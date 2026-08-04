@@ -38,6 +38,7 @@ import {
   handleAdminCreateAvailability,
   handleAdminCreateBookingToken,
   handleAdminCreateDirectBookingInvite,
+  handleAdminListAppointments,
   handleAdminRescheduleAppointment,
   handleAdminResolveTattooLifecycleReview,
   handleAdminRevokeSubmissionBookingTokens,
@@ -1452,6 +1453,85 @@ test("Studio permanently deletes only unpaid or cancelled appointments and prese
   );
   assert.equal(cancelledDelete.status, 200, await cancelledDelete.clone().text());
   assert.equal(database.prepare("SELECT COUNT(*) count FROM appointments WHERE id='delete-unpaid-cancelled'").get().count, 0);
+});
+
+test("Studio appointment payload distinguishes amount due from money actually paid", async () => {
+  const database = migratedDatabase();
+  const adminToken = "appointment-payment-state-admin";
+  const env = squareEnv(database, { SUBMISSIONS_ADMIN_TOKEN: adminToken });
+  const startAt = "2026-08-05T16:00:00.000Z";
+  const endAt = "2026-08-05T19:00:00.000Z";
+  insertSubmissionFixture(database, {
+    id: "special-payment-state-submission",
+    type: "tattoo_special",
+    status: "approved",
+    tattooStage: "ready_to_book",
+  });
+  insertAppointmentFixture(database, {
+    id: "special-requested-time",
+    submissionId: "special-payment-state-submission",
+    bookingTypeId: "tattoo_quarter",
+    status: "requested",
+    purpose: "tattoo",
+    startAt,
+    endAt,
+    holdState: null,
+    approvalState: "approved",
+  });
+  insertAppointmentFixture(database, {
+    id: "special-expired-checkout",
+    submissionId: "special-payment-state-submission",
+    bookingTypeId: "tattoo_quarter",
+    status: "cancelled",
+    purpose: "tattoo",
+    startAt,
+    endAt,
+    squareOrderId: "special-expired-order",
+    holdState: "expired",
+    approvalState: "approved",
+  });
+  database.prepare(
+    "UPDATE appointments SET cancellation_reason='Checkout hold expired unpaid' WHERE id='special-expired-checkout'",
+  ).run();
+  insertPaymentFixture(database, {
+    id: "special-expired-payment",
+    appointmentId: "special-expired-checkout",
+    checkoutId: "special-expired-link",
+    orderId: "special-expired-order",
+    status: "cancelled",
+  });
+  insertAppointmentFixture(database, {
+    id: "confirmed-paid-appointment",
+    bookingTypeId: "tattoo_quarter",
+    status: "confirmed",
+    purpose: "tattoo",
+    startAt: "2026-08-06T16:00:00.000Z",
+    endAt: "2026-08-06T17:30:00.000Z",
+    squareOrderId: "confirmed-paid-order",
+  });
+  insertPaymentFixture(database, {
+    id: "confirmed-paid-payment",
+    appointmentId: "confirmed-paid-appointment",
+    checkoutId: "confirmed-paid-link",
+    orderId: "confirmed-paid-order",
+    status: "paid",
+  });
+
+  const response = await handleAdminListAppointments(
+    draftRequest("/api/admin/booking/appointments", "GET", undefined, adminToken),
+    env,
+  );
+  assert.equal(response.status, 200, await response.clone().text());
+  const payload = await response.json();
+  const byId = new Map(payload.appointments.map((appointment) => [appointment.id, appointment]));
+  assert.equal(byId.get("special-requested-time").paymentStatus, "");
+  assert.equal(byId.get("special-requested-time").totalDueCents, 5000);
+  assert.equal(byId.get("special-requested-time").paidCents, 0);
+  assert.equal(byId.get("special-expired-checkout").paymentStatus, "cancelled");
+  assert.equal(byId.get("special-expired-checkout").paymentAmountCents, 5000);
+  assert.equal(byId.get("special-expired-checkout").paidCents, 0);
+  assert.equal(byId.get("confirmed-paid-appointment").paymentStatus, "paid");
+  assert.equal(byId.get("confirmed-paid-appointment").paidCents, 5000);
 });
 
 test("permanent appointment deletion reconciles and invalidates an unpaid Square checkout", async () => {
@@ -7690,10 +7770,52 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /function dayStatsFromAppointments\(\)[\s\S]*?activeScopedAppointments\(\)/);
   assert.match(submissionsStudio, /function renderDayAppointments\(dayFilter\)[\s\S]*?const scoped = activeScopedAppointments\(\)/);
   assert.match(submissionsStudio, /function renderCancelledAppointmentHistory\(\)/);
-  assert.match(submissionsStudio, /Cancelled History/);
-  assert.match(submissionsStudio, /Cancelled appointments no longer affect active calendar counts or booked hours\. Payment and audit history remain protected\./);
+  assert.match(submissionsStudio, /Cancelled &amp; Expired History/);
+  assert.match(submissionsStudio, /Cancelled appointments and expired checkout attempts do not affect active calendar counts or booked hours\. Payment and audit history remain protected\./);
   assert.match(submissionsStudio, /id="cancelledAppointmentHistory"/);
   assert.match(submissionsStudio, /Protected history retained/);
+  assert.match(submissionsStudio, /function appointmentIsExpiredCheckoutAttempt\(appointment\)/);
+  assert.match(submissionsStudio, /function primaryAppointmentFor\(submissionId\)[\s\S]*?candidate\.status === "requested"[\s\S]*?candidate\.bookingTokenId === latest\.bookingTokenId/);
+  assert.match(submissionsStudio, /Amount due: \$\{money\(totalDueCents, currency\)\}/);
+  assert.match(submissionsStudio, /Paid: \$\{money\(paidCents, currency\)\}/);
+  assert.match(submissionsStudio, /Square checkout: Not started/);
+  assert.doesNotMatch(submissionsStudio, /Total paid today/);
+  const primaryHelpers = submissionsStudio.match(
+    /(function appointmentIsExpiredCheckoutAttempt\(appointment\) \{[\s\S]*?function primaryAppointmentFor\(submissionId\) \{[\s\S]*?return ordered\.find[\s\S]*?\|\| latest;\r?\n  \})/,
+  );
+  assert.ok(primaryHelpers, "Studio primary-appointment helpers should remain testable as one pure block");
+  const helperSandbox = {
+    appointments: [
+      {
+        id: "requested-time",
+        submissionId: "special-submission",
+        bookingTokenId: "special-token",
+        bookingTypeId: "tattoo-special",
+        status: "requested",
+        holdState: "",
+        approvalState: "approved",
+        startAt: "2026-08-05T16:00:00.000Z",
+        endAt: "2026-08-05T19:00:00.000Z",
+        createdAt: "2026-08-04T00:39:17.884Z",
+      },
+      {
+        id: "expired-checkout",
+        submissionId: "special-submission",
+        bookingTokenId: "special-token",
+        bookingTypeId: "tattoo-special",
+        status: "cancelled",
+        holdState: "expired",
+        approvalState: "approved",
+        cancellationReason: "Checkout hold expired unpaid",
+        startAt: "2026-08-05T16:00:00.000Z",
+        endAt: "2026-08-05T19:00:00.000Z",
+        createdAt: "2026-08-04T09:29:44.429Z",
+      },
+    ],
+    titleize: (value) => value,
+  };
+  runInNewContext(`${primaryHelpers[1]}\nresult = primaryAppointmentFor("special-submission");`, helperSandbox);
+  assert.equal(helperSandbox.result.id, "requested-time");
   assert.match(submissionsStudio, /Additional Renderings/);
   assert.match(submissionsStudio, /data-create-rendering-request/);
   assert.match(submissionsStudio, /data-copy-rendering-link/);

@@ -1406,7 +1406,7 @@
       const payload = await api(`/api/admin/submissions/${encodeURIComponent(submissionId)}/tokens`);
       const tokens = payload.tokens || [];
       const submission = submissions.find((item) => item.id === submissionId);
-      const appointment = latestAppointmentFor(submissionId);
+      const appointment = primaryAppointmentFor(submissionId);
       const active = tokens.find((t) => t.state === "active");
       if (submission?.type === "tattoo_special" && submission.status === "approved") {
         const checkoutDeadline = appointment?.paymentDueAt || appointment?.holdExpiresAt || "";
@@ -3584,7 +3584,7 @@
         <button class="submission ${appointment.id === activeAppointmentId ? "active" : ""}" type="button" data-studio-appointment-id="${escapeHtml(appointment.id)}">
           <span class="submission-top">
             <span class="name">${escapeHtml(appointment.clientName || related?.contactName || "Unnamed")}</span>
-            <span class="pill">${escapeHtml(titleize(appointment.status || "unknown"))}</span>
+            <span class="pill">${escapeHtml(appointmentStateLabel(appointment))}</span>
           </span>
           <span class="meta">${escapeHtml(appointmentTypeLabel(appointment))} / ${escapeHtml(appointment.clientEmail || related?.contactEmail || "")}</span>
           <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
@@ -3606,10 +3606,6 @@
       return;
     }
     const related = appointmentRelatedSubmission(appointment);
-    const currency = appointment.currency || "USD";
-    const depositCents = Number(appointment.depositCents || 0);
-    const tipCents = Number(appointment.tipCents || 0);
-    const totalCents = Number(appointment.totalDueCents || depositCents + tipCents);
     const calendarHref = appointmentIsConfirmed(appointment) ? appointmentCalendarUrl(appointment) : "";
     const checkoutHref = appointment.squareCheckoutUrl || "";
     const sourceLabel = related
@@ -3623,7 +3619,7 @@
     detailEl.innerHTML = `
       <div class="detail-head">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <span class="pill">${bookingLabel} / ${escapeHtml(titleize(appointment.status || "unknown"))}</span>
+          <span class="pill">${bookingLabel} / ${escapeHtml(appointmentStateLabel(appointment))}</span>
           <span class="pill">${escapeHtml(appointmentTypeLabel(appointment))}</span>
         </div>
         <h2>${escapeHtml(contactName)}</h2>
@@ -3646,10 +3642,10 @@
       <div class="grid">
         ${detailField("Source", sourceLabel)}
         ${detailField("Booking Type", appointmentTypeLabel(appointment))}
-        ${detailField("Status", titleize(appointment.status || ""))}
+        ${detailField("Status", appointmentStateLabel(appointment))}
         ${detailField("When", `${formatDate(appointment.startAt)}${appointment.endAt ? `\nEnds: ${formatDate(appointment.endAt)}` : ""}`)}
         ${detailField("Client", `${contactName}\n${contactEmail}${contactPhone ? `\n${contactPhone}` : ""}`)}
-        ${detailField("Payment", `Reservation/deposit: ${money(depositCents, currency)}\nOptional tip: ${money(tipCents, currency)}\nTotal paid today: ${money(totalCents, currency)}\nSquare order: ${appointment.squareOrderId || "pending"}`)}
+        ${detailField("Payment", appointmentPaymentDetail(appointment))}
         ${detailField("Appointment ID", appointment.id || "")}
         ${detailField("Submission ID", related?.id || appointment.submissionId || "No linked submission")}
       </div>
@@ -3985,6 +3981,33 @@
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null;
   }
 
+  function appointmentIsExpiredCheckoutAttempt(appointment) {
+    return appointment?.status === "cancelled"
+      && appointment?.holdState === "expired"
+      && String(appointment?.cancellationReason || "").trim().toLowerCase() === "checkout hold expired unpaid";
+  }
+
+  function appointmentStateLabel(appointment) {
+    return appointmentIsExpiredCheckoutAttempt(appointment)
+      ? "Expired checkout"
+      : titleize(appointment?.status || "unknown");
+  }
+
+  function primaryAppointmentFor(submissionId) {
+    const ordered = appointments
+      .filter((appointment) => appointment.submissionId === submissionId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const latest = ordered[0] || null;
+    if (!appointmentIsExpiredCheckoutAttempt(latest)) return latest;
+    return ordered.find((candidate) => candidate.status === "requested"
+      && !candidate.holdState
+      && candidate.approvalState === "approved"
+      && candidate.bookingTokenId === latest.bookingTokenId
+      && candidate.bookingTypeId === latest.bookingTypeId
+      && candidate.startAt === latest.startAt
+      && candidate.endAt === latest.endAt) || latest;
+  }
+
   function historicPrerequisiteAppointmentFor(submissionId) {
     return appointments
       .filter((appointment) => appointment.submissionId === submissionId)
@@ -4006,14 +4029,34 @@
     return absoluteUrl(`/api/booking/calendar?appointment=${encodeURIComponent(appointment.id)}`);
   }
 
+  function appointmentPaymentStateLabel(appointment) {
+    const status = String(appointment?.paymentStatus || "").toLowerCase();
+    if (["paid", "completed", "settled"].includes(status)) return "Paid";
+    if (status === "payment_attention") return "Payment needs review";
+    if (status === "pending") return "Pending";
+    if (appointmentIsExpiredCheckoutAttempt(appointment)) return "Expired unpaid";
+    if (["cancelled", "void"].includes(status)) return "Cancelled";
+    if (status === "failed") return "Failed";
+    return appointment?.squareOrderId ? "Not recorded" : "Not started";
+  }
+
+  function appointmentPaymentDetail(appointment) {
+    const currency = appointment?.currency || "USD";
+    const depositCents = Number(appointment?.depositCents || 0);
+    const tipCents = Number(appointment?.tipCents || 0);
+    const totalDueCents = Number(appointment?.totalDueCents || depositCents + tipCents);
+    const paidCents = Number(appointment?.paidCents || 0);
+    const squareLine = appointment?.squareOrderId
+      ? `Square order: ${appointment.squareOrderId}`
+      : "Square checkout: Not started";
+    return `Reservation/deposit: ${money(depositCents, currency)}\nOptional tip: ${money(tipCents, currency)}\nAmount due: ${money(totalDueCents, currency)}\nPaid: ${money(paidCents, currency)}\nPayment status: ${appointmentPaymentStateLabel(appointment)}\n${squareLine}`;
+  }
+
   function renderPaymentSummary(submission) {
-    const appointment = latestAppointmentFor(submission.id);
+    const appointment = primaryAppointmentFor(submission.id);
     if (!appointment) return "";
     const currency = appointment.currency || "USD";
-    const depositCents = Number(appointment.depositCents || 0);
     const sessionFeeCents = Number(appointment.sessionFeeCents || 0);
-    const tipCents = Number(appointment.tipCents || 0);
-    const totalCents = Number(appointment.totalDueCents || depositCents + tipCents);
     const meeting = appointment.meeting || null;
     const isVirtual = appointment.bookingTypeId === "consult_virtual";
     const isPublicBooking = submission.type === "consultation" || ["consult_in_person", "consult_virtual", "build_in_person"].includes(appointment.bookingTypeId);
@@ -4040,7 +4083,7 @@ ${["archived", "cancelled"].includes(appointment.status) ? "" : `<button class="
       <div class="field" style="margin-top:16px;">
         <label>Appointment Payment</label>
         <div class="value">
-${isPublicBooking ? "Source: Public calendar booking\n" : ""}Status: ${escapeHtml(titleize(appointment.status))}
+${isPublicBooking ? "Source: Public calendar booking\n" : ""}Status: ${escapeHtml(appointmentStateLabel(appointment))}
 Session: ${escapeHtml(titleize(appointment.bookingTypeId || "session"))}
 Purpose: ${escapeHtml(titleize(appointment.purpose || "unspecified"))}
 When: ${escapeHtml(formatDate(appointment.startAt))}
@@ -4048,11 +4091,8 @@ Ends: ${escapeHtml(formatDate(appointment.endAt))}
 ${holdExpiresAt ? `Checkout hold expires: ${escapeHtml(formatDate(holdExpiresAt))}\n` : ""}${appointment.status === "expiry_attention" ? "Hold reconciliation: needs Studio attention; capacity remains blocked\n" : ""}${completedAt ? `Completed: ${escapeHtml(formatDate(completedAt))}\n` : ""}Reschedules used: ${escapeHtml(String(appointment.rescheduleCount ?? appointment.reschedule_count ?? 0))} / 1
 ${replacementFor ? `Replacement for: ${escapeHtml(replacementFor)}\n` : ""}${replacedBy ? `Replaced by: ${escapeHtml(replacedBy)}\n` : ""}
 ${appointmentIsConfirmed(appointment) && !isVirtual ? `Location: ${escapeHtml(STUDIO_ADDRESS)}\n` : ""}
-Reservation/deposit: ${escapeHtml(money(depositCents, currency))}
 ${sessionFeeCents ? `Extended Day fee due with final balance: ${escapeHtml(money(sessionFeeCents, currency))}\n` : ""}
-Optional tip: ${escapeHtml(money(tipCents, currency))}
-Total paid today: ${escapeHtml(money(totalCents, currency))}
-Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
+${escapeHtml(appointmentPaymentDetail(appointment))}
 ${meetingLines}
         </div>
         <div class="booking-actions" style="margin-top:10px;">
@@ -4207,7 +4247,7 @@ ${meetingLines}
     } : null;
     const pendingApproval = Boolean(special && specialPayload.booking_mode === "review"
       && !["approved", "booked", "declined"].includes(submission.status));
-    const pendingAppointment = special ? latestAppointmentFor(submission.id) : null;
+    const pendingAppointment = special ? primaryAppointmentFor(submission.id) : null;
     return {
       createdAt: Date.now(),
       previewSource: "saved_draft",
@@ -4306,7 +4346,7 @@ ${meetingLines}
     const budgetLabel = approvedBudgetLabel(
       submission.approvedBudget || tattooSessionPlans.get(submission.id)
     );
-    const appointment = latestAppointmentFor(submission.id);
+    const appointment = primaryAppointmentFor(submission.id);
     const specialClientUrl = submission.type === "tattoo_special"
       && submission.status === "approved"
       && appointmentIsPending(appointment)
@@ -4419,7 +4459,7 @@ ${meetingLines}
   }
 
   function renderCommunicationActions(submission) {
-    const appointment = latestAppointmentFor(submission.id);
+    const appointment = primaryAppointmentFor(submission.id);
     const specialPrepared = submission.type === "tattoo_special" && Boolean(submission.bookingUrl);
     const tattooPrepared = ["tattoo_inquiry", "flash_claim"].includes(submission.type) && Boolean(submission.bookingUrl);
     const nonBookingApproval = ["art_acquisition", "build_brief", "maze_design", "special_project"].includes(submission.type);
@@ -4769,7 +4809,7 @@ ${meetingLines}
     const price = Number(payload.approved_price_cents || payload.quoted_price_cents || 0);
     const review = payload.booking_mode === "review";
     const adjustablePrice = payload.special_offer_id === "special-anime";
-    const heldAppointment = latestAppointmentFor(submission.id);
+    const heldAppointment = primaryAppointmentFor(submission.id);
     const participants = Array.isArray(payload.participants) ? payload.participants : [];
     return `<section class="tattoo-special-review">
       <div><span class="pill">Tattoo Special</span><h3>${escapeHtml(payload.special_offer_title || "Tattoo Special")}${payload.special_variant_label ? ` — ${escapeHtml(payload.special_variant_label)}` : ""}</h3></div>
@@ -4797,7 +4837,7 @@ ${meetingLines}
     const preserveTextAssist = textAssistDirty && textAssistSubmissionId === submission.id;
     const initialTextAssist = preserveTextAssist ? textAssistDraft : textReminderCopy(submission);
     const hasAppointment = !!latestAppointmentFor(submission.id);
-    const latestAppointment = latestAppointmentFor(submission.id);
+    const latestAppointment = primaryAppointmentFor(submission.id);
     const hasStoredFiles = Array.isArray(submission.files) && submission.files.some((file) => file?.storageKey);
     const isProtected = ["booked", "paid", "cancelled", "archived"].includes(submission.status)
       || hasAppointment
@@ -5397,19 +5437,22 @@ ${meetingLines}
     ));
     if (countEl) countEl.textContent = `${cancelled.length} record${cancelled.length === 1 ? "" : "s"}`;
     if (!cancelled.length) {
-      panel.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">No cancelled appointments.</p>';
+      panel.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">No cancelled appointments or expired checkouts.</p>';
       return;
     }
     panel.innerHTML = cancelled.map((appointment) => {
       const related = appointmentRelatedSubmission(appointment);
-      const historyState = appointment.canPermanentlyDelete
-        ? "Eligible for permanent deletion"
-        : "Protected history retained";
+      const expiredCheckout = appointmentIsExpiredCheckoutAttempt(appointment);
+      const historyState = expiredCheckout
+        ? "Unpaid checkout expired; requested time remains unreserved"
+        : appointment.canPermanentlyDelete
+          ? "Eligible for permanent deletion"
+          : "Protected history retained";
       return `
         <div class="appt-item">
           <div class="appt-item-top">
             <span class="appt-name">${escapeHtml(appointment.clientName || "Unnamed")}</span>
-            <span class="pill">${escapeHtml(titleize(appointment.status || "cancelled"))}</span>
+            <span class="pill">${escapeHtml(appointmentStateLabel(appointment))}</span>
           </div>
           ${appointment.isTattooSpecial ? `<span class="pill">Tattoo Special &middot; ${escapeHtml(appointment.specialOfferTitle || "Tattoo Special")}</span>` : ""}
           <span class="appt-meta">${escapeHtml(formatDate(appointment.startAt))} &middot; ${escapeHtml(appointmentTypeLabel(appointment))} &middot; ${escapeHtml(historyState)}</span>
@@ -5663,14 +5706,14 @@ ${meetingLines}
         <div class="detail-head">
           <span class="pill">Tattoo Booking / Appointments</span>
           <h2>Tattoo Appointments</h2>
-          <p class="contact">Active tattoo sessions, consultations, and in-person build sessions appear on the calendar. Cancelled records remain available in history below.</p>
+          <p class="contact">Active tattoo sessions, consultations, and in-person build sessions appear on the calendar. Cancelled appointments and expired checkout attempts remain available in history below.</p>
         </div>
         ${appointmentCalendarMarkup()}
         <section class="review-card" style="margin-top:16px;">
           <div class="portfolio-head">
             <div>
-              <div class="review-card-header">Cancelled History</div>
-              <p class="contact" style="margin:6px 0 0;">Cancelled appointments no longer affect active calendar counts or booked hours. Payment and audit history remain protected.</p>
+              <div class="review-card-header">Cancelled &amp; Expired History</div>
+              <p class="contact" style="margin:6px 0 0;">Cancelled appointments and expired checkout attempts do not affect active calendar counts or booked hours. Payment and audit history remain protected.</p>
             </div>
             <span class="pill" id="cancelledAppointmentHistoryCount">0 records</span>
           </div>

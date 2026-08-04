@@ -349,6 +349,9 @@ function normalizeRule(row) {
 
 function normalizeAppointment(row) {
   const bookingTypeId = row.booking_type_id || row.bookingTypeId || "";
+  const paymentStatus = asString(row.payment_status || row.paymentStatus).toLowerCase();
+  const paymentAmountCents = Number(row.payment_amount_cents ?? row.paymentAmountCents ?? 0);
+  const paymentIsPaid = ["paid", "completed", "settled", "payment_attention"].includes(paymentStatus);
   return {
     id: row.id,
     submissionId: row.submission_id || "",
@@ -370,6 +373,9 @@ function normalizeAppointment(row) {
     depositCents: row.deposit_cents,
     tipCents: row.tip_cents || 0,
     totalDueCents: row.deposit_cents + (row.tip_cents || 0),
+    paymentStatus,
+    paymentAmountCents,
+    paidCents: paymentIsPaid ? paymentAmountCents : 0,
     sessionFeeCents: Number(row.session_fee_cents || 0),
     extendedDayAcknowledgedAt: row.extended_day_acknowledged_at || "",
     currency: row.currency || "USD",
@@ -3420,6 +3426,8 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
               tst.approved_price_cents AS special_approved_price_cents,
               tst.advertised_price_cents AS special_advertised_price_cents,
               tst.duration_minutes AS special_duration_minutes,
+              dp.status AS payment_status,
+              dp.amount_cents AS payment_amount_cents,
               CASE WHEN a.status IN ('pending_deposit','deposit_pending','cancelled','archived')
                 AND NOT EXISTS (
                   SELECT 1 FROM deposit_payments protected_payment
@@ -3452,6 +3460,12 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
        LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
        LEFT JOIN submissions s ON s.id = a.submission_id
        LEFT JOIN tattoo_special_submission_terms tst ON tst.submission_id = a.submission_id
+       LEFT JOIN deposit_payments dp ON dp.id = (
+         SELECT latest_payment.id FROM deposit_payments latest_payment
+         WHERE latest_payment.appointment_id = a.id
+         ORDER BY latest_payment.created_at DESC, latest_payment.id DESC
+         LIMIT 1
+       )
        LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
        WHERE a.id = ?`
     )
@@ -8323,6 +8337,8 @@ export async function handleAdminListAppointments(request, env) {
       .prepare(
         `SELECT a.*, bt.label AS booking_type_label, s.type AS submission_type,
                 tst.offer_title AS special_offer_title, tst.variant_label AS special_variant_label,
+                dp.status AS payment_status,
+                dp.amount_cents AS payment_amount_cents,
                 CASE WHEN a.status IN ('pending_deposit','deposit_pending','cancelled','archived')
                   AND NOT EXISTS (
                     SELECT 1 FROM deposit_payments protected_payment
@@ -8355,6 +8371,12 @@ export async function handleAdminListAppointments(request, env) {
          LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
          LEFT JOIN submissions s ON s.id = a.submission_id
          LEFT JOIN tattoo_special_submission_terms tst ON tst.submission_id = a.submission_id
+         LEFT JOIN deposit_payments dp ON dp.id = (
+           SELECT latest_payment.id FROM deposit_payments latest_payment
+           WHERE latest_payment.appointment_id = a.id
+           ORDER BY latest_payment.created_at DESC, latest_payment.id DESC
+           LIMIT 1
+         )
          LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
          ORDER BY a.start_at DESC
          LIMIT 100`
