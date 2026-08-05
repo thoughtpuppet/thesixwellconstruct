@@ -133,6 +133,26 @@ test("Studio Special Project editors use the shared collapsible section contract
   assert.match(source, /_editorOpen: true,/);
 });
 
+test("Studio gives Special Projects a dedicated tab with direct Shared Media upload", () => {
+  const source = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(source, /data-subview="special-projects">Special Projects<\/button>/);
+  assert.match(source, /subView === "special-projects"/);
+  assert.match(source, /async function renderSpecialProjectsManager\(\)/);
+  assert.match(source, /data-special-projects-form/);
+  assert.match(source, /data-special-media-files type="file" accept="image\/jpeg,image\/png,image\/webp,image\/gif" multiple/);
+  assert.match(source, /async function uploadSpecialProjectMedia\(project, button\)/);
+  assert.match(source, /api\("\/api\/admin\/media", \{ method: "POST", body: upload \}\)/);
+  assert.match(source, /upload\.append\("privacy", "public"\)/);
+  assert.match(source, /upload\.append\("public_presentation", "inline"\)/);
+  assert.match(source, /role: hasPrimary \? "gallery" : "primary"/);
+  assert.match(source, /JSON\.stringify\(\{ specialProjects: specialProjectsFromForm\(specialProjectsForm\) \}\)/);
+  const settingsRenderer = source.slice(
+    source.indexOf("async function renderTattooSettings()"),
+    source.indexOf("function tattooSpecialVariantText"),
+  );
+  assert.doesNotMatch(settingsRenderer, /data-add-special-project/);
+});
+
 const TATTOO_BUDGET_RANGES = [
   "Up to $300",
   "$300–$500",

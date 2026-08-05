@@ -444,6 +444,12 @@
   .special-project-modes { display:flex; flex-wrap:wrap; gap:8px 16px; }
   .special-project-media { display:grid; gap:8px; }
   .special-project-media-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(110px,.35fr) auto; gap:8px; align-items:end; padding:8px; border:5px solid var(--ring-faint); }
+  .special-project-media-identity { display:flex; align-items:center; gap:10px; min-width:0; }
+  .special-project-media-identity > div { min-width:0; overflow-wrap:anywhere; }
+  .special-project-media-thumb { width:64px; height:64px; flex:none; object-fit:cover; border:5px solid var(--ring-faint); background:var(--bg); }
+  .special-project-upload { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:10px; align-items:end; margin-top:12px; padding:12px; border:5px solid var(--ring-faint); }
+  .special-project-upload > .contact,
+  .special-project-upload > [data-special-media-upload-status] { grid-column:1/-1; }
   .tattoo-specials-manager { display:grid; gap:22px; }
   .save-feedback { min-height:1.5em; margin:7px 0 0; font-family:var(--sans); font-size:11px; color:var(--dim); }
   .save-feedback[data-state="success"] { color:#4caf50; }
@@ -482,6 +488,9 @@
     .tattoo-settings-row.special { grid-template-columns:1fr; }
     .special-project-media-row { grid-template-columns:minmax(0,1fr); }
     .special-project-media-row > label[style] { grid-column:auto!important; }
+    .special-project-upload { grid-template-columns:minmax(0,1fr); }
+    .special-project-upload > .contact,
+    .special-project-upload > [data-special-media-upload-status] { grid-column:auto; }
     .text-template-editor-grid { grid-template-columns:1fr; }
     .tattoo-specials-settings,
     .tattoo-special-offer__grid { grid-template-columns:minmax(0,1fr); }
@@ -1635,6 +1644,7 @@
         <button class="subnav-btn ${subView === "portfolio-settings" ? "is-active" : ""}" type="button" data-subview="portfolio-settings">Portfolio Settings</button>
         <button class="subnav-btn ${subView === "flash" ? "is-active" : ""}" type="button" data-subview="flash">Flash</button>
         <button class="subnav-btn ${subView === "designs" ? "is-active" : ""}" type="button" data-subview="designs">Designs</button>
+        <button class="subnav-btn ${subView === "special-projects" ? "is-active" : ""}" type="button" data-subview="special-projects">Special Projects</button>
         <button class="subnav-btn ${subView === "specials" ? "is-active" : ""}" type="button" data-subview="specials">Specials</button>
         <button class="subnav-btn ${subView === "tattoo-settings" ? "is-active" : ""}" type="button" data-subview="tattoo-settings">Tattoo Settings</button>`;
     } else if (activeTab === "studio") {
@@ -2865,6 +2875,7 @@
     ]);
     specialProjectMediaAssets = (mediaPayload.records || []).filter((item) =>
       (item.state || "active") === "active"
+      && String(item.mime_type || item.mimeType || "").startsWith("image/")
       && (item.privacy || "public") === "public"
       && ["not-required", "granted"].includes(item.consent_status || item.consentStatus || "not-required")
       && (item.public_presentation || item.publicPresentation || "inline") === "inline"
@@ -2915,7 +2926,14 @@
       <label class="special-project-wide">Application instructions<textarea data-special-instructions maxlength="5000">${escapeHtml(project.applicationInstructions || project.application_instructions || "")}</textarea></label>
       <label class="special-project-wide">Participation terms<textarea data-special-terms maxlength="10000">${escapeHtml(project.participationTerms || project.participation_terms || "")}</textarea></label>
       <div class="special-project-wide"><span class="contact">Ordered Shared Media gallery. Exactly one image must be Primary for an Experimental Project.</span><div class="special-project-media" data-special-media-list>${mediaRows}</div>
-        <div class="booking-actions"><select data-special-media-picker><option value="">Choose Shared Media…</option>${specialProjectMediaAssets.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || item.original_filename || item.originalFilename || item.id)}</option>`).join("")}</select><button class="button" type="button" data-add-special-media>Add Media</button></div>
+        <div class="special-project-upload">
+          <p class="contact">Upload project artwork here. Images are stored in Shared Media and attached to this project automatically; the first image becomes Primary.</p>
+          <label>Project images<input data-special-media-files type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple></label>
+          <label>Alt text for new images<input data-special-upload-alt value="${escapeHtml(projectTitle)}" maxlength="1000" placeholder="Describe the project artwork"></label>
+          <button class="button" type="button" data-upload-special-media>Upload &amp; Attach</button>
+          <span class="contact" data-special-media-upload-status role="status" aria-live="polite"></span>
+        </div>
+        <div class="booking-actions"><select data-special-media-picker><option value="">Or choose existing Shared Media…</option>${specialProjectMediaAssets.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || item.original_filename || item.originalFilename || item.id)}</option>`).join("")}</select><button class="button" type="button" data-add-special-media>Attach Existing</button></div>
       </div>
       <div class="special-project-wide booking-actions"><button class="button danger-button" type="button" data-remove-special-project>Remove Project</button></div>
     </section>`;
@@ -2925,12 +2943,97 @@
     const mediaId = item.id || item.mediaId || item.media_id || "";
     const asset = specialProjectMediaAssets.find((candidate) => candidate.id === mediaId) || {};
     const label = asset.title || asset.original_filename || asset.originalFilename || mediaId;
+    const previewUrl = asset.source_url || asset.sourceUrl || (mediaId ? `/api/construct/media/${encodeURIComponent(mediaId)}` : "");
     return `<div class="special-project-media-row" data-special-media data-media-id="${escapeHtml(mediaId)}">
-      <div><strong>${escapeHtml(label)}</strong><br><span class="contact">${escapeHtml(mediaId)}</span></div>
+      <div class="special-project-media-identity">${previewUrl ? `<img class="special-project-media-thumb" src="${escapeHtml(previewUrl)}" alt="" loading="lazy">` : ""}<div><strong>${escapeHtml(label)}</strong><br><span class="contact">${escapeHtml(mediaId)}</span></div></div>
       <label>Role<select data-special-media-role><option value="gallery" ${item.role !== "primary" ? "selected" : ""}>Gallery</option><option value="primary" ${item.role === "primary" ? "selected" : ""}>Primary</option></select></label>
       <div class="booking-actions"><button class="button" type="button" data-move-special-media="up" aria-label="Move media up">↑</button><button class="button" type="button" data-move-special-media="down" aria-label="Move media down">↓</button><button class="button danger-button" type="button" data-remove-special-media aria-label="Remove media">Remove</button></div>
       <label style="grid-column:1/-1;">Project-specific alt text<input data-special-media-alt value="${escapeHtml(item.alt || item.altText || item.alt_text_override || "")}" maxlength="1000"></label>
     </div>`;
+  }
+
+  const specialProjectUploadTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+  async function uploadSpecialProjectMedia(project, button) {
+    const input = project.querySelector("[data-special-media-files]");
+    const output = project.querySelector("[data-special-media-upload-status]");
+    const list = project.querySelector("[data-special-media-list]");
+    if (!input || !output || !list) throw new Error("The project media uploader is unavailable. Refresh Studio and try again.");
+    const files = [...(input?.files || [])];
+    if (!files.length) throw new Error("Choose at least one project image to upload.");
+    for (const file of files) {
+      if (!specialProjectUploadTypes.has(String(file.type || "").toLowerCase())) {
+        throw new Error(`${file.name} must be a JPG, PNG, WebP, or GIF image.`);
+      }
+      if (file.size > 15 * 1024 * 1024) throw new Error(`${file.name} exceeds 15 MB.`);
+    }
+    const projectTitle = project.querySelector("[data-special-title]")?.value.trim() || "Special Project";
+    const altText = project.querySelector("[data-special-upload-alt]")?.value.trim() || projectTitle;
+    let hasPrimary = [...list.querySelectorAll("[data-special-media-role]")].some((select) => select.value === "primary");
+    let uploadedCount = 0;
+    button.disabled = true;
+    try {
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        output.textContent = `Uploading ${index + 1} of ${files.length}: ${file.name}`;
+        const upload = new FormData();
+        upload.append("file", file);
+        upload.append("alt_text", altText);
+        upload.append("public_title", projectTitle);
+        upload.append("privacy", "public");
+        upload.append("consent_status", "not-required");
+        upload.append("public_presentation", "inline");
+        const payload = await api("/api/admin/media", { method: "POST", body: upload });
+        const asset = payload.record || {};
+        if (!asset.id) throw new Error(`${file.name} uploaded without a media ID.`);
+        if (!specialProjectMediaAssets.some((item) => item.id === asset.id)) specialProjectMediaAssets.unshift(asset);
+        detailEl.querySelectorAll("[data-special-media-picker]").forEach((picker) => {
+          if (![...picker.options].some((option) => option.value === asset.id)) {
+            picker.add(new Option(asset.original_filename || asset.originalFilename || asset.id, asset.id));
+          }
+        });
+        list.insertAdjacentHTML("beforeend", specialProjectMediaRow({
+          id: asset.id,
+          role: hasPrimary ? "gallery" : "primary",
+          alt: altText,
+        }));
+        enhanceControls(list.lastElementChild);
+        hasPrimary = true;
+        uploadedCount += 1;
+      }
+      input.value = "";
+      output.textContent = `${uploadedCount} image${uploadedCount === 1 ? "" : "s"} uploaded and attached. Save Special Projects to publish the gallery change.`;
+      setStatus(`${uploadedCount} Special Project image${uploadedCount === 1 ? "" : "s"} uploaded and attached`);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function specialProjectsFromForm(form) {
+    return [...form.querySelectorAll("[data-special-project]")].map((row, index) => ({
+      id: row.dataset.id || row.querySelector("[data-special-slug]")?.value.trim() || "",
+      slug: row.querySelector("[data-special-slug]")?.value.trim() || "",
+      title: row.querySelector("[data-special-title]")?.value.trim() || "",
+      profile: row.querySelector("[data-special-profile]")?.value || "extended",
+      status: row.querySelector("[data-special-status]")?.value || "closed",
+      rateText: row.querySelector("[data-special-rate]")?.value.trim() || "",
+      summary: row.querySelector("[data-special-summary]")?.value.trim() || "",
+      opensAt: row.querySelector("[data-special-opens]")?.value || "",
+      closesAt: row.querySelector("[data-special-closes]")?.value || "",
+      refundableDepositCents: Math.round(Number(row.querySelector("[data-special-deposit]")?.value || 0) * 100),
+      healedPhotoDueWeeks: Number(row.querySelector("[data-special-healed-weeks]")?.value || 6),
+      allowedModes: [...row.querySelectorAll("[data-special-mode]:checked")].map((input) => input.dataset.specialMode),
+      applicationInstructions: row.querySelector("[data-special-instructions]")?.value.trim() || "",
+      participationTerms: row.querySelector("[data-special-terms]")?.value.trim() || "",
+      media: [...row.querySelectorAll("[data-special-media]")].map((item, mediaIndex) => ({
+        id: item.dataset.mediaId,
+        role: item.querySelector("[data-special-media-role]")?.value || "gallery",
+        alt: item.querySelector("[data-special-media-alt]")?.value.trim() || "",
+        sortOrder: mediaIndex,
+      })),
+      _delete: row.dataset.delete === "true",
+      sortOrder: index,
+    }));
   }
 
   function sessionEstimateCopyEditor(copy = {}) {
@@ -2946,6 +3049,28 @@
     }).join("");
   }
 
+  async function renderSpecialProjectsManager() {
+    layoutEl.classList.add("single");
+    listPane.classList.add("hidden");
+    toolbarEl.innerHTML = "";
+    detailEl.innerHTML = '<p class="empty">Loading Special Projects…</p>';
+    await loadTattooSettings();
+    detailEl.innerHTML = `<section class="tattoo-settings" id="specialProjectsManager" data-admin-section-title="Special Projects">
+      <div class="portfolio-head"><div><h2>Special Projects</h2><p class="contact">Create Experimental or Extended projects, upload their artwork, control application modes, and open or close each call from one place.</p></div><button class="button" type="button" data-refresh-special-projects>Refresh</button></div>
+      <form class="tattoo-settings" data-special-projects-form>
+        <section class="tattoo-settings-card" data-admin-section-title="Project calls">
+          <h3>Project calls</h3>
+          <p class="contact">Experimental Projects are always free tattoo work with a refundable attendance deposit. Extended Projects retain concept, budget, and session planning. Closed calls stay visible but cannot accept applications.</p>
+          <div class="tattoo-settings-list">${tattooSettings.specialProjects.map(specialProjectRow).join("") || '<p class="empty">No Special Project calls configured.</p>'}</div>
+          <div class="booking-actions"><button class="button" type="button" data-add-special-project>Add Special Project</button></div>
+        </section>
+        <div class="booking-actions"><button class="button" type="submit">Save Special Projects</button></div>
+        <div class="contact" id="specialProjectsStatus" role="status" aria-live="polite"></div>
+      </form>
+    </section>`;
+    enhanceControls(detailEl);
+  }
+
   async function renderTattooSettings() {
     layoutEl.classList.add("single");
     listPane.classList.add("hidden");
@@ -2954,7 +3079,7 @@
     await loadTattooSettings();
     const settings = tattooSettings.settings || {};
     detailEl.innerHTML = `<section class="tattoo-settings" id="tattooSettings">
-      <div class="portfolio-head"><div><h2>Tattoo Settings</h2><p class="contact">Public rates, walk-in guidance, review timing, lead time, and Special Project availability. Public hours are derived from the active tattoo schedule.</p></div><button class="button" type="button" data-refresh-tattoo-settings>Refresh</button></div>
+      <div class="portfolio-head"><div><h2>Tattoo Settings</h2><p class="contact">Public rates, walk-in guidance, review timing, and lead time. Public hours are derived from the active tattoo schedule.</p></div><button class="button" type="button" data-refresh-tattoo-settings>Refresh</button></div>
       <form class="tattoo-settings" data-tattoo-settings-form>
         <div class="tattoo-settings-grid">
           <section class="tattoo-settings-card">
@@ -2971,12 +3096,6 @@
             <div class="tattoo-settings-list">${tattooSettings.rateCards.map(tattooRateRow).join("") || '<p class="empty">No rate cards configured.</p>'}</div>
           </section>
         </div>
-        <section class="tattoo-settings-card">
-          <h3>Special Project calls</h3>
-          <p class="contact">Experimental Projects are always free tattoo work with a refundable attendance deposit. Extended Projects retain concept, budget, and session planning. Closed calls stay visible but cannot accept applications.</p>
-          <div class="tattoo-settings-list">${tattooSettings.specialProjects.map(specialProjectRow).join("") || '<p class="empty">No Special Project calls configured.</p>'}</div>
-          <div class="booking-actions"><button class="button" type="button" data-add-special-project>Add Special Project</button></div>
-        </section>
         <section class="tattoo-settings-card">
           <h3>Session Plan Copy</h3>
           <p class="contact">Global wording for every private tattoo booking link. A client-specific estimate note can still override the default note without changing this template.</p>
@@ -3350,6 +3469,11 @@
 
     if (activeTab === "tattoo" && subView === "tattoo-settings") {
       renderTattooSettings().catch((error) => setStatus(error.message));
+      return;
+    }
+
+    if (activeTab === "tattoo" && subView === "special-projects") {
+      renderSpecialProjectsManager().catch((error) => setStatus(error.message));
       return;
     }
 
@@ -6733,6 +6857,14 @@ ${meetingLines}
       return;
     }
 
+    const refreshSpecialProjects = event.target.closest("[data-refresh-special-projects]");
+    if (refreshSpecialProjects) {
+      setStatus("Refreshing Special Projects");
+      await renderSpecialProjectsManager();
+      setStatus("Special Projects refreshed");
+      return;
+    }
+
     const resolveHistoricLifecycle = event.target.closest("[data-resolve-historic-lifecycle]");
     if (resolveHistoricLifecycle) {
       const submissionId = resolveHistoricLifecycle.dataset.resolveHistoricLifecycle;
@@ -7042,6 +7174,20 @@ ${meetingLines}
         row.hidden = true;
       } else {
         row.remove();
+      }
+      return;
+    }
+
+    const uploadSpecialMedia = event.target.closest("[data-upload-special-media]");
+    if (uploadSpecialMedia) {
+      const project = uploadSpecialMedia.closest("[data-special-project]");
+      const output = project?.querySelector("[data-special-media-upload-status]");
+      if (!project) return;
+      try {
+        await uploadSpecialProjectMedia(project, uploadSpecialMedia);
+      } catch (error) {
+        if (output) output.textContent = error.message;
+        setStatus(error.message);
       }
       return;
     }
@@ -7908,6 +8054,20 @@ ${meetingLines}
       return;
     }
 
+    const specialProjectsForm = event.target.closest("[data-special-projects-form]");
+    if (specialProjectsForm) {
+      event.preventDefault();
+      setStatus("Saving Special Projects");
+      await api("/api/admin/tattoo/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ specialProjects: specialProjectsFromForm(specialProjectsForm) }),
+      });
+      await renderSpecialProjectsManager();
+      setStatus("Special Projects saved");
+      return;
+    }
+
     const tattooSettingsForm = event.target.closest("[data-tattoo-settings-form]");
     if (tattooSettingsForm) {
       event.preventDefault();
@@ -7918,30 +8078,6 @@ ${meetingLines}
         label: row.querySelector("[data-rate-label]")?.value.trim() || "",
         rateText: row.querySelector("[data-rate-text]")?.value.trim() || "",
         active: row.querySelector("[data-rate-active]")?.checked !== false,
-        sortOrder: index,
-      }));
-      const specialProjects = [...tattooSettingsForm.querySelectorAll("[data-special-project]")].map((row, index) => ({
-        id: row.dataset.id || row.querySelector("[data-special-slug]")?.value.trim() || "",
-        slug: row.querySelector("[data-special-slug]")?.value.trim() || "",
-        title: row.querySelector("[data-special-title]")?.value.trim() || "",
-        profile: row.querySelector("[data-special-profile]")?.value || "extended",
-        status: row.querySelector("[data-special-status]")?.value || "closed",
-        rateText: row.querySelector("[data-special-rate]")?.value.trim() || "",
-        summary: row.querySelector("[data-special-summary]")?.value.trim() || "",
-        opensAt: row.querySelector("[data-special-opens]")?.value || "",
-        closesAt: row.querySelector("[data-special-closes]")?.value || "",
-        refundableDepositCents: Math.round(Number(row.querySelector("[data-special-deposit]")?.value || 0) * 100),
-        healedPhotoDueWeeks: Number(row.querySelector("[data-special-healed-weeks]")?.value || 6),
-        allowedModes: [...row.querySelectorAll("[data-special-mode]:checked")].map((input) => input.dataset.specialMode),
-        applicationInstructions: row.querySelector("[data-special-instructions]")?.value.trim() || "",
-        participationTerms: row.querySelector("[data-special-terms]")?.value.trim() || "",
-        media: [...row.querySelectorAll("[data-special-media]")].map((item, mediaIndex) => ({
-          id: item.dataset.mediaId,
-          role: item.querySelector("[data-special-media-role]")?.value || "gallery",
-          alt: item.querySelector("[data-special-media-alt]")?.value.trim() || "",
-          sortOrder: mediaIndex,
-        })),
-        _delete: row.dataset.delete === "true",
         sortOrder: index,
       }));
       const sessionEstimateCopy = Object.fromEntries(
@@ -7963,7 +8099,6 @@ ${meetingLines}
             sessionEstimateCopy,
           },
           rateCards,
-          specialProjects,
         }),
       });
       await renderTattooSettings();
