@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Healed Photograph - Art.Pill Tattoo House</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
+<link rel="stylesheet" href="/css/tattoos.css">
+<link rel="stylesheet" href="/css/forms.css">
+<style>
+  *,*::before,*::after{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--color-bg,#0e0e0e);color:var(--color-body,#FBD19D)}
+  body{font-family:Georgia,'Times New Roman',serif}.top{display:flex;justify-content:flex-end;padding:24px 40px}.top a{font:700 11px/1 Inter,Arial,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--color-tattooing);border:5px solid rgba(110,4,4,.4);padding:12px 16px;text-decoration:none}
+  main{width:min(840px,calc(100% - 48px));margin:0 auto;padding:72px 0 96px}.hero-descriptor{margin-bottom:36px}.upload-panel{border-top:5px solid rgba(109,61,21,.4);padding-top:32px}.upload-copy{font-size:15px;line-height:1.75;max-width:680px;margin-bottom:28px}.upload-meta{font:800 11px/1.6 Inter,Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:rgba(252,184,103,.62);margin-bottom:24px}.status{margin-top:18px;line-height:1.6}.hidden{display:none!important}
+  @media(max-width:600px){.top{padding:16px 24px}main{width:calc(100% - 48px);padding-top:48px}}
+</style>
+</head>
+<body class="tattoo-flow" data-venture="tattooing">
+<header class="top"><a href="/tattoos/">Art.Pill Tattoo House</a></header>
+<main>
+  <section class="site-hero site-hero--supporting">
+    <h1 class="hero-title">Healed Photograph</h1>
+    <p class="hero-descriptor">Private Experimental Project follow-up</p>
+  </section>
+  <section class="upload-panel">
+    <p class="upload-copy" id="intro">Checking your private upload link.</p>
+    <p class="upload-meta" id="projectMeta"></p>
+    <form class="public-form hidden" id="healedForm" enctype="multipart/form-data">
+      <div class="field"><label for="healedPhotos">Healed photographs</label><input id="healedPhotos" name="healed_photos" type="file" accept="image/jpeg,image/png,image/webp" multiple required><p class="file-note">Upload one to four clear JPG, PNG, or WEBP images. Each file may be up to 15 MB.</p></div>
+      <div class="submit-row"><button class="cta-primary" id="submitBtn" type="submit">Send Healed Photographs</button></div>
+    </form>
+    <p class="status" id="status" aria-live="polite"></p>
+  </section>
+</main>
+<script>
+(function(){
+  var token = new URLSearchParams(location.search).get("token") || "";
+  var form = document.getElementById("healedForm");
+  var intro = document.getElementById("intro");
+  var meta = document.getElementById("projectMeta");
+  var status = document.getElementById("status");
+  var submit = document.getElementById("submitBtn");
+  function endpoint(){ return "/api/special-projects/healed?token=" + encodeURIComponent(token); }
+  fetch(endpoint(), { headers:{ accept:"application/json" }, cache:"no-store" }).then(function(response){
+    return response.json().then(function(payload){ if(!response.ok) throw new Error(payload.error || "This upload link is unavailable."); return payload; });
+  }).then(function(payload){
+    var followup = payload.followup || {};
+    intro.textContent = followup.status === "pending" ? "Send the healed photograph you agreed to provide for this project. These files remain private unless the studio intentionally promotes them through its media workflow." : "This healed-photo follow-up is already complete.";
+    meta.textContent = [followup.projectTitle, followup.dueAt ? "Due " + new Date(followup.dueAt).toLocaleDateString() : ""].filter(Boolean).join(" / ");
+    form.classList.toggle("hidden", followup.status !== "pending");
+  }).catch(function(error){ intro.textContent = error.message; });
+  form.addEventListener("submit", function(event){
+    event.preventDefault();
+    var files = document.getElementById("healedPhotos").files;
+    if(files.length < 1 || files.length > 4){ status.textContent = "Choose between one and four photographs."; return; }
+    submit.disabled = true; status.textContent = "Sending your photographs securely.";
+    fetch(endpoint(), { method:"POST", body:new FormData(form) }).then(function(response){
+      return response.json().then(function(payload){ if(!response.ok) throw new Error(payload.error || "The photographs could not be sent."); return payload; });
+    }).then(function(payload){
+      form.classList.add("hidden"); intro.textContent = "Your healed photographs were received. Thank you for completing the project follow-up."; status.textContent = payload.received + " photograph" + (payload.received === 1 ? " was" : "s were") + " received privately.";
+    }).catch(function(error){ status.textContent = error.message; submit.disabled = false; });
+  });
+})();
+</script>
+<script src="/js/construct-nav.js"></script>
+</body>
+</html>

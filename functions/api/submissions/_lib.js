@@ -68,6 +68,9 @@ const TATTOO_INQUIRY_FILE_ROLE_ALIASES = {
   placement_photo: "placement_photos",
   cover_up_photos: "existing_tattoo_photos",
 };
+const SPECIAL_PROJECT_PROFILES = new Set(["extended", "experimental"]);
+const SPECIAL_PROJECT_MODES = new Set(["fresh", "cover_up", "blast_over"]);
+const SPECIAL_PROJECT_AGREEMENT_VERSION = "special-project-experimental-v1";
 
 const TATTOO_STAGES = new Set([
   "review",
@@ -140,8 +143,6 @@ const REQUIRED_FIELDS_BY_TYPE = {
   special_project: [
     ["project_title", "Project call or working title is required."],
     ["placement", "Placement is required."],
-    ["budget_range", "Budget range is required."],
-    ["message", "Concept direction is required."],
     ["review_consent", "Review consent is required.", "yes"],
   ],
   art_acquisition: [
@@ -812,9 +813,18 @@ function emptySubmissionProgress() {
     clientNotificationStatus: "unsent",
     clientNotificationSentAt: "",
     clientLinkNotificationStatus: "unsent",
+    clientLinkNotificationSentAt: "",
     depositPaymentStatus: "none",
     depositPaidAt: "",
     clientAccessStatus: "none",
+    clientActivity: {
+      bookingLinkOpenCount: 0,
+      firstBookingLinkOpenedAt: "",
+      latestBookingLinkOpenedAt: "",
+      squareRedirectCount: 0,
+      firstSquareRedirectAt: "",
+      latestSquareRedirectAt: "",
+    },
   };
 }
 
@@ -859,6 +869,31 @@ async function loadSubmissionProgress(database, submissionRows = []) {
     }
   }
 
+  const clientActivityRows = (await database.prepare(
+    `SELECT submission_id,
+            SUM(CASE WHEN event_type='booking_link_opened' THEN 1 ELSE 0 END) booking_link_open_count,
+            MIN(CASE WHEN event_type='booking_link_opened' THEN created_at END) first_booking_link_opened_at,
+            MAX(CASE WHEN event_type='booking_link_opened' THEN created_at END) latest_booking_link_opened_at,
+            SUM(CASE WHEN event_type='square_checkout_redirected' THEN 1 ELSE 0 END) square_redirect_count,
+            MIN(CASE WHEN event_type='square_checkout_redirected' THEN created_at END) first_square_redirect_at,
+            MAX(CASE WHEN event_type='square_checkout_redirected' THEN created_at END) latest_square_redirect_at
+     FROM booking_client_events
+     WHERE submission_id IN (${placeholders})
+     GROUP BY submission_id`
+  ).bind(...ids).all()).results || [];
+  for (const activity of clientActivityRows) {
+    const state = progress.get(activity.submission_id);
+    if (!state) continue;
+    state.clientActivity = {
+      bookingLinkOpenCount: Number(activity.booking_link_open_count || 0),
+      firstBookingLinkOpenedAt: activity.first_booking_link_opened_at || "",
+      latestBookingLinkOpenedAt: activity.latest_booking_link_opened_at || "",
+      squareRedirectCount: Number(activity.square_redirect_count || 0),
+      firstSquareRedirectAt: activity.first_square_redirect_at || "",
+      latestSquareRedirectAt: activity.latest_square_redirect_at || "",
+    };
+  }
+
   const currentNotificationSeen = new Set();
   const currentLinkNotificationSeen = new Set();
   const deliveryStatus = (status) => status === "sent"
@@ -877,6 +912,14 @@ async function loadSubmissionProgress(database, submissionRows = []) {
     const isCurrentLink = CLIENT_LINK_NOTIFICATION_TEMPLATES.has(delivery.template_key)
       && activeAccess
       && String(delivery.created_at || "") >= String(activeAccess.created_at || "");
+
+    if (
+      CLIENT_LINK_NOTIFICATION_TEMPLATES.has(delivery.template_key)
+      && delivery.status === "sent"
+      && !state.clientLinkNotificationSentAt
+    ) {
+      state.clientLinkNotificationSentAt = delivery.sent_at || delivery.created_at || "";
+    }
 
     if ((isCurrentDecision || isCurrentLink) && !currentNotificationSeen.has(submissionId)) {
       state.clientNotificationStatus = deliveryStatus(delivery.status);
@@ -955,9 +998,11 @@ function normalizeRow(row) {
     clientNotificationStatus: row.clientNotificationStatus || row.client_notification_status || "unsent",
     clientNotificationSentAt: row.clientNotificationSentAt || row.client_notification_sent_at || "",
     clientLinkNotificationStatus: row.clientLinkNotificationStatus || row.client_link_notification_status || "unsent",
+    clientLinkNotificationSentAt: row.clientLinkNotificationSentAt || row.client_link_notification_sent_at || "",
     depositPaymentStatus: row.depositPaymentStatus || row.deposit_payment_status || "none",
     depositPaidAt: row.depositPaidAt || row.deposit_paid_at || "",
     clientAccessStatus: row.clientAccessStatus || row.client_access_status || "none",
+    clientActivity: row.clientActivity || row.client_activity || emptySubmissionProgress().clientActivity,
     flashReservation,
     flashConflict,
     flash_conflict: flashConflict,
@@ -1098,6 +1143,36 @@ function validateTattooInquiryFiles(type, payload, files) {
       error: "Space-filler inquiries require at least 2 area photographs: one wide view and one close view.",
       status: 400,
     };
+  }
+  return null;
+}
+
+function validateSpecialProjectFiles(profile, mode, files) {
+  const imageTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+  const allowedRoles = profile === "experimental"
+    ? new Set(["body_area_photos"])
+    : new Set(["body_area_photos", "references"]);
+  for (const file of files || []) {
+    if (!allowedRoles.has(file.fieldName)) {
+      return { error: "This Special Project application contains an unsupported upload field.", status: 400 };
+    }
+    const contentType = String(file.contentType || "").toLowerCase();
+    if (file.fieldName === "body_area_photos" && !imageTypes.has(contentType)) {
+      return { error: "Body-area photographs must be PNG, JPG, or WEBP images.", status: 415 };
+    }
+    if (file.fieldName === "references" && !new Set([...imageTypes, "application/pdf"]).has(contentType)) {
+      return { error: "Reference uploads must be PNG, JPG, WEBP, or PDF files.", status: 415 };
+    }
+  }
+  const bodyPhotoCount = (files || []).filter((file) => file.fieldName === "body_area_photos").length;
+  if (bodyPhotoCount > 6) {
+    return { error: "Special Project applications accept no more than 6 body-area photographs.", status: 400 };
+  }
+  if (["cover_up", "blast_over"].includes(mode) && bodyPhotoCount < 1) {
+    return { error: `${mode === "cover_up" ? "Cover-up" : "Blast-over"} applications require a clear photograph of the existing tattoo.`, status: 400 };
+  }
+  if (profile === "experimental" && bodyPhotoCount < 1) {
+    return { error: "Experimental Project applications require at least 1 body-area photograph.", status: 400 };
   }
   return null;
 }
@@ -1368,6 +1443,7 @@ export async function handleCreateSubmission(request, env) {
 
   let savedFiles = [];
   let managedSheetSelections = [];
+  let specialProjectTerms = null;
 
   try {
     const db = requireSubmissionDb(env);
@@ -1446,6 +1522,45 @@ export async function handleCreateSubmission(request, env) {
           redirect: "/tattoos/special-projects/",
         });
       }
+      const profile = SPECIAL_PROJECT_PROFILES.has(call.profile) ? call.profile : "extended";
+      const allowedModes = (() => {
+        const parsed = parseJsonField(call.allowed_modes_json, ["fresh"]);
+        return [...new Set((Array.isArray(parsed) ? parsed : []).map(asString).filter((mode) => SPECIAL_PROJECT_MODES.has(mode)))];
+      })();
+      const selectedMode = asString(body.payload.application_mode || body.payload.selected_mode);
+      if (!selectedMode || !allowedModes.includes(selectedMode)) {
+        return errorResponse("Choose one of the application modes allowed for this Special Project.", 400, {
+          code: "SPECIAL_PROJECT_MODE_REQUIRED",
+        });
+      }
+      if (!asString(body.payload.placement) || !asString(body.payload.scale)) {
+        return errorResponse("Placement/body area and approximate scale are required.", 400, {
+          code: "SPECIAL_PROJECT_PLACEMENT_REQUIRED",
+        });
+      }
+      const profileFileValidation = validateSpecialProjectFiles(profile, selectedMode, body.files);
+      if (profileFileValidation) return errorResponse(profileFileValidation.error, profileFileValidation.status);
+      if (profile === "extended") {
+        if (!asString(body.payload.budget_range)) return errorResponse("Budget range is required.", 400);
+        if (!asString(body.payload.message)) return errorResponse("Concept direction is required.", 400);
+      } else {
+        const healedMethod = asString(body.payload.healed_photo_method);
+        if (!new Set(["return", "self_upload"]).has(healedMethod)) {
+          return errorResponse("Choose how you will provide the healed photograph.", 400, {
+            code: "HEALED_PHOTO_METHOD_REQUIRED",
+          });
+        }
+        if (asString(body.payload.experimental_terms_agreed) !== "yes") {
+          return errorResponse("Agreement to the Experimental Project terms is required.", 400, {
+            code: "EXPERIMENTAL_TERMS_REQUIRED",
+          });
+        }
+        if (Number(call.refundable_deposit_cents || 0) <= 0 || !asString(call.participation_terms)) {
+          return errorResponse("This Experimental Project is missing required booking terms. The application was not accepted.", 409, {
+            code: "EXPERIMENTAL_PROJECT_NOT_READY",
+          });
+        }
+      }
       body.payload.special_project_snapshot = {
         id: call.id,
         slug: call.slug,
@@ -1453,8 +1568,29 @@ export async function handleCreateSubmission(request, env) {
         summary: call.summary || "",
         rateText: call.rate_text || "",
         status: call.status,
+        profile,
+        allowedModes,
+        refundableDepositCents: Number(call.refundable_deposit_cents || 0),
+        healedPhotoDueWeeks: Number(call.healed_photo_due_weeks || 6),
+        applicationInstructions: call.application_instructions || "",
+        participationTerms: call.participation_terms || "",
+        agreementVersion: SPECIAL_PROJECT_AGREEMENT_VERSION,
       };
       body.payload.project_title = call.title;
+      body.payload.project_profile = profile;
+      body.payload.application_mode = selectedMode;
+      specialProjectTerms = {
+        projectId: call.id,
+        profile,
+        title: call.title,
+        selectedMode,
+        refundableDepositCents: Number(call.refundable_deposit_cents || 0),
+        healedPhotoMethod: profile === "experimental" ? asString(body.payload.healed_photo_method) : null,
+        healedPhotoDueWeeks: Number(call.healed_photo_due_weeks || 6),
+        participationTerms: call.participation_terms || "",
+        agreementSnapshot: body.payload.special_project_snapshot,
+        agreed: profile === "experimental",
+      };
     }
 
     if (submission.type === "maze_design") {
@@ -1679,6 +1815,33 @@ export async function handleCreateSubmission(request, env) {
                   (submission_id,archive_entity_id,curation_status,review_note,reviewed_at,created_at,updated_at)
                   VALUES(?,NULL,'candidate','',NULL,?,?)`).bind(id,now,now)]
               : []),
+          ]
+        : []),
+      ...(specialProjectTerms
+        ? [
+            db.prepare(
+              `INSERT INTO special_project_submission_terms (
+                submission_id,project_id,project_profile,project_title,selected_mode,
+                refundable_deposit_cents,healed_photo_method,healed_photo_due_weeks,
+                participation_terms,agreement_version,agreement_snapshot_json,
+                agreed_at,created_at,updated_at
+              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+            ).bind(
+              id,
+              specialProjectTerms.projectId,
+              specialProjectTerms.profile,
+              specialProjectTerms.title,
+              specialProjectTerms.selectedMode,
+              specialProjectTerms.refundableDepositCents,
+              specialProjectTerms.healedPhotoMethod,
+              specialProjectTerms.healedPhotoDueWeeks,
+              specialProjectTerms.participationTerms,
+              SPECIAL_PROJECT_AGREEMENT_VERSION,
+              JSON.stringify(specialProjectTerms.agreementSnapshot),
+              specialProjectTerms.agreed ? now : null,
+              now,
+              now,
+            ),
           ]
         : []),
     ]);
@@ -1954,6 +2117,21 @@ export async function handleGetSubmission(request, env, id) {
        ORDER BY ae.created_at ASC`
     ).bind(id).all();
 
+    const clientEventRows = await db.prepare(
+      `SELECT id, booking_token_id, appointment_id, event_type, metadata_json, created_at
+       FROM booking_client_events
+       WHERE submission_id = ?
+       ORDER BY created_at ASC`
+    ).bind(id).all();
+    const clientEvents = (clientEventRows.results || []).map((event) => ({
+      id: event.id,
+      bookingTokenId: event.booking_token_id || "",
+      appointmentId: event.appointment_id || "",
+      eventType: event.event_type,
+      metadata: parseJsonField(event.metadata_json, {}),
+      createdAt: event.created_at,
+    }));
+
     const renderingRequestRows = await db.prepare(
       `SELECT id, submission_id, appointment_id, request_number, amount_cents, currency,
               status, square_order_id, square_payment_link_id, square_checkout_url,
@@ -2037,6 +2215,62 @@ export async function handleGetSubmission(request, env, id) {
 
     const progressBySubmission = await loadSubmissionProgress(db, [row]);
     const normalized = normalizeRow({ ...row, ...(progressBySubmission.get(row.id) || {}) });
+    const specialProjectTermsRow = row.type === "special_project"
+      ? await db.prepare("SELECT * FROM special_project_submission_terms WHERE submission_id = ?").bind(id).first()
+      : null;
+    const healedFollowupRow = specialProjectTermsRow?.project_profile === "experimental"
+      ? await db.prepare(
+          `SELECT * FROM special_project_healed_followups
+           WHERE submission_id = ? ORDER BY created_at DESC LIMIT 1`
+        ).bind(id).first()
+      : null;
+    const healedPhotoRows = healedFollowupRow
+      ? await db.prepare(
+          `SELECT id,followup_id,original_filename,mime_type,byte_size,created_at
+           FROM special_project_healed_photos WHERE followup_id = ? ORDER BY created_at,id`
+        ).bind(healedFollowupRow.id).all()
+      : { results: [] };
+    const experimentalRefundRows = specialProjectTermsRow?.project_profile === "experimental"
+      ? await db.prepare(
+          `SELECT * FROM experimental_deposit_refunds
+           WHERE submission_id = ? ORDER BY created_at DESC`
+        ).bind(id).all()
+      : { results: [] };
+    const specialProjectTerms = specialProjectTermsRow ? {
+      projectId: specialProjectTermsRow.project_id,
+      profile: specialProjectTermsRow.project_profile,
+      title: specialProjectTermsRow.project_title,
+      selectedMode: specialProjectTermsRow.selected_mode,
+      refundableDepositCents: Number(specialProjectTermsRow.refundable_deposit_cents || 0),
+      healedPhotoMethod: specialProjectTermsRow.healed_photo_method || "",
+      healedPhotoDueWeeks: Number(specialProjectTermsRow.healed_photo_due_weeks || 6),
+      participationTerms: specialProjectTermsRow.participation_terms || "",
+      termsVersion: specialProjectTermsRow.agreement_version || "",
+      agreementSnapshot: parseJsonField(specialProjectTermsRow.agreement_snapshot_json, {}),
+      agreedAt: specialProjectTermsRow.agreed_at || "",
+      createdAt: specialProjectTermsRow.created_at,
+    } : null;
+    const healedFollowup = healedFollowupRow ? {
+      id: healedFollowupRow.id,
+      appointmentId: healedFollowupRow.appointment_id,
+      method: healedFollowupRow.method,
+      status: healedFollowupRow.status,
+      dueAt: healedFollowupRow.due_at,
+      initialInstructionsSentAt: healedFollowupRow.instructions_sent_at || "",
+      reminderSentAt: healedFollowupRow.reminder_sent_at || "",
+      mediaAssetId: healedFollowupRow.media_asset_id || "",
+      completedAt: healedFollowupRow.completed_at || "",
+      privateNote: healedFollowupRow.completion_note || "",
+      uploadTokenActive: Boolean(healedFollowupRow.token_hash),
+      uploadTokenExpiresAt: healedFollowupRow.token_expires_at || "",
+      photos: (healedPhotoRows.results || []).map((photo) => ({
+        id: photo.id,
+        fileName: photo.original_filename,
+        contentType: photo.mime_type,
+        sizeBytes: Number(photo.byte_size || 0),
+        receivedAt: photo.created_at,
+      })),
+    } : null;
     const mazeArchive = row.type === "maze_design"
       ? await loadMazeArchiveState(db, id, normalized.payload)
       : null;
@@ -2056,9 +2290,13 @@ export async function handleGetSubmission(request, env, id) {
         renderingRequests,
         briefDocument,
         mazeArchive,
+        specialProjectTerms,
+        healedFollowup,
+        experimentalRefunds: experimentalRefundRows.results || [],
       },
       events: events.results || [],
       appointmentEvents: appointmentEvents.results || [],
+      clientEvents,
       notifications: notifications.results || [],
     });
   } catch (error) {
@@ -2427,6 +2665,20 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
     }
 
     const isTattoo = isTattooSubmissionType(current.type);
+    const specialProjectTerms = current.type === "special_project"
+      ? await db.prepare("SELECT project_profile, selected_mode FROM special_project_submission_terms WHERE submission_id = ?")
+        .bind(id).first()
+      : null;
+    const experimentalSpecialProject = specialProjectTerms?.project_profile === "experimental";
+    const requestedExperimentalConsultation = Boolean(
+      decisionMode
+      && action === "approve"
+      && current.type === "special_project"
+      && ["cover_up", "blast_over"].includes(specialProjectTerms?.selected_mode)
+      && body.consultationRequired === true
+    );
+    const requiresPrerequisiteConsultation = submissionNeedsPrerequisiteConsultation(current)
+      || requestedExperimentalConsultation;
     if (requestedTattooStage && !isTattoo) {
       return errorResponse("Tattoo stages apply only to tattoo project submissions.", 409);
     }
@@ -2469,7 +2721,7 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
     }
 
     if (decisionMode && action === "approve" && isTattoo && current.type !== "tattoo_special") {
-      if (!submissionNeedsPrerequisiteConsultation(current)) {
+      if (!requiresPrerequisiteConsultation) {
         const reviewedPlan = await db.prepare(
           `SELECT session_category, split_policy, approved_budget_min_cents, approved_budget_max_cents
            FROM tattoo_session_plans WHERE submission_id = ?`
@@ -2479,8 +2731,10 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
           && reviewedPlan.split_policy !== "artist_review";
         const completeBudget = Number(reviewedPlan?.approved_budget_min_cents || 0) > 0
           && Number(reviewedPlan?.approved_budget_max_cents || 0) >= Number(reviewedPlan?.approved_budget_min_cents || 0);
-        if (!completePlan || !completeBudget) {
-          return errorResponse("Finish the reviewed session plan and approved project budget before approval.", 409, {
+        if (!completePlan || (!experimentalSpecialProject && !completeBudget)) {
+          return errorResponse(experimentalSpecialProject
+            ? "Finish the reviewed session plan before approving this free Experimental Project."
+            : "Finish the reviewed session plan and approved project budget before approval.", 409, {
             code: "REVIEWED_PLAN_AND_BUDGET_REQUIRED",
           });
         }
@@ -2492,7 +2746,7 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
     if (isTattoo && nextStatus === "approved" && current.status !== "approved") {
       if (current.type === "tattoo_special") {
         nextTattooStage = "ready_to_book";
-      } else if (submissionNeedsPrerequisiteConsultation(current)) {
+      } else if (requiresPrerequisiteConsultation) {
         nextTattooStage = "consultation_required";
       } else {
         const plan = await db.prepare(
@@ -2597,6 +2851,15 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
 
     let updateIndex = 0;
     let statements = [updateStatement, eventStatement];
+    if (requestedExperimentalConsultation) {
+      statements.push(
+        db.prepare(
+          `UPDATE submissions
+           SET payload_json=json_set(CASE WHEN json_valid(payload_json) THEN payload_json ELSE '{}' END,'$.consult_required','yes')
+           WHERE id=? AND updated_at=?`
+        ).bind(id, now),
+      );
+    }
     if (current.type === "flash_claim" && nextStatus === "approved" && current.status !== "approved") {
       const flash = await resolveFlashReference(db, parseJsonField(current.payload_json, {}));
       if (!flash) {

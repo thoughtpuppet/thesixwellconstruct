@@ -57,6 +57,7 @@ import {
   handleAdminUpdateSchedule,
   handleAdminUpdateAvailability,
   handleBookingCalendar,
+  handleBookingAccessEvent,
   handleBookingContext,
   handleAdminTattooSettings,
   handleSaveBookingSessionPlan,
@@ -78,8 +79,11 @@ import {
   handleRescheduleContext,
   reapExpiredBookingHolds,
   reapExpiredTattooRenderingRequests,
+  reconcileExperimentalDepositRefunds,
   handleSquareWebhook,
+  handleSquareCheckoutRedirect,
   handleStudioSquareWebhook,
+  handleAdminExperimentalAppointmentAction,
 } from "./functions/api/booking/_lib.js";
 import { shortBookingTokenFromPath } from "./functions/api/booking-links.js";
 import {
@@ -96,7 +100,12 @@ import {
   retryPendingAdminAppointmentNotifications,
   sendDueAppointmentReminders,
   sendDueEventTicketReminders,
+  sendDueExperimentalHealedReminders,
 } from "./functions/api/notifications/_lib.js";
+import {
+  handleAdminSpecialProjectHealed,
+  handlePublicSpecialProjectHealed,
+} from "./functions/api/special-projects/_lib.js";
 import { handlePortfolioApi } from "./functions/api/portfolio/_lib.js";
 import { handleConstructApi, reapStaleMediaUploads } from "./functions/api/construct/_lib.js";
 import { handleAdminCrmApi } from "./functions/api/crm/_lib.js";
@@ -822,6 +831,16 @@ async function handleBookingApi(request, env) {
     return handleBookingContext(request, env);
   }
 
+  if (pathname === "/api/booking/access-events") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleBookingAccessEvent(request, env);
+  }
+
+  if (pathname === "/api/booking/square-redirect") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleSquareCheckoutRedirect(request, env);
+  }
+
   if (pathname === "/api/booking/session-plan") {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handleSaveBookingSessionPlan(request, env);
@@ -1026,6 +1045,12 @@ async function handleBookingApi(request, env) {
     return handleAdminCompleteAppointment(request, env, decodeURIComponent(appointmentCompleteMatch[1]));
   }
 
+  const experimentalAppointmentMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)\/experimental$/);
+  if (experimentalAppointmentMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminExperimentalAppointmentAction(request, env, decodeURIComponent(experimentalAppointmentMatch[1]));
+  }
+
   const appointmentDeleteMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)$/);
   if (appointmentDeleteMatch) {
     if (method !== "DELETE") return methodNotAllowed(method, ["DELETE"]);
@@ -1218,6 +1243,21 @@ export default {
       return handleBookingApi(request, env);
     }
 
+    if (url.pathname === "/api/special-projects/healed") {
+      if (!["GET", "POST"].includes(request.method)) return methodNotAllowed(request.method, ["GET", "POST"]);
+      return handlePublicSpecialProjectHealed(request, env);
+    }
+
+    const specialProjectHealedAdminMatch = url.pathname.match(/^\/api\/admin\/special-projects\/healed\/([^/]+)(?:\/(file))?$/);
+    if (specialProjectHealedAdminMatch) {
+      return handleAdminSpecialProjectHealed(
+        request,
+        env,
+        decodeURIComponent(specialProjectHealedAdminMatch[1]),
+        specialProjectHealedAdminMatch[2] || "",
+      );
+    }
+
     if (url.pathname === "/api/tattoo/settings") {
       if (request.method !== "GET") return methodNotAllowed(request.method, ["GET"]);
       return handlePublicTattooSettings(request, env);
@@ -1393,9 +1433,11 @@ export default {
     ctx.waitUntil(retryPendingAdminAppointmentNotifications(env));
     ctx.waitUntil(sendDueAppointmentReminders(env));
     ctx.waitUntil(sendDueEventTicketReminders(env));
+    ctx.waitUntil(sendDueExperimentalHealedReminders(env));
     ctx.waitUntil(reapStalePendingTickets(env));
     ctx.waitUntil(reapExpiredBookingHolds(env));
     ctx.waitUntil(reapExpiredTattooRenderingRequests(env));
+    ctx.waitUntil(reconcileExperimentalDepositRefunds(env));
     ctx.waitUntil(reapExpiredTattooBuildDrafts(env));
     ctx.waitUntil(reapStaleMediaUploads(env));
     ctx.waitUntil(processDueOutreach(env));

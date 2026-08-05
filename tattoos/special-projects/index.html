@@ -166,6 +166,7 @@
   .archive-frame {
     position:relative; overflow:hidden; background:#0f0f0f;
   }
+  .archive-frame img { width:100%; height:100%; object-fit:cover; display:block; }
   .archive-frame:first-child { grid-row:span 2; }
   .archive-frame::before {
     content:""; position:absolute; inset:22px;
@@ -224,6 +225,14 @@
     letter-spacing:0.04em; line-height:1.7; color:var(--text-dim);
   }
   .project-load-status { padding:18px 0; font-size:13px; line-height:1.7; color:var(--text-dim); }
+  .application-panel { margin-top:72px; padding-top:42px; border-top:5px solid var(--ring-faint); }
+  .application-panel[hidden], .profile-fields[hidden] { display:none!important; }
+  .profile-fields:not([hidden]) { display:contents; }
+  .application-heading { font-family:var(--sans); font-size:clamp(28px,4vw,52px); font-weight:900; text-transform:uppercase; color:var(--accent); margin-bottom:12px; }
+  .application-note { max-width:720px; font-size:14px; line-height:1.7; color:var(--text-mute); margin-bottom:28px; }
+  .mode-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+  .mode-option { display:flex; gap:10px; align-items:flex-start; min-height:62px; padding:14px; border:5px solid var(--ring-faint); font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+  .terms-box { padding:18px; border:5px solid var(--ring-faint); color:var(--text-mute); font-size:13px; line-height:1.7; }
   footer.bottom {
     position:relative; z-index:2; max-width:1440px; margin:0 auto;
     padding:56px var(--s6); border-top:5px solid var(--ring-faint);
@@ -268,6 +277,7 @@ main { padding:var(--s6) var(--s5); }
     .archive-frame:first-child { grid-row:auto; }
     .meta-grid { grid-template-columns:1fr; }
     .application-row { flex-direction:column; align-items:flex-start; }
+    .mode-options { grid-template-columns:1fr; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
 </style>
@@ -275,6 +285,7 @@ main { padding:var(--s6) var(--s5); }
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
+<link rel="stylesheet" href="/css/forms.css">
 </head>
 <body class="tattoo-flow" data-venture="tattooing">
   <script>
@@ -304,7 +315,7 @@ main { padding:var(--s6) var(--s5); }
     <section class="intro site-hero site-hero--supporting">
       <h1 class="page-title hero-title" data-copy-id="special-projects-page-title">Special Projects</h1>
       <p class="page-subtitle hero-descriptor" data-copy-id="special-projects-page-subtitle">Special Projects by SAIEL DAUHN SOLEHMAN</p>
-      <p class="intro-body" data-copy-id="special-projects-intro-body">Special Projects are concept-driven tattoo calls opened for a defined body of collaborative work. Apply only to a current open calls. For other commissions, use the Custom inquiry path.</p>
+      <p class="intro-body" data-copy-id="special-projects-intro-body">Special Projects are artist-led tattoo opportunities. Some are free experimental designs with a refundable attendance deposit; others are extended collaborative calls. Apply to a current open project below.</p>
       <div class="intro-actions">
         <a class="cta-primary" href="#project-calls">View current calls</a>
         <a class="cta-secondary" href="/tattoos/inquire/custom/">Other symbolic commission &rarr;</a>
@@ -322,11 +333,7 @@ main { padding:var(--s6) var(--s5); }
         <p class="detail-kicker" id="projectKicker">Loading / Current status</p>
         <h2 class="detail-title" id="projectTitle">Current Calls</h2>
         <p class="detail-summary" id="projectSummary">Loading Special Project records from Studio.</p>
-        <div class="image-grid" aria-label="Abstract archive frames for selected project">
-          <div class="archive-frame"><span class="frame-label" id="frameOne">concept</span></div>
-          <div class="archive-frame"><span class="frame-label" id="frameTwo">placement</span></div>
-          <div class="archive-frame"><span class="frame-label" id="frameThree">review</span></div>
-        </div>
+        <div class="image-grid" id="projectMedia" aria-label="Selected project gallery"></div>
         <div class="meta-grid">
           <div class="meta-item"><p class="meta-label">Path</p><p class="meta-value" id="projectMedium">Special Project</p></div>
           <div class="meta-item"><p class="meta-label">Rate</p><p class="meta-value" id="projectStyle">Confirmed after review</p></div>
@@ -346,11 +353,56 @@ main { padding:var(--s6) var(--s5); }
         </div>
       </article>
     </section>
+    <section class="application-panel" id="application" aria-label="Special Projects application" hidden>
+      <h2 class="application-heading">Apply for <span id="applicationProjectTitle">this project</span></h2>
+      <p class="application-note" id="applicationInstructions">Choose an open project above to begin.</p>
+      <form class="public-form" id="specialProjectForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
+        <input type="hidden" name="type" value="special_project">
+        <input type="hidden" name="source_path" id="applicationSourcePath" value="/tattoos/special-projects/">
+        <input type="hidden" name="project_category" value="special_projects">
+        <input type="hidden" name="project_id" id="applicationProjectId">
+        <input type="hidden" name="special_project_slug" id="applicationProjectSlug">
+        <input type="hidden" name="project_title" id="applicationProjectValue">
+        <input type="hidden" name="subject" value="New Art.Pill Special Projects application">
+        <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
+        <div class="field-grid">
+          <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
+          <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
+          <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+          <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" type="tel" autocomplete="tel" required></div>
+          <div class="field"><label for="dob">Date of birth</label><input id="dob" name="dob" type="date" autocomplete="bday" required></div>
+          <div class="field"><label for="instagram">Instagram (optional)</label><input id="instagram" name="instagram" placeholder="@"></div>
+          <fieldset class="field full">
+            <legend>How would this project be used?</legend>
+            <div class="mode-options" id="applicationModes"></div>
+          </fieldset>
+          <div class="field"><label for="placement">Placement / body area</label><input id="placement" name="placement" required></div>
+          <div class="field"><label for="scale">Approximate scale</label><input id="scale" name="scale" placeholder="Example: palm-sized, upper arm" required></div>
+          <div class="field full"><label for="bodyAreaPhotos">Body-area photographs</label><input id="bodyAreaPhotos" name="body_area_photos" type="file" accept="image/png,image/jpeg,image/webp" multiple><p class="file-note" id="bodyPhotoHelp">Upload clear photographs of the intended area.</p></div>
+          <div class="profile-fields" id="extendedFields" hidden>
+            <div class="field"><label for="budgetRange">Total project budget</label><select id="budgetRange" name="budget_range"><option value="">Select a range</option><option>Up to $300</option><option>$300–$500</option><option>$500–$800</option><option>$800–$1,200</option><option>$1,200–$2,000</option><option>$2,000+</option><option>I’m flexible / I’d like guidance</option></select></div>
+            <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline"></div>
+            <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple></div>
+            <div class="field full"><label for="messageExtended">Concept direction</label><textarea id="messageExtended" name="message"></textarea></div>
+          </div>
+          <div class="profile-fields" id="experimentalFields" hidden>
+            <div class="field full"><label for="messageExperimental">Relevant notes (optional)</label><textarea id="messageExperimental" name="message" placeholder="Anything the studio should know about the placement, existing tattoo, or skin area."></textarea></div>
+            <fieldset class="field full"><legend>Healed photograph commitment</legend><label class="form-check"><input class="form-check__input" type="radio" name="healed_photo_method" value="return"><span class="form-check__label">I will return to the studio for a healed photograph.</span></label><label class="form-check"><input class="form-check__input" type="radio" name="healed_photo_method" value="self_upload"><span class="form-check__label">I will send a healed photograph that I take myself.</span></label></fieldset>
+            <div class="field full"><div class="terms-box" id="experimentalTerms"></div></div>
+            <div class="field full"><label class="form-check"><input class="form-check__input" id="experimentalTermsAgreed" type="checkbox" name="experimental_terms_agreed" value="yes"><span class="form-check__label">I agree to the Experimental Project terms, including the healed-photo commitment and authorized use of the resulting documentation.</span></label></div>
+          </div>
+        </div>
+        <label class="form-check"><input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required><span class="form-check__label">I confirm that I am 18 years of age or older.</span></label>
+        <label class="form-check"><input class="form-check__input" type="checkbox" name="review_consent" value="yes" required><span class="form-check__label">I understand that submitting an application does not reserve an appointment and that the studio will review the request first.</span></label>
+        <div class="submit-row"><button class="cta-primary" type="submit" id="submitBtn">Submit Application</button><p class="form-status" id="formStatus" aria-live="polite"></p></div>
+      </form>
+    </section>
   </main>
   <footer class="bottom">
     <a href="/tattoos/">&larr; back to Art.Pill</a>
     <a href="/home/">the six.well construct</a>
   </footer>
+  <script src="/js/submission-form.js"></script>
   <script>
   (function() {
     var projects = [];
@@ -368,6 +420,15 @@ main { padding:var(--s6) var(--s5); }
     var index = document.getElementById("projectIndex");
     var applyLink = document.getElementById("projectApply");
     var applicationCopy = document.getElementById("applicationCopy");
+    var mediaGrid = document.getElementById("projectMedia");
+    var application = document.getElementById("application");
+    var form = document.getElementById("specialProjectForm");
+    var applicationModes = document.getElementById("applicationModes");
+    var extendedFields = document.getElementById("extendedFields");
+    var experimentalFields = document.getElementById("experimentalFields");
+    var bodyAreaPhotos = document.getElementById("bodyAreaPhotos");
+    var bodyPhotoHelp = document.getElementById("bodyPhotoHelp");
+    var selectedProject = null;
 
     function effectiveStatus(project) {
       var now = Date.now();
@@ -397,6 +458,92 @@ main { padding:var(--s6) var(--s5); }
       return project.slug || project.id;
     }
 
+    function modeLabel(mode) {
+      return mode === "cover_up" ? "Cover-up" : mode === "blast_over" ? "Blast-over" : "Fresh skin";
+    }
+
+    function renderMedia(project) {
+      var media = Array.isArray(project.media) ? project.media : [];
+      mediaGrid.replaceChildren();
+      if (!media.length) {
+        ["concept", "placement", "review"].forEach(function(label) {
+          var frame = document.createElement("div");
+          frame.className = "archive-frame";
+          frame.innerHTML = '<span class="frame-label">' + label + '</span>';
+          mediaGrid.append(frame);
+        });
+        return;
+      }
+      media.forEach(function(item) {
+        var frame = document.createElement("figure");
+        frame.className = "archive-frame";
+        var image = document.createElement("img");
+        image.src = item.url;
+        image.alt = item.alt || project.title;
+        image.loading = "lazy";
+        frame.append(image);
+        mediaGrid.append(frame);
+      });
+    }
+
+    function setProfileFields(profile) {
+      var experimental = profile === "experimental";
+      extendedFields.hidden = experimental;
+      experimentalFields.hidden = !experimental;
+      Array.prototype.forEach.call(extendedFields.querySelectorAll("input,select,textarea"), function(control) { control.disabled = experimental; });
+      Array.prototype.forEach.call(experimentalFields.querySelectorAll("input,select,textarea"), function(control) { control.disabled = !experimental; });
+      document.getElementById("budgetRange").required = !experimental;
+      document.getElementById("messageExtended").required = !experimental;
+      Array.prototype.forEach.call(experimentalFields.querySelectorAll('[name="healed_photo_method"]'), function(control) { control.required = experimental; });
+      document.getElementById("experimentalTermsAgreed").required = experimental;
+    }
+
+    function configureApplication(project, status) {
+      selectedProject = project;
+      if (status !== "open") {
+        application.hidden = true;
+        return;
+      }
+      application.hidden = false;
+      document.getElementById("applicationProjectTitle").textContent = project.title;
+      document.getElementById("applicationInstructions").textContent = project.applicationInstructions || (project.profile === "experimental"
+        ? "This is a free artist-led project. The attendance deposit is refunded after you show up for the booked appointment."
+        : "Share the project details needed for review.");
+      document.getElementById("applicationProjectId").value = project.id;
+      document.getElementById("applicationProjectSlug").value = project.slug;
+      document.getElementById("applicationProjectValue").value = project.title;
+      document.getElementById("applicationSourcePath").value = location.pathname + location.search;
+      setProfileFields(project.profile || "extended");
+      applicationModes.replaceChildren();
+      (project.allowedModes || ["fresh"]).forEach(function(mode, index) {
+        var label = document.createElement("label");
+        label.className = "mode-option";
+        var input = document.createElement("input");
+        input.type = "radio";
+        input.name = "application_mode";
+        input.value = mode;
+        input.required = true;
+        if ((project.allowedModes || []).length === 1 || index === 0) input.checked = true;
+        var text = document.createElement("span");
+        text.textContent = modeLabel(mode);
+        label.append(input, text);
+        applicationModes.append(label);
+      });
+      document.getElementById("experimentalTerms").textContent = project.participationTerms || "Project terms are being prepared.";
+      syncBodyPhotoRequirement();
+    }
+
+    function syncBodyPhotoRequirement() {
+      var mode = form.querySelector('[name="application_mode"]:checked')?.value || "";
+      var experimental = selectedProject?.profile === "experimental";
+      bodyAreaPhotos.required = experimental || mode === "cover_up" || mode === "blast_over";
+      bodyPhotoHelp.textContent = mode === "cover_up" || mode === "blast_over"
+        ? "Upload one to six clear images. The existing tattoo must be clearly visible."
+        : experimental
+          ? "Upload one to six clear photographs of the intended body area."
+          : "Optional for fresh-skin Extended Projects; required for cover-ups and blast-overs.";
+    }
+
     function setProject(key) {
       var project = projects.find(function(item) { return keyFor(item) === key || item.id === key; }) || projects[0];
       if (!project) return;
@@ -406,12 +553,14 @@ main { padding:var(--s6) var(--s5); }
       fields.kicker.textContent = String(number).padStart(2, "0") + " / " + status;
       fields.title.textContent = project.title;
       fields.summary.textContent = project.summary || "This Studio-managed call does not have a public summary yet.";
-      fields.medium.textContent = "Special Project";
-      fields.style.textContent = project.rateText || "Confirmed after review";
+      fields.medium.textContent = project.profile === "experimental" ? "Experimental Project" : "Extended Project";
+      fields.style.textContent = project.profile === "experimental" ? "Free work / refundable attendance deposit" : (project.rateText || "Confirmed after review");
       fields.format.textContent = callWindow(project);
       fields.availability.textContent = status === "open" ? "Open call" : (status === "opening soon" ? "Opening soon" : "Closed call");
       fields.intention.textContent = status === "open"
-        ? "This call is accepting applications for review. Applying does not reserve an appointment; accepted projects receive call-specific next steps."
+        ? (project.profile === "experimental"
+          ? "This free experimental project is accepting applications for review. Choose only a mode listed for this design. If approved, a refundable attendance deposit holds the appointment."
+          : "This extended project is accepting applications for review. Applying does not reserve an appointment; accepted projects receive call-specific next steps.")
         : (status === "opening soon"
           ? "This call is visible for planning but is not accepting applications yet. Return when the managed opening date arrives."
           : "This call remains visible as context but is not accepting applications. Use Custom for another symbolic commission.");
@@ -422,7 +571,7 @@ main { padding:var(--s6) var(--s5); }
       if (status === "open") {
         applyLink.classList.remove("is-disabled");
         applyLink.removeAttribute("aria-disabled");
-        applyLink.href = "/tattoos/special-projects/apply/?project=" + encodeURIComponent(selectedKey);
+        applyLink.href = "#application";
         applyLink.textContent = "Apply for this call";
         applicationCopy.textContent = "This call is open for review. If accepted, the studio will send its development path and private booking access when appropriate.";
       } else {
@@ -432,6 +581,8 @@ main { padding:var(--s6) var(--s5); }
         applyLink.textContent = status === "opening soon" ? "Applications not open yet" : "Applications closed";
         applicationCopy.textContent = "This call is not accepting applications. Closed calls stay visible as context; another symbolic commission belongs in Custom.";
       }
+      renderMedia(project);
+      configureApplication(project, status);
       var url = new URL(location.href);
       url.searchParams.set("project", selectedKey);
       history.replaceState(null, "", url.pathname + url.search + url.hash);
@@ -472,6 +623,29 @@ main { padding:var(--s6) var(--s5); }
     select.addEventListener("change", function() {
       setProject(select.value);
     });
+    applicationModes.addEventListener("change", syncBodyPhotoRequirement);
+
+    applyLink.addEventListener("click", function(event) {
+      if (applyLink.classList.contains("is-disabled")) return;
+      event.preventDefault();
+      application.hidden = false;
+      application.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    window.SixWellSubmissionForms.init({
+      form: "#specialProjectForm",
+      submitButton: "#submitBtn",
+      status: "#formStatus",
+      pendingText: "Capturing your Special Projects application.",
+      errorText: "Submission failed. Please review the form and try again.",
+      onSuccess: function(payload) {
+        var receipt = new URL("/tattoos/submission-received/", location.origin);
+        receipt.searchParams.set("type", "special");
+        if (selectedProject) receipt.searchParams.set("project", keyFor(selectedProject));
+        if (payload && payload.submissionId) receipt.searchParams.set("ref", payload.submissionId);
+        location.href = receipt.pathname + receipt.search;
+      }
+    });
 
     fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
       .then(function(response) { if (!response.ok) throw new Error("Unable to load current calls."); return response.json(); })
@@ -481,7 +655,11 @@ main { padding:var(--s6) var(--s5); }
         });
         if (!projects.length) throw new Error("No Special Project calls are currently published.");
         renderIndex();
-        setProject(new URLSearchParams(location.search).get("project") || keyFor(projects[0]));
+        var requestedProject = new URLSearchParams(location.search).get("project") || keyFor(projects[0]);
+        setProject(requestedProject);
+        if (location.hash === "#application" && effectiveStatus(selectedProject || {}) === "open") {
+          application.scrollIntoView({ block: "start" });
+        }
       })
       .catch(function(error) {
         index.innerHTML = '<p class="project-load-status">Current calls could not be loaded. No application path has been opened.</p>';

@@ -65,7 +65,7 @@
   .status { color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:0.12em; text-transform:uppercase; }
   .layout { display:grid; grid-template-columns:minmax(320px,440px) minmax(0,1fr); min-height:0; }
   .list-pane { border-right:5px solid var(--ring-faint); min-height:0; overflow:auto; }
-  .detail-pane { min-height:0; overflow:auto; padding:28px; }
+  .detail-pane { min-width:0; min-height:0; overflow:auto; padding:28px; }
   .toolbar { display:flex; gap:10px; padding:16px; border-bottom:5px solid var(--ring-faint); position:sticky; top:0; background:rgba(14,14,14,0.96); z-index:2; }
   select,input,textarea { width:100%; background:var(--bg); color:var(--text); border:5px solid var(--ring-faint); padding:10px 12px; border-radius:0; transition:border-color var(--t-fast), background var(--t-fast); }
   select { -webkit-appearance:none; appearance:none; color-scheme:dark; accent-color:#FCB867; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FCB867' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
@@ -432,13 +432,17 @@
   .portfolio-option-actions .button { min-height:32px; padding:0 8px; font-size:8px; }
   .portfolio-option-key { color:var(--dim); font-family:var(--mono); font-size:9px; overflow-wrap:anywhere; }
   .portfolio-option-create { display:grid; gap:10px; border-top:5px solid var(--ring-faint); padding-top:14px; }
-  .tattoo-settings { display:grid; gap:22px; }
-  .tattoo-settings-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:start; }
-  .tattoo-settings-card { border:5px solid var(--ring-faint); padding:16px; background:var(--panel); display:grid; gap:12px; }
+  .tattoo-settings { display:grid; gap:22px; min-width:0; }
+  .tattoo-settings-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:start; min-width:0; }
+  .tattoo-settings-card { border:5px solid var(--ring-faint); padding:16px; background:var(--panel); display:grid; gap:12px; min-width:0; }
   .tattoo-settings-card h3 { font-family:var(--sans); font-size:13px; letter-spacing:.12em; text-transform:uppercase; }
-  .tattoo-settings-list { display:grid; gap:10px; }
-  .tattoo-settings-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(120px,.65fr) auto; gap:10px; align-items:end; border-top:3px solid var(--ring-faint); padding-top:10px; }
-  .tattoo-settings-row.special { grid-template-columns:minmax(0,1fr) minmax(110px,.45fr) minmax(110px,.45fr); }
+  .tattoo-settings-list { display:grid; gap:10px; min-width:0; }
+  .tattoo-settings-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(120px,.65fr) auto; gap:10px; align-items:end; border-top:5px solid var(--ring-faint); padding-top:10px; min-width:0; }
+  .tattoo-settings-row.special { grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; padding:14px; border:5px solid var(--ring-faint); }
+  .special-project-wide { grid-column:1/-1; }
+  .special-project-modes { display:flex; flex-wrap:wrap; gap:8px 16px; }
+  .special-project-media { display:grid; gap:8px; }
+  .special-project-media-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(110px,.35fr) auto; gap:8px; align-items:end; padding:8px; border:5px solid var(--ring-faint); }
   .tattoo-specials-manager { display:grid; gap:22px; }
   .save-feedback { min-height:1.5em; margin:7px 0 0; font-family:var(--sans); font-size:11px; color:var(--dim); }
   .save-feedback[data-state="success"] { color:#4caf50; }
@@ -475,6 +479,8 @@
     .tattoo-settings-grid { grid-template-columns:1fr; }
     .tattoo-settings-row,
     .tattoo-settings-row.special { grid-template-columns:1fr; }
+    .special-project-media-row { grid-template-columns:minmax(0,1fr); }
+    .special-project-media-row > label[style] { grid-column:auto!important; }
     .text-template-editor-grid { grid-template-columns:1fr; }
     .tattoo-specials-settings,
     .tattoo-special-offer__grid { grid-template-columns:minmax(0,1fr); }
@@ -682,6 +688,7 @@
   let portfolioBatch = null;
   let portfolioBatchUploading = false;
   let tattooSettings = { settings: {}, rateCards: [], specialProjects: [], displayedHours: "" };
+  let specialProjectMediaAssets = [];
   let tattooSpecials = { settings: {}, offers: [], media: [], readiness: {} };
   let manualTextTemplates = Object.fromEntries(
     (window.ManualTextAssist?.DEFAULT_TEMPLATES || []).map((template) => [template.key, { ...template }])
@@ -958,7 +965,26 @@
     if (submission.depositPaymentStatus === "paid") items.push("Deposit paid");
     else if (submission.depositPaymentStatus === "paid_attention") items.push("Payment needs review");
     else if (submission.depositPaymentStatus === "pending") items.push("Deposit pending");
+    const activity = submission.clientActivity || {};
+    if (activity.latestBookingLinkOpenedAt) items.push(`Client opened ${formatDate(activity.latestBookingLinkOpenedAt)}`);
+    if (activity.latestSquareRedirectAt) items.push(`Sent to Square ${formatDate(activity.latestSquareRedirectAt)}`);
     return items.filter(Boolean).map(escapeHtml).join(" &middot; ");
+  }
+
+  function clientActivitySummaryMarkup(submission) {
+    const activity = submission?.clientActivity || {};
+    const openCount = Number(activity.bookingLinkOpenCount || 0);
+    const squareCount = Number(activity.squareRedirectCount || 0);
+    const linkSent = submission?.clientLinkNotificationSentAt
+      ? formatDate(submission.clientLinkNotificationSentAt)
+      : submission?.clientLinkNotificationStatus === "sent" ? "Sent; timestamp unavailable" : "Not recorded";
+    const opened = openCount
+      ? `${openCount} ${openCount === 1 ? "opening" : "openings"} &middot; first ${escapeHtml(formatDate(activity.firstBookingLinkOpenedAt))}${openCount > 1 ? ` &middot; latest ${escapeHtml(formatDate(activity.latestBookingLinkOpenedAt))}` : ""}`
+      : "Not recorded";
+    const square = squareCount
+      ? `${squareCount} ${squareCount === 1 ? "redirect" : "redirects"} &middot; first ${escapeHtml(formatDate(activity.firstSquareRedirectAt))}${squareCount > 1 ? ` &middot; latest ${escapeHtml(formatDate(activity.latestSquareRedirectAt))}` : ""}`
+      : "Not recorded";
+    return `<strong>Client activity</strong><br>Link sent: ${escapeHtml(linkSent)}<br>Booking page opened: ${opened}<br>Sent to Square: ${square}<br><span style="color:var(--dim);">Sent to Square records the first-party handoff, not a verified Square page render.</span>`;
   }
 
   function updateRequestStateDisplays(submission) {
@@ -967,6 +993,9 @@
     });
     document.querySelectorAll("[data-request-state-meta]").forEach((container) => {
       if (container.dataset.requestStateMeta === submission.id) container.innerHTML = submissionStateMeta(submission);
+    });
+    document.querySelectorAll("[data-client-activity-summary]").forEach((container) => {
+      if (container.dataset.clientActivitySummary === submission.id) container.innerHTML = clientActivitySummaryMarkup(submission);
     });
   }
 
@@ -1192,19 +1221,28 @@
     }
 
     if (t === "special_project") {
-      return card("Special Project", `
+      const terms = submission.specialProjectTerms || {};
+      const profile = terms.profile || p("project_profile") || "extended";
+      const selectedMode = terms.selectedMode || p("selected_mode") || p("project_mode") || "";
+      return card(profile === "experimental" ? `Experimental Project — ${terms.title || p("project_title") || "Project"}` : "Extended Project", `
         <div class="grid">
+          ${field("Profile", titleize(profile))}
+          ${field("Mode", titleize(selectedMode))}
           ${field("Date of Birth", p("dob"))}
           ${field("Placement", p("placement"))}
-          ${field("Size", p("size"))}
-          ${field("Budget", p("budget_range"))}
-          ${field("Timeline", p("timeline"))}
+          ${field("Size", p("scale") || p("size"))}
+          ${profile === "experimental" ? field("Tattoo work", "Free") : field("Budget", p("budget_range"))}
+          ${profile === "experimental" ? field("Attendance deposit", money(terms.refundableDepositCents || p("refundable_deposit_cents") || 0)) : field("Timeline", p("timeline"))}
+          ${profile === "experimental" ? field("Healed-photo method", titleize(terms.healedPhotoMethod || p("healed_photo_method"))) : ""}
+          ${profile === "experimental" ? field("Healed-photo timing", `${terms.healedPhotoDueWeeks || p("healed_photo_due_weeks") || 6} weeks after attendance`) : ""}
           ${field("Instagram", p("instagram"))}
           ${field("Source", submission.sourcePath || "")}
         </div>
         <div class="field" style="margin-top:16px;"><label>Project Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>
-        <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
-        <div class="field" style="margin-top:16px;"><label>Project Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
+        ${profile === "extended" ? `<div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>` : ""}
+        <div class="field" style="margin-top:16px;"><label>${profile === "experimental" ? "Relevant Notes" : "Project Notes"}</label><div class="value full">${escapeHtml(p("message") || p("notes"))}</div></div>
+        ${profile === "experimental" ? `<div class="field" style="margin-top:16px;"><label>Agreement Snapshot</label><div class="value full">Project terms, healed-photo obligation, and documentation use accepted: ${terms.agreedAt ? "yes" : "missing"}<br>Accepted: ${escapeHtml(formatDate(terms.agreedAt || ""))}<br>Version: ${escapeHtml(terms.termsVersion || "")}</div></div>
+        <div class="field" style="margin-top:16px;"><label>Snapshotted Participation Terms</label><div class="value full">${escapeHtml(terms.participationTerms || p("participation_terms"))}</div></div>` : ""}
       `);
     }
 
@@ -1347,13 +1385,25 @@
         event_type: `appointment_${item.event_type || item.eventType || "event"}`,
         note: [item.note, item.appointmentId || item.appointment_id ? `Appointment ${item.appointmentId || item.appointment_id}` : ""].filter(Boolean).join(" · "),
       }));
-      const events = [...(payload.events || []), ...appointmentEvents]
+      const clientEvents = (payload.clientEvents || payload.client_events || []).map((item) => {
+        const eventType = item.eventType || item.event_type || "";
+        const metadata = item.metadata || {};
+        return {
+          ...item,
+          actor: "client",
+          label: eventType === "booking_link_opened" ? "Client opened booking link" : "Client sent to Square checkout",
+          note: eventType === "booking_link_opened" && metadata.accessState && metadata.accessState !== "active"
+            ? `${titleize(metadata.accessState)} link`
+            : "",
+        };
+      });
+      const events = [...(payload.events || []), ...appointmentEvents, ...clientEvents]
         .sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0));
       if (evContainer) {
         evContainer.innerHTML = events.length ? `<div class="event-list">${events.map((ev) => `
           <div class="event-item">
             <span class="event-time">${escapeHtml(formatDate(ev.created_at || ev.createdAt))}</span>
-            <span class="event-text">${escapeHtml(titleize(ev.event_type || ev.eventType || ""))}${ev.note ? ` - ${escapeHtml(ev.note)}` : ""}${ev.actor && ev.actor !== "system" ? ` (${escapeHtml(ev.actor)})` : ""}</span>
+            <span class="event-text">${escapeHtml(ev.label || titleize(ev.event_type || ev.eventType || ""))}${ev.note ? ` - ${escapeHtml(ev.note)}` : ""}${ev.actor && !["system", "client"].includes(ev.actor) ? ` (${escapeHtml(ev.actor)})` : ""}</span>
           </div>
         `).join("")}</div>`
         : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events recorded.</p>';
@@ -2808,7 +2858,16 @@
   }
 
   async function loadTattooSettings() {
-    const payload = await api("/api/admin/tattoo/settings");
+    const [payload, mediaPayload] = await Promise.all([
+      api("/api/admin/tattoo/settings"),
+      api("/api/admin/media"),
+    ]);
+    specialProjectMediaAssets = (mediaPayload.records || []).filter((item) =>
+      (item.state || "active") === "active"
+      && (item.privacy || "public") === "public"
+      && ["not-required", "granted"].includes(item.consent_status || item.consentStatus || "not-required")
+      && (item.public_presentation || item.publicPresentation || "inline") === "inline"
+    );
     tattooSettings = {
       settings: payload.settings || {},
       rateCards: payload.rateCards || payload.rate_cards || [],
@@ -2828,11 +2887,43 @@
 
   function specialProjectRow(project) {
     const status = project.status || "closed";
-    return `<div class="tattoo-settings-row special" data-special-project data-id="${escapeHtml(project.id || "")}" data-slug="${escapeHtml(project.slug || "")}">
-      <label>Call title<input data-special-title value="${escapeHtml(project.title || "")}" maxlength="160"></label>
+    const profile = project.profile || "extended";
+    const modes = new Set(project.allowedModes || project.allowed_modes || ["fresh"]);
+    const mediaRows = (project.media || []).map((item) => specialProjectMediaRow(item)).join("");
+    return `<div class="tattoo-settings-row special" data-special-project data-id="${escapeHtml(project.id || "")}">
+      <label>Project ID / slug<input data-special-slug value="${escapeHtml(project.slug || project.id || "")}" maxlength="96" pattern="[a-z0-9][a-z0-9-]*" required></label>
+      <label>Project title<input data-special-title value="${escapeHtml(project.title || "")}" maxlength="160" required></label>
+      <label>Profile<select data-special-profile><option value="extended" ${profile === "extended" ? "selected" : ""}>Extended</option><option value="experimental" ${profile === "experimental" ? "selected" : ""}>Experimental</option></select></label>
       <label>Status<select data-special-status><option value="open" ${status === "open" ? "selected" : ""}>Open</option><option value="closed" ${status === "closed" ? "selected" : ""}>Closed</option></select></label>
       <label>Displayed rate<input data-special-rate value="${escapeHtml(settingValue(project, "rateText", "rate_text"))}" maxlength="80"></label>
-      <label style="grid-column:1/-1;">Public summary<textarea data-special-summary maxlength="1200">${escapeHtml(project.summary || "")}</textarea></label>
+      <label>Opens at<input data-special-opens type="datetime-local" value="${escapeHtml(String(project.opensAt || project.opens_at || "").slice(0,16))}"></label>
+      <label>Closes at<input data-special-closes type="datetime-local" value="${escapeHtml(String(project.closesAt || project.closes_at || "").slice(0,16))}"></label>
+      <label>Attendance deposit ($)<input data-special-deposit type="number" min="0" step="1" value="${escapeHtml((Number(project.refundableDepositCents || project.refundable_deposit_cents || 0) / 100).toFixed(0))}"></label>
+      <label>Healed photo due (weeks)<input data-special-healed-weeks type="number" min="1" max="52" value="${escapeHtml(project.healedPhotoDueWeeks || project.healed_photo_due_weeks || 6)}"></label>
+      <div class="special-project-wide"><span class="contact">Allowed application modes (select at least one)</span><div class="special-project-modes">
+        <label class="check"><input data-special-mode="fresh" type="checkbox" ${modes.has("fresh") ? "checked" : ""}><span>Fresh skin</span></label>
+        <label class="check"><input data-special-mode="cover_up" type="checkbox" ${modes.has("cover_up") ? "checked" : ""}><span>Cover-up</span></label>
+        <label class="check"><input data-special-mode="blast_over" type="checkbox" ${modes.has("blast_over") ? "checked" : ""}><span>Blast-over</span></label>
+      </div></div>
+      <label class="special-project-wide">Public summary<textarea data-special-summary maxlength="5000">${escapeHtml(project.summary || "")}</textarea></label>
+      <label class="special-project-wide">Application instructions<textarea data-special-instructions maxlength="5000">${escapeHtml(project.applicationInstructions || project.application_instructions || "")}</textarea></label>
+      <label class="special-project-wide">Participation terms<textarea data-special-terms maxlength="10000">${escapeHtml(project.participationTerms || project.participation_terms || "")}</textarea></label>
+      <div class="special-project-wide"><span class="contact">Ordered Shared Media gallery. Exactly one image must be Primary for an Experimental Project.</span><div class="special-project-media" data-special-media-list>${mediaRows}</div>
+        <div class="booking-actions"><select data-special-media-picker><option value="">Choose Shared Media…</option>${specialProjectMediaAssets.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || item.original_filename || item.originalFilename || item.id)}</option>`).join("")}</select><button class="button" type="button" data-add-special-media>Add Media</button></div>
+      </div>
+      <div class="special-project-wide booking-actions"><button class="button danger-button" type="button" data-remove-special-project>Remove Project</button></div>
+    </div>`;
+  }
+
+  function specialProjectMediaRow(item) {
+    const mediaId = item.id || item.mediaId || item.media_id || "";
+    const asset = specialProjectMediaAssets.find((candidate) => candidate.id === mediaId) || {};
+    const label = asset.title || asset.original_filename || asset.originalFilename || mediaId;
+    return `<div class="special-project-media-row" data-special-media data-media-id="${escapeHtml(mediaId)}">
+      <div><strong>${escapeHtml(label)}</strong><br><span class="contact">${escapeHtml(mediaId)}</span></div>
+      <label>Role<select data-special-media-role><option value="gallery" ${item.role !== "primary" ? "selected" : ""}>Gallery</option><option value="primary" ${item.role === "primary" ? "selected" : ""}>Primary</option></select></label>
+      <div class="booking-actions"><button class="button" type="button" data-move-special-media="up" aria-label="Move media up">↑</button><button class="button" type="button" data-move-special-media="down" aria-label="Move media down">↓</button><button class="button danger-button" type="button" data-remove-special-media aria-label="Remove media">Remove</button></div>
+      <label style="grid-column:1/-1;">Project-specific alt text<input data-special-media-alt value="${escapeHtml(item.alt || item.altText || item.alt_text_override || "")}" maxlength="1000"></label>
     </div>`;
   }
 
@@ -2876,8 +2967,9 @@
         </div>
         <section class="tattoo-settings-card">
           <h3>Special Project calls</h3>
-          <p class="contact">Closed calls stay visible for context but cannot accept applications.</p>
+          <p class="contact">Experimental Projects are always free tattoo work with a refundable attendance deposit. Extended Projects retain concept, budget, and session planning. Closed calls stay visible but cannot accept applications.</p>
           <div class="tattoo-settings-list">${tattooSettings.specialProjects.map(specialProjectRow).join("") || '<p class="empty">No Special Project calls configured.</p>'}</div>
+          <div class="booking-actions"><button class="button" type="button" data-add-special-project>Add Special Project</button></div>
         </section>
         <section class="tattoo-settings-card">
           <h3>Session Plan Copy</h3>
@@ -3911,7 +4003,7 @@
     const apptCards = [...entry.appts].sort((a, b) => new Date(a.startAt) - new Date(b.startAt)).map((a) => {
       const time = a.startAt ? new Date(a.startAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
       const kind = homeAppointmentKind(a);
-      const kindLabel = a.isTattooSpecial ? "Tattoo Special" : kind === "art" ? "Art Studio" : "Tattoo";
+      const kindLabel = a.isExperimentalProject ? `Experimental Project — ${a.experimentalProjectTitle}` : a.isTattooSpecial ? "Tattoo Special" : kind === "art" ? "Art Studio" : "Tattoo";
       return `
         <button class="hub-entry kind-appt kind-${escapeHtml(kind)}" type="button" data-home-appointment="${escapeHtml(a.id || "")}" data-appt-submission="${escapeHtml(a.submissionId || "")}">
           <span class="he-top"><span class="he-kind">${escapeHtml(kindLabel)}</span><span class="appt-time">${escapeHtml(time)}</span></span>
@@ -3942,7 +4034,11 @@
     listEl.innerHTML = visible.map((submission) => {
       const isPendingDirectInvite = submission.payload?.direct_booking_invite === "yes" && !submission.contactName;
       const displayName = submission.contactName || (isPendingDirectInvite ? "Awaiting Client Details" : "Unnamed");
-      const displayType = isPendingDirectInvite ? "direct booking invite" : submission.type;
+      const displayType = isPendingDirectInvite
+        ? "direct booking invite"
+        : submission.type === "special_project" && (submission.specialProjectTerms?.profile || submission.payload?.project_profile) === "experimental"
+          ? `Experimental Project — ${submission.specialProjectTerms?.title || submission.payload?.project_title || "Project"}`
+          : submission.type;
       return `
       <button class="submission ${submission.id === activeId ? "active" : ""}" type="button" data-id="${submission.id}">
         <span class="submission-top">
@@ -4049,6 +4145,9 @@
     const squareLine = appointment?.squareOrderId
       ? `Square order: ${appointment.squareOrderId}`
       : "Square checkout: Not started";
+    if (appointment?.isExperimentalProject) {
+      return `Tattoo work: Free\nRefundable attendance deposit: ${money(depositCents, currency)}\nAmount paid: ${money(paidCents, currency)}\nPayment status: ${appointmentPaymentStateLabel(appointment)}\nRefund status: ${titleize(appointment.experimentalRefund?.status || "not requested")}\n${squareLine}`;
+    }
     return `Reservation/deposit: ${money(depositCents, currency)}\nOptional tip: ${money(tipCents, currency)}\nAmount due: ${money(totalDueCents, currency)}\nAmount paid: ${money(paidCents, currency)}\nPayment status: ${appointmentPaymentStateLabel(appointment)}\n${squareLine}`;
   }
 
@@ -4068,6 +4167,16 @@
       && ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose || "")
       && !completedAt
       && new Date(appointment.startAt).getTime() <= Date.now();
+    const canRecordExperimentalAttendance = appointment.isExperimentalProject
+      && appointment.purpose === "tattoo"
+      && appointment.status === "confirmed"
+      && new Date(appointment.startAt).getTime() <= Date.now();
+    const canIssueExperimentalException = appointment.isExperimentalProject
+      && ["cancelled", "no_show", "completed"].includes(appointment.status)
+      && appointment.experimentalRefund?.status !== "completed";
+    const canRetryExperimentalRefund = appointment.isExperimentalProject
+      && appointment.status === "completed"
+      && ["failed", "rejected", "attention"].includes(appointment.experimentalRefund?.status || "");
     const calendarHref = appointmentIsConfirmed(appointment) ? appointmentCalendarUrl(appointment) : "";
     const meetingLines = meeting?.joinUrl
       ? `Zoom: ready
@@ -4084,7 +4193,7 @@ ${["archived", "cancelled"].includes(appointment.status) ? "" : `<button class="
         <label>Appointment Payment</label>
         <div class="value">
 ${isPublicBooking ? "Source: Public calendar booking\n" : ""}Status: ${escapeHtml(appointmentStateLabel(appointment))}
-Session: ${escapeHtml(titleize(appointment.bookingTypeId || "session"))}
+Session: ${escapeHtml(appointment.isExperimentalProject ? `Experimental Project — ${appointment.experimentalProjectTitle}` : titleize(appointment.bookingTypeId || "session"))}
 Purpose: ${escapeHtml(titleize(appointment.purpose || "unspecified"))}
 When: ${escapeHtml(formatDate(appointment.startAt))}
 Ends: ${escapeHtml(formatDate(appointment.endAt))}
@@ -4102,6 +4211,9 @@ ${meetingLines}
           ${appointmentIsConfirmed(appointment) ? `<button class="button danger-button" type="button" data-cancel-appointment="${escapeHtml(appointment.id)}">Cancel Appointment</button>` : ""}
           ${appointment.canPermanentlyDelete ? `<button class="button danger-button" type="button" data-delete-appointment="${escapeHtml(appointment.id)}">Permanently Delete Appointment</button>` : ""}
           ${canCompleteConsultation ? `<button class="button" type="button" data-complete-appointment="${escapeHtml(appointment.id)}">Mark Consultation Complete</button>` : ""}
+          ${canRecordExperimentalAttendance ? `<button class="button" type="button" data-experimental-action="attended_refund" data-appointment-id="${escapeHtml(appointment.id)}">Mark Attended &amp; Refund</button><button class="button danger-button" type="button" data-experimental-action="no_show" data-appointment-id="${escapeHtml(appointment.id)}">Mark No-show</button>` : ""}
+          ${canRetryExperimentalRefund ? `<button class="button" type="button" data-experimental-action="attended_refund" data-appointment-id="${escapeHtml(appointment.id)}">Retry Attendance Refund</button>` : ""}
+          ${canIssueExperimentalException && !canRetryExperimentalRefund ? `<button class="button" type="button" data-experimental-action="exception_refund" data-appointment-id="${escapeHtml(appointment.id)}">Issue Exception Refund</button>` : ""}
           ${appointmentIsConfirmed(appointment) ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}">Resend Confirmation Email</button>` : ""}
         </div>
       </div>
@@ -4191,6 +4303,34 @@ ${meetingLines}
         <div class="booking-actions" style="margin-top:10px;">${actions}</div>
       </div>
     `;
+  }
+
+  function renderExperimentalFollowup(submission) {
+    const terms = submission.specialProjectTerms;
+    if (terms?.profile !== "experimental") return "";
+    const followup = submission.healedFollowup;
+    const refunds = submission.experimentalRefunds || [];
+    return `<section class="tattoo-special-review">
+      <div><span class="pill">Experimental Project</span><h3>Attendance Deposit &amp; Healed Documentation</h3></div>
+      <div class="tattoo-special-offer__grid">
+        ${detailField("Project", `Experimental Project — ${terms.title}`)}
+        ${detailField("Mode", titleize(terms.selectedMode))}
+        ${detailField("Tattoo work", "Free")}
+        ${detailField("Attendance deposit", money(terms.refundableDepositCents || 0))}
+        ${detailField("Healed-photo method", titleize(terms.healedPhotoMethod))}
+        ${detailField("Follow-up due", followup?.dueAt ? formatDate(followup.dueAt) : "Created after attendance")}
+        ${detailField("Follow-up status", followup ? titleize(followup.status) : "Not started")}
+        ${detailField("Reminder", followup?.reminderSentAt ? `Sent ${formatDate(followup.reminderSentAt)}` : "Not sent")}
+        ${detailField("Linked Shared Media", followup?.mediaAssetId || "None")}
+      </div>
+      ${refunds.length ? `<div class="field"><label>Refund History</label><div class="value full">${refunds.map((refund) => `${escapeHtml(titleize(refund.status))} · ${escapeHtml(money(refund.amount_cents || 0, refund.currency || "USD"))} · ${escapeHtml(titleize(refund.reason || ""))}${refund.provider_refund_id ? ` · Square ${escapeHtml(refund.provider_refund_id)}` : ""}${refund.exception_note ? `\nPrivate reason: ${escapeHtml(refund.exception_note)}` : ""}`).join("\n\n")}</div></div>` : ""}
+      ${followup ? `<div class="field"><label>Received Healed Photographs</label><div class="file-list">${followup.photos?.length ? followup.photos.map((photo) => `<div class="file-item"><span class="file-copy"><span class="file-name">${escapeHtml(photo.fileName)}</span></span><button class="button" type="button" data-healed-photo="${escapeHtml(photo.id)}" data-followup-id="${escapeHtml(followup.id)}" data-file-name="${escapeHtml(photo.fileName)}">Open</button></div>`).join("") : '<div class="value">None received.</div>'}</div></div>
+        ${followup.status === "pending" ? `<div class="booking-actions">
+          ${followup.method === "return" ? `<button class="button" type="button" data-healed-action="complete_return" data-followup-id="${escapeHtml(followup.id)}">Mark Return Photo Complete</button>` : `<button class="button" type="button" data-healed-action="regenerate_token" data-followup-id="${escapeHtml(followup.id)}">Regenerate Upload Link</button>`}
+          <button class="button danger-button" type="button" data-healed-action="waive" data-followup-id="${escapeHtml(followup.id)}">Waive With Private Reason</button>
+        </div>` : ""}
+        <div class="field" style="margin-top:12px;"><label>Attach existing Shared Media ID<input id="healedMediaAssetId" value="${escapeHtml(followup.mediaAssetId || "")}" placeholder="media-…"></label><p class="contact">Upload or curate the image in Shared Media first, then link it here. Linking does not publish it.</p><div class="booking-actions"><button class="button" type="button" data-healed-action="link_media" data-followup-id="${escapeHtml(followup.id)}">Link Shared Media</button></div></div>` : '<p class="contact">Attendance creates the follow-up and sends the selected instructions.</p>'}
+    </section>`;
   }
 
   function renderMazeArchivePanel(submission) {
@@ -4462,9 +4602,10 @@ ${meetingLines}
     const appointment = primaryAppointmentFor(submission.id);
     const specialPrepared = submission.type === "tattoo_special" && Boolean(submission.bookingUrl);
     const tattooPrepared = ["tattoo_inquiry", "flash_claim"].includes(submission.type) && Boolean(submission.bookingUrl);
-    const nonBookingApproval = ["art_acquisition", "build_brief", "maze_design", "special_project"].includes(submission.type);
+    const projectPrepared = submission.type === "special_project" && Boolean(submission.bookingUrl);
+    const nonBookingApproval = ["art_acquisition", "build_brief", "maze_design"].includes(submission.type);
     const canSendDecision = submission.status === "declined"
-      || (submission.status === "approved" && (nonBookingApproval || specialPrepared || tattooPrepared));
+      || (submission.status === "approved" && (nonBookingApproval || specialPrepared || tattooPrepared || projectPrepared));
     const canResendConfirmation = appointmentIsConfirmed(appointment);
     return `
       <div class="value" id="decisionCommunicationState">${escapeHtml(communicationStateLabel(submission))}</div>
@@ -4514,6 +4655,8 @@ ${meetingLines}
 
   function sessionPlanEditorHtml(plan = {}, submission = null) {
     const locked = ["approved", "declined"].includes(submission?.status);
+    const experimental = submission?.specialProjectTerms?.profile === "experimental"
+      || payloadValue(submission || {}, "project_profile") === "experimental";
     const preference = plan.clientPreference ? titleize(plan.clientPreference) : "No client response yet";
     const responseTime = plan.clientSelectedAt ? ` · ${formatDate(plan.clientSelectedAt)}` : "";
     const submittedBudget = submission
@@ -4560,7 +4703,10 @@ ${meetingLines}
         <div class="field"><label for="planMinutesMax">Estimated total project time â€” maximum (minutes)</label><input id="planMinutesMax" name="estimatedTotalMinutesMax" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMax ?? "")}"></div>
         <p class="contact wide">Optional. This is the estimated tattooing time for the entire project across every session. It is shown to the client as a time range; it does not control appointment types or calculate price.</p>
         <div class="field wide"><label for="planArtistNote">Client-facing session note</label><textarea id="planArtistNote" name="artistNote" placeholder="Explain the recommended pacing, breaks, or anything the client should know before scheduling.">${escapeHtml(plan.artistNote || "")}</textarea></div>
-        <div class="field wide">
+        ${experimental ? `<div class="field wide">
+          <h3>Free Experimental Work</h3>
+          <p class="contact">No tattoo budget or final balance applies. Use this plan only to define timing, pacing, and eligible appointment types. The project’s snapshotted attendance deposit is applied automatically.</p>
+        </div>` : `<div class="field wide">
           <h3>Approved Tattoo-Work Budget</h3>
           <p class="contact">Client-submitted comfort range: <strong>${escapeHtml(submittedBudget || "Not available")}</strong>. Enter the reviewed tattoo-labor range before the optional $200 Extended Day fee; the original inquiry value remains unchanged.</p>
         </div>
@@ -4572,8 +4718,9 @@ ${meetingLines}
         </label>
         <p class="contact wide">Use this only when alternate concept sketches may apply to the project. Saving this choice sends nothing.</p>
         <p class="contact wide">Both values are required before a tattoo booking link can be generated. Use the same value twice for an exact tattoo-work total. If the client selects Extended Day, the booking page adds the $200 fee, subtracts the $350 deposit credit, and shows the resulting balance. Consultation links do not require a tattoo budget.</p>
+        `}
       </form>
-      <p class="session-plan-client-state">Session-plan response: ${escapeHtml(preference)}${escapeHtml(responseTime)}${plan.clientAcknowledged ? " · acknowledged" : ""}<br>Budget response: ${escapeHtml(budgetResponse)}</p>
+      <p class="session-plan-client-state">Session-plan response: ${escapeHtml(preference)}${escapeHtml(responseTime)}${plan.clientAcknowledged ? " · acknowledged" : ""}${experimental ? "" : `<br>Budget response: ${escapeHtml(budgetResponse)}`}</p>
       <div class="booking-actions"><button class="button" id="saveSessionPlanBtn" type="button" ${locked ? "disabled" : ""}>Save Session Plan</button></div>
       <p class="save-feedback" id="sessionPlanSaveState" role="status" aria-live="polite"></p>
     `;
@@ -4846,7 +4993,11 @@ ${meetingLines}
     const historicPrerequisiteAppointment = historicPrerequisiteAppointmentFor(submission.id);
     const hasDirectAppointment = hasAppointment && !TATTOO_PROJECT_TYPES.has(submission.type);
     const studioVisit = isArtVisitAppointment(latestAppointment) || submissionBookingTypeId(submission) === "studio_visit";
-    const submissionTypeLabel = studioVisit ? "Open Studio Visit" : titleize(submission.type);
+    const submissionTypeLabel = studioVisit
+      ? "Open Studio Visit"
+      : submission.type === "special_project" && submission.specialProjectTerms?.profile === "experimental"
+        ? `Experimental Project — ${submission.specialProjectTerms.title}`
+        : titleize(submission.type);
     const clientSmsHref = smsHref(submission.contactPhone || payloadValue(submission, "phone"));
     const directBookingLabel = submission.type === "studio_booking"
       ? (studioVisit ? "Open Studio Visit" : "studio booking")
@@ -4906,6 +5057,7 @@ ${meetingLines}
       ${renderMazeArchivePanel(submission)}
       ${renderBriefDocument(submission)}
       ${renderPaymentSummary(submission)}
+      ${renderExperimentalFollowup(submission)}
       ${renderAdditionalRenderings(submission)}
       ${renderTattooSpecialReview(submission)}
       ${TATTOO_PROJECT_TYPES.has(submission.type) ? `<div class="session-plan-editor" id="tattooSessionPlanEditor"></div>` : ""}
@@ -4937,6 +5089,7 @@ ${meetingLines}
               <button class="button" id="revokeBookingBtn" type="button">Revoke</button>
             </div>
             <div id="tokenStateInfo" style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-top:6px;">Loading token state…</div>
+            <div data-client-activity-summary="${escapeHtml(submission.id)}" style="font-family:var(--sans);font-size:11px;line-height:1.55;color:var(--text);margin-top:10px;">${clientActivitySummaryMarkup(submission)}</div>
             ${renderBookingTokenControls(submission)}
           `}
         </div>
@@ -6161,19 +6314,26 @@ ${meetingLines}
         "clientNotificationStatus",
         "clientNotificationSentAt",
         "clientLinkNotificationStatus",
+        "clientLinkNotificationSentAt",
         "depositPaymentStatus",
         "depositPaidAt",
         "clientAccessStatus",
+        "clientActivity",
       ];
+      let activeClientActivityChanged = false;
       submissions.forEach((submission) => {
         const latest = latestById.get(submission.id);
         if (!latest) return;
+        if (submission.id === activeId) {
+          activeClientActivityChanged = JSON.stringify(submission.clientActivity || {}) !== JSON.stringify(latest.clientActivity || {});
+        }
         progressFields.forEach((field) => { submission[field] = latest[field]; });
       });
       submissions.forEach(updateRequestStateDisplays);
       const activeSubmission = submissions.find((item) => item.id === activeId);
       const communicationState = document.getElementById("decisionCommunicationState");
       if (activeSubmission && communicationState) communicationState.textContent = communicationStateLabel(activeSubmission);
+      if (activeSubmission && activeClientActivityChanged) renderEventHistory(activeSubmission.id);
     } catch {
       // Background progress refresh is best-effort; normal Studio actions still surface errors.
     } finally {
@@ -6266,9 +6426,16 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("change", (event) => {
-    if (event.target.id !== "textTemplateSelect" || !activeId) return;
-    const submission = submissions.find((item) => item.id === activeId);
-    if (submission) updateTextTemplateEditor(submission);
+    if (event.target.matches("[data-special-media-role]") && event.target.value === "primary") {
+      event.target.closest("[data-special-project]")?.querySelectorAll("[data-special-media-role]").forEach((select) => {
+        if (select !== event.target) select.value = "gallery";
+      });
+      return;
+    }
+    if (event.target.id === "textTemplateSelect" && activeId) {
+      const submission = submissions.find((item) => item.id === activeId);
+      if (submission) updateTextTemplateEditor(submission);
+    }
   });
 
   detailEl.addEventListener("click", async (event) => {
@@ -6754,6 +6921,157 @@ ${meetingLines}
       return;
     }
 
+    const experimentalAction = event.target.closest("[data-experimental-action]");
+    if (experimentalAction) {
+      const action = experimentalAction.dataset.experimentalAction;
+      const appointmentId = experimentalAction.dataset.appointmentId;
+      let note = "";
+      if (action === "attended_refund" && !window.confirm("Mark this Experimental Project appointment attended and initiate the exact attendance-deposit refund?")) return;
+      if (action === "no_show" && !window.confirm("Mark this Experimental Project appointment as a no-show? The attendance deposit will not be refunded.")) return;
+      if (action === "exception_refund") {
+        note = window.prompt("Private reason for the exception refund. This is required and is not sent to the client.")?.trim() || "";
+        if (!note || !window.confirm("Issue the exact attendance-deposit refund as a Studio exception?")) return;
+      }
+      experimentalAction.disabled = true;
+      try {
+        const payload = await api(`/api/admin/booking/appointments/${encodeURIComponent(appointmentId)}/experimental`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action, note, confirmed: action === "exception_refund" }),
+        });
+        await loadAndRender();
+        setStatus(action === "attended_refund"
+          ? `Attendance recorded; refund ${titleize(payload.refund?.status || "requested")}`
+          : action === "no_show" ? "No-show recorded; deposit forfeited" : `Exception refund ${titleize(payload.refund?.status || "requested")}`);
+      } catch (error) {
+        setStatus(error.message || "Experimental Project action failed");
+        if (experimentalAction.isConnected) experimentalAction.disabled = false;
+      }
+      return;
+    }
+
+    const healedAction = event.target.closest("[data-healed-action]");
+    if (healedAction) {
+      const action = healedAction.dataset.healedAction;
+      const followupId = healedAction.dataset.followupId;
+      let note = "";
+      if (action === "complete_return") note = window.prompt("Optional private note about the return/photo session:")?.trim() || "";
+      if (action === "waive") {
+        note = window.prompt("Private reason for waiving the healed-photo obligation:")?.trim() || "";
+        if (!note) return;
+      }
+      healedAction.disabled = true;
+      try {
+        const mediaId = action === "link_media" ? document.getElementById("healedMediaAssetId")?.value.trim() || "" : "";
+        const payload = await api(`/api/admin/special-projects/healed/${encodeURIComponent(followupId)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action, note, mediaId }),
+        });
+        if (payload.uploadUrl) {
+          await navigator.clipboard?.writeText(payload.uploadUrl).catch(() => {});
+          setStatus("New private healed-photo upload link copied");
+        } else if (action === "link_media") {
+          setStatus("Existing Shared Media linked; nothing was published");
+        } else {
+          setStatus(action === "waive" ? "Healed-photo obligation waived" : "Return healed photo marked complete");
+        }
+        await refreshActiveSubmissionDetail();
+      } catch (error) {
+        setStatus(error.message || "Healed-photo follow-up could not be updated");
+        if (healedAction.isConnected) healedAction.disabled = false;
+      }
+      return;
+    }
+
+    const healedPhoto = event.target.closest("[data-healed-photo]");
+    if (healedPhoto) {
+      healedPhoto.disabled = true;
+      try {
+        const response = await fetch(`/api/admin/special-projects/healed/${encodeURIComponent(healedPhoto.dataset.followupId)}/file?photo=${encodeURIComponent(healedPhoto.dataset.healedPhoto)}`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error("Healed photograph could not be opened.");
+        const objectUrl = URL.createObjectURL(await response.blob());
+        window.open(objectUrl, "_blank", "noopener,noreferrer");
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      } catch (error) {
+        setStatus(error.message);
+      } finally {
+        if (healedPhoto.isConnected) healedPhoto.disabled = false;
+      }
+      return;
+    }
+
+    const addSpecialProject = event.target.closest("[data-add-special-project]");
+    if (addSpecialProject) {
+      const list = addSpecialProject.closest(".tattoo-settings-card")?.querySelector(".tattoo-settings-list");
+      if (!list) return;
+      list.querySelector(".empty")?.remove();
+      list.insertAdjacentHTML("beforeend", specialProjectRow({
+        id: "",
+        slug: "",
+        title: "",
+        profile: "experimental",
+        status: "closed",
+        allowedModes: ["fresh"],
+        refundableDepositCents: 10000,
+        healedPhotoDueWeeks: 6,
+        media: [],
+      }));
+      enhanceControls(list.lastElementChild);
+      list.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    const removeSpecialProject = event.target.closest("[data-remove-special-project]");
+    if (removeSpecialProject) {
+      const row = removeSpecialProject.closest("[data-special-project]");
+      if (!row) return;
+      const title = row.querySelector("[data-special-title]")?.value.trim() || "this Special Project";
+      if (!window.confirm(`Remove ${title}? Existing application snapshots remain intact.`)) return;
+      if (row.dataset.id) {
+        row.dataset.delete = "true";
+        row.hidden = true;
+      } else {
+        row.remove();
+      }
+      return;
+    }
+
+    const addSpecialMedia = event.target.closest("[data-add-special-media]");
+    if (addSpecialMedia) {
+      const project = addSpecialMedia.closest("[data-special-project]");
+      const picker = project?.querySelector("[data-special-media-picker]");
+      const list = project?.querySelector("[data-special-media-list]");
+      const mediaId = picker?.value || "";
+      if (!list || !mediaId) return;
+      if (list.querySelector(`[data-media-id="${CSS.escape(mediaId)}"]`)) {
+        setStatus("That Shared Media item is already attached to this project");
+        return;
+      }
+      list.insertAdjacentHTML("beforeend", specialProjectMediaRow({ id: mediaId, role: list.children.length ? "gallery" : "primary" }));
+      enhanceControls(list.lastElementChild);
+      picker.value = "";
+      return;
+    }
+
+    const removeSpecialMedia = event.target.closest("[data-remove-special-media]");
+    if (removeSpecialMedia) {
+      removeSpecialMedia.closest("[data-special-media]")?.remove();
+      return;
+    }
+
+    const moveSpecialMedia = event.target.closest("[data-move-special-media]");
+    if (moveSpecialMedia) {
+      const row = moveSpecialMedia.closest("[data-special-media]");
+      const sibling = moveSpecialMedia.dataset.moveSpecialMedia === "up" ? row?.previousElementSibling : row?.nextElementSibling;
+      if (!row || !sibling) return;
+      if (moveSpecialMedia.dataset.moveSpecialMedia === "up") row.parentElement.insertBefore(row, sibling);
+      else row.parentElement.insertBefore(sibling, row);
+      return;
+    }
+
     const manageAppointment = event.target.closest("[data-manage-appointment]");
     if (manageAppointment) {
       openAppointment(manageAppointment.dataset.manageAppointment);
@@ -7057,9 +7375,15 @@ ${meetingLines}
       const confirmation = document.getElementById("decisionConfirmation");
       if (!confirmation) return;
       const actionLabel = action === "reopen" ? "Reopen Review" : titleize(action);
+      const submission = submissions.find((item) => item.id === activeId);
+      const terms = submission?.specialProjectTerms;
+      const canRequireConsultation = action === "approve"
+        && terms?.profile === "experimental"
+        && ["cover_up", "blast_over"].includes(terms.selectedMode);
       confirmation.innerHTML = `<div class="assist-panel" style="margin-top:10px;">
         <label>Confirm ${escapeHtml(actionLabel)}</label>
         <p class="contact">This records the Studio decision only. No client notification will be sent.</p>
+        ${canRequireConsultation ? `<label class="check" style="margin:10px 0;"><input id="experimentalConsultationRequired" type="checkbox"><span class="check-label">Require a free prerequisite consultation before issuing the Experimental Project tattoo booking link</span></label>` : ""}
         <div class="booking-actions">
           <button class="button ${action === "decline" ? "danger-button" : ""}" type="button" data-confirm-decision="${escapeHtml(action)}">Confirm ${escapeHtml(actionLabel)}</button>
           <button class="button" type="button" data-cancel-decision>Cancel</button>
@@ -7090,6 +7414,9 @@ ${meetingLines}
         }
         if (submission?.type === "tattoo_special") {
           body.approvedPriceCents = Math.round(Number(document.getElementById("specialApprovedPrice")?.value || 0) * 100);
+        }
+        if (submission?.specialProjectTerms?.profile === "experimental") {
+          body.consultationRequired = document.getElementById("experimentalConsultationRequired")?.checked === true;
         }
       }
       confirmDecisionButton.disabled = true;
@@ -7587,12 +7914,27 @@ ${meetingLines}
         sortOrder: index,
       }));
       const specialProjects = [...tattooSettingsForm.querySelectorAll("[data-special-project]")].map((row, index) => ({
-        id: row.dataset.id,
-        slug: row.dataset.slug,
+        id: row.dataset.id || row.querySelector("[data-special-slug]")?.value.trim() || "",
+        slug: row.querySelector("[data-special-slug]")?.value.trim() || "",
         title: row.querySelector("[data-special-title]")?.value.trim() || "",
+        profile: row.querySelector("[data-special-profile]")?.value || "extended",
         status: row.querySelector("[data-special-status]")?.value || "closed",
         rateText: row.querySelector("[data-special-rate]")?.value.trim() || "",
         summary: row.querySelector("[data-special-summary]")?.value.trim() || "",
+        opensAt: row.querySelector("[data-special-opens]")?.value || "",
+        closesAt: row.querySelector("[data-special-closes]")?.value || "",
+        refundableDepositCents: Math.round(Number(row.querySelector("[data-special-deposit]")?.value || 0) * 100),
+        healedPhotoDueWeeks: Number(row.querySelector("[data-special-healed-weeks]")?.value || 6),
+        allowedModes: [...row.querySelectorAll("[data-special-mode]:checked")].map((input) => input.dataset.specialMode),
+        applicationInstructions: row.querySelector("[data-special-instructions]")?.value.trim() || "",
+        participationTerms: row.querySelector("[data-special-terms]")?.value.trim() || "",
+        media: [...row.querySelectorAll("[data-special-media]")].map((item, mediaIndex) => ({
+          id: item.dataset.mediaId,
+          role: item.querySelector("[data-special-media-role]")?.value || "gallery",
+          alt: item.querySelector("[data-special-media-alt]")?.value.trim() || "",
+          sortOrder: mediaIndex,
+        })),
+        _delete: row.dataset.delete === "true",
         sortOrder: index,
       }));
       const sessionEstimateCopy = Object.fromEntries(

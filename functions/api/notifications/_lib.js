@@ -29,7 +29,7 @@ import { renderEmailContent, validateEmailContent } from "./_email-content.js";
 import { CLIENT_EMAIL_THEMES, renderClientEmail } from "./_email-renderer.js";
 import { defaultEmailDesignProfile, validateEmailDesignProfile } from "./_email-design.js";
 import { tattooPricingSummary } from "../booking/_pricing.js";
-import { bookingTokenFromUrl } from "../booking-links.js";
+import { bookingTokenFromUrl, createBookingRawToken } from "../booking-links.js";
 import {
   emailDesignHistory,
   emailDesignRevision,
@@ -593,6 +593,91 @@ export async function sendCrmFollowupEmail(env, message = {}) {
   });
 }
 
+export async function notifyExperimentalHealedFollowup(env, request, followup = {}, options = {}) {
+  const to = asString(followup.client_email || followup.clientEmail);
+  if (!to) return { ok: false, skipped: true, error: "Client email is required." };
+  const method = asString(followup.method);
+  const projectTitle = asString(followup.project_title || followup.projectTitle) || "Experimental Project";
+  const dueAt = followup.due_at || followup.dueAt;
+  const uploadUrl = asString(followup.upload_url || followup.uploadUrl);
+  const reminder = options.reminder === true;
+  const action = method === "self_upload"
+    ? `Send the healed photograph using your private upload link${uploadUrl ? `: ${uploadUrl}` : ". Reply to this email if you need a replacement link."}`
+    : "Return to the studio for the healed photograph. Reply to this email so the studio can coordinate the visit.";
+  const rendered = buildCrmFollowupEmail({
+    theme: "tattoo",
+    subject: reminder ? `Healed photograph due — ${projectTitle}` : `Healed photograph follow-up — ${projectTitle}`,
+    preheader: reminder ? "Your healed photograph is due." : "Your Experimental Project follow-up is ready.",
+    body: [
+      `Hi ${asString(followup.client_name || followup.clientName) || "there"},`,
+      "",
+      reminder
+        ? `Your healed photograph for ${projectTitle} is now due.`
+        : `Thank you for showing up for ${projectTitle}. Your attendance deposit refund has been initiated separately.`,
+      "",
+      action,
+      dueAt ? `Please complete this by ${formatDate(dueAt)}.` : "",
+      "",
+      "Your application agreement allows the finished documentation to be considered for the project record. Nothing is published automatically; the studio makes that decision separately.",
+    ].filter(Boolean).join("\n"),
+  });
+  return sendTransactionalEmail(env, {
+    to,
+    ...rendered,
+    contentLocked: true,
+    templateKey: reminder ? "experimental_healed_photo_reminder" : "experimental_healed_photo_instructions",
+    relatedType: "special_project_healed_followup",
+    relatedId: followup.id,
+    idempotencyKey: options.idempotencyKey
+      || `${reminder ? "experimental_healed_reminder" : "experimental_healed_instructions"}:${followup.id}`,
+  });
+}
+
+export async function sendDueExperimentalHealedReminders(env) {
+  const db = notificationDb(env);
+  if (!db) return { sent: 0, skipped: 0, failed: 0 };
+  const now = new Date().toISOString();
+  try {
+    const result = await db.prepare(
+      `SELECT f.*, s.contact_email AS client_email, s.contact_name AS client_name,
+              t.project_title
+       FROM special_project_healed_followups f
+       JOIN submissions s ON s.id=f.submission_id
+       JOIN special_project_submission_terms t ON t.submission_id=f.submission_id
+       WHERE f.status='pending' AND f.due_at<=? AND f.reminder_sent_at IS NULL
+       ORDER BY f.due_at LIMIT 50`
+    ).bind(now).all();
+    let sent = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const row of result.results || []) {
+      let uploadUrl = "";
+      if (row.method === "self_upload") {
+        const rawToken = createBookingRawToken();
+        const tokenHash = await sha256Hex(rawToken);
+        const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+        await db.prepare(
+          "UPDATE special_project_healed_followups SET token_hash=?,token_expires_at=?,updated_at=? WHERE id=? AND status='pending'"
+        ).bind(tokenHash, expiresAt, now, row.id).run();
+        uploadUrl = `${publicBaseUrl(env, null)}/tattoos/special-projects/healed/?token=${encodeURIComponent(rawToken)}`;
+      }
+      const delivery = await notifyExperimentalHealedFollowup(env, null, { ...row, upload_url: uploadUrl }, { reminder: true });
+      if (delivery.ok) {
+        await db.prepare(
+          "UPDATE special_project_healed_followups SET reminder_sent_at=COALESCE(reminder_sent_at,?),updated_at=? WHERE id=?"
+        ).bind(now, now, row.id).run();
+        delivery.skipped ? skipped += 1 : sent += 1;
+      } else {
+        failed += 1;
+      }
+    }
+    return { sent, skipped, failed };
+  } catch (error) {
+    console.warn("Unable to send due Experimental Project healed-photo reminders.", error.message);
+    return { sent: 0, skipped: 0, failed: 1, error: error.message };
+  }
+}
+
 export async function notifyTattooSpecialReview(env, review = {}, options = {}) {
   const outcome = asString(review.outcome);
   if (!new Set(["simplification_requested", "declined"]).has(outcome)) {
@@ -802,11 +887,15 @@ function normalizeAppointment(row) {
   const meetingJoinUrl = row.meeting_join_url || row.meetingJoinUrl || row.meeting?.joinUrl || "";
   const bookingTypeId = row.booking_type_id || row.bookingTypeId || "";
   const submissionType = row.submission_type || row.submissionType || (String(bookingTypeId).startsWith("tattoo_special_") ? "tattoo_special" : "");
+  const isExperimentalProject = (row.special_project_profile || row.specialProjectProfile) === "experimental";
+  const experimentalProjectTitle = row.special_project_title || row.experimentalProjectTitle || "";
   return {
     id: row.id,
     submissionId: row.submission_id || row.submissionId || "",
     bookingTypeId,
-    bookingTypeLabel: TATTOO_DAY_SESSION_LABELS[bookingTypeId] || row.booking_type_label || row.bookingTypeLabel || "Tattoo session",
+    bookingTypeLabel: isExperimentalProject
+      ? `Experimental Project — ${experimentalProjectTitle || "Project"}`
+      : TATTOO_DAY_SESSION_LABELS[bookingTypeId] || row.booking_type_label || row.bookingTypeLabel || "Tattoo session",
     clientName: row.client_name || row.clientName || "",
     clientEmail: row.client_email || row.clientEmail || "",
     clientPhone: row.client_phone || row.clientPhone || "",
@@ -828,6 +917,8 @@ function normalizeAppointment(row) {
     specialVariantLabel: row.special_variant_label || row.specialVariantLabel || "",
     specialApprovedPriceCents: row.special_approved_price_cents ?? row.specialApprovedPriceCents ?? row.special_advertised_price_cents ?? 0,
     specialDurationMinutes: row.special_duration_minutes ?? row.specialDurationMinutes ?? 0,
+    isExperimentalProject,
+    experimentalProjectTitle,
   };
 }
 
@@ -1373,7 +1464,12 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
   const purpose = asString(token.purpose || token.bookingPurpose || token.booking_purpose) || "tattoo";
   const isConsultationPurpose = purpose === "consultation";
   const isTattooSpecial = normalized.type === "tattoo_special";
-  const approvedBudget = isConsultationPurpose ? "" : reviewedBudgetLabel(token.approvedBudget);
+  const experimentalTerms = normalized.type === "special_project"
+    ? await notificationDb(env)?.prepare(
+        "SELECT project_title,refundable_deposit_cents FROM special_project_submission_terms WHERE submission_id=? AND project_profile='experimental'"
+      ).bind(normalized.id).first()
+    : null;
+  const approvedBudget = isConsultationPurpose || experimentalTerms ? "" : reviewedBudgetLabel(token.approvedBudget);
   const expiresAt = token.expiresAt || token.expires_at || "";
   const approvedSheetDesigns = flashSheetDesignLines(
     normalized.payload,
@@ -1382,7 +1478,11 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
   );
   const message = buildBookingLinkEmail({
     variant: isTattooSpecial ? "tattoo_special" : isConsultationPurpose ? "consultation" : "tattoo",
-    subject: isConsultationPurpose
+    subject: experimentalTerms
+      ? isConsultationPurpose
+        ? `Choose your free consultation — Experimental Project — ${experimentalTerms.project_title}`
+        : `Book Experimental Project — ${experimentalTerms.project_title}`
+      : isConsultationPurpose
       ? "Your private prerequisite consultation link"
       : isTattooSpecial
         ? "Finish booking your Tattoo Special - deposit required"
@@ -1392,7 +1492,11 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
     approvedSheetDesigns: approvedSheetDesigns.slice(1),
     sessionOptions: sessionOptionsText(bookingTypes),
     approvedBudget,
-    depositText: depositAmountText(bookingTypes),
+    depositText: experimentalTerms
+      ? isConsultationPurpose
+        ? "Free consultation — no payment required"
+        : `${formatMoney(experimentalTerms.refundable_deposit_cents, "USD")} refundable attendance deposit; the tattoo work is free`
+      : depositAmountText(bookingTypes),
     bookingUrl,
     expiresAt: expiresAt ? formatDate(expiresAt) : "",
     bookingTermsUrl: resources.bookingTermsUrl,
@@ -1417,16 +1521,20 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
   const specialRemaining = Math.max(0, Number(appointment.specialApprovedPriceCents || 0) - Number(appointment.depositCents || 0));
   const hasExtendedDayFee = appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
     && Number(appointment.sessionFeeCents || 0) > 0;
-  const ordinaryPricing = isSpecial ? null : await reviewedTattooPricing(env, appointment);
+  const ordinaryPricing = isSpecial || appointment.isExperimentalProject ? null : await reviewedTattooPricing(env, appointment);
   const ordinaryDetails = ordinaryTattooPricingDetails(ordinaryPricing, appointment);
-  const pricingDetails = isSpecial
+  const pricingDetails = appointment.isExperimentalProject
+    ? [{ id: "experimental_work", label: "Tattoo work", value: "Free" }]
+    : isSpecial
     ? [{
         id: "tattoo_special_total",
         label: "Tattoo Special total",
         value: formatMoney(appointment.specialApprovedPriceCents, appointment.currency),
       }]
     : ordinaryDetails.pricingDetails;
-  const balanceDetails = isSpecial
+  const balanceDetails = appointment.isExperimentalProject
+    ? []
+    : isSpecial
     ? [
         {
           id: "remaining_balance",
@@ -1440,7 +1548,9 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
         },
       ]
     : ordinaryDetails.balanceDetails;
-  const variant = isSpecial
+  const variant = appointment.isExperimentalProject
+    ? undefined
+    : isSpecial
     ? (appointment.tipCents ? "tattoo_special_tip" : "tattoo_special")
     : hasExtendedDayFee
       ? ordinaryPricing
@@ -1452,20 +1562,28 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
   const message = buildAppointmentConfirmedEmail({
     kind: isSpecial ? "tattoo_special" : "tattoo",
     variant,
-    subject: isSpecial
+    subject: appointment.isExperimentalProject
+      ? `${appointment.bookingTypeLabel} appointment confirmed`
+      : isSpecial
       ? "Your Tattoo Special appointment at art.pill TATTOO HOUSE has been confirmed"
       : "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: specialSession,
     pricingDetails,
-    feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received`,
+    feeText: appointment.isExperimentalProject
+      ? `${formatMoney(appointment.depositCents, appointment.currency)} refundable attendance deposit received`
+      : `${formatMoney(appointment.depositCents, appointment.currency)} received`,
     balanceDetails,
-    billingPolicyText: appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
+    billingPolicyText: appointment.isExperimentalProject
+      ? "The tattoo work is free. This attendance deposit will be refunded after you attend. Cancellation or a no-show forfeits it."
+      : appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
       ? "Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
       : "",
-    renderingPolicyText: "Your paid tattoo deposit includes one developed design direction. Artist-approved additional concept sketches are separate, non-refundable $50 fees that are not credited toward the tattoo total and must be paid before drawing begins.",
-    paymentPolicyText: TATTOO_APPOINTMENT_PAYMENT_AND_ARRIVAL_POLICY,
+    renderingPolicyText: appointment.isExperimentalProject ? "" : "Your paid tattoo deposit includes one developed design direction. Artist-approved additional concept sketches are separate, non-refundable $50 fees that are not credited toward the tattoo total and must be paid before drawing begins.",
+    paymentPolicyText: appointment.isExperimentalProject
+      ? "There is no project price or balance due for this experimental tattoo."
+      : TATTOO_APPOINTMENT_PAYMENT_AND_ARRIVAL_POLICY,
     tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
     totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
     confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
@@ -1491,11 +1609,15 @@ async function sendInPersonConsultationConfirmed(env, request, appointment, opti
   const resources = clientResourceUrls(env, request);
   const message = buildAppointmentConfirmedEmail({
     kind: "consultation_in_person",
-    subject: "Your consultation at art.pill TATTOO HOUSE has been confirmed",
+    subject: appointment.isExperimentalProject
+      ? `${appointment.bookingTypeLabel} consultation confirmed`
+      : "Your consultation at art.pill TATTOO HOUSE has been confirmed",
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: appointment.bookingTypeLabel,
-    feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`,
+    feeText: appointment.isExperimentalProject
+      ? "This prerequisite consultation is free; no payment was collected."
+      : `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`,
     tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
     totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
     confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
@@ -1912,6 +2034,9 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
   return db
     .prepare(
       `SELECT a.*, bt.label AS booking_type_label,
+              s.type AS submission_type,
+              spt.project_profile AS special_project_profile,
+              spt.project_title AS special_project_title,
               am.provider AS meeting_provider,
               am.provider_meeting_id,
               am.join_url AS meeting_join_url,
@@ -1920,6 +2045,8 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
               am.updated_at AS meeting_updated_at
        FROM appointments a
        LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+       LEFT JOIN submissions s ON s.id = a.submission_id
+       LEFT JOIN special_project_submission_terms spt ON spt.submission_id = a.submission_id
        LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
        WHERE a.id = ?`
     )

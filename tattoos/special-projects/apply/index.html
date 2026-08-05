@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Apply - Special Projects</title>
+<meta name="robots" content="noindex, follow">
+<script>
+  (function(){
+    var target = new URL("/tattoos/special-projects/", location.origin);
+    var project = new URLSearchParams(location.search).get("project");
+    if (project) target.searchParams.set("project", project);
+    target.hash = "application";
+    location.replace(target.pathname + target.search + target.hash);
+  })();
+</script>
 <script>if(new URLSearchParams(location.search).get("preview")==="1"){var previewRobots=document.createElement("meta");previewRobots.name="robots";previewRobots.content="noindex, nofollow";document.head.appendChild(previewRobots);}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

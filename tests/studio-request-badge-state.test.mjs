@@ -91,6 +91,16 @@ function openStateDatabase() {
       expires_at TEXT,
       created_at TEXT
     );
+    CREATE TABLE booking_client_events (
+      id TEXT PRIMARY KEY,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      submission_id TEXT NOT NULL,
+      booking_token_id TEXT,
+      appointment_id TEXT,
+      event_type TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL
+    );
   `);
   database.prepare(
     `INSERT INTO submissions (id,type,status,contact_name,contact_email,created_at,updated_at)

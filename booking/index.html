@@ -231,6 +231,7 @@
   const token = params.get("token") || shortTokenMatch?.[1] || "";
   const previewMode = params.get("preview") === "1";
   const editMode = params.get("edit") === "1";
+  const checkoutUnavailable = params.get("checkout") === "unavailable";
   const bookingPreviewKey = "swc_booking_admin_preview";
   const statusEl = document.getElementById("status");
   const walkInSection = document.getElementById("walkInSection");
@@ -320,6 +321,45 @@
     confirmButtonLabel: "Continue to Scheduling",
   };
   if (previewMode && editMode) document.body.classList.add("local-edit-preview");
+
+  function clientEventId(prefix) {
+    const randomPart = globalThis.crypto?.randomUUID
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    return `${prefix}:${randomPart}`;
+  }
+
+  function recordBookingOpen() {
+    if (previewMode || !token) return;
+    fetch("/api/booking/access-events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token, eventId: clientEventId("open") }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  function submitSquareRedirect(appointmentId) {
+    if (!appointmentId || previewMode) return;
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/api/booking/square-redirect";
+    form.hidden = true;
+    const fields = {
+      token,
+      appointmentId,
+      eventId: clientEventId("square"),
+    };
+    Object.entries(fields).forEach(([name, value]) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  }
 
   function previewContext() {
     const now = new Date();
@@ -668,7 +708,7 @@
   }
 
   function extendedDayPricing() {
-    if (selectedType?.id !== EXTENDED_DAY_BOOKING_TYPE_ID) return null;
+    if (selectedType?.id !== EXTENDED_DAY_BOOKING_TYPE_ID || context?.submission?.experimentalProject) return null;
     const plan = context?.sessionPlan;
     const currency = selectedType.currency || plan?.approvedBudgetCurrency || "USD";
     const laborMin = Number(plan?.approvedBudgetMinCents || 0);
@@ -820,23 +860,36 @@
   function applyPurposeCopy() {
     const consultation = context?.purpose === "consultation";
     const special = context?.submission?.special;
+    const experimental = context?.submission?.experimentalProject;
     const pendingSpecialApproval = Boolean(context?.submission?.pendingApproval);
-    bookingTitle.textContent = consultation ? "CONSULTATION." : special ? "TATTOO SPECIAL." : "BOOKING.";
-    bookingLead.textContent = consultation
+    bookingTitle.textContent = experimental ? `EXPERIMENTAL PROJECT — ${experimental.title}.` : consultation ? "CONSULTATION." : special ? "TATTOO SPECIAL." : "BOOKING.";
+    bookingLead.textContent = experimental
+      ? consultation
+        ? "Choose a time for the required project consultation. The consultation is free and does not require Square or a deposit. Tattoo booking access follows after the consultation is completed and the final session plan is saved."
+        : `The tattoo work for ${experimental.title} is free. Choose an appointment and pay the ${money(experimental.refundableDepositCents || 0)} attendance deposit through Square. The exact deposit is refunded after you attend; cancellation or a no-show forfeits it.`
+      : consultation
       ? "Project review has linked you to a required in-person planning consultation. Choose a time and pay the consultation reservation fee. This does not book the tattoo; tattoo access follows only after the consultation is completed and the studio saves the final session plan."
       : special
         ? pendingSpecialApproval
           ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Select the time you would like Studio to review. This records your request but does not reserve the appointment.`
           : `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Your approved total is ${money(special.quotedPriceCents || 0)} for ${minutesLabel(special.durationMinutes || 0)}. The ${money(special.depositCents || 0)} deposit is credited toward that total; the remaining balance is ${money(Math.max(0, (special.quotedPriceCents || 0) - (special.depositCents || 0)))}.`
       : "Your project and final session plan are ready for tattoo scheduling. Select a session, complete the tattoo deposit through Square, and return here for confirmation.";
-    sessionSectionLabel.textContent = consultation
+    sessionSectionLabel.textContent = experimental
+      ? consultation ? "Free Project Consultation" : "Experimental Project Appointment"
+      : consultation
       ? "Consultation & Reservation Fee"
       : special
         ? "Your Tattoo Special & Deposit"
         : "Session & Deposit";
-    depositKey.textContent = consultation ? "Reservation Fee" : pendingSpecialApproval ? "Deposit after approval" : "Deposit";
-    checkoutBtn.textContent = pendingSpecialApproval ? "Submit Requested Time" : "Continue to Square";
-    checkoutNote.textContent = consultation
+    depositKey.textContent = experimental
+      ? consultation ? "Due today" : "Refundable attendance deposit"
+      : consultation ? "Reservation Fee" : pendingSpecialApproval ? "Deposit after approval" : "Deposit";
+    checkoutBtn.textContent = experimental && consultation ? "Book Free Consultation" : pendingSpecialApproval ? "Submit Requested Time" : "Continue to Square";
+    checkoutNote.textContent = experimental
+      ? consultation
+        ? "Nothing is charged. Completing this consultation allows the Studio to issue the experimental tattoo booking link."
+        : `The tattoo work is free. Square collects only the ${money(experimental.refundableDepositCents || 0)} attendance deposit. It is refunded after attendance; cancellation or a no-show forfeits it.`
+      : consultation
       ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
       : special
         ? pendingSpecialApproval
@@ -853,6 +906,7 @@
     resumeCheckoutLink.classList.add("hidden");
     resumeCheckoutLink.textContent = "Resume Square checkout";
     delete resumeCheckoutLink.dataset.startDeposit;
+    delete resumeCheckoutLink.dataset.squareRedirect;
     changeRequestedDateLink.classList.add("hidden");
     releaseCheckoutBtn.classList.add("hidden");
     if (!pending) return false;
@@ -882,8 +936,9 @@
         resumeCheckoutLink.dataset.startDeposit = "1";
         resumeCheckoutLink.textContent = "Confirm and pay deposit";
         resumeCheckoutLink.classList.remove("hidden");
-      } else if (active && pending.checkoutUrl) {
-        resumeCheckoutLink.href = pending.checkoutUrl;
+      } else if (active && pending.checkoutReady) {
+        resumeCheckoutLink.href = "#";
+        resumeCheckoutLink.dataset.squareRedirect = "1";
         resumeCheckoutLink.textContent = "Confirm and pay deposit";
         resumeCheckoutLink.classList.remove("hidden");
       }
@@ -899,8 +954,9 @@
       pendingCheckoutText.textContent = active
         ? `Your ${service} time is held until ${formatDate(expiresAt)}. Resume the existing Square checkout; a second checkout will not be created.`
         : `This ${service} checkout has reached its hold time and is awaiting Square reconciliation. It continues to block the selected time until that check succeeds.`;
-      if (active && pending.checkoutUrl) {
-        resumeCheckoutLink.href = pending.checkoutUrl;
+      if (active && pending.checkoutReady) {
+        resumeCheckoutLink.href = "#";
+        resumeCheckoutLink.dataset.squareRedirect = "1";
         resumeCheckoutLink.classList.remove("hidden");
       }
       releaseCheckoutBtn.classList.remove("hidden");
@@ -949,6 +1005,14 @@
       pendingCheckoutText.textContent = "Preview mode only. The client's Square checkout is not opened from Studio preview.";
       return;
     }
+    if (resumeCheckoutLink.dataset.squareRedirect === "1") {
+      event.preventDefault();
+      const pending = context?.pendingCheckout;
+      if (!pending?.appointmentId) return;
+      pendingCheckoutText.textContent = "Opening the secure Square checkout.";
+      submitSquareRedirect(pending.appointmentId);
+      return;
+    }
     if (resumeCheckoutLink.dataset.startDeposit !== "1") return;
     event.preventDefault();
     const pending = context?.pendingCheckout;
@@ -967,10 +1031,10 @@
         }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.checkoutUrl) {
+      if (!response.ok || !payload.checkoutReady || !payload.appointmentId) {
         throw new Error(payload.error || "That requested time is no longer available. Choose another date.");
       }
-      window.location.href = payload.checkoutUrl;
+      submitSquareRedirect(payload.appointmentId);
     } catch (error) {
       pendingCheckoutText.textContent = `${error.message} No charge was made.`;
       resumeCheckoutLink.classList.remove("hidden");
@@ -1048,6 +1112,7 @@
     const types = context.bookingTypes || [];
     const windows = context.availabilityWindows || [];
     const special = context?.submission?.special;
+    const experimental = context?.submission?.experimentalProject;
     walkInSection.classList.toggle("hidden", Boolean(special));
     renderSessionPlan();
     renderPaceIntro();
@@ -1066,7 +1131,7 @@
           <span class="choice-meta">${escapeHtml(type.durationRangeLabel || minutesLabel(type.durationMinutes))} / ${escapeHtml(type.description)}</span>
           ${type.id === EXTENDED_DAY_BOOKING_TYPE_ID && !windows.some((windowItem) => windowMatchesType(windowItem, type)) ? '<span class="availability-note">No Extended Day dates are currently available. Shorter sessions remain bookable.</span>' : ""}
         </span>
-        <span class="price-wrap"><span class="price">${escapeHtml(type.depositLabel)}</span><span class="price-label">${context?.purpose === "consultation" ? "Reservation fee" : "Deposit"}</span></span>
+        <span class="price-wrap"><span class="price">${escapeHtml(type.depositLabel)}</span><span class="price-label">${experimental ? context?.purpose === "consultation" ? "Free" : "Refundable attendance deposit" : context?.purpose === "consultation" ? "Reservation fee" : "Deposit"}</span></span>
       </button>
     `).join("");
 
@@ -1104,7 +1169,9 @@
     }
 
     clientDetailsSection.classList.toggle("hidden", !context.requiresClientDetails);
-    sessionValue.textContent = special
+    sessionValue.textContent = experimental
+      ? `Experimental Project — ${experimental.title}`
+      : special
       ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}`
       : selectedType ? selectedType.label : "Select a session";
     windowValue.textContent = selectedWindow ? formatDate(selectedWindow.startAt) : "Select a time";
@@ -1118,11 +1185,16 @@
     remainingBalanceValue.textContent = extendedPricingSummary?.laborMin ? pricingRangeLabel(extendedPricingSummary.remainingMin, extendedPricingSummary.remainingMax, extendedPricingSummary.currency) : "-";
     tipValue.textContent = money(selectedTipCents, selectedType?.currency || "USD");
     const pendingSpecialApproval = Boolean(context?.submission?.pendingApproval);
-    tipControl.classList.toggle("hidden", pendingSpecialApproval);
-    tipRow.classList.toggle("hidden", pendingSpecialApproval);
-    totalDueRow.querySelector(".panel-key").textContent = pendingSpecialApproval ? "Due Today" : "Total Due Today";
-    totalValue.textContent = pendingSpecialApproval ? "$0" : selectedType ? money(Number(selectedType.depositCents || 0) + selectedTipCents, selectedType.currency || "USD") : "-";
-    checkoutNote.textContent = context?.submission?.special
+    if (experimental) selectedTipCents = 0;
+    tipControl.classList.toggle("hidden", pendingSpecialApproval || Boolean(experimental));
+    tipRow.classList.toggle("hidden", pendingSpecialApproval || Boolean(experimental));
+    totalDueRow.querySelector(".panel-key").textContent = experimental && context?.purpose === "consultation" ? "Due Today" : pendingSpecialApproval ? "Due Today" : "Total Due Today";
+    totalValue.textContent = experimental && context?.purpose === "consultation" ? "$0" : pendingSpecialApproval ? "$0" : selectedType ? money(Number(selectedType.depositCents || 0) + selectedTipCents, selectedType.currency || "USD") : "-";
+    checkoutNote.textContent = experimental
+      ? context?.purpose === "consultation"
+        ? "This consultation is free. No Square checkout or payment is required."
+        : `The tattoo work is free. The ${money(experimental.refundableDepositCents || 0)} attendance deposit is refunded after attendance. Cancellation or a no-show forfeits it.`
+      : context?.submission?.special
       ? pendingSpecialApproval
         ? `This records a requested time for approval. It does not reserve the appointment, book anything, or create a payment link.`
         : `${selectedType.depositLabel} is collected through Square and credited toward the ${money(context.submission.special.quotedPriceCents || 0)} Tattoo Special total. Remaining balance: ${money(Math.max(0, (context.submission.special.quotedPriceCents || 0) - Number(selectedType.depositCents || 0)))}.`
@@ -1181,7 +1253,12 @@
     selectedWindow = null;
     initializePlanSelection();
     applyPurposeCopy();
-    statusEl.classList.add("hidden");
+    if (checkoutUnavailable) {
+      statusEl.textContent = "That Square checkout is no longer available. Review the current booking status below or contact the Studio for help.";
+      statusEl.classList.remove("hidden");
+    } else {
+      statusEl.classList.add("hidden");
+    }
     if (!renderPendingCheckout()) appEl.classList.remove("hidden");
     render();
   }
@@ -1331,7 +1408,12 @@
     }
     checkoutBtn.disabled = true;
     const pendingSpecialApproval = Boolean(context?.submission?.pendingApproval);
-    checkoutNote.textContent = pendingSpecialApproval ? "Recording your requested time for Studio review." : "Preparing your Square deposit checkout.";
+    const experimental = context?.submission?.experimentalProject;
+    checkoutNote.textContent = pendingSpecialApproval
+      ? "Recording your requested time for Studio review."
+      : experimental && context?.purpose === "consultation"
+        ? "Booking your free consultation."
+        : "Preparing your Square deposit checkout.";
     const response = await fetch(pendingSpecialApproval ? "/api/booking/hold" : "/api/booking/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1365,9 +1447,19 @@
       renderPendingCheckout();
       return;
     }
-    window.location.href = payload.checkoutUrl;
+    if (payload.freeConsultation && payload.confirmationUrl) {
+      window.location.href = payload.confirmationUrl;
+      return;
+    }
+    if (!payload.checkoutReady || !payload.appointmentId) {
+      checkoutNote.textContent = "The Square checkout is not ready. Try again or contact the Studio for help.";
+      checkoutBtn.disabled = false;
+      return;
+    }
+    submitSquareRedirect(payload.appointmentId);
   });
 
+  recordBookingOpen();
   loadContext().catch((error) => {
     statusEl.textContent = error.message;
   });

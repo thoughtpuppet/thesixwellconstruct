@@ -32,6 +32,7 @@ import {
   handleAdminCompleteAppointment,
   handleAdminCreateAppointmentMeeting,
   handleAdminDeleteAppointment,
+  handleAdminExperimentalAppointmentAction,
   handleAdminCreateTattooRenderingRequest,
   handleAdminResendTattooRenderingRequest,
   handleAdminCancelTattooRenderingRequest,
@@ -59,6 +60,7 @@ import {
   handleRescheduleContext,
   handleSaveBookingSessionPlan,
   handleSquareWebhook,
+  reconcileExperimentalDepositRefunds,
   reapExpiredBookingHolds,
   reapExpiredTattooRenderingRequests,
 } from "../functions/api/booking/_lib.js";
@@ -77,7 +79,12 @@ import {
   notifySubmissionReceived,
   retryPendingAdminAppointmentNotifications,
   sendDueAppointmentReminders,
+  sendDueExperimentalHealedReminders,
 } from "../functions/api/notifications/_lib.js";
+import {
+  handleAdminSpecialProjectHealed,
+  handlePublicSpecialProjectHealed,
+} from "../functions/api/special-projects/_lib.js";
 import {
   buildBookingLinkEmail,
   buildSubmissionReceivedEmail,
@@ -1618,7 +1625,7 @@ test("permanent appointment deletion reconciles and invalidates an unpaid Square
   assert.equal(database.prepare("SELECT COUNT(*) count FROM appointments WHERE id='delete-square-cancelled'").get().count, 0);
 });
 
-test("All tattoo project types require budget and canonical ranges remain accepted", async () => {
+test("Extended tattoo project types require budget and canonical ranges remain accepted", async () => {
   const database = migratedDatabase();
   const env = { SUBMISSIONS_DB: new LocalD1(database) };
   const missingBudgetPayloads = [
@@ -1661,6 +1668,8 @@ test("All tattoo project types require budget and canonical ranges remain accept
       age_confirmed: "yes",
       project_title: "Mythic Body Studies",
       placement: "Back",
+      scale: "Full back",
+      application_mode: "fresh",
       message: "A long-form symbolic study.",
       review_consent: "yes",
     },
@@ -1683,6 +1692,409 @@ test("All tattoo project types require budget and canonical ranges remain accept
   }
 });
 
+test("Experimental Project applications are free, mode-bound, photo-gated, and snapshot their agreements", async () => {
+  const database = migratedDatabase();
+  database.prepare(
+    `UPDATE special_project_calls
+     SET profile='experimental',allowed_modes_json='["cover_up","blast_over"]',
+         refundable_deposit_cents=12500,healed_photo_due_weeks=6,
+         participation_terms='Attend the appointment and provide healed documentation.',status='open'
+     WHERE id='mythic-body-studies'`
+  ).run();
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSION_FILES: new MemoryBucket(),
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+  const payload = {
+    type: "special_project",
+    name: "Experimental Client",
+    email: "experimental@example.test",
+    dob: "1990-01-01",
+    age_confirmed: "yes",
+    review_consent: "yes",
+    special_project_slug: "mythic-body-studies",
+    project_title: "Mythic Body Studies",
+    placement: "Upper arm",
+    scale: "Palm-sized",
+    application_mode: "cover_up",
+    healed_photo_method: "self_upload",
+    experimental_terms_agreed: "yes",
+  };
+
+  const missingPhoto = await handleCreateSubmission(jsonRequest("/api/submissions", payload), env);
+  assert.equal(missingPhoto.status, 400);
+  assert.match((await missingPhoto.json()).error, /existing tattoo/i);
+
+  const invalidMime = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    { ...payload, email: "experimental-invalid@example.test" },
+    [{ fieldName: "body_area_photos", fileName: "area.pdf", contentType: "application/pdf" }],
+  ), env);
+  assert.equal(invalidMime.status, 415);
+
+  const invalidMode = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    { ...payload, email: "experimental-mode@example.test", application_mode: "fresh" },
+    [{ fieldName: "body_area_photos", fileName: "area.jpg" }],
+  ), env);
+  assert.equal(invalidMode.status, 400);
+
+  const accepted = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    payload,
+    [{ fieldName: "body_area_photos", fileName: "existing-tattoo.jpg" }],
+  ), env);
+  assert.equal(accepted.status, 200, await accepted.clone().text());
+  const submissionId = (await accepted.json()).submissionId;
+  const terms = database.prepare("SELECT * FROM special_project_submission_terms WHERE submission_id=?").get(submissionId);
+  assert.equal(terms.project_profile, "experimental");
+  assert.equal(terms.selected_mode, "cover_up");
+  assert.equal(terms.refundable_deposit_cents, 12500);
+  assert.equal(terms.healed_photo_method, "self_upload");
+  assert.ok(terms.agreed_at);
+  const saved = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(submissionId).payload_json);
+  assert.equal(saved.budget_range, undefined);
+  assert.equal(saved.special_project_snapshot.participationTerms, "Attend the appointment and provide healed documentation.");
+
+  database.prepare("UPDATE special_project_calls SET status='closed' WHERE id='mythic-body-studies'").run();
+  const closed = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    { ...payload, email: "experimental-closed@example.test" },
+    [{ fieldName: "body_area_photos", fileName: "area.jpg" }],
+  ), env);
+  assert.equal(closed.status, 409);
+});
+
+test("Studio manages Experimental Project modes, dates, deposit, healing interval, and ordered Shared Media", async () => {
+  const database = migratedDatabase();
+  const now = new Date().toISOString();
+  database.prepare(
+    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
+     VALUES(?,?,?,?,?,'public','granted','active','inline','test',?,?)`
+  ).run("project-media-a", "https://example.test/a.jpg", "a.jpg", "image/jpeg", "First view", now, now);
+  database.prepare(
+    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
+     VALUES(?,?,?,?,?,'public','granted','active','inline','test',?,?)`
+  ).run("project-media-b", "https://example.test/b.jpg", "b.jpg", "image/jpeg", "Second view", now, now);
+  const adminToken = "special-project-settings-admin";
+  const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSIONS_ADMIN_TOKEN: adminToken };
+  const save = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    {
+      specialProjects: [{
+        id: "free-lines",
+        slug: "free-lines",
+        title: "Free Lines",
+        profile: "experimental",
+        status: "open",
+        allowedModes: ["fresh", "blast_over"],
+        refundableDepositCents: 12500,
+        healedPhotoDueWeeks: 8,
+        opensAt: "2026-08-01T12:00:00.000Z",
+        closesAt: "2026-12-01T12:00:00.000Z",
+        participationTerms: "Attend and provide healed documentation.",
+        media: [
+          { id: "project-media-b", role: "primary", sortOrder: 0 },
+          { id: "project-media-a", role: "gallery", sortOrder: 1 },
+        ],
+      }],
+    },
+    adminToken,
+  ), env);
+  assert.equal(save.status, 200, await save.clone().text());
+  const saved = database.prepare("SELECT * FROM special_project_calls WHERE id='free-lines'").get();
+  assert.equal(saved.profile, "experimental");
+  assert.deepEqual(JSON.parse(saved.allowed_modes_json), ["fresh", "blast_over"]);
+  assert.equal(saved.refundable_deposit_cents, 12500);
+  assert.equal(saved.healed_photo_due_weeks, 8);
+  assert.deepEqual(database.prepare(
+    "SELECT media_id,role FROM special_project_call_media WHERE project_id='free-lines' ORDER BY sort_order"
+  ).all().map((item) => [item.media_id, item.role]), [
+    ["project-media-b", "primary"],
+    ["project-media-a", "gallery"],
+  ]);
+
+  const invalid = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    { specialProjects: [{ id: "bad-project", slug: "bad-project", title: "Bad", profile: "experimental", status: "open", allowedModes: [] }] },
+    adminToken,
+  ), env);
+  assert.equal(invalid.status, 400);
+});
+
+test("Experimental attendance refunds once, reconciles asynchronously, and creates the healed follow-up", async () => {
+  const database = migratedDatabase();
+  const adminToken = "experimental-refund-admin";
+  const submissionId = "experimental-refund-submission";
+  const appointmentId = "experimental-refund-appointment";
+  const now = new Date().toISOString();
+  database.prepare(
+    `UPDATE special_project_calls
+     SET profile='experimental',allowed_modes_json='["fresh"]',refundable_deposit_cents=12500,
+         healed_photo_due_weeks=6,participation_terms='Attend and provide healed documentation.'
+     WHERE id='mythic-body-studies'`
+  ).run();
+  insertSubmissionFixture(database, {
+    id: submissionId,
+    type: "special_project",
+    status: "booked",
+    tattooStage: "tattoo_scheduled",
+    name: "Experimental Refund Client",
+    email: "experimental-refund@example.test",
+  });
+  database.prepare(
+    `INSERT INTO special_project_submission_terms(
+      submission_id,project_id,project_profile,project_title,selected_mode,
+      refundable_deposit_cents,healed_photo_method,healed_photo_due_weeks,
+      participation_terms,agreement_version,agreement_snapshot_json,agreed_at,created_at,updated_at
+    ) VALUES(?,?,'experimental',?,'fresh',12500,'self_upload',6,?,'v1','{}',?,?,?)`
+  ).run(
+    submissionId,
+    "mythic-body-studies",
+    "Mythic Body Studies",
+    "Attend and provide healed documentation.",
+    now,
+    now,
+    now,
+  );
+  insertAppointmentFixture(database, {
+    id: appointmentId,
+    submissionId,
+    bookingTypeId: "tattoo_half",
+    status: "confirmed",
+    purpose: "tattoo",
+    name: "Experimental Refund Client",
+    email: "experimental-refund@example.test",
+    startAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+    endAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    depositCents: 12500,
+  });
+  insertPaymentFixture(database, {
+    id: "experimental-refund-payment",
+    appointmentId,
+    checkoutId: "experimental-refund-checkout",
+    orderId: "experimental-refund-order",
+    status: "paid",
+    amountCents: 12500,
+  });
+  database.prepare("UPDATE deposit_payments SET provider_payment_id='square-payment-experimental' WHERE id='experimental-refund-payment'").run();
+  const sent = [];
+  const env = squareEnv(database, {
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: { async send(message) { sent.push(message); return { messageId: `experimental-${sent.length}` }; } },
+  });
+  let refundRequests = 0;
+  await withMockFetch(async (url, init = {}) => {
+    if (String(url).endsWith("/v2/refunds") && init.method === "POST") {
+      refundRequests += 1;
+      const body = JSON.parse(init.body);
+      assert.equal(body.payment_id, "square-payment-experimental");
+      assert.equal(body.amount_money.amount, 12500);
+      return jsonFetchResponse({ refund: { id: "square-refund-experimental", status: "PENDING" } });
+    }
+    if (String(url).endsWith("/v2/refunds/square-refund-experimental")) {
+      return jsonFetchResponse({ refund: { id: "square-refund-experimental", status: "COMPLETED" } });
+    }
+    throw new Error(`Unexpected Square request: ${url}`);
+  }, async () => {
+    const attended = await handleAdminExperimentalAppointmentAction(adminJsonRequest(
+      `/api/admin/booking/appointments/${appointmentId}/experimental`,
+      { action: "attended_refund" },
+      adminToken,
+    ), env, appointmentId);
+    assert.equal(attended.status, 200, await attended.clone().text());
+    assert.equal((await attended.json()).refund.status, "pending");
+
+    const repeated = await handleAdminExperimentalAppointmentAction(adminJsonRequest(
+      `/api/admin/booking/appointments/${appointmentId}/experimental`,
+      { action: "attended_refund" },
+      adminToken,
+    ), env, appointmentId);
+    assert.equal(repeated.status, 200, await repeated.clone().text());
+    assert.equal((await repeated.json()).idempotent, true);
+    assert.equal(refundRequests, 1);
+
+    const reconciliation = await reconcileExperimentalDepositRefunds(env);
+    assert.deepEqual(reconciliation, { checked: 1, updated: 1 });
+  });
+
+  assert.equal(database.prepare("SELECT status FROM appointments WHERE id=?").get(appointmentId).status, "completed");
+  const refund = database.prepare("SELECT * FROM experimental_deposit_refunds WHERE appointment_id=?").get(appointmentId);
+  assert.equal(refund.status, "completed");
+  assert.equal(refund.amount_cents, 12500);
+  assert.ok(refund.completed_at);
+  const followup = database.prepare("SELECT * FROM special_project_healed_followups WHERE submission_id=?").get(submissionId);
+  assert.equal(followup.method, "self_upload");
+  assert.equal(followup.status, "pending");
+  assert.ok(followup.token_hash);
+  const dueDays = (new Date(followup.due_at).getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+  assert.ok(dueDays > 41 && dueDays <= 42.1, dueDays);
+  assert.equal(sent.length, 1);
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM crm_transactions WHERE source_type='experimental_deposit_refund' AND source_id=?"
+  ).get(refund.id).count, 1);
+});
+
+test("Experimental no-shows do not refund and exception refunds require private confirmation", async () => {
+  const database = migratedDatabase();
+  const adminToken = "experimental-no-show-admin";
+  const now = new Date().toISOString();
+  database.prepare("UPDATE special_project_calls SET profile='experimental',refundable_deposit_cents=5000 WHERE id='mythic-body-studies'").run();
+  insertSubmissionFixture(database, {
+    id: "experimental-no-show-submission",
+    type: "special_project",
+    status: "booked",
+    tattooStage: "tattoo_scheduled",
+  });
+  database.prepare(
+    `INSERT INTO special_project_submission_terms(
+      submission_id,project_id,project_profile,project_title,selected_mode,refundable_deposit_cents,
+      healed_photo_method,healed_photo_due_weeks,participation_terms,agreement_snapshot_json,agreed_at,created_at,updated_at
+    ) VALUES('experimental-no-show-submission','mythic-body-studies','experimental','Mythic Body Studies','fresh',5000,
+      'return',6,'Terms','{}',?,?,?)`
+  ).run(now, now, now);
+  insertAppointmentFixture(database, {
+    id: "experimental-no-show-appointment",
+    submissionId: "experimental-no-show-submission",
+    bookingTypeId: "tattoo_quarter",
+    status: "confirmed",
+    purpose: "tattoo",
+    startAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    endAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    depositCents: 5000,
+  });
+  insertPaymentFixture(database, {
+    id: "experimental-no-show-payment",
+    appointmentId: "experimental-no-show-appointment",
+    checkoutId: "experimental-no-show-checkout",
+    orderId: "experimental-no-show-order",
+    status: "paid",
+    amountCents: 5000,
+  });
+  database.prepare("UPDATE deposit_payments SET provider_payment_id='square-payment-no-show' WHERE id='experimental-no-show-payment'").run();
+  const env = squareEnv(database, { SUBMISSIONS_ADMIN_TOKEN: adminToken });
+  const noShow = await handleAdminExperimentalAppointmentAction(adminJsonRequest(
+    "/api/admin/booking/appointments/experimental-no-show-appointment/experimental",
+    { action: "no_show", note: "Did not arrive." },
+    adminToken,
+  ), env, "experimental-no-show-appointment");
+  assert.equal(noShow.status, 200, await noShow.clone().text());
+  assert.equal(database.prepare("SELECT status FROM appointments WHERE id='experimental-no-show-appointment'").get().status, "no_show");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM experimental_deposit_refunds").get().count, 0);
+
+  const missingReason = await handleAdminExperimentalAppointmentAction(adminJsonRequest(
+    "/api/admin/booking/appointments/experimental-no-show-appointment/experimental",
+    { action: "exception_refund", confirmed: true },
+    adminToken,
+  ), env, "experimental-no-show-appointment");
+  assert.equal(missingReason.status, 400);
+  const missingConfirmation = await handleAdminExperimentalAppointmentAction(adminJsonRequest(
+    "/api/admin/booking/appointments/experimental-no-show-appointment/experimental",
+    { action: "exception_refund", note: "Documented emergency." },
+    adminToken,
+  ), env, "experimental-no-show-appointment");
+  assert.equal(missingConfirmation.status, 400);
+});
+
+test("Healed-photo uploads stay private, consume their token, and due reminders deduplicate", async () => {
+  const database = migratedDatabase();
+  const adminToken = "experimental-healed-admin";
+  const token = "private-healed-upload-token";
+  const tokenHash = await sha256HexForTest(token);
+  const now = new Date().toISOString();
+  database.prepare("UPDATE special_project_calls SET profile='experimental' WHERE id='mythic-body-studies'").run();
+  for (const suffix of ["upload", "reminder"]) {
+    const submissionId = `experimental-healed-${suffix}-submission`;
+    const appointmentId = `experimental-healed-${suffix}-appointment`;
+    insertSubmissionFixture(database, { id: submissionId, type: "special_project", status: "booked", tattooStage: "closed" });
+    database.prepare(
+      `INSERT INTO special_project_submission_terms(
+        submission_id,project_id,project_profile,project_title,selected_mode,refundable_deposit_cents,
+        healed_photo_method,healed_photo_due_weeks,participation_terms,agreement_snapshot_json,agreed_at,created_at,updated_at
+      ) VALUES(?, 'mythic-body-studies','experimental','Mythic Body Studies','fresh',5000,
+        'self_upload',6,'Terms','{}',?,?,?)`
+    ).run(submissionId, now, now, now);
+    insertAppointmentFixture(database, {
+      id: appointmentId,
+      submissionId,
+      bookingTypeId: "tattoo_quarter",
+      status: "completed",
+      purpose: "tattoo",
+      startAt: new Date(Date.now() - 8 * 7 * 24 * 60 * 60 * 1000).toISOString(),
+      endAt: new Date(Date.now() - 8 * 7 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString(),
+      depositCents: 5000,
+    });
+    database.prepare(
+      `INSERT INTO special_project_healed_followups(
+        id,submission_id,appointment_id,method,status,due_at,token_hash,token_expires_at,created_at,updated_at
+      ) VALUES(?,?,?,'self_upload','pending',?,?,?,?,?)`
+    ).run(
+      `experimental-healed-${suffix}`,
+      submissionId,
+      appointmentId,
+      new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      suffix === "upload" ? tokenHash : null,
+      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      now,
+      now,
+    );
+  }
+  const bucket = new MemoryBucket();
+  const sent = [];
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSION_FILES: bucket,
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: { async send(message) { sent.push(message); return { messageId: `healed-${sent.length}` }; } },
+  };
+  const context = await handlePublicSpecialProjectHealed(
+    new Request(`https://example.test/api/special-projects/healed?token=${token}`),
+    env,
+  );
+  assert.equal(context.status, 200);
+  const uploaded = await handlePublicSpecialProjectHealed(multipartRequest(
+    `/api/special-projects/healed?token=${token}`,
+    {},
+    [{ fieldName: "healed_photos", fileName: "healed.webp", contentType: "image/webp", body: "private-photo" }],
+  ), env);
+  assert.equal(uploaded.status, 200, await uploaded.clone().text());
+  assert.equal((await uploaded.json()).received, 1);
+  const photo = database.prepare("SELECT * FROM special_project_healed_photos WHERE followup_id='experimental-healed-upload'").get();
+  assert.ok(photo.storage_key.startsWith("special-projects/healed/experimental-healed-upload/"));
+  assert.equal(bucket.objects.get(photo.storage_key).options.customMetadata.privacy, "private");
+  const consumed = database.prepare("SELECT status,token_hash FROM special_project_healed_followups WHERE id='experimental-healed-upload'").get();
+  assert.equal(consumed.status, "received");
+  assert.equal(consumed.token_hash, null);
+  const reused = await handlePublicSpecialProjectHealed(multipartRequest(
+    `/api/special-projects/healed?token=${token}`,
+    {},
+    [{ fieldName: "healed_photos", fileName: "again.jpg" }],
+  ), env);
+  assert.equal(reused.status, 404);
+
+  const privateFile = await handleAdminSpecialProjectHealed(new Request(
+    `https://example.test/api/admin/special-projects/healed/experimental-healed-upload/file?photo=${photo.id}`,
+    { headers: { authorization: `Bearer ${adminToken}` } },
+  ), env, "experimental-healed-upload", "file");
+  assert.equal(privateFile.status, 200);
+  assert.equal(privateFile.headers.get("cache-control"), "private, no-store");
+  assert.equal(privateFile.headers.get("x-robots-tag"), "noindex, nofollow");
+
+  const firstReminder = await sendDueExperimentalHealedReminders(env);
+  const secondReminder = await sendDueExperimentalHealedReminders(env);
+  assert.deepEqual(firstReminder, { sent: 1, skipped: 0, failed: 0 });
+  assert.deepEqual(secondReminder, { sent: 0, skipped: 0, failed: 0 });
+  assert.equal(sent.length, 1);
+  const reminded = database.prepare("SELECT reminder_sent_at,token_hash FROM special_project_healed_followups WHERE id='experimental-healed-reminder'").get();
+  assert.ok(reminded.reminder_sent_at);
+  assert.ok(reminded.token_hash);
+});
+
 test("all migrations apply with the tattoo lifecycle schema and managed defaults", () => {
   const database = migratedDatabase();
   assert.equal(database.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
@@ -1693,6 +2105,11 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   assert.ok(columns("submissions").has("idempotency_key"));
   assert.ok(columns("booking_tokens").has("purpose"));
   assert.ok(columns("tattoo_settings").has("session_estimate_copy_json"));
+  assert.ok(columns("special_project_calls").has("profile"));
+  assert.ok(columns("special_project_calls").has("allowed_modes_json"));
+  assert.ok(columns("special_project_calls").has("refundable_deposit_cents"));
+  assert.ok(columns("special_project_calls").has("healed_photo_due_weeks"));
+  assert.ok(columns("special_project_healed_followups").has("media_asset_id"));
   for (const name of [
     "approved_budget_min_cents",
     "approved_budget_max_cents",
@@ -1713,7 +2130,7 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   ]) assert.ok(columns("appointments").has(name), `appointments.${name}`);
 
   const tables = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name));
-  for (const name of ["appointment_events", "tattoo_settings", "tattoo_rate_cards", "special_project_calls", "visual_symbol_composition_rules", "visual_symbol_composition_rule_members"]) {
+  for (const name of ["appointment_events", "tattoo_settings", "tattoo_rate_cards", "special_project_calls", "special_project_call_media", "special_project_submission_terms", "experimental_deposit_refunds", "special_project_healed_followups", "special_project_healed_photos", "visual_symbol_composition_rules", "visual_symbol_composition_rule_members"]) {
     assert.ok(tables.has(name), name);
   }
 
@@ -3165,7 +3582,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(approvedBeforePreparation.status, 200);
   const approvedBeforePreparationPayload = await approvedBeforePreparation.json();
   assert.equal(approvedBeforePreparationPayload.submission.pendingApproval, false);
-  assert.equal(approvedBeforePreparationPayload.pendingCheckout.checkoutUrl, "");
+  assert.equal(approvedBeforePreparationPayload.pendingCheckout.checkoutReady, false);
   const depositResponse = await handleAdminTattooSpecialDeposit(adminJsonRequest(
     `/api/admin/tattoo/specials/submissions/${submitted.submissionId}/deposit`,
     {}, adminToken,
@@ -3201,7 +3618,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(approvedContext.pendingCheckout.status, "requested");
   assert.equal(approvedContext.pendingCheckout.holdState, "");
   assert.equal(approvedContext.pendingCheckout.resumable, false);
-  assert.equal(approvedContext.pendingCheckout.checkoutUrl, "");
+  assert.equal(approvedContext.pendingCheckout.checkoutReady, false);
   const repeatedPreparation = await handleAdminTattooSpecialDeposit(adminJsonRequest(
     `/api/admin/tattoo/specials/submissions/${submitted.submissionId}/deposit`,
     {}, adminToken,
@@ -3269,7 +3686,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   }), env));
   const checkout = await checkoutResponse.json();
   assert.equal(checkoutResponse.status, 200, checkout.detail || checkout.error);
-  assert.equal(checkout.checkoutUrl, "https://square.test/special");
+  assert.equal(checkout.checkoutReady, true);
   assert.deepEqual(squareRequestBody.order.line_items.map((item) => item.base_price_money.amount), [5000]);
   const checkoutAppointment = database.prepare("SELECT * FROM appointments WHERE id=?").get(checkout.appointmentId);
   assert.notEqual(checkout.appointmentId, hold.appointment.id);
@@ -3703,7 +4120,7 @@ test("approved Tattoo Special clients can change the requested time without crea
   }), env));
   const checkout = await checkoutResponse.json();
   assert.equal(checkoutResponse.status, 200, checkout.detail || checkout.error);
-  assert.equal(checkout.checkoutUrl, "https://square.test/special-change-checkout");
+  assert.equal(checkout.checkoutReady, true);
 
   let checkoutInvalidated = false;
   let replacementCheckoutCreated = false;

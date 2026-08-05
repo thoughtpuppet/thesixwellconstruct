@@ -8,6 +8,7 @@ import {
   notifySubmissionReceived,
   notifyTattooRenderingPaymentConfirmed,
   notifyTattooRenderingPaymentRequested,
+  notifyExperimentalHealedFollowup,
 } from "../notifications/_lib.js";
 import { ingestCrmSourceRecord } from "../crm/ingest.js";
 import { captureMarketingConsent } from "../outreach/_lib.js";
@@ -22,6 +23,7 @@ const BOOKING_STATUSES = new Set([
   "deposit_pending",
   "confirmed",
   "completed",
+  "no_show",
   "cancelled",
   "archived",
 ]);
@@ -88,6 +90,8 @@ const TATTOO_RENDERING_FEE_CENTS = 5000;
 const TATTOO_RENDERING_CURRENCY = "USD";
 const SPLIT_POLICIES = new Set(["artist_review", "required", "client_choice", "not_available"]);
 const CLIENT_SESSION_PREFERENCES = new Set(["studio_plan", "one_longer_session", "multiple_shorter_sessions"]);
+const SPECIAL_PROJECT_PROFILES = new Set(["extended", "experimental"]);
+const SPECIAL_PROJECT_MODES = new Set(["fresh", "cover_up", "blast_over"]);
 
 const CONFIRMATION_PATHS = {
   consult_in_person: "/booking/confirmed/consultation/",
@@ -349,6 +353,8 @@ function normalizeRule(row) {
 
 function normalizeAppointment(row) {
   const bookingTypeId = row.booking_type_id || row.bookingTypeId || "";
+  const isExperimentalProject = (row.special_project_profile || row.specialProjectProfile) === "experimental";
+  const experimentalProjectTitle = row.special_project_title || row.experimentalProjectTitle || "";
   const paymentStatus = asString(row.payment_status || row.paymentStatus).toLowerCase();
   const paymentAmountCents = Number(row.payment_amount_cents ?? row.paymentAmountCents ?? 0);
   const paymentIsPaid = ["paid", "completed", "settled", "payment_attention"].includes(paymentStatus);
@@ -357,11 +363,16 @@ function normalizeAppointment(row) {
     submissionId: row.submission_id || "",
     bookingTokenId: row.booking_token_id || "",
     bookingTypeId,
-    bookingTypeLabel: TATTOO_DAY_SESSION_LABELS[bookingTypeId] || row.booking_type_label || row.bookingTypeLabel || "",
+    bookingTypeLabel: isExperimentalProject
+      ? `Experimental Project — ${experimentalProjectTitle || "Project"}`
+      : TATTOO_DAY_SESSION_LABELS[bookingTypeId] || row.booking_type_label || row.bookingTypeLabel || "",
     submissionType: row.submission_type || row.submissionType || "",
     isTattooSpecial: (row.submission_type || row.submissionType) === "tattoo_special",
     specialOfferTitle: row.special_offer_title || row.specialOfferTitle || "",
     specialVariantLabel: row.special_variant_label || row.specialVariantLabel || "",
+    isExperimentalProject,
+    experimentalProjectTitle,
+    refundableDeposit: isExperimentalProject,
     availabilityWindowId: row.availability_window_id || "",
     status: row.status,
     purpose: row.purpose || purposeForBookingType(row.booking_type_id, Boolean(row.booking_token_id)),
@@ -398,6 +409,16 @@ function normalizeAppointment(row) {
     originalEndAt: row.original_end_at || "",
     cancelledAt: row.cancelled_at || "",
     cancellationReason: row.cancellation_reason || "",
+    experimentalRefund: row.experimental_refund_id ? {
+      id: row.experimental_refund_id,
+      status: row.experimental_refund_status || "pending",
+      amountCents: Number(row.experimental_refund_amount_cents || 0),
+      reason: row.experimental_refund_reason || "",
+      providerRefundId: row.experimental_provider_refund_id || "",
+      exceptionNote: row.experimental_refund_exception_note || "",
+      completedAt: row.experimental_refund_completed_at || "",
+      updatedAt: row.experimental_refund_updated_at || "",
+    } : null,
     canPermanentlyDelete: Boolean(row.can_permanently_delete),
     meeting: normalizeMeeting(row),
     createdAt: row.created_at,
@@ -930,7 +951,11 @@ function appointmentCalendarDescription(env, request, appointment) {
     lines.push(`Zoom link: ${appointment.meeting?.joinUrl || ""}`);
   } else {
     lines.push(`Studio address: ${studioCalendarLocation(env)}`);
-    if (appointment.purpose === "tattoo") {
+    if (appointment.purpose === "tattoo" && appointment.isExperimentalProject) {
+      lines.push("Tattoo work: Free experimental work.");
+      lines.push("Attendance deposit: Refunded after attendance. Cancellation or a no-show forfeits it.");
+      lines.push(`Day-of prep: ${resources.dayOfInstructionsUrl}`);
+    } else if (appointment.purpose === "tattoo") {
       lines.push("Final payment: At the start of your appointment, the remaining balance is collected after the final session price is confirmed and before tattooing begins.");
       lines.push(`Day-of prep: ${resources.dayOfInstructionsUrl}`);
     }
@@ -1019,9 +1044,14 @@ async function loadTokenContext(db, rawToken) {
     .prepare(
       `SELECT bt.*, s.status AS submission_status, s.contact_name, s.contact_email,
         s.contact_phone, s.type AS submission_type, s.source_path, s.tattoo_stage,
-        s.lifecycle_review_required, s.lifecycle_review_note, s.payload_json
+        s.lifecycle_review_required, s.lifecycle_review_note, s.payload_json,
+        spt.project_profile AS special_project_profile,
+        spt.project_title AS special_project_title,
+        spt.refundable_deposit_cents AS special_project_deposit_cents,
+        spt.healed_photo_method, spt.healed_photo_due_weeks
        FROM booking_tokens bt
        JOIN submissions s ON s.id = bt.submission_id
+       LEFT JOIN special_project_submission_terms spt ON spt.submission_id = s.id
        WHERE bt.token_hash = ?`
     )
     .bind(tokenHash)
@@ -1055,7 +1085,164 @@ async function loadTokenContext(db, rawToken) {
     purpose,
     allowedBookingTypes,
     pendingSpecialApproval,
+    experimentalProject: token.special_project_profile === "experimental" ? {
+      title: token.special_project_title || "Experimental Project",
+      refundableDepositCents: Number(token.special_project_deposit_cents || 0),
+      healedPhotoMethod: token.healed_photo_method || "",
+      healedPhotoDueWeeks: Number(token.healed_photo_due_weeks || 6),
+    } : null,
   };
+}
+
+function bookingTokenAccessState(token, now = new Date().toISOString()) {
+  if (token?.used_at) return "used";
+  if (token?.revoked_at) return "revoked";
+  if (token?.expires_at && token.expires_at < now) return "expired";
+  return "active";
+}
+
+function clientEventId(value) {
+  const normalized = asString(value);
+  return /^[A-Za-z0-9._:-]{8,128}$/.test(normalized) ? normalized : "";
+}
+
+async function bookingTokenForClientEvent(db, rawToken) {
+  if (!rawToken) return null;
+  const tokenHash = await sha256Hex(rawToken);
+  return db.prepare("SELECT * FROM booking_tokens WHERE token_hash = ?")
+    .bind(tokenHash)
+    .first();
+}
+
+async function recordBookingClientEvent(db, {
+  token,
+  eventType,
+  eventId,
+  appointmentId = null,
+  metadata = {},
+}) {
+  const idempotencyKey = `${eventType}:${token.id}:${eventId}`;
+  const now = new Date().toISOString();
+  await db.prepare(
+    `INSERT OR IGNORE INTO booking_client_events (
+       id, idempotency_key, submission_id, booking_token_id, appointment_id,
+       event_type, metadata_json, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID(),
+    idempotencyKey,
+    token.submission_id,
+    token.id,
+    appointmentId,
+    eventType,
+    JSON.stringify(metadata),
+    now,
+  ).run();
+}
+
+function emptyClientEventResponse() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    },
+  });
+}
+
+export async function handleBookingAccessEvent(request, env) {
+  const body = await readJsonBody(request);
+  const rawToken = asString(body?.token);
+  const eventId = clientEventId(body?.eventId);
+  if (!rawToken || !eventId) return emptyClientEventResponse();
+
+  try {
+    const db = requireBookingDb(env);
+    const token = await bookingTokenForClientEvent(db, rawToken);
+    if (!token) return emptyClientEventResponse();
+    await recordBookingClientEvent(db, {
+      token,
+      eventType: "booking_link_opened",
+      eventId,
+      metadata: { accessState: bookingTokenAccessState(token) },
+    });
+  } catch (error) {
+    console.error("Unable to record private booking access event.", error);
+  }
+  return emptyClientEventResponse();
+}
+
+function bookingReturnUrl(request, rawToken) {
+  let url;
+  try {
+    url = bookingUrlForToken(baseUrlFromRequest(request), rawToken);
+  } catch {
+    url = new URL("/booking/", request.url);
+    if (rawToken) url.searchParams.set("token", rawToken);
+  }
+  url.searchParams.set("checkout", "unavailable");
+  return url.toString();
+}
+
+function squareRedirectResponse(location) {
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location,
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    },
+  });
+}
+
+export async function handleSquareCheckoutRedirect(request, env) {
+  let rawToken = "";
+  try {
+    const form = await request.formData();
+    rawToken = asString(form.get("token"));
+    const appointmentId = asString(form.get("appointmentId"));
+    const requestedEventId = clientEventId(form.get("eventId"));
+    const context = await loadTokenContext(requireBookingDb(env), rawToken);
+    if (!context || context.invalid || !appointmentId || !requestedEventId) {
+      return squareRedirectResponse(bookingReturnUrl(request, rawToken));
+    }
+
+    const db = requireBookingDb(env);
+    const appointment = await db.prepare(
+      `SELECT id, submission_id, booking_token_id, status, hold_state,
+              hold_expires_at, square_checkout_url
+       FROM appointments
+       WHERE id = ? AND submission_id = ? AND booking_token_id = ?`
+    ).bind(appointmentId, context.token.submission_id, context.token.id).first();
+    const now = new Date().toISOString();
+    const checkoutUrl = asString(appointment?.square_checkout_url);
+    let squareUrl = null;
+    try {
+      squareUrl = new URL(checkoutUrl);
+    } catch {
+      squareUrl = null;
+    }
+    const redirectAllowed = appointment
+      && ["pending_deposit", "deposit_pending"].includes(appointment.status)
+      && appointment.hold_state === "active"
+      && appointment.hold_expires_at > now
+      && squareUrl?.protocol === "https:";
+    if (!redirectAllowed) {
+      return squareRedirectResponse(bookingReturnUrl(request, rawToken));
+    }
+
+    await recordBookingClientEvent(db, {
+      token: context.token,
+      eventType: "square_checkout_redirected",
+      eventId: requestedEventId,
+      appointmentId: appointment.id,
+      metadata: {},
+    });
+    return squareRedirectResponse(squareUrl.toString());
+  } catch (error) {
+    console.error("Unable to hand off private booking checkout to Square.", error);
+    return squareRedirectResponse(bookingReturnUrl(request, rawToken));
+  }
 }
 
 function normalizeTattooSessionPlan(row) {
@@ -1119,7 +1306,11 @@ async function ensureSessionPlanResponse(db, tokenContext) {
   if (tokenContext?.token?.submission_type === "tattoo_special") {
     return { plan };
   }
-  if (plan && !sessionPlanResponseComplete(plan)) {
+  const responseComplete = tokenContext?.experimentalProject
+    ? !sessionPlanRequiresClientResponse(plan)
+      || Boolean(Number(plan?.client_acknowledged) === 1 && plan?.client_preference && plan?.client_selected_at)
+    : sessionPlanResponseComplete(plan);
+  if (plan && !responseComplete) {
     return {
       error: reviewedBudgetIsComplete(plan) && !Number(plan.budget_acknowledged)
         ? "Review and agree to the approved project budget before choosing an appointment."
@@ -1326,7 +1517,19 @@ export async function handleBookingContext(request, env) {
     if (!context) return errorResponse("A private booking link is required.", 401);
     if (context.invalid) return errorResponse(context.invalid, 403);
 
-    const bookingTypes = await listBookingTypes(db, context.allowedBookingTypes);
+    let bookingTypes = await listBookingTypes(db, context.allowedBookingTypes);
+    if (context.experimentalProject) {
+      const depositCents = context.purpose === "consultation"
+        ? 0
+        : context.experimentalProject.refundableDepositCents;
+      bookingTypes = bookingTypes.map((type) => ({
+        ...type,
+        depositCents,
+        depositLabel: formatMoney(depositCents, type.currency || "USD"),
+        sessionFeeCents: 0,
+        sessionFeeLabel: formatMoney(0, type.currency || "USD"),
+      }));
+    }
     const windows = await listPublicWindows(db, bookingTypes);
     const isTattooSpecial = context.token.submission_type === "tattoo_special";
     const sessionPlan = context.purpose === "tattoo" && !isTattooSpecial
@@ -1380,6 +1583,7 @@ export async function handleBookingContext(request, env) {
               };
             })()
           : null,
+        experimentalProject: context.experimentalProject,
       },
       requiresClientDetails: directInviteNeedsClient(context.token),
       purpose: context.purpose,
@@ -1394,7 +1598,7 @@ export async function handleBookingContext(request, env) {
         status: pendingAppointment.status,
         startAt: pendingAppointment.startAt,
         endAt: pendingAppointment.endAt,
-        checkoutUrl: pendingResumable ? pendingAppointment.squareCheckoutUrl : "",
+        checkoutReady: pendingResumable,
         holdExpiresAt: pendingAppointment.holdExpiresAt,
         holdState: pendingAppointment.holdState,
         resumable: pendingResumable,
@@ -1426,7 +1630,7 @@ export async function handleSaveBookingSessionPlan(request, env) {
     const plan = await loadTattooSessionPlan(db, context.token.submission_id);
     if (!plan) return errorResponse("No session plan is attached to this project.", 404);
     if (body.acknowledged !== true) return errorResponse("Acknowledge the session estimate before continuing.", 400);
-    const requiresBudgetAcknowledgement = reviewedBudgetIsComplete(plan);
+    const requiresBudgetAcknowledgement = !context.experimentalProject && reviewedBudgetIsComplete(plan);
     if (requiresBudgetAcknowledgement && body.budgetAcknowledged !== true) {
       return errorResponse("Agree to the approved project budget before continuing.", 400, {
         code: "APPROVED_BUDGET_ACKNOWLEDGEMENT_REQUIRED",
@@ -1881,6 +2085,9 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     .bind(bookingTypeId)
     .first();
   if (!bookingType) return { error: "Unknown booking type." };
+  if (tokenContext.experimentalProject && tipCents > 0) {
+    return { error: "Tips are not collected through free Experimental Project booking links." };
+  }
   if (bookingType.id === EXTENDED_DAY_BOOKING_TYPE_ID && extendedDayAcknowledged !== true) {
     return { error: "Review and acknowledge the Extended Day pricing and billing policy before checkout." };
   }
@@ -1940,6 +2147,9 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
   const availability = await ensureAvailable(db, windowId, bookingType.id);
   if (availability.error) return availability;
 
+  const effectiveDepositCents = tokenContext.experimentalProject
+    ? (purpose === "prerequisite_consultation" ? 0 : tokenContext.experimentalProject.refundableDepositCents)
+    : Number(bookingType.deposit_cents || 0);
   const id = crypto.randomUUID();
   const inserted = await insertPendingAppointment(db, {
     id,
@@ -1951,9 +2161,9 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     clientName: tokenContext.token.contact_name,
     clientEmail: tokenContext.token.contact_email,
     clientPhone: tokenContext.token.contact_phone || null,
-    depositCents: bookingType.deposit_cents,
-    tipCents,
-    sessionFeeCents: bookingType.session_fee_cents || 0,
+    depositCents: effectiveDepositCents,
+    tipCents: tokenContext.experimentalProject ? 0 : tipCents,
+    sessionFeeCents: tokenContext.experimentalProject ? 0 : (bookingType.session_fee_cents || 0),
     extendedDayAcknowledgedAt: bookingType.id === EXTENDED_DAY_BOOKING_TYPE_ID ? now : null,
     currency: bookingType.currency || "USD",
     holdExpiresAt: tokenContext.pendingSpecialApproval
@@ -1970,7 +2180,10 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
   const appointment = await selectAppointmentWithMeeting(db, id);
   const normalizedAppointment = normalizeAppointment(appointment);
   await mirrorAppointmentToCrm(db, normalizedAppointment);
-  return { appointment: normalizedAppointment, bookingType: normalizeBookingType(bookingType) };
+  const normalizedType = normalizeBookingType(bookingType);
+  normalizedType.depositCents = effectiveDepositCents;
+  normalizedType.depositLabel = formatMoney(effectiveDepositCents, normalizedType.currency || "USD");
+  return { appointment: normalizedAppointment, bookingType: normalizedType };
 }
 
 async function createTattooSpecialTimeRequest(db, tokenContext, bookingTypeId, windowId) {
@@ -3201,9 +3414,11 @@ async function createSquarePaymentLink(request, env, appointment, bookingType, o
         location_id: squareLocationForBookingType(env, bookingType.id),
         line_items: [
           squareLineItem(
-            FULL_PAYMENT_BOOKING_TYPE_IDS.includes(bookingType.id)
-              ? `${bookingType.label} Reservation Fee`
-              : `${bookingType.label} Deposit`,
+            appointment.isExperimentalProject
+              ? `Experimental Project refundable attendance deposit — ${appointment.experimentalProjectTitle || "Project"}`
+              : FULL_PAYMENT_BOOKING_TYPE_IDS.includes(bookingType.id)
+                ? `${bookingType.label} Reservation Fee`
+                : `${bookingType.label} Deposit`,
             appointment.depositCents,
             appointment.currency,
           ),
@@ -3426,6 +3641,16 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
               tst.approved_price_cents AS special_approved_price_cents,
               tst.advertised_price_cents AS special_advertised_price_cents,
               tst.duration_minutes AS special_duration_minutes,
+              spt.project_profile AS special_project_profile,
+              spt.project_title AS special_project_title,
+              edr.id AS experimental_refund_id,
+              edr.status AS experimental_refund_status,
+              edr.amount_cents AS experimental_refund_amount_cents,
+              edr.reason AS experimental_refund_reason,
+              edr.provider_refund_id AS experimental_provider_refund_id,
+              edr.exception_note AS experimental_refund_exception_note,
+              edr.completed_at AS experimental_refund_completed_at,
+              edr.updated_at AS experimental_refund_updated_at,
               dp.status AS payment_status,
               dp.amount_cents AS payment_amount_cents,
               CASE WHEN a.status IN ('pending_deposit','deposit_pending','cancelled','archived')
@@ -3460,6 +3685,12 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
        LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
        LEFT JOIN submissions s ON s.id = a.submission_id
        LEFT JOIN tattoo_special_submission_terms tst ON tst.submission_id = a.submission_id
+       LEFT JOIN special_project_submission_terms spt ON spt.submission_id = a.submission_id
+       LEFT JOIN experimental_deposit_refunds edr ON edr.id = (
+         SELECT latest_refund.id FROM experimental_deposit_refunds latest_refund
+         WHERE latest_refund.appointment_id=a.id
+         ORDER BY latest_refund.requested_at DESC, latest_refund.id DESC LIMIT 1
+       )
        LEFT JOIN deposit_payments dp ON dp.id = (
          SELECT latest_payment.id FROM deposit_payments latest_payment
          WHERE latest_payment.appointment_id = a.id
@@ -3717,10 +3948,43 @@ export async function handleCreateBookingCheckout(request, env) {
       ...(result.code ? { code: result.code } : {}),
       ...(result.appointment ? { appointment: result.appointment } : {}),
     });
+    if (context.experimentalProject && context.purpose === "consultation") {
+      const now = new Date().toISOString();
+      const results = await db.batch([
+        db.prepare(
+          `UPDATE appointments SET status='confirmed',hold_state='converted',hold_reconciled_at=?,updated_at=?
+           WHERE id=? AND status='pending_deposit' AND deposit_cents=0`
+        ).bind(now, now, result.appointment.id),
+        db.prepare("UPDATE booking_tokens SET used_at=COALESCE(used_at,?),updated_at=? WHERE id=?")
+          .bind(now, now, context.token.id),
+        db.prepare(
+          `UPDATE submissions SET tattoo_stage='consultation_scheduled',updated_at=?
+           WHERE id=? AND status='approved' AND tattoo_stage='consultation_required'`
+        ).bind(now, context.token.submission_id),
+        db.prepare(
+          `INSERT INTO appointment_events(id,appointment_id,event_type,actor,note,metadata_json,created_at)
+           VALUES(?,?,'free_experimental_consultation_confirmed','system',NULL,'{}',?)`
+        ).bind(crypto.randomUUID(), result.appointment.id, now),
+      ]);
+      if (Number(results?.[0]?.meta?.changes || 0) < 1) {
+        return errorResponse("The free consultation could not be confirmed. Refresh and try again.", 409);
+      }
+      const appointment = normalizeAppointment(await selectAppointmentWithMeeting(db, result.appointment.id));
+      await mirrorAppointmentToCrm(db, appointment);
+      await notifyAppointmentConfirmed(env, request, appointment);
+      await notifyAdminAppointmentConfirmed(env, request, appointment);
+      return json({
+        ok: true,
+        appointmentId: appointment.id,
+        appointment,
+        freeConsultation: true,
+        confirmationUrl: `${confirmationPathForBookingType(appointment.bookingTypeId)}?appointment=${encodeURIComponent(appointment.id)}`,
+      });
+    }
     if (result.existing && result.appointment.squareCheckoutUrl) {
       return json({
         ok: true,
-        checkoutUrl: result.appointment.squareCheckoutUrl,
+        checkoutReady: true,
         appointmentId: result.appointment.id,
         holdExpiresAt: result.appointment.holdExpiresAt,
       });
@@ -3751,7 +4015,7 @@ export async function handleCreateBookingCheckout(request, env) {
 
     return json({
       ok: true,
-      checkoutUrl: paymentLink.url,
+      checkoutReady: true,
       appointmentId: result.appointment.id,
       holdExpiresAt: result.appointment.holdExpiresAt,
     });
@@ -5826,6 +6090,31 @@ async function processTattooRenderingSquareWebhook(request, env, db, renderingRo
 
 async function processSquareWebhookPayload(request, env, rawBody) {
   const payload = JSON.parse(rawBody || "{}");
+  if (payload.type === "refund.updated") {
+    const refund = payload?.data?.object?.refund || payload?.data?.object?.payment_refund || null;
+    const providerRefundId = asString(refund?.id);
+    if (!providerRefundId) return json({ ok: true, ignored: true, reason: "No Square refund id." });
+    const db = requireBookingDb(env);
+    const current = await db.prepare(
+      "SELECT * FROM experimental_deposit_refunds WHERE provider_refund_id=?"
+    ).bind(providerRefundId).first();
+    if (!current) return json({ ok: true, ignored: true, reason: "No matching Experimental Project refund." });
+    const status = normalizeSquareRefundStatus(refund.status);
+    const now = new Date().toISOString();
+    await db.batch([
+      db.prepare(
+        `UPDATE experimental_deposit_refunds SET status=?,raw_json=?,
+         completed_at=CASE WHEN ?='completed' THEN COALESCE(completed_at,?) ELSE completed_at END,
+         updated_at=? WHERE id=?`
+      ).bind(status, JSON.stringify(payload), status, now, now, current.id),
+      db.prepare(
+        `INSERT INTO appointment_events(id,appointment_id,event_type,actor,note,metadata_json,created_at)
+         VALUES(?,?,'experimental_refund_webhook','square_webhook',NULL,?,?)`
+      ).bind(crypto.randomUUID(), current.appointment_id, JSON.stringify({ providerRefundId, status }), now),
+    ]);
+    await mirrorExperimentalRefundToCrm(db, current.id);
+    return json({ ok: true, refund: true, refundId: current.id, status });
+  }
   const orderId = webhookOrderId(payload);
   if (!orderId) return json({ ok: true, ignored: true, reason: "No Square order id." });
 
@@ -6059,6 +6348,11 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
     ).bind(submissionId).first();
     if (!submission) return errorResponse("Submission not found.", 404);
     if (!TATTOO_PROJECT_SUBMISSION_TYPES.has(submission.type)) return errorResponse("Session planning applies only to tattoo project submissions.", 409);
+    const experimentalProject = submission.type === "special_project"
+      ? await db.prepare(
+        "SELECT * FROM special_project_submission_terms WHERE submission_id=? AND project_profile='experimental'"
+      ).bind(submissionId).first()
+      : null;
     if (request.method === "GET") {
       return json({ ok: true, sessionPlan: normalizeTattooSessionPlan(await loadTattooSessionPlan(db, submissionId)) });
     }
@@ -6353,8 +6647,7 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       && submission.tattoo_stage === "consultation_complete"
       && sessionCategory !== "artist_review"
       && splitPolicy !== "artist_review"
-      && budgetMinCents !== null
-      && budgetMaxCents !== null
+      && (experimentalProject || (budgetMinCents !== null && budgetMaxCents !== null))
     ) {
       await db.batch([
         db.prepare(
@@ -6848,6 +7141,11 @@ export async function handleAdminCreateBookingToken(request, env) {
     }
     let reviewedSessionPlan = null;
     let specialTerms = null;
+    const experimentalProject = submission.type === "special_project"
+      ? await db.prepare(
+        "SELECT * FROM special_project_submission_terms WHERE submission_id=? AND project_profile='experimental'"
+      ).bind(submissionId).first()
+      : null;
     if (purpose === "tattoo") {
       reviewedSessionPlan = await loadTattooSessionPlan(db, submissionId);
       if (!reviewedSessionPlan || reviewedSessionPlan.session_category === "artist_review" || reviewedSessionPlan.split_policy === "artist_review") {
@@ -6855,6 +7153,7 @@ export async function handleAdminCreateBookingToken(request, env) {
       }
       if (
         submission.source_path !== "/studio/direct-booking-invite"
+        && !experimentalProject
         && !reviewedBudgetIsComplete(reviewedSessionPlan)
       ) {
         return errorResponse("Set the approved project budget before generating tattoo booking access.", 409, {
@@ -7409,7 +7708,12 @@ function normalizeTattooRateCard(row) {
   };
 }
 
-function normalizeSpecialProjectCall(row) {
+function normalizedSpecialProjectModes(value) {
+  const parsed = Array.isArray(value) ? value : parseJsonField(value, []);
+  return [...new Set((parsed || []).map(asString).filter((mode) => SPECIAL_PROJECT_MODES.has(mode)))];
+}
+
+function normalizeSpecialProjectCall(row, media = []) {
   const now = new Date().toISOString();
   const isOpen = row.status === "open"
     && (!row.opens_at || row.opens_at <= now)
@@ -7419,6 +7723,22 @@ function normalizeSpecialProjectCall(row) {
     slug: row.slug,
     title: row.title,
     summary: row.summary || "",
+    profile: SPECIAL_PROJECT_PROFILES.has(row.profile) ? row.profile : "extended",
+    allowedModes: normalizedSpecialProjectModes(row.allowed_modes_json).length
+      ? normalizedSpecialProjectModes(row.allowed_modes_json)
+      : ["fresh"],
+    refundableDepositCents: Number(row.refundable_deposit_cents || 0),
+    healedPhotoDueWeeks: Number(row.healed_photo_due_weeks || 6),
+    applicationInstructions: row.application_instructions || "",
+    participationTerms: row.participation_terms || "",
+    media: media.map((item) => ({
+      id: item.media_id,
+      role: item.role || "gallery",
+      sortOrder: Number(item.sort_order || 0),
+      alt: item.alt_text_override || item.alt_text || "",
+      caption: item.caption || "",
+      url: item.source_url || (item.storage_key ? `/api/construct/media/${encodeURIComponent(item.media_id)}` : ""),
+    })),
     status: row.status,
     isOpen,
     rateText: row.rate_text || "",
@@ -7430,13 +7750,21 @@ function normalizeSpecialProjectCall(row) {
 }
 
 async function tattooSettingsPayload(db, includeInactive = false) {
-  const [settingsResult, ratesResult, callsResult, hoursResult, bookingTypesResult] = await db.batch([
+  const [settingsResult, ratesResult, callsResult, mediaResult, hoursResult, bookingTypesResult] = await db.batch([
     db.prepare("SELECT * FROM tattoo_settings WHERE id = 'default'"),
     db.prepare(
       `SELECT * FROM tattoo_rate_cards ${includeInactive ? "" : "WHERE active = 1"}
        ORDER BY sort_order ASC, label ASC`
     ),
     db.prepare("SELECT * FROM special_project_calls ORDER BY sort_order ASC, title ASC"),
+    db.prepare(
+      `SELECT spm.*, m.source_url, m.storage_key, m.alt_text, m.caption
+       FROM special_project_call_media spm
+       JOIN media_assets m ON m.id = spm.media_id
+       WHERE m.state = 'active'
+         AND (? = 1 OR (m.privacy = 'public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation = 'inline'))
+       ORDER BY spm.project_id, CASE spm.role WHEN 'primary' THEN 0 ELSE 1 END, spm.sort_order, spm.media_id`
+    ).bind(includeInactive ? 1 : 0),
     db.prepare(
       `SELECT day_of_week, start_time, end_time, note FROM availability_rules
        WHERE venture = 'tattooing' AND category = 'tattooing' AND active = 1
@@ -7450,10 +7778,15 @@ async function tattooSettingsPayload(db, includeInactive = false) {
   ]);
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const settingsRow = settingsResult.results?.[0] || null;
+  const mediaByProject = new Map();
+  for (const row of mediaResult.results || []) {
+    if (!mediaByProject.has(row.project_id)) mediaByProject.set(row.project_id, []);
+    mediaByProject.get(row.project_id).push(row);
+  }
   return {
     settings: normalizeTattooSettingsRow(settingsRow),
     rateCards: (ratesResult.results || []).map(normalizeTattooRateCard),
-    specialProjects: (callsResult.results || []).map(normalizeSpecialProjectCall),
+    specialProjects: (callsResult.results || []).map((row) => normalizeSpecialProjectCall(row, mediaByProject.get(row.id) || [])),
     bookingTypes: (bookingTypesResult.results || []).map(normalizeBookingType),
     displayedHours: (hoursResult.results || []).map((row) => ({
       dayOfWeek: Number(row.day_of_week),
@@ -7561,14 +7894,73 @@ export async function handleAdminTattooSettings(request, env) {
       if (!new Set(["open", "closed"]).has(status)) return errorResponse("Special Project status must be open or closed.", 400);
       const title = asString(call.title).slice(0, 200);
       if (!title) return errorResponse("Special Project title is required.", 400);
+      const profile = asString(call.profile) || "extended";
+      if (!SPECIAL_PROJECT_PROFILES.has(profile)) return errorResponse("Special Project profile must be extended or experimental.", 400);
+      const allowedModes = normalizedSpecialProjectModes(call.allowedModes ?? call.allowed_modes_json);
+      if (!allowedModes.length) return errorResponse("Each Special Project needs at least one application mode.", 400);
+      const refundableDeposit = parseDepositCents(call.refundableDepositCents ?? call.refundable_deposit_cents ?? 0);
+      if (refundableDeposit.error) return errorResponse(refundableDeposit.error, 400);
+      const healedPhotoDueWeeks = Math.max(1, Math.min(52, asPositiveInteger(call.healedPhotoDueWeeks ?? call.healed_photo_due_weeks, 6)));
+      const applicationInstructions = asString(call.applicationInstructions ?? call.application_instructions).slice(0, 5000);
+      const participationTerms = asString(call.participationTerms ?? call.participation_terms).slice(0, 10000);
+      const opensAt = asOptionalString(call.opensAt ?? call.opens_at);
+      const closesAt = asOptionalString(call.closesAt ?? call.closes_at);
+      if ((opensAt && !Number.isFinite(Date.parse(opensAt))) || (closesAt && !Number.isFinite(Date.parse(closesAt)))) {
+        return errorResponse("Special Project application dates must be valid dates and times.", 400);
+      }
+      if (opensAt && closesAt && Date.parse(closesAt) <= Date.parse(opensAt)) {
+        return errorResponse("A Special Project closing date must be after its opening date.", 400);
+      }
+      const media = Array.isArray(call.media) ? call.media : [];
+      const normalizedMedia = [];
+      const seenMedia = new Set();
+      for (let index = 0; index < media.length; index += 1) {
+        const item = media[index] || {};
+        const mediaId = asString(item.id || item.mediaId || item.media_id);
+        if (!mediaId || seenMedia.has(mediaId)) continue;
+        seenMedia.add(mediaId);
+        normalizedMedia.push({
+          id: mediaId,
+          role: asString(item.role) === "primary" ? "primary" : "gallery",
+          sortOrder: asPositiveInteger(item.sortOrder ?? item.sort_order, index),
+          alt: asString(item.alt || item.altText || item.alt_text_override).slice(0, 1000),
+        });
+      }
+      if (normalizedMedia.filter((item) => item.role === "primary").length > 1) {
+        return errorResponse("A Special Project can have only one primary image.", 400);
+      }
+      if (profile === "experimental") {
+        if (refundableDeposit.depositCents <= 0) return errorResponse("Experimental Projects require a positive refundable attendance deposit.", 400);
+        if (!participationTerms) return errorResponse("Experimental Projects require participation terms.", 400);
+        if (!normalizedMedia.some((item) => item.role === "primary")) return errorResponse("Experimental Projects require a primary image.", 400);
+      }
+      if (normalizedMedia.length) {
+        const placeholders = normalizedMedia.map(() => "?").join(",");
+        const eligible = await db.prepare(
+          `SELECT id FROM media_assets
+           WHERE id IN (${placeholders}) AND state='active' AND privacy='public'
+             AND consent_status IN ('not-required','granted') AND public_presentation='inline'`
+        ).bind(...normalizedMedia.map((item) => item.id)).all();
+        if ((eligible.results || []).length !== normalizedMedia.length) {
+          return errorResponse("Special Project media must be active, public, consent-cleared, inline Shared Media assets.", 409);
+        }
+      }
       statements.push(db.prepare(
         `INSERT INTO special_project_calls (
-          id, slug, title, summary, status, rate_text, sort_order, opens_at, closes_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, slug, title, summary, status, rate_text, sort_order, opens_at, closes_at,
+          profile, allowed_modes_json, refundable_deposit_cents, healed_photo_due_weeks,
+          application_instructions, participation_terms, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, title = excluded.title,
           summary = excluded.summary, status = excluded.status, rate_text = excluded.rate_text,
           sort_order = excluded.sort_order, opens_at = excluded.opens_at,
-          closes_at = excluded.closes_at, updated_at = excluded.updated_at`
+          closes_at = excluded.closes_at, profile = excluded.profile,
+          allowed_modes_json = excluded.allowed_modes_json,
+          refundable_deposit_cents = excluded.refundable_deposit_cents,
+          healed_photo_due_weeks = excluded.healed_photo_due_weeks,
+          application_instructions = excluded.application_instructions,
+          participation_terms = excluded.participation_terms,
+          updated_at = excluded.updated_at`
       ).bind(
         id,
         slug,
@@ -7577,10 +7969,24 @@ export async function handleAdminTattooSettings(request, env) {
         status,
         asString(call.rateText ?? call.rate_text).slice(0, 200),
         asPositiveInteger(call.sortOrder, 0),
-        asOptionalString(call.opensAt ?? call.opens_at),
-        asOptionalString(call.closesAt ?? call.closes_at),
+        opensAt,
+        closesAt,
+        profile,
+        JSON.stringify(allowedModes),
+        refundableDeposit.depositCents,
+        healedPhotoDueWeeks,
+        applicationInstructions,
+        participationTerms,
         now,
       ));
+      statements.push(db.prepare("DELETE FROM special_project_call_media WHERE project_id = ?").bind(id));
+      for (const item of normalizedMedia) {
+        statements.push(db.prepare(
+          `INSERT INTO special_project_call_media
+           (project_id,media_id,role,sort_order,alt_text_override,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?)`
+        ).bind(id, item.id, item.role, item.sortOrder, item.alt, now, now));
+      }
     }
 
     if (statements.length) await db.batch(statements);
@@ -8337,6 +8743,16 @@ export async function handleAdminListAppointments(request, env) {
       .prepare(
         `SELECT a.*, bt.label AS booking_type_label, s.type AS submission_type,
                 tst.offer_title AS special_offer_title, tst.variant_label AS special_variant_label,
+                spt.project_profile AS special_project_profile,
+                spt.project_title AS special_project_title,
+                edr.id AS experimental_refund_id,
+                edr.status AS experimental_refund_status,
+                edr.amount_cents AS experimental_refund_amount_cents,
+                edr.reason AS experimental_refund_reason,
+                edr.provider_refund_id AS experimental_provider_refund_id,
+                edr.exception_note AS experimental_refund_exception_note,
+                edr.completed_at AS experimental_refund_completed_at,
+                edr.updated_at AS experimental_refund_updated_at,
                 dp.status AS payment_status,
                 dp.amount_cents AS payment_amount_cents,
                 CASE WHEN a.status IN ('pending_deposit','deposit_pending','cancelled','archived')
@@ -8371,6 +8787,12 @@ export async function handleAdminListAppointments(request, env) {
          LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
          LEFT JOIN submissions s ON s.id = a.submission_id
          LEFT JOIN tattoo_special_submission_terms tst ON tst.submission_id = a.submission_id
+         LEFT JOIN special_project_submission_terms spt ON spt.submission_id = a.submission_id
+         LEFT JOIN experimental_deposit_refunds edr ON edr.id = (
+           SELECT latest_refund.id FROM experimental_deposit_refunds latest_refund
+           WHERE latest_refund.appointment_id = a.id
+           ORDER BY latest_refund.requested_at DESC, latest_refund.id DESC LIMIT 1
+         )
          LEFT JOIN deposit_payments dp ON dp.id = (
            SELECT latest_payment.id FROM deposit_payments latest_payment
            WHERE latest_payment.appointment_id = a.id
@@ -8388,6 +8810,285 @@ export async function handleAdminListAppointments(request, env) {
       detail: error.message,
     });
   }
+}
+
+function normalizeSquareRefundStatus(value) {
+  const status = asString(value).toUpperCase();
+  if (status === "COMPLETED") return "completed";
+  if (status === "REJECTED") return "rejected";
+  if (status === "FAILED") return "failed";
+  return "pending";
+}
+
+async function mirrorExperimentalRefundToCrm(database, refundId) {
+  if (!refundId) return { status: "skipped", reason: "source_required" };
+  try {
+    const row = await database.prepare(
+      `SELECT r.*,a.submission_id,a.client_name,a.client_email,a.client_phone,
+              dp.provider_payment_id,dp.provider_order_id
+       FROM experimental_deposit_refunds r
+       JOIN appointments a ON a.id=r.appointment_id
+       JOIN deposit_payments dp ON dp.id=r.deposit_payment_id
+       WHERE r.id=?`
+    ).bind(refundId).first();
+    if (!row) return { status: "skipped", reason: "source_required" };
+    const status = row.status === "completed"
+      ? "settled"
+      : ["failed", "rejected"].includes(row.status) ? "failed" : "pending";
+    return await ingestCrmSourceRecord(database, {
+      contact: {
+        displayName: row.client_name,
+        email: row.client_email,
+        phone: row.client_phone,
+      },
+      transaction: {
+        sourceProvider: "local",
+        sourceType: "experimental_deposit_refund",
+        sourceId: row.id,
+        nodeId: "node-tattoos",
+        transactionType: "refund",
+        status,
+        amountCents: row.amount_cents,
+        currency: row.currency || "USD",
+        occurredAt: row.completed_at || row.updated_at || row.requested_at,
+        externalOrderId: row.provider_order_id || row.id,
+        metadata: {
+          appointmentId: row.appointment_id,
+          submissionId: row.submission_id,
+          providerPaymentId: row.provider_payment_id || "",
+          providerRefundId: row.provider_refund_id || "",
+          refundReason: row.reason,
+        },
+      },
+    });
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "crm.live_mirror_failed",
+      sourceType: "experimental_deposit_refund",
+      sourceId: String(refundId),
+      errorName: error?.name || "Error",
+    }));
+    return { status: "skipped", reason: "ingest_failed" };
+  }
+}
+
+async function experimentalRefundContext(db, appointmentId) {
+  return db.prepare(
+    `SELECT a.*,s.type AS submission_type,s.contact_name,s.contact_email,s.contact_phone,
+            t.project_profile,t.project_title,t.refundable_deposit_cents,
+            dp.id AS deposit_payment_id,dp.provider_payment_id,dp.amount_cents AS payment_amount_cents,
+            dp.currency AS payment_currency,dp.status AS deposit_payment_status,
+            r.id AS refund_id,r.provider_refund_id,r.status AS refund_status,
+            r.idempotency_key AS refund_idempotency_key,r.reason AS refund_reason
+     FROM appointments a
+     JOIN submissions s ON s.id=a.submission_id
+     JOIN special_project_submission_terms t ON t.submission_id=s.id
+     LEFT JOIN deposit_payments dp ON dp.id=(
+       SELECT p.id FROM deposit_payments p WHERE p.appointment_id=a.id
+       ORDER BY p.created_at DESC,p.id DESC LIMIT 1
+     )
+     LEFT JOIN experimental_deposit_refunds r ON r.id=(
+       SELECT er.id FROM experimental_deposit_refunds er WHERE er.appointment_id=a.id
+       ORDER BY er.requested_at DESC,er.id DESC LIMIT 1
+     )
+     WHERE a.id=? AND t.project_profile='experimental'`
+  ).bind(appointmentId).first();
+}
+
+async function requestExperimentalDepositRefund(db, env, appointmentId, reason, exceptionNote = "") {
+  const row = await experimentalRefundContext(db, appointmentId);
+  if (!row) return { error: "Experimental Project appointment not found.", status: 404 };
+  if (row.purpose !== "tattoo") return { error: "Only the Experimental Project tattoo appointment carries a refundable deposit.", status: 409 };
+  if (!["paid", "completed", "settled"].includes(asString(row.deposit_payment_status).toLowerCase())) {
+    return { error: "A completed Square deposit payment is required before refunding.", status: 409 };
+  }
+  if (!row.provider_payment_id) return { error: "The Square payment ID is missing; reconcile the payment before refunding.", status: 409 };
+  const amountCents = Number(row.refundable_deposit_cents || 0);
+  if (amountCents <= 0 || Number(row.payment_amount_cents || 0) < amountCents) {
+    return { error: "The captured payment does not cover the snapshotted attendance deposit.", status: 409 };
+  }
+  if (row.refund_status === "completed") return { refund: row, idempotent: true };
+  if (row.refund_status === "pending" && row.provider_refund_id) return { refund: row, idempotent: true };
+  if (!squareConfigured(env)) return { error: "Square is not configured.", status: 503 };
+
+  const now = new Date().toISOString();
+  const refundId = row.refund_id || crypto.randomUUID();
+  const idempotencyKey = row.refund_idempotency_key || `experimental-refund:${appointmentId}`;
+  if (!row.refund_id) {
+    await db.prepare(
+      `INSERT INTO experimental_deposit_refunds(
+        id,appointment_id,deposit_payment_id,provider,idempotency_key,amount_cents,currency,
+        reason,exception_note,status,raw_json,requested_at,updated_at
+      ) VALUES(?,?,?,'square',?,?,?,?,?,'pending','{}',?,?)`
+    ).bind(
+      refundId,
+      appointmentId,
+      row.deposit_payment_id,
+      idempotencyKey,
+      amountCents,
+      row.payment_currency || row.currency || "USD",
+      reason,
+      exceptionNote,
+      now,
+      now,
+    ).run();
+  } else {
+    await db.prepare(
+      "UPDATE experimental_deposit_refunds SET status='pending',reason=?,exception_note=?,updated_at=? WHERE id=?"
+    ).bind(reason, exceptionNote, now, refundId).run();
+  }
+
+  let payload = {};
+  let response;
+  try {
+    response = await fetch(`${squareBaseUrl(env)}/v2/refunds`, {
+      method: "POST",
+      headers: {
+        "Square-Version": "2026-05-20",
+        "Authorization": `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey,
+        payment_id: row.provider_payment_id,
+        amount_money: { amount: amountCents, currency: row.payment_currency || row.currency || "USD" },
+        reason: reason === "attendance"
+          ? `Attendance deposit refund — ${row.project_title}`
+          : `Studio exception refund — ${exceptionNote}`,
+      }),
+    });
+    payload = await response.json().catch(() => ({}));
+  } catch (error) {
+    await db.prepare(
+      "UPDATE experimental_deposit_refunds SET status='failed',raw_json=?,updated_at=? WHERE id=?"
+    ).bind(JSON.stringify({ error: error.message }), new Date().toISOString(), refundId).run();
+    await mirrorExperimentalRefundToCrm(db, refundId);
+    return { error: "Square refund request failed. The attendance record was preserved and the refund can be retried.", status: 502 };
+  }
+
+  const providerRefund = payload.refund || null;
+  const normalizedStatus = response.ok
+    ? normalizeSquareRefundStatus(providerRefund?.status)
+    : response.status >= 400 && response.status < 500 ? "rejected" : "failed";
+  const updatedAt = new Date().toISOString();
+  await db.batch([
+    db.prepare(
+      `UPDATE experimental_deposit_refunds
+       SET provider_refund_id=COALESCE(?,provider_refund_id),status=?,raw_json=?,
+           completed_at=CASE WHEN ?='completed' THEN COALESCE(completed_at,?) ELSE completed_at END,
+           updated_at=? WHERE id=?`
+    ).bind(
+      providerRefund?.id || null,
+      normalizedStatus,
+      JSON.stringify(payload),
+      normalizedStatus,
+      updatedAt,
+      updatedAt,
+      refundId,
+    ),
+    db.prepare(
+      `INSERT INTO appointment_events(id,appointment_id,event_type,actor,note,metadata_json,created_at)
+       VALUES(?,?,'experimental_refund_updated','admin',?,?,?)`
+    ).bind(
+      crypto.randomUUID(),
+      appointmentId,
+      exceptionNote || null,
+      JSON.stringify({ refundId, providerRefundId: providerRefund?.id || "", status: normalizedStatus, reason }),
+      updatedAt,
+    ),
+  ]);
+  await mirrorExperimentalRefundToCrm(db, refundId);
+  if (!response.ok) {
+    return { error: payload.errors?.[0]?.detail || "Square rejected the refund request.", status: 409 };
+  }
+  return { refund: await db.prepare("SELECT * FROM experimental_deposit_refunds WHERE id=?").bind(refundId).first() };
+}
+
+export async function handleAdminExperimentalAppointmentAction(request, env, appointmentId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+  const action = asString(body.action);
+  const db = requireBookingDb(env);
+  const row = await experimentalRefundContext(db, appointmentId);
+  if (!row) return errorResponse("Experimental Project appointment not found.", 404);
+  if (!row.start_at || new Date(row.start_at).getTime() > Date.now()) {
+    return errorResponse("Attendance can be recorded only after the appointment start time.", 409);
+  }
+  if (action === "attended_refund") {
+    if (row.status === "confirmed") {
+      const headers = new Headers({ "content-type": "application/json" });
+      const authorization = request.headers.get("authorization");
+      if (authorization) headers.set("authorization", authorization);
+      const completion = await handleAdminCompleteAppointment(new Request(request.url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ note: asString(body.note) || "Experimental Project attended; refundable deposit initiated." }),
+      }), env, appointmentId);
+      if (!completion.ok) return completion;
+    } else if (row.status !== "completed") {
+      return errorResponse("Only a confirmed Experimental Project appointment can be marked attended.", 409);
+    }
+    const refund = await requestExperimentalDepositRefund(db, env, appointmentId, "attendance");
+    if (refund.error) return errorResponse(refund.error, refund.status || 409, { appointmentCompleted: true });
+    return json({ ok: true, attended: true, refund: refund.refund, idempotent: Boolean(refund.idempotent) });
+  }
+  if (action === "no_show") {
+    if (row.status !== "confirmed") return errorResponse("Only a confirmed appointment can be marked no-show.", 409);
+    const now = new Date().toISOString();
+    const results = await db.batch([
+      db.prepare("UPDATE appointments SET status='no_show',completed_at=?,completion_note=?,updated_at=? WHERE id=? AND status='confirmed'")
+        .bind(now, asString(body.note).slice(0, 5000), now, appointmentId),
+      db.prepare("UPDATE submissions SET tattoo_stage='closed',updated_at=? WHERE id=?")
+        .bind(now, row.submission_id),
+      db.prepare(
+        `INSERT INTO appointment_events(id,appointment_id,event_type,actor,note,metadata_json,created_at)
+         VALUES(?,?,'no_show','admin',?,'{"refundEligible":false}',?)`
+      ).bind(crypto.randomUUID(), appointmentId, asString(body.note).slice(0, 5000) || null, now),
+    ]);
+    if (Number(results?.[0]?.meta?.changes || 0) < 1) return errorResponse("No-show update raced with another appointment change.", 409);
+    return json({ ok: true, noShow: true, appointment: normalizeAppointment(await selectAppointmentWithMeeting(db, appointmentId)) });
+  }
+  if (action === "exception_refund") {
+    const note = asString(body.note).slice(0, 5000);
+    if (!note) return errorResponse("A private exception reason is required.", 400);
+    if (!body.confirmed) return errorResponse("Confirm the manual exception refund.", 400);
+    if (!["cancelled", "no_show", "completed"].includes(row.status)) {
+      return errorResponse("Exception refunds apply only to cancelled, no-show, or completed appointments.", 409);
+    }
+    const refund = await requestExperimentalDepositRefund(db, env, appointmentId, "manual_exception", note);
+    if (refund.error) return errorResponse(refund.error, refund.status || 409);
+    return json({ ok: true, exceptionRefund: true, refund: refund.refund, idempotent: Boolean(refund.idempotent) });
+  }
+  return errorResponse("Choose attended_refund, no_show, or exception_refund.", 400);
+}
+
+export async function reconcileExperimentalDepositRefunds(env) {
+  const db = requireBookingDb(env);
+  if (!squareConfigured(env)) return { checked: 0, updated: 0 };
+  const rows = (await db.prepare(
+    `SELECT * FROM experimental_deposit_refunds
+     WHERE status='pending' AND provider_refund_id IS NOT NULL
+     ORDER BY updated_at LIMIT 50`
+  ).all()).results || [];
+  let updated = 0;
+  for (const row of rows) {
+    const response = await fetch(`${squareBaseUrl(env)}/v2/refunds/${encodeURIComponent(row.provider_refund_id)}`, {
+      headers: { "Square-Version": "2026-05-20", "Authorization": `Bearer ${env.SQUARE_ACCESS_TOKEN}` },
+    });
+    if (!response.ok) continue;
+    const payload = await response.json().catch(() => ({}));
+    const status = normalizeSquareRefundStatus(payload.refund?.status);
+    if (status !== row.status) updated += 1;
+    const now = new Date().toISOString();
+    await db.prepare(
+      `UPDATE experimental_deposit_refunds SET status=?,raw_json=?,
+       completed_at=CASE WHEN ?='completed' THEN COALESCE(completed_at,?) ELSE completed_at END,updated_at=? WHERE id=?`
+    ).bind(status, JSON.stringify(payload), status, now, now, row.id).run();
+    await mirrorExperimentalRefundToCrm(db, row.id);
+  }
+  return { checked: rows.length, updated };
 }
 
 export async function handleAdminCompleteAppointment(request, env, appointmentId) {
@@ -8430,6 +9131,23 @@ export async function handleAdminCompleteAppointment(request, env, appointmentId
     }
     const note = asString(body.note || body.completionNote).slice(0, 5000);
     const now = new Date().toISOString();
+    const experimentalTerms = row.submission_id && purpose === "tattoo"
+      ? await db.prepare(
+        `SELECT * FROM special_project_submission_terms
+         WHERE submission_id=? AND project_profile='experimental'`
+      ).bind(row.submission_id).first()
+      : null;
+    const healedUploadToken = experimentalTerms?.healed_photo_method === "self_upload"
+      ? createBookingRawToken()
+      : "";
+    const healedTokenHash = healedUploadToken ? await sha256Hex(healedUploadToken) : null;
+    const healedDueAt = experimentalTerms
+      ? new Date(Date.now() + Math.max(1, Number(experimentalTerms.healed_photo_due_weeks || 6)) * 7 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+    const healedTokenExpiresAt = healedDueAt
+      ? new Date(new Date(healedDueAt).getTime() + 90 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+    const healedFollowupId = experimentalTerms ? crypto.randomUUID() : "";
     const statements = [
       db.prepare(
         `UPDATE appointments
@@ -8565,6 +9283,31 @@ export async function handleAdminCompleteAppointment(request, env, appointmentId
         ).bind(crypto.randomUUID(), appointmentId, now, row.submission_id, now, appointmentId, now),
       );
     }
+    if (experimentalTerms) {
+      statements.push(
+        db.prepare(
+          `INSERT INTO special_project_healed_followups (
+            id,submission_id,appointment_id,method,status,due_at,token_hash,
+            token_expires_at,created_at,updated_at
+          ) VALUES (?,?,?,?,'pending',?,?,?,?,?)
+          ON CONFLICT(submission_id) DO UPDATE SET
+            appointment_id=excluded.appointment_id,method=excluded.method,due_at=excluded.due_at,
+            token_hash=COALESCE(special_project_healed_followups.token_hash,excluded.token_hash),
+            token_expires_at=COALESCE(special_project_healed_followups.token_expires_at,excluded.token_expires_at),
+            updated_at=excluded.updated_at`
+        ).bind(
+          healedFollowupId,
+          row.submission_id,
+          appointmentId,
+          experimentalTerms.healed_photo_method,
+          healedDueAt,
+          healedTokenHash,
+          healedTokenExpiresAt,
+          now,
+          now,
+        ),
+      );
+    }
     const results = await db.batch(statements);
     if (Number(results?.[0]?.meta?.changes || 0) < 1) {
       return errorResponse("Appointment completion raced with another update.", 409);
@@ -8581,6 +9324,27 @@ export async function handleAdminCompleteAppointment(request, env, appointmentId
     }
     const updated = normalizeAppointment(await selectAppointmentWithMeeting(db, appointmentId));
     await mirrorAppointmentToCrm(db, updated, { includePayment: true });
+    let healedFollowup = null;
+    if (experimentalTerms) {
+      healedFollowup = await db.prepare(
+        "SELECT * FROM special_project_healed_followups WHERE submission_id=?"
+      ).bind(row.submission_id).first();
+      const uploadUrl = healedUploadToken
+        ? `${baseUrlFromRequest(request)}/tattoos/special-projects/healed/?token=${encodeURIComponent(healedUploadToken)}`
+        : "";
+      const delivery = await notifyExperimentalHealedFollowup(env, request, {
+        ...healedFollowup,
+        client_email: row.client_email,
+        client_name: row.client_name,
+        project_title: experimentalTerms.project_title,
+        upload_url: uploadUrl,
+      });
+      if (delivery?.ok) {
+        await db.prepare(
+          "UPDATE special_project_healed_followups SET instructions_sent_at=COALESCE(instructions_sent_at,?),updated_at=? WHERE id=?"
+        ).bind(now, now, healedFollowup.id).run();
+      }
+    }
     const submission = row.submission_id
       ? await db.prepare(
         `SELECT id, status, tattoo_stage, lifecycle_review_required, lifecycle_review_note
@@ -8592,6 +9356,12 @@ export async function handleAdminCompleteAppointment(request, env, appointmentId
       appointment: updated,
       tattooStage: submission?.tattoo_stage || "",
       historicalResolved: historicalResolution,
+      healedFollowup: healedFollowup ? {
+        id: healedFollowup.id,
+        method: healedFollowup.method,
+        status: healedFollowup.status,
+        dueAt: healedFollowup.due_at,
+      } : null,
       submission: submission ? {
         id: submission.id,
         status: submission.status,
