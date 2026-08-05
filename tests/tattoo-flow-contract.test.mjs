@@ -145,12 +145,78 @@ test("Studio gives Special Projects a dedicated tab with direct Shared Media upl
   assert.match(source, /upload\.append\("privacy", "public"\)/);
   assert.match(source, /upload\.append\("public_presentation", "inline"\)/);
   assert.match(source, /role: hasPrimary \? "gallery" : "primary"/);
-  assert.match(source, /JSON\.stringify\(\{ specialProjects: specialProjectsFromForm\(specialProjectsForm\) \}\)/);
+  assert.match(source, /data-special-media-preview="\$\{escapeHtml\(mediaId\)\}"/);
+  assert.match(source, /fetch\(`\/api\/admin\/media\/\$\{encodeURIComponent\(image\.dataset\.specialMediaPreview\)\}\/file`/);
+  assert.match(source, /headers: \{ authorization: `Bearer \$\{token\}` \}/);
+  assert.match(source, /const projects = specialProjectsFromForm\(specialProjectsForm\);/);
+  assert.match(source, /JSON\.stringify\(\{ specialProjects: projects \}\)/);
   const settingsRenderer = source.slice(
     source.indexOf("async function renderTattooSettings()"),
     source.indexOf("function tattooSpecialVariantText"),
   );
   assert.doesNotMatch(settingsRenderer, /data-add-special-project/);
+});
+
+test("Studio explains incomplete Experimental Projects instead of leaving save stuck", () => {
+  const source = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const validationStart = source.indexOf("  function specialProjectEditorValidation(projects) {");
+  const validationEnd = source.indexOf("\n\n  function syncSpecialProjectEditorRequirements", validationStart);
+  assert.ok(validationStart > -1 && validationEnd > validationStart, "Special Project editor validation must be present");
+  const validate = Function(`${source.slice(validationStart, validationEnd)}; return specialProjectEditorValidation;`)();
+  const complete = {
+    slug: "classic-cliches-praying-hands",
+    title: "Classic Cliches / Praying Hands",
+    profile: "experimental",
+    allowedModes: ["fresh"],
+    refundableDepositCents: 10000,
+    participationTerms: "Attendance and healed-photo terms.",
+    opensAt: "",
+    closesAt: "",
+    media: [{ role: "primary" }],
+    _delete: false,
+  };
+  assert.equal(validate([complete]), null);
+  assert.deepEqual(validate([{ ...complete, participationTerms: "" }]), {
+    index: 0,
+    selector: "[data-special-terms]",
+    message: "Add the participation terms applicants must accept for this Experimental Project.",
+  });
+  assert.deepEqual(validate([{ ...complete, media: [] }]), {
+    index: 0,
+    selector: "[data-special-media-role]",
+    message: "Choose exactly one Primary image for this Experimental Project.",
+  });
+  assert.match(source, /Participation terms\$\{profile === "experimental" \? " \(required for Experimental Projects\)"/);
+  assert.match(source, /const issue = specialProjectEditorValidation\(projects\);/);
+  assert.match(source, /if \(output\) output\.textContent = message;/);
+  assert.match(source, /if \(saveButton\?\.isConnected\) saveButton\.disabled = false;/);
+});
+
+test("Special Project gallery media is publicly readable after attachment", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  const mediaId = "special-project-public-media";
+  const storageKey = "construct/special-project-public-media/project.png";
+  const now = new Date().toISOString();
+  await bucket.put(storageKey, "project-image", { httpMetadata: { contentType: "image/png" } });
+  database.prepare(`
+    INSERT INTO media_assets(
+      id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,privacy,
+      consent_status,state,created_by,created_at,updated_at,transcript,transcript_status,
+      transcript_language,public_title,public_description,public_presentation
+    ) VALUES(?,?,?,?,?,'Project artwork','','public','not-required','active','studio',?,?,'','not-requested','en','Project artwork','','inline')
+  `).run(mediaId, storageKey, "project.png", "image/png", 13, now, now);
+  const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSION_FILES: bucket };
+  const beforeAttachment = await handleConstructApi(new Request(`https://example.test/api/construct/media/${mediaId}`), env);
+  assert.equal(beforeAttachment.status, 404);
+  database.prepare(`
+    INSERT INTO special_project_call_media(project_id,media_id,role,sort_order,alt_text_override,created_at,updated_at)
+    VALUES('mythic-body-studies',?,'primary',0,'Project artwork',?,?)
+  `).run(mediaId, now, now);
+  const response = await handleConstructApi(new Request(`https://example.test/api/construct/media/${mediaId}`), env);
+  assert.equal(response.status, 200, await response.clone().text());
+  assert.equal(response.headers.get("content-type"), "image/png");
+  assert.equal(await response.text(), "project-image");
 });
 
 const TATTOO_BUDGET_RANGES = [
@@ -239,6 +305,17 @@ class MemoryBucket {
 
   async delete(key) {
     this.objects.delete(key);
+  }
+
+  async head(key) {
+    const object = this.objects.get(key);
+    if (!object) return null;
+    return {
+      size: object.body.byteLength,
+      writeHttpMetadata(headers) {
+        if (object.options.httpMetadata?.contentType) headers.set("content-type", object.options.httpMetadata.contentType);
+      },
+    };
   }
 
   async get(key) {

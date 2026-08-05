@@ -2582,6 +2582,11 @@ async function publicMediaApi(request,env,mediaId){
             AND aov.publication_state='published' AND aov.public_visible=1
             AND ad.state='published' AND ad.public_visible=1 AND ce.visibility='public'
         )
+        OR EXISTS(
+          SELECT 1 FROM special_project_call_media spm
+          JOIN special_project_calls spc ON spc.id=spm.project_id
+          WHERE spm.media_id=m.id
+        )
       )`).bind(mediaId).first();
   if(!row)return failure("Not found.",404);
   return servePublicMedia(row,request,env);

@@ -447,6 +447,7 @@
   .special-project-media-identity { display:flex; align-items:center; gap:10px; min-width:0; }
   .special-project-media-identity > div { min-width:0; overflow-wrap:anywhere; }
   .special-project-media-thumb { width:64px; height:64px; flex:none; object-fit:cover; border:5px solid var(--ring-faint); background:var(--bg); }
+  .special-project-media-thumb:not([src]) { opacity:.4; }
   .special-project-upload { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:10px; align-items:end; margin-top:12px; padding:12px; border:5px solid var(--ring-faint); }
   .special-project-upload > .contact,
   .special-project-upload > [data-special-media-upload-status] { grid-column:1/-1; }
@@ -699,6 +700,7 @@
   let portfolioBatchUploading = false;
   let tattooSettings = { settings: {}, rateCards: [], specialProjects: [], displayedHours: "" };
   let specialProjectMediaAssets = [];
+  let specialProjectMediaPreviewUrls = [];
   let tattooSpecials = { settings: {}, offers: [], media: [], readiness: {} };
   let manualTextTemplates = Object.fromEntries(
     (window.ManualTextAssist?.DEFAULT_TEMPLATES || []).map((template) => [template.key, { ...template }])
@@ -2924,7 +2926,7 @@
       </div></div>
       <label class="special-project-wide">Public summary<textarea data-special-summary maxlength="5000">${escapeHtml(project.summary || "")}</textarea></label>
       <label class="special-project-wide">Application instructions<textarea data-special-instructions maxlength="5000">${escapeHtml(project.applicationInstructions || project.application_instructions || "")}</textarea></label>
-      <label class="special-project-wide">Participation terms<textarea data-special-terms maxlength="10000">${escapeHtml(project.participationTerms || project.participation_terms || "")}</textarea></label>
+      <label class="special-project-wide">Participation terms${profile === "experimental" ? " (required for Experimental Projects)" : ""}<textarea data-special-terms maxlength="10000" ${profile === "experimental" ? "required" : ""}>${escapeHtml(project.participationTerms || project.participation_terms || "")}</textarea></label>
       <div class="special-project-wide"><span class="contact">Ordered Shared Media gallery. Exactly one image must be Primary for an Experimental Project.</span><div class="special-project-media" data-special-media-list>${mediaRows}</div>
         <div class="special-project-upload">
           <p class="contact">Upload project artwork here. Images are stored in Shared Media and attached to this project automatically; the first image becomes Primary.</p>
@@ -2939,13 +2941,44 @@
     </section>`;
   }
 
+  function clearSpecialProjectMediaPreviews() {
+    specialProjectMediaPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    specialProjectMediaPreviewUrls = [];
+  }
+
+  async function hydrateSpecialProjectMediaPreviews(scope = detailEl) {
+    const previews = [
+      ...(scope.matches?.("[data-special-media-preview]") ? [scope] : []),
+      ...(scope.querySelectorAll?.("[data-special-media-preview]") || []),
+    ];
+    await Promise.all(previews.map(async (image) => {
+      if (image.dataset.previewLoading === "true" || image.dataset.previewReady === "true") return;
+      image.dataset.previewLoading = "true";
+      try {
+        const response = await fetch(`/api/admin/media/${encodeURIComponent(image.dataset.specialMediaPreview)}/file`, {
+          headers: { authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error("Preview unavailable");
+        const objectUrl = URL.createObjectURL(await response.blob());
+        specialProjectMediaPreviewUrls.push(objectUrl);
+        image.src = objectUrl;
+        image.dataset.previewReady = "true";
+      } catch {
+        image.removeAttribute("src");
+        image.title = "Preview unavailable";
+      } finally {
+        delete image.dataset.previewLoading;
+      }
+    }));
+  }
+
   function specialProjectMediaRow(item) {
     const mediaId = item.id || item.mediaId || item.media_id || "";
     const asset = specialProjectMediaAssets.find((candidate) => candidate.id === mediaId) || {};
     const label = asset.title || asset.original_filename || asset.originalFilename || mediaId;
-    const previewUrl = asset.source_url || asset.sourceUrl || (mediaId ? `/api/construct/media/${encodeURIComponent(mediaId)}` : "");
     return `<div class="special-project-media-row" data-special-media data-media-id="${escapeHtml(mediaId)}">
-      <div class="special-project-media-identity">${previewUrl ? `<img class="special-project-media-thumb" src="${escapeHtml(previewUrl)}" alt="" loading="lazy">` : ""}<div><strong>${escapeHtml(label)}</strong><br><span class="contact">${escapeHtml(mediaId)}</span></div></div>
+      <div class="special-project-media-identity">${mediaId ? `<img class="special-project-media-thumb" data-special-media-preview="${escapeHtml(mediaId)}" alt="" aria-hidden="true">` : ""}<div><strong>${escapeHtml(label)}</strong><br><span class="contact">${escapeHtml(mediaId)}</span></div></div>
       <label>Role<select data-special-media-role><option value="gallery" ${item.role !== "primary" ? "selected" : ""}>Gallery</option><option value="primary" ${item.role === "primary" ? "selected" : ""}>Primary</option></select></label>
       <div class="booking-actions"><button class="button" type="button" data-move-special-media="up" aria-label="Move media up">↑</button><button class="button" type="button" data-move-special-media="down" aria-label="Move media down">↓</button><button class="button danger-button" type="button" data-remove-special-media aria-label="Remove media">Remove</button></div>
       <label style="grid-column:1/-1;">Project-specific alt text<input data-special-media-alt value="${escapeHtml(item.alt || item.altText || item.alt_text_override || "")}" maxlength="1000"></label>
@@ -2998,6 +3031,7 @@
           alt: altText,
         }));
         enhanceControls(list.lastElementChild);
+        await hydrateSpecialProjectMediaPreviews(list.lastElementChild);
         hasPrimary = true;
         uploadedCount += 1;
       }
@@ -3036,6 +3070,58 @@
     }));
   }
 
+  function specialProjectEditorValidation(projects) {
+    for (let index = 0; index < projects.length; index += 1) {
+      const project = projects[index];
+      if (project._delete) continue;
+      if (!project.slug) return { index, selector: "[data-special-slug]", message: "Add a Project ID / slug before saving." };
+      if (!project.title) return { index, selector: "[data-special-title]", message: "Add a project title before saving." };
+      if (!project.allowedModes.length) return { index, selector: "[data-special-mode]", message: "Select at least one allowed application mode." };
+      const primaryCount = project.media.filter((item) => item.role === "primary").length;
+      if (primaryCount > 1) return { index, selector: "[data-special-media-role]", message: "A Special Project can have only one Primary image." };
+      if (project.opensAt && project.closesAt && Date.parse(project.closesAt) <= Date.parse(project.opensAt)) {
+        return { index, selector: "[data-special-closes]", message: "The closing date must be after the opening date." };
+      }
+      if (project.profile !== "experimental") continue;
+      if (project.refundableDepositCents <= 0) return { index, selector: "[data-special-deposit]", message: "Experimental Projects require a refundable attendance deposit greater than $0." };
+      if (!project.participationTerms) return { index, selector: "[data-special-terms]", message: "Add the participation terms applicants must accept for this Experimental Project." };
+      if (primaryCount !== 1) return { index, selector: "[data-special-media-role]", message: "Choose exactly one Primary image for this Experimental Project." };
+    }
+    return null;
+  }
+
+  function syncSpecialProjectEditorRequirements(row) {
+    if (!row) return;
+    const experimental = row.querySelector("[data-special-profile]")?.value === "experimental";
+    const terms = row.querySelector("[data-special-terms]");
+    const deposit = row.querySelector("[data-special-deposit]");
+    if (terms) terms.required = experimental;
+    if (deposit) {
+      deposit.required = experimental;
+      deposit.min = experimental ? "1" : "0";
+    }
+  }
+
+  function showSpecialProjectSaveIssue(form, issue) {
+    const rows = [...form.querySelectorAll("[data-special-project]")].filter((row) => row.dataset.delete !== "true");
+    const row = rows[issue.index];
+    if (row?.dataset.adminCollapsed === "true") {
+      row.querySelector(":scope > .admin-collapse-heading > [data-admin-collapse-control]")?.click();
+    }
+    const control = row?.querySelector(issue.selector);
+    const output = form.querySelector("#specialProjectsStatus");
+    if (output) output.textContent = issue.message;
+    setStatus(issue.message);
+    if (control) {
+      control.setCustomValidity?.(issue.message);
+      control.focus?.();
+      control.reportValidity?.();
+      const clearIssue = () => control.setCustomValidity?.("");
+      control.addEventListener("input", clearIssue, { once: true });
+      control.addEventListener("change", clearIssue, { once: true });
+    }
+  }
+
   function sessionEstimateCopyEditor(copy = {}) {
     return sessionEstimateCopyFields.map(([key, label, kind]) => {
       const value = escapeHtml(copy[key] || "");
@@ -3053,6 +3139,7 @@
     layoutEl.classList.add("single");
     listPane.classList.add("hidden");
     toolbarEl.innerHTML = "";
+    clearSpecialProjectMediaPreviews();
     detailEl.innerHTML = '<p class="empty">Loading Special Projects…</p>';
     await loadTattooSettings();
     detailEl.innerHTML = `<section class="tattoo-settings" id="specialProjectsManager" data-admin-section-title="Special Projects">
@@ -3069,6 +3156,7 @@
       </form>
     </section>`;
     enhanceControls(detailEl);
+    hydrateSpecialProjectMediaPreviews(detailEl).catch(() => {});
   }
 
   async function renderTattooSettings() {
@@ -6556,6 +6644,10 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("change", (event) => {
+    if (event.target.matches("[data-special-profile]")) {
+      syncSpecialProjectEditorRequirements(event.target.closest("[data-special-project]"));
+      return;
+    }
     if (event.target.matches("[data-special-media-role]") && event.target.value === "primary") {
       event.target.closest("[data-special-project]")?.querySelectorAll("[data-special-media-role]").forEach((select) => {
         if (select !== event.target) select.value = "gallery";
@@ -7205,6 +7297,7 @@ ${meetingLines}
       }
       list.insertAdjacentHTML("beforeend", specialProjectMediaRow({ id: mediaId, role: list.children.length ? "gallery" : "primary" }));
       enhanceControls(list.lastElementChild);
+      await hydrateSpecialProjectMediaPreviews(list.lastElementChild);
       picker.value = "";
       return;
     }
@@ -8057,14 +8150,32 @@ ${meetingLines}
     const specialProjectsForm = event.target.closest("[data-special-projects-form]");
     if (specialProjectsForm) {
       event.preventDefault();
+      const projects = specialProjectsFromForm(specialProjectsForm);
+      const issue = specialProjectEditorValidation(projects);
+      if (issue) {
+        showSpecialProjectSaveIssue(specialProjectsForm, issue);
+        return;
+      }
+      const output = specialProjectsForm.querySelector("#specialProjectsStatus");
+      const saveButton = event.submitter;
+      if (saveButton) saveButton.disabled = true;
+      if (output) output.textContent = "Saving Special Projects…";
       setStatus("Saving Special Projects");
-      await api("/api/admin/tattoo/settings", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ specialProjects: specialProjectsFromForm(specialProjectsForm) }),
-      });
-      await renderSpecialProjectsManager();
-      setStatus("Special Projects saved");
+      try {
+        await api("/api/admin/tattoo/settings", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ specialProjects: projects }),
+        });
+        await renderSpecialProjectsManager();
+        setStatus("Special Projects saved");
+      } catch (error) {
+        const message = error.message || "Special Projects could not be saved.";
+        if (output) output.textContent = message;
+        setStatus(message);
+      } finally {
+        if (saveButton?.isConnected) saveButton.disabled = false;
+      }
       return;
     }
 
