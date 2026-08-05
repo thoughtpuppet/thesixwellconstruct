@@ -122,6 +122,17 @@ import { handleAdminManualTextTemplates } from "../functions/api/communications/
 import { bookingTokenFromUrl } from "../functions/api/booking-links.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+
+test("Studio Special Project editors use the shared collapsible section contract", () => {
+  const source = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(source, /<section class="tattoo-settings-row special" data-special-project/);
+  assert.match(source, /data-admin-section-title="\$\{escapeHtml\(projectLabel\)\}"/);
+  assert.match(source, /data-admin-collapse-key="special-project-\$\{escapeHtml\(projectId\)\}"/);
+  assert.match(source, /data-admin-default="\$\{project\._editorOpen \? "open" : "closed"\}"/);
+  assert.match(source, /\.tattoo-settings-row\.special > \.admin-collapse-heading \{ grid-column:1\/-1;/);
+  assert.match(source, /_editorOpen: true,/);
+});
+
 const TATTOO_BUDGET_RANGES = [
   "Up to $300",
   "$300–$500",

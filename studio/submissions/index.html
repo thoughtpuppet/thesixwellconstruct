@@ -439,6 +439,7 @@
   .tattoo-settings-list { display:grid; gap:10px; min-width:0; }
   .tattoo-settings-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(120px,.65fr) auto; gap:10px; align-items:end; border-top:5px solid var(--ring-faint); padding-top:10px; min-width:0; }
   .tattoo-settings-row.special { grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; padding:14px; border:5px solid var(--ring-faint); }
+  .tattoo-settings-row.special > .admin-collapse-heading { grid-column:1/-1; align-items:center; }
   .special-project-wide { grid-column:1/-1; }
   .special-project-modes { display:flex; flex-wrap:wrap; gap:8px 16px; }
   .special-project-media { display:grid; gap:8px; }
@@ -2890,7 +2891,12 @@
     const profile = project.profile || "extended";
     const modes = new Set(project.allowedModes || project.allowed_modes || ["fresh"]);
     const mediaRows = (project.media || []).map((item) => specialProjectMediaRow(item)).join("");
-    return `<div class="tattoo-settings-row special" data-special-project data-id="${escapeHtml(project.id || "")}">
+    const projectId = project.id || project.slug || "new";
+    const projectTitle = String(project.title || "").trim();
+    const projectLabel = projectTitle
+      ? `${projectTitle} — ${profile === "experimental" ? "Experimental" : "Extended"} · ${status === "open" ? "Open" : "Closed"}`
+      : "New Special Project";
+    return `<section class="tattoo-settings-row special" data-special-project data-id="${escapeHtml(project.id || "")}" data-admin-section-title="${escapeHtml(projectLabel)}" data-admin-collapse-key="special-project-${escapeHtml(projectId)}" data-admin-default="${project._editorOpen ? "open" : "closed"}">
       <label>Project ID / slug<input data-special-slug value="${escapeHtml(project.slug || project.id || "")}" maxlength="96" pattern="[a-z0-9][a-z0-9-]*" required></label>
       <label>Project title<input data-special-title value="${escapeHtml(project.title || "")}" maxlength="160" required></label>
       <label>Profile<select data-special-profile><option value="extended" ${profile === "extended" ? "selected" : ""}>Extended</option><option value="experimental" ${profile === "experimental" ? "selected" : ""}>Experimental</option></select></label>
@@ -2912,7 +2918,7 @@
         <div class="booking-actions"><select data-special-media-picker><option value="">Choose Shared Media…</option>${specialProjectMediaAssets.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || item.original_filename || item.originalFilename || item.id)}</option>`).join("")}</select><button class="button" type="button" data-add-special-media>Add Media</button></div>
       </div>
       <div class="special-project-wide booking-actions"><button class="button danger-button" type="button" data-remove-special-project>Remove Project</button></div>
-    </div>`;
+    </section>`;
   }
 
   function specialProjectMediaRow(item) {
@@ -7018,6 +7024,7 @@ ${meetingLines}
         refundableDepositCents: 10000,
         healedPhotoDueWeeks: 6,
         media: [],
+        _editorOpen: true,
       }));
       enhanceControls(list.lastElementChild);
       list.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "start" });
