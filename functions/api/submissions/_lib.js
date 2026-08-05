@@ -890,7 +890,7 @@ async function loadSubmissionProgress(database, submissionRows = []) {
   }
 
   const paymentRows = (await database.prepare(
-    `SELECT a.submission_id,dp.status,dp.provider_payment_id,dp.updated_at
+    `SELECT a.submission_id,dp.status,dp.updated_at
      FROM deposit_payments dp
      JOIN appointments a ON a.id=dp.appointment_id
      WHERE a.submission_id IN (${placeholders})
@@ -900,7 +900,7 @@ async function loadSubmissionProgress(database, submissionRows = []) {
     const state = progress.get(payment.submission_id);
     if (!state) continue;
     const status = String(payment.status || "").toLowerCase();
-    const paid = ["paid", "completed", "settled"].includes(status) || Boolean(payment.provider_payment_id);
+    const paid = ["paid", "completed", "settled"].includes(status);
     if (status === "payment_attention") {
       state.depositPaymentStatus = "paid_attention";
       if (!state.depositPaidAt) state.depositPaidAt = payment.updated_at || "";

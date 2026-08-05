@@ -4049,7 +4049,7 @@
     const squareLine = appointment?.squareOrderId
       ? `Square order: ${appointment.squareOrderId}`
       : "Square checkout: Not started";
-    return `Reservation/deposit: ${money(depositCents, currency)}\nOptional tip: ${money(tipCents, currency)}\nAmount due: ${money(totalDueCents, currency)}\nPaid: ${money(paidCents, currency)}\nPayment status: ${appointmentPaymentStateLabel(appointment)}\n${squareLine}`;
+    return `Reservation/deposit: ${money(depositCents, currency)}\nOptional tip: ${money(tipCents, currency)}\nAmount due: ${money(totalDueCents, currency)}\nAmount paid: ${money(paidCents, currency)}\nPayment status: ${appointmentPaymentStateLabel(appointment)}\n${squareLine}`;
   }
 
   function renderPaymentSummary(submission) {

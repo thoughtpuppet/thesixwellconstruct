@@ -558,7 +558,7 @@ function saveReviewedTattooPlan(env, submissionId, token, fields = {}) {
   ), env, submissionId);
 }
 
-test("Studio submission progress reports current client notification delivery and paid deposits", async () => {
+test("Studio submission progress reports current client notification delivery and paid deposits without misreading cancelled Square identifiers", async () => {
   const database = migratedDatabase();
   const adminToken = "submission-progress-admin";
   const env = squareEnv(database, { SUBMISSIONS_ADMIN_TOKEN: adminToken });
@@ -587,6 +587,32 @@ test("Studio submission progress reports current client notification delivery an
     orderId: "progress-order",
     status: "paid",
   });
+  insertSubmissionFixture(database, {
+    id: "progress-cancelled-request",
+    type: "tattoo_special",
+    status: "approved",
+  });
+  insertAppointmentFixture(database, {
+    id: "progress-cancelled-appointment",
+    submissionId: "progress-cancelled-request",
+    bookingTypeId: "tattoo_quarter",
+    status: "cancelled",
+    purpose: "tattoo",
+    startAt: "2026-08-09T20:00:00.000Z",
+    endAt: "2026-08-09T22:00:00.000Z",
+    holdState: "expired",
+    approvalState: "approved",
+  });
+  insertPaymentFixture(database, {
+    id: "progress-cancelled-payment",
+    appointmentId: "progress-cancelled-appointment",
+    checkoutId: "progress-cancelled-checkout",
+    orderId: "progress-cancelled-order",
+    status: "cancelled",
+  });
+  database.prepare(
+    "UPDATE deposit_payments SET provider_payment_id='cancelled-square-payment-id' WHERE id='progress-cancelled-payment'",
+  ).run();
   const insertDelivery = database.prepare(
     `INSERT INTO notification_deliveries
       (id,channel,template_key,recipient,related_type,related_id,idempotency_key,status,error,sent_at,created_at)
@@ -614,11 +640,15 @@ test("Studio submission progress reports current client notification delivery an
     { headers: { authorization: `Bearer ${adminToken}` } },
   ), env);
   assert.equal(listed.status, 200);
-  const listedSubmission = (await listed.json()).submissions.find((item) => item.id === "progress-request");
+  const listedSubmissions = (await listed.json()).submissions;
+  const listedSubmission = listedSubmissions.find((item) => item.id === "progress-request");
+  const cancelledSubmission = listedSubmissions.find((item) => item.id === "progress-cancelled-request");
   assert.equal(listedSubmission.clientNotificationStatus, "failed");
   assert.equal(listedSubmission.clientLinkNotificationStatus, "unsent");
   assert.equal(listedSubmission.depositPaymentStatus, "paid");
   assert.ok(listedSubmission.depositPaidAt);
+  assert.equal(cancelledSubmission.depositPaymentStatus, "none");
+  assert.equal(cancelledSubmission.depositPaidAt, "");
 
   insertDelivery.run(
     "progress-current-sent",
@@ -645,6 +675,9 @@ test("Studio submission progress reports current client notification delivery an
   assert.match(studioSource, /requestBadgeMarkup\(submission\)/);
   assert.doesNotMatch(studioSource, /nextActionBadge|submissionProgressBadges/);
   assert.match(studioSource, /window\.setInterval\(refreshSubmissionProgress, 30000\)/);
+  const submissionsApiSource = readFileSync(join(ROOT, "functions", "api", "submissions", "_lib.js"), "utf8");
+  assert.match(submissionsApiSource, /const paid = \["paid", "completed", "settled"\]\.includes\(status\);/);
+  assert.doesNotMatch(submissionsApiSource, /const paid = [^\n]*provider_payment_id/);
 });
 
 function validCustomForProject(projectType, overrides = {}) {
@@ -7777,7 +7810,7 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /function appointmentIsExpiredCheckoutAttempt\(appointment\)/);
   assert.match(submissionsStudio, /function primaryAppointmentFor\(submissionId\)[\s\S]*?candidate\.status === "requested"[\s\S]*?candidate\.bookingTokenId === latest\.bookingTokenId/);
   assert.match(submissionsStudio, /Amount due: \$\{money\(totalDueCents, currency\)\}/);
-  assert.match(submissionsStudio, /Paid: \$\{money\(paidCents, currency\)\}/);
+  assert.match(submissionsStudio, /Amount paid: \$\{money\(paidCents, currency\)\}/);
   assert.match(submissionsStudio, /Square checkout: Not started/);
   assert.doesNotMatch(submissionsStudio, /Total paid today/);
   const primaryHelpers = submissionsStudio.match(
