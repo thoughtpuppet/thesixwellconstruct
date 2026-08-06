@@ -184,6 +184,7 @@ test("Special Project galleries follow the primary orientation and open an isola
   assert.match(source, /frame\.style\.setProperty\("--media-aspect", String\(ratio\)\)/);
   assert.match(source, /className = "project-media-primary"/);
   assert.match(source, /className = "project-media-companions"/);
+  assert.match(source, /align-content:flex-start; align-items:flex-start/);
   assert.match(source, /image\.loading = "eager"/);
   assert.match(source, /id="projectMediaDialog" aria-labelledby="projectMediaDialogTitle"/);
   assert.match(source, /frame\.className = "archive-frame has-media"/);
