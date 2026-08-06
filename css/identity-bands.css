@@ -46,6 +46,7 @@
 
 .brand-band--thoughtpuppet {
   --band-kicker-color: var(--color-art);
+  --band-mark-image: url("/assets/brand/thoughtpuppet-question-mark.svg");
 }
 
 .brand-band--thoughtpuppet .band-title {
@@ -56,9 +57,11 @@
 
 .brand-band--sixwell {
   --band-logo-aspect: 0.642857;
+  --band-mark-image: url("/assets/brand/six-well-clothing.svg.svg");
 }
 
 .brand-band--tattoo-house {
+  --band-mark-image: url("/assets/brand/art-pill-tattoo-house.svg.svg");
   --band-logo-aspect: 0.5523;
   --band-logo-shift-x: -4px;
   --band-identity-column: minmax(160px, 0.175fr);
@@ -108,7 +111,7 @@
   max-width: none;
   object-position: center;
   translate: var(--band-logo-shift-x) 0;
-  filter: brightness(0) saturate(100%) invert(97.401%) sepia(29.065%) saturate(624.078%) hue-rotate(351.216deg) brightness(70.445%) contrast(105.288%);
+  opacity: 0;
 }
 
 .band-identity-link {
@@ -118,6 +121,17 @@
   color: inherit;
   text-decoration: none;
   cursor: pointer;
+}
+
+.brand-band .band-identity-link::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--color-accent);
+  -webkit-mask: var(--band-mark-image) center / contain no-repeat;
+  mask: var(--band-mark-image) center / contain no-repeat;
+  translate: var(--band-logo-shift-x) 0;
+  pointer-events: none;
 }
 
 .band-identity-link:focus-visible {
@@ -480,6 +494,13 @@
 
   .brand-band .band-mark {
     object-position: calc(100% - 20px) center;
+    transform: scale(0.8);
+    transform-origin: calc(100% - 20px) center;
+  }
+
+  .brand-band .band-identity-link::before {
+    -webkit-mask-position: calc(100% - 20px) center;
+    mask-position: calc(100% - 20px) center;
     transform: scale(0.8);
     transform-origin: calc(100% - 20px) center;
   }

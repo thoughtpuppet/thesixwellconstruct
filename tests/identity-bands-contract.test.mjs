@@ -114,7 +114,11 @@ test("brand-band source marks retain the Legend color while titles and rendered 
   assert.match(sixWellSvg, new RegExp(`fill:\\s*${legendSymbolColor}`, "i"));
   assert.match(tattooHouseSvg, new RegExp(`fill:\\s*${legendSymbolColor}`, "i"));
   assert.match(identityCss, /\.brand-band\s*\{[\s\S]*--band-title-color:\s*var\(--color-accent\)/);
-  assert.match(identityCss, /\.brand-band \.band-mark\s*\{[\s\S]*filter:\s*brightness\(0\) saturate\(100%\)[^;]*;/);
+  assert.match(identityCss, /\.brand-band--thoughtpuppet\s*\{[\s\S]*--band-mark-image:\s*url\("\/assets\/brand\/thoughtpuppet-question-mark\.svg"\)/);
+  assert.match(identityCss, /\.brand-band--sixwell\s*\{[\s\S]*--band-mark-image:\s*url\("\/assets\/brand\/six-well-clothing\.svg\.svg"\)/);
+  assert.match(identityCss, /\.brand-band--tattoo-house\s*\{[\s\S]*--band-mark-image:\s*url\("\/assets\/brand\/art-pill-tattoo-house\.svg\.svg"\)/);
+  assert.match(identityCss, /\.brand-band \.band-mark\s*\{[\s\S]*opacity:\s*0/);
+  assert.match(identityCss, /\.brand-band \.band-identity-link::before\s*\{[\s\S]*background:\s*var\(--color-accent\)[\s\S]*-webkit-mask:\s*var\(--band-mark-image\) center \/ contain no-repeat[\s\S]*mask:\s*var\(--band-mark-image\) center \/ contain no-repeat/);
   assert.match(identityCss, /\.band-mark\s*\{[\s\S]*opacity:\s*1/);
   assert.match(identityCss, /\.band-identity-link:focus-visible\s*\{[\s\S]*outline:\s*5px solid/);
   assert.doesNotMatch(thoughtPuppetSvg, /<text\b/i);
