@@ -173,16 +173,25 @@ test("Special Projects expose public Series filtering while applications still t
   assert.match(source, /series\.cover\.url/);
 });
 
-test("Special Project galleries preserve artwork and open a full-image viewer", () => {
+test("Special Project galleries follow the primary orientation and open an isolated-image overlay", () => {
   const source = readFileSync(join(ROOT, "tattoos", "special-projects", "index.html"), "utf8");
   assert.match(source, /\.archive-frame:not\(\.has-media\)::before/);
   assert.match(source, /\.archive-frame:not\(\.has-media\)::after/);
   assert.match(source, /\.project-media-open img \{ width:100%; height:100%; object-fit:contain; \}/);
+  assert.match(source, /data-gallery-state="media"/);
+  assert.match(source, /data-primary-orientation="landscape"/);
+  assert.match(source, /mediaGrid\.dataset\.primaryOrientation = ratio < 0\.85 \? "portrait" : ratio > 1\.2 \? "landscape" : "square"/);
+  assert.match(source, /frame\.style\.setProperty\("--media-aspect", String\(ratio\)\)/);
+  assert.match(source, /className = "project-media-primary"/);
+  assert.match(source, /className = "project-media-companions"/);
+  assert.match(source, /image\.loading = "eager"/);
   assert.match(source, /id="projectMediaDialog" aria-labelledby="projectMediaDialogTitle"/);
   assert.match(source, /frame\.className = "archive-frame has-media"/);
-  assert.match(source, /button\.addEventListener\("click", function\(\) \{ openProjectMedia\(item, project\); \}\)/);
+  assert.match(source, /button\.addEventListener\("click", function\(\) \{ openProjectMedia\(item, project, button\); \}\)/);
   assert.match(source, /mediaDialog\.showModal\(\)/);
+  assert.match(source, /max-width:100%; max-height:100%/);
   assert.match(source, /event\.target === mediaDialog/);
+  assert.match(source, /mediaDialogTrigger\.focus\(\)/);
 });
 
 test("Studio review shows Series as quiet context without changing the project booking label", () => {
