@@ -37,14 +37,20 @@ export async function mount(host,api,setStatus){
   host.innerHTML='<section class="construct-manager"><p>Loading Merch workflow…</p></section>';
   let activeEditorId="";
 
+  async function paintEditor(editor,record={}){
+    editor.innerHTML=form(record);
+    await hydrateMediaPreviews(editor);
+    if(record.id){const connections=document.createElement("div");connections.className="cm-entity-connections";editor.appendChild(connections);await window.ConnectionsManager?.mount(connections,{entityId:record.id,originThreads:true})}
+  }
+
   async function paint(){
     clearMediaPreviews();
     try{
       const [payload,templates]=await Promise.all([api("/api/admin/merch-workflow"),templatePanel(api)]),records=payload.records||[],activeRecord=activeEditorId==="new"?{}:records.find(record=>record.id===activeEditorId);
       if(activeEditorId&&activeEditorId!=="new"&&!activeRecord)activeEditorId="";
-      host.innerHTML=`<section class="construct-manager mm-workspace"><div class="cm-head"><div><h2>Merch Products</h2><p class="cm-summary">Studio owns product identity, publication, Coming Soon pages, and launch alerts. Connecting Shopify never launches or sends anything.</p></div><button class="button" type="button" data-merch-new>New product</button></div><div data-merch-editor>${activeEditorId?form(activeRecord||{}):""}</div>${reconciliation(payload.reconciliation||{})}<div class="cm-grid">${records.map(card).join("")||'<div class="cm-empty">No Merch records.</div>'}</div>${templates}<div data-merch-launch></div></section>`;
+      host.innerHTML=`<section class="construct-manager mm-workspace"><div class="cm-head"><div><h2>Merch Products</h2><p class="cm-summary">Studio owns product identity, publication, Coming Soon pages, and launch alerts. Connecting Shopify never launches or sends anything.</p></div><button class="button" type="button" data-merch-new>New product</button></div><div data-merch-editor></div>${reconciliation(payload.reconciliation||{})}<div class="cm-grid">${records.map(card).join("")||'<div class="cm-empty">No Merch records.</div>'}</div>${templates}<div data-merch-launch></div></section>`;
       bind(payload);
-      if(activeEditorId)await hydrateMediaPreviews(host.querySelector("[data-merch-editor]"));
+      if(activeEditorId)await paintEditor(host.querySelector("[data-merch-editor]"),activeRecord||{});
     }catch(error){host.innerHTML=`<section class="construct-manager"><div class="cm-notice" data-kind="error">${esc(error.message)}</div></section>`}
   }
 
@@ -52,7 +58,7 @@ export async function mount(host,api,setStatus){
     const shell=host.querySelector(".mm-workspace"),editor=shell.querySelector("[data-merch-editor]"),launch=shell.querySelector("[data-merch-launch]"),records=payload.records||[];
     shell.addEventListener("click",async event=>{
       const fresh=event.target.closest("[data-merch-new]"),edit=event.target.closest("[data-merch-edit]"),cancel=event.target.closest("[data-merch-cancel]"),mediaButton=event.target.closest("[data-merch-media-action]"),importButton=event.target.closest("[data-merch-import]"),preview=event.target.closest("[data-merch-preview]"),close=event.target.closest("[data-launch-close]"),confirmButton=event.target.closest("[data-launch-confirm]"),publish=event.target.closest("[data-template-publish]");
-      if(fresh||edit){activeEditorId=edit?edit.dataset.merchEdit:"new";const record=edit?records.find(item=>item.id===activeEditorId):{};editor.innerHTML=form(record||{});await hydrateMediaPreviews(editor);editor.querySelector("input")?.focus();return}
+      if(fresh||edit){activeEditorId=edit?edit.dataset.merchEdit:"new";const record=edit?records.find(item=>item.id===activeEditorId):{};await paintEditor(editor,record||{});editor.querySelector("input")?.focus();return}
       if(cancel){activeEditorId="";clearMediaPreviews();editor.innerHTML="";return}
       if(mediaButton){
         const productForm=mediaButton.closest("[data-merch-form]"),recordId=productForm?.dataset.id,item=mediaButton.closest("[data-merch-media-id]"),mediaId=item?.dataset.merchMediaId,record=records.find(entry=>entry.id===recordId),action=mediaButton.dataset.merchMediaAction;

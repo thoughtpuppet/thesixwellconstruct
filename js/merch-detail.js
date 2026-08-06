@@ -36,12 +36,6 @@ function money(value) {
   }).format(Number(value.amount));
 }
 
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[character]);
-}
-
 function sourceFor(product) {
   const key = canonicalSourceKey(product.sourceVenture || product.sourceLabel);
   return { key, ...(SOURCES[key] || SOURCES["six.well"]) };
@@ -65,37 +59,10 @@ function showOrigin(product) {
   section.hidden = false;
 }
 
-function originRelatedCard(product) {
-  if (!product.originPath || !product.originTitle) return "";
-  return `<a class="related-card" href="${escapeHtml(product.originPath)}">
-    <div class="related-frame">${product.originThumb ? `<img src="${escapeHtml(product.originThumb)}" alt="${escapeHtml(product.originTitle)}">` : ""}</div>
-    <div class="related-info"><p class="related-type">source work</p><p class="related-name">${escapeHtml(product.originTitle)}</p><p class="related-price">${escapeHtml(product.originMeta || "open record")}</p></div>
-  </a>`;
-}
-
 async function showRelated(product) {
   const section = document.getElementById("productRelated");
-  const row = document.getElementById("relatedRow");
-  if (product.slug === "lostmarbles-hoodie") {
-    section.hidden = false;
-    return;
-  }
-  row.innerHTML = "";
-  try {
-    const response = await fetch(`/api/connections/${encodeURIComponent(product.id)}`);
-    if (response.ok) {
-      const payload = await response.json();
-      const records = payload.connections || payload.records || [];
-      row.innerHTML = records.map((entry) => {
-        const item = entry.entity || entry.target || entry.record || entry;
-        const route = item.route || item.canonical_route || item.canonicalRoute || "#";
-        const image = item.image_url || item.imageUrl || item.thumbnail || "";
-        return `<a class="related-card" href="${escapeHtml(route)}"><div class="related-frame">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(item.title || item.name || "Connected record")}">` : ""}</div><div class="related-info"><p class="related-type">${escapeHtml(entry.label || entry.relationship_label || "connected")}</p><p class="related-name">${escapeHtml(item.title || item.name || item.id || "Construct record")}</p><p class="related-price">open record</p></div></a>`;
-      }).join("");
-    }
-  } catch {}
-  if (!row.innerHTML) row.innerHTML = originRelatedCard(product);
-  section.hidden = !row.innerHTML;
+  if (!section || !window.ConstructConnections || !product.id) return;
+  await window.ConstructConnections.mount({ host: section, entityId: product.id, title: "Related", embedded: true });
 }
 
 function hydrateBase(product) {

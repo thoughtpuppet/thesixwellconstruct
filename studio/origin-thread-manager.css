@@ -1,0 +1,51 @@
+.cm-origin-thread-manager {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 5px solid var(--ring-faint);
+  background: var(--bg);
+}
+
+.cm-origin-thread-manager-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.cm-origin-thread-manager-head h4 {
+  margin: 5px 0 0;
+  font-family: var(--sans);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.cm-origin-thread-manager-head p {
+  max-width: 720px;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font: 11px/1.6 var(--sans);
+}
+
+.cm-origin-thread-retained {
+  padding: 14px;
+  border: 5px solid var(--ring-faint);
+  color: var(--muted);
+  font: 11px/1.55 var(--sans);
+}
+
+.cm-origin-thread-retained strong {
+  color: var(--accent);
+  font: 900 9px/1 var(--sans);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.cm-origin-thread-retained p { margin: 7px 0 0; }
+.cm-entity-connections { border-width: 5px; }
+
+@media (max-width: 720px) {
+  .cm-origin-thread-manager { padding: 14px; }
+  .cm-origin-thread-manager-head .button { width: 100%; }
+}

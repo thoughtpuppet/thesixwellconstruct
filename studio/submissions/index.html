@@ -2696,7 +2696,7 @@
           panel.hidden = isOpen;
           if (!isOpen && !panel.dataset.connectionsMounted) {
             panel.dataset.connectionsMounted = "true";
-            await window.ConnectionsManager?.mount(panel, { entityId: connections.dataset.id });
+            await window.ConnectionsManager?.mount(panel, { entityId: connections.dataset.id, originThreads: true });
           }
         }
       }
@@ -2956,6 +2956,7 @@
         const kind = button.dataset.entityKind;
         await window.ConnectionsManager.mount(panel, {
           entityId: button.dataset.entityId,
+          originThreads: kind === "project",
           excludedRelationshipTypeIds: ["rel-realized-as"],
           excludedTargetEntityTypes: kind === "project" ? ["special_project_series"] : ["special_project"],
         });
@@ -5769,6 +5770,7 @@ ${meetingLines}
             </div>
             <button class="button save-schedule" type="submit">Save Event</button>
           </form>
+          <div class="cm-entity-connections" data-event-connections="${escapeHtml(ev.id)}"></div>
         </div>
       </section>
     `;
@@ -5898,6 +5900,9 @@ ${meetingLines}
         : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events yet. Create your first one below.</p>';
       body.innerHTML = renderCreateEventCard() + existing;
       enhanceControls(detailEl);
+      await Promise.all([...body.querySelectorAll("[data-event-connections]")].map((connections) =>
+        window.ConnectionsManager?.mount(connections, { entityId: connections.dataset.eventConnections, originThreads: true })
+      ));
       if (activeTab === "events" && !listPane.classList.contains("hidden")) renderEventsList();
     } catch (error) {
       body.innerHTML = `<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">${escapeHtml(error.message)}</p>`;
@@ -8995,7 +9000,8 @@ ${meetingLines}
   }
 })();
 </script>
-<script src="/studio/connections-manager.js?v=2"></script>
+<script src="/studio/origin-thread-manager.js?v=1"></script>
+<script src="/studio/connections-manager.js?v=3"></script>
 <script src="/studio/archive-colors-materials.js?v=4"></script>
 <script src="/studio/archive-failed-experiments.js?v=1"></script>
 <script src="/studio/construct-manager.js?v=resumable-video-1"></script>

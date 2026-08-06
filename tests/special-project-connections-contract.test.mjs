@@ -43,6 +43,7 @@ test("Special Projects Studio reuses the Art-style scoped connection panel witho
   assert.match(studio, /data-save-special-projects/);
   assert.match(studio, /event\.target\.matches\?\.\("\[data-special-projects-form\]"\)/);
   assert.match(studio, /excludedRelationshipTypeIds: \["rel-realized-as"\]/);
+  assert.match(studio, /originThreads: kind === "project"/);
   assert.match(studio, /wireSpecialProjectConnections\(detailEl\)/);
   assert.match(manager, /excludedRelationshipTypeIds/);
   assert.match(manager, /excludedTargetEntityTypes/);
@@ -55,8 +56,8 @@ test("public Special Projects reuse the canonical Cards and Graph connection com
   const component = source("js", "construct-connections.js");
   assert.match(page, /id="seriesConnections" hidden/);
   assert.match(page, /id="projectConnections" hidden/);
-  assert.match(page, /\/js\/construct-connections\.js\?v=6/);
-  assert.match(page, /title: "Project Connections"/);
+  assert.match(page, /\/js\/construct-connections\.js\?v=7/);
+  assert.match(page, /title: "Related"/);
   assert.match(page, /title: "Series Connections"/);
   assert.match(page, /activeSeriesSlug[\s\S]*seriesRecords\.find/);
   assert.match(component, /options\.title\|\|"Related"/);

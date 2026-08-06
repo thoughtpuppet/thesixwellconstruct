@@ -96,16 +96,37 @@ test("Studio manages reusable assignments, one primary thread, and archival with
   assert.equal(created.status, 201);
   const thread = (await created.json()).record;
 
-  const assigned = await handleConstructApi(request("/api/admin/archive-dossiers/art-marbles", { method: "PATCH", admin: true, body: { origin_thread_ids: ["origin-thread-lost-marbles", thread.id], primary_origin_thread_id: thread.id } }), runtime);
+  const assigned = await handleConstructApi(request("/api/admin/entities/art-marbles/origin-threads", { method: "PUT", admin: true, body: { origin_thread_ids: ["origin-thread-lost-marbles", thread.id], primary_origin_thread_id: thread.id } }), runtime);
   assert.equal(assigned.status, 200);
-  const dossier = (await assigned.json()).record;
-  assert.equal(dossier.origin_thread_ids.length, 2);
-  assert.equal(dossier.primary_origin_thread_id, thread.id);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_origin_thread_dossiers WHERE dossier_entity_id='art-marbles' AND is_primary=1").get().count, 1);
+  const entity = await assigned.json();
+  assert.equal(entity.origin_thread_ids.length, 2);
+  assert.equal(entity.primary_origin_thread_id, thread.id);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_origin_thread_entities WHERE entity_id='art-marbles' AND is_primary=1").get().count, 1);
+
+  db.exec(`INSERT INTO content_entities(id,entity_type,node_id,visibility,created_at,updated_at)
+    VALUES('origin-test-standalone','special_project','node-tattoos','internal',datetime('now'),datetime('now'))`);
+  const standalone = await handleConstructApi(request("/api/admin/entities/origin-test-standalone/origin-threads", { method: "PUT", admin: true, body: { origin_thread_ids: [thread.id], primary_origin_thread_id: thread.id } }), runtime);
+  assert.equal(standalone.status, 200);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_origin_thread_entities WHERE entity_id='origin-test-standalone'").get().count, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_dossiers WHERE entity_id='origin-test-standalone'").get().count, 0);
 
   const archived = await handleConstructApi(request(`/api/admin/archive-origin-threads/${thread.id}`, { method: "DELETE", admin: true }), runtime);
   assert.equal(archived.status, 200);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_origin_thread_dossiers WHERE thread_id=?").get(thread.id).count, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_origin_thread_entities WHERE thread_id=?").get(thread.id).count, 2);
+  const retained = await handleConstructApi(request("/api/admin/entities/origin-test-standalone/origin-threads", { method: "PUT", admin: true, body: { origin_thread_ids: [], primary_origin_thread_id: "" } }), runtime);
+  assert.equal(retained.status, 200);
+  assert.deepEqual((await retained.json()).origin_thread_ids, [thread.id]);
   const hidden = await handleConstructApi(request("/api/archive/items?origin=second-source"), runtime);
   assert.equal(hidden.status, 404);
+});
+
+test("public Connections exposes published origin threads without turning them into graph edges", async () => {
+  const db = database();
+  const response = await handleConstructApi(request("/api/connections/art-marbles"), env(db));
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.originThreads[0].slug, "lost-marbles");
+  assert.equal(payload.originThreads[0].is_primary, 1);
+  assert.equal(payload.count, payload.records.length);
+  assert.equal(payload.cardCount, payload.records.length + payload.originThreads.length + Number(Boolean(payload.archiveCard)));
 });

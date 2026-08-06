@@ -187,7 +187,7 @@ test("shared connections render a published archive dossier as the final Related
   assert.match(source, /function legacyArchiveCard\(host\)/);
   assert.match(source, /archiveFallback=legacyArchiveCard\(host\)/);
   assert.match(source, /archiveCard=payload\.archiveCard\|\|archiveFallback/);
-  assert.match(source, /if\(!records\.length&&!archiveCard\)return host/);
+  assert.match(source, /if\(!records\.length&&!originThreads\.length&&!archiveCard\)return host/);
   assert.match(source, /archiveGroup=group\("Archive",\[archiveCard\],payload\.entity\.node\.color\)/);
   assert.match(source, /archiveGroup\.classList\.add\("cc-group--archive"\)/);
   assert.match(source, /content\.appendChild\(archiveGroup\)/);
@@ -281,7 +281,7 @@ test("Art print intent is managed and private Merch drafts stay out of public co
   assert.equal(connections.payload.archiveCard.related.entityType, "archive_dossier");
   assert.equal(connections.payload.archiveCard.related.route, "/archive/records/lostmarbles/");
   assert.equal(connections.payload.archiveCard.related.node.id, "node-archive");
-  assert.equal(connections.payload.cardCount, connections.payload.count + 1);
+  assert.equal(connections.payload.cardCount, connections.payload.count + connections.payload.originThreads.length + 1);
   assert.equal(connections.payload.records.some((record) => record.related.entityType === "archive_dossier"), false);
 
   const archiveOnly = await jsonResponse(await handleConstructApi(request("/api/connections/art-lust"), env));

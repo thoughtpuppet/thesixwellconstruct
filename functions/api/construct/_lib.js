@@ -613,11 +613,11 @@ async function validateOriginThreadIds(database,ids){
   return rows.length===ids.length;
 }
 
-async function replaceDossierOriginThreads(database,entityId,ids,primaryId=""){
-  if(primaryId&&!ids.includes(primaryId))throw new Error("The primary origin thread must also be assigned to this dossier.");
+async function replaceEntityOriginThreads(database,entityId,ids,primaryId=""){
+  if(primaryId&&!ids.includes(primaryId))throw new Error("The primary origin thread must also be assigned to this entity.");
   if(!await validateOriginThreadIds(database,ids))throw new Error("Choose valid origin threads.");
-  const statements=[database.prepare("DELETE FROM archive_origin_thread_dossiers WHERE dossier_entity_id=?").bind(entityId)];
-  ids.forEach((threadId,index)=>statements.push(database.prepare("INSERT INTO archive_origin_thread_dossiers(thread_id,dossier_entity_id,is_primary,sort_order,created_at) VALUES(?,?,?,?,datetime('now'))").bind(threadId,entityId,threadId===primaryId?1:0,index+1)));
+  const statements=[database.prepare("DELETE FROM archive_origin_thread_entities WHERE entity_id=?").bind(entityId)];
+  ids.forEach((threadId,index)=>statements.push(database.prepare("INSERT INTO archive_origin_thread_entities(thread_id,entity_id,is_primary,sort_order,created_at) VALUES(?,?,?,?,datetime('now'))").bind(threadId,entityId,threadId===primaryId?1:0,index+1)));
   await database.batch(statements);
 }
 
@@ -1205,7 +1205,7 @@ function archivePublicConditions(url, alias = "ad") {
   }
   const origin=text(url.searchParams.get("origin"),160).toLowerCase();
   if(origin){
-    conditions.push(`EXISTS (SELECT 1 FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id WHERE otd.dossier_entity_id=${alias}.entity_id AND ot.slug=? AND ot.state='published' AND ot.public_visible=1)`);
+    conditions.push(`EXISTS (SELECT 1 FROM archive_origin_thread_entities ote JOIN archive_origin_threads ot ON ot.id=ote.thread_id WHERE ote.entity_id=${alias}.entity_id AND ot.slug=? AND ot.state='published' AND ot.public_visible=1)`);
     values.push(origin);
   }
   const color=text(url.searchParams.get("color"),160).toLowerCase();
@@ -1426,7 +1426,7 @@ async function publicArchiveItems(request, env) {
   const originThread=originSlug?await database.prepare("SELECT id,slug,title,summary,sort_order,updated_at FROM archive_origin_threads WHERE slug=? AND state='published' AND public_visible=1").bind(originSlug).first():null;
   if(originSlug&&!originThread)return failure("Origin thread not found.",404);
   const where = conditions.join(" AND ");
-  const itemSql = `${archiveEntitySql(where)} ORDER BY ${originThread?"COALESCE((SELECT otd.sort_order FROM archive_origin_thread_dossiers otd WHERE otd.thread_id=? AND otd.dossier_entity_id=ad.entity_id),999999),":""}ad.featured DESC,ad.sort_order,ad.published_at DESC,ad.entity_id LIMIT ? OFFSET ?`;
+  const itemSql = `${archiveEntitySql(where)} ORDER BY ${originThread?"COALESCE((SELECT ote.sort_order FROM archive_origin_thread_entities ote WHERE ote.thread_id=? AND ote.entity_id=ad.entity_id),999999),":""}ad.featured DESC,ad.sort_order,ad.published_at DESC,ad.entity_id LIMIT ? OFFSET ?`;
   const countSql = `SELECT COUNT(*) total FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ${where}`;
   const [itemsResult,countResult,facetResult,catalogueMediumFacetResult,materialFacetResult,collectionFacetResult] = await database.batch([
     database.prepare(itemSql).bind(...values,...(originThread?[originThread.id]:[]),limit,offset),
@@ -1461,8 +1461,8 @@ async function publicArchiveItems(request, env) {
   items=items.map(item=>({...item,matches:usageMatches.get(item.entity_id)||[]}));
   let evidence=[],currentRecordPosition=null;
   if(originThread){
-    const assignments=items.length?(await database.prepare(`SELECT dossier_entity_id,is_primary,sort_order FROM archive_origin_thread_dossiers WHERE thread_id=? AND dossier_entity_id IN (${items.map(()=>"?").join(",")})`).bind(originThread.id,...items.map(item=>item.entity_id)).all()).results||[]:[];
-    const assignmentMap=new Map(assignments.map(row=>[row.dossier_entity_id,row]));
+    const assignments=items.length?(await database.prepare(`SELECT entity_id,is_primary,sort_order FROM archive_origin_thread_entities WHERE thread_id=? AND entity_id IN (${items.map(()=>"?").join(",")})`).bind(originThread.id,...items.map(item=>item.entity_id)).all()).results||[]:[];
+    const assignmentMap=new Map(assignments.map(row=>[row.entity_id,row]));
     const currentId=text(url.searchParams.get("from"),200);
     items=items.map(item=>{const assignment=assignmentMap.get(item.entity_id)||{},isCurrent=Boolean(currentId&&(currentId===item.entity_id||currentId===item.archive_slug));return {...item,origin_thread_role:Number(assignment.is_primary)?"primary":"supporting",origin_position:Number(assignment.sort_order||0),is_current:isCurrent}}).sort((a,b)=>a.origin_position-b.origin_position||a.title.localeCompare(b.title));
     const currentItem=items.find(item=>item.is_current);if(currentItem)currentRecordPosition=currentItem.origin_position;
@@ -1539,10 +1539,10 @@ async function publicArchiveDetail(request,env,archiveSlug){
       FROM entity_relationships er JOIN relationship_types rt ON rt.id=er.relationship_type_id
       WHERE er.public_visible=1 AND rt.public_visible=1 AND (er.source_entity_id=? OR er.target_entity_id=?)
       ORDER BY er.sort_order,er.created_at`).bind(entityId,entityId),
-    database.prepare(`SELECT ot.id,ot.slug,ot.title,ot.summary,otd.is_primary,otd.sort_order
-      FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id
-      WHERE otd.dossier_entity_id=? AND ot.state='published' AND ot.public_visible=1
-      ORDER BY otd.is_primary DESC,otd.sort_order,ot.sort_order,ot.title`).bind(entityId),
+    database.prepare(`SELECT ot.id,ot.slug,ot.title,ot.summary,ote.is_primary,ote.sort_order
+      FROM archive_origin_thread_entities ote JOIN archive_origin_threads ot ON ot.id=ote.thread_id
+      WHERE ote.entity_id=? AND ot.state='published' AND ot.public_visible=1
+      ORDER BY ote.is_primary DESC,ote.sort_order,ot.sort_order,ot.title`).bind(entityId),
     database.prepare(`SELECT * FROM archive_object_versions aov
       WHERE aov.entity_id=? AND aov.publication_state='published' AND aov.public_visible=1
         AND EXISTS(SELECT 1 FROM archive_object_states aos WHERE aos.version_id=aov.id AND aos.publication_state='published' AND aos.public_visible=1)
@@ -3037,7 +3037,7 @@ async function publicArchiveCard(database,current){
 
 async function publicConnections(env,entityId){
   const database=db(env),currentMap=await entityRecords(database,[entityId]),current=currentMap.get(entityId);if(!current||current.visibility!=="public"||!current.route)return failure("Entity not found.",404);
-  const [relationshipResult,archiveCard]=await Promise.all([
+  const [relationshipResult,archiveCard,originThreadResult]=await Promise.all([
     database.prepare(`SELECT er.id,er.source_entity_id,er.target_entity_id,er.relationship_type_id,er.sort_order,
       rt.slug relationshipSlug,rt.forward_label,rt.reverse_label,
       state.id linked_state_id,version.id linked_state_version_id,state.state_roman linked_state_roman,state.title linked_state_title,
@@ -3053,11 +3053,16 @@ async function publicConnections(env,entityId){
       WHERE er.public_visible=1 AND rt.public_visible=1 AND (er.source_entity_id=? OR er.target_entity_id=?)
       ORDER BY er.sort_order,er.created_at`).bind(entityId,entityId).all(),
     publicArchiveCard(database,current),
+    database.prepare(`SELECT ot.id,ot.slug,ot.title,ot.summary,ote.is_primary,ote.sort_order
+      FROM archive_origin_thread_entities ote JOIN archive_origin_threads ot ON ot.id=ote.thread_id
+      WHERE ote.entity_id=? AND ot.state='published' AND ot.public_visible=1
+      ORDER BY ote.is_primary DESC,ote.sort_order,ot.sort_order,ot.title`).bind(entityId).all(),
   ]);
   const rows=relationshipResult.results||[];
   const entities=await entityRecords(database,rows.flatMap(row=>[row.source_entity_id,row.target_entity_id]));const records=[];for(const row of rows){const outgoing=row.source_entity_id===entityId,related=entities.get(outgoing?row.target_entity_id:row.source_entity_id);if(!related||related.visibility!=="public"||!related.route)continue;const stateParts=[row.linked_state_catalogue_id,row.linked_state_roman?`State ${row.linked_state_roman}`:"",row.linked_state_title,row.linked_state_variant].filter(Boolean);records.push({id:row.id,direction:outgoing?"outgoing":"incoming",label:outgoing?row.forward_label:row.reverse_label,relationshipType:{id:row.relationship_type_id,slug:row.relationshipSlug},related,sortOrder:Number(row.sort_order||0),stateLink:row.linked_state_id&&row.linked_state_version_id?{id:row.linked_state_id,roman:row.linked_state_roman||"",title:row.linked_state_title||"",variant:row.linked_state_variant||"",catalogueId:row.linked_state_catalogue_id||"",label:stateParts.join(" / ")}:null})}
   const includesFailedExperiment=current.entityType==="archive_failed_experiment"||records.some(record=>record.related.entityType==="archive_failed_experiment");
-  return json({entity:current,records,archiveCard,count:records.length,cardCount:records.length+(archiveCard?1:0)},{cache:includesFailedExperiment?"no-store":"public, max-age=60"});
+  const originThreads=originThreadResult.results||[],primaryOriginThread=originThreads.find(thread=>Number(thread.is_primary))||null;
+  return json({entity:current,records,archiveCard,originThreads,origin_threads:originThreads,primaryOriginThread,primary_origin_thread:primaryOriginThread,count:records.length,cardCount:records.length+originThreads.length+(archiveCard?1:0)},{cache:includesFailedExperiment?"no-store":"public, max-age=60"});
 }
 
 async function taxonomyApi(request,env){const database=db(env);if(request.method==="GET"){const rows=(await database.prepare("SELECT * FROM taxonomy_terms ORDER BY kind,sort_order,name").all()).results||[];return json({records:rows,count:rows.length});}const b=await readJson(request);const kind=b?.kind==="theme"?"theme":"tag";const name=text(b?.name,160);if(!name)return failure("A term name is required.");const termId=text(b.id,160)||id("term");await database.prepare("INSERT INTO taxonomy_terms(id,kind,name,slug,description,public_visible,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,datetime('now'),datetime('now'))").bind(termId,kind,name,slug(b.slug||name),text(b.description,2000),b.public_visible===false?0:1,Number(b.sort_order)||0).run();return json({record:await database.prepare("SELECT * FROM taxonomy_terms WHERE id=?").bind(termId).first()},{status:201});}
@@ -3597,7 +3602,7 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
     if(entityId&&!records[0])return failure("Dossier not found.",404);
     if(entityId){
       const [originResult,contextResult,themeResult,versionResult,stateResult,documentationResult,collectionResult]=await database.batch([
-        database.prepare(`SELECT ot.*,otd.is_primary,otd.sort_order assignment_sort_order FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id WHERE otd.dossier_entity_id=? ORDER BY otd.is_primary DESC,otd.sort_order,ot.title`).bind(entityId),
+        database.prepare(`SELECT ot.*,ote.is_primary,ote.sort_order assignment_sort_order FROM archive_origin_thread_entities ote JOIN archive_origin_threads ot ON ot.id=ote.thread_id WHERE ote.entity_id=? ORDER BY ote.is_primary DESC,ote.sort_order,ot.title`).bind(entityId),
         database.prepare(`SELECT ads.subject_entity_id entity_id,ads.role,ads.public_visible,ads.sort_order,ce.entity_type,
           COALESCE(p.name,o.name,pl.name,ev.title,ce.id) name
           FROM archive_dossier_subjects ads JOIN content_entities ce ON ce.id=ads.subject_entity_id
@@ -3629,11 +3634,8 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();if(!before)return failure("Dossier not found.",404);const owner=await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(entityId).first();
     const next={archive_slug:slug(body.archive_slug??body.archiveSlug??body.slug??before.archive_slug),orientation:text(body.orientation??before.orientation,8000),story:text(body.story??before.story,50000),story_html:text(body.story_html??before.story_html,50000),empty_materials_note:text(body.empty_materials_note??before.empty_materials_note,3000),record_type:text(body.record_type??body.recordType??before.record_type,100),state:text(body.state??before.state,30),public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible)?1:0,featured:body.featured===undefined?Number(before.featured):truthy(body.featured)?1:0,sort_order:Number(body.sort_order??before.sort_order)||0};
     if(!next.archive_slug)return failure("archive_slug is required.");if(!ARCHIVE_STATES.has(next.state))return failure("Invalid dossier state.");if(next.state==="published"&&next.public_visible&&owner?.visibility!=="public")return failure("The canonical entity must be public before its dossier can publish.",409);
-    const hasOriginUpdate=Object.prototype.hasOwnProperty.call(body,"origin_thread_ids")||Object.prototype.hasOwnProperty.call(body,"originThreadIds"),assignmentIds=hasOriginUpdate?originThreadIds(body.origin_thread_ids??body.originThreadIds):[],primaryOriginId=hasOriginUpdate?text(body.primary_origin_thread_id??body.primaryOriginThreadId,200):"";
     const hasCollectionUpdate=Object.prototype.hasOwnProperty.call(body,"collection_ids")||Object.prototype.hasOwnProperty.call(body,"collectionIds"),collectionIds=hasCollectionUpdate?archiveCollectionIds(body.collection_ids??body.collectionIds):[];
-    if(hasOriginUpdate&&(primaryOriginId&&!assignmentIds.includes(primaryOriginId)||!await validateOriginThreadIds(database,assignmentIds)))return failure("Choose valid origin threads and make the primary thread part of the dossier assignment.",409);
     await database.prepare(`UPDATE archive_dossiers SET archive_slug=?,orientation=?,story=?,story_html=?,empty_materials_note=?,record_type=?,state=?,public_visible=?,featured=?,sort_order=?,published_at=CASE WHEN ?='published' AND ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(next.archive_slug,next.orientation,next.story,next.story_html,next.empty_materials_note,next.record_type,next.state,next.public_visible,next.featured,next.sort_order,next.state,next.public_visible,entityId).run();
-    if(hasOriginUpdate)await replaceDossierOriginThreads(database,entityId,assignmentIds,primaryOriginId);
     if(hasCollectionUpdate)try{await replaceDossierCollections(database,entityId,collectionIds)}catch(error){return failure(error.message,409)}
     try{
       await replaceArchiveContext(database,entityId,archiveContextAssignments(body.context_assignments??body.contextAssignments));
@@ -4431,11 +4433,41 @@ async function archiveTimelinesAdminApi(request,env,timelineId="",chapterId=""){
 
 function normalizeOriginThread(body,existing={}){return {slug:slug(body.slug??existing.slug),title:text(body.title??existing.title,300),summary:text(body.summary??existing.summary,8000),state:text(body.state??existing.state,30)||"draft",public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):truthy(body.public_visible??body.publicVisible)?1:0,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
 
+async function entityOriginThreadPayload(database,entityId){
+  const entity=await database.prepare("SELECT id,entity_type,node_id,visibility FROM content_entities WHERE id=?").bind(entityId).first();
+  if(!entity)return null;
+  const records=(await database.prepare(`SELECT ot.*,CASE WHEN ote.entity_id IS NULL THEN 0 ELSE 1 END assigned,
+    COALESCE(ote.is_primary,0) is_primary,ote.sort_order assignment_sort_order
+    FROM archive_origin_threads ot
+    LEFT JOIN archive_origin_thread_entities ote ON ote.thread_id=ot.id AND ote.entity_id=?
+    ORDER BY CASE WHEN ote.entity_id IS NULL THEN 1 ELSE 0 END,ote.is_primary DESC,ote.sort_order,ot.sort_order,ot.title`).bind(entityId).all()).results||[];
+  const assigned=records.filter(record=>Number(record.assigned));
+  return {entity,records,origin_threads:records,origin_thread_ids:assigned.map(record=>record.id),primary_origin_thread_id:assigned.find(record=>Number(record.is_primary))?.id||""};
+}
+
+async function entityOriginThreadsAdminApi(request,env,entityId){
+  const database=db(env),current=await entityOriginThreadPayload(database,entityId);
+  if(!current)return failure("Entity not found.",404);
+  if(request.method==="GET")return json(current);
+  if(request.method!=="PUT")return failure("Method not allowed.",405);
+  const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+  const requestedIds=originThreadIds(body.origin_thread_ids??body.originThreadIds),primaryId=text(body.primary_origin_thread_id??body.primaryOriginThreadId,200);
+  if(primaryId&&!requestedIds.includes(primaryId))return failure("Choose the primary thread as an entity assignment first.",409);
+  const activeRows=requestedIds.length?(await database.prepare(`SELECT id FROM archive_origin_threads WHERE state<>'archived' AND id IN (${requestedIds.map(()=>"?").join(",")})`).bind(...requestedIds).all()).results||[]:[];
+  if(activeRows.length!==requestedIds.length)return failure("Choose valid, active origin threads.",409);
+  const archivedAssignments=(await database.prepare(`SELECT ote.thread_id FROM archive_origin_thread_entities ote JOIN archive_origin_threads ot ON ot.id=ote.thread_id WHERE ote.entity_id=? AND ot.state='archived' ORDER BY ote.sort_order,ot.sort_order,ot.title`).bind(entityId).all()).results||[];
+  const finalIds=[...requestedIds,...archivedAssignments.map(record=>record.thread_id).filter(id=>!requestedIds.includes(id))];
+  await replaceEntityOriginThreads(database,entityId,finalIds,primaryId);
+  return json(await entityOriginThreadPayload(database,entityId));
+}
+
 async function archiveOriginThreadsAdminApi(request,env,threadId=""){
   const database=db(env);
   if(request.method==="GET"){
     const where=threadId?"WHERE ot.id=?":"";const statement=database.prepare(`SELECT ot.*,
-      (SELECT COUNT(*) FROM archive_origin_thread_dossiers otd WHERE otd.thread_id=ot.id) dossier_count,
+      (SELECT COUNT(*) FROM archive_origin_thread_entities ote WHERE ote.thread_id=ot.id) entity_count,
+      (SELECT COUNT(*) FROM archive_origin_thread_entities ote WHERE ote.thread_id=ot.id) dossier_count,
+      (SELECT COUNT(*) FROM archive_origin_thread_entities ote JOIN archive_dossiers ad ON ad.entity_id=ote.entity_id WHERE ote.thread_id=ot.id) archive_dossier_count,
       (SELECT COUNT(*) FROM archive_origin_thread_materials otm WHERE otm.thread_id=ot.id) material_count
       FROM archive_origin_threads ot ${where} ORDER BY ot.sort_order,ot.title`);const result=threadId?await statement.bind(threadId).all():await statement.all();const records=result.results||[];if(threadId&&!records[0])return failure("Origin thread not found.",404);return json(threadId?{record:records[0],origin_thread:records[0]}:{records,origin_threads:records,count:records.length});
   }
@@ -4871,6 +4903,7 @@ export async function handleConstructApi(request,env){
   const timelineMatch=path.match(/^\/api\/admin\/archive-timelines(?:\/([^/]+))?$/);if(timelineMatch)return archiveTimelinesAdminApi(request,env,timelineMatch[1]?decodeURIComponent(timelineMatch[1]):"");
   const flashSheetDesignsMatch=path.match(/^\/api\/admin\/flash\/([^/]+)\/sheet-designs$/);if(flashSheetDesignsMatch)return flashSheetDesignsAdminApi(request,env,decodeURIComponent(flashSheetDesignsMatch[1]));
   if(path==="/api/admin/entities"&&request.method==="GET")return entityDirectory(request,env);
+  const entityOriginThreadsMatch=path.match(/^\/api\/admin\/entities\/([^/]+)\/origin-threads$/);if(entityOriginThreadsMatch)return entityOriginThreadsAdminApi(request,env,decodeURIComponent(entityOriginThreadsMatch[1]));
   const relationshipTypeMatch=path.match(/^\/api\/admin\/relationship-types(?:\/([^/]+))?$/);if(relationshipTypeMatch)return relationshipTypesApi(request,env,relationshipTypeMatch[1]?decodeURIComponent(relationshipTypeMatch[1]):"");
   const relationshipMatch=path.match(/^\/api\/admin\/relationships(?:\/([^/]+))?$/);if(relationshipMatch)return relationshipApi(request,env,relationshipMatch[1]?decodeURIComponent(relationshipMatch[1]):"");
   if(path==="/api/admin/taxonomy")return taxonomyApi(request,env);

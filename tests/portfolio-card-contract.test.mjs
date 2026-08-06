@@ -115,6 +115,6 @@ test("Studio Portfolio opens one item into the complete editor and returns to th
   assert.match(studio, /data-portfolio-back>← Back to Portfolio<\/button>/);
   assert.match(studio, /renderPortfolioCard\(item,index,stateItems\.length,\{editor:true\}\)/);
   assert.match(studio, /portfolio-card\$\{editor \? " is-open" : ""\}/);
-  assert.match(studio, /window\.ConnectionsManager\?\.mount\(panel, \{ entityId: connections\.dataset\.id \}\)/);
+  assert.match(studio, /window\.ConnectionsManager\?\.mount\(panel, \{ entityId: connections\.dataset\.id, originThreads: true \}\)/);
   assert.doesNotMatch(studio, /\.portfolio-card:not\(\.is-open\)/, "Open must not hide the existing card actions or editors");
 });

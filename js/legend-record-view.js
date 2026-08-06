@@ -216,7 +216,7 @@
       if (existing) existing.addEventListener("load", mount, { once: true });
       else {
         const script = document.createElement("script");
-        script.src = "/js/construct-connections.js?v=5";
+        script.src = "/js/construct-connections.js?v=7";
         script.addEventListener("load", mount, { once: true });
         document.head.appendChild(script);
       }
