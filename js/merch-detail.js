@@ -1,4 +1,4 @@
-import { initMerchProductPage } from "/js/shop-storefront.js";
+import { initMerchProductPage, renderProductGallery } from "/js/shop-storefront.js";
 import { launchAlertMarkup, setupLaunchAlertForms } from "/js/merch-alerts.js";
 import { SOURCES, canonicalSourceKey } from "/shared/storefront-config.js";
 
@@ -129,6 +129,11 @@ function hydrateBase(product) {
     placeholder.hidden = false;
     placeholder.textContent = product.title;
   }
+  renderProductGallery(product, {
+    galleryContainer: document.getElementById("productGallery"),
+    heroImgEl: image,
+    heroImageContainer: document.querySelector(".product-image"),
+  });
   showOrigin(product);
   if (product.slug === "lostmarbles-hoodie") {
     const archive = document.getElementById("productArchive");
@@ -156,6 +161,7 @@ async function hydrateCommerce(product) {
   }
   await initMerchProductPage({
     handle: product.shopifyHandle,
+    product,
     addButtonEl: document.getElementById("addBtn"),
     colorContainer: document.getElementById("colorRow"),
     colorLabelEl: document.getElementById("colorLabel"),

@@ -12,6 +12,7 @@ import {
   handleMerchCatalog,
   handleMerchItem,
 } from "../functions/api/merch/_lib.js";
+import { handleConstructApi } from "../functions/api/construct/_lib.js";
 import { launchAlertMarkup } from "../js/merch-alerts.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -56,6 +57,37 @@ test("public catalogue survives Shopify failure and hides private Merch drafts",
   assert.equal(payload.products.find(product=>product.slug==="maze-puffer-jacket").pagePath,"/merch/maze-puffer-jacket/");
   assert.equal(payload.commerceAvailable,false);
   assert.equal((await handleMerchItem(request("/api/shop/items/marbles-print"),{SUBMISSIONS_DB:new LocalD1(database)},"marbles-print")).status,404);
+});
+
+test("Studio product media supplies the ordered public gallery and admin editor",async()=>{
+  const database=migratedDatabase();
+  database.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,alt_text,privacy,consent_status,state,created_by,created_at,updated_at)
+    VALUES('media-merch-primary','construct/media-merch-primary/front.webp','front.webp','image/webp','Front view','public','not-required','active','test',datetime('now'),datetime('now')),
+      ('media-merch-gallery','construct/media-merch-gallery/back.webp','back.webp','image/webp','Back view','public','not-required','active','test',datetime('now'),datetime('now'))`).run();
+  database.prepare(`INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at)
+    VALUES('merch-maze-puffer-jacket','media-merch-gallery','gallery',2,1,'Back of the MAZE puffer jacket','',datetime('now')),
+      ('merch-maze-puffer-jacket','media-merch-primary','primary',1,1,'Front of the MAZE puffer jacket','',datetime('now'))`).run();
+  const env={SUBMISSIONS_DB:new LocalD1(database),SUBMISSIONS_ADMIN_TOKEN:"studio-secret"};
+  const publicResponse=await handleMerchItem(request("/api/shop/items/maze-puffer-jacket"),env,"maze-puffer-jacket");
+  const product=(await publicResponse.json()).product;
+  assert.equal(product.heroImage,"/api/construct/entity-media/media-merch-primary");
+  assert.deepEqual(product.images.map(image=>image.url),[
+    "/api/construct/entity-media/media-merch-primary",
+    "/api/construct/entity-media/media-merch-gallery",
+  ]);
+  assert.deepEqual(product.images.map(image=>image.altText),["Front of the MAZE puffer jacket","Back of the MAZE puffer jacket"]);
+  const adminResponse=await handleAdminMerchApi(request("/api/admin/merch-workflow","GET",undefined,true),env);
+  const adminRecord=(await adminResponse.json()).records.find(record=>record.id==="merch-maze-puffer-jacket");
+  assert.equal(adminRecord.media[0].role,"primary");
+  assert.equal(adminRecord.media[0].adminUrl,"/api/admin/media/media-merch-primary/file");
+  const primaryChange=await handleConstructApi(request("/api/admin/entities/merch-maze-puffer-jacket/media/media-merch-gallery","PATCH",{role:"primary",sort_order:1,public_visible:true},true),env);
+  assert.equal(primaryChange.status,200,await primaryChange.clone().text());
+  assert.equal(database.prepare("SELECT role FROM entity_media WHERE entity_id='merch-maze-puffer-jacket' AND media_id='media-merch-primary'").get().role,"gallery");
+  assert.equal(database.prepare("SELECT image_url FROM merch_items WHERE id='merch-maze-puffer-jacket'").get().image_url,"/api/construct/entity-media/media-merch-gallery");
+  const removed=await handleConstructApi(request("/api/admin/entities/merch-maze-puffer-jacket/media/media-merch-gallery","DELETE",undefined,true),env);
+  assert.equal(removed.status,200,await removed.clone().text());
+  assert.equal(database.prepare("SELECT role FROM entity_media WHERE entity_id='merch-maze-puffer-jacket' AND media_id='media-merch-primary'").get().role,"primary");
+  assert.equal(database.prepare("SELECT image_url FROM merch_items WHERE id='merch-maze-puffer-jacket'").get().image_url,"/api/construct/entity-media/media-merch-primary");
 });
 
 test("newsletter consent is separate and Beehiiv failure cannot invalidate a product alert",async()=>{
@@ -112,7 +144,7 @@ test("Studio creation never requires or invents a Shopify handle",async()=>{
 });
 
 test("shared Merch routes and alert forms stay contractually connected",()=>{
-  const worker=readFileSync(join(ROOT,"_worker.js"),"utf8"),catalog=readFileSync(join(ROOT,"js","shop-storefront.js"),"utf8"),detail=readFileSync(join(ROOT,"merch","detail","index.html"),"utf8"),detailCss=readFileSync(join(ROOT,"css","merch-detail.css"),"utf8"),alertsCss=readFileSync(join(ROOT,"css","merch-alerts.css"),"utf8"),merchApi=readFileSync(join(ROOT,"functions","api","merch","_lib.js"),"utf8");
+  const worker=readFileSync(join(ROOT,"_worker.js"),"utf8"),catalog=readFileSync(join(ROOT,"js","shop-storefront.js"),"utf8"),detailScript=readFileSync(join(ROOT,"js","merch-detail.js"),"utf8"),manager=readFileSync(join(ROOT,"studio","merch-manager.js"),"utf8"),detail=readFileSync(join(ROOT,"merch","detail","index.html"),"utf8"),detailCss=readFileSync(join(ROOT,"css","merch-detail.css"),"utf8"),alertsCss=readFileSync(join(ROOT,"css","merch-alerts.css"),"utf8"),merchApi=readFileSync(join(ROOT,"functions","api","merch","_lib.js"),"utf8");
   assert.match(worker,/serveMerchRecordPage/);assert.match(worker,/lostmarbleshoodie:\s*"lostmarbles-hoodie"/);assert.match(worker,/status: 410/);assert.match(worker,/merch\/marbles-print\.html/);
   assert.doesNotMatch(catalog,/PLACEHOLDER_PRODUCTS/);assert.match(catalog,/setupLaunchAlertForms\(grid\)/);
   assert.match(detail,/id="merch-record-data"/);assert.match(detail,/css\/merch-detail\.css/);assert.match(detail,/js\/merch-detail\.js/);
@@ -120,6 +152,8 @@ test("shared Merch routes and alert forms stay contractually connected",()=>{
   assert.match(detailCss,/grid-template-columns:1fr 1fr/);assert.match(detailCss,/\.product-image\s*\{/);assert.match(detailCss,/position:sticky; top:73px/);assert.match(detailCss,/\.origin-inner\s*\{/);assert.match(detailCss,/\.cart-drawer\s*\{/);
   assert.doesNotMatch(detailCss,/\.merch-top/);assert.doesNotMatch(detailCss,/\.product-copy/);
   assert.match(alertsCss,/grid-template-columns:1fr!important/);assert.match(merchApi,/AbortSignal\.timeout\(4000\)/);
+  assert.match(manager,/name="product_images"/);assert.match(manager,/uploadProductImages/);assert.match(manager,/data-merch-media-action="primary"/);
+  assert.match(catalog,/export function renderProductGallery/);assert.match(detailScript,/renderProductGallery\(product/);assert.match(detailScript,/\sproduct,\s/);
 });
 
 test("launch-alert disclosure is collapsed until its accessible toggle is activated",()=>{

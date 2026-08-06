@@ -3080,7 +3080,7 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
   const database=db(env);
   const entity=await database.prepare("SELECT ce.entity_type,fi.state flash_state,afe.state failed_experiment_state FROM content_entities ce LEFT JOIN flash_items fi ON fi.id=ce.id AND ce.entity_type='flash_item' LEFT JOIN archive_failed_experiments afe ON afe.entity_id=ce.id AND ce.entity_type='archive_failed_experiment' WHERE ce.id=?").bind(entityId).first();
   if(!entity)return failure("Entity not found.",404);
-  const isFlash=entity.entity_type==="flash_item",isFailedExperiment=entity.entity_type==="archive_failed_experiment";
+  const isFlash=entity.entity_type==="flash_item",isMerch=entity.entity_type==="merch_item",isFailedExperiment=entity.entity_type==="archive_failed_experiment",managedPrimary=isFlash||isMerch;
   if(request.method==="GET"&&!mediaId){
     const rows=(await database.prepare(`SELECT em.*,m.original_filename,m.source_url,m.storage_key,m.mime_type,m.state media_state,
       COALESCE(NULLIF(em.alt_text_override,''),m.alt_text) alt_text,
@@ -3092,7 +3092,7 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
   if(request.method==="POST"&&!mediaId){
     const b=await readJson(request);if(!b?.media_id)return failure("media_id is required.");
     const role=text(b.role,60)||"gallery",publicVisible=b.public_visible?1:0;
-    if(isFlash&&!["primary","gallery"].includes(role))return failure("Flash media must be primary or gallery artwork.");
+    if(managedPrimary&&!["primary","gallery"].includes(role))return failure(`${isFlash?"Flash":"Merch"} media must be primary or gallery artwork.`);
     const mediaAsset=await database.prepare("SELECT *,state media_state,privacy media_privacy,consent_status media_consent_status,public_presentation media_presentation FROM media_assets WHERE id=?").bind(b.media_id).first();
     if(!mediaAsset)return failure("Media not found.",404);
     if(isFlash&&role==="primary"&&PUBLIC_FLASH_STATES.has(entity.flash_state)&&!eligibleFlashMedia({...mediaAsset,public_visible:publicVisible}))return failure("A published Flash design needs an eligible public primary image.",409);
@@ -3100,8 +3100,10 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
     const cover=role==="gallery"&&!publicVisible?await database.prepare("SELECT id FROM portfolio_items WHERE id=? AND state='published' AND cover_image_ref=?").bind(entityId,b.media_id).first():null;
     if(cover)return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);
     const statements=[];
-    if(isFlash&&role==="primary")statements.push(database.prepare("UPDATE entity_media SET role='gallery' WHERE entity_id=? AND role='primary' AND media_id<>?").bind(entityId,b.media_id));
+    if(managedPrimary&&role==="primary")statements.push(database.prepare("UPDATE entity_media SET role='gallery' WHERE entity_id=? AND role='primary' AND media_id<>?").bind(entityId,b.media_id));
     statements.push(database.prepare("INSERT OR REPLACE INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at) VALUES(?,?,?,?,?,?,?,datetime('now'))").bind(entityId,b.media_id,role,Number(b.sort_order)||0,publicVisible,text(b.alt_text_override,1000),text(b.caption_override,3000)));
+    if(isMerch&&role==="primary")statements.push(database.prepare("UPDATE merch_items SET image_url=?,alt_text=?,updated_at=datetime('now') WHERE id=?")
+      .bind(`/api/construct/entity-media/${encodeURIComponent(b.media_id)}`,text(b.alt_text_override||mediaAsset.alt_text,1000),entityId));
     try{await database.batch(statements);}catch(error){if(isPortfolioCoverGuardError(error))return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);throw error;}
     if(isFailedExperiment)await syncFailedExperimentVisibility(database,entityId);
     return json({ok:true},{status:201});
@@ -3122,7 +3124,7 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
       alt_text_override:Object.prototype.hasOwnProperty.call(b,"alt_text_override")?text(b.alt_text_override,1000):attachment.alt_text_override,
       caption_override:Object.prototype.hasOwnProperty.call(b,"caption_override")?text(b.caption_override,3000):attachment.caption_override,
     };
-    if(isFlash&&!["primary","gallery"].includes(next.role))return failure("Flash media must be primary or gallery artwork.");
+    if(managedPrimary&&!["primary","gallery"].includes(next.role))return failure(`${isFlash?"Flash":"Merch"} media must be primary or gallery artwork.`);
     if(isFailedExperiment&&entity.failed_experiment_state==="published"&&next.public_visible){
       const projected={...next,resolved_alt_text:text(next.alt_text_override||next.alt_text,1000),resolved_caption:text(next.caption_override||next.caption,3000)};
       if(!failedExperimentMediaEligible(projected)||!failedExperimentMediaAccessible(projected))return failure("Published experiment evidence must be eligible and accessible.",409);
@@ -3134,9 +3136,11 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
       if(!projected.some(row=>row.role==="primary"&&eligibleFlashMedia(row)))return failure("A published Flash design must keep an eligible primary image.",409);
     }
     const statements=[];
-    if(isFlash&&next.role==="primary")statements.push(database.prepare("UPDATE entity_media SET role='gallery' WHERE entity_id=? AND role='primary' AND media_id<>?").bind(entityId,mediaId));
+    if(managedPrimary&&next.role==="primary")statements.push(database.prepare("UPDATE entity_media SET role='gallery' WHERE entity_id=? AND role='primary' AND media_id<>?").bind(entityId,mediaId));
     statements.push(database.prepare("UPDATE entity_media SET role=?,sort_order=?,public_visible=?,alt_text_override=?,caption_override=? WHERE entity_id=? AND media_id=?")
       .bind(next.role,next.sort_order,next.public_visible,next.alt_text_override,next.caption_override,entityId,mediaId));
+    if(isMerch&&next.role==="primary")statements.push(database.prepare("UPDATE merch_items SET image_url=?,alt_text=?,updated_at=datetime('now') WHERE id=?")
+      .bind(`/api/construct/entity-media/${encodeURIComponent(mediaId)}`,text(next.alt_text_override||next.alt_text,1000),entityId));
     try{await database.batch(statements);}catch(error){if(isPortfolioCoverGuardError(error))return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);throw error;}
     if(isFailedExperiment)await syncFailedExperimentVisibility(database,entityId);
     return json({record:await database.prepare("SELECT * FROM entity_media WHERE entity_id=? AND media_id=?").bind(entityId,mediaId).first()});
@@ -3145,13 +3149,21 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
     const portfolioCover=attachment.role==="gallery"?await database.prepare("SELECT id FROM portfolio_items WHERE id=? AND state='published' AND cover_image_ref=?").bind(entityId,mediaId).first():null;
     if(portfolioCover)return failure("Unpublish this tattoo or choose another permitted result image before removing its cover.",409);
     let promoted=null;
-    if(isFlash&&attachment.role==="primary"){
-      const rows=await flashMediaRows(database,entityId);
-      promoted=rows.find(row=>row.media_id!==mediaId&&row.role==="gallery"&&(!PUBLIC_FLASH_STATES.has(entity.flash_state)||eligibleFlashMedia(row)))||null;
+    if(managedPrimary&&attachment.role==="primary"){
+      const rows=isFlash?await flashMediaRows(database,entityId):(await database.prepare(`SELECT em.*,m.alt_text,
+        COALESCE(NULLIF(em.alt_text_override,''),m.alt_text) resolved_alt_text
+        FROM entity_media em JOIN media_assets m ON m.id=em.media_id
+        WHERE em.entity_id=? AND em.public_visible=1 AND m.state='active' AND m.privacy='public'
+          AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+          AND m.mime_type LIKE 'image/%' ORDER BY em.sort_order,em.created_at`).bind(entityId).all()).results||[];
+      promoted=rows.find(row=>row.media_id!==mediaId&&row.role==="gallery"&&(!isFlash||!PUBLIC_FLASH_STATES.has(entity.flash_state)||eligibleFlashMedia(row)))||null;
     }
     if(isFlash&&PUBLIC_FLASH_STATES.has(entity.flash_state)&&attachment.role==="primary"&&!promoted)return failure("A published Flash design must keep an eligible primary image.",409);
     const statements=[database.prepare("DELETE FROM entity_media WHERE entity_id=? AND media_id=?").bind(entityId,mediaId)];
     if(promoted)statements.push(database.prepare("UPDATE entity_media SET role='primary',sort_order=1 WHERE entity_id=? AND media_id=?").bind(entityId,promoted.media_id));
+    if(isMerch)statements.push(promoted
+      ?database.prepare("UPDATE merch_items SET image_url=?,alt_text=?,updated_at=datetime('now') WHERE id=?").bind(`/api/construct/entity-media/${encodeURIComponent(promoted.media_id)}`,text(promoted.resolved_alt_text||promoted.alt_text,1000),entityId)
+      :database.prepare("UPDATE merch_items SET image_url=CASE WHEN image_url=? THEN '' ELSE image_url END,updated_at=datetime('now') WHERE id=?").bind(`/api/construct/entity-media/${encodeURIComponent(mediaId)}`,entityId));
     await database.batch(statements);
     if(isFailedExperiment)await syncFailedExperimentVisibility(database,entityId);
     return json({ok:true,promoted_media_id:promoted?.media_id||null});

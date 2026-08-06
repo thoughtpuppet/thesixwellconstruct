@@ -143,7 +143,7 @@ function resolveOptionValues(product) {
   return values;
 }
 
-function renderProductGallery(product, options) {
+export function renderProductGallery(product, options) {
   const images = (product.images && product.images.length ? product.images : []).filter((image) => image?.url);
   const fallbackImage = product.heroImage
     ? [{ url: product.heroImage, altText: product.heroImageAlt || product.title }]
@@ -829,8 +829,20 @@ export async function initMerchProductPage(options) {
   });
   await cart.refreshCart();
 
-  const product = await getProductByHandle(options.handle);
-  if (!product) throw new Error(`No Shopify product found for handle ${options.handle}.`);
+  const commerceProduct = await getProductByHandle(options.handle);
+  if (!commerceProduct) throw new Error(`No Shopify product found for handle ${options.handle}.`);
+  const presentationProduct = options.product || null;
+  const product = presentationProduct ? {
+    ...commerceProduct,
+    ...presentationProduct,
+    price: commerceProduct.price,
+    availableForSale: commerceProduct.availableForSale,
+    options: commerceProduct.options,
+    variants: commerceProduct.variants,
+    images: presentationProduct.images?.length ? presentationProduct.images : commerceProduct.images,
+    heroImage: presentationProduct.heroImage || commerceProduct.heroImage,
+    heroImageAlt: presentationProduct.heroImageAlt || commerceProduct.heroImageAlt,
+  } : commerceProduct;
 
   const source = resolveSource(product.sourceVenture || product.sourceLabel);
   const optionValues = resolveOptionValues(product);

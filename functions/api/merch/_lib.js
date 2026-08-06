@@ -85,9 +85,52 @@ function normalizeOptions(value) {
   })).filter((entry) => entry.values.length);
 }
 
-function publicProduct(row, shopify = null) {
+function productMediaUrl(mediaId, sourceUrl = "") {
+  return sourceUrl || `/api/construct/entity-media/${encodeURIComponent(mediaId)}`;
+}
+
+async function productMedia(database, entityIds, { publicOnly = false } = {}) {
+  const ids = [...new Set((entityIds || []).filter(Boolean))];
+  const map = new Map(ids.map((entityId) => [entityId, []]));
+  if (!ids.length) return map;
+  const conditions = [
+    `em.entity_id IN (${ids.map(() => "?").join(",")})`,
+    "m.state='active'",
+    "m.mime_type LIKE 'image/%'",
+  ];
+  if (publicOnly) conditions.push(
+    "em.public_visible=1",
+    "m.privacy='public'",
+    "m.consent_status IN ('not-required','granted')",
+    "m.public_presentation='inline'",
+  );
+  const result = await database.prepare(`SELECT em.entity_id,em.media_id,em.role,em.sort_order,em.public_visible,
+      em.alt_text_override,m.source_url,m.original_filename,m.mime_type,m.alt_text
+    FROM entity_media em JOIN media_assets m ON m.id=em.media_id
+    WHERE ${conditions.join(" AND ")}
+    ORDER BY em.entity_id,CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order,em.created_at`).bind(...ids).all();
+  for (const row of result.results || []) {
+    if (!map.has(row.entity_id)) map.set(row.entity_id, []);
+    map.get(row.entity_id).push({
+      id: row.media_id,
+      role: row.role,
+      sortOrder: Number(row.sort_order) || 0,
+      publicVisible: Number(row.public_visible) === 1,
+      url: productMediaUrl(row.media_id, row.source_url),
+      adminUrl: `/api/admin/media/${encodeURIComponent(row.media_id)}/file`,
+      altText: row.alt_text_override || row.alt_text || "",
+      filename: row.original_filename || "",
+      mimeType: row.mime_type || "",
+    });
+  }
+  return map;
+}
+
+function publicProduct(row, shopify = null, media = []) {
   const live = row.availability_state === "available" && shopify ? shopify : null;
   const handle = row.shopify_handle || row.slug;
+  const primaryMedia = media.find((item) => item.role === "primary") || media[0] || null;
+  const studioImages = media.map((item) => ({ url: item.url, altText: item.altText || row.alt_text || row.title }));
   return {
     ...(live || {}),
     id: row.id,
@@ -106,9 +149,9 @@ function publicProduct(row, shopify = null) {
     availableForSale: Boolean(live?.availableForSale && live?.variants?.some((variant) => variant.availableForSale)),
     options: live?.options?.length ? live.options : normalizeOptions(row.options_json),
     variants: live?.variants || [],
-    images: live?.images || [],
-    heroImage: row.image_url || live?.heroImage || null,
-    heroImageAlt: row.alt_text || live?.heroImageAlt || row.title,
+    images: studioImages.length ? studioImages : live?.images || [],
+    heroImage: primaryMedia?.url || row.image_url || live?.heroImage || null,
+    heroImageAlt: primaryMedia?.altText || row.alt_text || live?.heroImageAlt || row.title,
     pagePath: row.route || `/merch/${encodeURIComponent(row.slug)}/`,
     canonicalRoute: row.route || `/merch/${encodeURIComponent(row.slug)}/`,
     catalogNumber: row.catalog_number || null,
@@ -148,9 +191,10 @@ async function publicRows(env, slug = "") {
 export async function handleMerchCatalog(request, env) {
   if (request.method !== "GET") return failure("Method not allowed.", 405);
   const [rows, shopify] = await Promise.all([publicRows(env), shopifyProducts(env)]);
+  const media = await productMedia(db(env), rows.map((row) => row.id), { publicOnly: true });
   const byHandle = new Map(shopify.products.map((product) => [product.handle, product]));
   return json({
-    products: rows.map((row) => publicProduct(row, row.shopify_handle ? byHandle.get(row.shopify_handle) : null)),
+    products: rows.map((row) => publicProduct(row, row.shopify_handle ? byHandle.get(row.shopify_handle) : null, media.get(row.id) || [])),
     commerceAvailable: !shopify.error,
   });
 }
@@ -165,7 +209,8 @@ export async function handleMerchItem(request, env, itemSlug) {
     try { shopify = await fetchProductByHandle(env, row.shopify_handle, { signal: AbortSignal.timeout(4000) }); }
     catch (error) { console.warn(JSON.stringify({ event: "merch_shopify_product_unavailable", slug: row.slug, error: error.message })); }
   }
-  return json({ product: publicProduct(row, shopify) });
+  const media = await productMedia(db(env), [row.id], { publicOnly: true });
+  return json({ product: publicProduct(row, shopify, media.get(row.id) || []) });
 }
 
 function substitute(template, values) {
@@ -348,9 +393,10 @@ async function adminList(database, env) {
     shopifyProducts(env),
   ]);
   const rows = rowsResult.results || [];
+  const media = await productMedia(database, rows.map((row) => row.id));
   const connected = new Set(rows.map((row) => row.shopify_handle).filter(Boolean));
   return {
-    records: rows.map((row) => ({ ...row, alert_counts: counts.get(row.id) || {}, canonical_route: row.route })),
+    records: rows.map((row) => ({ ...row, media: media.get(row.id) || [], alert_counts: counts.get(row.id) || {}, canonical_route: row.route })),
     reconciliation: {
       shopifyAvailable: !shopify.error,
       shopifyError: shopify.error,
@@ -418,6 +464,12 @@ async function importShopifyProduct(request, env) {
 async function launchReadiness(database, env, recordId) {
   const product = await database.prepare("SELECT * FROM merch_items WHERE id=?").bind(recordId).first();
   if (!product) return null;
+  const media = await productMedia(database, [recordId], { publicOnly: true });
+  const primaryMedia = (media.get(recordId) || []).find((item) => item.role === "primary") || (media.get(recordId) || [])[0];
+  if (primaryMedia) {
+    product.image_url = primaryMedia.url;
+    product.alt_text = primaryMedia.altText || product.alt_text;
+  }
   const confirmed = await database.prepare("SELECT COUNT(*) count FROM merch_launch_alerts WHERE merch_item_id=? AND status='confirmed'").bind(recordId).first();
   let shopify = null;
   let shopifyError = "";
