@@ -1,12 +1,5 @@
-import { fetchCatalog, json, serverError } from "./_lib.js";
+import { handleMerchCatalog } from "../merch/_lib.js";
 
 export async function onRequestGet(context) {
-  try {
-    const products = await fetchCatalog(context.env);
-    return json({ products });
-  } catch (error) {
-    return serverError("Unable to load Shopify catalog.", {
-      detail: error.message,
-    });
-  }
+  return handleMerchCatalog(context.request, context.env);
 }

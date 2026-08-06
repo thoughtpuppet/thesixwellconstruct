@@ -3,7 +3,6 @@ import {
   badRequest,
   createCart,
   fetchCartById,
-  fetchCatalog,
   fetchProductByHandle,
   json,
   readJsonBody,
@@ -11,6 +10,13 @@ import {
   serverError,
   updateCartLines,
 } from "./functions/api/shop/_lib.js";
+import {
+  handleAdminMerchApi,
+  handleLaunchAlertSignup,
+  handleLaunchAlertToken,
+  handleMerchCatalog,
+  handleMerchItem,
+} from "./functions/api/merch/_lib.js";
 import {
   handleCreateSubmission,
   handleDeleteSubmission,
@@ -383,6 +389,7 @@ const LEGEND_RECORD_RESERVED_SLUGS = new Set([
 ]);
 
 const ART_RECORD_RESERVED_SLUGS = new Set(["acquisitioninquiry", "detail", "index"]);
+const MERCH_RECORD_RESERVED_SLUGS = new Set(["alerts", "detail", "index"]);
 const ART_LEGACY_PAGE_SLUGS = new Set([
   "homelandsecuritypainting",
   "lostmarblespainting",
@@ -406,6 +413,15 @@ function artRecordSlug(pathname) {
     ART_LEGACY_PAGE_SLUGS.has(candidate) ||
     !/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(candidate)
   ) return "";
+  return candidate;
+}
+
+function merchRecordSlug(pathname) {
+  const parts = normalizePath(pathname).split("/").filter(Boolean);
+  if (parts.length !== 2 || parts[0] !== "merch" || hasFileExtension(pathname)) return "";
+  let candidate = "";
+  try { candidate = decodeURIComponent(parts[1]); } catch { return ""; }
+  if (MERCH_RECORD_RESERVED_SLUGS.has(candidate) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidate)) return "";
   return candidate;
 }
 
@@ -541,6 +557,50 @@ async function serveArtPreviewPage(request, env) {
   return new Response(response.body, { status: response.status, headers });
 }
 
+async function serveMerchRecordPage(request, env, slug) {
+  const apiUrl = new URL(`/api/shop/items/${encodeURIComponent(slug)}`, request.url);
+  const apiResponse = await handleMerchItem(new Request(apiUrl, { method: "GET", headers: { accept: "application/json" } }), env, slug);
+  if (apiResponse.status === 404) return notFoundPage(request, env);
+  if (!apiResponse.ok) return apiResponse;
+  const payload = await apiResponse.json();
+  const product = payload.product;
+  if (!product || product.slug !== slug) return notFoundPage(request, env);
+  const assetResponse = await servePublicAsset(request, env, "/merch/detail/index.html");
+  if (request.method === "HEAD") return assetResponse;
+  const siteOrigin = String(env.PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/g, "");
+  const canonicalUrl = `${siteOrigin}${product.canonicalRoute}`;
+  const title = `${product.title} · merch · the six.well construct`;
+  const description = product.description || product.statement || `Merch detail for ${product.title}.`;
+  const html = (await assetResponse.text())
+    .replace(/<title data-merch-record-title>[\s\S]*?<\/title>/, `<title data-merch-record-title>${escapeHtml(title)}</title>`)
+    .replace(/<meta data-merch-record-description name="description" content="[^"]*">/, `<meta data-merch-record-description name="description" content="${escapeHtml(description)}">`)
+    .replace(/<link data-merch-record-canonical rel="canonical" href="[^"]*">/, `<link data-merch-record-canonical rel="canonical" href="${escapeHtml(canonicalUrl)}">`)
+    .replace('<script id="merch-record-data" type="application/json"></script>', `<script id="merch-record-data" type="application/json">${legendRecordJson(payload)}</script>`);
+  const headers = new Headers(assetResponse.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  headers.set("cache-control", "no-store");
+  return new Response(html, { status: assetResponse.status, headers });
+}
+
+async function legacyMerchResponse(request, env, pathname) {
+  if (pathname === "/merch/am-i-losing-my-marbles.html") {
+    return new Response("Gone", { status: 410, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  }
+  const legacy = {
+    "/merch/lostmarbles-hoodie.html": "lostmarbles-hoodie",
+    "/merch/marbles-print.html": "marbles-print",
+    "/merch/maze-puffer-jacket.html": "maze-puffer-jacket",
+  }[pathname];
+  if (!legacy) return null;
+  const probe = await handleMerchItem(new Request(new URL(`/api/shop/items/${legacy}`, request.url), { method: "GET" }), env, legacy);
+  if (!probe.ok) return notFoundPage(request, env);
+  const target = new URL(request.url);
+  target.pathname = `/merch/${legacy}/`;
+  target.search = "";
+  return Response.redirect(target, 308);
+}
+
 function isHiddenByHomeOnlyMode(pathname) {
   if (!HIDE_PUBLIC_PAGES_EXCEPT_HOME) return false;
   const normalizedPath = normalizePath(pathname);
@@ -566,17 +626,6 @@ function lineUpdates(lines = []) {
     id: line.lineId,
     quantity: Number(line.quantity || 0),
   }));
-}
-
-async function handleCatalog(env) {
-  try {
-    const products = await fetchCatalog(env);
-    return json({ products });
-  } catch (error) {
-    return serverError("Unable to load Shopify catalog.", {
-      detail: error.message,
-    });
-  }
 }
 
 async function handleProduct(request, env) {
@@ -683,8 +732,15 @@ async function handleShopApi(request, env) {
 
   if (pathname === "/api/shop/catalog") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
-    return handleCatalog(env);
+    return handleMerchCatalog(request, env);
   }
+
+  const itemMatch = pathname.match(/^\/api\/shop\/items\/([^/]+)$/);
+  if (itemMatch) return handleMerchItem(request, env, decodeURIComponent(itemMatch[1]));
+
+  if (pathname === "/api/shop/launch-alerts") return handleLaunchAlertSignup(request, env);
+  if (pathname === "/api/shop/launch-alerts/confirm") return handleLaunchAlertToken(request, env, "confirm");
+  if (pathname === "/api/shop/launch-alerts/cancel") return handleLaunchAlertToken(request, env, "cancel");
 
   if (pathname === "/api/shop/product") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
@@ -1159,6 +1215,10 @@ export default {
       return handleAdminAnalytics(request, env);
     }
 
+    if (url.pathname === "/api/admin/merch-workflow" || url.pathname.startsWith("/api/admin/merch-workflow/")) {
+      return handleAdminMerchApi(request, env);
+    }
+
     if (
       url.pathname === "/api/search" ||
       url.pathname === "/api/site/explore" ||
@@ -1388,6 +1448,9 @@ export default {
       return notFoundPage(request, env);
     }
 
+    const legacyMerch = await legacyMerchResponse(request, env, url.pathname);
+    if (legacyMerch) return legacyMerch;
+
     const requestedArtSlug = artRecordSlug(url.pathname);
     if (requestedArtSlug) {
       if (!url.pathname.endsWith("/")) {
@@ -1397,6 +1460,17 @@ export default {
         return Response.redirect(canonicalUrl, 308);
       }
       return serveArtRecordPage(request, env, requestedArtSlug);
+    }
+
+    const requestedMerchSlug = merchRecordSlug(url.pathname);
+    if (requestedMerchSlug) {
+      if (!url.pathname.endsWith("/")) {
+        const canonicalUrl = new URL(request.url);
+        canonicalUrl.pathname = `${normalizePath(url.pathname)}/`;
+        canonicalUrl.search = "";
+        return Response.redirect(canonicalUrl, 308);
+      }
+      return serveMerchRecordPage(request, env, requestedMerchSlug);
     }
 
     if (isFrontDoorPath(url.pathname)) {

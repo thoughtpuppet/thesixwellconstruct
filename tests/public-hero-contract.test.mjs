@@ -70,10 +70,7 @@ const routes = [
   { route: "/events/solehmans-new-year/", file: "events/solehmans-new-year/index.html", variant: "supporting", descriptor: true },
   { route: "/events/ss-and-f-live-audience/", file: "events/ss-and-f-live-audience/index.html", variant: "supporting", descriptor: true },
 
-  { route: "/merch/am-i-losing-my-marbles", file: "merch/am-i-losing-my-marbles.html", variant: "supporting" },
-  { route: "/merch/lostmarbles-hoodie", file: "merch/lostmarbles-hoodie.html", variant: "supporting" },
-  { route: "/merch/marbles-print", file: "merch/marbles-print.html", variant: "supporting" },
-  { route: "/merch/maze-puffer-jacket", file: "merch/maze-puffer-jacket.html", variant: "supporting" },
+  { route: "/merch/:slug/", file: "merch/detail/index.html", variant: "supporting", descriptor: true, dynamic: true },
   { route: "/preferences/", file: "preferences/index.html", variant: "supporting", descriptor: true },
   { route: "/search/", file: "search/index.html", variant: "supporting" },
 
@@ -101,7 +98,7 @@ const routes = [
   { route: "/tattoos/submission-received/", file: "tattoos/submission-received/index.html", variant: "supporting", descriptor: true },
 ];
 
-const excludedActiveSource = /(?:managed-preview|about-next|construct-connections-(?:organic|prototype))|^adventure\/index\.html$/;
+const excludedActiveSource = /(?:managed-preview|about-next|construct-connections-(?:organic|prototype))|^adventure\/index\.html$|^merch\/alerts\//;
 
 async function walkHtml(entry) {
   const absolute = path.join(root, entry);

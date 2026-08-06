@@ -2,6 +2,14 @@ SHOPIFY_STORE_DOMAIN=your-store.myshopify.com
 SHOPIFY_STOREFRONT_ACCESS_TOKEN=your-storefront-access-token
 SHOPIFY_STOREFRONT_API_VERSION=2025-07
 SHOPIFY_MERCH_QUERY=tag:construct-merch
+# Keep every Merch delivery flag false until the local schema, verified sender,
+# and Beehiiv double-opt-in webhook have been tested deliberately.
+MERCH_ALERTS_ENABLED=false
+MERCH_EMAIL_SEND_ENABLED=false
+MERCH_LAUNCH_SEND_ENABLED=false
+MERCH_FROM_EMAIL=notifications@your-verified-domain.example
+MERCH_FROM_NAME=Six.Well Merch
+MERCH_REPLY_TO=reply@your-verified-domain.example
 # Construct People reads completed orders and customers through a Shopify
 # custom app. Keep this Admin token secret and grant read_orders,
 # read_all_orders, and read_customers.

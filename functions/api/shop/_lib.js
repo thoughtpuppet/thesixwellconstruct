@@ -144,7 +144,7 @@ export function getShopifyConfig(env) {
   };
 }
 
-export async function storefrontRequest(env, query, variables = {}) {
+export async function storefrontRequest(env, query, variables = {}, options = {}) {
   const config = getShopifyConfig(env);
   const tokenHeader = config.storefrontAccessToken.startsWith("shpat_")
     ? "Shopify-Storefront-Private-Token"
@@ -156,6 +156,7 @@ export async function storefrontRequest(env, query, variables = {}) {
       [tokenHeader]: config.storefrontAccessToken,
     },
     body: JSON.stringify({ query, variables }),
+    signal: options.signal,
   });
 
   if (!response.ok) {
@@ -277,7 +278,7 @@ export function normalizeCart(cart) {
   };
 }
 
-export async function fetchCatalog(env) {
+export async function fetchCatalog(env, options = {}) {
   const config = getShopifyConfig(env);
   const data = await storefrontRequest(
     env,
@@ -290,13 +291,14 @@ export async function fetchCatalog(env) {
         }
       }
     `,
-    { first: 50, query: config.merchQuery }
+    { first: 50, query: config.merchQuery },
+    options,
   );
 
   return (data.products?.nodes || []).map(normalizeProduct);
 }
 
-export async function fetchProductByHandle(env, handle) {
+export async function fetchProductByHandle(env, handle, options = {}) {
   const data = await storefrontRequest(
     env,
     `#graphql
@@ -306,7 +308,8 @@ export async function fetchProductByHandle(env, handle) {
         }
       }
     `,
-    { handle }
+    { handle },
+    options,
   );
 
   if (data.product) {
@@ -324,7 +327,8 @@ export async function fetchProductByHandle(env, handle) {
         }
       }
     `,
-    { first: 1, query: `handle:${handle}` }
+    { first: 1, query: `handle:${handle}` },
+    options,
   );
 
   return fallback.products?.nodes?.[0]

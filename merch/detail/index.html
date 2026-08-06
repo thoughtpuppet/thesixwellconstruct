@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title data-merch-record-title>Merch product · the six.well construct</title>
+  <meta data-merch-record-description name="description" content="A published product from Six.Well Merch.">
+  <link data-merch-record-canonical rel="canonical" href="https://thesixwellconstruct.com/merch/">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/site-typography.css">
+  <link rel="stylesheet" href="/css/hero.css">
+  <link rel="stylesheet" href="/css/transitions.css">
+  <link rel="stylesheet" href="/css/merch-detail.css">
+  <link rel="stylesheet" href="/css/merch-alerts.css">
+</head>
+<body data-venture="merch">
+  <header class="merch-top">
+    <a href="/home/" class="merch-wordmark">the six.well construct</a>
+    <button class="cart-toggle" id="cartToggle" type="button" aria-label="Open cart">cart <span id="cartCount">0</span></button>
+  </header>
+
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/home/">construct</a><span>/</span><a href="/merch/">merch</a><span>/</span><span id="breadcrumbCurrent">product</span>
+  </nav>
+
+  <main id="productRoot">
+    <section class="product-hero site-hero site-hero--supporting">
+      <div class="product-media" id="productMedia">
+        <span class="catalog-number" id="catalogNumber"></span>
+        <img id="productImage" alt="" hidden>
+        <span class="product-placeholder" id="productPlaceholder">Six.Well Merch</span>
+      </div>
+      <div class="product-copy">
+        <p class="source-label" id="sourceLabel">Six.Well Merch</p>
+        <h1 class="hero-title" id="productTitle">Merch product</h1>
+        <p class="hero-descriptor" id="productDescriptor">Loading product details.</p>
+        <p class="product-edition" id="productEdition"></p>
+        <p class="product-price" id="productPrice"></p>
+        <div id="commerceControls"></div>
+        <div id="launchAlertSlot"></div>
+        <p class="product-note" id="shippingNote"></p>
+      </div>
+    </section>
+
+    <section class="product-story" id="productStory" hidden>
+      <p class="section-label">about.</p>
+      <p id="productDescription"></p>
+    </section>
+
+    <section class="product-origin" id="productOrigin" hidden>
+      <p class="section-label">origin.</p>
+      <div class="origin-grid">
+        <img id="originImage" alt="" hidden>
+        <div>
+          <h2 id="originTitle"></h2>
+          <p id="originMeta"></p>
+          <a id="originLink" class="product-link">Open the source work <span aria-hidden="true">→</span></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="product-related" id="productRelated" hidden>
+      <p class="section-label">connected.</p>
+      <div class="related-grid" id="relatedGrid"></div>
+    </section>
+  </main>
+
+  <footer class="merch-bottom"><p>© the six.well construct</p><a href="/merch/">back to merch</a></footer>
+
+  <div class="cart-overlay" id="cartOverlay"></div>
+  <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+    <div class="drawer-header"><strong>cart</strong><button id="drawerClose" type="button" aria-label="Close cart">×</button></div>
+    <div class="drawer-items" id="drawerItems"><p class="drawer-empty">cart is empty</p></div>
+    <div class="drawer-footer"><p>subtotal <strong id="subtotal">$0</strong></p><button id="checkoutBtn" type="button" disabled>proceed to checkout</button><p id="checkoutStatus" aria-live="polite"></p></div>
+  </aside>
+
+  <script id="merch-record-data" type="application/json"></script>
+  <script type="module" src="/js/merch-detail.js"></script>
+</body>
+</html>

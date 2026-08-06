@@ -1,12 +1,12 @@
 import {
   SOURCE_ORDER,
   SOURCES,
-  PLACEHOLDER_PRODUCTS,
   canonicalSourceKey,
   getColorHex,
   getPresentation,
   getTypeLabel,
 } from "/shared/storefront-config.js";
+import { launchAlertMarkup, setupLaunchAlertForms } from "/js/merch-alerts.js";
 
 const CART_STORAGE_KEY = "sixwell-shopify-cart-id";
 
@@ -725,13 +725,17 @@ export async function initMerchCatalogPage() {
             selectorsHtml += `<p class="size-required" id="req-${product.handle}">select a size</p>`;
           }
           selectorsHtml += optionMarkup(optionValues.finish, "finish", product.handle, selectedFinish, product.handle);
-          const ctaLabel = product.availableForSale ? "add to cart" : product.isPlaceholder ? "coming soon" : "sold out";
-          ctaHtml = `
-            <button class="card-add"${product.availableForSale ? "" : " disabled"} data-add="${product.handle}">
-              <span>${ctaLabel}</span>
-              <span class="arrow">&rarr;</span>
-            </button>
-          `;
+          if (product.availabilityState === "coming_soon" && product.notifyEnabled) {
+            ctaHtml = launchAlertMarkup(product, true);
+          } else {
+            const ctaLabel = product.availableForSale ? "add to cart" : "sold out";
+            ctaHtml = `
+              <button class="card-add"${product.availableForSale ? "" : " disabled"} data-add="${product.handle}">
+                <span>${ctaLabel}</span>
+                <span class="arrow">&rarr;</span>
+              </button>
+            `;
+          }
         }
 
         return `
@@ -790,6 +794,7 @@ export async function initMerchCatalogPage() {
         await cart.addVariant(variant.id, 1);
       });
     });
+    setupLaunchAlertForms(grid);
   }
 
   try {
@@ -798,10 +803,6 @@ export async function initMerchCatalogPage() {
       ...product,
       sourceVenture: canonicalSourceKey(product.sourceVenture || product.sourceLabel),
     }));
-    const liveHandles = new Set(products.map((p) => p.handle));
-    for (const placeholder of PLACEHOLDER_PRODUCTS) {
-      if (!liveHandles.has(placeholder.handle)) products.push(placeholder);
-    }
     renderFilters();
     renderTypeFilters();
     renderGrid();

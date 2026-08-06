@@ -1,0 +1,11 @@
+.launch-alert{margin-top:28px;padding-top:22px;border-top:5px solid var(--color-merch,#f08f00)}
+.launch-alert h2{font:700 22px/1 Georgia,serif;text-transform:uppercase;color:var(--color-merch,#f08f00)}
+.launch-alert label{display:block;margin:14px 0 7px;font:700 10px/1 Arial,sans-serif;text-transform:uppercase;letter-spacing:.14em}
+.launch-alert input[type="email"]{box-sizing:border-box;width:100%;padding:14px;border:5px solid rgba(240,143,0,.5);background:transparent;color:var(--color-about,#fcb867);font:inherit}
+.launch-alert-check{display:flex!important;gap:10px;align-items:flex-start;text-transform:none!important;letter-spacing:normal!important;line-height:1.5!important}
+.launch-alert-submit{display:flex;justify-content:space-between;gap:20px;width:100%;margin-top:16px;padding:13px 15px;border:5px solid var(--color-merch,#f08f00);background:transparent;color:var(--color-about,#fcb867);font-weight:800;text-transform:uppercase;letter-spacing:.1em;cursor:pointer}
+.launch-alert-submit:hover{background:var(--color-merch,#f08f00);color:var(--color-bg,#090909)}
+.launch-alert-status{min-height:24px;font-size:12px;line-height:1.5}.launch-alert-disclosure{font-size:11px;line-height:1.5;color:rgba(252,184,103,.62)}
+.launch-alert--compact{margin-top:16px;padding-top:16px}.launch-alert--compact h2{font-size:16px}.launch-alert--compact .launch-alert-disclosure{font-size:10px}
+.form-honeypot{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
+@media(max-width:640px){body[data-landing-family="merch-commerce"] .grid{grid-template-columns:1fr!important;gap:var(--s6)!important}}

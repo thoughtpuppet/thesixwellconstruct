@@ -167,7 +167,7 @@ test("managed original acquisition uses the painting-specific acquire label", ()
 test("Lost Marbles keeps its preview, final related archive fallback, and natural title wrapping", () => {
   const html = readFileSync(join(ROOT, "art", "lostmarblespainting.html"), "utf8");
   const relatedStart = html.indexOf('<section class="related-block" data-legacy-connections>');
-  const hoodie = html.indexOf('href="/merch/lostmarbles-hoodie.html"', relatedStart);
+  const hoodie = html.indexOf('href="/merch/lostmarbles-hoodie/"', relatedStart);
   const archive = html.indexOf('href="/archive/records/lostmarbles/"', relatedStart);
 
   assert.match(html, /title-preview-fbd19d/);
@@ -227,7 +227,7 @@ test("print state resolver covers intent, Shopify state, and failure fallbacks",
   assert.deepEqual(plain(resolve({ connection: { route: "", shopifyHandle: "" } })), { state: "unavailable", label: "unavailable", action: "unavailable", href: "", disabled: true });
 });
 
-test("Art print intent is managed and public connections expose one Shopify print", async () => {
+test("Art print intent is managed and private Merch drafts stay out of public connections", async () => {
   const database = migratedDatabase();
   const env = environment(database);
 
@@ -258,7 +258,7 @@ test("Art print intent is managed and public connections expose one Shopify prin
     admin: true,
     body: { public_visible: true },
   }), env));
-  assert.equal(published.response.status, 200);
+  assert.equal(published.response.status, 409);
   database.exec(`
     UPDATE entity_relationships SET public_visible=1 WHERE id='connection-marbles-hoodie-art';
     INSERT OR IGNORE INTO entity_relationships
@@ -271,8 +271,7 @@ test("Art print intent is managed and public connections expose one Shopify prin
   const print = connections.payload.records.find((record) => record.related.id === "merch-marbles-print");
   const hoodie = connections.payload.records.find((record) => record.related.id === "merch-lostmarbles-hoodie");
   const eye = connections.payload.records.find((record) => record.related.id === "fig-eye");
-  assert.equal(print.related.shopifyHandle, "marbles-print");
-  assert.equal(print.related.imageUrl, "/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg");
+  assert.equal(print, undefined);
   assert.equal(hoodie.related.imageUrl, "");
   assert.equal(hoodie.related.shopifyHandle, "lostmarbles-hoodie");
   assert.equal(eye.related.imageUrl, "");
@@ -300,8 +299,8 @@ test("Art print intent is managed and public connections expose one Shopify prin
   database.exec(`
     INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at)
     VALUES('merch-second-print','merch_item','node-merch','public',1,'test','test',datetime('now'),datetime('now'));
-    INSERT INTO merch_items(id,shopify_handle,title,product_type,state,route,image_url,alt_text,sort_order,created_at,updated_at)
-    VALUES('merch-second-print','second-print','Second Print','print','published','/merch/second-print.html','','',99,datetime('now'),datetime('now'));
+    INSERT INTO merch_items(id,slug,shopify_handle,title,product_type,state,availability_state,route,image_url,alt_text,sort_order,created_at,updated_at)
+    VALUES('merch-second-print','second-print','second-print','Second Print','print','published','available','/merch/second-print/','','',99,datetime('now'),datetime('now'));
   `);
   const second = await jsonResponse(await handleConstructApi(request("/api/admin/relationships", {
     method: "POST",
@@ -313,8 +312,7 @@ test("Art print intent is managed and public connections expose one Shopify prin
       public_visible: true,
     },
   }), env));
-  assert.equal(second.response.status, 409);
-  assert.match(second.payload.error, /only one public print product/i);
+  assert.equal(second.response.status, 201);
 });
 
 test("Studio exposes the print plan selector without claiming inventory ownership", () => {
