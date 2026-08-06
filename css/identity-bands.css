@@ -29,6 +29,7 @@
 }
 
 .brand-band {
+  --band-title-color: var(--color-accent);
   --band-logo-aspect: 0.642857;
   --band-logo-shift-x: 0px;
   --band-identity-column: minmax(160px, 0.2fr);
@@ -54,7 +55,7 @@
 }
 
 .brand-band--sixwell {
-  --band-title-color: var(--color-accent);
+  --band-logo-aspect: 0.642857;
 }
 
 .brand-band--tattoo-house {
@@ -107,6 +108,7 @@
   max-width: none;
   object-position: center;
   translate: var(--band-logo-shift-x) 0;
+  filter: brightness(0) saturate(100%) invert(97.401%) sepia(29.065%) saturate(624.078%) hue-rotate(351.216deg) brightness(70.445%) contrast(105.288%);
 }
 
 .band-identity-link {

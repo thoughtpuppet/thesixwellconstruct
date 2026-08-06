@@ -86,7 +86,7 @@ test("artist portrait opens an accessible full-size identity dialog", async () =
   assert.match(lightbox, /dialog\.addEventListener\("close"/);
 });
 
-test("brand-band marks share the Legend symbol color and accessible link treatment", async () => {
+test("brand-band source marks retain the Legend color while titles and rendered marks use amber", async () => {
   const [art, legend, legendCss, tokens, identityCss, thoughtPuppetSvg, sixWellSvg, tattooHouseSvg] = await Promise.all([
     read("art/index.html"),
     read("about/legend/index.html"),
@@ -113,6 +113,8 @@ test("brand-band marks share the Legend symbol color and accessible link treatme
   assert.match(thoughtPuppetSvg, new RegExp(`<path fill="${legendSymbolColor}"`, "i"));
   assert.match(sixWellSvg, new RegExp(`fill:\\s*${legendSymbolColor}`, "i"));
   assert.match(tattooHouseSvg, new RegExp(`fill:\\s*${legendSymbolColor}`, "i"));
+  assert.match(identityCss, /\.brand-band\s*\{[\s\S]*--band-title-color:\s*var\(--color-accent\)/);
+  assert.match(identityCss, /\.brand-band \.band-mark\s*\{[\s\S]*filter:\s*brightness\(0\) saturate\(100%\)[^;]*;/);
   assert.match(identityCss, /\.band-mark\s*\{[\s\S]*opacity:\s*1/);
   assert.match(identityCss, /\.band-identity-link:focus-visible\s*\{[\s\S]*outline:\s*5px solid/);
   assert.doesNotMatch(thoughtPuppetSvg, /<text\b/i);
