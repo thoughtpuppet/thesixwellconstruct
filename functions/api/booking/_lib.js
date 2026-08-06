@@ -92,6 +92,7 @@ const SPLIT_POLICIES = new Set(["artist_review", "required", "client_choice", "n
 const CLIENT_SESSION_PREFERENCES = new Set(["studio_plan", "one_longer_session", "multiple_shorter_sessions"]);
 const SPECIAL_PROJECT_PROFILES = new Set(["extended", "experimental"]);
 const SPECIAL_PROJECT_MODES = new Set(["fresh", "cover_up", "blast_over"]);
+const SPECIAL_PROJECT_SERIES_STATES = new Set(["draft", "published", "retired", "archived"]);
 
 const CONFIRMATION_PATHS = {
   consult_in_person: "/booking/confirmed/consultation/",
@@ -7713,7 +7714,25 @@ function normalizedSpecialProjectModes(value) {
   return [...new Set((parsed || []).map(asString).filter((mode) => SPECIAL_PROJECT_MODES.has(mode)))];
 }
 
-function normalizeSpecialProjectCall(row, media = []) {
+function normalizeSpecialProjectSeries(row, cover = null) {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    statement: row.statement || "",
+    state: SPECIAL_PROJECT_SERIES_STATES.has(row.state) ? row.state : "draft",
+    sortOrder: Number(row.sort_order || 0),
+    cover: cover ? {
+      id: cover.media_id,
+      alt: cover.alt_text_override || cover.alt_text || `${row.name} series cover`,
+      url: cover.source_url || (cover.storage_key ? `/api/construct/entity-media/${encodeURIComponent(cover.media_id)}` : ""),
+    } : null,
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || "",
+  };
+}
+
+function normalizeSpecialProjectCall(row, media = [], series = null) {
   const now = new Date().toISOString();
   const isOpen = row.status === "open"
     && (!row.opens_at || row.opens_at <= now)
@@ -7731,6 +7750,8 @@ function normalizeSpecialProjectCall(row, media = []) {
     healedPhotoDueWeeks: Number(row.healed_photo_due_weeks || 6),
     applicationInstructions: row.application_instructions || "",
     participationTerms: row.participation_terms || "",
+    seriesId: series?.id || "",
+    series,
     media: media.map((item) => ({
       id: item.media_id,
       role: item.role || "gallery",
@@ -7750,7 +7771,7 @@ function normalizeSpecialProjectCall(row, media = []) {
 }
 
 async function tattooSettingsPayload(db, includeInactive = false) {
-  const [settingsResult, ratesResult, callsResult, mediaResult, hoursResult, bookingTypesResult] = await db.batch([
+  const [settingsResult, ratesResult, callsResult, mediaResult, seriesResult, seriesMediaResult, hoursResult, bookingTypesResult] = await db.batch([
     db.prepare("SELECT * FROM tattoo_settings WHERE id = 'default'"),
     db.prepare(
       `SELECT * FROM tattoo_rate_cards ${includeInactive ? "" : "WHERE active = 1"}
@@ -7764,6 +7785,29 @@ async function tattooSettingsPayload(db, includeInactive = false) {
        WHERE m.state = 'active'
          AND (? = 1 OR (m.privacy = 'public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation = 'inline'))
        ORDER BY spm.project_id, CASE spm.role WHEN 'primary' THEN 0 ELSE 1 END, spm.sort_order, spm.media_id`
+    ).bind(includeInactive ? 1 : 0),
+    db.prepare(
+      `SELECT s.*, ce.visibility
+       FROM special_project_series s
+       JOIN content_entities ce ON ce.id = s.id
+       WHERE (? = 1 OR (s.state = 'published' AND ce.visibility = 'public'))
+       ORDER BY s.sort_order ASC, s.name ASC`
+    ).bind(includeInactive ? 1 : 0),
+    db.prepare(
+      `SELECT em.entity_id AS series_id, em.media_id, em.alt_text_override,
+              m.source_url, m.storage_key, m.alt_text
+       FROM entity_media em
+       JOIN special_project_series s ON s.id = em.entity_id
+       JOIN content_entities ce ON ce.id = s.id
+       JOIN media_assets m ON m.id = em.media_id
+       WHERE em.role = 'cover' AND m.state = 'active'
+         AND (? = 1 OR (
+           s.state = 'published' AND ce.visibility = 'public'
+           AND em.public_visible = 1 AND m.privacy = 'public'
+           AND m.consent_status IN ('not-required','granted')
+           AND m.public_presentation = 'inline'
+         ))
+       ORDER BY em.entity_id, em.sort_order, em.created_at`
     ).bind(includeInactive ? 1 : 0),
     db.prepare(
       `SELECT day_of_week, start_time, end_time, note FROM availability_rules
@@ -7783,10 +7827,21 @@ async function tattooSettingsPayload(db, includeInactive = false) {
     if (!mediaByProject.has(row.project_id)) mediaByProject.set(row.project_id, []);
     mediaByProject.get(row.project_id).push(row);
   }
+  const coverBySeries = new Map();
+  for (const row of seriesMediaResult.results || []) {
+    if (!coverBySeries.has(row.series_id)) coverBySeries.set(row.series_id, row);
+  }
+  const specialProjectSeries = (seriesResult.results || []).map((row) =>
+    normalizeSpecialProjectSeries(row, coverBySeries.get(row.id) || null)
+  );
+  const seriesById = new Map(specialProjectSeries.map((series) => [series.id, series]));
   return {
     settings: normalizeTattooSettingsRow(settingsRow),
     rateCards: (ratesResult.results || []).map(normalizeTattooRateCard),
-    specialProjects: (callsResult.results || []).map((row) => normalizeSpecialProjectCall(row, mediaByProject.get(row.id) || [])),
+    specialProjectSeries,
+    specialProjects: (callsResult.results || []).map((row) =>
+      normalizeSpecialProjectCall(row, mediaByProject.get(row.id) || [], seriesById.get(row.series_id) || null)
+    ),
     bookingTypes: (bookingTypesResult.results || []).map(normalizeBookingType),
     displayedHours: (hoursResult.results || []).map((row) => ({
       dayOfWeek: Number(row.day_of_week),
@@ -7879,6 +7934,99 @@ export async function handleAdminTattooSettings(request, env) {
       }
     }
 
+    const currentSeriesResult = await db.prepare("SELECT id FROM special_project_series").all();
+    const knownSeriesIds = new Set((currentSeriesResult.results || []).map((row) => row.id));
+    if (Array.isArray(body.specialProjectSeries)) {
+      const submittedSeriesIds = new Set();
+      const submittedSeriesSlugs = new Set();
+      for (const [index, series] of body.specialProjectSeries.entries()) {
+        if (series?._delete === true) {
+          return errorResponse("Special Project Series cannot be deleted. Set the series state to Archived instead.", 409);
+        }
+        const id = asString(series?.id);
+        const slug = asString(series?.slug);
+        if (!/^[a-z0-9][a-z0-9-]{0,95}$/.test(id) || !/^[a-z0-9][a-z0-9-]{0,95}$/.test(slug)) {
+          return errorResponse("Each Special Project Series requires stable lowercase id and slug values.", 400);
+        }
+        if (submittedSeriesIds.has(id) || submittedSeriesSlugs.has(slug)) {
+          return errorResponse("Special Project Series IDs and slugs must be unique.", 400);
+        }
+        submittedSeriesIds.add(id);
+        submittedSeriesSlugs.add(slug);
+        const name = asString(series?.name).slice(0, 200);
+        if (!name) return errorResponse("Special Project Series name is required.", 400);
+        const state = asString(series?.state) || "draft";
+        if (!SPECIAL_PROJECT_SERIES_STATES.has(state)) {
+          return errorResponse("Special Project Series state must be draft, published, retired, or archived.", 400);
+        }
+        const existingEntity = await db.prepare("SELECT entity_type FROM content_entities WHERE id = ?").bind(id).first();
+        if (existingEntity && existingEntity.entity_type !== "special_project_series") {
+          return errorResponse("That Series ID is already used by another Construct entity.", 409);
+        }
+        const cover = series?.cover && typeof series.cover === "object" ? series.cover : null;
+        const coverMediaId = asString(cover?.id || series?.coverMediaId || series?.cover_media_id);
+        if (coverMediaId) {
+          const eligibleCover = await db.prepare(
+            `SELECT id FROM media_assets
+             WHERE id = ? AND state = 'active' AND privacy = 'public'
+               AND consent_status IN ('not-required','granted') AND public_presentation = 'inline'
+               AND mime_type LIKE 'image/%'`
+          ).bind(coverMediaId).first();
+          if (!eligibleCover) {
+            return errorResponse("A Special Project Series cover must be an active, public, consent-cleared Shared Media image.", 409);
+          }
+        }
+        const visibility = state === "published" ? "public" : "internal";
+        statements.push(db.prepare(
+          `INSERT INTO content_entities (
+             id,entity_type,node_id,visibility,search_visibility,public_at,
+             created_by,updated_by,created_at,updated_at
+           ) VALUES (?, 'special_project_series', 'node-tattoos', ?, 0, ?, 'studio', 'studio', ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             entity_type = excluded.entity_type,
+             node_id = excluded.node_id,
+             visibility = excluded.visibility,
+             search_visibility = 0,
+             public_at = CASE
+               WHEN excluded.visibility = 'public' THEN COALESCE(content_entities.public_at, excluded.public_at)
+               ELSE content_entities.public_at
+             END,
+             updated_by = 'studio',
+             updated_at = excluded.updated_at`
+        ).bind(id, visibility, visibility === "public" ? now : null, now, now));
+        statements.push(db.prepare(
+          `INSERT INTO special_project_series (
+             id,slug,name,statement,state,sort_order,created_at,updated_at
+           ) VALUES (?,?,?,?,?,?,?,?)
+           ON CONFLICT(id) DO UPDATE SET
+             slug = excluded.slug,
+             name = excluded.name,
+             statement = excluded.statement,
+             state = excluded.state,
+             sort_order = excluded.sort_order,
+             updated_at = excluded.updated_at`
+        ).bind(
+          id,
+          slug,
+          name,
+          asString(series?.statement).slice(0, 5000),
+          state,
+          asPositiveInteger(series?.sortOrder ?? series?.sort_order, index),
+          now,
+          now,
+        ));
+        statements.push(db.prepare("DELETE FROM entity_media WHERE entity_id = ? AND role = 'cover'").bind(id));
+        if (coverMediaId) {
+          statements.push(db.prepare(
+            `INSERT INTO entity_media (
+               entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at
+             ) VALUES (?,?,'cover',0,1,?,'',?)`
+          ).bind(id, coverMediaId, asString(cover?.alt || cover?.altText).slice(0, 1000), now));
+        }
+        knownSeriesIds.add(id);
+      }
+    }
+
     const specialProjects = Array.isArray(body.specialProjects) ? body.specialProjects : [];
     for (const call of specialProjects) {
       const id = asString(call.id || call.slug);
@@ -7894,6 +8042,10 @@ export async function handleAdminTattooSettings(request, env) {
       if (!new Set(["open", "closed"]).has(status)) return errorResponse("Special Project status must be open or closed.", 400);
       const title = asString(call.title).slice(0, 200);
       if (!title) return errorResponse("Special Project title is required.", 400);
+      const seriesId = asOptionalString(call.seriesId ?? call.series_id);
+      if (seriesId && !knownSeriesIds.has(seriesId)) {
+        return errorResponse("Choose an existing Special Project Series or create it before saving the project.", 400);
+      }
       const profile = asString(call.profile) || "extended";
       if (!SPECIAL_PROJECT_PROFILES.has(profile)) return errorResponse("Special Project profile must be extended or experimental.", 400);
       const allowedModes = normalizedSpecialProjectModes(call.allowedModes ?? call.allowed_modes_json);
@@ -7949,8 +8101,8 @@ export async function handleAdminTattooSettings(request, env) {
         `INSERT INTO special_project_calls (
           id, slug, title, summary, status, rate_text, sort_order, opens_at, closes_at,
           profile, allowed_modes_json, refundable_deposit_cents, healed_photo_due_weeks,
-          application_instructions, participation_terms, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          application_instructions, participation_terms, series_id, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, title = excluded.title,
           summary = excluded.summary, status = excluded.status, rate_text = excluded.rate_text,
           sort_order = excluded.sort_order, opens_at = excluded.opens_at,
@@ -7960,6 +8112,7 @@ export async function handleAdminTattooSettings(request, env) {
           healed_photo_due_weeks = excluded.healed_photo_due_weeks,
           application_instructions = excluded.application_instructions,
           participation_terms = excluded.participation_terms,
+          series_id = excluded.series_id,
           updated_at = excluded.updated_at`
       ).bind(
         id,
@@ -7977,6 +8130,7 @@ export async function handleAdminTattooSettings(request, env) {
         healedPhotoDueWeeks,
         applicationInstructions,
         participationTerms,
+        seriesId,
         now,
       ));
       statements.push(db.prepare("DELETE FROM special_project_call_media WHERE project_id = ?").bind(id));

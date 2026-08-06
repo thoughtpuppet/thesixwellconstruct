@@ -4,6 +4,7 @@ import {
   bookingUrlForToken,
   createBookingRawToken,
 } from "../booking-links.js";
+import { ingestCrmSourceRecord } from "../crm/ingest.js";
 
 const SPECIAL_TYPE = "tattoo_special";
 const SPECIAL_BOOKING_PREFIX = "tattoo_special_";
@@ -32,6 +33,50 @@ function integer(value, fallback = 0) {
 function requireDb(env) {
   if (!env.SUBMISSIONS_DB) throw new Error("Missing D1 binding SUBMISSIONS_DB.");
   return env.SUBMISSIONS_DB;
+}
+
+async function mirrorTattooSpecialParticipantsToCrm(database, {
+  submissionId,
+  participants,
+  status,
+  subject,
+  occurredAt,
+}) {
+  const people = Array.isArray(participants) ? participants : [];
+  for (let index = 0; index < people.length; index += 1) {
+    const participant = people[index] || {};
+    const primary = index === 0;
+    const sourceType = primary ? "submission" : "submission_participant";
+    const sourceId = primary ? submissionId : `${submissionId}:${index + 1}`;
+    try {
+      await ingestCrmSourceRecord(database, {
+        contact: {
+          displayName: participant.name,
+          email: participant.email,
+          phone: participant.phone,
+        },
+        interaction: {
+          sourceProvider: "local",
+          sourceType,
+          sourceId,
+          nodeId: "node-tattoos",
+          channel: "website",
+          interactionType: primary ? "tattoo_special" : "tattoo_special_participant",
+          label: primary ? subject : `${subject} participant`,
+          status,
+          occurredAt,
+          metadata: { submissionId, participantIndex: index },
+        },
+      });
+    } catch (error) {
+      console.warn(JSON.stringify({
+        event: "crm.live_mirror_failed",
+        sourceType,
+        sourceId,
+        errorName: error?.name || "Error",
+      }));
+    }
+  }
 }
 
 function adminError(request, env) {
@@ -572,9 +617,16 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
 
     const idempotencyKey = text(request.headers.get("idempotency-key") || fields.idempotencyKey, 200);
     if (!idempotencyKey) return failure("An idempotency key is required.", 400);
-    const existing = await db.prepare("SELECT id, booking_url, status, payload_json FROM submissions WHERE idempotency_key = ?").bind(idempotencyKey).first();
+    const existing = await db.prepare("SELECT id, booking_url, status, subject, payload_json, created_at FROM submissions WHERE idempotency_key = ?").bind(idempotencyKey).first();
     if (existing) {
       const existingPayload = JSON.parse(existing.payload_json || "{}");
+      await mirrorTattooSpecialParticipantsToCrm(db, {
+        submissionId: existing.id,
+        participants: existingPayload.participants,
+        status: existing.status,
+        subject: existing.subject || "Tattoo Special",
+        occurredAt: existing.created_at,
+      });
       return json({
         ok: true,
         idempotent: true,
@@ -660,6 +712,14 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
          VALUES (?, ?, 'created', 'system', ?, ?)`
       ).bind(crypto.randomUUID(), submissionId, `Tattoo Special · ${terms.offer_title} · ${terms.variant_label}`, now),
     ]);
+
+    await mirrorTattooSpecialParticipantsToCrm(db, {
+      submissionId,
+      participants,
+      status: direct ? "approved" : "new",
+      subject: `Tattoo Special · ${terms.offer_title}`,
+      occurredAt: now,
+    });
 
     const token = await createBookingAccess(db, request, submissionId, terms, terms.sales_closes_at);
     return json({

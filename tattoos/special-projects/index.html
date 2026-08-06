@@ -140,6 +140,28 @@
     font-family:var(--sans); font-weight:900; font-size:12px;
     letter-spacing:0.1em; text-transform:uppercase;
   }
+  .series-filter {
+    display:flex; flex-wrap:wrap; gap:12px; align-items:center;
+    margin-bottom:28px; padding:18px 0; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint);
+  }
+  .series-filter button {
+    min-height:42px; padding:8px 14px; border:5px solid var(--ring-faint);
+    font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--text-mute); transition:border-color var(--t-fast),color var(--t-fast),background var(--t-fast);
+  }
+  .series-filter button:hover,
+  .series-filter button:focus-visible,
+  .series-filter button.is-active { border-color:var(--signal); color:var(--accent); background:rgba(252,184,103,.04); outline:none; }
+  .series-context {
+    display:grid; grid-template-columns:96px minmax(0,1fr); gap:18px; align-items:center;
+    max-width:720px; margin-bottom:28px; padding:16px; border:5px solid var(--ring-faint);
+  }
+  .series-context[hidden] { display:none; }
+  .series-context img { width:96px; height:96px; object-fit:cover; border:5px solid var(--ring-faint); }
+  .series-context img[hidden] { display:none; }
+  .series-context.no-cover { grid-template-columns:1fr; }
+  .series-context button { font-family:var(--sans); font-size:12px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; color:var(--signal); text-align:left; }
+  .series-context p { margin-top:8px; font-size:13px; line-height:1.65; color:var(--text-mute); }
   .project-detail {
     min-width:0;
     padding:26px 0 0;
@@ -166,25 +188,51 @@
   .archive-frame {
     position:relative; overflow:hidden; background:#0f0f0f;
   }
+  .archive-frame.has-media { display:flex; align-items:center; justify-content:center; }
   .archive-frame img { width:100%; height:100%; object-fit:cover; display:block; }
+  .project-media-open {
+    width:100%; height:100%; padding:0; border:0; background:#0f0f0f;
+    cursor:zoom-in; display:flex; align-items:center; justify-content:center;
+  }
+  .project-media-open img { width:100%; height:100%; object-fit:contain; }
+  .project-media-open:focus-visible { outline:5px solid var(--signal); outline-offset:-5px; }
   .archive-frame:first-child { grid-row:span 2; }
-  .archive-frame::before {
+  .archive-frame:not(.has-media)::before {
     content:""; position:absolute; inset:22px;
     border:5px solid rgba(109,61,21,0.36);
   }
-  .archive-frame::after {
+  .archive-frame:not(.has-media)::after {
     content:""; position:absolute; left:50%; top:50%;
     width:42%; aspect-ratio:1; border:5px solid rgba(110,4,4,0.46);
     transform:translate(-50%,-50%) rotate(38deg);
   }
-  .archive-frame:nth-child(2)::after {
+  .archive-frame:not(.has-media):nth-child(2)::after {
     width:34%; height:62%; aspect-ratio:auto;
     border-color:rgba(252,184,103,0.28);
     transform:translate(-50%,-50%) skewY(-14deg);
   }
-  .archive-frame:nth-child(3)::after {
+  .archive-frame:not(.has-media):nth-child(3)::after {
     width:58%; border-color:rgba(255,231,202,0.13);
     transform:translate(-50%,-50%) rotate(-18deg);
+  }
+  .project-media-dialog {
+    width:100vw; max-width:none; height:100vh; max-height:none; margin:0; padding:28px;
+    border:0; background:rgba(9,9,9,.98); color:var(--text);
+  }
+  .project-media-dialog::backdrop { background:rgba(0,0,0,.9); }
+  .project-media-dialog[open] { display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:16px; }
+  .project-media-dialog__close {
+    justify-self:end; min-height:44px; padding:8px 14px; border:5px solid var(--signal);
+    color:var(--accent); font-family:var(--sans); font-size:10px; font-weight:900;
+    letter-spacing:.14em; text-transform:uppercase;
+  }
+  .project-media-dialog__close:focus-visible { outline:5px solid var(--accent); outline-offset:5px; }
+  .project-media-dialog img {
+    display:block; width:100%; height:100%; min-height:0; object-fit:contain;
+  }
+  .project-media-dialog p {
+    margin:0; text-align:center; color:var(--text-mute); font-family:var(--serif);
+    font-size:12px; letter-spacing:.12em; text-transform:uppercase;
   }
   .frame-label {
     position:absolute; left:28px; bottom:24px; z-index:2;
@@ -275,9 +323,14 @@ main { padding:var(--s6) var(--s5); }
     }
     .image-grid { grid-template-columns:1fr; grid-template-rows:260px 180px 180px; }
     .archive-frame:first-child { grid-row:auto; }
+    .project-media-dialog { padding:16px; }
     .meta-grid { grid-template-columns:1fr; }
     .application-row { flex-direction:column; align-items:flex-start; }
     .mode-options { grid-template-columns:1fr; }
+    .series-filter { align-items:stretch; }
+    .series-filter button { flex:1 1 140px; }
+    .series-context { grid-template-columns:72px minmax(0,1fr); }
+    .series-context img { width:72px; height:72px; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
 </style>
@@ -321,6 +374,9 @@ main { padding:var(--s6) var(--s5); }
         <a class="cta-secondary" href="/tattoos/inquire/custom/">Other symbolic commission &rarr;</a>
       </div>
     </section>
+    <nav class="series-filter" id="seriesFilter" aria-label="Filter Special Projects by series">
+      <button type="button" class="is-active" data-series-filter="">All projects</button>
+    </nav>
     <select class="mobile-picker" id="projectSelect" aria-label="Select a Special Project call">
       <option value="">Loading current calls&hellip;</option>
     </select>
@@ -331,6 +387,10 @@ main { padding:var(--s6) var(--s5); }
       </aside>
       <article class="project-detail" aria-live="polite">
         <p class="detail-kicker" id="projectKicker">Loading / Current status</p>
+        <section class="series-context" id="projectSeriesContext" hidden>
+          <img id="projectSeriesCover" alt="" hidden>
+          <div><button type="button" id="projectSeriesName"></button><p id="projectSeriesStatement"></p></div>
+        </section>
         <h2 class="detail-title" id="projectTitle">Current Calls</h2>
         <p class="detail-summary" id="projectSummary">Loading Special Project records from Studio.</p>
         <div class="image-grid" id="projectMedia" aria-label="Selected project gallery"></div>
@@ -398,6 +458,11 @@ main { padding:var(--s6) var(--s5); }
       </form>
     </section>
   </main>
+  <dialog class="project-media-dialog" id="projectMediaDialog" aria-labelledby="projectMediaDialogTitle">
+    <button class="project-media-dialog__close" id="projectMediaDialogClose" type="button">Close</button>
+    <img id="projectMediaDialogImage" alt="">
+    <p id="projectMediaDialogTitle"></p>
+  </dialog>
   <footer class="bottom">
     <a href="/tattoos/">&larr; back to Art.Pill</a>
     <a href="/home/">the six.well construct</a>
@@ -406,6 +471,9 @@ main { padding:var(--s6) var(--s5); }
   <script>
   (function() {
     var projects = [];
+    var visibleProjects = [];
+    var seriesRecords = [];
+    var activeSeriesSlug = "";
     var fields = {
       kicker: document.getElementById("projectKicker"),
       title: document.getElementById("projectTitle"),
@@ -418,9 +486,18 @@ main { padding:var(--s6) var(--s5); }
     };
     var select = document.getElementById("projectSelect");
     var index = document.getElementById("projectIndex");
+    var seriesFilter = document.getElementById("seriesFilter");
+    var seriesContext = document.getElementById("projectSeriesContext");
+    var seriesCover = document.getElementById("projectSeriesCover");
+    var seriesName = document.getElementById("projectSeriesName");
+    var seriesStatement = document.getElementById("projectSeriesStatement");
     var applyLink = document.getElementById("projectApply");
     var applicationCopy = document.getElementById("applicationCopy");
     var mediaGrid = document.getElementById("projectMedia");
+    var mediaDialog = document.getElementById("projectMediaDialog");
+    var mediaDialogImage = document.getElementById("projectMediaDialogImage");
+    var mediaDialogTitle = document.getElementById("projectMediaDialogTitle");
+    var mediaDialogClose = document.getElementById("projectMediaDialogClose");
     var application = document.getElementById("application");
     var form = document.getElementById("specialProjectForm");
     var applicationModes = document.getElementById("applicationModes");
@@ -458,9 +535,85 @@ main { padding:var(--s6) var(--s5); }
       return project.slug || project.id;
     }
 
+    function seriesForProject(project) {
+      return project && project.series && typeof project.series === "object" ? project.series : null;
+    }
+
+    function availableSeries() {
+      return seriesRecords.filter(function(series) {
+        return projects.some(function(project) {
+          return seriesForProject(project)?.slug === series.slug;
+        });
+      });
+    }
+
+    function renderSeriesFilters() {
+      seriesFilter.replaceChildren();
+      [{ slug: "", name: "All projects" }].concat(availableSeries()).forEach(function(series) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.textContent = series.name;
+        button.setAttribute("data-series-filter", series.slug || "");
+        button.classList.toggle("is-active", (series.slug || "") === activeSeriesSlug);
+        button.addEventListener("click", function() { setSeriesFilter(series.slug || ""); });
+        seriesFilter.append(button);
+      });
+    }
+
+    function renderSeriesContext(project) {
+      var series = seriesForProject(project);
+      if (!series) {
+        seriesContext.hidden = true;
+        seriesCover.hidden = true;
+        seriesCover.removeAttribute("src");
+        return;
+      }
+      seriesContext.hidden = false;
+      seriesName.textContent = series.name;
+      seriesName.setAttribute("aria-label", "Show all " + series.name + " projects");
+      seriesName.onclick = function() { setSeriesFilter(series.slug, keyFor(project)); };
+      seriesStatement.textContent = series.statement || "";
+      if (series.cover && series.cover.url) {
+        seriesCover.src = series.cover.url;
+        seriesCover.alt = series.cover.alt || series.name + " series cover";
+        seriesCover.hidden = false;
+        seriesContext.classList.remove("no-cover");
+      } else {
+        seriesCover.hidden = true;
+        seriesCover.removeAttribute("src");
+        seriesContext.classList.add("no-cover");
+      }
+    }
+
+    function setSeriesFilter(slug, projectKey) {
+      var valid = slug && availableSeries().some(function(series) { return series.slug === slug; });
+      activeSeriesSlug = valid ? slug : "";
+      renderSeriesFilters();
+      renderIndex();
+      setProject(projectKey || keyFor(visibleProjects[0] || projects[0] || {}));
+    }
+
     function modeLabel(mode) {
       return mode === "cover_up" ? "Cover-up" : mode === "blast_over" ? "Blast-over" : "Fresh skin";
     }
+
+    function openProjectMedia(item, project) {
+      var description = item.alt || project.title;
+      mediaDialogImage.src = item.url;
+      mediaDialogImage.alt = description;
+      mediaDialogTitle.textContent = description;
+      mediaDialog.showModal();
+    }
+
+    mediaDialogClose.addEventListener("click", function() { mediaDialog.close(); });
+    mediaDialog.addEventListener("click", function(event) {
+      if (event.target === mediaDialog) mediaDialog.close();
+    });
+    mediaDialog.addEventListener("close", function() {
+      mediaDialogImage.removeAttribute("src");
+      mediaDialogImage.alt = "";
+      mediaDialogTitle.textContent = "";
+    });
 
     function renderMedia(project) {
       var media = Array.isArray(project.media) ? project.media : [];
@@ -476,12 +629,18 @@ main { padding:var(--s6) var(--s5); }
       }
       media.forEach(function(item) {
         var frame = document.createElement("figure");
-        frame.className = "archive-frame";
+        frame.className = "archive-frame has-media";
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = "project-media-open";
+        button.setAttribute("aria-label", "Open full image: " + (item.alt || project.title));
         var image = document.createElement("img");
         image.src = item.url;
         image.alt = item.alt || project.title;
         image.loading = "lazy";
-        frame.append(image);
+        button.append(image);
+        button.addEventListener("click", function() { openProjectMedia(item, project); });
+        frame.append(button);
         mediaGrid.append(frame);
       });
     }
@@ -545,12 +704,16 @@ main { padding:var(--s6) var(--s5); }
     }
 
     function setProject(key) {
-      var project = projects.find(function(item) { return keyFor(item) === key || item.id === key; }) || projects[0];
+      var project = visibleProjects.find(function(item) { return keyFor(item) === key || item.id === key; })
+        || projects.find(function(item) { return keyFor(item) === key || item.id === key; })
+        || visibleProjects[0]
+        || projects[0];
       if (!project) return;
       var selectedKey = keyFor(project);
       var status = effectiveStatus(project);
-      var number = projects.indexOf(project) + 1;
+      var number = Math.max(visibleProjects.indexOf(project), 0) + 1;
       fields.kicker.textContent = String(number).padStart(2, "0") + " / " + status;
+      renderSeriesContext(project);
       fields.title.textContent = project.title;
       fields.summary.textContent = project.summary || "This Studio-managed call does not have a public summary yet.";
       fields.medium.textContent = project.profile === "experimental" ? "Experimental Project" : "Extended Project";
@@ -585,13 +748,18 @@ main { padding:var(--s6) var(--s5); }
       configureApplication(project, status);
       var url = new URL(location.href);
       url.searchParams.set("project", selectedKey);
+      if (activeSeriesSlug) url.searchParams.set("series", activeSeriesSlug);
+      else url.searchParams.delete("series");
       history.replaceState(null, "", url.pathname + url.search + url.hash);
     }
 
     function renderIndex() {
       index.replaceChildren();
       select.replaceChildren();
-      projects.forEach(function(project, projectIndex) {
+      visibleProjects = activeSeriesSlug
+        ? projects.filter(function(project) { return seriesForProject(project)?.slug === activeSeriesSlug; })
+        : projects.slice();
+      visibleProjects.forEach(function(project, projectIndex) {
         var key = keyFor(project);
         var status = effectiveStatus(project);
         var button = document.createElement("button");
@@ -607,7 +775,7 @@ main { padding:var(--s6) var(--s5); }
         title.textContent = project.title;
         var state = document.createElement("span");
         state.className = "index-year";
-        state.textContent = status;
+        state.textContent = (seriesForProject(project)?.name ? seriesForProject(project).name + " / " : "") + status;
         copy.append(title, state);
         button.append(number, copy);
         button.addEventListener("click", function() { setProject(key); });
@@ -615,7 +783,7 @@ main { padding:var(--s6) var(--s5); }
 
         var option = document.createElement("option");
         option.value = key;
-        option.textContent = number.textContent + " " + project.title + " / " + status;
+        option.textContent = number.textContent + " " + project.title + (seriesForProject(project)?.name ? " / " + seriesForProject(project).name : "") + " / " + status;
         select.append(option);
       });
     }
@@ -653,10 +821,16 @@ main { padding:var(--s6) var(--s5); }
         projects = (Array.isArray(payload.specialProjects) ? payload.specialProjects : []).slice().sort(function(a, b) {
           return Number(a.sortOrder || 0) - Number(b.sortOrder || 0);
         });
+        seriesRecords = (Array.isArray(payload.specialProjectSeries) ? payload.specialProjectSeries : []).slice().sort(function(a, b) {
+          return Number(a.sortOrder || 0) - Number(b.sortOrder || 0);
+        });
         if (!projects.length) throw new Error("No Special Project calls are currently published.");
-        renderIndex();
-        var requestedProject = new URLSearchParams(location.search).get("project") || keyFor(projects[0]);
-        setProject(requestedProject);
+        var params = new URLSearchParams(location.search);
+        var requestedProject = params.get("project") || keyFor(projects[0]);
+        var requestedSeries = params.get("series") || "";
+        var requestedRecord = projects.find(function(project) { return keyFor(project) === requestedProject || project.id === requestedProject; });
+        if (requestedRecord && requestedSeries && seriesForProject(requestedRecord)?.slug !== requestedSeries) requestedSeries = "";
+        setSeriesFilter(requestedSeries, requestedProject);
         if (location.hash === "#application" && effectiveStatus(selectedProject || {}) === "open") {
           application.scrollIntoView({ block: "start" });
         }

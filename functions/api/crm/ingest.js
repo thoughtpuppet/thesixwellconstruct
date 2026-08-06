@@ -14,6 +14,18 @@ function normalizeEmail(value) {
   return valueString(value, 320).toLowerCase();
 }
 
+function contactHasNameAndEmail(contactValue) {
+  const contact = safeObject(contactValue);
+  const name = valueString(contact.displayName || contact.name, 200);
+  const email = normalizeEmail(contact.email);
+  return Boolean(
+    name
+    && email
+    && name.toLowerCase() !== email
+    && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  );
+}
+
 function normalizePhone(value) {
   const raw = valueString(value, 80);
   if (!raw) return "";
@@ -348,6 +360,22 @@ function eligibilityFromRecord(record) {
       : transactionTuple;
     return {
       reason: "paid_event_ticket",
+      sourceProvider: tuple.sourceProvider,
+      sourceType: tuple.sourceType,
+      sourceId: tuple.sourceId,
+      at: valueString(
+        interaction.occurredAt || transaction.occurredAt,
+        80,
+      ),
+    };
+  }
+  if (contactHasNameAndEmail(record.contact)) {
+    const tuple = interactionTuple || transactionTuple;
+    return {
+      // `website_booking` is the existing constrained database key for a
+      // source-qualified site contact. The exact interaction remains recorded
+      // in the eligibility source fields below.
+      reason: "website_booking",
       sourceProvider: tuple.sourceProvider,
       sourceType: tuple.sourceType,
       sourceId: tuple.sourceId,

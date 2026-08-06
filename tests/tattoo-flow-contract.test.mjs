@@ -149,12 +149,35 @@ test("Studio gives Special Projects a dedicated tab with direct Shared Media upl
   assert.match(source, /fetch\(`\/api\/admin\/media\/\$\{encodeURIComponent\(image\.dataset\.specialMediaPreview\)\}\/file`/);
   assert.match(source, /headers: \{ authorization: `Bearer \$\{token\}` \}/);
   assert.match(source, /const projects = specialProjectsFromForm\(specialProjectsForm\);/);
-  assert.match(source, /JSON\.stringify\(\{ specialProjects: projects \}\)/);
+  assert.match(source, /const seriesRecords = specialProjectSeriesFromForm\(specialProjectsForm\);/);
+  assert.match(source, /JSON\.stringify\(\{ specialProjectSeries: seriesRecords, specialProjects: projects \}\)/);
+  assert.match(source, /data-admin-section-title="Project Series"/);
+  assert.match(source, /data-special-series-cover-file type="file" accept="image\/jpeg,image\/png,image\/webp,image\/gif"/);
+  assert.match(source, /Create new series/);
   const settingsRenderer = source.slice(
     source.indexOf("async function renderTattooSettings()"),
     source.indexOf("function tattooSpecialVariantText"),
   );
   assert.doesNotMatch(settingsRenderer, /data-add-special-project/);
+});
+
+test("Special Projects expose public Series filtering while applications still target one project", () => {
+  const source = readFileSync(join(ROOT, "tattoos", "special-projects", "index.html"), "utf8");
+  assert.match(source, /id="seriesFilter" aria-label="Filter Special Projects by series"/);
+  assert.match(source, /function setSeriesFilter\(slug, projectKey\)/);
+  assert.match(source, /params\.get\("series"\)/);
+  assert.match(source, /url\.searchParams\.set\("series", activeSeriesSlug\)/);
+  assert.match(source, /seriesName\.onclick = function\(\) \{ setSeriesFilter\(series\.slug, keyFor\(project\)\); \}/);
+  assert.match(source, /document\.getElementById\("applicationProjectId"\)\.value = project\.id/);
+  assert.match(source, /document\.getElementById\("applicationProjectSlug"\)\.value = project\.slug/);
+  assert.match(source, /series\.cover\.url/);
+});
+
+test("Studio review shows Series as quiet context without changing the project booking label", () => {
+  const source = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(source, /terms\.seriesName \|\| terms\.agreementSnapshot\?\.series\?\.name/);
+  assert.match(source, /\$\{escapeHtml\(seriesName\)\} &middot; \$\{escapeHtml\(projectTitle\)\}/);
+  assert.match(source, /Experimental Project \u2014 \$\{terms\.title/);
 });
 
 test("Studio explains incomplete Experimental Projects instead of leaving save stuck", () => {
@@ -1806,7 +1829,8 @@ test("Experimental Project applications are free, mode-bound, photo-gated, and s
     `UPDATE special_project_calls
      SET profile='experimental',allowed_modes_json='["cover_up","blast_over"]',
          refundable_deposit_cents=12500,healed_photo_due_weeks=6,
-         participation_terms='Attend the appointment and provide healed documentation.',status='open'
+         participation_terms='Attend the appointment and provide healed documentation.',status='open',
+         series_id='sp-series-classic-cliches'
      WHERE id='mythic-body-studies'`
   ).run();
   const env = {
@@ -1860,10 +1884,29 @@ test("Experimental Project applications are free, mode-bound, photo-gated, and s
   assert.equal(terms.selected_mode, "cover_up");
   assert.equal(terms.refundable_deposit_cents, 12500);
   assert.equal(terms.healed_photo_method, "self_upload");
+  assert.equal(terms.series_id, "sp-series-classic-cliches");
+  assert.equal(terms.series_name, "Classic Clichés");
+  assert.equal(terms.series_slug, "classic-cliches");
   assert.ok(terms.agreed_at);
   const saved = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(submissionId).payload_json);
   assert.equal(saved.budget_range, undefined);
   assert.equal(saved.special_project_snapshot.participationTerms, "Attend the appointment and provide healed documentation.");
+  assert.deepEqual(saved.special_project_snapshot.series, {
+    id: "sp-series-classic-cliches",
+    name: "Classic Clichés",
+    slug: "classic-cliches",
+  });
+  database.prepare(
+    "UPDATE special_project_series SET name='Renamed Series',slug='renamed-series' WHERE id='sp-series-classic-cliches'"
+  ).run();
+  const immutableTerms = database.prepare(
+    "SELECT series_id,series_name,series_slug FROM special_project_submission_terms WHERE submission_id=?"
+  ).get(submissionId);
+  assert.deepEqual({ ...immutableTerms }, {
+    series_id: "sp-series-classic-cliches",
+    series_name: "Classic Clichés",
+    series_slug: "classic-cliches",
+  });
 
   database.prepare("UPDATE special_project_calls SET status='closed' WHERE id='mythic-body-studies'").run();
   const closed = await handleCreateSubmission(multipartRequest(
@@ -1931,6 +1974,120 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
     adminToken,
   ), env);
   assert.equal(invalid.status, 400);
+});
+
+test("Studio manages Special Project Series, cover media, assignment, and public visibility", async () => {
+  const database = migratedDatabase();
+  const now = new Date().toISOString();
+  database.prepare(
+    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
+     VALUES('series-cover','https://example.test/series-cover.jpg','series-cover.jpg','image/jpeg','Classic Cliches cover','public','granted','active','inline','test',?,?)`
+  ).run(now, now);
+  const adminToken = "special-project-series-admin";
+  const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSIONS_ADMIN_TOKEN: adminToken };
+  const projectRecord = (id, title, seriesId) => ({
+    id,
+    slug: id,
+    title,
+    profile: "extended",
+    status: "open",
+    allowedModes: ["fresh"],
+    seriesId,
+  });
+  const saved = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    {
+      specialProjectSeries: [
+        {
+          id: "sp-series-classic-cliches",
+          slug: "classic-cliches",
+          name: "Classic Clichés",
+          statement: "Reimagining familiar tattoo iconography.",
+          state: "published",
+          sortOrder: 1,
+          cover: { id: "series-cover", alt: "Classic Clichés study cover" },
+        },
+        {
+          id: "sp-series-private-studies",
+          slug: "private-studies",
+          name: "Private Studies",
+          statement: "A draft artistic grouping.",
+          state: "draft",
+          sortOrder: 2,
+        },
+      ],
+      specialProjects: [
+        projectRecord("memory-transfer", "Memory Transfer Studies", "sp-series-classic-cliches"),
+        projectRecord("mythic-body-studies", "Mythic Body Studies", "sp-series-private-studies"),
+      ],
+    },
+    adminToken,
+  ), env);
+  assert.equal(saved.status, 200, await saved.clone().text());
+  assert.equal(database.prepare("SELECT series_id FROM special_project_calls WHERE id='memory-transfer'").get().series_id, "sp-series-classic-cliches");
+  assert.equal(database.prepare("SELECT series_id FROM special_project_calls WHERE id='mythic-body-studies'").get().series_id, "sp-series-private-studies");
+  assert.deepEqual(
+    { ...database.prepare("SELECT media_id,role,public_visible,alt_text_override FROM entity_media WHERE entity_id='sp-series-classic-cliches'").get() },
+    { media_id: "series-cover", role: "cover", public_visible: 1, alt_text_override: "Classic Clichés study cover" },
+  );
+  assert.equal(database.prepare("SELECT visibility FROM content_entities WHERE id='sp-series-private-studies'").get().visibility, "internal");
+
+  class SelectBatchD1 extends LocalD1 {
+    async batch(statements) {
+      return Promise.all(statements.map((statement) => statement.all()));
+    }
+  }
+  const publicResponse = await handlePublicTattooSettings(
+    new Request("https://example.test/api/tattoo/settings"),
+    { SUBMISSIONS_DB: new SelectBatchD1(database) },
+  );
+  assert.equal(publicResponse.status, 200, await publicResponse.clone().text());
+  const publicPayload = await publicResponse.json();
+  assert.deepEqual(publicPayload.specialProjectSeries.map((series) => series.slug), ["classic-cliches"]);
+  const publicSeries = publicPayload.specialProjectSeries[0];
+  assert.equal(publicSeries.cover.id, "series-cover");
+  assert.equal(publicSeries.cover.url, "https://example.test/series-cover.jpg");
+  assert.equal(publicPayload.specialProjects.find((project) => project.id === "memory-transfer").series.slug, "classic-cliches");
+  const hiddenSeriesProject = publicPayload.specialProjects.find((project) => project.id === "mythic-body-studies");
+  assert.equal(hiddenSeriesProject.series, null);
+  assert.equal(hiddenSeriesProject.seriesId, "");
+
+  const adminResponse = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "GET",
+    undefined,
+    adminToken,
+  ), { SUBMISSIONS_DB: new SelectBatchD1(database), SUBMISSIONS_ADMIN_TOKEN: adminToken });
+  assert.equal(adminResponse.status, 200, await adminResponse.clone().text());
+  assert.deepEqual((await adminResponse.json()).specialProjectSeries.map((series) => series.slug), ["classic-cliches", "private-studies"]);
+
+  const unknown = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    { specialProjects: [projectRecord("large-scale", "Large Scale Symbolic Work", "unknown-series")] },
+    adminToken,
+  ), env);
+  assert.equal(unknown.status, 400);
+
+  const hardDelete = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    { specialProjectSeries: [{ id: "sp-series-private-studies", _delete: true }] },
+    adminToken,
+  ), env);
+  assert.equal(hardDelete.status, 409);
+
+  const duplicate = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    { specialProjectSeries: [
+      { id: "series-one", slug: "same-slug", name: "One", state: "draft" },
+      { id: "series-two", slug: "same-slug", name: "Two", state: "draft" },
+    ] },
+    adminToken,
+  ), env);
+  assert.equal(duplicate.status, 400);
 });
 
 test("Experimental attendance refunds once, reconciles asynchronously, and creates the healed follow-up", async () => {
@@ -2217,6 +2374,10 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   assert.ok(columns("special_project_calls").has("allowed_modes_json"));
   assert.ok(columns("special_project_calls").has("refundable_deposit_cents"));
   assert.ok(columns("special_project_calls").has("healed_photo_due_weeks"));
+  assert.ok(columns("special_project_calls").has("series_id"));
+  assert.ok(columns("special_project_submission_terms").has("series_id"));
+  assert.ok(columns("special_project_submission_terms").has("series_name"));
+  assert.ok(columns("special_project_submission_terms").has("series_slug"));
   assert.ok(columns("special_project_healed_followups").has("media_asset_id"));
   for (const name of [
     "approved_budget_min_cents",
@@ -2238,7 +2399,7 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   ]) assert.ok(columns("appointments").has(name), `appointments.${name}`);
 
   const tables = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name));
-  for (const name of ["appointment_events", "tattoo_settings", "tattoo_rate_cards", "special_project_calls", "special_project_call_media", "special_project_submission_terms", "experimental_deposit_refunds", "special_project_healed_followups", "special_project_healed_photos", "visual_symbol_composition_rules", "visual_symbol_composition_rule_members"]) {
+  for (const name of ["appointment_events", "tattoo_settings", "tattoo_rate_cards", "special_project_series", "special_project_calls", "special_project_call_media", "special_project_submission_terms", "experimental_deposit_refunds", "special_project_healed_followups", "special_project_healed_photos", "visual_symbol_composition_rules", "visual_symbol_composition_rule_members"]) {
     assert.ok(tables.has(name), name);
   }
 
@@ -2250,6 +2411,15 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
     build: "Quoted after review",
   });
   assert.equal(database.prepare("SELECT count(*) AS count FROM special_project_calls WHERE status = 'open'").get().count, 3);
+  assert.equal(database.prepare("SELECT count(*) AS count FROM special_project_calls WHERE series_id IS NOT NULL").get().count, 0);
+  assert.deepEqual(
+    { ...database.prepare("SELECT id,slug,name,state FROM special_project_series WHERE id='sp-series-classic-cliches'").get() },
+    { id: "sp-series-classic-cliches", slug: "classic-cliches", name: "Classic Clichés", state: "published" },
+  );
+  assert.deepEqual(
+    { ...database.prepare("SELECT entity_type,node_id,visibility FROM content_entities WHERE id='sp-series-classic-cliches'").get() },
+    { entity_type: "special_project_series", node_id: "node-tattoos", visibility: "public" },
+  );
   assert.equal(database.prepare("SELECT lead_time_days FROM tattoo_settings WHERE id = 'default'").get().lead_time_days, 14);
   assert.deepEqual(
     database.prepare(
@@ -2491,7 +2661,7 @@ test("public tattoo settings publish active tattoo booking hours", async () => {
   }]);
 });
 
-test("Build submissions require intent, snapshot stable published symbol IDs, stay out of People, and are idempotent", async () => {
+test("Build submissions require intent, snapshot stable published symbol IDs, enter People, and are idempotent", async () => {
   const database = migratedDatabase();
   const env = { SUBMISSIONS_DB: new LocalD1(database) };
   database.prepare(
@@ -2536,11 +2706,22 @@ test("Build submissions require intent, snapshot stable published symbol IDs, st
   assert.equal(database.prepare("SELECT count(*) AS count FROM submissions WHERE idempotency_key = ?").get("build-contract-test").count, 1);
   assert.equal(database.prepare(
     `SELECT COUNT(*) count FROM crm_people`
-  ).get().count, 0);
+  ).get().count, 1);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT display_name,eligibility_source_type,eligibility_source_id
+      FROM crm_people
+    `).get() },
+    {
+      display_name: "Build Client",
+      eligibility_source_type: "submission",
+      eligibility_source_id: firstBody.submissionId,
+    },
+  );
   assert.equal(database.prepare(
     `SELECT COUNT(*) count FROM crm_interactions
      WHERE source_provider='local' AND source_type='submission' AND source_id=?`
-  ).get(firstBody.submissionId).count, 0);
+  ).get(firstBody.submissionId).count, 1);
 
   const row = database.prepare("SELECT status, tattoo_stage, payload_json FROM submissions WHERE id = ?").get(firstBody.submissionId);
   const saved = JSON.parse(row.payload_json);

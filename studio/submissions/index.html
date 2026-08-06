@@ -440,6 +440,9 @@
   .tattoo-settings-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(120px,.65fr) auto; gap:10px; align-items:end; border-top:5px solid var(--ring-faint); padding-top:10px; min-width:0; }
   .tattoo-settings-row.special { grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; padding:14px; border:5px solid var(--ring-faint); }
   .tattoo-settings-row.special > .admin-collapse-heading { grid-column:1/-1; align-items:center; }
+  .tattoo-settings-row.special-series { grid-template-columns:repeat(3,minmax(0,1fr)); align-items:start; padding:14px; border:5px solid var(--ring-faint); }
+  .tattoo-settings-row.special-series > .admin-collapse-heading { grid-column:1/-1; align-items:center; }
+  .special-project-series-cover { grid-column:1/-1; display:grid; gap:10px; }
   .special-project-wide { grid-column:1/-1; }
   .special-project-modes { display:flex; flex-wrap:wrap; gap:8px 16px; }
   .special-project-media { display:grid; gap:8px; }
@@ -486,7 +489,8 @@
     .session-plan-grid .wide { grid-column:auto; }
     .tattoo-settings-grid { grid-template-columns:1fr; }
     .tattoo-settings-row,
-    .tattoo-settings-row.special { grid-template-columns:1fr; }
+    .tattoo-settings-row.special,
+    .tattoo-settings-row.special-series { grid-template-columns:1fr; }
     .special-project-media-row { grid-template-columns:minmax(0,1fr); }
     .special-project-media-row > label[style] { grid-column:auto!important; }
     .special-project-upload { grid-template-columns:minmax(0,1fr); }
@@ -698,9 +702,10 @@
   let portfolioOptions = { styles: [], collections: [] };
   let portfolioBatch = null;
   let portfolioBatchUploading = false;
-  let tattooSettings = { settings: {}, rateCards: [], specialProjects: [], displayedHours: "" };
+  let tattooSettings = { settings: {}, rateCards: [], specialProjectSeries: [], specialProjects: [], displayedHours: "" };
   let specialProjectMediaAssets = [];
   let specialProjectMediaPreviewUrls = [];
+  let specialProjectSeriesEditorCounter = 0;
   let tattooSpecials = { settings: {}, offers: [], media: [], readiness: {} };
   let manualTextTemplates = Object.fromEntries(
     (window.ManualTextAssist?.DEFAULT_TEMPLATES || []).map((template) => [template.key, { ...template }])
@@ -1236,8 +1241,12 @@
       const terms = submission.specialProjectTerms || {};
       const profile = terms.profile || p("project_profile") || "extended";
       const selectedMode = terms.selectedMode || p("selected_mode") || p("project_mode") || "";
+      const seriesName = terms.seriesName || terms.agreementSnapshot?.series?.name || "";
+      const projectTitle = terms.title || p("project_title") || "Project";
       return card(profile === "experimental" ? `Experimental Project — ${terms.title || p("project_title") || "Project"}` : "Extended Project", `
+        ${seriesName ? `<p class="contact" style="margin-bottom:12px;">${escapeHtml(seriesName)} &middot; ${escapeHtml(projectTitle)}</p>` : ""}
         <div class="grid">
+          ${seriesName ? field("Series", seriesName) : ""}
           ${field("Profile", titleize(profile))}
           ${field("Mode", titleize(selectedMode))}
           ${field("Date of Birth", p("dob"))}
@@ -2885,6 +2894,7 @@
     tattooSettings = {
       settings: payload.settings || {},
       rateCards: payload.rateCards || payload.rate_cards || [],
+      specialProjectSeries: payload.specialProjectSeries || payload.special_project_series || [],
       specialProjects: payload.specialProjects || payload.special_projects || [],
       displayedHours: formatDisplayedTattooHours(payload.displayedHours ?? payload.displayed_hours),
     };
@@ -2897,6 +2907,53 @@
       <label>Displayed rate<input data-rate-text value="${escapeHtml(settingValue(rate, "rateText", "rate_text"))}" maxlength="80"></label>
       <label class="check"><input data-rate-active type="checkbox" ${Number(rate.active ?? 1) ? "checked" : ""}><span>Public</span></label>
     </div>`;
+  }
+
+  function specialProjectSeriesOptions(selectedId = "") {
+    const options = tattooSettings.specialProjectSeries.map((series) => {
+      const state = series.state || "draft";
+      return `<option value="${escapeHtml(series.id)}" ${series.id === selectedId ? "selected" : ""}>${escapeHtml(series.name)} (${escapeHtml(state)})</option>`;
+    }).join("");
+    return `<option value="" ${selectedId ? "" : "selected"}>No series</option>${options}<option value="__create__">Create new series…</option>`;
+  }
+
+  function specialProjectSeriesCoverRow(cover = {}) {
+    const mediaId = cover.id || cover.mediaId || cover.media_id || "";
+    if (!mediaId) return '<p class="contact" data-special-series-cover-empty>No cover image selected.</p>';
+    const asset = specialProjectMediaAssets.find((candidate) => candidate.id === mediaId) || {};
+    const label = asset.title || asset.original_filename || asset.originalFilename || mediaId;
+    return `<div class="special-project-media-row" data-special-series-cover data-media-id="${escapeHtml(mediaId)}">
+      <div class="special-project-media-identity"><img class="special-project-media-thumb" data-special-media-preview="${escapeHtml(mediaId)}" alt="" aria-hidden="true"><div><strong>${escapeHtml(label)}</strong><br><span class="contact">${escapeHtml(mediaId)}</span></div></div>
+      <label>Series cover alt text<input data-special-series-cover-alt value="${escapeHtml(cover.alt || cover.altText || "")}" maxlength="1000"></label>
+      <div class="booking-actions"><button class="button danger-button" type="button" data-remove-special-series-cover>Remove Cover</button></div>
+    </div>`;
+  }
+
+  function specialProjectSeriesRow(series = {}) {
+    const editorKey = series._editorKey || series.id || `new-series-${++specialProjectSeriesEditorCounter}`;
+    const seriesId = series.id || "";
+    const name = String(series.name || "").trim();
+    const state = series.state || "draft";
+    const label = name ? `${name} · ${state}` : "New Project Series";
+    return `<section class="tattoo-settings-row special-series" data-special-project-series data-id="${escapeHtml(seriesId)}" data-series-editor-key="${escapeHtml(editorKey)}" data-admin-section-title="${escapeHtml(label)}" data-admin-collapse-key="special-project-series-${escapeHtml(editorKey)}" data-admin-default="${series._editorOpen ? "open" : "closed"}">
+      <label>Series ID<input data-special-series-id value="${escapeHtml(seriesId)}" maxlength="96" pattern="[a-z0-9][a-z0-9-]*" ${seriesId ? "readonly" : ""} required></label>
+      <label>Public slug<input data-special-series-slug value="${escapeHtml(series.slug || "")}" maxlength="96" pattern="[a-z0-9][a-z0-9-]*" required></label>
+      <label>Series name<input data-special-series-name value="${escapeHtml(series.name || "")}" maxlength="200" required></label>
+      <label>State<select data-special-series-state><option value="draft" ${state === "draft" ? "selected" : ""}>Draft</option><option value="published" ${state === "published" ? "selected" : ""}>Published</option><option value="retired" ${state === "retired" ? "selected" : ""}>Retired</option><option value="archived" ${state === "archived" ? "selected" : ""}>Archived</option></select></label>
+      <label class="special-project-wide">Public statement<textarea data-special-series-statement maxlength="5000">${escapeHtml(series.statement || "")}</textarea></label>
+      <div class="special-project-series-cover">
+        <span class="contact">Optional series cover. This presents the series; project artwork remains attached to each individual project.</span>
+        <div data-special-series-cover-slot>${specialProjectSeriesCoverRow(series.cover || {})}</div>
+        <div class="special-project-upload">
+          <label>Upload cover<input data-special-series-cover-file type="file" accept="image/jpeg,image/png,image/webp,image/gif"></label>
+          <label>Alt text<input data-special-series-upload-alt value="${escapeHtml(name ? `${name} series cover` : "")}" maxlength="1000" placeholder="Describe the series cover"></label>
+          <button class="button" type="button" data-upload-special-series-cover>Upload &amp; Use Cover</button>
+          <span class="contact" data-special-series-upload-status role="status" aria-live="polite"></span>
+        </div>
+        <div class="booking-actions"><select data-special-series-cover-picker><option value="">Or choose existing Shared Media…</option>${specialProjectMediaAssets.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || item.original_filename || item.originalFilename || item.id)}</option>`).join("")}</select><button class="button" type="button" data-add-special-series-cover>Use Existing as Cover</button></div>
+      </div>
+      <p class="special-project-wide contact">Series are retained as Construct entities. To remove one from public use, set its state to Archived.</p>
+    </section>`;
   }
 
   function specialProjectRow(project) {
@@ -2912,6 +2969,7 @@
     return `<section class="tattoo-settings-row special" data-special-project data-id="${escapeHtml(project.id || "")}" data-admin-section-title="${escapeHtml(projectLabel)}" data-admin-collapse-key="special-project-${escapeHtml(projectId)}" data-admin-default="${project._editorOpen ? "open" : "closed"}">
       <label>Project ID / slug<input data-special-slug value="${escapeHtml(project.slug || project.id || "")}" maxlength="96" pattern="[a-z0-9][a-z0-9-]*" required></label>
       <label>Project title<input data-special-title value="${escapeHtml(project.title || "")}" maxlength="160" required></label>
+      <label>Series<select data-special-series>${specialProjectSeriesOptions(project.seriesId || project.series_id || "")}</select></label>
       <label>Profile<select data-special-profile><option value="extended" ${profile === "extended" ? "selected" : ""}>Extended</option><option value="experimental" ${profile === "experimental" ? "selected" : ""}>Experimental</option></select></label>
       <label>Status<select data-special-status><option value="open" ${status === "open" ? "selected" : ""}>Open</option><option value="closed" ${status === "closed" ? "selected" : ""}>Closed</option></select></label>
       <label>Displayed rate<input data-special-rate value="${escapeHtml(settingValue(project, "rateText", "rate_text"))}" maxlength="80"></label>
@@ -3020,7 +3078,7 @@
         const asset = payload.record || {};
         if (!asset.id) throw new Error(`${file.name} uploaded without a media ID.`);
         if (!specialProjectMediaAssets.some((item) => item.id === asset.id)) specialProjectMediaAssets.unshift(asset);
-        detailEl.querySelectorAll("[data-special-media-picker]").forEach((picker) => {
+        detailEl.querySelectorAll("[data-special-media-picker], [data-special-series-cover-picker]").forEach((picker) => {
           if (![...picker.options].some((option) => option.value === asset.id)) {
             picker.add(new Option(asset.original_filename || asset.originalFilename || asset.id, asset.id));
           }
@@ -3043,11 +3101,83 @@
     }
   }
 
+  function setSpecialProjectSeriesCover(row, cover) {
+    const slot = row.querySelector("[data-special-series-cover-slot]");
+    if (!slot) throw new Error("The series cover editor is unavailable. Refresh Studio and try again.");
+    slot.innerHTML = specialProjectSeriesCoverRow(cover);
+    enhanceControls(slot);
+    hydrateSpecialProjectMediaPreviews(slot).catch(() => {});
+  }
+
+  async function uploadSpecialProjectSeriesCover(row, button) {
+    const input = row.querySelector("[data-special-series-cover-file]");
+    const output = row.querySelector("[data-special-series-upload-status]");
+    const file = input?.files?.[0];
+    if (!file) throw new Error("Choose a series cover image to upload.");
+    if (!specialProjectUploadTypes.has(String(file.type || "").toLowerCase())) {
+      throw new Error(`${file.name} must be a JPG, PNG, WebP, or GIF image.`);
+    }
+    if (file.size > 15 * 1024 * 1024) throw new Error(`${file.name} exceeds 15 MB.`);
+    const seriesName = row.querySelector("[data-special-series-name]")?.value.trim() || "Special Project Series";
+    const altText = row.querySelector("[data-special-series-upload-alt]")?.value.trim() || `${seriesName} series cover`;
+    button.disabled = true;
+    if (output) output.textContent = `Uploading ${file.name}`;
+    try {
+      const upload = new FormData();
+      upload.append("file", file);
+      upload.append("alt_text", altText);
+      upload.append("public_title", `${seriesName} series cover`);
+      upload.append("privacy", "public");
+      upload.append("consent_status", "not-required");
+      upload.append("public_presentation", "inline");
+      const payload = await api("/api/admin/media", { method: "POST", body: upload });
+      const asset = payload.record || {};
+      if (!asset.id) throw new Error(`${file.name} uploaded without a media ID.`);
+      if (!specialProjectMediaAssets.some((item) => item.id === asset.id)) specialProjectMediaAssets.unshift(asset);
+      detailEl.querySelectorAll("[data-special-media-picker], [data-special-series-cover-picker]").forEach((picker) => {
+        if (![...picker.options].some((option) => option.value === asset.id)) {
+          picker.add(new Option(asset.original_filename || asset.originalFilename || asset.id, asset.id));
+        }
+      });
+      setSpecialProjectSeriesCover(row, { id: asset.id, alt: altText });
+      input.value = "";
+      if (output) output.textContent = "Cover uploaded and selected. Save Special Projects to publish the series change.";
+      setStatus("Special Project Series cover uploaded and selected");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function specialProjectSeriesFromForm(form) {
+    return [...form.querySelectorAll("[data-special-project-series]")].map((row, index) => {
+      const cover = row.querySelector("[data-special-series-cover]");
+      return {
+        id: row.dataset.id || row.querySelector("[data-special-series-id]")?.value.trim() || "",
+        slug: row.querySelector("[data-special-series-slug]")?.value.trim() || "",
+        name: row.querySelector("[data-special-series-name]")?.value.trim() || "",
+        statement: row.querySelector("[data-special-series-statement]")?.value.trim() || "",
+        state: row.querySelector("[data-special-series-state]")?.value || "draft",
+        cover: cover ? {
+          id: cover.dataset.mediaId,
+          alt: cover.querySelector("[data-special-series-cover-alt]")?.value.trim() || "",
+        } : null,
+        sortOrder: index,
+      };
+    });
+  }
+
   function specialProjectsFromForm(form) {
+    const seriesIdsByEditorKey = new Map([...form.querySelectorAll("[data-special-project-series]")].map((row) => [
+      row.dataset.seriesEditorKey,
+      row.dataset.id || row.querySelector("[data-special-series-id]")?.value.trim() || "",
+    ]));
     return [...form.querySelectorAll("[data-special-project]")].map((row, index) => ({
       id: row.dataset.id || row.querySelector("[data-special-slug]")?.value.trim() || "",
       slug: row.querySelector("[data-special-slug]")?.value.trim() || "",
       title: row.querySelector("[data-special-title]")?.value.trim() || "",
+      seriesId: seriesIdsByEditorKey.get(row.querySelector("[data-special-series]")?.value || "")
+        || row.querySelector("[data-special-series]")?.value
+        || "",
       profile: row.querySelector("[data-special-profile]")?.value || "extended",
       status: row.querySelector("[data-special-status]")?.value || "closed",
       rateText: row.querySelector("[data-special-rate]")?.value.trim() || "",
@@ -3090,6 +3220,22 @@
     return null;
   }
 
+  function specialProjectSeriesEditorValidation(seriesRecords) {
+    const ids = new Set();
+    const slugs = new Set();
+    for (let index = 0; index < seriesRecords.length; index += 1) {
+      const series = seriesRecords[index];
+      if (!series.id) return { index, selector: "[data-special-series-id]", message: "Add a stable Series ID before saving." };
+      if (!series.slug) return { index, selector: "[data-special-series-slug]", message: "Add the public series slug before saving." };
+      if (!series.name) return { index, selector: "[data-special-series-name]", message: "Add the series name before saving." };
+      if (ids.has(series.id)) return { index, selector: "[data-special-series-id]", message: "Each Series ID must be unique." };
+      if (slugs.has(series.slug)) return { index, selector: "[data-special-series-slug]", message: "Each series slug must be unique." };
+      ids.add(series.id);
+      slugs.add(series.slug);
+    }
+    return null;
+  }
+
   function syncSpecialProjectEditorRequirements(row) {
     if (!row) return;
     const experimental = row.querySelector("[data-special-profile]")?.value === "experimental";
@@ -3122,6 +3268,25 @@
     }
   }
 
+  function showSpecialProjectSeriesSaveIssue(form, issue) {
+    const row = [...form.querySelectorAll("[data-special-project-series]")][issue.index];
+    if (row?.dataset.adminCollapsed === "true") {
+      row.querySelector(":scope > .admin-collapse-heading > [data-admin-collapse-control]")?.click();
+    }
+    const control = row?.querySelector(issue.selector);
+    const output = form.querySelector("#specialProjectsStatus");
+    if (output) output.textContent = issue.message;
+    setStatus(issue.message);
+    if (control) {
+      control.setCustomValidity?.(issue.message);
+      control.focus?.();
+      control.reportValidity?.();
+      const clearIssue = () => control.setCustomValidity?.("");
+      control.addEventListener("input", clearIssue, { once: true });
+      control.addEventListener("change", clearIssue, { once: true });
+    }
+  }
+
   function sessionEstimateCopyEditor(copy = {}) {
     return sessionEstimateCopyFields.map(([key, label, kind]) => {
       const value = escapeHtml(copy[key] || "");
@@ -3135,6 +3300,38 @@
     }).join("");
   }
 
+  function addSpecialProjectSeriesEditor(form, projectRow = null) {
+    const list = form.querySelector("[data-special-series-list]");
+    if (!list) return null;
+    const editorKey = `new-series-${++specialProjectSeriesEditorCounter}`;
+    list.querySelector("[data-special-series-empty]")?.remove();
+    list.insertAdjacentHTML("beforeend", specialProjectSeriesRow({
+      id: "",
+      slug: "",
+      name: "",
+      state: "draft",
+      statement: "",
+      cover: null,
+      _editorKey: editorKey,
+      _editorOpen: true,
+    }));
+    const row = list.lastElementChild;
+    form.querySelectorAll("[data-special-series]").forEach((select) => {
+      const createOption = [...select.options].find((option) => option.value === "__create__");
+      const option = new Option("New series (unsaved)", editorKey);
+      option.dataset.seriesEditorKey = editorKey;
+      if (createOption) select.add(option, createOption);
+      else select.add(option);
+    });
+    const projectSelect = projectRow?.querySelector("[data-special-series]");
+    if (projectSelect) projectSelect.value = editorKey;
+    enhanceControls(row);
+    hydrateSpecialProjectMediaPreviews(row).catch(() => {});
+    row?.scrollIntoView({ behavior: "smooth", block: "start" });
+    row?.querySelector("[data-special-series-id]")?.focus();
+    return row;
+  }
+
   async function renderSpecialProjectsManager() {
     layoutEl.classList.add("single");
     listPane.classList.add("hidden");
@@ -3143,8 +3340,14 @@
     detailEl.innerHTML = '<p class="empty">Loading Special Projects…</p>';
     await loadTattooSettings();
     detailEl.innerHTML = `<section class="tattoo-settings" id="specialProjectsManager" data-admin-section-title="Special Projects">
-      <div class="portfolio-head"><div><h2>Special Projects</h2><p class="contact">Create Experimental or Extended projects, upload their artwork, control application modes, and open or close each call from one place.</p></div><button class="button" type="button" data-refresh-special-projects>Refresh</button></div>
+      <div class="portfolio-head"><div><h2>Special Projects</h2><p class="contact">Create artistic series and individual Experimental or Extended projects, upload their artwork, and control each application call from one place.</p></div><button class="button" type="button" data-refresh-special-projects>Refresh</button></div>
       <form class="tattoo-settings" data-special-projects-form>
+        <section class="tattoo-settings-card" data-admin-section-title="Project Series">
+          <h3>Project Series</h3>
+          <p class="contact">Series describe the larger artistic body of work. Projects remain independently bookable and may have no series.</p>
+          <div class="tattoo-settings-list" data-special-series-list>${tattooSettings.specialProjectSeries.map(specialProjectSeriesRow).join("") || '<p class="empty" data-special-series-empty>No Special Project Series configured.</p>'}</div>
+          <div class="booking-actions"><button class="button" type="button" data-add-special-project-series>Add Series</button></div>
+        </section>
         <section class="tattoo-settings-card" data-admin-section-title="Project calls">
           <h3>Project calls</h3>
           <p class="contact">Experimental Projects are always free tattoo work with a refundable attendance deposit. Extended Projects retain concept, budget, and session planning. Closed calls stay visible but cannot accept applications.</p>
@@ -6643,7 +6846,24 @@ ${meetingLines}
     }
   });
 
+  detailEl.addEventListener("input", (event) => {
+    if (!event.target.matches("[data-special-series-id], [data-special-series-name]")) return;
+    const row = event.target.closest("[data-special-project-series]");
+    if (!row || row.dataset.id) return;
+    const editorKey = row.dataset.seriesEditorKey;
+    const id = row.querySelector("[data-special-series-id]")?.value.trim() || "new series";
+    const name = row.querySelector("[data-special-series-name]")?.value.trim() || id;
+    detailEl.querySelectorAll("[data-special-series]").forEach((select) => {
+      const option = [...select.options].find((item) => item.value === editorKey);
+      if (option) option.textContent = `${name} (unsaved)`;
+    });
+  });
+
   detailEl.addEventListener("change", (event) => {
+    if (event.target.matches("[data-special-series]") && event.target.value === "__create__") {
+      addSpecialProjectSeriesEditor(event.target.closest("[data-special-projects-form]"), event.target.closest("[data-special-project]"));
+      return;
+    }
     if (event.target.matches("[data-special-profile]")) {
       syncSpecialProjectEditorRequirements(event.target.closest("[data-special-project]"));
       return;
@@ -7230,6 +7450,46 @@ ${meetingLines}
       } finally {
         if (healedPhoto.isConnected) healedPhoto.disabled = false;
       }
+      return;
+    }
+
+    const addSpecialProjectSeries = event.target.closest("[data-add-special-project-series]");
+    if (addSpecialProjectSeries) {
+      addSpecialProjectSeriesEditor(addSpecialProjectSeries.closest("[data-special-projects-form]"));
+      return;
+    }
+
+    const uploadSpecialSeriesCover = event.target.closest("[data-upload-special-series-cover]");
+    if (uploadSpecialSeriesCover) {
+      const row = uploadSpecialSeriesCover.closest("[data-special-project-series]");
+      const output = row?.querySelector("[data-special-series-upload-status]");
+      if (!row) return;
+      try {
+        await uploadSpecialProjectSeriesCover(row, uploadSpecialSeriesCover);
+      } catch (error) {
+        if (output) output.textContent = error.message;
+        setStatus(error.message);
+      }
+      return;
+    }
+
+    const addSpecialSeriesCover = event.target.closest("[data-add-special-series-cover]");
+    if (addSpecialSeriesCover) {
+      const row = addSpecialSeriesCover.closest("[data-special-project-series]");
+      const picker = row?.querySelector("[data-special-series-cover-picker]");
+      const mediaId = picker?.value || "";
+      if (!row || !mediaId) return;
+      const seriesName = row.querySelector("[data-special-series-name]")?.value.trim() || "Special Project Series";
+      setSpecialProjectSeriesCover(row, { id: mediaId, alt: `${seriesName} series cover` });
+      picker.value = "";
+      return;
+    }
+
+    const removeSpecialSeriesCover = event.target.closest("[data-remove-special-series-cover]");
+    if (removeSpecialSeriesCover) {
+      const row = removeSpecialSeriesCover.closest("[data-special-project-series]");
+      const slot = row?.querySelector("[data-special-series-cover-slot]");
+      if (slot) slot.innerHTML = specialProjectSeriesCoverRow({});
       return;
     }
 
@@ -8150,6 +8410,12 @@ ${meetingLines}
     const specialProjectsForm = event.target.closest("[data-special-projects-form]");
     if (specialProjectsForm) {
       event.preventDefault();
+      const seriesRecords = specialProjectSeriesFromForm(specialProjectsForm);
+      const seriesIssue = specialProjectSeriesEditorValidation(seriesRecords);
+      if (seriesIssue) {
+        showSpecialProjectSeriesSaveIssue(specialProjectsForm, seriesIssue);
+        return;
+      }
       const projects = specialProjectsFromForm(specialProjectsForm);
       const issue = specialProjectEditorValidation(projects);
       if (issue) {
@@ -8165,7 +8431,7 @@ ${meetingLines}
         await api("/api/admin/tattoo/settings", {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ specialProjects: projects }),
+          body: JSON.stringify({ specialProjectSeries: seriesRecords, specialProjects: projects }),
         });
         await renderSpecialProjectsManager();
         setStatus("Special Projects saved");

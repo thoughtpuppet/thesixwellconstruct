@@ -1507,9 +1507,14 @@ export async function handleCreateSubmission(request, env) {
         body.payload.special_project_slug || body.payload.project_slug || body.payload.project_title
       );
       const call = await db.prepare(
-        `SELECT * FROM special_project_calls
-         WHERE id = ? OR slug = ? OR lower(title) = lower(?)
-         ORDER BY CASE WHEN id = ? THEN 0 WHEN slug = ? THEN 1 ELSE 2 END
+        `SELECT spc.*,
+                series.id AS series_snapshot_id,
+                series.name AS series_snapshot_name,
+                series.slug AS series_snapshot_slug
+         FROM special_project_calls spc
+         LEFT JOIN special_project_series series ON series.id = spc.series_id
+         WHERE spc.id = ? OR spc.slug = ? OR lower(spc.title) = lower(?)
+         ORDER BY CASE WHEN spc.id = ? THEN 0 WHEN spc.slug = ? THEN 1 ELSE 2 END
          LIMIT 1`
       ).bind(selectedCall, selectedCall, selectedCall, selectedCall, selectedCall).first();
       const now = new Date().toISOString();
@@ -1574,6 +1579,11 @@ export async function handleCreateSubmission(request, env) {
         healedPhotoDueWeeks: Number(call.healed_photo_due_weeks || 6),
         applicationInstructions: call.application_instructions || "",
         participationTerms: call.participation_terms || "",
+        series: call.series_snapshot_id ? {
+          id: call.series_snapshot_id,
+          name: call.series_snapshot_name || "",
+          slug: call.series_snapshot_slug || "",
+        } : null,
         agreementVersion: SPECIAL_PROJECT_AGREEMENT_VERSION,
       };
       body.payload.project_title = call.title;
@@ -1583,6 +1593,9 @@ export async function handleCreateSubmission(request, env) {
         projectId: call.id,
         profile,
         title: call.title,
+        seriesId: call.series_snapshot_id || null,
+        seriesName: call.series_snapshot_name || "",
+        seriesSlug: call.series_snapshot_slug || "",
         selectedMode,
         refundableDepositCents: Number(call.refundable_deposit_cents || 0),
         healedPhotoMethod: profile === "experimental" ? asString(body.payload.healed_photo_method) : null,
@@ -1821,16 +1834,20 @@ export async function handleCreateSubmission(request, env) {
         ? [
             db.prepare(
               `INSERT INTO special_project_submission_terms (
-                submission_id,project_id,project_profile,project_title,selected_mode,
+                submission_id,project_id,project_profile,project_title,
+                series_id,series_name,series_slug,selected_mode,
                 refundable_deposit_cents,healed_photo_method,healed_photo_due_weeks,
                 participation_terms,agreement_version,agreement_snapshot_json,
                 agreed_at,created_at,updated_at
-              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
             ).bind(
               id,
               specialProjectTerms.projectId,
               specialProjectTerms.profile,
               specialProjectTerms.title,
+              specialProjectTerms.seriesId,
+              specialProjectTerms.seriesName,
+              specialProjectTerms.seriesSlug,
               specialProjectTerms.selectedMode,
               specialProjectTerms.refundableDepositCents,
               specialProjectTerms.healedPhotoMethod,
@@ -2240,6 +2257,9 @@ export async function handleGetSubmission(request, env, id) {
       projectId: specialProjectTermsRow.project_id,
       profile: specialProjectTermsRow.project_profile,
       title: specialProjectTermsRow.project_title,
+      seriesId: specialProjectTermsRow.series_id || "",
+      seriesName: specialProjectTermsRow.series_name || "",
+      seriesSlug: specialProjectTermsRow.series_slug || "",
       selectedMode: specialProjectTermsRow.selected_mode,
       refundableDepositCents: Number(specialProjectTermsRow.refundable_deposit_cents || 0),
       healedPhotoMethod: specialProjectTermsRow.healed_photo_method || "",

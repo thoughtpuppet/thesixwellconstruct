@@ -29,6 +29,17 @@ function normalizeEmail(value) {
   return text(value, 320).toLowerCase();
 }
 
+function hasNameAndEmail(nameValue, emailValue) {
+  const name = text(nameValue, 200);
+  const email = normalizeEmail(emailValue);
+  return Boolean(
+    name
+    && email
+    && name.toLowerCase() !== email
+    && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  );
+}
+
 function normalizePhone(value) {
   const raw = text(value, 80);
   if (!raw) return "";
@@ -1056,6 +1067,15 @@ async function persistSquare(database, records, counts) {
       customerEmail ||
       customerPhone ||
       "";
+    const suppliedName = directoryDisplayName
+      || payerDisplayName
+      || (
+        profileFallbackDisplayName !== customerEmail
+        && profileFallbackDisplayName !== customerPhone
+          ? profileFallbackDisplayName
+          : ""
+      );
+    const contactEligible = hasNameAndEmail(suppliedName, customerEmail);
     const paymentAmountCents = Number.isSafeInteger(Number(payment.amount?.amountMinor))
       ? Number(payment.amount.amountMinor)
       : null;
@@ -1099,7 +1119,10 @@ async function persistSquare(database, records, counts) {
       preferredPersonId: mirrored?.person_id || null,
       conflictSourceType: "payment",
       conflictSourceId: payment.externalId,
-      allowCreate: false,
+      allowCreate: contactEligible,
+      eligibilityReason: contactEligible ? "website_booking" : "",
+      eligibilitySourceType: "payment",
+      eligibilitySourceId: payment.externalId,
     });
     if (!personId) {
       counts.unmatched += 1;
@@ -1342,6 +1365,7 @@ async function persistShopifyMarketing(database, personId, contact) {
 
 async function persistShopify(database, records, counts) {
   for (const customer of records.customers || []) {
+    const contactEligible = hasNameAndEmail(customer.displayName, customer.email);
     const personId = await ensureProviderPerson(database, {
       provider: "shopify",
       externalId: customer.externalId,
@@ -1353,15 +1377,35 @@ async function persistShopify(database, records, counts) {
       tags: customer.tags,
       conflictSourceType: "customer",
       conflictSourceId: customer.externalId,
-      allowCreate: false,
+      allowCreate: contactEligible,
+      eligibilityReason: contactEligible ? "website_booking" : "",
+      eligibilitySourceType: "customer",
+      eligibilitySourceId: customer.externalId,
     });
-    if (personId) await persistShopifyMarketing(database, personId, customer);
+    if (personId) {
+      await persistShopifyMarketing(database, personId, customer);
+      await upsertInteraction(database, {
+        personId,
+        provider: "shopify",
+        sourceType: "customer",
+        sourceId: customer.externalId,
+        nodeId: "node-merch",
+        channel: "shopify",
+        interactionType: "customer_profile",
+        label: "Shopify customer profile",
+        status: "active",
+        occurredAt: customer.createdAt,
+        metadata: { tags: customer.tags || [] },
+      });
+      counts.interactions += 1;
+    }
     if (!personId) counts.unmatched += 1;
   }
 
   for (const order of records.orders || []) {
     const contact = order.contact || {};
     const payments = order.settledPaymentTransactions || [];
+    const contactEligible = hasNameAndEmail(contact.displayName, contact.email);
     const existingOrderPerson = await database.prepare(`
       SELECT person_id
       FROM crm_interactions
@@ -1380,8 +1424,10 @@ async function persistShopify(database, records, counts) {
       tags: order.tags,
       conflictSourceType: "order",
       conflictSourceId: order.externalId,
-      allowCreate: payments.length > 0,
-      eligibilityReason: "paid_shopify_order",
+      allowCreate: payments.length > 0 || contactEligible,
+      eligibilityReason: payments.length > 0
+        ? "paid_shopify_order"
+        : contactEligible ? "website_booking" : "",
       eligibilitySourceType: "order",
       eligibilitySourceId: order.externalId,
       preferredPersonId: existingOrderPerson?.person_id || null,

@@ -91,6 +91,12 @@ function isLikelyEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function hasNameAndEmail(nameValue, emailValue) {
+  const name = asString(nameValue, 200);
+  const email = normalizeEmail(emailValue);
+  return Boolean(name && email && name.toLowerCase() !== email && isLikelyEmail(email));
+}
+
 function normalizePhone(value) {
   const raw = asString(value, 80);
   if (!raw) return "";
@@ -3771,6 +3777,15 @@ async function insertLocalTransaction(database, personId, {
 
 async function localBackfillSources(database, limit, offsets) {
   const sourceQueries = {
+    submissions: {
+      sql: `SELECT * FROM submissions
+        WHERE trim(contact_name)!='' AND trim(contact_email)!=''
+          AND lower(trim(contact_name))!=lower(trim(contact_email))
+        ORDER BY created_at,id LIMIT ? OFFSET ?`,
+      count: `SELECT COUNT(*) count FROM submissions
+        WHERE trim(contact_name)!='' AND trim(contact_email)!=''
+          AND lower(trim(contact_name))!=lower(trim(contact_email))`,
+    },
     appointments: {
       sql: "SELECT * FROM appointments ORDER BY created_at,id LIMIT ? OFFSET ?",
       count: "SELECT COUNT(*) count FROM appointments",
@@ -3787,12 +3802,38 @@ async function localBackfillSources(database, limit, offsets) {
     eventTickets: {
       sql: `SELECT t.*,e.title event_title,e.slug event_slug
         FROM event_tickets t JOIN events e ON e.id=t.event_id
-        WHERE t.status='paid' OR t.paid_at IS NOT NULL
+        WHERE (
+          trim(t.contact_name)!='' AND trim(t.contact_email)!=''
+          AND lower(trim(t.contact_name))!=lower(trim(t.contact_email))
+        ) OR t.status='paid' OR t.paid_at IS NOT NULL
           OR t.square_payment_id IS NOT NULL OR t.refund_id IS NOT NULL
         ORDER BY t.created_at,t.id LIMIT ? OFFSET ?`,
       count: `SELECT COUNT(*) count FROM event_tickets
-        WHERE status='paid' OR paid_at IS NOT NULL
+        WHERE (
+          trim(contact_name)!='' AND trim(contact_email)!=''
+          AND lower(trim(contact_name))!=lower(trim(contact_email))
+        ) OR status='paid' OR paid_at IS NOT NULL
           OR square_payment_id IS NOT NULL OR refund_id IS NOT NULL`,
+    },
+    eventWaitlist: {
+      sql: `SELECT w.*,e.title event_title,e.slug event_slug
+        FROM event_waitlist w JOIN events e ON e.id=w.event_id
+        WHERE trim(w.contact_name)!='' AND trim(w.contact_email)!=''
+          AND lower(trim(w.contact_name))!=lower(trim(w.contact_email))
+        ORDER BY w.created_at,w.id LIMIT ? OFFSET ?`,
+      count: `SELECT COUNT(*) count FROM event_waitlist
+        WHERE trim(contact_name)!='' AND trim(contact_email)!=''
+          AND lower(trim(contact_name))!=lower(trim(contact_email))`,
+    },
+    eventOpenMic: {
+      sql: `SELECT o.*,e.title event_title,e.slug event_slug
+        FROM event_open_mic_signups o JOIN events e ON e.id=o.event_id
+        WHERE trim(o.performer_name)!='' AND trim(o.performer_email)!=''
+          AND lower(trim(o.performer_name))!=lower(trim(o.performer_email))
+        ORDER BY o.created_at,o.id LIMIT ? OFFSET ?`,
+      count: `SELECT COUNT(*) count FROM event_open_mic_signups
+        WHERE trim(performer_name)!='' AND trim(performer_email)!=''
+          AND lower(trim(performer_name))!=lower(trim(performer_email))`,
     },
   };
   const data = {};
@@ -3833,6 +3874,54 @@ async function handleBackfill(request, database) {
     if (!resolved.personId) unmatched += 1;
     return resolved.personId;
   };
+
+  for (const row of data.submissions) {
+    const personId = await processPerson({
+      sourceType: "submission",
+      sourceId: row.id,
+      name: row.contact_name,
+      email: row.contact_email,
+      phone: row.contact_phone,
+      occurredAt: row.created_at,
+      eligibilityReason: "website_booking",
+    });
+    await insertLocalInteraction(database, personId, {
+      sourceType: "submission",
+      sourceId: row.id,
+      nodeId: nodeForSubmissionType(row.type),
+      interactionType: row.type || "submission",
+      label: row.subject || row.type || "Website submission",
+      status: row.status || "new",
+      occurredAt: row.created_at,
+      metadata: { submissionId: row.id, sourcePath: row.source_path || "" },
+    });
+    const contact = parseJson(row.contact_json, {});
+    const participants = Array.isArray(contact.participants) ? contact.participants : [];
+    for (let index = 1; index < participants.length; index += 1) {
+      const participant = participants[index] || {};
+      if (!hasNameAndEmail(participant.name, participant.email)) continue;
+      const participantSourceId = `${row.id}:${index + 1}`;
+      const participantId = await processPerson({
+        sourceType: "submission_participant",
+        sourceId: participantSourceId,
+        name: participant.name,
+        email: participant.email,
+        phone: participant.phone,
+        occurredAt: row.created_at,
+        eligibilityReason: "website_booking",
+      });
+      await insertLocalInteraction(database, participantId, {
+        sourceType: "submission_participant",
+        sourceId: participantSourceId,
+        nodeId: nodeForSubmissionType(row.type),
+        interactionType: "tattoo_special_participant",
+        label: `${row.subject || "Tattoo Special"} participant`,
+        status: row.status || "new",
+        occurredAt: row.created_at,
+        metadata: { submissionId: row.id, participantIndex: index },
+      });
+    }
+  }
 
   for (const row of data.appointments) {
     const personId = await processPerson({
@@ -3896,6 +3985,10 @@ async function handleBackfill(request, database) {
     });
   }
   for (const row of data.eventTickets) {
+    const hasSettledPayment = row.status === "paid"
+      || Boolean(row.paid_at)
+      || Boolean(row.square_payment_id)
+      || Boolean(row.refund_id);
     const personId = await processPerson({
       sourceType: "event_ticket",
       sourceId: row.id,
@@ -3903,7 +3996,7 @@ async function handleBackfill(request, database) {
       email: row.contact_email,
       phone: row.contact_phone,
       occurredAt: row.paid_at || row.created_at,
-      eligibilityReason: "paid_event_ticket",
+      eligibilityReason: hasSettledPayment ? "paid_event_ticket" : "website_booking",
     });
     await insertLocalInteraction(database, personId, {
       sourceType: "event_ticket",
@@ -3916,10 +4009,6 @@ async function handleBackfill(request, database) {
       occurredAt: row.paid_at || row.created_at,
       metadata: { eventId: row.event_id, eventSlug: row.event_slug, purchaserNotAttendee: true },
     });
-    const hasSettledPayment = row.status === "paid"
-      || Boolean(row.paid_at)
-      || Boolean(row.square_payment_id)
-      || Boolean(row.refund_id);
     await insertLocalTransaction(database, personId, {
       sourceType: "event_ticket_payment",
       sourceId: row.id,
@@ -3962,9 +4051,56 @@ async function handleBackfill(request, database) {
           ticketId: row.id,
           providerPaymentId: row.square_payment_id || "",
           providerRefundId: row.refund_id,
-        },
-      });
-    }
+      },
+    });
+  }
+  for (const row of data.eventWaitlist) {
+    const personId = await processPerson({
+      sourceType: "event_waitlist",
+      sourceId: row.id,
+      name: row.contact_name,
+      email: row.contact_email,
+      phone: row.contact_phone,
+      occurredAt: row.created_at,
+      eligibilityReason: "website_booking",
+    });
+    await insertLocalInteraction(database, personId, {
+      sourceType: "event_waitlist",
+      sourceId: row.id,
+      nodeId: "node-events",
+      interactionType: "event_waitlist",
+      label: row.event_title || "Event waitlist",
+      status: row.status || "new",
+      quantity: row.seats_requested,
+      occurredAt: row.created_at,
+      metadata: { eventId: row.event_id, eventSlug: row.event_slug || "" },
+    });
+  }
+  for (const row of data.eventOpenMic) {
+    const personId = await processPerson({
+      sourceType: "event_open_mic",
+      sourceId: row.id,
+      name: row.performer_name,
+      email: row.performer_email,
+      phone: row.performer_phone,
+      occurredAt: row.created_at,
+      eligibilityReason: "website_booking",
+    });
+    await insertLocalInteraction(database, personId, {
+      sourceType: "event_open_mic",
+      sourceId: row.id,
+      nodeId: "node-events",
+      interactionType: "performance",
+      label: row.piece_title || row.act_type || row.event_title || "Open mic signup",
+      status: row.status || "requested",
+      occurredAt: row.created_at,
+      metadata: {
+        eventId: row.event_id,
+        eventSlug: row.event_slug || "",
+        actType: row.act_type || "",
+      },
+    });
+  }
   }
   const now = nowIso();
   await auditStatement(database, {

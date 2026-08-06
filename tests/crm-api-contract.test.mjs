@@ -1168,10 +1168,10 @@ test("live source ingestion skips cleanly before the CRM schema exists", async (
   assert.equal(result.reason, "schema_unavailable");
 });
 
-test("noncustomer sources cannot create People but may enrich an eligible customer", async () => {
+test("every sourced contact with a name and email enters People and keeps exact provenance", async () => {
   const database = migratedDatabase();
   const d1 = new LocalD1(database);
-  const excluded = [
+  const contactSources = [
     ["submission", "tattoo_inquiry", "new"],
     ["event_waitlist", "event_waitlist", "waiting"],
     ["event_open_mic", "open_mic_request", "pending"],
@@ -1179,10 +1179,10 @@ test("noncustomer sources cannot create People but may enrich an eligible custom
     ["event_ticket", "event_ticket", "pending"],
     ["square_payment", "payment", "settled"],
   ];
-  for (const [sourceType, interactionType, status] of excluded) {
+  for (const [sourceType, interactionType, status] of contactSources) {
     const result = await ingestCrmSourceRecord(d1, {
       contact: {
-        displayName: `Excluded ${sourceType}`,
+        displayName: `Contact ${sourceType}`,
         email: `${sourceType}@example.test`,
       },
       interaction: {
@@ -1195,11 +1195,42 @@ test("noncustomer sources cannot create People but may enrich an eligible custom
     });
     assert.deepEqual(
       { status: result.status, reason: result.reason },
+      { status: "applied", reason: "" },
+    );
+    assert.deepEqual(
+      { ...database.prepare(`
+        SELECT eligibility_reason,eligibility_source_provider,eligibility_source_type
+        FROM crm_people WHERE id=?
+      `).get(result.personId) },
+      {
+        eligibility_reason: "website_booking",
+        eligibility_source_provider: sourceType === "square_payment" ? "square" : "local",
+        eligibility_source_type: sourceType,
+      },
+    );
+  }
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, contactSources.length);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, contactSources.length);
+
+  for (const [suffix, contact] of [
+    ["missing-name", { email: "missing-name@example.test" }],
+    ["missing-email", { displayName: "Missing Email" }],
+  ]) {
+    const result = await ingestCrmSourceRecord(d1, {
+      contact,
+      interaction: {
+        sourceProvider: "local",
+        sourceType: "submission",
+        sourceId: `excluded-${suffix}`,
+        interactionType: "tattoo_inquiry",
+        status: "new",
+      },
+    });
+    assert.deepEqual(
+      { status: result.status, reason: result.reason },
       { status: "skipped", reason: "not_directory_eligible" },
     );
   }
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, 0);
 
   const booking = await ingestCrmSourceRecord(d1, {
     contact: {
@@ -1241,7 +1272,7 @@ test("noncustomer sources cannot create People but may enrich an eligible custom
       eligibility_source_type: "appointment",
     },
   );
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, contactSources.length + 1);
   assert.equal(database.prepare(
     "SELECT COUNT(*) count FROM crm_interactions WHERE person_id=?"
   ).get(booking.personId).count, 2);
@@ -1255,6 +1286,83 @@ test("noncustomer sources cannot create People but may enrich an eligible custom
   );
   assert.equal(manualProfile.payload.person.eligibilityReason, "studio_manual_entry");
   assert.equal(manualProfile.payload.person.eligibilitySourceProvider, "manual");
+});
+
+test("contact-directory backfill deduplicates historical submissions and includes named participants", () => {
+  const database = migratedDatabase();
+  const insertSubmission = database.prepare(`
+    INSERT INTO submissions(
+      id,type,status,source_path,subject,contact_name,contact_email,contact_phone,
+      contact_json,payload_json,request_meta_json,files_json,created_at,updated_at
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `);
+  insertSubmission.run(
+    "historical-ashley-one",
+    "tattoo_special",
+    "new",
+    "/tattoos/specials/",
+    "Tattoo Special",
+    "Ashley Jackson",
+    "Ashley@example.test",
+    "404-555-0100",
+    JSON.stringify({
+      participants: [
+        { name: "Ashley Jackson", email: "Ashley@example.test", phone: "404-555-0100" },
+        { name: "Blake Participant", email: "blake@example.test", phone: "404-555-0101" },
+      ],
+    }),
+    "{}",
+    "{}",
+    "[]",
+    "2026-08-01T12:00:00.000Z",
+    "2026-08-01T12:00:00.000Z",
+  );
+  insertSubmission.run(
+    "historical-ashley-two",
+    "tattoo_inquiry",
+    "approved",
+    "/tattoos/inquiry/",
+    "Second inquiry",
+    "Ashley Jackson",
+    "ashley@example.test",
+    "404-555-0100",
+    "{}",
+    "{}",
+    "{}",
+    "[]",
+    "2026-08-02T12:00:00.000Z",
+    "2026-08-02T12:00:00.000Z",
+  );
+
+  const backfill = readFileSync(
+    join(ROOT, "tools", "crm-contact-directory-backfill.sql"),
+    "utf8",
+  );
+  database.exec(backfill);
+
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 2);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_people WHERE display_name='Ashley Jackson'
+  `).get().count, 1);
+  assert.deepEqual(
+    database.prepare(`
+      SELECT source_type,source_id FROM crm_interactions
+      ORDER BY source_type,source_id
+    `).all().map((row) => [row.source_type, row.source_id]),
+    [
+      ["submission", "historical-ashley-one"],
+      ["submission", "historical-ashley-two"],
+      ["submission_participant", "historical-ashley-one:2"],
+    ],
+  );
+  assert.equal(database.prepare(`
+    SELECT COUNT(DISTINCT person_id) count FROM crm_identities
+    WHERE kind='email' AND normalized_value='ashley@example.test' AND active=1
+  `).get().count, 1);
+
+  database.exec(backfill);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 2);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, 3);
 });
 
 test("concurrent qualifying bookings with one email converge without orphan people", async () => {
@@ -3818,7 +3926,7 @@ test("concurrent phone-only import apply calls create one person", async () => {
   `).get(importId).count, 1);
 });
 
-test("local historical backfill ignores mirrored event submissions and is repeat-safe", async () => {
+test("local historical backfill keeps every named contact interaction and is repeat-safe", async () => {
   const database = migratedDatabase();
   const now = "2026-07-01T12:00:00.000Z";
 
@@ -3851,7 +3959,7 @@ test("local historical backfill ignores mirrored event submissions and is repeat
   }));
   assert.equal(result.response.status, 200, JSON.stringify(result.payload));
   assert.equal(result.payload.createdPeople, 1);
-  assert.equal("submissions" in result.payload.processed, false);
+  assert.equal(result.payload.processed.submissions, 1);
   assert.equal(result.payload.processed.eventTickets, 1);
 
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
@@ -3862,7 +3970,7 @@ test("local historical backfill ignores mirrored event submissions and is repeat
   assert.equal(database.prepare(`
     SELECT COUNT(*) count FROM crm_interactions
     WHERE source_provider='local' AND source_type='submission'
-  `).get().count, 0);
+  `).get().count, 1);
   assert.equal(database.prepare(`
     SELECT COUNT(*) count FROM crm_transactions
     WHERE source_provider='local' AND source_type='event_ticket_payment'
@@ -3875,14 +3983,14 @@ test("local historical backfill ignores mirrored event submissions and is repeat
   assert.equal(result.response.status, 200, JSON.stringify(result.payload));
   assert.equal(result.payload.createdPeople, 0);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, 2);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 1);
 
   const personId = database.prepare("SELECT id FROM crm_people").get().id;
   result = await responseJson(await api(database, `/api/admin/crm/people/${personId}`));
   assert.equal(result.response.status, 200);
   assert.equal(result.payload.person.netSpendCents, 4_500);
-  assert.equal(result.payload.person.interactionCount, 1);
+  assert.equal(result.payload.person.interactionCount, 2);
 });
 
 test("concurrent phone-only appointment backfills reserve one source owner", async () => {
@@ -4042,13 +4150,13 @@ test("historical backfill repairs a cancelled ticket after paid and refunded evi
   assert.equal(result.response.status, 200, JSON.stringify(result.payload));
   assert.equal(database.prepare(`
     SELECT COUNT(*) count FROM crm_people
-  `).get().count, 0);
+  `).get().count, 1);
   assert.equal(database.prepare(`
     SELECT COUNT(*) count
     FROM crm_transactions
     WHERE source_provider='local' AND source_type='event_ticket_payment'
       AND source_id='ticket-lifecycle-backfill'
-  `).get().count, 0);
+  `).get().count, 1);
 
   database.prepare(`
     UPDATE event_tickets
@@ -4154,7 +4262,7 @@ test("CRM provider status reports integration readiness without exposing credent
   assert.equal(serialized.includes("beehiiv-test-key"), false);
 });
 
-test("Shopify customer profiles alone cannot create People records", async () => {
+test("Shopify customer profiles with a name and email create People records", async () => {
   const database = migratedDatabase();
   const shopifyEnv = {
     SHOPIFY_STORE_DOMAIN: "construct-test.myshopify.com",
@@ -4181,8 +4289,16 @@ test("Shopify customer profiles alone cannot create People records", async () =>
             nodes: [{
               id: "gid://shopify/Customer/profile-only",
               displayName: "Profile Only",
-              email: "profile-only@example.test",
-              phone: "+14045550111",
+              defaultEmailAddress: {
+                emailAddress: "profile-only@example.test",
+                marketingState: "NOT_SUBSCRIBED",
+                marketingUpdatedAt: "2026-07-01T12:00:00.000Z",
+              },
+              defaultPhoneNumber: {
+                phoneNumber: "+14045550111",
+                marketingState: "NOT_SUBSCRIBED",
+                marketingUpdatedAt: "2026-07-01T12:00:00.000Z",
+              },
               createdAt: "2026-07-01T12:00:00.000Z",
               updatedAt: "2026-07-01T12:00:00.000Z",
               tags: [],
@@ -4202,9 +4318,27 @@ test("Shopify customer profiles alone cannot create People records", async () =>
   })));
   assert.equal(result.response.status, 200, JSON.stringify(result.payload));
   assert.equal(result.payload.status, "complete");
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_identities").get().count, 0);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, 0);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT display_name,eligibility_reason,eligibility_source_provider,
+        eligibility_source_type
+      FROM crm_people
+    `).get() },
+    {
+      display_name: "Profile Only",
+      eligibility_reason: "website_booking",
+      eligibility_source_provider: "shopify",
+      eligibility_source_type: "customer",
+    },
+  );
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE kind='email' AND normalized_value='profile-only@example.test' AND active=1
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_interactions
+    WHERE source_provider='shopify' AND source_type='customer'
+  `).get().count, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 0);
 });
 
