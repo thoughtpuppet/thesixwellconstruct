@@ -112,10 +112,13 @@ test("Studio creation never requires or invents a Shopify handle",async()=>{
 });
 
 test("shared Merch routes and alert forms stay contractually connected",()=>{
-  const worker=readFileSync(join(ROOT,"_worker.js"),"utf8"),catalog=readFileSync(join(ROOT,"js","shop-storefront.js"),"utf8"),detail=readFileSync(join(ROOT,"merch","detail","index.html"),"utf8"),alertsCss=readFileSync(join(ROOT,"css","merch-alerts.css"),"utf8"),merchApi=readFileSync(join(ROOT,"functions","api","merch","_lib.js"),"utf8");
-  assert.match(worker,/serveMerchRecordPage/);assert.match(worker,/status: 410/);assert.match(worker,/merch\/marbles-print\.html/);
+  const worker=readFileSync(join(ROOT,"_worker.js"),"utf8"),catalog=readFileSync(join(ROOT,"js","shop-storefront.js"),"utf8"),detail=readFileSync(join(ROOT,"merch","detail","index.html"),"utf8"),detailCss=readFileSync(join(ROOT,"css","merch-detail.css"),"utf8"),alertsCss=readFileSync(join(ROOT,"css","merch-alerts.css"),"utf8"),merchApi=readFileSync(join(ROOT,"functions","api","merch","_lib.js"),"utf8");
+  assert.match(worker,/serveMerchRecordPage/);assert.match(worker,/lostmarbleshoodie:\s*"lostmarbles-hoodie"/);assert.match(worker,/status: 410/);assert.match(worker,/merch\/marbles-print\.html/);
   assert.doesNotMatch(catalog,/PLACEHOLDER_PRODUCTS/);assert.match(catalog,/setupLaunchAlertForms\(grid\)/);
   assert.match(detail,/id="merch-record-data"/);assert.match(detail,/css\/merch-detail\.css/);assert.match(detail,/js\/merch-detail\.js/);
+  assert.doesNotMatch(detail,/<style>/);assert.doesNotMatch(detail,/Marbles\. Print/);assert.match(detail,/class="product-image"/);assert.match(detail,/class="product-details"/);assert.match(detail,/id="launchAlertSlot"/);
+  assert.match(detailCss,/grid-template-columns:1fr 1fr/);assert.match(detailCss,/\.product-image\s*\{/);assert.match(detailCss,/position:sticky; top:73px/);assert.match(detailCss,/\.origin-inner\s*\{/);assert.match(detailCss,/\.cart-drawer\s*\{/);
+  assert.doesNotMatch(detailCss,/\.merch-top/);assert.doesNotMatch(detailCss,/\.product-copy/);
   assert.match(alertsCss,/grid-template-columns:1fr!important/);assert.match(merchApi,/AbortSignal\.timeout\(4000\)/);
 });
 

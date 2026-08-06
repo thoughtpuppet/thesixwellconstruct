@@ -1,80 +1,183 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title data-merch-record-title>Merch product · the six.well construct</title>
-  <meta data-merch-record-description name="description" content="A published product from Six.Well Merch.">
-  <link data-merch-record-canonical rel="canonical" href="https://thesixwellconstruct.com/merch/">
-  <link rel="stylesheet" href="/css/tokens.css">
-  <link rel="stylesheet" href="/css/site-typography.css">
-  <link rel="stylesheet" href="/css/hero.css">
-  <link rel="stylesheet" href="/css/transitions.css">
-  <link rel="stylesheet" href="/css/merch-detail.css">
-  <link rel="stylesheet" href="/css/merch-alerts.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-merch-record-title>Merch product · the six.well construct</title>
+<meta data-merch-record-description name="description" content="A published product from Six.Well Merch.">
+<link data-merch-record-canonical rel="canonical" href="https://thesixwellconstruct.com/merch/">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+
+<link rel="stylesheet" href="/css/merch-detail.css">
+<link rel="stylesheet" href="/css/merch-alerts.css">
+<link rel="stylesheet" href="/css/mobile.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 </head>
-<body data-venture="merch">
-  <header class="merch-top">
-    <a href="/home/" class="merch-wordmark">the six.well construct</a>
-    <button class="cart-toggle" id="cartToggle" type="button" aria-label="Open cart">cart <span id="cartCount">0</span></button>
+<body data-venture="merch" data-product-slug data-construct-entity>
+
+  <script>
+  (function(){
+    var o = document.createElement('div');
+    o.id = 'construct-fade';
+    o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;';
+    document.body.appendChild(o);
+  })();
+  </script>
+
+  <div class="grain"></div>
+
+  <header class="top">
+    <div></div>
+    <div class="header-right">
+      <button class="cart-toggle" id="cartToggle" type="button" aria-label="open cart">
+        <span class="cart-label">cart</span>
+        <span class="cart-count" id="cartCount">0</span>
+      </button>
+    </div>
   </header>
 
-  <nav class="breadcrumb" aria-label="Breadcrumb">
-    <a href="/home/">construct</a><span>/</span><a href="/merch/">merch</a><span>/</span><span id="breadcrumbCurrent">product</span>
+  <nav class="breadcrumb" aria-label="breadcrumb">
+    <a href="/home/">construct</a>
+    <span class="breadcrumb-sep">/</span>
+    <a href="/merch/">merch</a>
+    <span class="breadcrumb-sep">/</span>
+    <a id="breadcrumbSource" href="/merch/">source</a>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current" id="breadcrumbCurrent">product</span>
   </nav>
 
-  <main id="productRoot">
+  <main>
     <section class="product-hero site-hero site-hero--supporting">
-      <div class="product-media" id="productMedia">
-        <span class="catalog-number" id="catalogNumber"></span>
-        <img id="productImage" alt="" hidden>
-        <span class="product-placeholder" id="productPlaceholder">Six.Well Merch</span>
-      </div>
-      <div class="product-copy">
-        <p class="source-label" id="sourceLabel">Six.Well Merch</p>
-        <h1 class="hero-title" id="productTitle">Merch product</h1>
-        <p class="hero-descriptor" id="productDescriptor">Loading product details.</p>
-        <p class="product-edition" id="productEdition"></p>
-        <p class="product-price" id="productPrice"></p>
-        <div id="commerceControls"></div>
-        <div id="launchAlertSlot"></div>
-        <p class="product-note" id="shippingNote"></p>
-      </div>
-    </section>
-
-    <section class="product-story" id="productStory" hidden>
-      <p class="section-label">about.</p>
-      <p id="productDescription"></p>
-    </section>
-
-    <section class="product-origin" id="productOrigin" hidden>
-      <p class="section-label">origin.</p>
-      <div class="origin-grid">
-        <img id="originImage" alt="" hidden>
-        <div>
-          <h2 id="originTitle"></h2>
-          <p id="originMeta"></p>
-          <a id="originLink" class="product-link">Open the source work <span aria-hidden="true">→</span></a>
+      <div class="product-image">
+        <div class="product-gallery-shell">
+          <div class="product-image-main">
+            <span class="img-plaque" id="catalogNumber"></span>
+            <img id="productHeroImage" alt="LOST MARBLES. Hoodie">
+            <span class="img-placeholder" id="productImagePlaceholder">product image</span>
+            <span class="img-edition" id="imageEdition"></span>
+          </div>
+          <div class="product-gallery" id="productGallery" aria-label="product gallery"></div>
         </div>
       </div>
+
+      <div class="product-details">
+        <div class="product-source">
+          <span class="source-dot" id="sourceDot"></span>
+          <span class="source-label" id="sourceLabel">thoughtpuppet</span>
+        </div>
+
+        <h1 class="product-name hero-title" id="productName">LOST MARBLES. HOODIE</h1>
+        <p class="hero-descriptor" id="productDescription"></p>
+        <p class="product-price" id="productPrice">$130</p>
+        <p class="product-edition" id="productEdition">limited edition &mdash; 30 pieces</p>
+
+        <div id="commerceControls">
+          <p class="selector-label">colorway</p>
+          <div class="color-row" id="colorRow">
+            <span class="color-name" id="colorLabel"></span>
+          </div>
+
+          <p class="selector-label">size</p>
+          <div class="size-grid" id="sizeGrid"></div>
+          <p class="size-required" id="sizeRequired">select a size</p>
+
+          <a class="size-guide" href="#">size guide</a>
+
+          <button class="add-btn" id="addBtn">
+            <span>add to cart</span>
+            <span class="arrow">&rarr;</span>
+          </button>
+          <p class="product-note" id="purchaseStatus"></p>
+        </div>
+        <div id="launchAlertSlot"></div>
+        <p class="product-note" id="shippingNote"></p>
+
+        <section class="origin" id="productOrigin" hidden>
+          <hr class="section-divider">
+          <p class="origin-label" data-copy-id="lostmarbles-hoodie-origin-label">origin.</p>
+          <div class="origin-inner">
+            <div class="painting-frame">
+              <img id="originThumb" src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
+                   alt="AM I LOSING MY MARBLES OR HIDING THEM?">
+            </div>
+
+            <div class="painting-info">
+              <h2 class="painting-name" id="originTitle">AM I LOSING MY MARBLES OR HIDING THEM?</h2>
+              <p class="painting-meta" id="originMeta">2023 &middot; acrylic on wood panel</p>
+              <a class="painting-link" id="originLink" href="/art/lostmarblespainting.html">
+                <span>learn more about the painting that inspired this product</span>
+                <span class="arrow">&rarr;</span>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section class="related" id="productRelated" hidden>
+          <hr class="section-divider">
+          <p class="section-label" data-copy-id="lostmarbles-hoodie-related-label">also from this work.</p>
+          <div class="related-row" id="relatedRow">
+            <a class="related-card" href="/art/lostmarblespainting.html">
+              <div class="related-frame">
+                <img src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
+                     alt="AM I LOSING MY MARBLES OR HIDING THEM?">
+              </div>
+              <div class="related-info">
+                <p class="related-type" data-copy-id="lostmarbles-hoodie-related-painting-type">original painting</p>
+                <p class="related-name" data-copy-id="lostmarbles-hoodie-related-painting-name">AM I LOSING MY MARBLES OR HIDING THEM?</p>
+                <p class="related-price" data-copy-id="lostmarbles-hoodie-related-painting-price">price on request</p>
+              </div>
+            </a>
+          </div>
+        </section>
+
+        <section class="origin" id="productArchive" hidden>
+          <hr class="section-divider">
+          <p class="origin-label">archive.</p>
+          <a class="painting-link" id="archiveLink" href="#">
+            <span>explore this edition, its source painting, and its history</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+        </section>
+      </div>
     </section>
 
-    <section class="product-related" id="productRelated" hidden>
-      <p class="section-label">connected.</p>
-      <div class="related-grid" id="relatedGrid"></div>
-    </section>
+    <footer class="bottom">
+      <p>&copy; the six.well construct</p>
+      <a href="/merch">&larr; back to merch</a>
+    </footer>
   </main>
-
-  <footer class="merch-bottom"><p>© the six.well construct</p><a href="/merch/">back to merch</a></footer>
 
   <div class="cart-overlay" id="cartOverlay"></div>
   <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
-    <div class="drawer-header"><strong>cart</strong><button id="drawerClose" type="button" aria-label="Close cart">×</button></div>
-    <div class="drawer-items" id="drawerItems"><p class="drawer-empty">cart is empty</p></div>
-    <div class="drawer-footer"><p>subtotal <strong id="subtotal">$0</strong></p><button id="checkoutBtn" type="button" disabled>proceed to checkout</button><p id="checkoutStatus" aria-live="polite"></p></div>
+    <div class="drawer-header">
+      <span class="title">cart</span>
+      <button class="drawer-close" id="drawerClose" type="button" aria-label="close cart">&times;</button>
+    </div>
+    <div class="drawer-items" id="drawerItems">
+      <p class="drawer-empty">cart is empty</p>
+    </div>
+    <div class="drawer-footer">
+      <div class="subtotal">
+        <span class="subtotal-label">subtotal</span>
+        <span class="subtotal-val" id="subtotal">$0</span>
+      </div>
+      <button class="checkout-btn" id="checkoutBtn" type="button" disabled>proceed to checkout</button>
+      <p class="drawer-status" id="checkoutStatus" aria-live="polite"></p>
+      <p class="drawer-note">shipping &amp; taxes calculated at checkout</p>
+    </div>
   </aside>
 
   <script id="merch-record-data" type="application/json"></script>
   <script type="module" src="/js/merch-detail.js"></script>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+
 </body>
 </html>

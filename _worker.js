@@ -390,6 +390,9 @@ const LEGEND_RECORD_RESERVED_SLUGS = new Set([
 
 const ART_RECORD_RESERVED_SLUGS = new Set(["acquisitioninquiry", "detail", "index"]);
 const MERCH_RECORD_RESERVED_SLUGS = new Set(["alerts", "detail", "index"]);
+const MERCH_RECORD_ALIASES = {
+  lostmarbleshoodie: "lostmarbles-hoodie",
+};
 const ART_LEGACY_PAGE_SLUGS = new Set([
   "homelandsecuritypainting",
   "lostmarblespainting",
@@ -558,6 +561,7 @@ async function serveArtPreviewPage(request, env) {
 }
 
 async function serveMerchRecordPage(request, env, slug) {
+  slug = MERCH_RECORD_ALIASES[slug] || slug;
   const apiUrl = new URL(`/api/shop/items/${encodeURIComponent(slug)}`, request.url);
   const apiResponse = await handleMerchItem(new Request(apiUrl, { method: "GET", headers: { accept: "application/json" } }), env, slug);
   if (apiResponse.status === 404) return notFoundPage(request, env);
@@ -591,6 +595,7 @@ async function legacyMerchResponse(request, env, pathname) {
     "/merch/lostmarbles-hoodie.html": "lostmarbles-hoodie",
     "/merch/marbles-print.html": "marbles-print",
     "/merch/maze-puffer-jacket.html": "maze-puffer-jacket",
+    "/merch/six-well-clothing.html": "six-well-clothing",
   }[pathname];
   if (!legacy) return null;
   const probe = await handleMerchItem(new Request(new URL(`/api/shop/items/${legacy}`, request.url), { method: "GET" }), env, legacy);
