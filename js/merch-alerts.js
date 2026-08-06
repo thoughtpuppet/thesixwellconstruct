@@ -1,21 +1,39 @@
 export const MERCH_ALERT_DISCLOSURE_VERSION = "merch-alert-v1-2026-08-05";
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[character]));
+}
+
 export function launchAlertMarkup(product, compact = false) {
-  return `<form class="launch-alert${compact ? " launch-alert--compact" : ""}" data-launch-alert data-product-slug="${product.slug}">
-    <h2>Notify me when this launches.</h2>
-    <label>Email address<input name="email" type="email" autocomplete="email" required></label>
-    <label class="launch-alert-check"><input name="newsletter" type="checkbox"> <span>Also send me the Six.Well newsletter. This is optional and requires its own email confirmation.</span></label>
-    <input name="company" tabindex="-1" autocomplete="off" aria-hidden="true" class="form-honeypot">
-    <button class="launch-alert-submit" type="submit"><span>Request launch alert</span><span aria-hidden="true">→</span></button>
-    <p class="launch-alert-disclosure">One email when this product launches. Confirm through the email sent after signup. The newsletter choice is separate.</p>
-    <p class="launch-alert-status" aria-live="polite"></p>
-  </form>`;
+  const slug = escapeHtml(product.slug);
+  const panelId = `launch-alert-${compact ? "card" : "detail"}-${slug}`;
+  return `<div class="launch-alert${compact ? " launch-alert--compact" : ""}" data-launch-alert data-product-slug="${slug}">
+    <button class="launch-alert-toggle" type="button" aria-expanded="false" aria-controls="${panelId}" data-launch-alert-toggle>
+      <span>Notify me when this launches.</span><span class="launch-alert-toggle-mark" aria-hidden="true">+</span>
+    </button>
+    <form class="launch-alert-form" id="${panelId}" data-launch-alert-form hidden>
+      <label>Email address<input name="email" type="email" autocomplete="email" required></label>
+      <label class="launch-alert-check"><input name="newsletter" type="checkbox"> <span>Also send me the Six.Well newsletter. This is optional and requires its own email confirmation.</span></label>
+      <input name="company" tabindex="-1" autocomplete="off" aria-hidden="true" class="form-honeypot">
+      <button class="launch-alert-submit" type="submit"><span>Request launch alert</span><span aria-hidden="true">→</span></button>
+      <p class="launch-alert-disclosure">One email when this product launches. Confirm through the email sent after signup. The newsletter choice is separate.</p>
+      <p class="launch-alert-status" aria-live="polite"></p>
+    </form>
+  </div>`;
 }
 
 export function setupLaunchAlertForms(scope = document) {
-  scope.querySelectorAll("[data-launch-alert]").forEach((form) => {
-    if (form.dataset.ready === "true") return;
-    form.dataset.ready = "true";
+  scope.querySelectorAll("[data-launch-alert]").forEach((alert) => {
+    if (alert.dataset.ready === "true") return;
+    alert.dataset.ready = "true";
+    const toggle = alert.querySelector("[data-launch-alert-toggle]");
+    const form = alert.querySelector("[data-launch-alert-form]");
+    toggle.addEventListener("click", () => {
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!expanded));
+      form.hidden = expanded;
+      if (!expanded) form.querySelector('input[name="email"]')?.focus();
+    });
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const status = form.querySelector(".launch-alert-status");
@@ -29,7 +47,7 @@ export function setupLaunchAlertForms(scope = document) {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            slug: form.dataset.productSlug,
+            slug: alert.dataset.productSlug,
             email: data.get("email"),
             newsletterOptIn: data.get("newsletter") === "on",
             disclosureVersion: MERCH_ALERT_DISCLOSURE_VERSION,

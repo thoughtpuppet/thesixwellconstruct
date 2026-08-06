@@ -12,6 +12,7 @@ import {
   handleMerchCatalog,
   handleMerchItem,
 } from "../functions/api/merch/_lib.js";
+import { launchAlertMarkup } from "../js/merch-alerts.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -116,4 +117,15 @@ test("shared Merch routes and alert forms stay contractually connected",()=>{
   assert.doesNotMatch(catalog,/PLACEHOLDER_PRODUCTS/);assert.match(catalog,/setupLaunchAlertForms\(grid\)/);
   assert.match(detail,/id="merch-record-data"/);assert.match(detail,/css\/merch-detail\.css/);assert.match(detail,/js\/merch-detail\.js/);
   assert.match(alertsCss,/grid-template-columns:1fr!important/);assert.match(merchApi,/AbortSignal\.timeout\(4000\)/);
+});
+
+test("launch-alert disclosure is collapsed until its accessible toggle is activated",()=>{
+  const html=launchAlertMarkup({slug:"maze-puffer-jacket"},true);
+  const detailHtml=launchAlertMarkup({slug:"maze-puffer-jacket"});
+  assert.match(html,/data-launch-alert-toggle/);assert.match(html,/aria-expanded="false"/);
+  assert.match(html,/aria-controls="launch-alert-card-maze-puffer-jacket"/);
+  assert.match(html,/data-launch-alert-form hidden/);assert.match(html,/type="button"/);
+  assert.ok(html.indexOf("Notify me when this launches.")<html.indexOf("Email address"));
+  assert.match(detailHtml,/aria-controls="launch-alert-detail-maze-puffer-jacket"/);
+  assert.match(detailHtml,/id="launch-alert-detail-maze-puffer-jacket" data-launch-alert-form hidden/);
 });
