@@ -451,6 +451,15 @@
   .special-project-media-identity > div { min-width:0; overflow-wrap:anywhere; }
   .special-project-media-thumb { width:64px; height:64px; flex:none; object-fit:cover; border:5px solid var(--ring-faint); background:var(--bg); }
   .special-project-media-thumb:not([src]) { opacity:.4; }
+  .special-project-card-crop { grid-column:1/-1; display:grid; grid-template-columns:minmax(150px,220px) minmax(0,1fr); gap:14px; align-items:start; padding-top:8px; border-top:5px solid var(--ring-faint); }
+  .special-project-card-crop[hidden] { display:none!important; }
+  .special-project-card-crop-preview { aspect-ratio:3/4; overflow:hidden; border:5px solid var(--ring-faint); background:var(--bg); }
+  .special-project-card-crop-preview img { display:block; width:100%; height:100%; object-fit:cover; }
+  .special-project-card-crop-preview img:not([src]) { opacity:.4; }
+  .special-project-card-crop-controls { display:grid; gap:12px; }
+  .special-project-card-crop-controls label { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 12px; align-items:center; }
+  .special-project-card-crop-controls input { grid-column:1/-1; width:100%; }
+  .special-project-card-crop-controls output { color:var(--accent); font-family:var(--mono); }
   .special-project-upload { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:10px; align-items:end; margin-top:12px; padding:12px; border:5px solid var(--ring-faint); }
   .special-project-upload > .contact,
   .special-project-upload > [data-special-media-upload-status] { grid-column:1/-1; }
@@ -495,6 +504,8 @@
     .tattoo-settings-row.special-series { grid-template-columns:1fr; }
     .special-project-media-row { grid-template-columns:minmax(0,1fr); }
     .special-project-media-row > label[style] { grid-column:auto!important; }
+    .special-project-card-crop { grid-template-columns:1fr; }
+    .special-project-card-crop-preview { width:min(100%,240px); }
     .special-project-upload { grid-template-columns:minmax(0,1fr); }
     .special-project-upload > .contact,
     .special-project-upload > [data-special-media-upload-status] { grid-column:auto; }
@@ -3106,12 +3117,38 @@
     const mediaId = item.id || item.mediaId || item.media_id || "";
     const asset = specialProjectMediaAssets.find((candidate) => candidate.id === mediaId) || {};
     const label = asset.title || asset.original_filename || asset.originalFilename || mediaId;
+    const focalX = Math.max(0, Math.min(100, Math.round(Number(item.cardFocalX ?? item.card_focal_x ?? 50) || 0)));
+    const focalY = Math.max(0, Math.min(100, Math.round(Number(item.cardFocalY ?? item.card_focal_y ?? 50) || 0)));
+    const isPrimary = item.role === "primary";
     return `<div class="special-project-media-row" data-special-media data-media-id="${escapeHtml(mediaId)}">
       <div class="special-project-media-identity">${mediaId ? `<img class="special-project-media-thumb" data-special-media-preview="${escapeHtml(mediaId)}" alt="" aria-hidden="true">` : ""}<div><strong>${escapeHtml(label)}</strong><br><span class="contact">${escapeHtml(mediaId)}</span></div></div>
-      <label>Role<select data-special-media-role><option value="gallery" ${item.role !== "primary" ? "selected" : ""}>Gallery</option><option value="primary" ${item.role === "primary" ? "selected" : ""}>Primary</option></select></label>
+      <label>Role<select data-special-media-role><option value="gallery" ${isPrimary ? "" : "selected"}>Gallery</option><option value="primary" ${isPrimary ? "selected" : ""}>Primary</option></select></label>
       <div class="booking-actions"><button class="button" type="button" data-move-special-media="up" aria-label="Move media up">↑</button><button class="button" type="button" data-move-special-media="down" aria-label="Move media down">↓</button><button class="button danger-button" type="button" data-remove-special-media aria-label="Remove media">Remove</button></div>
       <label style="grid-column:1/-1;">Project-specific alt text<input data-special-media-alt value="${escapeHtml(item.alt || item.altText || item.alt_text_override || "")}" maxlength="1000"></label>
+      <div class="special-project-card-crop" data-special-card-crop ${isPrimary ? "" : "hidden"}>
+        <div class="special-project-card-crop-preview">${mediaId ? `<img data-special-media-preview="${escapeHtml(mediaId)}" data-special-card-crop-image alt="3 by 4 card crop preview" style="object-position:${focalX}% ${focalY}%">` : ""}</div>
+        <div class="special-project-card-crop-controls">
+          <p class="contact">Card crop only. The project gallery and isolated-image view continue to show the complete image.</p>
+          <label>Horizontal focal point <output data-special-card-focal-x-output>${focalX}%</output><input data-special-card-focal-x type="range" min="0" max="100" step="1" value="${focalX}"></label>
+          <label>Vertical focal point <output data-special-card-focal-y-output>${focalY}%</output><input data-special-card-focal-y type="range" min="0" max="100" step="1" value="${focalY}"></label>
+        </div>
+      </div>
     </div>`;
+  }
+
+  function syncSpecialProjectCardCrop(row) {
+    if (!row) return;
+    const crop = row.querySelector("[data-special-card-crop]");
+    if (!crop) return;
+    crop.hidden = row.querySelector("[data-special-media-role]")?.value !== "primary";
+    const x = Math.max(0, Math.min(100, Math.round(Number(row.querySelector("[data-special-card-focal-x]")?.value ?? 50))));
+    const y = Math.max(0, Math.min(100, Math.round(Number(row.querySelector("[data-special-card-focal-y]")?.value ?? 50))));
+    const image = row.querySelector("[data-special-card-crop-image]");
+    if (image) image.style.objectPosition = `${x}% ${y}%`;
+    const xOutput = row.querySelector("[data-special-card-focal-x-output]");
+    const yOutput = row.querySelector("[data-special-card-focal-y-output]");
+    if (xOutput) xOutput.textContent = `${x}%`;
+    if (yOutput) yOutput.textContent = `${y}%`;
   }
 
   const specialProjectUploadTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -3263,6 +3300,8 @@
       media: [...row.querySelectorAll("[data-special-media]")].map((item, mediaIndex) => ({
         id: item.dataset.mediaId,
         role: item.querySelector("[data-special-media-role]")?.value || "gallery",
+        cardFocalX: Number(item.querySelector("[data-special-card-focal-x]")?.value ?? 50),
+        cardFocalY: Number(item.querySelector("[data-special-card-focal-y]")?.value ?? 50),
         alt: item.querySelector("[data-special-media-alt]")?.value.trim() || "",
         sortOrder: mediaIndex,
       })),
@@ -6935,6 +6974,11 @@ ${meetingLines}
     });
   });
 
+  detailEl.addEventListener("input", (event) => {
+    if (!event.target.matches("[data-special-card-focal-x], [data-special-card-focal-y]")) return;
+    syncSpecialProjectCardCrop(event.target.closest("[data-special-media]"));
+  });
+
   detailEl.addEventListener("change", (event) => {
     if (event.target.matches("[data-special-series]") && event.target.value === "__create__") {
       addSpecialProjectSeriesEditor(event.target.closest("[data-special-projects-form]"), event.target.closest("[data-special-project]"));
@@ -6944,10 +6988,14 @@ ${meetingLines}
       syncSpecialProjectEditorRequirements(event.target.closest("[data-special-project]"));
       return;
     }
-    if (event.target.matches("[data-special-media-role]") && event.target.value === "primary") {
-      event.target.closest("[data-special-project]")?.querySelectorAll("[data-special-media-role]").forEach((select) => {
-        if (select !== event.target) select.value = "gallery";
-      });
+    if (event.target.matches("[data-special-media-role]")) {
+      const project = event.target.closest("[data-special-project]");
+      if (event.target.value === "primary") {
+        project?.querySelectorAll("[data-special-media-role]").forEach((select) => {
+          if (select !== event.target) select.value = "gallery";
+        });
+      }
+      project?.querySelectorAll("[data-special-media]").forEach(syncSpecialProjectCardCrop);
       return;
     }
     if (event.target.id === "textTemplateSelect" && activeId) {

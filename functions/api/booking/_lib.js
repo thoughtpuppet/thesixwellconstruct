@@ -7756,6 +7756,8 @@ function normalizeSpecialProjectCall(row, media = [], series = null) {
       id: item.media_id,
       role: item.role || "gallery",
       sortOrder: Number(item.sort_order || 0),
+      cardFocalX: Number(item.card_focal_x ?? 50),
+      cardFocalY: Number(item.card_focal_y ?? 50),
       alt: item.alt_text_override || item.alt_text || "",
       caption: item.caption || "",
       url: item.source_url || (item.storage_key ? `/api/construct/media/${encodeURIComponent(item.media_id)}` : ""),
@@ -8081,11 +8083,21 @@ export async function handleAdminTattooSettings(request, env) {
         const item = media[index] || {};
         const mediaId = asString(item.id || item.mediaId || item.media_id);
         if (!mediaId || seenMedia.has(mediaId)) continue;
+        const rawFocalX = item.cardFocalX ?? item.card_focal_x ?? 50;
+        const rawFocalY = item.cardFocalY ?? item.card_focal_y ?? 50;
+        const focalX = Number(rawFocalX);
+        const focalY = Number(rawFocalY);
+        if (!Number.isFinite(focalX) || focalX < 0 || focalX > 100
+          || !Number.isFinite(focalY) || focalY < 0 || focalY > 100) {
+          return errorResponse("Special Project card focal positions must be numbers from 0 to 100.", 400);
+        }
         seenMedia.add(mediaId);
         normalizedMedia.push({
           id: mediaId,
           role: asString(item.role) === "primary" ? "primary" : "gallery",
           sortOrder: asPositiveInteger(item.sortOrder ?? item.sort_order, index),
+          cardFocalX: Math.round(focalX),
+          cardFocalY: Math.round(focalY),
           alt: asString(item.alt || item.altText || item.alt_text_override).slice(0, 1000),
         });
       }
@@ -8163,9 +8175,9 @@ export async function handleAdminTattooSettings(request, env) {
       for (const item of normalizedMedia) {
         statements.push(db.prepare(
           `INSERT INTO special_project_call_media
-           (project_id,media_id,role,sort_order,alt_text_override,created_at,updated_at)
-           VALUES (?,?,?,?,?,?,?)`
-        ).bind(id, item.id, item.role, item.sortOrder, item.alt, now, now));
+           (project_id,media_id,role,sort_order,card_focal_x,card_focal_y,alt_text_override,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?)`
+        ).bind(id, item.id, item.role, item.sortOrder, item.cardFocalX, item.cardFocalY, item.alt, now, now));
       }
     }
 

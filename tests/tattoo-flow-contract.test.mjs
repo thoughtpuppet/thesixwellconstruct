@@ -146,6 +146,12 @@ test("Studio gives Special Projects a dedicated tab with direct Shared Media upl
   assert.match(source, /upload\.append\("public_presentation", "inline"\)/);
   assert.match(source, /role: hasPrimary \? "gallery" : "primary"/);
   assert.match(source, /data-special-media-preview="\$\{escapeHtml\(mediaId\)\}"/);
+  assert.match(source, /data-special-card-crop/);
+  assert.match(source, /data-special-card-crop-image/);
+  assert.match(source, /data-special-card-focal-x type="range" min="0" max="100"/);
+  assert.match(source, /data-special-card-focal-y type="range" min="0" max="100"/);
+  assert.match(source, /cardFocalX: Number\(item\.querySelector\("\[data-special-card-focal-x\]"\)/);
+  assert.match(source, /project\?\.querySelectorAll\("\[data-special-media\]"\)\.forEach\(syncSpecialProjectCardCrop\)/);
   assert.match(source, /fetch\(`\/api\/admin\/media\/\$\{encodeURIComponent\(image\.dataset\.specialMediaPreview\)\}\/file`/);
   assert.match(source, /headers: \{ authorization: `Bearer \$\{token\}` \}/);
   assert.match(source, /const projects = specialProjectsFromForm\(specialProjectsForm\);/);
@@ -161,13 +167,20 @@ test("Studio gives Special Projects a dedicated tab with direct Shared Media upl
   assert.doesNotMatch(settingsRenderer, /data-add-special-project/);
 });
 
-test("Special Projects expose public Series filtering while applications still target one project", () => {
+test("Special Projects expose a focal-aware card grid, Series filtering, and one selected application", () => {
   const source = readFileSync(join(ROOT, "tattoos", "special-projects", "index.html"), "utf8");
   assert.match(source, /id="seriesFilter" aria-label="Filter Special Projects by series"/);
-  assert.match(source, /function setSeriesFilter\(slug, projectKey\)/);
+  assert.match(source, /function setSeriesFilter\(slug, projectKey, options\)/);
   assert.match(source, /params\.get\("series"\)/);
   assert.match(source, /url\.searchParams\.set\("series", activeSeriesSlug\)/);
   assert.match(source, /seriesName\.onclick = function\(\) \{ setSeriesFilter\(series\.slug, keyFor\(project\)\); \}/);
+  assert.match(source, /\.project-card-grid \{\s*display:grid; grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\s*gap:16px/);
+  assert.match(source, /@media \(max-width:600px\) \{\s*\.project-card-grid \{ grid-template-columns:1fr; \}/);
+  assert.match(source, /\.project-card-media \{[\s\S]*aspect-ratio:3\/4/);
+  assert.match(source, /image\.style\.objectPosition = cardFocal\(primaryMedia\.cardFocalX\) \+ "% " \+ cardFocal\(primaryMedia\.cardFocalY\) \+ "%"/);
+  assert.match(source, /apply\.href = projectUrl\(project, "#application"\)/);
+  assert.match(source, /hasRequestedProject && requestedRecord \? "detail"/);
+  assert.doesNotMatch(source, /id="projectSelect"/);
   assert.match(source, /document\.getElementById\("applicationProjectId"\)\.value = project\.id/);
   assert.match(source, /document\.getElementById\("applicationProjectSlug"\)\.value = project\.slug/);
   assert.match(source, /series\.cover\.url/);
@@ -1951,7 +1964,12 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
      VALUES(?,?,?,?,?,'public','granted','active','inline','test',?,?)`
   ).run("project-media-b", "https://example.test/b.jpg", "b.jpg", "image/jpeg", "Second view", now, now);
   const adminToken = "special-project-settings-admin";
-  const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSIONS_ADMIN_TOKEN: adminToken };
+  const localD1 = new LocalD1(database);
+  const writeBatch = localD1.batch.bind(localD1);
+  localD1.batch = async (statements) => statements.every((statement) => /^\s*SELECT\b/i.test(statement.sql))
+    ? Promise.all(statements.map((statement) => statement.all()))
+    : writeBatch(statements);
+  const env = { SUBMISSIONS_DB: localD1, SUBMISSIONS_ADMIN_TOKEN: adminToken };
   const save = await handleAdminTattooSettings(draftRequest(
     "/api/admin/tattoo/settings",
     "PATCH",
@@ -1969,7 +1987,7 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
         closesAt: "2026-12-01T12:00:00.000Z",
         participationTerms: "Attend and provide healed documentation.",
         media: [
-          { id: "project-media-b", role: "primary", sortOrder: 0 },
+          { id: "project-media-b", role: "primary", sortOrder: 0, cardFocalX: 28.6, cardFocalY: 74.2 },
           { id: "project-media-a", role: "gallery", sortOrder: 1 },
         ],
       }],
@@ -1983,11 +2001,26 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
   assert.equal(saved.refundable_deposit_cents, 12500);
   assert.equal(saved.healed_photo_due_weeks, 8);
   assert.deepEqual(database.prepare(
-    "SELECT media_id,role FROM special_project_call_media WHERE project_id='free-lines' ORDER BY sort_order"
-  ).all().map((item) => [item.media_id, item.role]), [
-    ["project-media-b", "primary"],
-    ["project-media-a", "gallery"],
+    "SELECT media_id,role,card_focal_x,card_focal_y FROM special_project_call_media WHERE project_id='free-lines' ORDER BY sort_order"
+  ).all().map((item) => [item.media_id, item.role, item.card_focal_x, item.card_focal_y]), [
+    ["project-media-b", "primary", 29, 74],
+    ["project-media-a", "gallery", 50, 50],
   ]);
+  const readSettings = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "GET",
+    undefined,
+    adminToken,
+  ), env);
+  assert.equal(readSettings.status, 200);
+  const savedPayload = await readSettings.json();
+  const savedProject = savedPayload.specialProjects.find((project) => project.id === "free-lines");
+  assert.ok(savedProject, JSON.stringify(savedPayload.specialProjects));
+  const savedPrimary = savedProject.media[0];
+  assert.deepEqual(
+    { cardFocalX: savedPrimary.cardFocalX, cardFocalY: savedPrimary.cardFocalY },
+    { cardFocalX: 29, cardFocalY: 74 },
+  );
   assert.deepEqual(
     { ...database.prepare("SELECT entity_type,node_id,visibility,search_visibility FROM content_entities WHERE id='free-lines'").get() },
     { entity_type: "special_project", node_id: "node-tattoos", visibility: "public", search_visibility: 0 },
@@ -2054,6 +2087,49 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
     adminToken,
   ), env);
   assert.equal(invalid.status, 400);
+
+  const invalidFocal = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    {
+      specialProjects: [{
+        id: "free-lines",
+        slug: "free-lines",
+        title: "Free Lines",
+        profile: "experimental",
+        status: "open",
+        allowedModes: ["fresh"],
+        refundableDepositCents: 12500,
+        participationTerms: "Attend and provide healed documentation.",
+        media: [{ id: "project-media-b", role: "primary", cardFocalX: 101, cardFocalY: 50 }],
+      }],
+    },
+    adminToken,
+  ), env);
+  assert.equal(invalidFocal.status, 400);
+});
+
+test("Special Project card focal migration centers existing attachments and enforces bounds", () => {
+  const migrationName = "0111_special_project_card_focal_points.sql";
+  const database = migratedDatabase({ before: migrationName });
+  const now = new Date().toISOString();
+  database.prepare(
+    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
+     VALUES(?,?,?,?,?,'public','granted','active','inline','test',?,?)`
+  ).run("legacy-card-media", "https://example.test/legacy.jpg", "legacy.jpg", "image/jpeg", "Legacy", now, now);
+  database.prepare(
+    `INSERT INTO special_project_call_media(project_id,media_id,role,sort_order,alt_text_override,created_at,updated_at)
+     VALUES('memory-transfer','legacy-card-media','primary',0,'Legacy',?,?)`
+  ).run(now, now);
+  database.exec(readFileSync(join(ROOT, "migrations", migrationName), "utf8"));
+  assert.deepEqual(
+    { ...database.prepare("SELECT card_focal_x,card_focal_y FROM special_project_call_media WHERE media_id='legacy-card-media'").get() },
+    { card_focal_x: 50, card_focal_y: 50 },
+  );
+  assert.throws(
+    () => database.prepare("UPDATE special_project_call_media SET card_focal_x=101 WHERE media_id='legacy-card-media'").run(),
+    /constraint/i,
+  );
 });
 
 test("Special Project entity IDs reject collisions and application history protects deletion", async () => {
@@ -2533,6 +2609,8 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   assert.ok(columns("special_project_calls").has("refundable_deposit_cents"));
   assert.ok(columns("special_project_calls").has("healed_photo_due_weeks"));
   assert.ok(columns("special_project_calls").has("series_id"));
+  assert.ok(columns("special_project_call_media").has("card_focal_x"));
+  assert.ok(columns("special_project_call_media").has("card_focal_y"));
   assert.ok(columns("special_project_submission_terms").has("series_id"));
   assert.ok(columns("special_project_submission_terms").has("series_name"));
   assert.ok(columns("special_project_submission_terms").has("series_slug"));

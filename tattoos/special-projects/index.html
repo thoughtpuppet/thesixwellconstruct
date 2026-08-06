@@ -90,55 +90,76 @@
   .cta-primary.is-disabled { opacity:0.42; pointer-events:none; }
   .cta-secondary { display:inline-flex; align-items:center; min-height:48px; padding:0 18px; border:5px solid var(--ring-faint); font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); }
   .archive-shell {
-    display:grid; grid-template-columns:minmax(220px,320px) minmax(0,1fr);
-    width:100%;
-    gap:48px; border-top:5px solid var(--ring-faint); background:transparent;
+    width:100%; border-top:5px solid var(--ring-faint); background:transparent;
     padding-top:28px;
   }
-  .project-index {
-    border-right:5px solid var(--ring-faint);
-    padding:26px 0;
-  }
+  .project-overview { width:100%; }
   .index-heading {
     font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
     text-transform:uppercase; color:var(--text-dim);
-    padding:0 26px 22px;
+    margin-bottom:18px;
   }
-  .index-button {
-    width:100%; display:grid; grid-template-columns:42px minmax(0,1fr);
-    gap:16px; text-align:left; padding:18px 26px 18px 25px;
-    border-left:5px solid transparent;
-    transition:background var(--t-fast), color var(--t-fast), padding-left var(--t-fast), border-color var(--t-fast);
+  .project-card-grid {
+    display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:16px; width:100%;
   }
-  .index-button:hover { background:rgba(255,231,202,0.025); }
-  .index-button.is-active {
-    border-left-color:var(--signal);
-    padding-left:35px;
+  .project-card {
+    display:flex; flex-direction:column; min-width:0;
+    border:5px solid var(--ring-faint); background:#0f0f0f;
+    transition:border-color var(--t-fast), background var(--t-fast);
   }
-  .index-button.is-closed { opacity:0.52; }
-  .index-number {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.18em;
-    color:var(--text-dim); padding-top:2px;
+  .project-card:hover { border-color:var(--ring-soft); background:#111; }
+  .project-card.is-active { border-color:var(--signal); }
+  .project-card-select { display:block; min-width:0; }
+  .project-card-select:focus-visible,
+  .project-card-apply:focus-visible {
+    outline:5px solid var(--accent); outline-offset:-5px;
   }
-  .index-title {
-    display:block; font-family:var(--sans); font-weight:900; font-size:13px;
-    letter-spacing:0.08em; line-height:1.2; text-transform:uppercase;
-    color:var(--text-mute);
+  .project-card-media {
+    position:relative; width:100%; aspect-ratio:3/4; overflow:hidden;
+    background:#0c0c0c; border-bottom:5px solid var(--ring-faint);
   }
-  .index-year {
-    display:block; margin-top:7px;
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
-    color:var(--text-dim); text-transform:uppercase;
+  .project-card-media img { display:block; width:100%; height:100%; object-fit:cover; }
+  .project-card-media.is-placeholder::before {
+    content:""; position:absolute; inset:24px; border:5px solid rgba(109,61,21,.36);
   }
-  .index-button.is-active .index-title { color:var(--signal); }
-  .mobile-picker {
-    display:none; width:100%; margin-bottom:24px;
-    appearance:none; background:transparent;
-    border:5px solid var(--ring-faint);
-    color:var(--text);
-    padding:14px 18px;
-    font-family:var(--sans); font-weight:900; font-size:12px;
-    letter-spacing:0.1em; text-transform:uppercase;
+  .project-card-media.is-placeholder::after {
+    content:""; position:absolute; left:50%; top:50%; width:42%; aspect-ratio:1;
+    border:5px solid rgba(110,4,4,.46); transform:translate(-50%,-50%) rotate(38deg);
+  }
+  .project-card-placeholder-label {
+    position:absolute; left:24px; bottom:20px; z-index:1;
+    font-family:var(--serif); font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--text-dim);
+  }
+  .project-card-body { display:grid; gap:10px; padding:18px; }
+  .project-card-series {
+    min-height:1.2em; font-family:var(--serif); font-size:10px; letter-spacing:.18em;
+    text-transform:uppercase; color:var(--text-dim);
+  }
+  .project-card-title {
+    font-family:var(--sans); font-weight:900; font-size:clamp(20px,2.5vw,34px);
+    letter-spacing:-.025em; line-height:1; text-transform:uppercase; color:var(--accent);
+  }
+  .project-card-meta {
+    font-family:var(--serif); font-size:11px; line-height:1.6; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--text-mute);
+  }
+  .project-card-status {
+    justify-self:start; margin-top:4px; padding:8px 10px; border:5px solid var(--ring-soft);
+    font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--text);
+  }
+  .project-card-status[data-status="open"] { border-color:var(--signal); color:var(--accent); }
+  .project-card-status[data-status="closed"] { color:var(--text-dim); }
+  .project-card-open {
+    margin-top:4px; font-family:var(--sans); font-size:10px; font-weight:900;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--signal);
+  }
+  .project-card-actions { display:flex; padding:0 18px 18px; margin-top:auto; }
+  .project-card-apply {
+    display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:8px 14px;
+    border:5px solid var(--signal); font-family:var(--sans); font-size:10px; font-weight:900;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--accent);
   }
   .series-filter {
     display:flex; flex-wrap:wrap; gap:12px; align-items:center;
@@ -164,7 +185,7 @@
   .series-context p { margin-top:8px; font-size:13px; line-height:1.65; color:var(--text-mute); }
   .project-detail {
     min-width:0;
-    padding:26px 0 0;
+    margin-top:72px; padding:42px 0 0; border-top:5px solid var(--ring-faint);
     min-height:720px;
   }
   .detail-kicker {
@@ -326,10 +347,7 @@
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
   @media (max-width:1100px) {
-    .archive-shell { grid-template-columns:1fr; border:none; padding-top:0; }
-    .project-index { display:none; }
-    .mobile-picker { display:block; }
-    .project-detail { border-top:5px solid var(--ring-faint); min-height:auto; }
+    .project-detail { min-height:auto; }
     .meta-grid { grid-template-columns:1fr 1fr; }
   }
   @media (max-width:768px) {
@@ -343,7 +361,6 @@ main { padding:var(--s6) var(--s5); }
       max-width:100%;
       overflow-wrap:break-word;
     }
-    .mobile-picker,
     .archive-shell,
     .project-detail {
       width:100%;
@@ -375,6 +392,10 @@ main { padding:var(--s6) var(--s5); }
     .series-context { grid-template-columns:72px minmax(0,1fr); }
     .series-context img { width:72px; height:72px; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
+  }
+  @media (max-width:600px) {
+    .project-card-grid { grid-template-columns:1fr; }
+    .project-card-title { font-size:clamp(24px,9vw,38px); }
   }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
@@ -420,15 +441,12 @@ main { padding:var(--s6) var(--s5); }
     <nav class="series-filter" id="seriesFilter" aria-label="Filter Special Projects by series">
       <button type="button" class="is-active" data-series-filter="">All projects</button>
     </nav>
-    <select class="mobile-picker" id="projectSelect" aria-label="Select a Special Project call">
-      <option value="">Loading current calls&hellip;</option>
-    </select>
     <section class="archive-shell" id="project-calls" aria-label="Special Project calls">
-      <aside class="project-index" aria-label="Project index">
-        <p class="index-heading">Project Index</p>
+      <section class="project-overview" aria-label="All Special Projects">
+        <p class="index-heading">All Special Projects</p>
         <div id="projectIndex"><p class="project-load-status">Loading Studio-managed calls&hellip;</p></div>
-      </aside>
-      <article class="project-detail" aria-live="polite">
+      </section>
+      <article class="project-detail" id="project-detail" aria-live="polite" tabindex="-1">
         <p class="detail-kicker" id="projectKicker">Loading / Current status</p>
         <section class="series-context" id="projectSeriesContext" hidden>
           <img id="projectSeriesCover" alt="" hidden>
@@ -530,8 +548,8 @@ main { padding:var(--s6) var(--s5); }
       availability: document.getElementById("projectAvailability"),
       intention: document.getElementById("projectIntention")
     };
-    var select = document.getElementById("projectSelect");
     var index = document.getElementById("projectIndex");
+    var projectDetail = document.getElementById("project-detail");
     var seriesFilter = document.getElementById("seriesFilter");
     var seriesContext = document.getElementById("projectSeriesContext");
     var seriesCover = document.getElementById("projectSeriesCover");
@@ -588,6 +606,24 @@ main { padding:var(--s6) var(--s5); }
       return project && project.series && typeof project.series === "object" ? project.series : null;
     }
 
+    function primaryMediaFor(project) {
+      var media = Array.isArray(project && project.media) ? project.media : [];
+      return media.find(function(item) { return item.role === "primary"; }) || null;
+    }
+
+    function cardFocal(value) {
+      var number = Number(value);
+      return Number.isFinite(number) ? Math.max(0, Math.min(100, number)) : 50;
+    }
+
+    function projectUrl(project, hash) {
+      var url = new URL(location.pathname, location.origin);
+      url.searchParams.set("project", keyFor(project));
+      if (activeSeriesSlug) url.searchParams.set("series", activeSeriesSlug);
+      if (hash) url.hash = hash;
+      return url.pathname + url.search + url.hash;
+    }
+
     function availableSeries() {
       return seriesRecords.filter(function(series) {
         return projects.some(function(project) {
@@ -636,6 +672,7 @@ main { padding:var(--s6) var(--s5); }
 
     function renderConnections(project) {
       if (!window.ConstructConnections) return;
+      window.ConstructConnections.clear(projectConnections);
       window.ConstructConnections.mount({
         host: projectConnections,
         entityId: project.id,
@@ -645,10 +682,8 @@ main { padding:var(--s6) var(--s5); }
       var activeSeries = activeSeriesSlug
         ? seriesRecords.find(function(series) { return series.slug === activeSeriesSlug; })
         : null;
-      if (!activeSeries) {
-        window.ConstructConnections.clear(seriesConnections);
-        return;
-      }
+      window.ConstructConnections.clear(seriesConnections);
+      if (!activeSeries) return;
       window.ConstructConnections.mount({
         host: seriesConnections,
         entityId: activeSeries.id,
@@ -657,12 +692,15 @@ main { padding:var(--s6) var(--s5); }
       });
     }
 
-    function setSeriesFilter(slug, projectKey) {
+    function setSeriesFilter(slug, projectKey, options) {
       var valid = slug && availableSeries().some(function(series) { return series.slug === slug; });
       activeSeriesSlug = valid ? slug : "";
       renderSeriesFilters();
       renderIndex();
-      setProject(projectKey || keyFor(visibleProjects[0] || projects[0] || {}));
+      var requestedVisible = visibleProjects.find(function(project) {
+        return keyFor(project) === projectKey || project.id === projectKey;
+      });
+      setProject(keyFor(requestedVisible || visibleProjects[0] || projects[0] || {}), options);
     }
 
     function modeLabel(mode) {
@@ -806,7 +844,8 @@ main { padding:var(--s6) var(--s5); }
           : "Optional for fresh-skin Extended Projects; required for cover-ups and blast-overs.";
     }
 
-    function setProject(key) {
+    function setProject(key, options) {
+      options = options || {};
       var project = visibleProjects.find(function(item) { return keyFor(item) === key || item.id === key; })
         || projects.find(function(item) { return keyFor(item) === key || item.id === key; })
         || visibleProjects[0]
@@ -830,14 +869,19 @@ main { padding:var(--s6) var(--s5); }
         : (status === "opening soon"
           ? "This call is visible for planning but is not accepting applications yet. Return when the managed opening date arrives."
           : "This call remains visible as context but is not accepting applications. Use Custom for another symbolic commission.");
-      Array.prototype.forEach.call(index.querySelectorAll(".index-button"), function(button) {
-        button.classList.toggle("is-active", button.getAttribute("data-project") === selectedKey);
+      Array.prototype.forEach.call(index.querySelectorAll(".project-card"), function(card) {
+        var active = card.getAttribute("data-project") === selectedKey;
+        card.classList.toggle("is-active", active);
+        var link = card.querySelector(".project-card-select");
+        if (link) {
+          if (active) link.setAttribute("aria-current", "true");
+          else link.removeAttribute("aria-current");
+        }
       });
-      if (select.value !== selectedKey) select.value = selectedKey;
       if (status === "open") {
         applyLink.classList.remove("is-disabled");
         applyLink.removeAttribute("aria-disabled");
-        applyLink.href = "#application";
+        applyLink.href = projectUrl(project, "#application");
         applyLink.textContent = "Apply for this call";
         applicationCopy.textContent = "This call is open for review. If accepted, the studio will send its development path and private booking access when appropriate.";
       } else {
@@ -850,58 +894,112 @@ main { padding:var(--s6) var(--s5); }
       renderMedia(project);
       configureApplication(project, status);
       renderConnections(project);
-      var url = new URL(location.href);
-      url.searchParams.set("project", selectedKey);
-      if (activeSeriesSlug) url.searchParams.set("series", activeSeriesSlug);
-      else url.searchParams.delete("series");
-      history.replaceState(null, "", url.pathname + url.search + url.hash);
+      if (options.updateUrl !== false) {
+        var url = new URL(location.href);
+        url.searchParams.set("project", selectedKey);
+        if (activeSeriesSlug) url.searchParams.set("series", activeSeriesSlug);
+        else url.searchParams.delete("series");
+        if (options.scrollTo === "application") url.hash = "#application";
+        else if (url.hash === "#application") url.hash = "";
+        history.replaceState(null, "", url.pathname + url.search + url.hash);
+      }
+      if (options.scrollTo) {
+        var target = options.scrollTo === "application" ? application : projectDetail;
+        requestAnimationFrame(function() {
+          target.scrollIntoView({ behavior: options.smooth === false ? "auto" : "smooth", block: "start" });
+        });
+      }
     }
 
     function renderIndex() {
       index.replaceChildren();
-      select.replaceChildren();
+      index.className = "project-card-grid";
       visibleProjects = activeSeriesSlug
         ? projects.filter(function(project) { return seriesForProject(project)?.slug === activeSeriesSlug; })
         : projects.slice();
       visibleProjects.forEach(function(project, projectIndex) {
         var key = keyFor(project);
         var status = effectiveStatus(project);
-        var button = document.createElement("button");
-        button.className = "index-button" + (status === "closed" ? " is-closed" : "");
-        button.type = "button";
-        button.setAttribute("data-project", key);
-        var number = document.createElement("span");
-        number.className = "index-number";
-        number.textContent = String(projectIndex + 1).padStart(2, "0");
-        var copy = document.createElement("span");
+        var statusLabel = status === "opening soon" ? "Opening Soon" : status === "open" ? "Open" : "Closed";
+        var card = document.createElement("article");
+        card.className = "project-card";
+        card.setAttribute("data-project", key);
+        var selectLink = document.createElement("a");
+        selectLink.className = "project-card-select";
+        selectLink.href = projectUrl(project);
+        selectLink.setAttribute("aria-label", "Open " + project.title);
+        var media = document.createElement("div");
+        media.className = "project-card-media";
+        var primaryMedia = primaryMediaFor(project);
+        if (primaryMedia && primaryMedia.url) {
+          var image = document.createElement("img");
+          image.src = primaryMedia.url;
+          image.alt = primaryMedia.alt || project.title;
+          image.loading = projectIndex < 2 ? "eager" : "lazy";
+          image.decoding = "async";
+          image.style.objectPosition = cardFocal(primaryMedia.cardFocalX) + "% " + cardFocal(primaryMedia.cardFocalY) + "%";
+          media.append(image);
+        } else {
+          media.classList.add("is-placeholder");
+          var placeholderLabel = document.createElement("span");
+          placeholderLabel.className = "project-card-placeholder-label";
+          placeholderLabel.textContent = "Project image pending";
+          media.append(placeholderLabel);
+        }
+        var body = document.createElement("div");
+        body.className = "project-card-body";
+        var series = seriesForProject(project);
+        if (series && series.name) {
+          var seriesLabel = document.createElement("p");
+          seriesLabel.className = "project-card-series";
+          seriesLabel.textContent = series.name;
+          body.append(seriesLabel);
+        }
         var title = document.createElement("span");
-        title.className = "index-title";
+        title.className = "project-card-title";
         title.textContent = project.title;
+        var meta = document.createElement("p");
+        meta.className = "project-card-meta";
+        meta.textContent = (project.profile === "experimental" ? "Experimental" : "Extended")
+          + " / " + (project.allowedModes || ["fresh"]).map(modeLabel).join(" · ");
         var state = document.createElement("span");
-        state.className = "index-year";
-        state.textContent = (seriesForProject(project)?.name ? seriesForProject(project).name + " / " : "") + status;
-        copy.append(title, state);
-        button.append(number, copy);
-        button.addEventListener("click", function() { setProject(key); });
-        index.append(button);
-
-        var option = document.createElement("option");
-        option.value = key;
-        option.textContent = number.textContent + " " + project.title + (seriesForProject(project)?.name ? " / " + seriesForProject(project).name : "") + " / " + status;
-        select.append(option);
+        state.className = "project-card-status";
+        state.dataset.status = status;
+        state.textContent = statusLabel;
+        var openLabel = document.createElement("span");
+        openLabel.className = "project-card-open";
+        openLabel.textContent = "View project →";
+        body.append(title, meta, state, openLabel);
+        selectLink.append(media, body);
+        selectLink.addEventListener("click", function(event) {
+          event.preventDefault();
+          setProject(key, { scrollTo: "detail" });
+        });
+        card.append(selectLink);
+        if (status === "open") {
+          var actions = document.createElement("div");
+          actions.className = "project-card-actions";
+          var apply = document.createElement("a");
+          apply.className = "project-card-apply";
+          apply.href = projectUrl(project, "#application");
+          apply.textContent = "Apply";
+          apply.addEventListener("click", function(event) {
+            event.preventDefault();
+            setProject(key, { scrollTo: "application" });
+          });
+          actions.append(apply);
+          card.append(actions);
+        }
+        index.append(card);
       });
     }
 
-    select.addEventListener("change", function() {
-      setProject(select.value);
-    });
     applicationModes.addEventListener("change", syncBodyPhotoRequirement);
 
     applyLink.addEventListener("click", function(event) {
       if (applyLink.classList.contains("is-disabled")) return;
       event.preventDefault();
-      application.hidden = false;
-      application.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (selectedProject) setProject(keyFor(selectedProject), { scrollTo: "application" });
     });
 
     window.SixWellSubmissionForms.init({
@@ -930,19 +1028,23 @@ main { padding:var(--s6) var(--s5); }
         });
         if (!projects.length) throw new Error("No Special Project calls are currently published.");
         var params = new URLSearchParams(location.search);
+        var hasRequestedProject = params.has("project");
         var requestedProject = params.get("project") || keyFor(projects[0]);
         var requestedSeries = params.get("series") || "";
         var requestedRecord = projects.find(function(project) { return keyFor(project) === requestedProject || project.id === requestedProject; });
         if (requestedRecord && requestedSeries && seriesForProject(requestedRecord)?.slug !== requestedSeries) requestedSeries = "";
-        setSeriesFilter(requestedSeries, requestedProject);
-        if (location.hash === "#application" && effectiveStatus(selectedProject || {}) === "open") {
-          application.scrollIntoView({ block: "start" });
-        }
+        var initialScroll = location.hash === "#application" && requestedRecord && effectiveStatus(requestedRecord) === "open"
+          ? "application"
+          : hasRequestedProject && requestedRecord ? "detail" : "";
+        setSeriesFilter(requestedSeries, requestedProject, {
+          updateUrl: false,
+          scrollTo: initialScroll,
+          smooth: false
+        });
       })
       .catch(function(error) {
         index.innerHTML = '<p class="project-load-status">Current calls could not be loaded. No application path has been opened.</p>';
-        select.innerHTML = '<option value="">Calls unavailable</option>';
-        select.disabled = true;
+        index.className = "";
         fields.kicker.textContent = "Unavailable / Safe fallback";
         fields.title.textContent = "Current Calls Unavailable";
         fields.summary.textContent = error.message || "The Studio-managed call list could not be loaded.";
