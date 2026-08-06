@@ -391,6 +391,7 @@ main { padding:var(--s6) var(--s5); }
           <img id="projectSeriesCover" alt="" hidden>
           <div><button type="button" id="projectSeriesName"></button><p id="projectSeriesStatement"></p></div>
         </section>
+        <section id="seriesConnections" hidden></section>
         <h2 class="detail-title" id="projectTitle">Current Calls</h2>
         <p class="detail-summary" id="projectSummary">Loading Special Project records from Studio.</p>
         <div class="image-grid" id="projectMedia" aria-label="Selected project gallery"></div>
@@ -411,6 +412,7 @@ main { padding:var(--s6) var(--s5); }
             <a class="cta-secondary" href="/tattoos/inquire/custom/">Use Custom instead</a>
           </div>
         </div>
+        <section id="projectConnections" hidden></section>
       </article>
     </section>
     <section class="application-panel" id="application" aria-label="Special Projects application" hidden>
@@ -468,6 +470,7 @@ main { padding:var(--s6) var(--s5); }
     <a href="/home/">the six.well construct</a>
   </footer>
   <script src="/js/submission-form.js"></script>
+  <script src="/js/construct-connections.js?v=6"></script>
   <script>
   (function() {
     var projects = [];
@@ -491,6 +494,8 @@ main { padding:var(--s6) var(--s5); }
     var seriesCover = document.getElementById("projectSeriesCover");
     var seriesName = document.getElementById("projectSeriesName");
     var seriesStatement = document.getElementById("projectSeriesStatement");
+    var seriesConnections = document.getElementById("seriesConnections");
+    var projectConnections = document.getElementById("projectConnections");
     var applyLink = document.getElementById("projectApply");
     var applicationCopy = document.getElementById("applicationCopy");
     var mediaGrid = document.getElementById("projectMedia");
@@ -583,6 +588,29 @@ main { padding:var(--s6) var(--s5); }
         seriesCover.removeAttribute("src");
         seriesContext.classList.add("no-cover");
       }
+    }
+
+    function renderConnections(project) {
+      if (!window.ConstructConnections) return;
+      window.ConstructConnections.mount({
+        host: projectConnections,
+        entityId: project.id,
+        title: "Project Connections",
+        embedded: true
+      });
+      var activeSeries = activeSeriesSlug
+        ? seriesRecords.find(function(series) { return series.slug === activeSeriesSlug; })
+        : null;
+      if (!activeSeries) {
+        window.ConstructConnections.clear(seriesConnections);
+        return;
+      }
+      window.ConstructConnections.mount({
+        host: seriesConnections,
+        entityId: activeSeries.id,
+        title: "Series Connections",
+        embedded: true
+      });
     }
 
     function setSeriesFilter(slug, projectKey) {
@@ -746,6 +774,7 @@ main { padding:var(--s6) var(--s5); }
       }
       renderMedia(project);
       configureApplication(project, status);
+      renderConnections(project);
       var url = new URL(location.href);
       url.searchParams.set("project", selectedKey);
       if (activeSeriesSlug) url.searchParams.set("series", activeSeriesSlug);

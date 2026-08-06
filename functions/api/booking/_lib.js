@@ -8035,8 +8035,19 @@ export async function handleAdminTattooSettings(request, env) {
         return errorResponse("Each Special Project requires stable lowercase id and slug values.", 400);
       }
       if (call._delete === true) {
+        const applicationHistory = await db.prepare(
+          "SELECT submission_id FROM special_project_submission_terms WHERE project_id = ? LIMIT 1"
+        ).bind(id).first();
+        if (applicationHistory) {
+          return errorResponse("Special Projects with application history cannot be deleted. Set the project status to Closed instead.", 409);
+        }
         statements.push(db.prepare("DELETE FROM special_project_calls WHERE id = ?").bind(id));
+        statements.push(db.prepare("DELETE FROM content_entities WHERE id = ? AND entity_type = 'special_project'").bind(id));
         continue;
+      }
+      const existingEntity = await db.prepare("SELECT entity_type FROM content_entities WHERE id = ?").bind(id).first();
+      if (existingEntity && existingEntity.entity_type !== "special_project") {
+        return errorResponse("That Project ID is already used by another Construct entity.", 409);
       }
       const status = asString(call.status) || "closed";
       if (!new Set(["open", "closed"]).has(status)) return errorResponse("Special Project status must be open or closed.", 400);
@@ -8097,6 +8108,21 @@ export async function handleAdminTattooSettings(request, env) {
           return errorResponse("Special Project media must be active, public, consent-cleared, inline Shared Media assets.", 409);
         }
       }
+      statements.push(db.prepare(
+        `INSERT INTO content_entities (
+           id,entity_type,node_id,visibility,search_visibility,public_at,
+           created_by,updated_by,created_at,updated_at
+         ) VALUES (?, 'special_project', 'node-tattoos', 'public', 0, ?, 'studio', 'studio', ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           entity_type = excluded.entity_type,
+           node_id = excluded.node_id,
+           visibility = 'public',
+           search_visibility = 0,
+           public_at = COALESCE(content_entities.public_at, excluded.public_at),
+           archived_at = NULL,
+           updated_by = 'studio',
+           updated_at = excluded.updated_at`
+      ).bind(id, now, now, now));
       statements.push(db.prepare(
         `INSERT INTO special_project_calls (
           id, slug, title, summary, status, rate_text, sort_order, opens_at, closes_at,

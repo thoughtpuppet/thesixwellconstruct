@@ -1978,6 +1978,64 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
     ["project-media-b", "primary"],
     ["project-media-a", "gallery"],
   ]);
+  assert.deepEqual(
+    { ...database.prepare("SELECT entity_type,node_id,visibility,search_visibility FROM content_entities WHERE id='free-lines'").get() },
+    { entity_type: "special_project", node_id: "node-tattoos", visibility: "public", search_visibility: 0 },
+  );
+
+  const directoryResponse = await handleConstructApi(draftRequest(
+    "/api/admin/entities",
+    "GET",
+    undefined,
+    adminToken,
+  ), env);
+  assert.equal(directoryResponse.status, 200, await directoryResponse.clone().text());
+  const projectEntity = (await directoryResponse.json()).records.find((record) => record.id === "free-lines");
+  assert.equal(projectEntity.title, "Free Lines");
+  assert.equal(projectEntity.route, "/tattoos/special-projects/?project=free-lines");
+  assert.equal(projectEntity.imageUrl, "https://example.test/b.jpg");
+  assert.equal(projectEntity.kindLabel, "Special Project");
+  assert.equal(projectEntity.detailLabel, "Experimental");
+
+  const publicRelationship = await handleConstructApi(draftRequest(
+    "/api/admin/relationships",
+    "POST",
+    {
+      source_entity_id: "free-lines",
+      target_entity_id: "fig-eye",
+      relationship_type_id: "rel-uses-symbol",
+      public_visible: true,
+    },
+    adminToken,
+  ), env);
+  assert.equal(publicRelationship.status, 201, await publicRelationship.clone().text());
+  const privateRelationship = await handleConstructApi(draftRequest(
+    "/api/admin/relationships",
+    "POST",
+    {
+      source_entity_id: "free-lines",
+      target_entity_id: "maze-path",
+      relationship_type_id: "rel-related-to",
+      public_visible: false,
+    },
+    adminToken,
+  ), env);
+  assert.equal(privateRelationship.status, 201, await privateRelationship.clone().text());
+
+  const publicConnections = await handleConstructApi(
+    new Request("https://example.test/api/connections/free-lines"),
+    env,
+  );
+  assert.equal(publicConnections.status, 200, await publicConnections.clone().text());
+  const connectionsPayload = await publicConnections.json();
+  assert.equal(connectionsPayload.entity.imageUrl, "https://example.test/b.jpg");
+  assert.deepEqual(connectionsPayload.records.map((record) => record.related.id), ["fig-eye"]);
+  const reverseConnections = await handleConstructApi(
+    new Request("https://example.test/api/connections/fig-eye"),
+    env,
+  );
+  const reverseProject = (await reverseConnections.json()).records.find((record) => record.related.id === "free-lines");
+  assert.equal(reverseProject.related.imageUrl, "https://example.test/b.jpg");
 
   const invalid = await handleAdminTattooSettings(draftRequest(
     "/api/admin/tattoo/settings",
@@ -1986,6 +2044,84 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
     adminToken,
   ), env);
   assert.equal(invalid.status, 400);
+});
+
+test("Special Project entity IDs reject collisions and application history protects deletion", async () => {
+  const database = migratedDatabase();
+  const adminToken = "special-project-entity-admin";
+  const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSIONS_ADMIN_TOKEN: adminToken };
+  const now = new Date().toISOString();
+  database.prepare(
+    `INSERT INTO content_entities(id,entity_type,node_id,visibility,created_at,updated_at)
+     VALUES('project-id-collision','art_work','node-art','internal',?,?)`
+  ).run(now, now);
+  const collision = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    { specialProjects: [{ id: "project-id-collision", slug: "project-id-collision", title: "Collision", profile: "extended", status: "closed", allowedModes: ["fresh"] }] },
+    adminToken,
+  ), env);
+  assert.equal(collision.status, 409);
+
+  const created = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    { specialProjects: [{ id: "protected-project", slug: "protected-project", title: "Protected Project", profile: "extended", status: "closed", allowedModes: ["fresh"] }] },
+    adminToken,
+  ), env);
+  assert.equal(created.status, 200, await created.clone().text());
+  insertSubmissionFixture(database, { id: "protected-project-submission", type: "special_project" });
+  database.prepare(
+    `INSERT INTO special_project_submission_terms(
+      submission_id,project_id,project_profile,project_title,selected_mode,
+      refundable_deposit_cents,healed_photo_due_weeks,participation_terms,
+      agreement_version,agreement_snapshot_json,agreed_at,created_at,updated_at
+    ) VALUES(?,?,'extended',?,'fresh',0,6,'','v1','{}',?,?,?)`
+  ).run("protected-project-submission", "protected-project", "Protected Project", now, now, now);
+  const protectedDelete = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    { specialProjects: [{ id: "protected-project", slug: "protected-project", _delete: true }] },
+    adminToken,
+  ), env);
+  assert.equal(protectedDelete.status, 409);
+  assert.equal(database.prepare("SELECT count(*) count FROM special_project_calls WHERE id='protected-project'").get().count, 1);
+  assert.equal(database.prepare("SELECT count(*) count FROM content_entities WHERE id='protected-project'").get().count, 1);
+
+  const unusedCreated = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    { specialProjects: [{ id: "unused-project", slug: "unused-project", title: "Unused Project", profile: "extended", status: "closed", allowedModes: ["fresh"] }] },
+    adminToken,
+  ), env);
+  assert.equal(unusedCreated.status, 200, await unusedCreated.clone().text());
+  database.prepare(
+    `INSERT INTO entity_relationships(
+      id,source_entity_id,target_entity_id,relationship_type_id,public_visible,
+      internal_notes,sort_order,created_by,created_at,updated_at
+    ) VALUES('unused-project-relation','unused-project','fig-eye','rel-related-to',0,'',0,'test',?,?)`
+  ).run(now, now);
+  const unusedDelete = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    { specialProjects: [{ id: "unused-project", slug: "unused-project", _delete: true }] },
+    adminToken,
+  ), env);
+  assert.equal(unusedDelete.status, 200, await unusedDelete.clone().text());
+  assert.equal(database.prepare("SELECT count(*) count FROM content_entities WHERE id='unused-project'").get().count, 0);
+  assert.equal(database.prepare("SELECT count(*) count FROM entity_relationships WHERE id='unused-project-relation'").get().count, 0);
+});
+
+test("Special Project connection migration fails on an existing entity ID collision", () => {
+  const database = migratedDatabase({ before: "0109_special_project_connections.sql" });
+  const now = new Date().toISOString();
+  database.prepare(
+    "INSERT INTO content_entities(id,entity_type,node_id,visibility,created_at,updated_at) VALUES('mythic-body-studies','art_work','node-art','internal',?,?)"
+  ).run(now, now);
+  assert.throws(
+    () => database.exec(readFileSync(join(ROOT, "migrations", "0109_special_project_connections.sql"), "utf8")),
+    /UNIQUE constraint failed: content_entities.id/,
+  );
 });
 
 test("Studio manages Special Project Series, cover media, assignment, and public visibility", async () => {
@@ -2431,6 +2567,10 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   assert.deepEqual(
     { ...database.prepare("SELECT entity_type,node_id,visibility FROM content_entities WHERE id='sp-series-classic-cliches'").get() },
     { entity_type: "special_project_series", node_id: "node-tattoos", visibility: "public" },
+  );
+  assert.deepEqual(
+    database.prepare("SELECT id,entity_type,node_id,visibility FROM content_entities WHERE entity_type='special_project' ORDER BY id").all().map((row) => ({ ...row })),
+    ["large-scale", "memory-transfer", "mythic-body-studies"].map((id) => ({ id, entity_type: "special_project", node_id: "node-tattoos", visibility: "public" })),
   );
   assert.equal(database.prepare("SELECT lead_time_days FROM tattoo_settings WHERE id = 'default'").get().lead_time_days, 14);
   assert.deepEqual(

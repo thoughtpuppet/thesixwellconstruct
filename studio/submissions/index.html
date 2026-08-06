@@ -454,6 +454,10 @@
   .special-project-upload { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:10px; align-items:end; margin-top:12px; padding:12px; border:5px solid var(--ring-faint); }
   .special-project-upload > .contact,
   .special-project-upload > [data-special-media-upload-status] { grid-column:1/-1; }
+  .special-project-connections { grid-column:1/-1; border:5px solid var(--ring-faint); padding:12px; min-width:0; }
+  .special-project-connections > summary { cursor:pointer; font-family:var(--sans); font-size:11px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; color:var(--signal); }
+  .special-project-connections[open] > summary { margin-bottom:12px; }
+  .special-project-connections .cm-connections-workbench { margin-top:12px; }
   .tattoo-specials-manager { display:grid; gap:22px; }
   .save-feedback { min-height:1.5em; margin:7px 0 0; font-family:var(--sans); font-size:11px; color:var(--dim); }
   .save-feedback[data-state="success"] { color:#4caf50; }
@@ -2929,6 +2933,30 @@
     </div>`;
   }
 
+  function specialProjectConnectionsBlock(entityId, kind) {
+    if (!entityId) {
+      return `<details class="special-project-connections"><summary>Connections</summary><p class="contact">Save this ${kind} first to add Construct connections.</p></details>`;
+    }
+    return `<details class="special-project-connections" data-special-project-connections data-entity-id="${escapeHtml(entityId)}" data-entity-kind="${escapeHtml(kind)}"><summary>Connections</summary><p class="contact">Connect this ${kind} to symbols and other work. Series membership stays controlled by the Series field.</p><div data-special-project-connections-panel></div></details>`;
+  }
+
+  function wireSpecialProjectConnections(scope = detailEl) {
+    scope.querySelectorAll("[data-special-project-connections]").forEach((details) => {
+      details.addEventListener("toggle", async () => {
+        if (!details.open || details.dataset.connectionsMounted === "true") return;
+        const panel = details.querySelector("[data-special-project-connections-panel]");
+        if (!panel) return;
+        details.dataset.connectionsMounted = "true";
+        const kind = details.dataset.entityKind;
+        await window.ConnectionsManager?.mount(panel, {
+          entityId: details.dataset.entityId,
+          excludedRelationshipTypeIds: ["rel-realized-as"],
+          excludedTargetEntityTypes: kind === "project" ? ["special_project_series"] : ["special_project"],
+        });
+      });
+    });
+  }
+
   function specialProjectSeriesRow(series = {}) {
     const editorKey = series._editorKey || series.id || `new-series-${++specialProjectSeriesEditorCounter}`;
     const seriesId = series.id || "";
@@ -2952,6 +2980,7 @@
         </div>
         <div class="booking-actions"><select data-special-series-cover-picker><option value="">Or choose existing Shared Media…</option>${specialProjectMediaAssets.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || item.original_filename || item.originalFilename || item.id)}</option>`).join("")}</select><button class="button" type="button" data-add-special-series-cover>Use Existing as Cover</button></div>
       </div>
+      ${specialProjectConnectionsBlock(seriesId, "series")}
       <p class="special-project-wide contact">Series are retained as Construct entities. To remove one from public use, set its state to Archived.</p>
     </section>`;
   }
@@ -2995,6 +3024,7 @@
         </div>
         <div class="booking-actions"><select data-special-media-picker><option value="">Or choose existing Shared Media…</option>${specialProjectMediaAssets.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title || item.original_filename || item.originalFilename || item.id)}</option>`).join("")}</select><button class="button" type="button" data-add-special-media>Attach Existing</button></div>
       </div>
+      ${specialProjectConnectionsBlock(project.id || "", "project")}
       <div class="special-project-wide booking-actions"><button class="button danger-button" type="button" data-remove-special-project>Remove Project</button></div>
     </section>`;
   }
@@ -3359,6 +3389,7 @@
       </form>
     </section>`;
     enhanceControls(detailEl);
+    wireSpecialProjectConnections(detailEl);
     hydrateSpecialProjectMediaPreviews(detailEl).catch(() => {});
   }
 
@@ -8917,7 +8948,7 @@ ${meetingLines}
   }
 })();
 </script>
-<script src="/studio/connections-manager.js?v=1"></script>
+<script src="/studio/connections-manager.js?v=2"></script>
 <script src="/studio/archive-colors-materials.js?v=4"></script>
 <script src="/studio/archive-failed-experiments.js?v=1"></script>
 <script src="/studio/construct-manager.js?v=resumable-video-1"></script>
