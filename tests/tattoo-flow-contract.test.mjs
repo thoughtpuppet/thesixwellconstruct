@@ -173,6 +173,18 @@ test("Special Projects expose public Series filtering while applications still t
   assert.match(source, /series\.cover\.url/);
 });
 
+test("Special Project galleries preserve artwork and open a full-image viewer", () => {
+  const source = readFileSync(join(ROOT, "tattoos", "special-projects", "index.html"), "utf8");
+  assert.match(source, /\.archive-frame:not\(\.has-media\)::before/);
+  assert.match(source, /\.archive-frame:not\(\.has-media\)::after/);
+  assert.match(source, /\.project-media-open img \{ width:100%; height:100%; object-fit:contain; \}/);
+  assert.match(source, /id="projectMediaDialog" aria-labelledby="projectMediaDialogTitle"/);
+  assert.match(source, /frame\.className = "archive-frame has-media"/);
+  assert.match(source, /button\.addEventListener\("click", function\(\) \{ openProjectMedia\(item, project\); \}\)/);
+  assert.match(source, /mediaDialog\.showModal\(\)/);
+  assert.match(source, /event\.target === mediaDialog/);
+});
+
 test("Studio review shows Series as quiet context without changing the project booking label", () => {
   const source = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
   assert.match(source, /terms\.seriesName \|\| terms\.agreementSnapshot\?\.series\?\.name/);
