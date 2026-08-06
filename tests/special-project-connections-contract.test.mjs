@@ -29,12 +29,19 @@ test("Construct directory exposes Special Projects with routes, profiles, and pr
   assert.match(construct, /WHEN 'special_project' THEN CASE spc\.profile WHEN 'experimental' THEN 'Experimental' ELSE 'Extended' END/);
 });
 
-test("Special Projects Studio provides lazy scoped connections for saved projects and series", () => {
+test("Special Projects Studio reuses the Art-style scoped connection panel without nesting forms", () => {
   const studio = source("studio", "submissions", "index.html");
   const manager = source("studio", "connections-manager.js");
   assert.match(studio, /specialProjectConnectionsBlock\(seriesId, "series"\)/);
   assert.match(studio, /specialProjectConnectionsBlock\(project\.id \|\| "", "project"\)/);
   assert.match(studio, /Save this \$\{kind\} first to add Construct connections/);
+  assert.match(studio, /data-special-project-connections[\s\S]*aria-expanded="false"[\s\S]*aria-controls=/);
+  assert.match(studio, /data-special-project-connections-panel hidden/);
+  assert.match(studio, /panel\.hidden = isOpen/);
+  assert.match(studio, /<div class="tattoo-settings" data-special-projects-form>/);
+  assert.doesNotMatch(studio, /<form class="tattoo-settings" data-special-projects-form>/);
+  assert.match(studio, /data-save-special-projects/);
+  assert.match(studio, /event\.target\.matches\?\.\("\[data-special-projects-form\]"\)/);
   assert.match(studio, /excludedRelationshipTypeIds: \["rel-realized-as"\]/);
   assert.match(studio, /wireSpecialProjectConnections\(detailEl\)/);
   assert.match(manager, /excludedRelationshipTypeIds/);

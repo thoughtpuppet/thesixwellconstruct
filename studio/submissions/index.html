@@ -454,10 +454,8 @@
   .special-project-upload { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:10px; align-items:end; margin-top:12px; padding:12px; border:5px solid var(--ring-faint); }
   .special-project-upload > .contact,
   .special-project-upload > [data-special-media-upload-status] { grid-column:1/-1; }
-  .special-project-connections { grid-column:1/-1; border:5px solid var(--ring-faint); padding:12px; min-width:0; }
-  .special-project-connections > summary { cursor:pointer; font-family:var(--sans); font-size:11px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; color:var(--signal); }
-  .special-project-connections[open] > summary { margin-bottom:12px; }
-  .special-project-connections .cm-connections-workbench { margin-top:12px; }
+  .special-project-connection-actions { align-items:center; }
+  .special-project-connections-panel { border:5px solid var(--ring-faint); padding:12px; min-width:0; }
   .tattoo-specials-manager { display:grid; gap:22px; }
   .save-feedback { min-height:1.5em; margin:7px 0 0; font-family:var(--sans); font-size:11px; color:var(--dim); }
   .save-feedback[data-state="success"] { color:#4caf50; }
@@ -2935,26 +2933,68 @@
 
   function specialProjectConnectionsBlock(entityId, kind) {
     if (!entityId) {
-      return `<details class="special-project-connections"><summary>Connections</summary><p class="contact">Save this ${kind} first to add Construct connections.</p></details>`;
+      return `<div class="special-project-wide booking-actions special-project-connection-actions"><button class="button" type="button" disabled>Connections</button><span class="contact">Save this ${kind} first to add Construct connections.</span></div>`;
     }
-    return `<details class="special-project-connections" data-special-project-connections data-entity-id="${escapeHtml(entityId)}" data-entity-kind="${escapeHtml(kind)}"><summary>Connections</summary><p class="contact">Connect this ${kind} to symbols and other work. Series membership stays controlled by the Series field.</p><div data-special-project-connections-panel></div></details>`;
+    const panelId = `special-project-connections-${kind}-${entityId}`;
+    return `<div class="special-project-wide booking-actions special-project-connection-actions"><button class="button" type="button" data-special-project-connections data-entity-id="${escapeHtml(entityId)}" data-entity-kind="${escapeHtml(kind)}" aria-expanded="false" aria-controls="${escapeHtml(panelId)}">Connections</button><span class="contact">Connect this ${kind} to symbols and other work. Series membership stays controlled by the Series field.</span></div><div class="special-project-wide special-project-connections-panel" id="${escapeHtml(panelId)}" data-special-project-connections-panel hidden></div>`;
   }
 
   function wireSpecialProjectConnections(scope = detailEl) {
-    scope.querySelectorAll("[data-special-project-connections]").forEach((details) => {
-      details.addEventListener("toggle", async () => {
-        if (!details.open || details.dataset.connectionsMounted === "true") return;
-        const panel = details.querySelector("[data-special-project-connections-panel]");
+    scope.querySelectorAll("[data-special-project-connections]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const panel = scope.querySelector(`#${CSS.escape(button.getAttribute("aria-controls"))}`);
         if (!panel) return;
-        details.dataset.connectionsMounted = "true";
-        const kind = details.dataset.entityKind;
-        await window.ConnectionsManager?.mount(panel, {
-          entityId: details.dataset.entityId,
+        const isOpen = button.getAttribute("aria-expanded") === "true";
+        button.setAttribute("aria-expanded", String(!isOpen));
+        panel.hidden = isOpen;
+        if (isOpen || panel.dataset.connectionsMounted === "true") return;
+        if (!window.ConnectionsManager) {
+          panel.innerHTML = '<div class="cm-notice" data-kind="error">The shared Connections workbench is unavailable. Refresh Studio and try again.</div>';
+          return;
+        }
+        panel.dataset.connectionsMounted = "true";
+        const kind = button.dataset.entityKind;
+        await window.ConnectionsManager.mount(panel, {
+          entityId: button.dataset.entityId,
           excludedRelationshipTypeIds: ["rel-realized-as"],
           excludedTargetEntityTypes: kind === "project" ? ["special_project_series"] : ["special_project"],
         });
       });
     });
+  }
+
+  async function saveSpecialProjects(form, saveButton) {
+    const seriesRecords = specialProjectSeriesFromForm(form);
+    const seriesIssue = specialProjectSeriesEditorValidation(seriesRecords);
+    if (seriesIssue) {
+      showSpecialProjectSeriesSaveIssue(form, seriesIssue);
+      return;
+    }
+    const projects = specialProjectsFromForm(form);
+    const issue = specialProjectEditorValidation(projects);
+    if (issue) {
+      showSpecialProjectSaveIssue(form, issue);
+      return;
+    }
+    const output = form.querySelector("#specialProjectsStatus");
+    if (saveButton) saveButton.disabled = true;
+    if (output) output.textContent = "Saving Special Projects...";
+    setStatus("Saving Special Projects");
+    try {
+      await api("/api/admin/tattoo/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ specialProjectSeries: seriesRecords, specialProjects: projects }),
+      });
+      await renderSpecialProjectsManager();
+      setStatus("Special Projects saved");
+    } catch (error) {
+      const message = error.message || "Special Projects could not be saved.";
+      if (output) output.textContent = message;
+      setStatus(message);
+    } finally {
+      if (saveButton?.isConnected) saveButton.disabled = false;
+    }
   }
 
   function specialProjectSeriesRow(series = {}) {
@@ -3371,7 +3411,7 @@
     await loadTattooSettings();
     detailEl.innerHTML = `<section class="tattoo-settings" id="specialProjectsManager" data-admin-section-title="Special Projects">
       <div class="portfolio-head"><div><h2>Special Projects</h2><p class="contact">Create artistic series and individual Experimental or Extended projects, upload their artwork, and control each application call from one place.</p></div><button class="button" type="button" data-refresh-special-projects>Refresh</button></div>
-      <form class="tattoo-settings" data-special-projects-form>
+      <div class="tattoo-settings" data-special-projects-form>
         <section class="tattoo-settings-card" data-admin-section-title="Project Series">
           <h3>Project Series</h3>
           <p class="contact">Series describe the larger artistic body of work. Projects remain independently bookable and may have no series.</p>
@@ -3384,9 +3424,9 @@
           <div class="tattoo-settings-list">${tattooSettings.specialProjects.map(specialProjectRow).join("") || '<p class="empty">No Special Project calls configured.</p>'}</div>
           <div class="booking-actions"><button class="button" type="button" data-add-special-project>Add Special Project</button></div>
         </section>
-        <div class="booking-actions"><button class="button" type="submit">Save Special Projects</button></div>
+        <div class="booking-actions"><button class="button" type="button" data-save-special-projects>Save Special Projects</button></div>
         <div class="contact" id="specialProjectsStatus" role="status" aria-live="polite"></div>
-      </form>
+      </div>
     </section>`;
     enhanceControls(detailEl);
     wireSpecialProjectConnections(detailEl);
@@ -7484,6 +7524,13 @@ ${meetingLines}
       return;
     }
 
+    const saveSpecialProjectsButton = event.target.closest("[data-save-special-projects]");
+    if (saveSpecialProjectsButton) {
+      const form = saveSpecialProjectsButton.closest("[data-special-projects-form]");
+      if (form) await saveSpecialProjects(form, saveSpecialProjectsButton);
+      return;
+    }
+
     const addSpecialProjectSeries = event.target.closest("[data-add-special-project-series]");
     if (addSpecialProjectSeries) {
       addSpecialProjectSeriesEditor(addSpecialProjectSeries.closest("[data-special-projects-form]"));
@@ -8438,7 +8485,7 @@ ${meetingLines}
       return;
     }
 
-    const specialProjectsForm = event.target.closest("[data-special-projects-form]");
+    const specialProjectsForm = event.target.matches?.("[data-special-projects-form]") ? event.target : null;
     if (specialProjectsForm) {
       event.preventDefault();
       const seriesRecords = specialProjectSeriesFromForm(specialProjectsForm);
