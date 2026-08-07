@@ -167,13 +167,13 @@ test("Studio gives Special Projects a dedicated tab with direct Shared Media upl
   assert.doesNotMatch(settingsRenderer, /data-add-special-project/);
 });
 
-test("Special Projects expose a focal-aware card grid, Series filtering, and one selected application", () => {
+test("Special Projects expose an overview card grid and shared dedicated project detail", () => {
   const source = readFileSync(join(ROOT, "tattoos", "special-projects", "index.html"), "utf8");
   assert.match(source, /id="seriesFilter" aria-label="Filter Special Projects by series"/);
-  assert.match(source, /function setSeriesFilter\(slug, projectKey, options\)/);
+  assert.match(source, /function setSeriesFilter\(slug, options\)/);
   assert.match(source, /params\.get\("series"\)/);
   assert.match(source, /url\.searchParams\.set\("series", activeSeriesSlug\)/);
-  assert.match(source, /seriesName\.onclick = function\(\) \{ setSeriesFilter\(series\.slug, keyFor\(project\)\); \}/);
+  assert.match(source, /seriesName\.href = seriesUrl\(series\)/);
   assert.match(source, /\.project-card-grid \{\s*display:grid; grid-template-columns:repeat\(3,minmax\(0,1fr\)\);\s*gap:16px/);
   assert.match(source, /@media \(max-width:980px\) \{\s*\.project-card-grid \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\); \}/);
   assert.match(source, /@media \(max-width:600px\) \{\s*\.project-card-grid \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\); \}/);
@@ -181,7 +181,12 @@ test("Special Projects expose a focal-aware card grid, Series filtering, and one
   assert.match(source, /\.project-card-media \{[\s\S]*aspect-ratio:3\/4/);
   assert.match(source, /image\.style\.objectPosition = cardFocal\(primaryMedia\.cardFocalX\) \+ "% " \+ cardFocal\(primaryMedia\.cardFocalY\) \+ "%"/);
   assert.match(source, /apply\.href = projectUrl\(project, "#application"\)/);
-  assert.match(source, /hasRequestedProject && requestedRecord \? "detail"/);
+  assert.match(source, /data-project-overview-only/);
+  assert.match(source, /data-project-detail-only/);
+  assert.match(source, /var isDetailPage = Boolean\(routeSlug\)/);
+  assert.match(source, /new URL\("\/tattoos\/special-projects\/" \+ encodeURIComponent\(keyFor\(project\)\) \+ "\/"/);
+  assert.match(source, /location\.replace\(projectUrl\(legacyRecord/);
+  assert.doesNotMatch(source, /selectLink\.addEventListener\("click"/);
   assert.doesNotMatch(source, /id="projectSelect"/);
   assert.match(source, /document\.getElementById\("applicationProjectId"\)\.value = project\.id/);
   assert.match(source, /document\.getElementById\("applicationProjectSlug"\)\.value = project\.slug/);
@@ -2037,7 +2042,7 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
   assert.equal(directoryResponse.status, 200, await directoryResponse.clone().text());
   const projectEntity = (await directoryResponse.json()).records.find((record) => record.id === "free-lines");
   assert.equal(projectEntity.title, "Free Lines");
-  assert.equal(projectEntity.route, "/tattoos/special-projects/?project=free-lines");
+  assert.equal(projectEntity.route, "/tattoos/special-projects/free-lines/");
   assert.equal(projectEntity.imageUrl, "https://example.test/b.jpg");
   assert.equal(projectEntity.kindLabel, "Special Project");
   assert.equal(projectEntity.detailLabel, "Experimental");

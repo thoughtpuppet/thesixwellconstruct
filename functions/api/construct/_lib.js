@@ -2865,7 +2865,7 @@ function entityDirectorySql(where="1=1"){
     CASE ce.entity_type
       WHEN 'flash_item' THEN COALESCE(NULLIF(fi.legacy_path,''),'/tattoos/flash/'||fi.slug||'/')
       WHEN 'flash_series' THEN '/tattoos/flash/?series='||fs.slug
-      WHEN 'special_project' THEN '/tattoos/special-projects/?project='||spc.slug
+      WHEN 'special_project' THEN '/tattoos/special-projects/'||spc.slug||'/'
       WHEN 'special_project_series' THEN '/tattoos/special-projects/?series='||sps.slug
       WHEN 'art_work' THEN COALESCE(NULLIF(aw.legacy_path,''),'/art/'||aw.slug||'/')
       WHEN 'portfolio_item' THEN '/tattoos/portfolio/?work='||pi.id

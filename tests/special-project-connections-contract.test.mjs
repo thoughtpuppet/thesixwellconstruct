@@ -22,7 +22,7 @@ test("Special Project calls receive collision-safe Construct identities", () => 
 test("Construct directory exposes Special Projects with routes, profiles, and primary media", () => {
   const construct = source("functions", "api", "construct", "_lib.js");
   assert.match(construct, /WHEN 'special_project' THEN spc\.title/);
-  assert.match(construct, /WHEN 'special_project' THEN '\/tattoos\/special-projects\/\?project='\|\|spc\.slug/);
+  assert.match(construct, /WHEN 'special_project' THEN '\/tattoos\/special-projects\/'\|\|spc\.slug\|\|'\/'/);
   assert.match(construct, /FROM special_project_call_media spm JOIN media_assets m/);
   assert.match(construct, /ORDER BY CASE spm\.role WHEN 'primary' THEN 0 ELSE 1 END/);
   assert.match(construct, /WHEN 'special_project' THEN 'Special Project'/);
@@ -60,6 +60,8 @@ test("public Special Projects reuse the canonical Cards and Graph connection com
   assert.match(page, /title: "Related"/);
   assert.match(page, /title: "Series Connections"/);
   assert.match(page, /activeSeriesSlug[\s\S]*seriesRecords\.find/);
+  assert.match(page, /entityId: project\.id/);
+  assert.match(page, /entityId: series\.id/);
   assert.match(component, /options\.title\|\|"Related"/);
   assert.match(component, /mountRequests=new WeakMap/);
   assert.match(component, /window\.ConstructConnections=\{mount,clear\}/);

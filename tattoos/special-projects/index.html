@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Special Projects - Art.Pill Tattoo House</title>
+<title data-special-project-title>Special Projects - Art.Pill Tattoo House</title>
+<meta data-special-project-description name="description" content="Artist-led experimental and extended tattoo projects from Art.Pill Tattoo House.">
+<link data-special-project-canonical rel="canonical" href="https://thesixwellconstruct.com/tattoos/special-projects/">
 <script>if(new URLSearchParams(location.search).get("preview")==="1"){var previewRobots=document.createElement("meta");previewRobots.name="robots";previewRobots.content="noindex, nofollow";document.head.appendChild(previewRobots);}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -181,13 +183,22 @@
   .series-context img { width:96px; height:96px; object-fit:cover; border:5px solid var(--ring-faint); }
   .series-context img[hidden] { display:none; }
   .series-context.no-cover { grid-template-columns:1fr; }
-  .series-context button { font-family:var(--sans); font-size:12px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; color:var(--signal); text-align:left; }
+  .series-context button,
+  .series-context a { font-family:var(--sans); font-size:12px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; color:var(--signal); text-align:left; }
   .series-context p { margin-top:8px; font-size:13px; line-height:1.65; color:var(--text-mute); }
+  body[data-special-project-page="overview"] [data-project-detail-only],
+  body[data-special-project-page="detail"] [data-project-overview-only] { display:none!important; }
   .project-detail {
     min-width:0;
     margin-top:72px; padding:42px 0 0; border-top:5px solid var(--ring-faint);
     min-height:720px;
   }
+  body[data-special-project-page="detail"] .project-detail { margin-top:0; padding-top:0; border-top:0; }
+  .project-breadcrumb {
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:28px;
+    font-family:var(--serif); font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--text-dim);
+  }
+  .project-breadcrumb a { color:var(--signal); }
   .detail-kicker {
     font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
     text-transform:uppercase; color:var(--text-dim); margin-bottom:14px;
@@ -410,7 +421,7 @@ main { padding:var(--s6) var(--s5); }
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
-<body class="tattoo-flow" data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing" data-special-project-page="overview">
   <script>
   (function(){
     var o = document.createElement('div');
@@ -435,7 +446,7 @@ main { padding:var(--s6) var(--s5); }
     <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
   </header>
   <main>
-    <section class="intro site-hero site-hero--supporting">
+    <section class="intro site-hero site-hero--supporting" data-project-overview-only>
       <h1 class="page-title hero-title" data-copy-id="special-projects-page-title">Special Projects</h1>
       <p class="page-subtitle hero-descriptor" data-copy-id="special-projects-page-subtitle">Special Projects by SAIEL DAUHN SOLEHMAN</p>
       <p class="intro-body" data-copy-id="special-projects-intro-body">Special Projects are artist-led tattoo opportunities. Some are free experimental designs with a refundable attendance deposit; others are extended collaborative calls. Apply to a current open project below.</p>
@@ -444,22 +455,27 @@ main { padding:var(--s6) var(--s5); }
         <a class="cta-secondary" href="/tattoos/inquire/custom/">Other symbolic commission &rarr;</a>
       </div>
     </section>
-    <nav class="series-filter" id="seriesFilter" aria-label="Filter Special Projects by series">
+    <nav class="series-filter" id="seriesFilter" aria-label="Filter Special Projects by series" data-project-overview-only>
       <button type="button" class="is-active" data-series-filter="">All projects</button>
     </nav>
     <section class="archive-shell" id="project-calls" aria-label="Special Project calls">
-      <section class="project-overview" aria-label="All Special Projects">
+      <section class="project-overview" aria-label="All Special Projects" data-project-overview-only>
         <p class="index-heading">All Special Projects</p>
+        <section class="series-context" id="overviewSeriesContext" hidden>
+          <img id="overviewSeriesCover" alt="" hidden>
+          <div><p id="overviewSeriesName"></p><p id="overviewSeriesStatement"></p></div>
+        </section>
         <div id="projectIndex"><p class="project-load-status">Loading Studio-managed calls&hellip;</p></div>
+        <section id="seriesConnections" hidden></section>
       </section>
-      <article class="project-detail" id="project-detail" aria-live="polite" tabindex="-1">
+      <article class="project-detail" id="project-detail" aria-live="polite" tabindex="-1" data-project-detail-only>
+        <nav class="project-breadcrumb" aria-label="Breadcrumb"><a href="/tattoos/special-projects/">Special Projects</a><span aria-hidden="true">/</span><span id="projectBreadcrumbTitle">Project</span></nav>
         <p class="detail-kicker" id="projectKicker">Loading / Current status</p>
         <section class="series-context" id="projectSeriesContext" hidden>
           <img id="projectSeriesCover" alt="" hidden>
-          <div><button type="button" id="projectSeriesName"></button><p id="projectSeriesStatement"></p></div>
+          <div><a id="projectSeriesName" href="/tattoos/special-projects/"></a><p id="projectSeriesStatement"></p></div>
         </section>
-        <section id="seriesConnections" hidden></section>
-        <h2 class="detail-title" id="projectTitle">Current Calls</h2>
+        <h1 class="detail-title" id="projectTitle">Current Calls</h1>
         <p class="detail-summary" id="projectSummary">Loading Special Project records from Studio.</p>
         <div class="image-grid" id="projectMedia" aria-label="Selected project gallery"></div>
         <div class="meta-grid">
@@ -482,7 +498,7 @@ main { padding:var(--s6) var(--s5); }
         <section id="projectConnections" hidden></section>
       </article>
     </section>
-    <section class="application-panel" id="application" aria-label="Special Projects application" hidden>
+    <section class="application-panel" id="application" aria-label="Special Projects application" data-project-detail-only hidden>
       <h2 class="application-heading">Apply for <span id="applicationProjectTitle">this project</span></h2>
       <p class="application-note" id="applicationInstructions">Choose an open project above to begin.</p>
       <form class="public-form" id="specialProjectForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
@@ -533,7 +549,7 @@ main { padding:var(--s6) var(--s5); }
     <p id="projectMediaDialogTitle"></p>
   </dialog>
   <footer class="bottom">
-    <a href="/tattoos/">&larr; back to Art.Pill</a>
+    <a id="specialProjectsBackLink" href="/tattoos/">&larr; back to Art.Pill</a>
     <a href="/home/">the six.well construct</a>
   </footer>
   <script src="/js/submission-form.js"></script>
@@ -544,6 +560,14 @@ main { padding:var(--s6) var(--s5); }
     var visibleProjects = [];
     var seriesRecords = [];
     var activeSeriesSlug = "";
+    var routeParts = location.pathname.split("/").filter(Boolean);
+    var routeSlug = "";
+    if (routeParts.length === 3 && routeParts[0] === "tattoos" && routeParts[1] === "special-projects"
+      && !["apply", "healed"].includes(routeParts[2])) {
+      try { routeSlug = decodeURIComponent(routeParts[2]); } catch (error) { routeSlug = ""; }
+    }
+    var isDetailPage = Boolean(routeSlug);
+    document.body.setAttribute("data-special-project-page", isDetailPage ? "detail" : "overview");
     var fields = {
       kicker: document.getElementById("projectKicker"),
       title: document.getElementById("projectTitle"),
@@ -555,8 +579,11 @@ main { padding:var(--s6) var(--s5); }
       intention: document.getElementById("projectIntention")
     };
     var index = document.getElementById("projectIndex");
-    var projectDetail = document.getElementById("project-detail");
     var seriesFilter = document.getElementById("seriesFilter");
+    var overviewSeriesContext = document.getElementById("overviewSeriesContext");
+    var overviewSeriesCover = document.getElementById("overviewSeriesCover");
+    var overviewSeriesName = document.getElementById("overviewSeriesName");
+    var overviewSeriesStatement = document.getElementById("overviewSeriesStatement");
     var seriesContext = document.getElementById("projectSeriesContext");
     var seriesCover = document.getElementById("projectSeriesCover");
     var seriesName = document.getElementById("projectSeriesName");
@@ -570,6 +597,8 @@ main { padding:var(--s6) var(--s5); }
     var mediaDialogImage = document.getElementById("projectMediaDialogImage");
     var mediaDialogTitle = document.getElementById("projectMediaDialogTitle");
     var mediaDialogClose = document.getElementById("projectMediaDialogClose");
+    var projectBreadcrumbTitle = document.getElementById("projectBreadcrumbTitle");
+    var backLink = document.getElementById("specialProjectsBackLink");
     var application = document.getElementById("application");
     var form = document.getElementById("specialProjectForm");
     var applicationModes = document.getElementById("applicationModes");
@@ -623,11 +652,15 @@ main { padding:var(--s6) var(--s5); }
     }
 
     function projectUrl(project, hash) {
-      var url = new URL(location.pathname, location.origin);
-      url.searchParams.set("project", keyFor(project));
-      if (activeSeriesSlug) url.searchParams.set("series", activeSeriesSlug);
+      var url = new URL("/tattoos/special-projects/" + encodeURIComponent(keyFor(project)) + "/", location.origin);
       if (hash) url.hash = hash;
       return url.pathname + url.search + url.hash;
+    }
+
+    function seriesUrl(series) {
+      var url = new URL("/tattoos/special-projects/", location.origin);
+      if (series && series.slug) url.searchParams.set("series", series.slug);
+      return url.pathname + url.search;
     }
 
     function availableSeries() {
@@ -661,8 +694,8 @@ main { padding:var(--s6) var(--s5); }
       }
       seriesContext.hidden = false;
       seriesName.textContent = series.name;
+      seriesName.href = seriesUrl(series);
       seriesName.setAttribute("aria-label", "Show all " + series.name + " projects");
-      seriesName.onclick = function() { setSeriesFilter(series.slug, keyFor(project)); };
       seriesStatement.textContent = series.statement || "";
       if (series.cover && series.cover.url) {
         seriesCover.src = series.cover.url;
@@ -676,7 +709,29 @@ main { padding:var(--s6) var(--s5); }
       }
     }
 
-    function renderConnections(project) {
+    function renderOverviewSeries(series) {
+      if (!series) {
+        overviewSeriesContext.hidden = true;
+        overviewSeriesCover.hidden = true;
+        overviewSeriesCover.removeAttribute("src");
+        return;
+      }
+      overviewSeriesContext.hidden = false;
+      overviewSeriesName.textContent = series.name;
+      overviewSeriesStatement.textContent = series.statement || "";
+      if (series.cover && series.cover.url) {
+        overviewSeriesCover.src = series.cover.url;
+        overviewSeriesCover.alt = series.cover.alt || series.name + " series cover";
+        overviewSeriesCover.hidden = false;
+        overviewSeriesContext.classList.remove("no-cover");
+      } else {
+        overviewSeriesCover.hidden = true;
+        overviewSeriesCover.removeAttribute("src");
+        overviewSeriesContext.classList.add("no-cover");
+      }
+    }
+
+    function renderProjectConnections(project) {
       if (!window.ConstructConnections) return;
       window.ConstructConnections.clear(projectConnections);
       window.ConstructConnections.mount({
@@ -685,28 +740,38 @@ main { padding:var(--s6) var(--s5); }
         title: "Related",
         embedded: true
       });
-      var activeSeries = activeSeriesSlug
-        ? seriesRecords.find(function(series) { return series.slug === activeSeriesSlug; })
-        : null;
+    }
+
+    function renderSeriesConnections(series) {
+      if (!window.ConstructConnections) return;
       window.ConstructConnections.clear(seriesConnections);
-      if (!activeSeries) return;
+      if (!series) return;
       window.ConstructConnections.mount({
         host: seriesConnections,
-        entityId: activeSeries.id,
+        entityId: series.id,
         title: "Series Connections",
         embedded: true
       });
     }
 
-    function setSeriesFilter(slug, projectKey, options) {
+    function setSeriesFilter(slug, options) {
+      options = options || {};
       var valid = slug && availableSeries().some(function(series) { return series.slug === slug; });
       activeSeriesSlug = valid ? slug : "";
       renderSeriesFilters();
       renderIndex();
-      var requestedVisible = visibleProjects.find(function(project) {
-        return keyFor(project) === projectKey || project.id === projectKey;
-      });
-      setProject(keyFor(requestedVisible || visibleProjects[0] || projects[0] || {}), options);
+      var activeSeries = activeSeriesSlug
+        ? seriesRecords.find(function(series) { return series.slug === activeSeriesSlug; })
+        : null;
+      renderOverviewSeries(activeSeries);
+      renderSeriesConnections(activeSeries);
+      if (options.updateUrl !== false) {
+        var url = new URL(location.href);
+        url.searchParams.delete("project");
+        if (activeSeriesSlug) url.searchParams.set("series", activeSeriesSlug);
+        else url.searchParams.delete("series");
+        history.replaceState(null, "", url.pathname + url.search);
+      }
     }
 
     function modeLabel(mode) {
@@ -850,19 +915,32 @@ main { padding:var(--s6) var(--s5); }
           : "Optional for fresh-skin Extended Projects; required for cover-ups and blast-overs.";
     }
 
-    function setProject(key, options) {
-      options = options || {};
+    function setProjectMetadata(project) {
+      var title = project.title + " · Special Projects · Art.Pill Tattoo House";
+      var description = project.summary || ("Special Project detail for " + project.title + ".");
+      var canonical = new URL(projectUrl(project), location.origin).href;
+      document.title = title;
+      var descriptionMeta = document.querySelector("[data-special-project-description]");
+      var canonicalLink = document.querySelector("[data-special-project-canonical]");
+      if (descriptionMeta) descriptionMeta.setAttribute("content", description);
+      if (canonicalLink) canonicalLink.setAttribute("href", canonical);
+    }
+
+    function setProject(key) {
       var project = visibleProjects.find(function(item) { return keyFor(item) === key || item.id === key; })
         || projects.find(function(item) { return keyFor(item) === key || item.id === key; })
         || visibleProjects[0]
         || projects[0];
       if (!project) return;
-      var selectedKey = keyFor(project);
       var status = effectiveStatus(project);
-      var number = Math.max(visibleProjects.indexOf(project), 0) + 1;
+      var number = Math.max(projects.indexOf(project), 0) + 1;
       fields.kicker.textContent = String(number).padStart(2, "0") + " / " + status;
       renderSeriesContext(project);
       fields.title.textContent = project.title;
+      projectBreadcrumbTitle.textContent = project.title;
+      setProjectMetadata(project);
+      backLink.href = seriesForProject(project) ? seriesUrl(seriesForProject(project)) : "/tattoos/special-projects/";
+      backLink.textContent = "← back to Special Projects";
       fields.summary.textContent = project.summary || "This Studio-managed call does not have a public summary yet.";
       fields.medium.textContent = project.profile === "experimental" ? "Experimental Project" : "Extended Project";
       fields.style.textContent = project.profile === "experimental" ? "Free work / refundable attendance deposit" : (project.rateText || "Confirmed after review");
@@ -875,15 +953,6 @@ main { padding:var(--s6) var(--s5); }
         : (status === "opening soon"
           ? "This call is visible for planning but is not accepting applications yet. Return when the managed opening date arrives."
           : "This call remains visible as context but is not accepting applications. Use Custom for another symbolic commission.");
-      Array.prototype.forEach.call(index.querySelectorAll(".project-card"), function(card) {
-        var active = card.getAttribute("data-project") === selectedKey;
-        card.classList.toggle("is-active", active);
-        var link = card.querySelector(".project-card-select");
-        if (link) {
-          if (active) link.setAttribute("aria-current", "true");
-          else link.removeAttribute("aria-current");
-        }
-      });
       if (status === "open") {
         applyLink.classList.remove("is-disabled");
         applyLink.removeAttribute("aria-disabled");
@@ -899,20 +968,10 @@ main { padding:var(--s6) var(--s5); }
       }
       renderMedia(project);
       configureApplication(project, status);
-      renderConnections(project);
-      if (options.updateUrl !== false) {
-        var url = new URL(location.href);
-        url.searchParams.set("project", selectedKey);
-        if (activeSeriesSlug) url.searchParams.set("series", activeSeriesSlug);
-        else url.searchParams.delete("series");
-        if (options.scrollTo === "application") url.hash = "#application";
-        else if (url.hash === "#application") url.hash = "";
-        history.replaceState(null, "", url.pathname + url.search + url.hash);
-      }
-      if (options.scrollTo) {
-        var target = options.scrollTo === "application" ? application : projectDetail;
+      renderProjectConnections(project);
+      if (location.hash === "#application" && status === "open") {
         requestAnimationFrame(function() {
-          target.scrollIntoView({ behavior: options.smooth === false ? "auto" : "smooth", block: "start" });
+          application.scrollIntoView({ behavior: "auto", block: "start" });
         });
       }
     }
@@ -977,10 +1036,6 @@ main { padding:var(--s6) var(--s5); }
         openLabel.textContent = "View project →";
         body.append(title, meta, state, openLabel);
         selectLink.append(media, body);
-        selectLink.addEventListener("click", function(event) {
-          event.preventDefault();
-          setProject(key, { scrollTo: "detail" });
-        });
         card.append(selectLink);
         if (status === "open") {
           var actions = document.createElement("div");
@@ -989,10 +1044,6 @@ main { padding:var(--s6) var(--s5); }
           apply.className = "project-card-apply";
           apply.href = projectUrl(project, "#application");
           apply.textContent = "Apply";
-          apply.addEventListener("click", function(event) {
-            event.preventDefault();
-            setProject(key, { scrollTo: "application" });
-          });
           actions.append(apply);
           card.append(actions);
         }
@@ -1001,12 +1052,6 @@ main { padding:var(--s6) var(--s5); }
     }
 
     applicationModes.addEventListener("change", syncBodyPhotoRequirement);
-
-    applyLink.addEventListener("click", function(event) {
-      if (applyLink.classList.contains("is-disabled")) return;
-      event.preventDefault();
-      if (selectedProject) setProject(keyFor(selectedProject), { scrollTo: "application" });
-    });
 
     window.SixWellSubmissionForms.init({
       form: "#specialProjectForm",
@@ -1034,32 +1079,38 @@ main { padding:var(--s6) var(--s5); }
         });
         if (!projects.length) throw new Error("No Special Project calls are currently published.");
         var params = new URLSearchParams(location.search);
-        var hasRequestedProject = params.has("project");
-        var requestedProject = params.get("project") || keyFor(projects[0]);
-        var requestedSeries = params.get("series") || "";
-        var requestedRecord = projects.find(function(project) { return keyFor(project) === requestedProject || project.id === requestedProject; });
-        if (requestedRecord && requestedSeries && seriesForProject(requestedRecord)?.slug !== requestedSeries) requestedSeries = "";
-        var initialScroll = location.hash === "#application" && requestedRecord && effectiveStatus(requestedRecord) === "open"
-          ? "application"
-          : hasRequestedProject && requestedRecord ? "detail" : "";
-        setSeriesFilter(requestedSeries, requestedProject, {
-          updateUrl: false,
-          scrollTo: initialScroll,
-          smooth: false
-        });
+        if (isDetailPage) {
+          var routeProject = projects.find(function(project) { return keyFor(project) === routeSlug; });
+          if (!routeProject) throw new Error("This Special Project is not publicly available.");
+          setProject(keyFor(routeProject));
+          return;
+        }
+        var legacyProject = params.get("project") || "";
+        if (legacyProject) {
+          var legacyRecord = projects.find(function(project) { return keyFor(project) === legacyProject || project.id === legacyProject; });
+          if (legacyRecord) {
+            location.replace(projectUrl(legacyRecord, location.hash === "#application" ? "#application" : ""));
+            return;
+          }
+        }
+        setSeriesFilter(params.get("series") || "", { updateUrl: false });
       })
       .catch(function(error) {
-        index.innerHTML = '<p class="project-load-status">Current calls could not be loaded. No application path has been opened.</p>';
-        index.className = "";
+        if (!isDetailPage) {
+          index.innerHTML = '<p class="project-load-status">Current calls could not be loaded. No application path has been opened.</p>';
+          index.className = "";
+          return;
+        }
         fields.kicker.textContent = "Unavailable / Safe fallback";
-        fields.title.textContent = "Current Calls Unavailable";
-        fields.summary.textContent = error.message || "The Studio-managed call list could not be loaded.";
+        fields.title.textContent = "Special Project Unavailable";
+        fields.summary.textContent = error.message || "The Studio-managed project could not be loaded.";
         fields.availability.textContent = "Unavailable";
-        fields.intention.textContent = "Please return later or use Custom for another symbolic commission.";
+        fields.intention.textContent = "Please return to Special Projects and choose another public project.";
         applyLink.classList.add("is-disabled");
         applyLink.setAttribute("aria-disabled", "true");
         applyLink.removeAttribute("href");
         applyLink.textContent = "Applications unavailable";
+        application.hidden = true;
       });
   })();
   </script>

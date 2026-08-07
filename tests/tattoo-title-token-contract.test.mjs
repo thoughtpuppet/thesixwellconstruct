@@ -28,7 +28,7 @@ const PAGES = {
   "tattoos/policies/index.html": "ba66c97db81072c0c0eecbb50a636708bac27e0326e4119b33f70f008ddc03ca",
   "tattoos/portfolio/index.html": "e0916fd329f2f600fcb7695202e4ffecc14006f92165a8605306a9f7f6690ca2",
   "tattoos/special-projects/apply/index.html": "0bc3a84d2a696c2334f2b84a01072574dd504a2be99495d76f240cb7d0985529",
-  "tattoos/special-projects/index.html": "e2f7c518b58f9282a27dfc9488bc4df95994bafcf085dacc305cbaba079a0a89",
+  "tattoos/special-projects/index.html": "a28751eb7304fd7ad5d6fa3f43d1c7eea69b9dd2899eb27dc3281eb2780d3c93",
   "tattoos/submission-received/index.html": "c8134bc8bd464b312c38dfa5b9b2481477ab1218bcdc297ec030768d4420e725",
 };
 

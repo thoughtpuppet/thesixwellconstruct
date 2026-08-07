@@ -259,6 +259,13 @@ function archiveDynamicRouteFile(urlPath) {
   return path.resolve(root, "archive", parts[1], "index.html");
 }
 
+function specialProjectDetailRouteFile(urlPath) {
+  const parts = normalizeRoute(urlPath).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "tattoos" || parts[1] !== "special-projects") return null;
+  if (["apply", "healed"].includes(parts[2]) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(parts[2])) return null;
+  return path.resolve(root, "tattoos", "special-projects", "index.html");
+}
+
 function legendRecordRouteFile(urlPath) {
   const parts = normalizeRoute(urlPath).split("/").filter(Boolean);
   if (parts.length !== 3 || parts[0] !== "about" || parts[1] !== "legend") return null;
@@ -325,6 +332,8 @@ function safePath(urlPath) {
   if (isHomeRoute(decoded)) return path.resolve(root, "home", "index.html");
   const archiveDynamicFile = archiveDynamicRouteFile(decoded);
   if (archiveDynamicFile) return archiveDynamicFile;
+  const specialProjectDetailFile = specialProjectDetailRouteFile(decoded);
+  if (specialProjectDetailFile) return specialProjectDetailFile;
   const legendRecordFile = legendRecordRouteFile(decoded);
   if (legendRecordFile) return legendRecordFile;
 

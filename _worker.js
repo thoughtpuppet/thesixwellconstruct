@@ -401,6 +401,7 @@ const ART_LEGACY_PAGE_SLUGS = new Set([
   "slothpainting",
   "thefrustrationsofinnercharospainting",
 ]);
+const SPECIAL_PROJECT_RESERVED_SLUGS = new Set(["apply", "healed"]);
 
 function artRecordSlug(pathname) {
   const parts = normalizePath(pathname).split("/").filter(Boolean);
@@ -425,6 +426,15 @@ function merchRecordSlug(pathname) {
   let candidate = "";
   try { candidate = decodeURIComponent(parts[1]); } catch { return ""; }
   if (MERCH_RECORD_RESERVED_SLUGS.has(candidate) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidate)) return "";
+  return candidate;
+}
+
+function specialProjectRecordSlug(pathname) {
+  const parts = normalizePath(pathname).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "tattoos" || parts[1] !== "special-projects" || hasFileExtension(pathname)) return "";
+  let candidate = "";
+  try { candidate = decodeURIComponent(parts[2]); } catch { return ""; }
+  if (SPECIAL_PROJECT_RESERVED_SLUGS.has(candidate) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidate)) return "";
   return candidate;
 }
 
@@ -496,6 +506,49 @@ async function serveLegendRecordPage(request, env, slug) {
     .replace(
       '<script id="legend-record-data" type="application/json"></script>',
       `<script id="legend-record-data" type="application/json">${legendRecordJson(payload)}</script>`,
+    );
+  const headers = new Headers(assetResponse.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  headers.set("cache-control", "no-store");
+  return new Response(html, { status: assetResponse.status, headers });
+}
+
+async function publicSpecialProjectRecord(env, reference) {
+  const value = String(reference || "").trim();
+  if (!value) return null;
+  return env.SUBMISSIONS_DB.prepare(
+    `SELECT spc.id,spc.slug,spc.title,COALESCE(spc.summary,'') summary
+     FROM special_project_calls spc
+     JOIN content_entities ce ON ce.id=spc.id AND ce.entity_type='special_project'
+     WHERE (spc.slug=?1 OR spc.id=?1) AND ce.visibility='public'
+     LIMIT 1`
+  ).bind(value).first();
+}
+
+async function serveSpecialProjectRecordPage(request, env, slug) {
+  const record = await publicSpecialProjectRecord(env, slug);
+  if (!record || record.slug !== slug) return notFoundPage(request, env);
+
+  const assetResponse = await servePublicAsset(request, env, "/tattoos/special-projects/index.html");
+  if (request.method === "HEAD") return assetResponse;
+
+  const siteOrigin = String(env.PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/g, "");
+  const canonicalUrl = `${siteOrigin}/tattoos/special-projects/${encodeURIComponent(record.slug)}/`;
+  const title = `${record.title} · Special Projects · Art.Pill Tattoo House`;
+  const description = record.summary || `Special Project detail for ${record.title}.`;
+  const html = (await assetResponse.text())
+    .replace(
+      /<title data-special-project-title>[\s\S]*?<\/title>/,
+      `<title data-special-project-title>${escapeHtml(title)}</title>`,
+    )
+    .replace(
+      /<meta data-special-project-description name="description" content="[^"]*">/,
+      `<meta data-special-project-description name="description" content="${escapeHtml(description)}">`,
+    )
+    .replace(
+      /<link data-special-project-canonical rel="canonical" href="[^"]*">/,
+      `<link data-special-project-canonical rel="canonical" href="${escapeHtml(canonicalUrl)}">`,
     );
   const headers = new Headers(assetResponse.headers);
   headers.delete("content-length");
@@ -1451,6 +1504,34 @@ export default {
 
     if (normalizePath(url.pathname) === "/art/detail") {
       return notFoundPage(request, env);
+    }
+
+    const normalizedPublicPath = normalizePath(url.pathname);
+    if (normalizedPublicPath === "/tattoos/special-projects/apply") {
+      const reference = url.searchParams.get("project") || "";
+      if (!reference) return Response.redirect(new URL("/tattoos/special-projects/", request.url), 308);
+      const project = await publicSpecialProjectRecord(env, reference);
+      if (!project) return notFoundPage(request, env);
+      const canonicalUrl = new URL(`/tattoos/special-projects/${encodeURIComponent(project.slug)}/`, request.url);
+      canonicalUrl.hash = "#application";
+      return Response.redirect(canonicalUrl, 308);
+    }
+
+    if (normalizedPublicPath === "/tattoos/special-projects" && url.searchParams.has("project")) {
+      const project = await publicSpecialProjectRecord(env, url.searchParams.get("project"));
+      if (!project) return notFoundPage(request, env);
+      return Response.redirect(new URL(`/tattoos/special-projects/${encodeURIComponent(project.slug)}/`, request.url), 308);
+    }
+
+    const requestedSpecialProjectSlug = specialProjectRecordSlug(url.pathname);
+    if (requestedSpecialProjectSlug) {
+      if (!url.pathname.endsWith("/")) {
+        const canonicalUrl = new URL(request.url);
+        canonicalUrl.pathname = `${normalizePath(url.pathname)}/`;
+        canonicalUrl.search = "";
+        return Response.redirect(canonicalUrl, 308);
+      }
+      return serveSpecialProjectRecordPage(request, env, requestedSpecialProjectSlug);
     }
 
     const legacyMerch = await legacyMerchResponse(request, env, url.pathname);
