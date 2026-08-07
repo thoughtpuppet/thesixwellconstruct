@@ -174,8 +174,10 @@ test("Special Projects expose a focal-aware card grid, Series filtering, and one
   assert.match(source, /params\.get\("series"\)/);
   assert.match(source, /url\.searchParams\.set\("series", activeSeriesSlug\)/);
   assert.match(source, /seriesName\.onclick = function\(\) \{ setSeriesFilter\(series\.slug, keyFor\(project\)\); \}/);
-  assert.match(source, /\.project-card-grid \{\s*display:grid; grid-template-columns:repeat\(2,minmax\(0,1fr\)\);\s*gap:16px/);
-  assert.match(source, /@media \(max-width:600px\) \{\s*\.project-card-grid \{ grid-template-columns:1fr; \}/);
+  assert.match(source, /\.project-card-grid \{\s*display:grid; grid-template-columns:repeat\(3,minmax\(0,1fr\)\);\s*gap:16px/);
+  assert.match(source, /@media \(max-width:980px\) \{\s*\.project-card-grid \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\); \}/);
+  assert.match(source, /@media \(max-width:600px\) \{\s*\.project-card-grid \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\); \}/);
+  assert.match(source, /\.project-card-title \{\s*--type-body-leading-active:1\.05;\s*font-size:clamp\(16px,4\.75vw,20px\); overflow-wrap:anywhere;/);
   assert.match(source, /\.project-card-media \{[\s\S]*aspect-ratio:3\/4/);
   assert.match(source, /image\.style\.objectPosition = cardFocal\(primaryMedia\.cardFocalX\) \+ "% " \+ cardFocal\(primaryMedia\.cardFocalY\) \+ "%"/);
   assert.match(source, /apply\.href = projectUrl\(project, "#application"\)/);
