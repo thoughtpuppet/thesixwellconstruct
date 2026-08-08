@@ -15,7 +15,9 @@ test("private booking presents contextual copy as body text and names the approv
   assert.match(source, /const requestedAppointment = `\$\{designLabel\} appointment for \$\{formatDate\(pending\.startAt\)\}`/);
   assert.match(source, /\$\{requestedAppointment\} is approved\. Confirm the appointment by paying the \$\{depositLabel\} deposit/);
   assert.match(source, /the requested time is not reserved until payment succeeds/);
-  assert.match(source, /pending\.paymentDueAt \? ` by \$\{formatDate\(pending\.paymentDueAt\)\}`/);
+  assert.doesNotMatch(source, /by \$\{formatDate\(pending\.paymentDueAt\)\}/);
+  assert.match(source, /Private booking access for \$\{requestedAppointment\} is no longer active/);
+  assert.doesNotMatch(source, /The deposit window for \$\{requestedAppointment\} has ended/);
   assert.doesNotMatch(source, /Studio approved your requested time/);
 });
 

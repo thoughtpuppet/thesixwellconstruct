@@ -939,8 +939,8 @@
       const requestedOnly = pending.status === "requested" && !pending.holdState;
       const paymentOpen = !pending.paymentDueAt || new Date(pending.paymentDueAt).getTime() > Date.now();
       pendingCheckoutText.textContent = paymentOpen
-        ? `${requestedAppointment} is approved. Confirm the appointment by paying the ${depositLabel} deposit${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}. Availability will be checked before Square opens; the requested time is not reserved until payment succeeds.`
-        : `The deposit window for ${requestedAppointment} has ended. Use the support details below before attempting another booking.`;
+        ? `${requestedAppointment} is approved. Confirm the appointment by paying the ${depositLabel} deposit. Availability will be checked before Square opens; the requested time is not reserved until payment succeeds.`
+        : `Private booking access for ${requestedAppointment} is no longer active. Use the support details below before attempting another booking.`;
       if (paymentOpen && requestedOnly) {
         resumeCheckoutLink.href = "#";
         resumeCheckoutLink.dataset.startDeposit = "1";

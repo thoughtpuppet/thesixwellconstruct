@@ -1793,7 +1793,6 @@ export async function notifyTattooRenderingPaymentRequested(env, request, render
     appointmentWhen: renderingRow.start_at
       ? `${formatDate(renderingRow.start_at)} - ${formatDate(renderingRow.end_at)}`
       : "",
-    expiresAt: renderingRow.expires_at ? formatDate(renderingRow.expires_at) : "",
     checkoutUrl: renderingRow.square_checkout_url,
   });
   return sendTransactionalEmail(env, {
@@ -1855,7 +1854,6 @@ export async function notifyTattooSpecialDepositRequested(env, request, details 
     selection: [details.offerTitle, details.variantLabel].filter(Boolean).join(" — "),
     approvedTotal: formatMoney(details.approvedPriceCents || 0, details.currency || "USD"),
     depositText: formatMoney(details.depositCents || 0, details.currency || "USD"),
-    paymentDue: formatDate(details.paymentDueAt || details.expiresAt),
     checkoutUrl: details.checkoutUrl,
   });
   return sendTransactionalEmail(env, {

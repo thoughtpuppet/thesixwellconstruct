@@ -205,19 +205,32 @@ function validateShape(defaultValue, candidate, path, errors) {
   if (typeof candidate !== "string") errors.push(`${path} must be text.`);
 }
 
-function reconcileShape(defaultValue, candidate) {
+function matchesBlockedCopy(value, patterns = []) {
+  if (typeof value !== "string") return false;
+  return patterns.some((pattern) => {
+    if (pattern instanceof RegExp) {
+      pattern.lastIndex = 0;
+      return pattern.test(value);
+    }
+    return value.toLowerCase().includes(String(pattern || "").toLowerCase());
+  });
+}
+
+function reconcileShape(defaultValue, candidate, blockedCopyPatterns = []) {
   if (Array.isArray(defaultValue)) {
-    return Array.isArray(candidate) && candidate.every((entry) => typeof entry === "string")
+    return Array.isArray(candidate)
+      && candidate.every((entry) => typeof entry === "string")
+      && !candidate.some((entry) => matchesBlockedCopy(entry, blockedCopyPatterns))
       ? clone(candidate)
       : clone(defaultValue);
   }
   if (defaultValue && typeof defaultValue === "object") {
     const source = candidate && typeof candidate === "object" && !Array.isArray(candidate) ? candidate : {};
     return Object.fromEntries(
-      Object.entries(defaultValue).map(([key, value]) => [key, reconcileShape(value, source[key])]),
+      Object.entries(defaultValue).map(([key, value]) => [key, reconcileShape(value, source[key], blockedCopyPatterns)]),
     );
   }
-  return typeof candidate === "string" ? candidate : defaultValue;
+  return typeof candidate === "string" && !matchesBlockedCopy(candidate, blockedCopyPatterns) ? candidate : defaultValue;
 }
 
 export function reconcileEmailContent(semantic, content, options = {}) {
@@ -230,8 +243,9 @@ export function reconcileEmailContent(semantic, content, options = {}) {
       typeof entry !== "string" || !tokensIn(entry).some((token) => removedTokens.has(token))
     ));
   }
+  const blockedCopyPatterns = options.blockedCopyPatterns || [];
   return Object.fromEntries(
-    Object.entries(defaults).map(([key, value]) => [key, reconcileShape(value, candidate[key])]),
+    Object.entries(defaults).map(([key, value]) => [key, reconcileShape(value, candidate[key], blockedCopyPatterns)]),
   );
 }
 
@@ -246,6 +260,9 @@ export function validateEmailContent(semantic, content, options = {}) {
   });
   Object.entries(defaults).forEach(([key, value]) => validateShape(value, content[key], key, errors));
   const allStrings = stringsIn(content);
+  if (allStrings.some((entry) => matchesBlockedCopy(entry, options.blockedCopyPatterns || []))) {
+    errors.push("Removed client deadline language cannot be restored.");
+  }
   if (allStrings.some((entry) => entry.length > 10_000)) errors.push("One or more copy fields exceed 10,000 characters.");
   if (allStrings.join("").length > 50_000) errors.push("Template copy exceeds 50,000 characters.");
   if (allStrings.some((entry) => HTML_PATTERN.test(entry))) errors.push("Raw HTML is not allowed in template copy.");

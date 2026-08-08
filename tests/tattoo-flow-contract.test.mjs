@@ -89,9 +89,11 @@ import {
   buildBookingLinkEmail,
   buildSubmissionReceivedEmail,
   clientEmailPreviewCatalog,
+  emailTemplateDefinition,
   renderClientEmailPreview,
 } from "../functions/api/notifications/_email-templates.js";
 import { escapeEmailHtml } from "../functions/api/notifications/_email-renderer.js";
+import { reconcileEmailContent, validateEmailContent } from "../functions/api/notifications/_email-content.js";
 import {
   defaultEmailDesignProfile,
   resolveEmailDesign,
@@ -4518,7 +4520,7 @@ test("legacy Tattoo Special request-time links remain compatible with approval a
   assert.doesNotMatch(approvalEmail.text, /square\.test\/special/);
   assert.doesNotMatch(approvalEmail.html, /Change requested time/i);
   assert.match(approvalEmail.html, /appointment will be set once the deposit is complete/i);
-  assert.match(approvalEmail.text, /available until the date shown above/i);
+  assert.doesNotMatch(approvalEmail.text, /pay by|available until the date shown above|link expires/i);
   assert.deepEqual(database.prepare(
     "SELECT channel,status FROM notification_deliveries WHERE related_id=? AND template_key='tattoo_special_deposit_requested' ORDER BY channel",
   ).all(submitted.submissionId).map((row) => ({ ...row })), [
@@ -7462,8 +7464,42 @@ test("client transactional email catalog renders exact HTML and plain-text varia
   assert.match(specialDepositPreview.text, new RegExp(specialDepositApprovalCopy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(specialDepositPreview.html, /Choose a Time/);
   assert.doesNotMatch(specialDepositPreview.html, /Change requested time/);
-  assert.match(specialDepositPreview.text, /available until the date shown above/i);
+  assert.doesNotMatch(specialDepositPreview.text, /pay by|available until the date shown above|link expires/i);
   assert.match(specialDepositPreview.text, /Choose a time that works for you/i);
+  for (const [templateKey, variant] of [
+    ["booking_link_created", "tattoo"],
+    ["booking_link_created", "tattoo_special"],
+    ["tattoo_rendering_payment_requested", "default"],
+  ]) {
+    const rendered = renderClientEmailPreview(templateKey, variant);
+    const identity = `${templateKey}:${variant}`;
+    assert.doesNotMatch(rendered.text, /pay by|payment link expires|private link expires|before the private link expires/i, identity);
+    assert.doesNotMatch(rendered.html, /pay by|payment link expires|private link expires|before the private link expires/i, identity);
+    const definition = emailTemplateDefinition(templateKey, variant);
+    const stalePublishedContent = structuredClone(definition.defaultContent);
+    stalePublishedContent.preheader = "Pay by Tuesday before the private link expires.";
+    assert.equal(validateEmailContent(
+      definition.rendered.semantic,
+      stalePublishedContent,
+      definition.options,
+    ).ok, false, `${identity} rejects restored deadline copy`);
+    assert.equal(
+      reconcileEmailContent(definition.rendered.semantic, stalePublishedContent, definition.options).preheader,
+      definition.defaultContent.preheader,
+      `${identity} reconciles a stale published deadline to the current default`,
+    );
+  }
+  const staleSpecialDefinition = emailTemplateDefinition("tattoo_special_deposit_requested", "default");
+  const staleSpecialContent = structuredClone(staleSpecialDefinition.defaultContent);
+  staleSpecialContent.notice = [
+    ...staleSpecialContent.notice,
+    "This private link is available until the date shown above.",
+  ];
+  assert.deepEqual(
+    reconcileEmailContent(staleSpecialDefinition.rendered.semantic, staleSpecialContent, staleSpecialDefinition.options).notice,
+    staleSpecialDefinition.defaultContent.notice,
+    "stale published Tattoo Special notices reconcile to deadline-free defaults",
+  );
   const specialReceiptPreview = renderClientEmailPreview("submission_received", "tattoo_special");
   assert.match(specialReceiptPreview.subject, /Tattoo Special request received$/);
   assert.match(specialReceiptPreview.html, /Your request has been received\./);

@@ -596,6 +596,8 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
     const fileError = validateReferenceFiles(body.files);
     if (fileError) return failure(fileError, 400);
     const referenceLink = text(fields.referenceLink, 1000);
+    const utm = text(fields.utm, 500);
+    const foundVia = text(fields.foundVia, 120);
     if (terms.reference_requirement === "required" && !body.files.length && !referenceLink) {
       return failure("This Tattoo Special requires at least one reference image or reference link.", 400);
     }
@@ -670,6 +672,8 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
       script_text: scriptText,
       max_word_count: maxWordCount || null,
       reference_link: referenceLink,
+      utm: utm || null,
+      found_via: foundVia || null,
       participants,
       primary_participant_index: 0,
       automated_messages_recipient: primary.email,

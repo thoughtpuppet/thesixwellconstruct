@@ -6,6 +6,18 @@ import {
   validateEmailContent,
 } from "./_email-content.js";
 
+const CLIENT_PAYMENT_DEADLINE_PATTERNS = Object.freeze([
+  /\bpay by\b/i,
+  /\blink expires\b/i,
+  /available until the date shown above/i,
+]);
+
+const DEADLINE_FREE_TATTOO_EMAILS = new Set([
+  "booking_link_created",
+  "tattoo_rendering_payment_requested",
+  "tattoo_special_deposit_requested",
+]);
+
 function list(values) {
   return (Array.isArray(values) ? values : []).filter((entry) => String(entry || "").trim());
 }
@@ -141,7 +153,7 @@ export function buildBookingLinkEmail(data) {
       consultation
         ? "Your project review is ready for the required in-person planning consultation. This consultation happens before tattoo scheduling."
         : tattooSpecial
-          ? "Your Tattoo Special was approved, but no appointment is booked yet. Choose an available time and complete the Square deposit before the private link expires."
+          ? "Your Tattoo Special was approved, but no appointment is booked yet. Choose an available time and complete the Square deposit to confirm the appointment."
           : "Your tattoo project and final session plan are ready for tattoo booking. Choose Quarter Day, Half Day, Full Day, or the optional Extended Day. You may use one longer appointment or split the project across shorter appointments.",
     ],
     sections: [
@@ -162,7 +174,6 @@ export function buildBookingLinkEmail(data) {
         label: consultation ? "Consultation reservation fee" : tattooSpecial ? "Deposit required to confirm" : "Tattoo deposit due to book",
         value: data.depositText,
       },
-      data.expiresAt ? { label: "Private link expires", value: data.expiresAt } : null,
     ],
     primaryAction: {
       label: consultation ? "Choose consultation time" : tattooSpecial ? "Choose time and pay deposit" : "Review session and book",
@@ -208,7 +219,6 @@ export function buildTattooRenderingPaymentRequestEmail(data) {
     details: [
       { label: "Drawing fee", value: data.amountText || "$50" },
       data.appointmentWhen ? { label: "Current appointment", value: data.appointmentWhen } : null,
-      data.expiresAt ? { label: "Payment link expires", value: data.expiresAt } : null,
     ],
     primaryAction: { label: "Pay drawing fee", href: data.checkoutUrl },
     notice: [
@@ -255,7 +265,7 @@ export function buildTattooSpecialDepositRequestEmail(data) {
     variables: { client_name: data.clientName || "there" },
     theme: "tattoo",
     subject: data.subject || "Your Tattoo Special was approved — deposit required",
-    preheader: "Choose an available time and complete the deposit before the link expires.",
+    preheader: "Choose an available time and complete the deposit to confirm the appointment.",
     classification: "TATTOO SPECIAL APPROVED",
     headline: "Your request is approved.",
     greeting: `Hi ${data.clientName || "there"},`,
@@ -267,13 +277,11 @@ export function buildTattooSpecialDepositRequestEmail(data) {
       { label: "Tattoo Special", value: data.selection },
       { label: "Approved total", value: data.approvedTotal },
       { label: "Deposit due", value: data.depositText },
-      { label: "Pay by", value: data.paymentDue },
     ],
     primaryAction: { label: "Choose a Time", href: data.checkoutUrl },
     secondaryActions: [],
     notice: [
       "Choose a time that works for you. Availability is checked again before Square opens.",
-      "This private link is available until the date shown above. Need more time or have a question? Feel free to reach out.",
       "The deposit is non-refundable and is credited toward the approved Tattoo Special total.",
     ],
     signature: tattooSignature(true),
@@ -967,7 +975,6 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       selection: "Hand Sized Tattoo — Standard",
       approvedTotal: "$200",
       depositText: "$50",
-      paymentDue: "Tuesday, August 4, 2026 at 2:30 PM EDT",
       checkoutUrl: "https://square.link/u/demo-tattoo-special-deposit",
       changeTimeUrl: "https://example.com/booking/reschedule/?appointment=demo-special&flow=special-request",
     });
@@ -1058,7 +1065,6 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       requestNumber: 1,
       amountText: "$50",
       appointmentWhen: SAMPLE.when,
-      expiresAt: SAMPLE.shortWhen,
       checkoutUrl: "https://square.link/u/demo-rendering-fee",
     });
   } else if (key === "tattoo_rendering_payment_confirmed") {
@@ -1295,6 +1301,9 @@ export function emailTemplateDefinition(templateKey, variant = "") {
   const options = {
     omit: entry.omitEditable || [],
     removedTokens: entry.templateKey === "submission_received" ? ["review_line"] : [],
+    blockedCopyPatterns: DEADLINE_FREE_TATTOO_EMAILS.has(entry.templateKey)
+      ? CLIENT_PAYMENT_DEADLINE_PATTERNS
+      : [],
   };
   return {
     ...entry,
