@@ -5,6 +5,10 @@ import {
   createBookingRawToken,
 } from "../booking-links.js";
 import { ingestCrmSourceRecord } from "../crm/ingest.js";
+import {
+  notifyAdminSubmissionReceived,
+  notifySubmissionReceived,
+} from "../notifications/_lib.js";
 
 const SPECIAL_TYPE = "tattoo_special";
 const SPECIAL_BOOKING_PREFIX = "tattoo_special_";
@@ -276,6 +280,12 @@ async function loadOfferMetrics(db) {
               END) AS booked,
               MAX(CASE
                 WHEN a.status IN ('pending_deposit','deposit_pending') AND a.hold_state = 'active' THEN 1
+                WHEN s.status='approved' AND EXISTS (
+                  SELECT 1 FROM booking_tokens bt
+                  WHERE bt.submission_id=t.submission_id
+                    AND bt.revoked_at IS NULL AND bt.used_at IS NULL
+                    AND (bt.expires_at IS NULL OR bt.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                ) THEN 1
                 ELSE 0
               END) AS awaiting_deposit,
               MAX(CASE
@@ -285,6 +295,7 @@ async function loadOfferMetrics(db) {
                 ELSE 0
               END) AS cancelled
        FROM tattoo_special_submission_terms t
+       JOIN submissions s ON s.id=t.submission_id
        LEFT JOIN appointments a ON a.submission_id = t.submission_id
        LEFT JOIN deposit_payments dp ON dp.appointment_id = a.id
        GROUP BY t.offer_id, t.submission_id
@@ -418,8 +429,8 @@ async function createBookingAccess(db, request, submissionId, terms, closesAt) {
       .bind(bookingUrl.pathname + bookingUrl.search, now, submissionId),
     db.prepare(
       `INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at)
-       VALUES (?, ?, 'booking_link_created', 'system', ?, ?)`
-    ).bind(crypto.randomUUID(), submissionId, `Tattoo Special · ${terms.offer_title} · expires at sales close`, now),
+       VALUES (?, ?, 'special_request_link_created', 'system', ?, ?)`
+    ).bind(crypto.randomUUID(), submissionId, `Tattoo Special request-time selection · ${terms.offer_title} · expires at sales close`, now),
   ]);
   return { id: tokenId, rawToken: token, bookingUrl: bookingUrl.pathname + bookingUrl.search, purpose: "tattoo", expiresAt: closesAt, allowedBookingTypes: [terms.booking_type_id] };
 }
@@ -429,7 +440,7 @@ function absoluteClientBookingUrl(request, env, pathOrUrl) {
   return new URL(pathOrUrl, base).toString();
 }
 
-async function activePreparedAccess(db, submissionId, appointmentId, bookingUrl) {
+async function activePreparedAccess(db, submissionId, bookingUrl) {
   let token = "";
   try {
     token = bookingTokenFromUrl(bookingUrl);
@@ -438,24 +449,20 @@ async function activePreparedAccess(db, submissionId, appointmentId, bookingUrl)
   }
   if (!token) return null;
   return db.prepare(
-    `SELECT bt.id FROM booking_tokens bt
-     JOIN appointments a ON a.booking_token_id = bt.id
-     WHERE bt.submission_id = ? AND a.id = ? AND bt.token_hash = ?
-       AND a.status='requested' AND a.hold_state IS NULL AND a.approval_state='approved'
+    `SELECT bt.id,bt.expires_at FROM booking_tokens bt
+     JOIN submissions s ON s.id = bt.submission_id
+     WHERE bt.submission_id = ? AND bt.token_hash = ? AND s.status='approved'
        AND bt.revoked_at IS NULL AND bt.used_at IS NULL
        AND (bt.expires_at IS NULL OR bt.expires_at > ?)
      LIMIT 1`
-  ).bind(submissionId, appointmentId, await sha256(token), new Date().toISOString()).first();
+  ).bind(submissionId, await sha256(token), new Date().toISOString()).first();
 }
 
 async function prepareTattooSpecialClientAccess(db, request, env, submission, preparedRequest) {
-  const priorPreparation = await db.prepare(
-    "SELECT id FROM submission_events WHERE submission_id=? AND event_type='special_deposit_link_prepared' LIMIT 1"
-  ).bind(submission.id).first();
   const currentAccess = submission.booking_url
-    ? await activePreparedAccess(db, submission.id, preparedRequest.appointment.id, submission.booking_url)
+    ? await activePreparedAccess(db, submission.id, submission.booking_url)
     : null;
-  if (priorPreparation && currentAccess) {
+  if (currentAccess) {
     return {
       id: currentAccess.id,
       path: submission.booking_url,
@@ -485,9 +492,7 @@ async function prepareTattooSpecialClientAccess(db, request, env, submission, pr
     db.prepare(
       `INSERT INTO booking_tokens
        (id,token_hash,submission_id,allowed_booking_types_json,purpose,expires_at,created_at,updated_at)
-       SELECT ?,?,?,?,?,?,?,? FROM appointments
-       WHERE id=? AND submission_id=? AND status='requested'
-         AND hold_state IS NULL AND approval_state='approved'`
+       VALUES (?,?,?,?,?,?,?,?)`
     ).bind(
       tokenId,
       await sha256(token),
@@ -497,15 +502,7 @@ async function prepareTattooSpecialClientAccess(db, request, env, submission, pr
       expiresAt,
       now,
       now,
-      preparedRequest.appointment.id,
-      submission.id,
     ),
-    db.prepare(
-      `UPDATE appointments SET booking_token_id=?,updated_at=?
-       WHERE id=? AND submission_id=? AND status='requested'
-         AND hold_state IS NULL AND approval_state='approved'
-         AND EXISTS (SELECT 1 FROM booking_tokens WHERE id=?)`
-    ).bind(tokenId, now, preparedRequest.appointment.id, submission.id, tokenId),
     db.prepare(
       `UPDATE booking_tokens SET revoked_at=COALESCE(revoked_at,?),updated_at=?
        WHERE submission_id=? AND id<>? AND used_at IS NULL`
@@ -519,10 +516,18 @@ async function prepareTattooSpecialClientAccess(db, request, env, submission, pr
       `INSERT INTO submission_events (id,submission_id,event_type,actor,note,created_at)
        SELECT ?,?,'booking_link_created','admin',?,?
        WHERE EXISTS (SELECT 1 FROM booking_tokens WHERE id=? AND submission_id=?)`
-    ).bind(crypto.randomUUID(), submission.id, `tattoo_special_deposit:${preparedRequest.appointment.id}:${tokenId}`, now, tokenId, submission.id),
+    ).bind(crypto.randomUUID(), submission.id, `tattoo_special_deposit:${preparedRequest.appointment?.id || "approval-first"}:${tokenId}`, now, tokenId, submission.id),
   ];
+  if (preparedRequest.appointment?.id) {
+    statements.push(db.prepare(
+      `UPDATE appointments SET booking_token_id=?,updated_at=?
+       WHERE id=? AND submission_id=? AND status='requested'
+         AND hold_state IS NULL AND approval_state='approved'
+         AND EXISTS (SELECT 1 FROM booking_tokens WHERE id=?)`
+    ).bind(tokenId, now, preparedRequest.appointment.id, submission.id, tokenId));
+  }
   const results = await db.batch(statements);
-  if (Number(results?.[1]?.meta?.changes || 0) < 1 || Number(results?.[3]?.meta?.changes || 0) < 1) {
+  if (Number(results?.[0]?.meta?.changes || 0) < 1 || Number(results?.[2]?.meta?.changes || 0) < 1) {
     throw new Error("The prepared deposit could not be attached to new client access.");
   }
   return {
@@ -633,6 +638,9 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
         submissionId: existing.id,
         bookingUrl: existing.booking_url || "",
         reviewRequired: existingPayload.booking_mode === "review",
+        receipt: existingPayload.booking_mode === "review"
+          ? "Thanks for sending this in. A follow-up will arrive soon."
+          : "Your private booking link is ready.",
       });
     }
 
@@ -721,13 +729,20 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
       occurredAt: now,
     });
 
-    const token = await createBookingAccess(db, request, submissionId, terms, terms.sales_closes_at);
+    const createdSubmission = await db.prepare("SELECT * FROM submissions WHERE id=?").bind(submissionId).first();
+    await Promise.allSettled([
+      notifySubmissionReceived(env, createdSubmission),
+      notifyAdminSubmissionReceived(env, createdSubmission),
+    ]);
+    const token = direct
+      ? await createBookingAccess(db, request, submissionId, terms, terms.sales_closes_at)
+      : null;
     return json({
       ok: true,
       submissionId,
       reviewRequired: !direct,
       bookingUrl: token?.bookingUrl || "",
-      receipt: direct ? "Your private booking link is ready." : "Choose an available time to finish sending your Tattoo Special request for Studio approval.",
+      receipt: direct ? "Your private booking link is ready." : "Thanks for sending this in. A follow-up will arrive soon.",
     }, { status: 201 });
   } catch (error) {
     if (String(error.message || error).includes("UNIQUE constraint failed: submissions.idempotency_key")) {
@@ -1090,12 +1105,12 @@ export async function handleAdminTattooSpecialDeposit(request, env, submissionId
     const clientAccess = await prepareTattooSpecialClientAccess(db, request, env, submission, preparedRequest);
     await db.prepare(
       "INSERT INTO submission_events (id,submission_id,event_type,actor,note,created_at) VALUES (?,?,'special_deposit_link_prepared','admin',?,?)"
-    ).bind(crypto.randomUUID(), submissionId, preparedRequest.appointment.id, new Date().toISOString()).run();
+    ).bind(crypto.randomUUID(), submissionId, preparedRequest.appointment?.id || "approval-first", new Date().toISOString()).run();
     return json({
       ok: true,
       checkoutUrl: "",
       clientUrl: clientAccess.bookingUrl,
-      appointmentId: preparedRequest.appointment.id,
+      appointmentId: preparedRequest.appointment?.id || "",
       paymentDueAt: preparedRequest.paymentDueAt,
       existing: preparedRequest.existing && clientAccess.existing,
       delivery: { ok: false, skipped: true, reason: "explicit_client_notification_required" },

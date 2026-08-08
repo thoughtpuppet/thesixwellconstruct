@@ -114,8 +114,9 @@
 <link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
+<link rel="stylesheet" href="/css/booking-client-copy.css">
 </head>
-<body class="tattoo-flow" data-venture="tattooing" data-construct-breadcrumb-current="Private Booking">
+<body class="tattoo-flow booking-client-flow" data-venture="tattooing" data-construct-breadcrumb-current="Private Booking">
 <script>
 (function(){
   var o = document.createElement("div");
@@ -231,6 +232,7 @@
   const token = params.get("token") || shortTokenMatch?.[1] || "";
   const previewMode = params.get("preview") === "1";
   const editMode = params.get("edit") === "1";
+  const tattooSpecialRequestEntry = params.get("entry") === "tattoo-special-request";
   const checkoutUnavailable = params.get("checkout") === "unavailable";
   const bookingPreviewKey = "swc_booking_admin_preview";
   const statusEl = document.getElementById("status");
@@ -330,7 +332,7 @@
   }
 
   function recordBookingOpen() {
-    if (previewMode || !token) return;
+    if (previewMode || tattooSpecialRequestEntry || !token) return;
     fetch("/api/booking/access-events", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -510,6 +512,14 @@
   function formatDate(value) {
     if (!value) return "";
     return new Date(value).toLocaleString([], { weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
+  }
+
+  function formatRequestedTime(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    const day = date.toLocaleDateString([], { weekday:"short", month:"short", day:"numeric" });
+    const time = date.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" });
+    return `${day} at ${time}`;
   }
 
   function money(cents, currency = "USD") {
@@ -871,7 +881,7 @@
       ? "Project review has linked you to a required in-person planning consultation. Choose a time and pay the consultation reservation fee. This does not book the tattoo; tattoo access follows only after the consultation is completed and the studio saves the final session plan."
       : special
         ? pendingSpecialApproval
-          ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Select the time you would like Studio to review. This records your request but does not reserve the appointment.`
+          ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Select a time for review. This records the request but does not reserve the appointment.`
           : `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Your approved total is ${money(special.quotedPriceCents || 0)} for ${minutesLabel(special.durationMinutes || 0)}. The ${money(special.depositCents || 0)} deposit is credited toward that total; the remaining balance is ${money(Math.max(0, (special.quotedPriceCents || 0) - (special.depositCents || 0)))}.`
       : "Your project and final session plan are ready for tattoo scheduling. Select a session, complete the tattoo deposit through Square, and return here for confirmation.";
     sessionSectionLabel.textContent = experimental
@@ -893,7 +903,7 @@
       ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
       : special
         ? pendingSpecialApproval
-          ? `Nothing is charged and the time is not reserved. If Studio approves the request, you can confirm an available appointment by paying the ${money(special.depositCents || 0)} deposit.`
+          ? `Nothing is charged and the time is not reserved. After approval, an available appointment can be confirmed by paying the ${money(special.depositCents || 0)} deposit.`
           : `${money(special.depositCents || 0)} is collected now and credited toward the ${money(special.quotedPriceCents || 0)} Tattoo Special total. The deposit is non-refundable.`
       : "The tattoo deposit is applied toward the appointment total. Optional tips are itemized separately on the Square receipt.";
     const badge = document.querySelector(".badge");
@@ -916,7 +926,7 @@
     const active = activeState && Number.isFinite(expiresMs) && expiresMs > Date.now();
     const service = context?.purpose === "consultation" ? "consultation" : "tattoo appointment";
     if (pending.approvalState === "pending") {
-      pendingCheckoutText.textContent = `Your requested time, ${formatDate(pending.startAt || pending.heldStartAt)}, has been sent to Studio for review. It is not reserved, no appointment is booked, and no deposit is due unless the request is approved.`;
+      pendingCheckoutText.textContent = `Your requested time, ${formatRequestedTime(pending.startAt || pending.heldStartAt)}, has been submitted for review. The appointment has not been booked yet, and the deposit is not due until approval.`;
       pendingCheckoutPanel.classList.remove("hidden");
       appEl.classList.add("hidden");
       return true;
@@ -929,8 +939,8 @@
       const requestedOnly = pending.status === "requested" && !pending.holdState;
       const paymentOpen = !pending.paymentDueAt || new Date(pending.paymentDueAt).getTime() > Date.now();
       pendingCheckoutText.textContent = paymentOpen
-        ? `You requested ${requestedAppointment}. Studio approved the request. Confirm the appointment by paying the ${depositLabel} deposit${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}. Availability will be checked before Square opens; the requested time is not reserved until payment succeeds.`
-        : `Your requested ${requestedAppointment} was approved, but its deposit window has ended. Contact the Studio before attempting another booking.`;
+        ? `${requestedAppointment} is approved. Confirm the appointment by paying the ${depositLabel} deposit${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}. Availability will be checked before Square opens; the requested time is not reserved until payment succeeds.`
+        : `The deposit window for ${requestedAppointment} has ended. Use the support details below before attempting another booking.`;
       if (paymentOpen && requestedOnly) {
         resumeCheckoutLink.href = "#";
         resumeCheckoutLink.dataset.startDeposit = "1";
@@ -1196,7 +1206,7 @@
         : `The tattoo work is free. The ${money(experimental.refundableDepositCents || 0)} attendance deposit is refunded after attendance. Cancellation or a no-show forfeits it.`
       : context?.submission?.special
       ? pendingSpecialApproval
-        ? `This records a requested time for approval. It does not reserve the appointment, book anything, or create a payment link.`
+        ? `This records a requested time for review. It does not reserve the appointment, book anything, or create a payment link.`
         : `${selectedType.depositLabel} is collected through Square and credited toward the ${money(context.submission.special.quotedPriceCents || 0)} Tattoo Special total. Remaining balance: ${money(Math.max(0, (context.submission.special.quotedPriceCents || 0) - Number(selectedType.depositCents || 0)))}.`
       : selectedType?.id === EXTENDED_DAY_BOOKING_TYPE_ID
       ? `Square collects only the ${selectedType.depositLabel} deposit${selectedTipCents ? " and your optional tip" : ""} today. The $200 Extended Day fee is included in the final studio balance, and the deposit is credited toward your final total.`
@@ -1410,7 +1420,7 @@
     const pendingSpecialApproval = Boolean(context?.submission?.pendingApproval);
     const experimental = context?.submission?.experimentalProject;
     checkoutNote.textContent = pendingSpecialApproval
-      ? "Recording your requested time for Studio review."
+      ? "Recording your requested time for review."
       : experimental && context?.purpose === "consultation"
         ? "Booking your free consultation."
         : "Preparing your Square deposit checkout.";

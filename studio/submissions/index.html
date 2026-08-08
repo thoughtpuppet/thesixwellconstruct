@@ -181,7 +181,7 @@
   .text-template-editor { border:5px solid var(--ring-faint); padding:14px; display:grid; gap:12px; margin-top:6px; min-width:0; max-width:100%; }
   .text-template-editor-grid { display:grid; grid-template-columns:minmax(180px,.65fr) minmax(0,1.35fr); gap:12px; align-items:start; min-width:0; }
   .text-template-editor-grid > label,.text-template-editor select,.text-template-editor textarea { min-width:0; max-width:100%; }
-  .text-template-editor-preview { border:5px solid var(--ring-faint); padding:12px; color:var(--muted); line-height:1.6; overflow-wrap:anywhere; min-width:0; max-width:100%; }
+  .text-template-editor-preview { border:5px solid var(--ring-faint); padding:12px; color:var(--muted); line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; min-width:0; max-width:100%; }
   .session-plan-editor { border:5px solid rgba(110,4,4,.46); padding:16px; margin-top:18px; display:grid; gap:14px; }
   .session-plan-editor h3 { margin:0; color:var(--accent); font-family:var(--sans); font-size:16px; text-transform:uppercase; }
   .session-plan-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
@@ -307,6 +307,7 @@
   .request-badge.tone-needs-review { border-color:color-mix(in srgb,var(--studio-status-warning) 60%,transparent); color:var(--studio-status-warning); }
   .request-badge.tone-review { border-color:color-mix(in srgb,var(--studio-text) 42%,transparent); color:var(--studio-text); }
   .request-badge.tone-action,.request-badge.tone-success { border-color:color-mix(in srgb,var(--studio-status-success) 66%,transparent); color:var(--studio-status-success); }
+  .request-badge.tone-booked { border-color:color-mix(in srgb,var(--studio-signal) 66%,transparent); color:var(--studio-signal); }
   .request-badge.tone-error { border-color:color-mix(in srgb,var(--studio-status-error) 72%,transparent); color:var(--studio-status-error); }
   .request-badge.tone-terminal { border-color:color-mix(in srgb,var(--studio-dim) 52%,transparent); color:var(--studio-dim); }
   .detail-section { border-top:5px solid var(--ring-faint); margin-top:22px; }
@@ -437,6 +438,14 @@
   .tattoo-settings-card { border:5px solid var(--ring-faint); padding:16px; background:var(--panel); display:grid; gap:12px; min-width:0; }
   .tattoo-settings-card h3 { font-family:var(--sans); font-size:13px; letter-spacing:.12em; text-transform:uppercase; }
   .tattoo-settings-list { display:grid; gap:10px; min-width:0; }
+  .tattoo-settings-card > *,
+  .tattoo-settings-list > *,
+  .tattoo-settings-row.special > *,
+  .tattoo-settings-row.special-series > *,
+  .special-project-wide,
+  .special-project-series-cover,
+  .special-project-media,
+  .special-project-upload { min-width:0; max-width:100%; }
   .tattoo-settings-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(120px,.65fr) auto; gap:10px; align-items:end; border-top:5px solid var(--ring-faint); padding-top:10px; min-width:0; }
   .tattoo-settings-row.special { grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; padding:14px; border:5px solid var(--ring-faint); }
   .tattoo-settings-row.special > .admin-collapse-heading { grid-column:1/-1; align-items:center; }
@@ -501,7 +510,18 @@
     .tattoo-settings-grid { grid-template-columns:1fr; }
     .tattoo-settings-row,
     .tattoo-settings-row.special,
-    .tattoo-settings-row.special-series { grid-template-columns:1fr; }
+    .tattoo-settings-row.special-series { grid-template-columns:minmax(0,1fr); }
+    .tattoo-settings,
+    .tattoo-settings-card,
+    .tattoo-settings-list,
+    .tattoo-settings-row.special,
+    .tattoo-settings-row.special-series { width:100%; max-width:100%; min-width:0; }
+    .tattoo-settings-card,
+    .tattoo-settings-row.special,
+    .tattoo-settings-row.special-series { padding:12px; }
+    .special-project-wide,
+    .special-project-series-cover { grid-column:auto; }
+    .special-project-modes .check { min-width:0; flex:1 1 90px; }
     .special-project-media-row { grid-template-columns:minmax(0,1fr); }
     .special-project-media-row > label[style] { grid-column:auto!important; }
     .special-project-card-crop { grid-template-columns:1fr; }
@@ -512,6 +532,8 @@
     .text-template-editor-grid { grid-template-columns:1fr; }
     .tattoo-specials-settings,
     .tattoo-special-offer__grid { grid-template-columns:minmax(0,1fr); }
+    .studio-console .custom-select > .custom-select-trigger,
+    .studio-console .custom-select-option { font-size:var(--studio-type-body-size-active,13px); }
   }
   @media (max-width:900px) {
     .layout { grid-template-columns:1fr; }
@@ -1555,7 +1577,12 @@
       },
     }).then(async (response) => {
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Request failed.");
+      if (!response.ok) {
+        const error = new Error(payload.error || "Request failed.");
+        error.code = payload.code || "";
+        error.status = response.status;
+        throw error;
+      }
       return payload;
     });
   }
@@ -3039,20 +3066,22 @@
 
   function specialProjectRow(project) {
     const status = project.status || "closed";
+    const publicationState = project.publicationState || project.publication_state || "draft";
     const profile = project.profile || "extended";
     const modes = new Set(project.allowedModes || project.allowed_modes || ["fresh"]);
     const mediaRows = (project.media || []).map((item) => specialProjectMediaRow(item)).join("");
     const projectId = project.id || project.slug || "new";
     const projectTitle = String(project.title || "").trim();
     const projectLabel = projectTitle
-      ? `${projectTitle} — ${profile === "experimental" ? "Experimental" : "Extended"} · ${status === "open" ? "Open" : "Closed"}`
+      ? `${projectTitle} — ${profile === "experimental" ? "Experimental" : "Extended"} · ${publicationState === "published" ? "Published" : "Draft"} · ${status === "open" ? "Open" : "Closed"}`
       : "New Special Project";
     return `<section class="tattoo-settings-row special" data-special-project data-id="${escapeHtml(project.id || "")}" data-admin-section-title="${escapeHtml(projectLabel)}" data-admin-collapse-key="special-project-${escapeHtml(projectId)}" data-admin-default="${project._editorOpen ? "open" : "closed"}">
       <label>Project ID / slug<input data-special-slug value="${escapeHtml(project.slug || project.id || "")}" maxlength="96" pattern="[a-z0-9][a-z0-9-]*" required></label>
       <label>Project title<input data-special-title value="${escapeHtml(project.title || "")}" maxlength="160" required></label>
       <label>Series<select data-special-series>${specialProjectSeriesOptions(project.seriesId || project.series_id || "")}</select></label>
       <label>Profile<select data-special-profile><option value="extended" ${profile === "extended" ? "selected" : ""}>Extended</option><option value="experimental" ${profile === "experimental" ? "selected" : ""}>Experimental</option></select></label>
-      <label>Status<select data-special-status><option value="open" ${status === "open" ? "selected" : ""}>Open</option><option value="closed" ${status === "closed" ? "selected" : ""}>Closed</option></select></label>
+      <label>Publication<select data-special-publication><option value="draft" ${publicationState === "draft" ? "selected" : ""}>Draft / Unpublished</option><option value="published" ${publicationState === "published" ? "selected" : ""}>Published</option></select></label>
+      <label>Applications<select data-special-status><option value="open" ${status === "open" ? "selected" : ""}>Open</option><option value="closed" ${status === "closed" ? "selected" : ""}>Closed</option></select></label>
       <label>Displayed rate<input data-special-rate value="${escapeHtml(settingValue(project, "rateText", "rate_text"))}" maxlength="80"></label>
       <label>Opens at<input data-special-opens type="datetime-local" value="${escapeHtml(String(project.opensAt || project.opens_at || "").slice(0,16))}"></label>
       <label>Closes at<input data-special-closes type="datetime-local" value="${escapeHtml(String(project.closesAt || project.closes_at || "").slice(0,16))}"></label>
@@ -3202,7 +3231,7 @@
         uploadedCount += 1;
       }
       input.value = "";
-      output.textContent = `${uploadedCount} image${uploadedCount === 1 ? "" : "s"} uploaded and attached. Save Special Projects to publish the gallery change.`;
+      output.textContent = `${uploadedCount} image${uploadedCount === 1 ? "" : "s"} uploaded and attached. Save Special Projects to keep the gallery change.`;
       setStatus(`${uploadedCount} Special Project image${uploadedCount === 1 ? "" : "s"} uploaded and attached`);
     } finally {
       button.disabled = false;
@@ -3249,7 +3278,7 @@
       });
       setSpecialProjectSeriesCover(row, { id: asset.id, alt: altText });
       input.value = "";
-      if (output) output.textContent = "Cover uploaded and selected. Save Special Projects to publish the series change.";
+      if (output) output.textContent = "Cover uploaded and selected. Save Special Projects to keep the series change.";
       setStatus("Special Project Series cover uploaded and selected");
     } finally {
       button.disabled = false;
@@ -3287,6 +3316,7 @@
         || row.querySelector("[data-special-series]")?.value
         || "",
       profile: row.querySelector("[data-special-profile]")?.value || "extended",
+      publicationState: row.querySelector("[data-special-publication]")?.value || "draft",
       status: row.querySelector("[data-special-status]")?.value || "closed",
       rateText: row.querySelector("[data-special-rate]")?.value.trim() || "",
       summary: row.querySelector("[data-special-summary]")?.value.trim() || "",
@@ -3460,7 +3490,7 @@
         </section>
         <section class="tattoo-settings-card" data-admin-section-title="Project calls">
           <h3>Project calls</h3>
-          <p class="contact">Experimental Projects are always free tattoo work with a refundable attendance deposit. Extended Projects retain concept, budget, and session planning. Closed calls stay visible but cannot accept applications.</p>
+          <p class="contact">Experimental Projects are always free tattoo work with a refundable attendance deposit. Extended Projects retain concept, budget, and session planning. Published Closed calls stay visible but cannot accept applications; Draft projects are removed from the public site without losing their content or history.</p>
           <div class="tattoo-settings-list">${tattooSettings.specialProjects.map(specialProjectRow).join("") || '<p class="empty">No Special Project calls configured.</p>'}</div>
           <div class="booking-actions"><button class="button" type="button" data-add-special-project>Add Special Project</button></div>
         </section>
@@ -4648,6 +4678,20 @@
     return ["pending_deposit", "deposit_pending", "replacement_pending", "expiry_attention"].includes(appointment?.status || "");
   }
 
+  function tattooSpecialDepositIsPrepared(submission, appointment) {
+    if (submission?.type !== "tattoo_special" || submission?.status !== "approved") return false;
+    return Boolean(submission.bookingUrl)
+      && submission.clientAccessStatus === "active";
+  }
+
+  function privateBookingApprovalIsPrepared(submission) {
+    return submission?.type !== "tattoo_special"
+      && TATTOO_PROJECT_TYPES.has(submission?.type)
+      && submission?.status === "approved"
+      && Boolean(submission?.bookingUrl)
+      && submission?.clientAccessStatus === "active";
+  }
+
   function appointmentIsConfirmed(appointment) {
     return appointment?.status === "confirmed";
   }
@@ -5019,12 +5063,7 @@ ${meetingLines}
       submission.approvedBudget || tattooSessionPlans.get(submission.id)
     );
     const appointment = primaryAppointmentFor(submission.id);
-    const specialClientUrl = submission.type === "tattoo_special"
-      && submission.status === "approved"
-      && appointmentIsPending(appointment)
-      && appointment?.approvalState === "approved"
-      && ["active", "expiry_attention"].includes(appointment?.holdState || "")
-      && Boolean(appointment.checkoutUrl || appointment.squareCheckoutUrl)
+    const specialClientUrl = tattooSpecialDepositIsPrepared(submission, appointment)
       ? bookingUrl
       : "";
     const isStudio = submission.type === "studio_booking" || isStudioAppointment(appointment);
@@ -5132,12 +5171,11 @@ ${meetingLines}
 
   function renderCommunicationActions(submission) {
     const appointment = primaryAppointmentFor(submission.id);
-    const specialPrepared = submission.type === "tattoo_special" && Boolean(submission.bookingUrl);
-    const tattooPrepared = ["tattoo_inquiry", "flash_claim"].includes(submission.type) && Boolean(submission.bookingUrl);
-    const projectPrepared = submission.type === "special_project" && Boolean(submission.bookingUrl);
-    const nonBookingApproval = ["art_acquisition", "build_brief", "maze_design"].includes(submission.type);
+    const specialPrepared = tattooSpecialDepositIsPrepared(submission, appointment);
+    const privateBookingPrepared = privateBookingApprovalIsPrepared(submission);
+    const nonBookingApproval = submission.type === "art_acquisition";
     const canSendDecision = submission.status === "declined"
-      || (submission.status === "approved" && (nonBookingApproval || specialPrepared || tattooPrepared || projectPrepared));
+      || (submission.status === "approved" && (nonBookingApproval || specialPrepared || privateBookingPrepared));
     const canResendConfirmation = appointmentIsConfirmed(appointment);
     return `
       <div class="value" id="decisionCommunicationState">${escapeHtml(communicationStateLabel(submission))}</div>
@@ -7634,6 +7672,7 @@ ${meetingLines}
         slug: "",
         title: "",
         profile: "experimental",
+        publicationState: "draft",
         status: "closed",
         allowedModes: ["fresh"],
         refundableDepositCents: 10000,
@@ -8166,6 +8205,11 @@ ${meetingLines}
         setStatus("Client notification sent");
       } catch (error) {
         await refreshSubmissionProgress();
+        if (["BOOKING_LINK_REQUIRED", "DEPOSIT_LINK_REQUIRED", "DEPOSIT_CLIENT_LINK_REQUIRED"].includes(error.code)) {
+          await loadAndRender();
+          setStatus(error.message);
+          return;
+        }
         const state = document.getElementById("decisionCommunicationState");
         if (state) state.textContent = "Failed · Retry available";
         button.textContent = "Retry";
@@ -8289,7 +8333,8 @@ ${meetingLines}
     const deleteSubmissionButton = event.target.closest("#deleteSubmissionBtn");
     if (deleteSubmissionButton && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
-      const hasAppointment = !!latestAppointmentFor(activeId);
+      const linkedAppointments = appointments.filter((appointment) => appointment.submissionId === activeId);
+      const hasAppointment = linkedAppointments.length > 0;
       const hasStoredFiles = Array.isArray(submission?.files) && submission.files.some((file) => file?.storageKey);
       const force = deleteSubmissionButton.dataset.forceDelete === "1"
         || ["booked", "paid", "cancelled", "archived"].includes(submission?.status)
@@ -8297,13 +8342,27 @@ ${meetingLines}
         || hasStoredFiles
         || Boolean(submission?.briefDocument);
       const label = submission?.contactName || submission?.contactEmail || "this entry";
+      const protectedAppointments = linkedAppointments.filter((appointment) => !appointment.canPermanentlyDelete);
+      if (protectedAppointments.length) {
+        setStatus(`This entry has ${protectedAppointments.length} confirmed or payment-protected appointment${protectedAppointments.length === 1 ? "" : "s"}. Cancel or retain that history before deleting the submission.`);
+        return;
+      }
       const confirmationMessage = force
-        ? `Permanently delete ${label}? This removes the submission, private links, and stored files. Appointment and payment history will be retained without this submission link. This cannot be undone.`
+        ? `Permanently delete ${label}? This removes the submission, private links, stored files${linkedAppointments.length ? `, and ${linkedAppointments.length} linked appointment${linkedAppointments.length === 1 ? "" : "s"}` : ""}. This cannot be undone.`
         : `Delete ${label}? This permanently removes the submission record and any booking tokens. This cannot be undone.`;
       if (!window.confirm(confirmationMessage)) {
         return;
       }
       setStatus("Deleting entry");
+      for (const appointment of linkedAppointments) {
+        await api(`/api/admin/booking/appointments/${encodeURIComponent(appointment.id)}`, {
+          method: "DELETE",
+        });
+      }
+      if (linkedAppointments.length) {
+        const deletedAppointmentIds = new Set(linkedAppointments.map((appointment) => appointment.id));
+        appointments = appointments.filter((appointment) => !deletedAppointmentIds.has(appointment.id));
+      }
       const result = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}${force ? "?force=1" : ""}`, {
         method: "DELETE",
       });
@@ -8313,8 +8372,8 @@ ${meetingLines}
       detailEl.innerHTML = '<p class="empty">Select a submission to review details.</p>';
       setStatus(result.cleanupWarnings?.length
         ? `Entry deleted with cleanup warning: ${result.cleanupWarnings.join(" ")}`
-        : result.detachedAppointments
-          ? `Entry deleted; ${result.detachedAppointments} appointment record${result.detachedAppointments === 1 ? "" : "s"} retained`
+        : linkedAppointments.length
+          ? "Entry and linked appointments deleted"
           : "Entry deleted");
       return;
     }

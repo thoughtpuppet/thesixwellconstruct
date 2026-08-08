@@ -2585,7 +2585,9 @@ async function publicMediaApi(request,env,mediaId){
         OR EXISTS(
           SELECT 1 FROM special_project_call_media spm
           JOIN special_project_calls spc ON spc.id=spm.project_id
+          JOIN content_entities ce ON ce.id=spc.id AND ce.entity_type='special_project'
           WHERE spm.media_id=m.id
+            AND spc.publication_state='published' AND ce.visibility='public'
         )
       )`).bind(mediaId).first();
   if(!row)return failure("Not found.",404);
@@ -2857,7 +2859,7 @@ function entityDirectorySql(where="1=1"){
       WHEN 'construct_node' THEN own.name WHEN 'construct_pathway' THEN cp.name WHEN 'person' THEN pe.name
       WHEN 'place' THEN pl.name WHEN 'event' THEN ev.title ELSE ce.id END title,
     CASE ce.entity_type
-      WHEN 'flash_item' THEN fi.state WHEN 'flash_series' THEN fs.state WHEN 'special_project' THEN spc.status WHEN 'special_project_series' THEN sps.state WHEN 'art_work' THEN aw.state WHEN 'portfolio_item' THEN pi.state WHEN 'merch_item' THEN mi.state
+      WHEN 'flash_item' THEN fi.state WHEN 'flash_series' THEN fs.state WHEN 'special_project' THEN spc.publication_state WHEN 'special_project_series' THEN sps.state WHEN 'art_work' THEN aw.state WHEN 'portfolio_item' THEN pi.state WHEN 'merch_item' THEN mi.state
       WHEN 'visual_symbol' THEN vs.state WHEN 'archive_record' THEN ar.state WHEN 'archive_collection' THEN ac.state
       WHEN 'archive_failed_experiment' THEN afe.state
       WHEN 'construct_node' THEN own.state WHEN 'construct_pathway' THEN cp.state WHEN 'person' THEN pe.state

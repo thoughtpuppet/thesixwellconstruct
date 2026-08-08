@@ -242,6 +242,14 @@
       plain.textContent = payload.text || "";
       rendered = payload;
     }
+    function clearRenderedPreview() {
+      rendered = null;
+      meta.replaceChildren();
+      iframe.srcdoc = "";
+      plain.textContent = "";
+      if (mode === "design") stage.replaceChildren();
+      else if (!stage.contains(frame)) stage.replaceChildren(frame);
+    }
     async function renderUnsaved() {
       if (!selected || !content) return;
       try {
@@ -257,6 +265,7 @@
               : "code default loaded as a working copy";
         setStatus(`${selected.label} · ${workingState}`);
       } catch (error) {
+        clearRenderedPreview();
         setStatus(error.payload?.errors?.join(" ") || error.message, true);
       }
     }
@@ -411,6 +420,7 @@
         await renderDesign(designProfile, "working");
         setStatus(`${designScopeSelect.options[designScopeSelect.selectedIndex].text} · ${dirty() ? "unsaved design changes" : designRevision ? `saved batch draft revision ${designRevision}` : "repository defaults loaded as a working copy"}`);
       } catch (error) {
+        clearRenderedPreview();
         setStatus(error.payload?.errors?.join(" ") || error.message, true);
       }
     }
@@ -432,6 +442,8 @@
       selected = currentEntry();
       if (!selected) { editorLayout.hidden = true; setStatus("No templates match the selected filters."); return; }
       editorLayout.hidden = false;
+      clearRenderedPreview();
+      setStatus(`Loading ${selected.label} working copy`);
       try {
         const params = new URLSearchParams({ variant: selected.variant });
         definition = await api(`/api/admin/notifications/templates/${encodeURIComponent(selected.templateKey)}?${params}`);
@@ -442,6 +454,7 @@
         setPreviewSource("working");
         buildForm(); updateActions(); await renderUnsaved();
       } catch (error) {
+        clearRenderedPreview();
         if ([401, 403].includes(error.status)) setStatus("Admin authentication required. Open Studio and enter the bearer token first.", true);
         else setStatus(error.message, true);
       }
@@ -455,6 +468,7 @@
         savedDesignProfile = clone(designProfile);
         buildDesignForm(); updateActions(); await renderDesignUnsaved();
       } catch (error) {
+        clearRenderedPreview();
         if ([401, 403].includes(error.status)) setStatus("Admin authentication required. Open Studio and enter the bearer token first.", true);
         else setStatus(error.message, true);
       }

@@ -25,7 +25,7 @@ import {
   renderEmailTemplateContent,
   TATTOO_APPOINTMENT_PAYMENT_AND_ARRIVAL_POLICY,
 } from "./_email-templates.js";
-import { renderEmailContent, validateEmailContent } from "./_email-content.js";
+import { reconcileEmailContent, renderEmailContent, validateEmailContent } from "./_email-content.js";
 import { CLIENT_EMAIL_THEMES, renderClientEmail } from "./_email-renderer.js";
 import { defaultEmailDesignProfile, validateEmailDesignProfile } from "./_email-design.js";
 import { tattooPricingSummary } from "../booking/_pricing.js";
@@ -479,7 +479,10 @@ async function sendTransactionalEmail(env, message) {
     }
     try {
       const definition = emailTemplateDefinition(message.templateKey, message.templateVariant || "default");
-      const published = await templateRevision(db, message.templateKey, message.templateVariant || "default", "published");
+      const published = reconcileStoredTemplateRevision(
+        definition,
+        await templateRevision(db, message.templateKey, message.templateVariant || "default", "published"),
+      );
       if (definition && published) {
         const validation = validateEmailContent(message.semantic, published.content, definition.options);
         if (!validation.ok) throw new Error(validation.errors.join(" "));
@@ -1046,8 +1049,8 @@ const SUBMISSION_RECEIPTS = {
   tattoo_special: {
     label: "request",
     subject: "Tattoo Special request received",
-    expectation: "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.",
-    next: "No appointment is booked or reserved yet. If approved, the Studio may send a private page where current availability is checked before deposit checkout begins.",
+    expectation: "Thanks for sending this in. The selected Tattoo Special and project details are ready for review.",
+    next: "If approved, a private link will make it easy to choose an available time and complete the deposit.",
   },
   consultation: {
     label: "consultation reservation",
@@ -1363,11 +1366,6 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
   const settings = constructIdentity
     ? { reviewTimeMessage: DEFAULT_REVIEW_TIME_MESSAGE, supportEmail: constructIdentity.replyTo, supportPhone: env.STUDIO_CONTACT_PHONE || "(770) 820-5800" }
     : await tattooReceiptSettings(env);
-  const reviewLine = type === "tattoo_special"
-    ? "This is a requested time, not a hold or booked appointment. If Studio approves it, availability is checked again when you begin deposit payment, and the appointment is confirmed only after successful payment."
-    : ["consultation", "build_session"].includes(type)
-      ? "Complete checkout from the Square link you opened to keep the selected time."
-      : settings.reviewTimeMessage;
   const requestedSheetDesigns = type === "flash_claim"
     ? flashSheetDesignLines(normalized.payload, "sheet_design_selections", "Requested sheet designs:")
     : [];
@@ -1388,7 +1386,6 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     requestedSheetDesigns: requestedSheetDesigns.slice(1),
     expectation: profile.expectation,
     next: profile.next,
-    reviewLine,
     supportEmail: settings.supportEmail,
     supportPhone: settings.supportPhone,
     briefUrl: normalized.briefUrl,
@@ -1854,22 +1851,21 @@ export async function notifyTattooSpecialDepositRequested(env, request, details 
   const message = buildTattooSpecialDepositRequestEmail({
     subject: "Your Tattoo Special was approved — deposit required",
     clientName: details.clientName || details.contactName,
-    when: `${formatDate(details.startAt)}${details.endAt ? ` - ${formatDate(details.endAt)}` : ""}`,
+    when: details.startAt ? `${formatDate(details.startAt)}${details.endAt ? ` - ${formatDate(details.endAt)}` : ""}` : "",
     selection: [details.offerTitle, details.variantLabel].filter(Boolean).join(" — "),
     approvedTotal: formatMoney(details.approvedPriceCents || 0, details.currency || "USD"),
     depositText: formatMoney(details.depositCents || 0, details.currency || "USD"),
-    paymentDue: formatDate(details.paymentDueAt),
+    paymentDue: formatDate(details.paymentDueAt || details.expiresAt),
     checkoutUrl: details.checkoutUrl,
-    changeTimeUrl: `${publicBaseUrl(env, request)}/booking/reschedule/?appointment=${encodeURIComponent(details.appointmentId)}&flow=special-request`,
   });
   return sendTransactionalEmail(env, {
     to,
     ...message,
     templateKey: "tattoo_special_deposit_requested",
     templateVariant: "default",
-    relatedType: "appointment",
-    relatedId: details.appointmentId,
-    idempotencyKey: options.idempotencyKey || `tattoo_special_deposit_requested:${details.appointmentId}`,
+    relatedType: details.appointmentId ? "appointment" : "submission",
+    relatedId: details.appointmentId || details.submissionId,
+    idempotencyKey: options.idempotencyKey || `tattoo_special_deposit_requested:${details.appointmentId || details.submissionId}`,
   });
 }
 
@@ -2144,7 +2140,10 @@ export async function handleAdminPreviewNotification(request, env) {
       body: messageBody,
     });
     const wrapperDefinition = emailTemplateDefinition(selected.templateKey, selected.variant);
-    const published = await templateRevision(notificationDb(env), selected.templateKey, selected.variant, "published");
+    const published = reconcileStoredTemplateRevision(
+      wrapperDefinition,
+      await templateRevision(notificationDb(env), selected.templateKey, selected.variant, "published"),
+    );
     const composed = published
       ? renderEmailContent(base.semantic, published.content, wrapperDefinition.options, publishedDesignProfile)
       : renderClientEmail(base.semantic, publishedDesignProfile);
@@ -2157,14 +2156,17 @@ export async function handleAdminPreviewNotification(request, env) {
     });
   }
   const definition = emailTemplateDefinition(selected.templateKey, selected.variant);
-  let content = body?.content || null;
+  let content = body?.content
+    ? reconcileEmailContent(definition.rendered.semantic, body.content, definition.options)
+    : null;
   let revision = 0;
   let source = "default";
   if (!content && asString(url.searchParams.get("source")) !== "default") {
     const draft = asString(url.searchParams.get("source")) === "draft"
       ? await templateRevision(notificationDb(env), selected.templateKey, selected.variant, "draft")
       : null;
-    const published = draft || await templateRevision(notificationDb(env), selected.templateKey, selected.variant, "published");
+    const stored = draft || await templateRevision(notificationDb(env), selected.templateKey, selected.variant, "published");
+    const published = reconcileStoredTemplateRevision(definition, stored);
     if (published) {
       content = published.content;
       revision = published.revision;
@@ -2190,6 +2192,14 @@ export async function handleAdminPreviewNotification(request, env) {
   });
 }
 
+function reconcileStoredTemplateRevision(definition, revision) {
+  if (!definition || !revision) return revision || null;
+  return {
+    ...revision,
+    content: reconcileEmailContent(definition.rendered.semantic, revision.content, definition.options),
+  };
+}
+
 const EMAIL_DESIGN_REPRESENTATIVES = Object.freeze({
   tattoo: Object.freeze({ node: "tattoo", label: "Tattoo", templateKey: "booking_link_created", variant: "tattoo" }),
   art: Object.freeze({ node: "art", label: "Art", templateKey: "appointment_rescheduled", variant: "studio_visit" }),
@@ -2204,7 +2214,11 @@ function emailDesignScopes(scope) {
 }
 
 async function renderEmailDesignRepresentative(db, representative, profile) {
-  const publishedCopy = await templateRevision(db, representative.templateKey, representative.variant, "published");
+  const definition = emailTemplateDefinition(representative.templateKey, representative.variant);
+  const publishedCopy = reconcileStoredTemplateRevision(
+    definition,
+    await templateRevision(db, representative.templateKey, representative.variant, "published"),
+  );
   const result = publishedCopy
     ? renderEmailTemplateContent(representative.templateKey, representative.variant, publishedCopy.content, profile)
     : null;
@@ -2355,8 +2369,14 @@ export async function handleAdminEmailTemplates(request, env) {
   if (!db) return errorResponse("Missing D1 binding SUBMISSIONS_DB.", 503);
 
   if (request.method === "GET" && (!action || action === "history")) {
-    const draft = await templateRevision(db, selected.templateKey, selected.variant, "draft");
-    const published = await templateRevision(db, selected.templateKey, selected.variant, "published");
+    const draft = reconcileStoredTemplateRevision(
+      definition,
+      await templateRevision(db, selected.templateKey, selected.variant, "draft"),
+    );
+    const published = reconcileStoredTemplateRevision(
+      definition,
+      await templateRevision(db, selected.templateKey, selected.variant, "published"),
+    );
     const history = action === "history" ? await templateHistory(db, selected.templateKey, selected.variant) : undefined;
     return json({
       ...selected,
@@ -2372,7 +2392,8 @@ export async function handleAdminEmailTemplates(request, env) {
   if (!body) return errorResponse("Expected JSON body.", 400);
   try {
     if (request.method === "PUT" && action === "draft") {
-      const validation = validateEmailContent(definition.rendered.semantic, body.content, definition.options);
+      const reconciledContent = reconcileEmailContent(definition.rendered.semantic, body.content, definition.options);
+      const validation = validateEmailContent(definition.rendered.semantic, reconciledContent, definition.options);
       if (!validation.ok) return errorResponse("Template copy is invalid.", 422, { errors: validation.errors });
       const saved = await saveTemplateDraft(db, {
         templateKey: selected.templateKey,
@@ -2384,7 +2405,10 @@ export async function handleAdminEmailTemplates(request, env) {
       return json({ draft: saved });
     }
     if (request.method === "POST" && action === "publish") {
-      const draft = await templateRevision(db, selected.templateKey, selected.variant, "draft");
+      const draft = reconcileStoredTemplateRevision(
+        definition,
+        await templateRevision(db, selected.templateKey, selected.variant, "draft"),
+      );
       if (!draft) return errorResponse("No saved draft is available to publish.", 409);
       const validation = validateEmailContent(definition.rendered.semantic, draft.content, definition.options);
       if (!validation.ok) return errorResponse("Saved draft is invalid.", 422, { errors: validation.errors });
@@ -2401,10 +2425,13 @@ export async function handleAdminEmailTemplates(request, env) {
       });
       if (draft?.conflict) return errorResponse("Template draft is stale.", 409, draft);
       if (!draft) return errorResponse("Template revision was not found.", 404);
-      return json({ draft });
+      return json({ draft: reconcileStoredTemplateRevision(definition, draft) });
     }
     if (request.method === "POST" && action === "test") {
-      const draft = await templateRevision(db, selected.templateKey, selected.variant, "draft");
+      const draft = reconcileStoredTemplateRevision(
+        definition,
+        await templateRevision(db, selected.templateKey, selected.variant, "draft"),
+      );
       if (!draft || draft.revision !== Number(body.revision)) return errorResponse("Save the current draft before sending a test.", 409);
       const publishedDesign = await emailDesignRevision(db, "published");
       const result = renderEmailTemplateContent(

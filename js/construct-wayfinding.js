@@ -158,7 +158,10 @@
 
         var rect = header.getBoundingClientRect();
         if (rect.top > 1 || rect.bottom <= 0 || rect.height > 140) return;
-        topBarBottom = Math.max(topBarBottom, header.offsetTop + rect.height);
+        /* A sticky header's offsetTop follows the document scroll position in
+           some browsers. Its viewport bottom is the actual clearance needed
+           above the breadcrumb and stays stable during scroll restoration. */
+        topBarBottom = Math.max(topBarBottom, rect.bottom);
       });
 
       var targetTop = Math.max(baselineTop, topBarBottom);

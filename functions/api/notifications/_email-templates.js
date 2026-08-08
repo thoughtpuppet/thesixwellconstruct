@@ -49,11 +49,11 @@ export function buildTattooDraftResumeEmail(data) {
 export function buildSubmissionReceivedEmail(data) {
   const requested = list(data.requestedSheetDesigns);
   const construct = ["construct_art", "construct_event", "construct_studio"].includes(data.theme);
-  const supportPhone = String(data.supportPhone || "").trim();
+  const supportPhone = "(770) 820-5800";
   return renderClientEmail({
     templateKey: "submission_received",
     templateVariant: data.variant || "custom",
-    variables: { client_name: data.clientName || "there", submission_label: data.label, support_email: data.supportEmail, support_phone: supportPhone, review_line: data.reviewLine },
+    variables: { client_name: data.clientName || "there", submission_label: data.label, support_email: data.supportEmail },
     theme: construct ? data.theme : "tattoo",
     subject: data.subject,
     preheader: "Your submission reference, review expectations, and next steps.",
@@ -80,10 +80,7 @@ export function buildSubmissionReceivedEmail(data) {
       },
     ],
     notice: [
-      data.reviewLine,
-      supportPhone
-        ? `Questions or corrections? Email ${data.supportEmail}, call ${supportPhone}, or text ${supportPhone}, and include your submission reference.`
-        : `Questions or corrections? Email ${data.supportEmail} and include your submission reference.`,
+      `Questions or corrections? Email ${data.supportEmail}, call or text ${supportPhone}.`,
     ],
     signature: construct ? constructSignature() : tattooSignature(),
   });
@@ -183,7 +180,7 @@ export function buildBookingLinkEmail(data) {
       consultation
         ? "The consultation fee is non-refundable and is not a tattoo deposit. Paying schedules only the prerequisite consultation; the tattoo remains unbooked until consultation completion, a final session plan, and a separate tattoo booking link."
         : tattooSpecial
-          ? "This link is private to your Tattoo Special. Selecting a requested time does not reserve it. After approval, availability is checked again when deposit checkout begins, and the appointment is confirmed only after Square reports the deposit as paid. The deposit is non-refundable and is credited toward the fixed approved total."
+          ? "This link is private to your approved Tattoo Special. Choose an available time and complete the deposit to set the appointment. The deposit is non-refundable and is credited toward the fixed approved total."
           : "This link is private to your project. Tattoo deposits are non-refundable and go toward the final cost of the scheduled tattoo. Personalized aftercare instructions are provided at the appointment.",
       "If the available times do not work, reply to this email and the studio can help.",
     ],
@@ -258,28 +255,25 @@ export function buildTattooSpecialDepositRequestEmail(data) {
     variables: { client_name: data.clientName || "there" },
     theme: "tattoo",
     subject: data.subject || "Your Tattoo Special was approved — deposit required",
-    preheader: "Confirm an available appointment by paying the deposit before the deadline.",
+    preheader: "Choose an available time and complete the deposit before the link expires.",
     classification: "TATTOO SPECIAL APPROVED",
-    headline: "Your request is approved. Pay the deposit to confirm an available time.",
+    headline: "Your request is approved.",
     greeting: `Hi ${data.clientName || "there"},`,
     intro: [
-      "Sai Solehman has approved your Tattoo Special request. Your requested time is not reserved yet. Use the private page below to check availability, confirm the appointment, and pay your deposit. You can also change your requested time if needed.",
+      "Use the private link below to choose an available time and complete the deposit. The appointment will be set once the deposit is complete.",
     ],
     details: [
-      { label: "Requested appointment", value: data.when },
+      ...(data.when ? [{ label: "Appointment", value: data.when }] : []),
       { label: "Tattoo Special", value: data.selection },
       { label: "Approved total", value: data.approvedTotal },
       { label: "Deposit due", value: data.depositText },
       { label: "Pay by", value: data.paymentDue },
     ],
-    primaryAction: { label: "Confirm and pay deposit", href: data.checkoutUrl },
-    secondaryActions: data.changeTimeUrl ? [
-      { id: "change_requested_time", label: "Change requested time", href: data.changeTimeUrl },
-    ] : [],
+    primaryAction: { label: "Choose a Time", href: data.checkoutUrl },
+    secondaryActions: [],
     notice: [
-      "The appointment becomes booked only after Square confirms the deposit payment.",
-      "Availability is checked immediately before Square checkout is created. If that time is no longer available, no charge is made and you can request another time without another Studio approval.",
-      "The private deposit page expires after 24 hours or at the Tattoo Specials sales deadline, whichever comes first.",
+      "Choose a time that works for you. Availability is checked again before Square opens.",
+      "This private link is available until the date shown above. Need more time or have a question? Feel free to reach out.",
       "The deposit is non-refundable and is credited toward the approved Tattoo Special total.",
     ],
     signature: tattooSignature(true),
@@ -910,7 +904,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       build: ["Build Your Own submission", "The studio will review your symbols, composition, placement, scale, and budget.", "If the project is a fit, the Studio will send the appropriate next step."],
       maze: ["Maze Studio submission", "The studio will review the generated maze, placement, scale, and project notes.", "If the project is a fit, the Studio will send the appropriate next step."],
       special: ["special project application", "The studio will review the application, scope, placement, references, budget, and timing.", "If the project is a fit, the Studio will contact you with the next step."],
-      tattoo_special: ["request", "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.", "No appointment is booked or reserved yet. If approved, the Studio may send a private page where availability is checked before deposit checkout begins."],
+      tattoo_special: ["request", "Thanks for sending this in. The selected Tattoo Special and project details are ready for review.", "If approved, a private link will make it easy to choose an available time and complete the deposit."],
       consultation: ["consultation request", "Your selected consultation time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       build_session: ["Build session request", "Your selected Build session time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       art_acquisition: ["art acquisition inquiry", "The Art studio will review the work, availability, budget, and questions you shared.", "The studio will reply with availability, acquisition details, or the next step."],
@@ -936,9 +930,6 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       requestedSheetDesigns: flash ? ["A is Moth - placement: Forearm - scale: 4 in"] : [],
       expectation: profile[1],
       next: profile[2],
-      reviewLine: mode === "tattoo_special"
-        ? "This is a requested time, not a hold or booked appointment. Availability is checked again when deposit checkout begins, and the appointment is confirmed only after successful payment."
-        : ["consultation", "build_session"].includes(mode) ? "Complete checkout to keep the selected time." : "Most project submissions are reviewed within 5-7 business days.",
       supportEmail: SAMPLE.supportEmail,
       supportPhone: SAMPLE.supportPhone,
       briefUrl: ["build", "maze"].includes(mode) ? "https://thesixwellconstruct.com/api/tattoo/briefs/demo-document?v=1&sig=sample" : "",
@@ -1301,7 +1292,10 @@ export function emailTemplateDefinition(templateKey, variant = "") {
   if (!entry) return null;
   const rendered = renderClientEmailPreview(entry.templateKey, entry.variant);
   if (!rendered?.semantic) return null;
-  const options = { omit: entry.omitEditable || [] };
+  const options = {
+    omit: entry.omitEditable || [],
+    removedTokens: entry.templateKey === "submission_received" ? ["review_line"] : [],
+  };
   return {
     ...entry,
     defaultContent: editableEmailContent(rendered.semantic, options),

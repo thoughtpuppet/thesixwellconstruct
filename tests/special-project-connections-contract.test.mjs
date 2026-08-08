@@ -16,7 +16,8 @@ test("Special Project calls receive collision-safe Construct identities", () => 
   assert.match(booking, /existingEntity\.entity_type !== "special_project"/);
   assert.match(booking, /Special Projects with application history cannot be deleted/);
   assert.match(booking, /DELETE FROM content_entities WHERE id = \? AND entity_type = 'special_project'/);
-  assert.match(booking, /VALUES \(\?, 'special_project', 'node-tattoos', 'public'/);
+  assert.match(booking, /const visibility = publicationState === "published" \? "public" : "internal"/);
+  assert.match(booking, /visibility = excluded\.visibility/);
 });
 
 test("Construct directory exposes Special Projects with routes, profiles, and primary media", () => {

@@ -1,0 +1,32 @@
+/* Operational booking prose uses sentence case while display roles retain the shared uppercase treatment. */
+body.booking-client-flow main :where(
+  p:not(.hero-descriptor):not(.section-label):not(.block-kicker):not(.offering-name):not(.payment-holding-title):not(.kicker):not(.label),
+  .status,
+  .error,
+  .form-check__label,
+  .visit-list li,
+  .detail-row > span:last-child
+) {
+  --type-body-transform: none;
+  --type-body-tracking-active: normal;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+body.booking-client-flow main .lead {
+  --type-body-transform: none;
+  --type-body-tracking-active: normal;
+  max-width: 670px;
+  color: var(--muted, var(--color-text-muted));
+  font-size: 16px;
+  line-height: 1.75 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+body.booking-client-flow main :where(.pending-checkout-link, .pending-checkout-button) {
+  --type-body-transform: uppercase;
+  --type-body-tracking-active: 0.12em;
+  text-transform: uppercase !important;
+  letter-spacing: 0.12em !important;
+}

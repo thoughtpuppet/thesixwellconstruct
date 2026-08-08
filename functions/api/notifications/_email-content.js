@@ -205,6 +205,36 @@ function validateShape(defaultValue, candidate, path, errors) {
   if (typeof candidate !== "string") errors.push(`${path} must be text.`);
 }
 
+function reconcileShape(defaultValue, candidate) {
+  if (Array.isArray(defaultValue)) {
+    return Array.isArray(candidate) && candidate.every((entry) => typeof entry === "string")
+      ? clone(candidate)
+      : clone(defaultValue);
+  }
+  if (defaultValue && typeof defaultValue === "object") {
+    const source = candidate && typeof candidate === "object" && !Array.isArray(candidate) ? candidate : {};
+    return Object.fromEntries(
+      Object.entries(defaultValue).map(([key, value]) => [key, reconcileShape(value, source[key])]),
+    );
+  }
+  return typeof candidate === "string" ? candidate : defaultValue;
+}
+
+export function reconcileEmailContent(semantic, content, options = {}) {
+  const defaults = editableEmailContent(semantic, options);
+  if (!content || typeof content !== "object" || Array.isArray(content)) return clone(defaults);
+  const removedTokens = new Set(options.removedTokens || []);
+  const candidate = clone(content);
+  if (removedTokens.size && Array.isArray(candidate.notice)) {
+    candidate.notice = candidate.notice.filter((entry) => (
+      typeof entry !== "string" || !tokensIn(entry).some((token) => removedTokens.has(token))
+    ));
+  }
+  return Object.fromEntries(
+    Object.entries(defaults).map(([key, value]) => [key, reconcileShape(value, candidate[key])]),
+  );
+}
+
 export function validateEmailContent(semantic, content, options = {}) {
   const defaults = editableEmailContent(semantic, options);
   const errors = [];

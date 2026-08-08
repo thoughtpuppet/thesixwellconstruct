@@ -1508,17 +1508,20 @@ export async function handleCreateSubmission(request, env) {
       );
       const call = await db.prepare(
         `SELECT spc.*,
+                entity.visibility AS entity_visibility,
                 series.id AS series_snapshot_id,
                 series.name AS series_snapshot_name,
                 series.slug AS series_snapshot_slug
          FROM special_project_calls spc
+         JOIN content_entities entity ON entity.id = spc.id AND entity.entity_type = 'special_project'
          LEFT JOIN special_project_series series ON series.id = spc.series_id
          WHERE spc.id = ? OR spc.slug = ? OR lower(spc.title) = lower(?)
          ORDER BY CASE WHEN spc.id = ? THEN 0 WHEN spc.slug = ? THEN 1 ELSE 2 END
          LIMIT 1`
       ).bind(selectedCall, selectedCall, selectedCall, selectedCall, selectedCall).first();
       const now = new Date().toISOString();
-      const isOpen = call && call.status === "open"
+      const isPublished = call && call.publication_state === "published" && call.entity_visibility === "public";
+      const isOpen = isPublished && call.status === "open"
         && (!call.opens_at || call.opens_at <= now)
         && (!call.closes_at || call.closes_at > now);
       if (!isOpen) {
@@ -2722,11 +2725,6 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
              AND hold_state IS NULL AND approval_state IN ('pending','approved')
            ORDER BY created_at DESC LIMIT 1`
         ).bind(id).first();
-        if (!requestedAppointment) {
-          return errorResponse("The client must request a time before this Tattoo Special can be approved.", 409, {
-            code: "VALID_SPECIAL_TIME_REQUEST_REQUIRED",
-          });
-        }
         const advertised = Number(terms.advertised_price_cents || 0);
         const approvedPrice = terms.offer_id === "special-anime"
           ? Number(body.approvedPriceCents || advertised)
@@ -2734,7 +2732,7 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
         if (!Number.isInteger(approvedPrice) || approvedPrice < advertised) {
           return errorResponse("The approved Tattoo Special price is invalid.", 400);
         }
-        specialDecision = { terms, requestedAppointment, approvedPrice };
+        specialDecision = { terms, requestedAppointment: requestedAppointment || null, approvedPrice };
       } else {
         specialDecision = { terms };
       }
@@ -3128,13 +3126,15 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
             "UPDATE tattoo_session_plans SET approved_budget_min_cents = ?, approved_budget_max_cents = ?, updated_at = ? WHERE submission_id = ?"
           ).bind(specialDecision.approvedPrice, specialDecision.approvedPrice, now, id),
           db.prepare(
-            `UPDATE appointments SET approval_state = 'approved', approval_decided_at = COALESCE(approval_decided_at, ?), updated_at = ?
-             WHERE id = ? AND status='requested' AND hold_state IS NULL AND approval_state IN ('pending','approved')`
-          ).bind(now, now, specialDecision.requestedAppointment.id),
-          db.prepare(
             "UPDATE submissions SET payload_json=json_set(payload_json,'$.approved_price_cents',?) WHERE id=? AND updated_at=?"
           ).bind(specialDecision.approvedPrice, id, now),
         );
+        if (specialDecision.requestedAppointment?.id) {
+          statements.push(db.prepare(
+            `UPDATE appointments SET approval_state = 'approved', approval_decided_at = COALESCE(approval_decided_at, ?), updated_at = ?
+             WHERE id = ? AND status='requested' AND hold_state IS NULL AND approval_state IN ('pending','approved')`
+          ).bind(now, now, specialDecision.requestedAppointment.id));
+        }
       } else if (action === "decline") {
         statements.push(
           db.prepare("UPDATE tattoo_special_submission_terms SET review_outcome = 'declined', updated_at = ? WHERE submission_id = ?").bind(now, id),
@@ -3245,13 +3245,9 @@ export async function handleSubmissionDecisionNotification(request, env, id) {
       });
     } else if (submission.status === "approved" && submission.type === "tattoo_special") {
       const details = await db.prepare(
-        `SELECT a.id appointment_id,a.client_name,a.client_email,a.start_at,a.end_at,a.payment_due_at,
-                t.offer_title,t.variant_label,t.approved_price_cents,t.deposit_cents
-         FROM appointments a JOIN tattoo_special_submission_terms t ON t.submission_id=a.submission_id
-         WHERE a.submission_id=? AND a.status='requested' AND a.hold_state IS NULL
-           AND a.approval_state='approved' AND a.payment_due_at>?
-         ORDER BY a.created_at DESC LIMIT 1`
-      ).bind(id, new Date().toISOString()).first();
+        `SELECT offer_title,variant_label,approved_price_cents,deposit_cents
+         FROM tattoo_special_submission_terms WHERE submission_id=?`
+      ).bind(id).first();
       if (!details) {
         return errorResponse("Prepare the Tattoo Special deposit link before sending approval.", 409, {
           code: "DEPOSIT_LINK_REQUIRED",
@@ -3266,17 +3262,15 @@ export async function handleSubmissionDecisionNotification(request, env, id) {
         });
       }
       delivery = await notifyTattooSpecialDepositRequested(env, request, {
-        appointmentId: details.appointment_id,
+        submissionId: id,
         clientName: submission.contact_name,
         clientEmail: submission.contact_email,
-        startAt: details.start_at,
-        endAt: details.end_at,
         offerTitle: details.offer_title,
         variantLabel: details.variant_label,
         approvedPriceCents: details.approved_price_cents,
         depositCents: details.deposit_cents,
         currency: "USD",
-        paymentDueAt: details.payment_due_at,
+        expiresAt: clientAccess.expires_at,
         checkoutUrl: absoluteClientUrl(env, request, submission.booking_url),
       }, { idempotencyKey: attemptKey });
     } else if (submission.status === "approved" && isTattooSubmissionType(submission.type)) {
@@ -3338,8 +3332,11 @@ export async function handleDeleteSubmission(request, env, id) {
       .prepare("SELECT COUNT(*) AS count FROM appointments WHERE submission_id = ?")
       .bind(id)
       .first();
-    if (!force && Number(appointmentCount?.count || 0) > 0) {
-      return errorResponse("Submission has appointment history. Archive it instead of deleting.", 409);
+    if (Number(appointmentCount?.count || 0) > 0) {
+      return errorResponse("Permanently delete each linked appointment before deleting this submission. Linked appointments are not detached or left on the calendar.", 409, {
+        code: "SUBMISSION_APPOINTMENTS_REQUIRE_DELETE",
+        appointmentCount: Number(appointmentCount?.count || 0),
+      });
     }
 
     if (!force && ["booked", "paid", "cancelled", "archived"].includes(current.status)) {
@@ -3388,11 +3385,6 @@ export async function handleDeleteSubmission(request, env, id) {
            SET outcome='released',updated_at=?
            WHERE submission_id=? AND outcome='approved'`
         ).bind(new Date().toISOString(), id),
-        db.prepare(
-          `UPDATE appointments
-           SET submission_id = NULL, booking_token_id = NULL, updated_at = ?
-           WHERE submission_id = ?`
-        ).bind(new Date().toISOString(), id),
       );
     }
     statements.push(
@@ -3437,7 +3429,7 @@ export async function handleDeleteSubmission(request, env, id) {
       ok: true,
       deletedId: id,
       permanent: force,
-      detachedAppointments: force ? Number(appointmentCount?.count || 0) : 0,
+      detachedAppointments: 0,
       deletedFiles: force ? deletedFileCount : 0,
       cleanupWarnings,
     });

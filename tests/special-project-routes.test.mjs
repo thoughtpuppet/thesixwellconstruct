@@ -108,6 +108,11 @@ test("Special Project routes canonicalize legacy destinations and reject non-pub
   assert.equal(unknown.status, 404);
   assert.match(await unknown.text(), /Not found/i);
 
+  database.prepare("UPDATE special_project_calls SET publication_state='draft' WHERE id='mythic-body-studies'").run();
+  const draftRecord = await worker.fetch(new Request("https://example.test/tattoos/special-projects/mythic-body-studies/"), env, {});
+  assert.equal(draftRecord.status, 404);
+
+  database.prepare("UPDATE special_project_calls SET publication_state='published' WHERE id='mythic-body-studies'").run();
   database.prepare("UPDATE content_entities SET visibility='internal' WHERE id='mythic-body-studies'").run();
   const privateRecord = await worker.fetch(new Request("https://example.test/tattoos/special-projects/mythic-body-studies/"), env, {});
   assert.equal(privateRecord.status, 404);

@@ -79,10 +79,26 @@ function htmlContactText(input) {
 
   for (const match of raw.matchAll(phonePattern)) {
     const index = match.index ?? 0;
+    const preceding = raw.slice(cursor, index);
+    const combinedActions = preceding.match(/\bcall or text\s*$/i);
+    if (combinedActions) {
+      const telHref = phoneHref(match[0], "tel");
+      const smsHref = phoneHref(match[0], "sms");
+      rendered += htmlText(preceding.slice(0, combinedActions.index));
+      rendered += telHref
+        ? `<a href="${escapeEmailHtml(telHref)}" style="color:${SHARED.amber}!important;text-decoration:underline!important;">call</a>`
+        : "call";
+      rendered += " or ";
+      rendered += smsHref
+        ? `<a href="${escapeEmailHtml(smsHref)}" style="color:${SHARED.amber}!important;text-decoration:underline!important;">text ${htmlText(match[0])}</a>`
+        : `text ${htmlText(match[0])}`;
+      cursor = index + match[0].length;
+      continue;
+    }
     const context = raw.slice(Math.max(0, index - 12), index);
     const protocol = /\btext\s*$/i.test(context) ? "sms" : "tel";
     const href = phoneHref(match[0], protocol);
-    rendered += htmlText(raw.slice(cursor, index));
+    rendered += htmlText(preceding);
     rendered += href
       ? `<a href="${escapeEmailHtml(href)}" style="color:${SHARED.amber}!important;text-decoration:underline!important;">${htmlText(match[0])}</a>`
       : htmlText(match[0]);

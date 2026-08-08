@@ -60,7 +60,7 @@ export const MANUAL_TEXT_TEMPLATE_DEFINITIONS = [
   {
     key: "tattoo_special_approved",
     label: "Tattoo Special approved",
-    group: "Tattoo",
+    group: "Tattoo Specials",
     allowedTokens: ["booking_url"],
     defaultBody: "Your Tattoo Special request has been approved. Review your approved request and pay the deposit to confirm your appointment here: {{booking_url}}",
   },

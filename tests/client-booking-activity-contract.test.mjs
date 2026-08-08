@@ -304,7 +304,8 @@ test("admin submission responses expose activity summaries and full client histo
 test("private booking and Studio surfaces use tracked activity without adding a badge", () => {
   const booking = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
-  assert.match(booking, /if \(previewMode \|\| !token\) return;[\s\S]*?\/api\/booking\/access-events/);
+  assert.match(booking, /const tattooSpecialRequestEntry = params\.get\("entry"\) === "tattoo-special-request"/);
+  assert.match(booking, /if \(previewMode \|\| tattooSpecialRequestEntry \|\| !token\) return;[\s\S]*?\/api\/booking\/access-events/);
   assert.match(booking, /form\.action = "\/api\/booking\/square-redirect"/);
   assert.doesNotMatch(booking, /window\.location\.href = payload\.checkoutUrl/);
   assert.match(studio, /function clientActivitySummaryMarkup\(submission\)/);

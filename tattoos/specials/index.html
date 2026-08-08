@@ -23,13 +23,13 @@
   <main>
     <section class="landing-hero site-hero site-hero--landing specials-hero">
       <div><h1 class="hero-title">SPECIALS.</h1></div>
-      <p class="hero-descriptor">Limited-time tattoo specials from <span>art.pill Tattoo House</span>. Send your request, select an available time, and pay the deposit after Studio approval.</p>
+      <p class="hero-descriptor">Limited-time tattoo specials from <span>art.pill Tattoo House</span>. Send a request for review, then choose an available time and complete the deposit after approval.</p>
     </section>
 
     <section class="specials-state" id="specialsState" aria-live="polite">
       <p class="specials-kicker">Tattoo Special</p>
       <h2 id="stateTitle">Loading the current Tattoo Specials.</h2>
-      <p id="stateCopy">Checking the Studio-managed sales window and current selections.</p>
+      <p id="stateCopy">Checking the current sales window and available selections.</p>
     </section>
 
     <section class="specials-offers" id="specialsOffersSection" hidden aria-labelledby="offersTitle">
@@ -67,7 +67,7 @@
         </fieldset>
         <fieldset id="participant2Fieldset" hidden>
           <legend>Second adult participant (optional)</legend>
-          <p class="field-note">The studio stores this person’s details, but automated email goes only to the primary participant.</p>
+          <p class="field-note">These details stay with the request. Automated email goes only to the primary participant.</p>
           <div class="field-grid">
             <div class="field"><label for="participant2Name">Full name</label><input id="participant2Name" name="participant2Name" autocomplete="off"></div>
             <div class="field"><label for="participant2Email">Email</label><input id="participant2Email" type="email" name="participant2Email" autocomplete="off" pattern="[^\s@]+@[^\s@]+\.[^\s@]+" title="Enter a complete email address, such as name@example.com."></div>
@@ -80,7 +80,7 @@
           <legend>Project</legend>
           <div class="field-grid">
             <div class="field full"><label for="specialsPlacement">Placement</label><input id="specialsPlacement" name="placement" maxlength="500" required placeholder="Where on the body?"></div>
-            <div class="field full"><label for="specialsProjectDetails">Project details</label><textarea id="specialsProjectDetails" name="projectDetails" rows="5" maxlength="5000" required placeholder="Describe imagery, composition, skin-tone considerations, and anything Studio should know."></textarea></div>
+            <div class="field full"><label for="specialsProjectDetails">Project details</label><textarea id="specialsProjectDetails" name="projectDetails" rows="5" maxlength="5000" required placeholder="Share imagery, composition, skin-tone considerations, and anything else that may be helpful."></textarea></div>
             <div class="field full" id="scriptTextField" hidden><label for="specialsScriptText">Script text <span id="scriptTextHint"></span></label><textarea id="specialsScriptText" name="scriptText" rows="3" maxlength="500" placeholder="Enter the exact words you want tattooed."></textarea><p class="field-note" id="scriptWordCount"></p></div>
             <div class="field full"><label for="specialsReferenceLink">Reference link <span id="referenceLinkHint">(optional)</span></label><input id="specialsReferenceLink" type="url" name="referenceLink" placeholder="https://…"></div>
             <div class="field full"><label for="specialsReferences">Reference images <span id="referenceFileHint">(optional)</span></label><input id="specialsReferences" type="file" name="references" accept="image/*" multiple></div>
@@ -92,7 +92,7 @@
           <label class="form-check"><input class="form-check__input" type="checkbox" name="transactionalMessagesAccepted" value="yes" required><span class="form-check__label">I agree to receive transactional email about this Tattoo Special request.</span></label>
         </fieldset>
         <div class="specials-submit-row">
-          <button type="submit" id="specialsSubmit">Continue to Select Time Slot</button>
+          <button type="submit" id="specialsSubmit">Send Request</button>
           <p class="form-status" id="specialsFormStatus" role="status"></p>
         </div>
       </form>

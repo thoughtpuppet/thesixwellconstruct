@@ -125,8 +125,8 @@ test("request badge resolver follows the approved operational vocabulary", () =>
     [{ ...base, status: "declined" }, "DECLINED", "terminal"],
     [{ ...base, status: "cancelled" }, "CANCELLED", "terminal"],
     [{ ...base, status: "archived" }, "ARCHIVED", "terminal"],
-    [{ ...base, status: "booked" }, "BOOKED", "success"],
-    [{ ...base, tattooStage: "tattoo_scheduled" }, "BOOKED", "success"],
+    [{ ...base, status: "booked" }, "BOOKED", "booked"],
+    [{ ...base, tattooStage: "tattoo_scheduled" }, "BOOKED", "booked"],
     [{ ...base, depositPaymentStatus: "paid" }, "DEPOSIT PAID", "success"],
     [{ ...base, depositPaymentStatus: "pending" }, "AWAITING DEPOSIT", "waiting"],
     [{ ...base, tattooStage: "consultation_scheduled" }, "CONSULTATION SCHEDULED", "success"],
@@ -238,6 +238,7 @@ test("Studio request surfaces render one operational badge slot and quiet metada
   assert.match(tokens, /--studio-status-info:\s*#79B8D1/);
   assert.match(studio, /src="\/studio\/request-badge-state\.js\?v=1"/);
   assert.match(studio, /data-request-badge=/);
+  assert.match(studio, /\.request-badge\.tone-booked\s*\{[^}]*var\(--studio-signal\)/);
   assert.match(studio, /data-request-state-meta=/);
   assert.doesNotMatch(studio, /nextActionBadge|submissionProgressBadges|data-submission-progress/);
   assert.match(worker, /const openMatch = pathname\.match\([\s\S]*?handleOpenSubmission/);

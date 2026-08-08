@@ -9,7 +9,7 @@
     { key:"studio_confirmed", label:"Studio booking confirmed", group:"Studio", allowedTokens:["booking_label"], body:"Your {{booking_label}} is confirmed. Keep an eye on your email for arrival details, and reply here if anything changes." },
     { key:"studio_received", label:"Studio request received", group:"Studio", allowedTokens:["booking_label"], body:"We received your {{booking_label}} request and will follow up with next steps. Thank you." },
     { key:"tattoo_appointment_confirmed", label:"Tattoo appointment confirmed", group:"Tattoo", allowedTokens:[], body:"Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session." },
-    { key:"tattoo_special_approved", label:"Tattoo Special approved", group:"Tattoo", allowedTokens:["booking_url"], body:"Your Tattoo Special request has been approved. Review your approved request and pay the deposit to confirm your appointment here: {{booking_url}}" },
+    { key:"tattoo_special_approved", label:"Tattoo Special approved", group:"Tattoo Specials", allowedTokens:["booking_url"], body:"Your Tattoo Special request has been approved. Review your approved request and pay the deposit to confirm your appointment here: {{booking_url}}" },
     { key:"tattoo_consultation_required", label:"Consultation required", group:"Tattoo", allowedTokens:["booking_url"], body:"Your project needs an in-person consultation before tattoo booking. You can choose a consultation time and place the deposit here: {{booking_url}}" },
     { key:"tattoo_booking_approved", label:"Tattoo approved for booking", group:"Tattoo", allowedTokens:["approved_budget_sentence","booking_url"], body:"Your project has been approved for booking. {{approved_budget_sentence}} Review and agree to the session estimate and budget, choose your appointment, and place the deposit here: {{booking_url}}" },
     { key:"tattoo_inquiry_received", label:"Tattoo inquiry received", group:"Tattoo", allowedTokens:[], body:"We received your inquiry and will review the project details before sending booking access." },
@@ -32,7 +32,9 @@
   function renderTemplate(body, values = {}) {
     return String(body || "")
       .replace(/{{\s*([a-z][a-z0-9_]*)\s*}}/g, (_match, token) => String(values[token] ?? ""))
-      .replace(/\s+/g, " ")
+      .replace(/\r\n?/g, "\n")
+      .replace(/[^\S\r\n]+/g, " ")
+      .replace(/ *\n */g, "\n")
       .trim();
   }
 
@@ -52,7 +54,7 @@
     if (context.appointmentConfirmed || (context.bookingUrl && context.status === "booked")) {
       return { openingKey: "opening_tattoo", bodyKey: "tattoo_appointment_confirmed" };
     }
-    if (context.specialClientUrl) {
+    if (context.type === "tattoo_special" && context.specialClientUrl) {
       return { openingKey: "opening_tattoo", bodyKey: "tattoo_special_approved" };
     }
     if (context.bookingUrl && context.status === "approved" && context.requiresInPersonConsult) {
@@ -68,7 +70,10 @@
     const opening = templates[openingKey]?.body || "";
     const body = templates[bodyKey]?.body || "";
     const closing = openingKey === "opening_tattoo" ? (templates.closing_tattoo?.body || "") : "";
-    return renderTemplate(`${opening} ${body} ${closing}`, values);
+    return [opening, body, closing]
+      .map((part) => renderTemplate(part, values))
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   root.ManualTextAssist = { TIMEZONE, DEFAULT_TEMPLATES, greetingForDate, renderTemplate, templateSelection, compose };

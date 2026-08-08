@@ -27,7 +27,7 @@
     if (payment === "paid_attention") return badge("PAYMENT NEEDS REVIEW", "error");
     if (notification === "failed") return badge("EMAIL FAILED", "error");
     if (["declined", "cancelled", "archived"].includes(status)) return badge(status.toUpperCase(), "terminal");
-    if (status === "booked" || stage === "tattoo_scheduled") return badge("BOOKED", "success");
+    if (status === "booked" || stage === "tattoo_scheduled") return badge("BOOKED", "booked");
     if (payment === "paid") return badge("DEPOSIT PAID", "success");
     if (payment === "pending") return badge("AWAITING DEPOSIT", "waiting");
     if (stage === "consultation_scheduled") return badge("CONSULTATION SCHEDULED", "success");

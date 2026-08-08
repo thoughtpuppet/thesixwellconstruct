@@ -521,7 +521,8 @@ async function publicSpecialProjectRecord(env, reference) {
     `SELECT spc.id,spc.slug,spc.title,COALESCE(spc.summary,'') summary
      FROM special_project_calls spc
      JOIN content_entities ce ON ce.id=spc.id AND ce.entity_type='special_project'
-     WHERE (spc.slug=?1 OR spc.id=?1) AND ce.visibility='public'
+     WHERE (spc.slug=?1 OR spc.id=?1)
+       AND spc.publication_state='published' AND ce.visibility='public'
      LIMIT 1`
   ).bind(value).first();
 }
