@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useRef } from "react";
-import type { MazeShapeKind, MazeTool, ShapeSizeScope } from "../types";
+import type { CanvasMode, MazeShapeKind, MazeTool, ShapeSizeScope } from "../types";
+import { defaultInkColorForMode, inkOptionsForMode } from "../lib/canvas-mode";
 
 type WallPreset = Extract<MazeTool, { type: "wallPreset" }>["preset"];
 
@@ -80,11 +81,10 @@ const shapeOptions: Array<{
   { kind: "hexagon", label: "Hexagon", Icon: Hexagon }
 ];
 
-const inkOptions = ["#151413", "#b51f29", "#1f7c8c", "#d66a1f", "#d9a21b", "#2d9b74"];
-
 type MazeToolsProps = {
   tool: MazeTool;
   onToolChange: (tool: MazeTool) => void;
+  canvasMode: CanvasMode;
   referenceName: string;
   referenceStatus: string;
   onReferenceUpload: (file: File) => void;
@@ -100,6 +100,7 @@ type MazeToolsProps = {
 export function MazeTools({
   tool,
   onToolChange,
+  canvasMode,
   referenceName,
   referenceStatus,
   onReferenceUpload,
@@ -116,7 +117,9 @@ export function MazeTools({
   const wallTool = tool.type === "wall" ? tool : null;
   const presetTool = tool.type === "wallPreset" ? tool : null;
   const eraserTool = tool.type === "eraser" ? tool : null;
-  const activeColor = shapeTool?.fill ?? wallTool?.stroke ?? presetTool?.stroke ?? "#151413";
+  const defaultInkColor = defaultInkColorForMode(canvasMode);
+  const activeColor = shapeTool?.fill ?? wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor;
+  const inkOptions = inkOptionsForMode(canvasMode);
   const activeWallWidth = wallTool?.strokeWidth ?? presetTool?.strokeWidth ?? 20;
   const activeEraserWidth = eraserTool?.width ?? 48;
 
@@ -124,7 +127,7 @@ export function MazeTools({
     onToolChange({
       type: "shape",
       kind,
-      stroke: "#151413",
+      stroke: activeColor,
       fill: activeColor,
       filled: shapeTool?.filled ?? true,
       size: shapeSize
@@ -200,7 +203,7 @@ export function MazeTools({
             onToolChange({
               type: "wall",
               variant: "straight",
-              stroke: wallTool?.stroke ?? presetTool?.stroke ?? "#151413",
+              stroke: wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor,
               strokeWidth: activeWallWidth
             })
           }
@@ -215,7 +218,7 @@ export function MazeTools({
             onToolChange({
               type: "wall",
               variant: "curve",
-              stroke: wallTool?.stroke ?? presetTool?.stroke ?? "#151413",
+              stroke: wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor,
               strokeWidth: activeWallWidth
             })
           }
@@ -235,7 +238,7 @@ export function MazeTools({
               onToolChange({
                 type: "wallPreset",
                 preset,
-                stroke: wallTool?.stroke ?? presetTool?.stroke ?? "#151413",
+                stroke: wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor,
                 strokeWidth: activeWallWidth,
                 size: presetTool?.size ?? 128
               })
@@ -319,7 +322,7 @@ export function MazeTools({
                 onToolChange({
                   type: "shape",
                   kind: shapeTool?.kind ?? "circle",
-                  stroke: "#151413",
+                  stroke: color,
                   fill: color,
                   filled: shapeTool?.filled ?? true,
                   size: shapeSize
@@ -340,7 +343,7 @@ export function MazeTools({
             onToolChange({
               type: "shape",
               kind: shapeTool?.kind ?? "circle",
-              stroke: "#151413",
+              stroke: activeColor,
               fill: activeColor,
               filled: event.target.checked,
               size: shapeSize

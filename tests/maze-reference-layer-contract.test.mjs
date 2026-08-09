@@ -53,7 +53,7 @@ test("reference image is non-interactive and rendered beneath Maze marks", () =>
 test("reference image stays outside Maze persistence and final captures", () => {
   assert.match(
     types,
-    /export type MazeState = \{\s*canvasLayout: CanvasLayout;\s*mazeWalls: MazeWall\[\];\s*mazeShapes: MazeShape\[\];\s*\};/
+    /export type MazeState = \{\s*canvasLayout: CanvasLayout;\s*canvasMode: CanvasMode;\s*mazeWalls: MazeWall\[\];\s*mazeShapes: MazeShape\[\];\s*\};/
   );
   assert.match(app, /stage\.find\("\.maze-reference"\)/);
   assert.match(app, /referenceNodes\.forEach\(\(node\) => node\.visible\(false\)\)/);

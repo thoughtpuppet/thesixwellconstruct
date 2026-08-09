@@ -12,8 +12,14 @@ import {
   fitMazeToLayout,
   isCanvasLayout
 } from "./lib/canvas-layout";
+import {
+  defaultInkColorForMode,
+  isCanvasMode,
+  sanitizeToolForCanvasMode,
+  switchCanvasMode
+} from "./lib/canvas-mode";
 import { shapeTouchedByEraser, splitWallByEraser } from "./lib/maze";
-import type { CanvasLayout, CanvasReference, MazeShape, MazeState, MazeTool, MazeWall, Selection, ShapeSizeScope } from "./types";
+import type { CanvasLayout, CanvasMode, CanvasReference, MazeShape, MazeState, MazeTool, MazeWall, Selection, ShapeSizeScope } from "./types";
 import "./maze-submit.css";
 
 const LEGACY_STORAGE_KEY = "art-pill-maze-design";
@@ -70,8 +76,8 @@ type ServerDraft = {
   payload: MazeDraftPayload;
 };
 
-function emptyState(canvasLayout = defaultCanvasLayout()): MazeState {
-  return { canvasLayout, mazeWalls: [], mazeShapes: [] };
+function emptyState(canvasLayout = defaultCanvasLayout(), canvasMode: CanvasMode = "standard"): MazeState {
+  return { canvasLayout, canvasMode, mazeWalls: [], mazeShapes: [] };
 }
 
 function normalizeMazeState(value: Partial<MazeState> | null | undefined, emptyLayout = defaultCanvasLayout()): MazeState {
@@ -82,7 +88,8 @@ function normalizeMazeState(value: Partial<MazeState> | null | undefined, emptyL
     : mazeWalls.length || mazeShapes.length
       ? "wide"
       : emptyLayout;
-  return { canvasLayout, mazeWalls, mazeShapes };
+  const canvasMode = isCanvasMode(value?.canvasMode) ? value.canvasMode : "standard";
+  return { canvasLayout, canvasMode, mazeWalls, mazeShapes };
 }
 
 function emptyForm(): MazeFormDraft {
@@ -162,6 +169,7 @@ function draftPayload(state: MazeState, form: MazeFormDraft, clientDraftId: stri
     version: 1,
     clientDraftId,
     canvasLayout: state.canvasLayout,
+    canvasMode: state.canvasMode,
     mazeWalls: state.mazeWalls,
     mazeShapes: state.mazeShapes,
     contact: {
@@ -563,10 +571,14 @@ function SaveEmailDialog({
 
 function CanvasLayoutPicker({
   value,
-  onChange
+  onChange,
+  canvasMode,
+  onCanvasModeChange
 }: {
   value: CanvasLayout;
   onChange: (layout: CanvasLayout) => void;
+  canvasMode: CanvasMode;
+  onCanvasModeChange: (mode: CanvasMode) => void;
 }) {
   return (
     <section className="canvas-layout-bar" aria-labelledby="canvas-layout-heading">
@@ -574,19 +586,30 @@ function CanvasLayoutPicker({
         <span>Canvas layout</span>
         <p id="canvas-layout-heading">{CANVAS_LAYOUTS[value].description}</p>
       </div>
-      <div className="canvas-layout-options" role="group" aria-label="Choose canvas layout">
-        {CANVAS_LAYOUT_OPTIONS.map((layout) => (
-          <button
-            key={layout.id}
-            type="button"
-            className={value === layout.id ? "active" : ""}
-            aria-pressed={value === layout.id}
-            onClick={() => onChange(layout.id)}
-          >
-            <span className={`canvas-layout-icon ${layout.id}`} aria-hidden="true" />
-            <span>{layout.label}</span>
-          </button>
-        ))}
+      <div className="canvas-layout-controls">
+        <button
+          type="button"
+          className={`negative-space-toggle${canvasMode === "negative-space" ? " active" : ""}`}
+          aria-pressed={canvasMode === "negative-space"}
+          onClick={() => onCanvasModeChange(canvasMode === "negative-space" ? "standard" : "negative-space")}
+        >
+          <span className="negative-space-toggle-swatch" aria-hidden="true" />
+          Negative Space Mode
+        </button>
+        <div className="canvas-layout-options" role="group" aria-label="Choose canvas layout">
+          {CANVAS_LAYOUT_OPTIONS.map((layout) => (
+            <button
+              key={layout.id}
+              type="button"
+              className={value === layout.id ? "active" : ""}
+              aria-pressed={value === layout.id}
+              onClick={() => onChange(layout.id)}
+            >
+              <span className={`canvas-layout-icon ${layout.id}`} aria-hidden="true" />
+              <span>{layout.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -594,12 +617,15 @@ function CanvasLayoutPicker({
 
 function MobileQuickTools({
   tool,
-  onToolChange
+  onToolChange,
+  canvasMode
 }: {
   tool: MazeTool;
   onToolChange: (tool: MazeTool) => void;
+  canvasMode: CanvasMode;
 }) {
   const eraserWidth = tool.type === "eraser" ? tool.width : 48;
+  const defaultInkColor = defaultInkColorForMode(canvasMode);
   return (
     <div className="mobile-quick-tools" role="toolbar" aria-label="Quick maze tools">
       <button
@@ -609,7 +635,7 @@ function MobileQuickTools({
         onClick={() => onToolChange(
           tool.type === "wall"
             ? tool
-            : { type: "wall", variant: "straight", stroke: "#151413", strokeWidth: 20 }
+            : { type: "wall", variant: "straight", stroke: defaultInkColor, strokeWidth: 20 }
         )}
       >
         Draw
@@ -701,7 +727,7 @@ export default function App() {
   const [mazeTool, setMazeTool] = useState<MazeTool>({
     type: "wall",
     variant: "straight",
-    stroke: "#151413",
+    stroke: defaultInkColorForMode(initialDraft.state.canvasMode),
     strokeWidth: 20
   });
   const [stage, setStage] = useState<Konva.Stage | null>(null);
@@ -753,6 +779,9 @@ export default function App() {
     stateRef.current = state;
   }, [state]);
   useEffect(() => {
+    setMazeTool((current) => sanitizeToolForCanvasMode(current, state.canvasMode));
+  }, [state.canvasMode]);
+  useEffect(() => {
     formDraftRef.current = formDraft;
   }, [formDraft]);
 
@@ -791,6 +820,10 @@ export default function App() {
     setPendingCanvasLayout(canvasLayout);
   };
 
+  const requestCanvasMode = (canvasMode: CanvasMode) => {
+    commit((current) => switchCanvasMode(current, canvasMode));
+  };
+
   const fitPendingCanvasLayout = () => {
     if (!pendingCanvasLayout) return;
     const nextLayout = pendingCanvasLayout;
@@ -803,7 +836,7 @@ export default function App() {
     if (!pendingCanvasLayout) return;
     const nextLayout = pendingCanvasLayout;
     setPendingCanvasLayout(null);
-    commit(() => emptyState(nextLayout));
+    commit((current) => emptyState(nextLayout, current.canvasMode));
     setSelected(null);
   };
 
@@ -883,6 +916,7 @@ export default function App() {
 
       const next = {
         canvasLayout: current.canvasLayout,
+        canvasMode: current.canvasMode,
         mazeWalls: nextWalls.sort(byZ),
         mazeShapes: nextShapes.sort(byZ)
       };
@@ -998,6 +1032,7 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       state: {
         canvasLayout: payload.canvasLayout,
+        canvasMode: payload.canvasMode,
         mazeWalls: payload.mazeWalls,
         mazeShapes: payload.mazeShapes
       },
@@ -1016,7 +1051,7 @@ export default function App() {
       localStorage.removeItem(PREVIOUS_STORAGE_KEY);
       localStorage.removeItem(LEGACY_STORAGE_KEY);
     }
-    commit((current) => emptyState(current.canvasLayout));
+    commit((current) => emptyState(current.canvasLayout, current.canvasMode));
     setSelected(null);
     removeReference();
   };
@@ -1279,6 +1314,7 @@ export default function App() {
           <MazeTools
             tool={mazeTool}
             onToolChange={setMazeTool}
+            canvasMode={state.canvasMode}
             referenceName={reference?.name || ""}
             referenceStatus={referenceStatus}
             onReferenceUpload={uploadReference}
@@ -1292,11 +1328,17 @@ export default function App() {
           />
         </aside>
         <div className="canvas-workspace">
-          <CanvasLayoutPicker value={state.canvasLayout} onChange={requestCanvasLayout} />
-          <MobileQuickTools tool={mazeTool} onToolChange={setMazeTool} />
+          <CanvasLayoutPicker
+            value={state.canvasLayout}
+            onChange={requestCanvasLayout}
+            canvasMode={state.canvasMode}
+            onCanvasModeChange={requestCanvasMode}
+          />
+          <MobileQuickTools tool={mazeTool} onToolChange={setMazeTool} canvasMode={state.canvasMode} />
           <ConstructCanvas
             items={[]}
             canvasLayout={state.canvasLayout}
+            canvasMode={state.canvasMode}
             reference={reference}
             mazeWalls={state.mazeWalls}
             mazeShapes={state.mazeShapes}

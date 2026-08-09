@@ -3451,6 +3451,7 @@ test("Maze drafts enforce size, revocation, expiration cleanup, and email rate l
   const mazePayload = {
     version: 1,
     clientDraftId: "maze-client-draft",
+    canvasMode: "negative-space",
     mazeWalls: [{ instanceId: "wall-1", kind: "straight", points: [0, 0, 100, 0], stroke: "#151413", strokeWidth: 20, zIndex: 1 }],
     mazeShapes: [],
     contact: { email: "maze-draft@example.test" },
@@ -3474,6 +3475,11 @@ test("Maze drafts enforce size, revocation, expiration cleanup, and email rate l
   assert.equal(
     JSON.parse(database.prepare("SELECT payload_json FROM tattoo_build_drafts WHERE id=?").get(createdBody.draft.id).payload_json).budgetRange,
     "I’m flexible / I’d like guidance",
+  );
+
+  assert.equal(
+    JSON.parse(database.prepare("SELECT payload_json FROM tattoo_build_drafts WHERE id=?").get(createdBody.draft.id).payload_json).canvasMode,
+    "negative-space",
   );
 
   const revoked = await handleDeleteBuildDraft(draftRequest(

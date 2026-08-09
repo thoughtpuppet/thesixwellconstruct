@@ -2,10 +2,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Circle, Layer, Rect, Stage, Transformer } from "react-konva";
 import type Konva from "konva";
 import { symbolLibrary } from "../data/symbols";
-import type { CanvasItem, CanvasLayout, CanvasReference, MazeShape, MazeTool, MazeWall, Selection } from "../types";
+import type { CanvasItem, CanvasLayout, CanvasMode, CanvasReference, MazeShape, MazeTool, MazeWall, Selection } from "../types";
 import { uuid } from "../lib/id";
 import { pathLength, perfectMazeWall, smoothCurvePoints, wallStampPoints } from "../lib/maze";
 import { CANVAS_LAYOUTS } from "../lib/canvas-layout";
+import { canvasBackgroundForMode, defaultInkColorForMode, STANDARD_CANVAS_COLOR } from "../lib/canvas-mode";
 import { MazeGeometryShape } from "./MazeGeometryShape";
 import { MazeWallLine } from "./MazeWallLine";
 import { ReferenceImage } from "./ReferenceImage";
@@ -18,6 +19,7 @@ type ConstructCanvasProps = {
   selected: Selection;
   mazeTool: MazeTool;
   canvasLayout: CanvasLayout;
+  canvasMode: CanvasMode;
   reference: CanvasReference | null;
   workspaceMode: "construct" | "maze";
   onSelect: (selection: Selection) => void;
@@ -47,6 +49,7 @@ export function ConstructCanvas({
   selected,
   mazeTool,
   canvasLayout,
+  canvasMode,
   reference,
   workspaceMode,
   onSelect,
@@ -64,6 +67,8 @@ export function ConstructCanvas({
   onStageReady
 }: ConstructCanvasProps) {
   const { width: canvasWidth, height: canvasHeight } = CANVAS_LAYOUTS[canvasLayout];
+  const canvasBackground = canvasBackgroundForMode(canvasMode);
+  const canvasContrast = defaultInkColorForMode(canvasMode);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
@@ -411,7 +416,7 @@ export function ConstructCanvas({
         height={canvasHeight * scale}
         scaleX={scale}
         scaleY={scale}
-        className="construct-stage"
+        className={`construct-stage${canvasMode === "negative-space" ? " negative-space" : ""}`}
         onMouseDown={handleCanvasStart}
         onMouseMove={handleCanvasMove}
         onMouseUp={handleCanvasEnd}
@@ -425,25 +430,27 @@ export function ConstructCanvas({
             name="canvas-background"
             width={canvasWidth}
             height={canvasHeight}
-            fill="#b88f4e"
+            fill={canvasBackground}
           />
-          <Rect
-            name="canvas-background"
-            x={canvasWidth / 2 - 165}
-            y={canvasHeight / 2 - 120}
-            width={330}
-            height={240}
-            fill="#d4b271"
-            opacity={0.36}
-            cornerRadius={4}
-          />
+          {canvasMode === "standard" ? (
+            <Rect
+              name="canvas-background"
+              x={canvasWidth / 2 - 165}
+              y={canvasHeight / 2 - 120}
+              width={330}
+              height={240}
+              fill="#d4b271"
+              opacity={0.36}
+              cornerRadius={4}
+            />
+          ) : null}
           <Rect
             name="canvas-background"
             x={28}
             y={28}
             width={canvasWidth - 56}
             height={canvasHeight - 56}
-            stroke="#211f1d"
+            stroke={canvasMode === "negative-space" ? STANDARD_CANVAS_COLOR : "#211f1d"}
             strokeWidth={2}
             opacity={0.14}
           />
@@ -542,10 +549,10 @@ export function ConstructCanvas({
               x={eraserPoint.x}
               y={eraserPoint.y}
               radius={mazeTool.type === "eraser" ? mazeTool.width / 2 : 24}
-              stroke="#151413"
+              stroke={canvasContrast}
               strokeWidth={2}
               dash={[6, 5]}
-              fill="rgba(212, 178, 113, 0.5)"
+              fill={canvasMode === "negative-space" ? "rgba(184, 143, 78, 0.28)" : "rgba(212, 178, 113, 0.5)"}
               listening={false}
             />
           ) : null}

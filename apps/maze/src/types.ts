@@ -121,6 +121,8 @@ export type MazeShape = {
 
 export type CanvasLayout = "tall" | "square" | "wide";
 
+export type CanvasMode = "standard" | "negative-space";
+
 export type ShapeSizeScope = "selected-future" | "all";
 
 export type CanvasReference = {
@@ -132,6 +134,7 @@ export type CanvasReference = {
 
 export type MazeState = {
   canvasLayout: CanvasLayout;
+  canvasMode: CanvasMode;
   mazeWalls: MazeWall[];
   mazeShapes: MazeShape[];
 };
