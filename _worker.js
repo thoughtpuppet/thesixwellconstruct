@@ -155,6 +155,7 @@ const HIDDEN_PUBLIC_PATHS = [
   "/writings"
 ];
 const CLOSED_PUBLIC_PAGE_PATHS = ["/about", "/archive", "/tattoos/build"];
+const OPEN_PUBLIC_PAGE_PATHS = new Set(["/tattoos/build/maze"]);
 
 const HIDE_PUBLIC_PAGES_EXCEPT_HOME = false;
 const PUBLIC_FRONT_DOOR_PATHS = new Set(["/", "/index", "/index/", "/index.html"]);
@@ -377,6 +378,7 @@ function archiveDynamicAssetPath(pathname) {
 function isClosedPublicPagePath(pathname) {
   if (!isPublicPagePath(pathname)) return false;
   const normalizedPath = normalizePath(pathname).toLowerCase();
+  if (OPEN_PUBLIC_PAGE_PATHS.has(normalizedPath)) return false;
   return CLOSED_PUBLIC_PAGE_PATHS.some((closedPath) => (
     normalizedPath === closedPath || normalizedPath.startsWith(`${closedPath}/`)
   ));

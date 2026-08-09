@@ -28,11 +28,21 @@ test("closed public page families temporarily redirect to the 404 page", async (
     "/tattoos/build/",
     "/tattoos/build/index.html",
     "/tattoos/build/in-person/",
-    "/tattoos/build/maze/",
   ]) {
     const response = await worker.fetch(new Request(`https://example.test${path}?source=test`), env, {});
     assert.equal(response.status, 302, path);
     assert.equal(response.headers.get("location"), "https://example.test/404.html", path);
+  }
+});
+
+test("the Maze Studio remains public while the rest of the Build family is closed", async () => {
+  for (const path of [
+    "/tattoos/build/maze",
+    "/tattoos/build/maze/",
+    "/tattoos/build/maze/index.html",
+  ]) {
+    const response = await worker.fetch(new Request(`https://example.test${path}`), env, {});
+    assert.equal(response.status, 200, path);
   }
 });
 
