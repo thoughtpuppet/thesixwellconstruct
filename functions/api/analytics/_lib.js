@@ -4,6 +4,7 @@ const DATASET = "swc_site_analytics";
 const EVENT_SCHEMA_VERSION = "1";
 const MAX_BODY_BYTES = 32 * 1024;
 const MAX_EVENTS = 32;
+const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 // The account currently exposes a little over 26 weeks of Cloudflare RUM data.
 // Stay below that boundary so initial backfill and 12-month views request only
@@ -25,7 +26,17 @@ const EVENT_FIELDS = new Set([
   "maxScroll", "progress", "count", "sequence", "viewportWidth",
 ]);
 
-const RANGE_DAYS = { "7d": 7, "30d": 30, "90d": 90, "12m": 366 };
+const RANGE_WINDOWS = {
+  "1h": { durationMs: HOUR_MS, rolling: true },
+  "24h": { durationMs: 24 * HOUR_MS, rolling: true },
+  "36h": { durationMs: 36 * HOUR_MS, rolling: true },
+  "48h": { durationMs: 48 * HOUR_MS, rolling: true },
+  "5d": { durationMs: 5 * DAY_MS, rolling: true },
+  "7d": { days: 7 },
+  "30d": { days: 30 },
+  "90d": { days: 90 },
+  "12m": { days: 366 },
+};
 const VIEWS = new Set(["overview", "journeys", "acquisition", "performance"]);
 const DEVICES = new Set(["all", "desktop", "mobile", "tablet"]);
 
@@ -192,11 +203,25 @@ function isoDate(value) {
 }
 
 function dateRange(range, endDate = new Date()) {
-  const days = RANGE_DAYS[range] || RANGE_DAYS["30d"];
+  const window = RANGE_WINDOWS[range] || RANGE_WINDOWS["30d"];
+  if (window.rolling) {
+    const end = new Date(endDate);
+    const start = new Date(end.getTime() - window.durationMs);
+    return {
+      days: window.durationMs / DAY_MS, rolling: true, start, end,
+      startIso: start.toISOString(), endIso: end.toISOString(),
+    };
+  }
+  const days = window.days;
   const end = new Date(endDate);
   const endExclusive = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate() + 1));
   const start = new Date(endExclusive.getTime() - days * DAY_MS);
-  return { days, start, end: endExclusive, startIso: start.toISOString(), endIso: endExclusive.toISOString() };
+  return { days, rolling: false, start, end: endExclusive, startIso: start.toISOString(), endIso: endExclusive.toISOString() };
+}
+
+function rangeCoverage(range) {
+  if (range.rolling) return { from: range.start.toISOString(), through: range.end.toISOString() };
+  return { from: isoDate(range.start), through: isoDate(new Date(range.end.getTime() - DAY_MS)) };
 }
 
 function sourceState(ready, error = "", dataThrough = "") {
@@ -446,17 +471,23 @@ function queryList(rows, label, value = "value", secondary = "") {
 }
 
 async function fetchCustomOverview(env, range, filters) {
-  const [sessions, engagement, daily, groups] = await Promise.all([
+  const [sessions, engagement, daily, groups, pages, hours, pageHours] = await Promise.all([
     analyticsSql(env, `SELECT count(DISTINCT index1) sessions FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_view"])}`),
     analyticsSql(env, `SELECT count(DISTINCT index1) engaged_sessions, sum(_sample_interval * double1) / sum(_sample_interval) avg_active_seconds FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_exit"])} AND double1 >= 10`),
     analyticsSql(env, `SELECT formatDateTime(timestamp, '%Y-%m-%d', 'Etc/UTC') date, sum(_sample_interval) value FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_view"])} GROUP BY date ORDER BY date`),
     analyticsSql(env, `SELECT blob5 label, sum(_sample_interval) value FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_view"])} GROUP BY label ORDER BY value DESC LIMIT 20`),
+    analyticsSql(env, `SELECT blob2 path, sum(_sample_interval) page_views, count(DISTINCT index1) sessions FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_view"])} GROUP BY path ORDER BY page_views DESC LIMIT 30`),
+    analyticsSql(env, `SELECT formatDateTime(timestamp, '%H', 'America/New_York') hour_of_day, sum(_sample_interval) page_views, count(DISTINCT index1) sessions FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_view"])} GROUP BY hour_of_day ORDER BY page_views DESC`),
+    analyticsSql(env, `SELECT formatDateTime(timestamp, '%H', 'America/New_York') hour_of_day, blob2 path, sum(_sample_interval) page_views, count(DISTINCT index1) sessions FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_view"])} GROUP BY hour_of_day,path ORDER BY page_views DESC LIMIT 50`),
   ]);
   return {
     sessions: Number(sessions[0]?.sessions || 0), engagedSessions: Number(engagement[0]?.engaged_sessions || 0),
     avgActiveSeconds: Number(engagement[0]?.avg_active_seconds || 0),
     series: (daily || []).map((row) => ({ date: row.date, views: Number(row.value || 0) })),
     contentGroups: queryList(groups, "label").slice(0, 12),
+    pageActivity: (pages || []).map((row) => ({ path: normalizeAnalyticsPath(row.path), pageViews: Number(row.page_views || 0), sessions: Number(row.sessions || 0) })),
+    activityByHour: (hours || []).map((row) => ({ hour: Number(row.hour_of_day), pageViews: Number(row.page_views || 0), sessions: Number(row.sessions || 0) })),
+    activityByPageHour: (pageHours || []).map((row) => ({ hour: Number(row.hour_of_day), path: normalizeAnalyticsPath(row.path), pageViews: Number(row.page_views || 0), sessions: Number(row.sessions || 0) })),
   };
 }
 
@@ -494,6 +525,7 @@ async function d1All(database, sql, bindings = []) {
 }
 
 async function loadRollups(env, range, view) {
+  if (range.rolling) return [];
   if (!env.SUBMISSIONS_DB) return [];
   try {
     return await d1All(env.SUBMISSIONS_DB, `SELECT day,source,metric,dimension_a,dimension_b,value,sample_count,updated_at
@@ -595,7 +627,7 @@ function applyRollupFallback(view, payload, rows) {
 
 function filtersFromUrl(url) {
   const view = VIEWS.has(url.searchParams.get("view")) ? url.searchParams.get("view") : "overview";
-  const rangeName = RANGE_DAYS[url.searchParams.get("range")] ? url.searchParams.get("range") : "30d";
+  const rangeName = RANGE_WINDOWS[url.searchParams.get("range")] ? url.searchParams.get("range") : "30d";
   const device = DEVICES.has(url.searchParams.get("device")) ? url.searchParams.get("device") : "all";
   const group = safeSlug(url.searchParams.get("group"), 48);
   return { view, rangeName, device, group };
@@ -604,9 +636,10 @@ function filtersFromUrl(url) {
 async function buildAnalyticsView(env, options) {
   const range = options.range || dateRange(options.rangeName);
   const filters = { device: options.device || "all", group: options.group || "" };
+  const coverage = rangeCoverage(range);
   const payload = {
     view: options.view, range: options.rangeName, filters, generatedAt: new Date().toISOString(),
-    dataThrough: isoDate(new Date(range.end.getTime() - DAY_MS)), sources: {}, coverage: { from: isoDate(range.start), through: isoDate(new Date(range.end.getTime() - DAY_MS)) },
+    dataThrough: coverage.through, sources: {}, coverage,
   };
   const tasks = [];
   if (options.view === "overview") {
@@ -636,10 +669,10 @@ export async function handleAdminAnalytics(request, env) {
   if (auth) return auth;
   if (request.method !== "GET") return failure("Method not allowed.", 405);
   const options = filtersFromUrl(new URL(request.url));
-  const payload = await buildAnalyticsView(env, options);
+  const currentRange = dateRange(options.rangeName);
+  const payload = await buildAnalyticsView(env, { ...options, range: currentRange });
   if (options.view === "overview") {
-    const currentRange = dateRange(options.rangeName);
-    const previousEnd = new Date(currentRange.start.getTime() - DAY_MS);
+    const previousEnd = currentRange.rolling ? currentRange.start : new Date(currentRange.start.getTime() - DAY_MS);
     const previousRange = dateRange(options.rangeName, previousEnd);
     const previous = await buildAnalyticsView(env, { ...options, range: previousRange });
     payload.comparison = {

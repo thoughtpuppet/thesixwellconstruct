@@ -102,6 +102,71 @@ test("Studio analytics auth is protected and reports partial source readiness", 
   }
 });
 
+test("Studio analytics exposes rolling last-hour, 24-, 36-, 48-hour and 5-day ranges", async () => {
+  const studio = readFileSync(join(ROOT, "studio", "analytics.js"), "utf8");
+  const consoleHtml = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(consoleHtml, /\/studio\/analytics\.js\?v=analytics-hourly-activity/);
+  for (const [value, label] of [["1h", "Last hour"], ["24h", "Last 24 hours"], ["36h", "Last 36 hours"], ["48h", "Last 48 hours"], ["5d", "Last 5 days"]]) {
+    assert.match(studio, new RegExp(`\\["${value}", "${label}"\\]`));
+  }
+
+  const originalFetch = globalThis.fetch;
+  const windows = [];
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes("/graphql")) {
+      const variables = JSON.parse(options.body).variables;
+      if (variables.filter) windows.push([variables.filter.datetime_geq, variables.filter.datetime_lt]);
+      return new Response(JSON.stringify({ data: { viewer: { accounts: [{ pageloads: [], vitals: [] }] } } }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    for (const value of ["1h", "24h", "36h", "48h", "5d"]) {
+      const response = await handleAdminAnalytics(new Request(`https://example.com/api/admin/analytics?view=overview&range=${value}`, {
+        headers: { authorization: "Bearer secret" },
+      }), {
+        SUBMISSIONS_ADMIN_TOKEN: "secret", CLOUDFLARE_ACCOUNT_ID: "account",
+        CLOUDFLARE_WEB_ANALYTICS_SITE_TAG: "site", CLOUDFLARE_ANALYTICS_API_TOKEN: "token",
+      });
+      assert.equal((await response.json()).range, value);
+    }
+    const expectedHours = [1, 1, 24, 24, 36, 36, 48, 48, 120, 120];
+    assert.deepEqual(windows.map(([start, end]) => (new Date(end) - new Date(start)) / (60 * 60 * 1000)), expectedHours);
+    for (let index = 0; index < windows.length; index += 2) assert.equal(windows[index][0], windows[index + 1][1]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Studio Analytics explains every tab and names the unit behind acquisition counts", () => {
+  const studio = readFileSync(join(ROOT, "studio", "analytics.js"), "utf8");
+  const css = readFileSync(join(ROOT, "studio", "analytics.css"), "utf8");
+  for (const view of ["overview", "journeys", "acquisition", "performance"]) {
+    assert.match(studio, new RegExp(`analyticsKey\\("${view}"\\)`));
+  }
+  assert.match(studio, /How to read this tab/);
+  assert.match(studio, /utm_medium values such as paid\. Each number is an attributed page-view count, not people, clicks, leads, or bookings\./);
+  assert.match(studio, /utm_campaign labels such as aug_specials\. Each number is an attributed page-view count/);
+  assert.match(studio, /Recorded exit[\s\S]*internal navigation, not the session's final page/);
+  assert.match(studio, /P75[\s\S]*75% of recorded experiences/);
+  assert.match(css, /\.analytics-key-grid\s*\{[\s\S]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(css, /@media \(max-width:620px\)[\s\S]*\.analytics-key-grid\s*\{\s*grid-template-columns:1fr/);
+});
+
+test("overview ranks page activity by Eastern clock hour without identifying people", () => {
+  const studio = readFileSync(join(ROOT, "studio", "analytics.js"), "utf8");
+  const api = readFileSync(join(ROOT, "functions", "api", "analytics", "_lib.js"), "utf8");
+  assert.match(studio, /Most-viewed pages/);
+  assert.match(studio, /Activity by time of day/);
+  assert.match(studio, /Busiest page and time combinations/);
+  assert.match(studio, /Counts are page views and anonymous tab sessions, not identified people/);
+  assert.match(api, /formatDateTime\(timestamp, '%H', 'America\/New_York'\) hour_of_day/);
+  assert.match(api, /GROUP BY hour_of_day,path ORDER BY page_views DESC/);
+  assert.match(api, /count\(DISTINCT index1\) sessions/);
+});
+
 test("Cloudflare RUM parsing applies adaptive sample intervals and metric units", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {

@@ -7,8 +7,61 @@
   var currentContext = null;
   var currentState = { view: "overview", range: "30d", device: "all", group: "" };
   var chartSequence = 0;
+  var RANGES = [["1h", "Last hour"], ["24h", "Last 24 hours"], ["36h", "Last 36 hours"], ["48h", "Last 48 hours"], ["5d", "Last 5 days"], ["7d", "Last 7 days"], ["30d", "Last 30 days"], ["90d", "Last 90 days"], ["12m", "Last 12 months"]];
+  var RANGE_VALUES = RANGES.map(function (option) { return option[0]; });
   var GROUPS = [["", "All content"], ["entry", "Entry"], ["home", "Home"], ["tattoos", "Tattoos"], ["art", "Art"], ["merch", "Merch"], ["events", "Events"], ["archive", "Archive"], ["about", "About"], ["booking", "Booking"]];
   var VIEW_TITLES = { overview: "Site overview", journeys: "Visitor journeys", acquisition: "Audience acquisition", performance: "Site performance" };
+  var VIEW_KEYS = {
+    overview: {
+      summary: "Traffic and attention during the selected range. One person can create several page views, and no persistent visitor identity is used.",
+      items: [
+        ["Visits", "Entry visits measured by Cloudflare. This is not a permanent count of unique people."],
+        ["Page views", "Public page loads. One visit can include several page views."],
+        ["Engaged sessions", "Anonymous browser-tab sessions with at least 10 seconds of active page time."],
+        ["Average active time", "Average time a page remained visible in the active tab before exit."],
+        ["Previous period", "The immediately preceding window of the same length as the selected range."],
+        ["Content groups", "Page views grouped into major public areas such as Tattoos, Archive, or Events."],
+        ["Activity hour", "First-party page views grouped by Eastern clock hour and ranked from busiest to quietest."],
+        ["Anonymous sessions", "Distinct browser-tab sessions active in a group. This is not a persistent count of people."],
+      ],
+    },
+    journeys: {
+      summary: "Anonymous movement through public pages. A session lasts only within one browser tab and is not connected to a contact or booking record.",
+      items: [
+        ["Entry page", "The first public page recorded in an anonymous tab session."],
+        ["Recorded exit", "A page that was hidden or unloaded. It may be an internal navigation, not the session's final page."],
+        ["Page-to-page move", "A recorded previous page followed by the next public page in the same tab."],
+        ["Active", "Visible-tab time recorded for that page before exit."],
+        ["Scroll", "The average deepest percentage of the page reached before exit."],
+        ["Section reach", "A section visible by at least 50% for at least one second."],
+        ["Milestone", "A deliberately tracked interaction such as opening, starting, or completing an experience."],
+      ],
+    },
+    acquisition: {
+      summary: "How public page views arrived. Campaign tags remain attached only within the anonymous browser-tab session that opened the tagged link.",
+      items: [
+        ["Count", "The number of attributed page views, not individual people, ad clicks, leads, or bookings."],
+        ["Referrer", "The external website domain that sent the visit. Full referring URLs are not retained."],
+        ["UTM source", "The value of utm_source, usually the platform or sender, such as instagram or newsletter."],
+        ["UTM medium", "The value of utm_medium, describing the channel type. For example, paid means the link was tagged as paid traffic."],
+        ["UTM campaign", "The value of utm_campaign, naming the promotion. For example, aug_specials identifies that campaign."],
+        ["Audience attributes", "Country, device, browser, and operating system are aggregate Cloudflare page-load measurements."],
+      ],
+    },
+    performance: {
+      summary: "Real-user loading, responsiveness, and visual-stability measurements from Cloudflare. Lower values are better for every metric shown.",
+      items: [
+        ["P75", "The 75th percentile: 75% of recorded experiences were at or below this value."],
+        ["LCP", "Largest Contentful Paint: how quickly the main visible content appeared."],
+        ["INP", "Interaction to Next Paint: how quickly the page responded to an interaction."],
+        ["CLS", "Cumulative Layout Shift: how much visible content moved unexpectedly. This score is unitless."],
+        ["FCP", "First Contentful Paint: how quickly the first visible content appeared."],
+        ["Page load", "Time until the browser reported the page load complete."],
+        ["Samples", "The number of Cloudflare measurements supporting a page row."],
+        ["Status colors", "Green is good, amber needs improvement, red is poor, and gray means no rating is available."],
+      ],
+    },
+  };
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>'"]/g, function (char) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]; });
@@ -28,6 +81,18 @@
     return number(seconds / 60, 1) + "m";
   }
 
+  function hourLabel(value) {
+    var hour = Math.max(0, Math.min(23, Number(value) || 0));
+    return (hour % 12 || 12) + " " + (hour >= 12 ? "PM" : "AM") + " ET";
+  }
+
+  function dataThrough(value) {
+    if (!value) return "not available";
+    if (!String(value).includes("T")) return String(value);
+    var timestamp = new Date(value);
+    return Number.isNaN(timestamp.getTime()) ? String(value) : timestamp.toLocaleString();
+  }
+
   function pctChange(current, previous) {
     if (current == null || previous == null || previous === "") return { text: "Previous period unavailable", direction: "" };
     current = Number(current); previous = Number(previous);
@@ -41,7 +106,7 @@
     var params = new URLSearchParams(match?.[2] || "");
     return {
       active: Boolean(match), view: match?.[1] || "overview",
-      range: ["7d", "30d", "90d", "12m"].includes(params.get("range")) ? params.get("range") : "30d",
+      range: RANGE_VALUES.includes(params.get("range")) ? params.get("range") : "30d",
       device: ["all", "desktop", "mobile", "tablet"].includes(params.get("device")) ? params.get("device") : "all",
       group: /^[a-z0-9-]{0,48}$/.test(params.get("group") || "") ? params.get("group") || "" : "",
     };
@@ -57,7 +122,7 @@
     if (!sources.length) return "";
     return '<div class="analytics-source-list">' + sources.map(function ([name, source]) {
       var state = source.state || (source.ready ? "current" : "unavailable");
-      var updated = source.dataThrough ? " through " + source.dataThrough : "";
+      var updated = source.dataThrough ? " through " + dataThrough(source.dataThrough) : "";
       return '<span class="analytics-source" data-ready="' + Boolean(source.ready) + '" title="' + escapeHtml(source.error || "Data source ready") + '">' + escapeHtml(name === "rum" ? "Cloudflare RUM" : "Site engagement") + ": " + escapeHtml(state + updated) + "</span>";
     }).join("") + "</div>";
   }
@@ -70,10 +135,10 @@
 
   function filtersMarkup(state, payload) {
     return '<div class="analytics-filters" aria-label="Analytics filters">' +
-      select("analyticsRange", "Range", [["7d", "Last 7 days"], ["30d", "Last 30 days"], ["90d", "Last 90 days"], ["12m", "Last 12 months"]], state.range) +
+      select("analyticsRange", "Range", RANGES, state.range) +
       select("analyticsDevice", "Device", [["all", "All devices"], ["desktop", "Desktop"], ["mobile", "Mobile"], ["tablet", "Tablet"]], state.device) +
       select("analyticsGroup", "Content", GROUPS, state.group) +
-      '<div class="analytics-updated">Data through ' + escapeHtml(payload.dataThrough || "not available") + "<br>Updated " + escapeHtml(new Date(payload.generatedAt || Date.now()).toLocaleString()) + "</div></div>";
+      '<div class="analytics-updated">Data through ' + escapeHtml(dataThrough(payload.dataThrough)) + "<br>Updated " + escapeHtml(new Date(payload.generatedAt || Date.now()).toLocaleString()) + "</div></div>";
   }
 
   function select(id, label, options, selected) {
@@ -87,6 +152,14 @@
 
   function panel(title, note, body, extraClass) {
     return '<section class="analytics-panel ' + (extraClass || "") + '"><div class="analytics-panel-head"><div><h3>' + escapeHtml(title) + '</h3><p class="analytics-panel-note">' + escapeHtml(note || "") + "</p></div></div>" + body + "</section>";
+  }
+
+  function analyticsKey(view) {
+    var key = VIEW_KEYS[view] || VIEW_KEYS.overview;
+    var titleId = "analytics-key-title-" + view;
+    return '<aside class="analytics-key" aria-labelledby="' + titleId + '"><div class="analytics-key-head"><p class="analytics-key-eyebrow">Data key</p><h3 id="' + titleId + '">How to read this tab</h3><p>' + escapeHtml(key.summary) + '</p></div><dl class="analytics-key-grid">' + key.items.map(function (item) {
+      return '<div class="analytics-key-item"><dt>' + escapeHtml(item[0]) + '</dt><dd>' + escapeHtml(item[1]) + '</dd></div>';
+    }).join("") + "</dl></aside>";
   }
 
   function barList(items, empty) {
@@ -134,14 +207,21 @@
   function renderOverview(payload) {
     var rum = payload.rum || {}, custom = payload.custom || {}, previous = payload.comparison || {};
     var series = rum.series || [];
-    return '<div class="analytics-kpis">' +
+    var pages = (custom.pageActivity || []).map(function (item) { return ["<strong>" + escapeHtml(item.path) + "</strong>", number(item.pageViews), number(item.sessions)]; });
+    var hours = (custom.activityByHour || []).map(function (item) { return ["<strong>" + escapeHtml(hourLabel(item.hour)) + "</strong>", number(item.pageViews), number(item.sessions)]; });
+    var pageHours = (custom.activityByPageHour || []).map(function (item) { return ["<strong>" + escapeHtml(hourLabel(item.hour)) + "</strong>", escapeHtml(item.path), number(item.pageViews), number(item.sessions)]; });
+    return analyticsKey("overview") + '<div class="analytics-kpis">' +
       kpi("Visits", rum.visits, rum.visits, previous.visits) +
       kpi("Page views", rum.pageViews, rum.pageViews, previous.pageViews) +
       kpi("Engaged sessions", custom.engagedSessions, custom.engagedSessions, previous.engagedSessions) +
       kpi("Average active time", custom.avgActiveSeconds, custom.avgActiveSeconds, previous.avgActiveSeconds, duration) +
       '</div><div class="analytics-grid">' +
       panel("Traffic over time", "Cloudflare page views and entry visits, sampled when required by the source.", lineChart(series, [{ key: "pageViews", label: "Views" }, { key: "visits", label: "Visits" }], "Page views and visits over time") + sourceTable(series, [{ key: "date", label: "Date" }, { key: "pageViews", label: "Page views" }, { key: "visits", label: "Visits" }])) +
-      '<div class="analytics-stack">' + panel("Content groups", "The public areas receiving the most attention.", barList(rum.contentGroups?.length ? rum.contentGroups : custom.contentGroups, "Content activity will appear after collection begins.")) + vitalPanel(rum.vitals || {}) + "</div></div>";
+      '<div class="analytics-stack">' + panel("Content groups", "The public areas receiving the most attention.", barList(rum.contentGroups?.length ? rum.contentGroups : custom.contentGroups, "Content activity will appear after collection begins.")) + vitalPanel(rum.vitals || {}) + "</div></div>" +
+      '<div class="analytics-grid equal" style="margin-top:16px">' +
+      panel("Most-viewed pages", "First-party page views and anonymous browser-tab sessions during the selected range.", dataTable(["Page", "Page views", "Anonymous sessions"], pages, "Page activity will appear after collection begins.")) +
+      panel("Activity by time of day", "First-party page-view activity grouped by Eastern clock hour and ranked busiest first.", dataTable(["Time (ET)", "Page views", "Anonymous sessions"], hours, "Hourly activity will appear after collection begins.")) + "</div>" +
+      '<div style="margin-top:16px">' + panel("Busiest page and time combinations", "The pages and Eastern clock hours receiving the most activity. Counts are page views and anonymous tab sessions, not identified people.", dataTable(["Time (ET)", "Page", "Page views", "Anonymous sessions"], pageHours, "Page-and-time activity will appear after collection begins.")) + "</div>";
   }
 
   function rating(metric, value) {
@@ -164,11 +244,11 @@
     var transitions = (data.transitions || []).map(function (item) { return ["<strong>" + escapeHtml(item.source) + "</strong>", escapeHtml(item.destination), number(item.value)]; });
     var engagement = (data.engagement || []).map(function (item) { return ["<strong>" + escapeHtml(item.path) + "</strong>", duration(item.activeSeconds), number(item.scroll, 0) + "%", number(item.value)]; });
     var milestones = (data.milestones || []).map(function (item) { return ["<strong>" + escapeHtml(item.group || "Interactive") + "</strong>", escapeHtml(item.action || item.item || "milestone"), number(item.value)]; });
-    return '<div class="analytics-grid equal">' +
+    return analyticsKey("journeys") + '<div class="analytics-grid equal">' +
       panel("Entry pages", "Where anonymous tab sessions begin.", barList(data.entries, "Journey data begins after the collector is deployed.")) +
-      panel("Exit pages", "The last recorded public page in a session.", barList(data.exits, "Exit data begins after the collector is deployed.")) +
+      panel("Recorded exits", "Pages that were hidden or unloaded; an exit can be an internal navigation rather than the end of a session.", barList(data.exits, "Exit data begins after the collector is deployed.")) +
       panel("Page-to-page movement", "Ranked transitions; no persistent visitor identity is used.", dataTable(["From", "To", "Moves"], transitions, "No transitions recorded yet.")) +
-      panel("Page engagement", "Average active time and maximum scroll recorded at page exit.", dataTable(["Page", "Active", "Scroll", "Views"], engagement, "No engagement summaries recorded yet.")) +
+      panel("Page engagement", "Average active time and maximum scroll recorded when each page exits.", dataTable(["Page", "Active", "Scroll", "Recorded exits"], engagement, "No engagement summaries recorded yet.")) +
       panel("Section reach", "Sections seen at least 50% for one second.", barList((data.sections || []).map(function (item) { return { label: item.path + " · " + item.label, value: item.value }; }), "No declared sections recorded yet.")) +
       panel("Interactive milestones", "Entry, homepage, Archive, Legend, Portfolio, and Build activity.", dataTable(["Surface", "Milestone", "Count"], milestones, "No interactive milestones recorded yet.")) + "</div>";
   }
@@ -176,16 +256,16 @@
   function renderAcquisition(payload) {
     var rum = payload.rum || {}, custom = payload.custom || {};
     var series = rum.series || [];
-    return '<div class="analytics-grid">' +
+    return analyticsKey("acquisition") + '<div class="analytics-grid">' +
       panel("Audience trend", "Real-user page loads captured by Cloudflare Web Analytics.", lineChart(series, [{ key: "views", label: "Views" }], "Audience page loads over time") + sourceTable(series, [{ key: "date", label: "Date" }, { key: "views", label: "Views" }])) +
-      '<div class="analytics-stack">' + panel("Referrer domains", "Direct and external referring hosts; complete URLs are not retained.", barList(rum.referrers)) + panel("Campaign sources", "Whitelisted UTM source values carried only within the anonymous tab session.", barList(custom.utmSources, "No UTM-tagged visits recorded yet.")) + "</div></div>" +
-      '<div class="analytics-grid equal" style="margin-top:16px">' + panel("Countries", "Country-level aggregate only.", barList(rum.countries)) + panel("Devices", "Cloudflare device classification.", barList(rum.devices)) + panel("Browsers", "Real-user browser mix.", barList(rum.browsers)) + panel("Operating systems", "Real-user operating-system mix.", barList(rum.operatingSystems)) + panel("UTM media", "Whitelisted campaign medium values.", barList(custom.utmMedia)) + panel("UTM campaigns", "Normalized campaign labels; click identifiers are never retained.", barList(custom.campaigns)) + "</div>";
+      '<div class="analytics-stack">' + panel("Referrer domains", "External domains that sent page loads; complete referring URLs are not retained.", barList(rum.referrers)) + panel("Campaign sources", "utm_source values. Each number is an attributed page-view count, not a visitor or click count.", barList(custom.utmSources, "No UTM-tagged page views recorded yet.")) + "</div></div>" +
+      '<div class="analytics-grid equal" style="margin-top:16px">' + panel("Countries", "Country-level page-load aggregate only.", barList(rum.countries)) + panel("Devices", "Cloudflare page loads grouped by device classification.", barList(rum.devices)) + panel("Browsers", "Cloudflare page loads grouped by browser.", barList(rum.browsers)) + panel("Operating systems", "Cloudflare page loads grouped by operating system.", barList(rum.operatingSystems)) + panel("UTM media", "utm_medium values such as paid. Each number is an attributed page-view count, not people, clicks, leads, or bookings.", barList(custom.utmMedia)) + panel("UTM campaigns", "utm_campaign labels such as aug_specials. Each number is an attributed page-view count; click identifiers are never retained.", barList(custom.campaigns)) + "</div>";
   }
 
   function renderPerformance(payload) {
     var rum = payload.rum || {}, summary = rum.summary || {}, series = rum.series || [];
     var paths = (rum.paths || []).map(function (item) { return ["<strong>" + escapeHtml(item.path) + "</strong>", vitalValue("lcp", item.lcp), vitalValue("inp", item.inp), vitalValue("cls", item.cls), item.fcp ? number(item.fcp) + "ms" : "—", item.pageLoad ? number(item.pageLoad) + "ms" : "—", number(item.samples)]; });
-    return '<div class="analytics-kpis analytics-kpis-performance">' +
+    return analyticsKey("performance") + '<div class="analytics-kpis analytics-kpis-performance">' +
       performanceKpi("LCP P75", "lcp", summary.lcp) + performanceKpi("INP P75", "inp", summary.inp) + performanceKpi("CLS P75", "cls", summary.cls) + performanceKpi("FCP P75", "fcp", summary.fcp) + performanceKpi("Page load P75", "load", summary.pageLoad) +
       '</div><div class="analytics-grid">' +
       panel("Core Web Vitals trend", "P75 values from real visitor sessions. LCP and INP use milliseconds; CLS is unitless.", lineChart(series, [{ key: "lcp", label: "LCP" }, { key: "inp", label: "INP" }], "Core Web Vitals over time") + sourceTable(series, [{ key: "date", label: "Date" }, { key: "lcp", label: "LCP", format: function (value) { return number(value) + "ms"; } }, { key: "inp", label: "INP", format: function (value) { return number(value) + "ms"; } }, { key: "cls", label: "CLS", format: function (value) { return number(value, 3); } }])) +

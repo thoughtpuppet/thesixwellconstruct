@@ -577,10 +577,6 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
     if (!primary.phone) return failure("Enter the primary purchaser's phone number.", 400, { field: "phone" });
     if (!isAtLeastEighteen(primary.dob)) return failure("Enter a valid date of birth confirming the primary participant is at least 18.", 400, { field: "dob" });
     if (text(fields.ageConfirmed).toLowerCase() !== "yes") return failure("The primary participant must confirm they are at least 18.", 400);
-    if (text(fields.policyAccepted).toLowerCase() !== "yes") return failure("Accept the Tattoo Special deposit and booking policies to continue.", 400);
-    if (text(fields.transactionalMessagesAccepted).toLowerCase() !== "yes") {
-      return failure("Agree to receive transactional email updates for this Tattoo Special request.", 400);
-    }
     const placement = text(fields.placement, 500);
     const projectDetails = text(fields.projectDetails, 5000);
     if (!placement || !projectDetails) return failure("Placement and project details are required.", 400);

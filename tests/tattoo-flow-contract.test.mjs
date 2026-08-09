@@ -4030,7 +4030,8 @@ test("Tattoo Specials public copy matches the approval-first booking lifecycle",
   assert.match(script, /There are no special available at this time\./);
   assert.match(script, /Check back another time or <a href="\$\{escape\(payload\.normalInquiryUrl\)\}">submit a normal tattoo request<\/a>\./);
   assert.match(page, /id="specialsSubmit">Send Request<\/button>/);
-  assert.match(page, />I agree to receive transactional email about this Tattoo Special request\.<\/span>/);
+  assert.doesNotMatch(page, /name="policyAccepted"|name="transactionalMessagesAccepted"/);
+  assert.doesNotMatch(page, /<legend>Deposit policy<\/legend>|I agree to receive transactional/i);
   assert.match(page, />These details stay with the request\. Automated email goes only to the primary participant\.<\/p>/);
   assert.doesNotMatch(page, /request, approval, deposit, and appointment|Message and data rates may apply|Reply STOP to opt out/i);
   assert.doesNotMatch(page, /specials-booking-cue|Book Your Appointment/);
@@ -4223,8 +4224,6 @@ test("legacy Tattoo Special request-time links remain compatible with approval a
     phone: "4045550101",
     dob: "1990-01-01",
     ageConfirmed: "yes",
-    policyAccepted: "yes",
-    transactionalMessagesAccepted: "yes",
     placement: "Upper arm",
     projectDetails: "A hand-sized symbolic composition.",
     // These values are intentionally hostile; the server must ignore them.
