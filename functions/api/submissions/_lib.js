@@ -107,7 +107,7 @@ const FILE_LIMITS_BY_TYPE = {
   flash_claim: 6,
   special_project: 6,
   build_brief: 6,
-  maze_design: 2,
+  maze_design: 4,
   art_acquisition: 4,
 };
 
@@ -1300,15 +1300,26 @@ function formatCalendarDate(parts) {
 }
 
 async function validateMazeArtifacts(files) {
-  const png = files.find((file) => file.fieldName === "maze_image" && file.contentType === "image/png");
-  const jsonFile = files.find((file) => file.fieldName === "maze_json_file" && file.contentType === "application/json");
-  if (!png || !jsonFile) {
-    return { error: "Maze submissions require both the generated PNG and JSON design artifacts." };
+  const supportedRoles = new Set([
+    "maze_image",
+    "maze_transparent_image",
+    "maze_stencil_image",
+    "maze_json_file",
+  ]);
+  const filesByRole = new Map();
+  for (const file of files) {
+    if (!supportedRoles.has(file.fieldName)) {
+      return { error: "The Maze submission contains an unsupported artifact." };
+    }
+    if (filesByRole.has(file.fieldName)) {
+      return { error: `The Maze submission contains more than one ${file.fieldName} artifact.` };
+    }
+    filesByRole.set(file.fieldName, file);
   }
-  const signature = new Uint8Array(await png.file.slice(0, 8).arrayBuffer());
-  const expected = [137, 80, 78, 71, 13, 10, 26, 10];
-  if (signature.length !== expected.length || expected.some((byte, index) => signature[index] !== byte)) {
-    return { error: "The maze image artifact is not a valid PNG file." };
+
+  const jsonFile = filesByRole.get("maze_json_file");
+  if (!jsonFile || jsonFile.contentType !== "application/json") {
+    return { error: "Maze submissions require the editable JSON design artifact." };
   }
   if (jsonFile.size > 2 * 1024 * 1024) {
     return { error: "The maze JSON artifact cannot exceed 2 MB." };
@@ -1319,12 +1330,50 @@ async function validateMazeArtifacts(files) {
   } catch {
     return { error: "The maze JSON artifact is invalid." };
   }
+  const canvasMode = design?.canvasMode === undefined ? "standard" : design.canvasMode;
+  if (!new Set(["standard", "negative-space"]).has(canvasMode)) {
+    return { error: "The Maze JSON contains an invalid canvas mode." };
+  }
+
+  const requiredPngRoles = canvasMode === "negative-space"
+    ? ["maze_image", "maze_stencil_image"]
+    : ["maze_image", "maze_transparent_image", "maze_stencil_image"];
+  const expectedRoles = new Set([...requiredPngRoles, "maze_json_file"]);
+  if (files.length !== expectedRoles.size || [...filesByRole.keys()].some((role) => !expectedRoles.has(role))) {
+    return {
+      error: canvasMode === "negative-space"
+        ? "Negative Space Maze submissions require canvas and Studio stencil PNGs plus JSON; a separate transparent render is not accepted."
+        : "Standard Maze submissions require canvas, transparent, and Studio stencil PNGs plus JSON.",
+    };
+  }
+
+  const expectedSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+  for (const role of requiredPngRoles) {
+    const png = filesByRole.get(role);
+    if (!png || png.contentType !== "image/png") {
+      return { error: `The ${role} artifact must be a PNG file.` };
+    }
+    const signature = new Uint8Array(await png.file.slice(0, 8).arrayBuffer());
+    if (signature.length !== expectedSignature.length || expectedSignature.some((byte, index) => signature[index] !== byte)) {
+      return { error: `The ${role} artifact is not a valid PNG file.` };
+    }
+  }
+
   const walls = Array.isArray(design?.mazeWalls) ? design.mazeWalls : [];
   const shapes = Array.isArray(design?.mazeShapes) ? design.mazeShapes : [];
   if (!walls.length && !shapes.length) {
     return { error: "Draw at least one maze wall or shape before submitting." };
   }
-  return { designSummary: { wallCount: walls.length, shapeCount: shapes.length } };
+  return {
+    designSummary: {
+      wallCount: walls.length,
+      shapeCount: shapes.length,
+      canvasMode,
+      renderVariants: canvasMode === "negative-space"
+        ? ["canvas", "stencil"]
+        : ["canvas", "transparent", "stencil"],
+    },
+  };
 }
 
 function normalizedLegacyPath(value) {

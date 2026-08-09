@@ -185,7 +185,7 @@ function section(title, body, className = "") {
 function referenceList(files, links) {
   const values = [];
   (Array.isArray(files) ? files : []).forEach((file) => {
-    if (!["maze_json_file"].includes(file?.fieldName) && file?.fileName) values.push(file.fileName);
+    if (!["maze_json_file", "maze_transparent_image", "maze_stencil_image"].includes(file?.fieldName) && file?.fileName) values.push(file.fileName);
   });
   if (links && links !== "Not provided") values.push(...String(links).split(/\s*[\n,]\s*/).filter(Boolean));
   return values.length ? `<ul>${values.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : `<p class="muted">No references were included.</p>`;

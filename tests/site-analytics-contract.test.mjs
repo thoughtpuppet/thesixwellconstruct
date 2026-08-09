@@ -209,6 +209,7 @@ test("Studio Analytics explains every tab and names the unit behind acquisition 
   assert.match(studio, /utm_campaign labels such as aug_specials\. Each number is an attributed page-view count/);
   assert.match(studio, /Recorded exit[\s\S]*internal navigation, not the session's final page/);
   assert.match(studio, /P75[\s\S]*75% of recorded experiences/);
+  assert.match(studio, /Sampled estimate[\s\S]*may appear in round increments/);
   assert.match(css, /\.analytics-key-grid\s*\{[\s\S]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(css, /@media \(max-width:620px\)[\s\S]*\.analytics-key-grid\s*\{\s*grid-template-columns:1fr/);
 });
@@ -225,7 +226,7 @@ test("overview ranks page activity by Eastern clock hour without identifying peo
   assert.match(api, /count\(DISTINCT index1\) sessions/);
 });
 
-test("Cloudflare RUM parsing applies adaptive sample intervals and metric units", async () => {
+test("Cloudflare RUM keeps adaptive estimates without multiplying sample intervals again", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     if (String(url).includes("/graphql")) return new Response(JSON.stringify({ data: { viewer: { accounts: [{
@@ -242,8 +243,11 @@ test("Cloudflare RUM parsing applies adaptive sample intervals and metric units"
       CLOUDFLARE_WEB_ANALYTICS_SITE_TAG: "site", CLOUDFLARE_ANALYTICS_API_TOKEN: "token",
     });
     const payload = await response.json();
-    assert.equal(payload.rum.pageViews, 20);
-    assert.equal(payload.rum.visits, 6);
+    assert.equal(payload.rum.pageViews, 10);
+    assert.equal(payload.rum.visits, 3);
+    assert.equal(payload.rum.series[0].sampled, true);
+    assert.equal(payload.rum.series[0].maxSampleInterval, 2);
+    assert.deepEqual(payload.rum.sampling, { sampled: true, maxInterval: 2 });
     assert.equal(payload.rum.vitals.lcp, 2100);
     assert.equal(payload.rum.vitals.inp, 180);
     assert.equal(payload.rum.vitals.cls, 0);

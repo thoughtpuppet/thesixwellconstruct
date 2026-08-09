@@ -730,6 +730,36 @@ function validCustom(overrides = {}) {
   };
 }
 
+const MAZE_PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+
+function mazeSubmissionFiles({
+  canvasMode = "standard",
+  mazeWalls = [{ id: "wall-1" }],
+  mazeShapes = [],
+} = {}) {
+  return [
+    { fieldName: "maze_image", fileName: "maze.png", contentType: "image/png", body: MAZE_PNG_SIGNATURE },
+    ...(canvasMode === "standard" ? [{
+      fieldName: "maze_transparent_image",
+      fileName: "maze-transparent.png",
+      contentType: "image/png",
+      body: MAZE_PNG_SIGNATURE,
+    }] : []),
+    {
+      fieldName: "maze_stencil_image",
+      fileName: "maze-stencil.png",
+      contentType: "image/png",
+      body: MAZE_PNG_SIGNATURE,
+    },
+    {
+      fieldName: "maze_json_file",
+      fileName: "maze.json",
+      contentType: "application/json",
+      body: JSON.stringify({ canvasMode, mazeWalls, mazeShapes }),
+    },
+  ];
+}
+
 function decideSubmission(env, submissionId, token, action, fields = {}) {
   return handleSubmissionDecision(adminJsonRequest(
     `/api/admin/submissions/${submissionId}/decision`,
@@ -3540,7 +3570,7 @@ test("Maze drafts enforce size, revocation, expiration cleanup, and email rate l
   ).get(createdBody.draft.id).payload_json, "{}");
 });
 
-test("Maze submissions require generated artifacts and snapshot their wall and shape counts", async () => {
+test("Maze submissions require mode-specific render variants and snapshot their artifact contract", async () => {
   const database = migratedDatabase();
   const env = {
     SUBMISSIONS_DB: new LocalD1(database),
@@ -3564,23 +3594,7 @@ test("Maze submissions require generated artifacts and snapshot their wall and s
   const created = await handleCreateSubmission(multipartRequest(
     "/api/submissions",
     payload,
-    [
-      {
-        fieldName: "maze_image",
-        fileName: "maze.png",
-        contentType: "image/png",
-        body: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
-      },
-      {
-        fieldName: "maze_json_file",
-        fileName: "maze.json",
-        contentType: "application/json",
-        body: JSON.stringify({
-          mazeWalls: [{ id: "wall-1" }],
-          mazeShapes: [{ id: "shape-1" }],
-        }),
-      },
-    ],
+    mazeSubmissionFiles({ mazeShapes: [{ id: "shape-1" }] }),
   ), env);
   const createdPayload = await created.json();
   assert.equal(created.status, 200, createdPayload.detail || createdPayload.error);
@@ -3588,11 +3602,59 @@ test("Maze submissions require generated artifacts and snapshot their wall and s
   const saved = JSON.parse(
     database.prepare("SELECT payload_json FROM submissions WHERE id = ?").get(submissionId).payload_json,
   );
-  assert.deepEqual(saved.maze_artifact_snapshot, { wallCount: 1, shapeCount: 1 });
+  assert.deepEqual(saved.maze_artifact_snapshot, {
+    wallCount: 1,
+    shapeCount: 1,
+    canvasMode: "standard",
+    renderVariants: ["canvas", "transparent", "stencil"],
+  });
+  assert.equal(createdPayload.filesReceived, 4);
   assert.equal(database.prepare("SELECT status FROM maze_archive_consents WHERE submission_id=?").get(submissionId).status, "not_granted");
   assert.equal(database.prepare("SELECT COUNT(*) count FROM maze_archive_entries WHERE submission_id=?").get(submissionId).count, 0);
   const ineligible = await handlePromoteMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive/promote`, { title:"No Consent",altText:"A maze." }, "maze-test-admin"), env, submissionId);
   assert.equal(ineligible.status, 409);
+});
+
+test("Maze artifact validation rejects missing, duplicate, invalid, and mode-incompatible render variants", async () => {
+  const database = migratedDatabase();
+  const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSION_FILES: new MemoryBucket() };
+  const payload = {
+    type: "maze_design",
+    name: "Variant Client",
+    email: "variants@example.test",
+    dob: "1990-01-01",
+    age_confirmed: "yes",
+    budget_range: "Up to $300",
+    maze_explanation: "Artifact validation.",
+    review_consent: "yes",
+  };
+
+  const missingStencil = mazeSubmissionFiles().filter((file) => file.fieldName !== "maze_stencil_image");
+  assert.equal((await handleCreateSubmission(multipartRequest("/api/submissions", payload, missingStencil), env)).status, 400);
+
+  const duplicateBase = mazeSubmissionFiles({ canvasMode: "negative-space" });
+  const duplicateCanvas = [...duplicateBase, { ...duplicateBase[0], fileName: "duplicate.png" }];
+  assert.equal((await handleCreateSubmission(multipartRequest("/api/submissions", payload, duplicateCanvas), env)).status, 400);
+
+  const invalidStencil = mazeSubmissionFiles().map((file) => file.fieldName === "maze_stencil_image"
+    ? { ...file, body: new Uint8Array([1, 2, 3, 4]) }
+    : file);
+  assert.equal((await handleCreateSubmission(multipartRequest("/api/submissions", payload, invalidStencil), env)).status, 400);
+
+  const negativeFiles = mazeSubmissionFiles({ canvasMode: "negative-space" });
+  const negativeCreated = await handleCreateSubmission(multipartRequest("/api/submissions", payload, negativeFiles), env);
+  const negativePayload = await negativeCreated.json();
+  assert.equal(negativeCreated.status, 200, negativePayload.detail || negativePayload.error);
+  assert.equal(negativePayload.filesReceived, 3);
+  const negativeSaved = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(negativePayload.submissionId).payload_json);
+  assert.deepEqual(negativeSaved.maze_artifact_snapshot.renderVariants, ["canvas", "stencil"]);
+
+  const negativeWithTransparent = [
+    ...negativeFiles.slice(0, 1),
+    { fieldName: "maze_transparent_image", fileName: "maze-transparent.png", contentType: "image/png", body: MAZE_PNG_SIGNATURE },
+    ...negativeFiles.slice(1),
+  ];
+  assert.equal((await handleCreateSubmission(multipartRequest("/api/submissions", payload, negativeWithTransparent), env)).status, 400);
 });
 
 test("support contact copy migration updates current receipt revisions and preserves retired history", () => {
@@ -5039,10 +5101,7 @@ test("Maze Archive consent is explicit, separately scoped, versioned, and idempo
     type: "maze_design", firstName: "Jordan", lastName: "Rivera", email: "jordan@example.test",
     dob: "1990-01-01", age_confirmed: "yes", budget_range: "Up to $300", maze_explanation: "A private path through grief.", review_consent: "yes",
   };
-  const files = [
-    { fieldName: "maze_image", fileName: "maze.png", contentType: "image/png", body: new Uint8Array([137,80,78,71,13,10,26,10]) },
-    { fieldName: "maze_json_file", fileName: "maze.json", contentType: "application/json", body: JSON.stringify({ mazeWalls:[{id:"w"}],mazeShapes:[] }) },
-  ];
+  const files = mazeSubmissionFiles();
   const invalid = await handleCreateSubmission(multipartRequest("/api/submissions", { ...base, maze_archive_opt_in:"yes", maze_archive_attribution:"display_name" }, files), env);
   assert.equal(invalid.status, 400);
 
@@ -5081,10 +5140,7 @@ test("Maze Archive promotion copies one presentation PNG, stays private until ca
     type:"maze_design",firstName:"Avery",lastName:"Stone",email:"avery@example.test",phone:"555-0100",
     placement:"forearm",dob:"1990-01-01",budget_range:"Up to $300",maze_explanation:"This sentence may be considered.",review_consent:"yes",age_confirmed:"yes",
     maze_archive_opt_in:"yes",maze_archive_attribution:"display_name",maze_archive_display_name:"A. Stone",maze_archive_include_explanation:"yes",
-  }, [
-    { fieldName:"maze_image",fileName:"maze.png",contentType:"image/png",body:new Uint8Array([137,80,78,71,13,10,26,10]) },
-    { fieldName:"maze_json_file",fileName:"maze.json",contentType:"application/json",body:JSON.stringify({mazeWalls:[{id:"w"}],mazeShapes:[{id:"s"}]}) },
-  ]);
+  }, mazeSubmissionFiles({ mazeShapes: [{ id: "s" }] }));
   const created = await handleCreateSubmission(request, env);
   const createdPayload = await created.json();
   assert.equal(created.status, 200, createdPayload.detail || createdPayload.error);
@@ -5130,7 +5186,7 @@ test("Maze Archive promotion copies one presentation PNG, stays private until ca
     title:"Threshold Maze",altText:"Angular black maze walls and a centered circle.",
   }, token), env, submissionId);
   assert.equal((await replay.json()).idempotent, true);
-  assert.equal(bucket.objects.size, 3); // two private source artifacts plus one public derivative
+  assert.equal(bucket.objects.size, 5); // four private source artifacts plus one public derivative
 
   const entityId = promotedPayload.mazeArchive.archiveEntityId;
   database.prepare("UPDATE content_entities SET visibility='public',search_visibility=1,public_at=datetime('now') WHERE id=?").run(entityId);
@@ -10435,8 +10491,22 @@ test("Build and Maze brief templates render required client content without sens
       assert.match(rendered.html, /Shared themes/);
       assert.match(rendered.html, /The passage is read before/);
     } else {
+      source.files = [
+        { fieldName: "maze_image", fileName: "maze.png" },
+        { fieldName: "maze_transparent_image", fileName: "maze-transparent.png" },
+        { fieldName: "maze_stencil_image", fileName: "maze-stencil.png" },
+        { fieldName: "maze_json_file", fileName: "maze.json" },
+      ];
+      const privacyRendered = renderBriefHtml({
+        templateKey,
+        content,
+        source,
+        mazeImageDataUrl: source.mazeImageDataUrl || "",
+      });
       assert.match(rendered.html, /Submitted Maze design/);
       assert.match(rendered.html, /open center represents/);
+      assert.match(privacyRendered.html, /maze\.png/);
+      assert.doesNotMatch(privacyRendered.html, /maze-transparent\.png|maze-stencil\.png|maze\.json/);
     }
   }
   const unsafe = briefTemplateDefault("tattoo_build_brief_pdf");

@@ -15,8 +15,9 @@
     overview: {
       summary: "Traffic and attention during the selected range. One person can create several page views, and no persistent visitor identity is used.",
       items: [
-        ["Visits", "Entry visits measured by Cloudflare. This is not a permanent count of unique people."],
-        ["Page views", "Public page loads. One visit can include several page views."],
+        ["Visits", "Entry visits reported by Cloudflare. This is not a permanent count of unique people."],
+        ["Page views", "Public page loads reported by Cloudflare. One visit can include several page views."],
+        ["Sampled estimate", "Cloudflare retains unsampled Web Analytics data for seven days, then may estimate older totals from a sample. Estimated values are already adjusted by Cloudflare and may appear in round increments."],
         ["Engaged sessions", "Anonymous browser-tab sessions with at least 10 seconds of active page time."],
         ["Average active time", "Average time a page remained visible in the active tab before exit."],
         ["Previous period", "The immediately preceding window of the same length as the selected range."],
@@ -207,6 +208,10 @@
   function renderOverview(payload) {
     var rum = payload.rum || {}, custom = payload.custom || {}, previous = payload.comparison || {};
     var series = rum.series || [];
+    var sampling = rum.sampling || {};
+    var trafficDescription = sampling.sampled
+      ? "Cloudflare-reported page views and entry visits. Older rows marked Sampled estimate are extrapolated by Cloudflare and may appear in round increments; the dashboard does not multiply them again."
+      : "Cloudflare-reported page views and entry visits. Rows in this range were not sampled.";
     var pages = (custom.pageActivity || []).map(function (item) { return ["<strong>" + escapeHtml(item.path) + "</strong>", number(item.pageViews), number(item.sessions)]; });
     var hours = (custom.activityByHour || []).map(function (item) { return ["<strong>" + escapeHtml(hourLabel(item.hour)) + "</strong>", number(item.pageViews), number(item.sessions)]; });
     var pageHours = (custom.activityByPageHour || []).map(function (item) { return ["<strong>" + escapeHtml(hourLabel(item.hour)) + "</strong>", escapeHtml(item.path), number(item.pageViews), number(item.sessions)]; });
@@ -216,7 +221,7 @@
       kpi("Engaged sessions", custom.engagedSessions, custom.engagedSessions, previous.engagedSessions) +
       kpi("Average active time", custom.avgActiveSeconds, custom.avgActiveSeconds, previous.avgActiveSeconds, duration) +
       '</div><div class="analytics-grid">' +
-      panel("Traffic over time", "Cloudflare page views and entry visits, sampled when required by the source.", lineChart(series, [{ key: "pageViews", label: "Views" }, { key: "visits", label: "Visits" }], "Page views and visits over time") + sourceTable(series, [{ key: "date", label: "Date" }, { key: "pageViews", label: "Page views" }, { key: "visits", label: "Visits" }])) +
+      panel("Traffic over time", trafficDescription, lineChart(series, [{ key: "pageViews", label: "Views" }, { key: "visits", label: "Visits" }], "Page views and visits over time") + sourceTable(series, [{ key: "date", label: "Date" }, { key: "pageViews", label: "Page views" }, { key: "visits", label: "Visits" }, { key: "sampled", label: "Data quality", format: function (sampled) { return sampled ? "Sampled estimate" : "Unsampled"; } }])) +
       '<div class="analytics-stack">' + panel("Content groups", "The public areas receiving the most attention.", barList(rum.contentGroups?.length ? rum.contentGroups : custom.contentGroups, "Content activity will appear after collection begins.")) + vitalPanel(rum.vitals || {}) + "</div></div>" +
       '<div class="analytics-grid equal" style="margin-top:16px">' +
       panel("Most-viewed pages", "First-party page views and anonymous browser-tab sessions during the selected range.", dataTable(["Page", "Page views", "Anonymous sessions"], pages, "Page activity will appear after collection begins.")) +

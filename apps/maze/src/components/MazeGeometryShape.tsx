@@ -34,6 +34,7 @@ function sharedShapeProps(
   onSelect: () => void
 ) {
   return {
+    name: "maze-shape-render",
     x: shape.x,
     y: shape.y,
     rotation: shape.rotation,

@@ -15,6 +15,7 @@ import {
 import {
   CANVAS_TONES,
   DEFAULT_CANVAS_TONE,
+  NEGATIVE_SPACE_CANVAS_COLOR,
   canvasToneColor,
   defaultInkColorForMode,
   isCanvasMode,
@@ -245,20 +246,42 @@ function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
-function captureMazeImage(stage: Konva.Stage | null): string | null {
+type MazeImageVariant = "canvas" | "transparent" | "stencil";
+
+function captureMazeImage(stage: Konva.Stage | null, variant: MazeImageVariant = "canvas"): string | null {
   if (!stage) return null;
-  const hiddenNodes = [
+  const utilityNodes = [
     ...stage.find(".maze-reference"),
-    ...stage.find(".maze-snap-guide")
+    ...stage.find(".maze-snap-guide"),
+    ...stage.find(".maze-export-affordance")
   ];
+  const backgroundNodes = variant === "canvas" ? [] : [...stage.find(".canvas-background")];
+  const hiddenNodes = [...new Set([...utilityNodes, ...backgroundNodes])];
+  const wallNodes = variant === "stencil" ? [...stage.find(".maze-wall-render")] : [];
+  const shapeNodes = variant === "stencil" ? [...stage.find(".maze-shape-render")] : [];
   const visibility = hiddenNodes.map((node) => node.visible());
+  const wallStyles = wallNodes.map((node) => ({ stroke: node.getAttr("stroke") }));
+  const shapeStyles = shapeNodes.map((node) => ({
+    fill: node.getAttr("fill"),
+    stroke: node.getAttr("stroke"),
+    strokeWidth: node.getAttr("strokeWidth")
+  }));
+
   hiddenNodes.forEach((node) => node.visible(false));
+  wallNodes.forEach((node) => node.setAttr("stroke", NEGATIVE_SPACE_CANVAS_COLOR));
+  shapeNodes.forEach((node) => node.setAttrs({
+    fill: "transparent",
+    stroke: NEGATIVE_SPACE_CANVAS_COLOR,
+    strokeWidth: 5
+  }));
   stage.draw();
   try {
     const stageScale = stage.scaleX() || 1;
     return stage.toDataURL({ pixelRatio: 2 / stageScale });
   } finally {
     hiddenNodes.forEach((node, index) => node.visible(visibility[index]));
+    wallNodes.forEach((node, index) => node.setAttrs(wallStyles[index]));
+    shapeNodes.forEach((node, index) => node.setAttrs(shapeStyles[index]));
     stage.draw();
   }
 }
@@ -280,12 +303,13 @@ function clearMazeSubmissionIdempotencyKey() {
 }
 
 // Submit a finished maze into the same review -> booking pipeline as a brief.
-// Captures the maze as PNG + JSON, collects contact details and an explanation,
+// Captures the final Maze render variants + JSON, collects contact details and an explanation,
 // and posts as a `maze_design` submission.
 function SubmitDialog({
   open,
   onClose,
   capturePng,
+  canvasMode,
   getJson,
   isEmpty,
   formDraft,
@@ -296,7 +320,8 @@ function SubmitDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  capturePng: () => string | null;
+  capturePng: (variant: MazeImageVariant) => string | null;
+  canvasMode: CanvasMode;
   getJson: () => string;
   isEmpty: boolean;
   formDraft: MazeFormDraft;
@@ -379,11 +404,19 @@ function SubmitDialog({
       fd.set("subject", "New Art.Pill Build a Maze submission");
       fd.set("review_consent", "yes");
 
-      const png = capturePng();
+      const canvasPng = capturePng("canvas");
+      const transparentPng = canvasMode === "standard" ? capturePng("transparent") : null;
+      const stencilPng = capturePng("stencil");
       const mazeJson = getJson();
-      if (!png) throw new Error("The maze image could not be captured. Wait a moment and try again.");
+      if (!canvasPng || !stencilPng || (canvasMode === "standard" && !transparentPng)) {
+        throw new Error("The maze image variants could not be captured. Wait a moment and try again.");
+      }
       if (!mazeJson) throw new Error("The maze project file could not be created. Try again.");
-      fd.set("maze_image", dataUrlToBlob(png), "maze.png");
+      fd.set("maze_image", dataUrlToBlob(canvasPng), "maze.png");
+      if (transparentPng) {
+        fd.set("maze_transparent_image", dataUrlToBlob(transparentPng), "maze-transparent.png");
+      }
+      fd.set("maze_stencil_image", dataUrlToBlob(stencilPng), "maze-stencil.png");
       fd.set("maze_json_file", new Blob([mazeJson], { type: "application/json" }), "maze.json");
 
       const res = await fetch("/api/submissions", {
@@ -1472,7 +1505,8 @@ export default function App() {
       <SubmitDialog
         open={submitOpen}
         onClose={() => setSubmitOpen(false)}
-        capturePng={() => captureMazeImage(stage)}
+        capturePng={(variant) => captureMazeImage(stage, variant)}
+        canvasMode={state.canvasMode}
         getJson={() => JSON.stringify(state)}
         isEmpty={state.mazeWalls.length === 0 && state.mazeShapes.length === 0}
         formDraft={formDraft}

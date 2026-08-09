@@ -17,6 +17,7 @@ type MazeWallLineProps = {
   onDragMove?: (node: Konva.Node) => void;
   onDragFinish?: () => void;
   shapeRef?: (node: Konva.Node | null) => void;
+  exportable?: boolean;
 };
 
 function localArcPoints(radius: number, startAngle: number, endAngle: number) {
@@ -64,7 +65,8 @@ export function MazeWallLine({
   onPerfect,
   onDragMove,
   onDragFinish,
-  shapeRef
+  shapeRef,
+  exportable = true
 }: MazeWallLineProps) {
   const kind = wall.kind ?? "straight";
   const smoothFreehand = kind === "curve";
@@ -166,6 +168,7 @@ export function MazeWallLine({
           {remainingCircleRanges(erasedRanges).map(([start, end]) => (
             <Line
               key={`${start}-${end}`}
+              name={exportable ? "maze-wall-render" : "maze-export-affordance"}
               points={localArcPoints(radius, start, end)}
               tension={0}
               stroke={wall.stroke}
@@ -183,6 +186,7 @@ export function MazeWallLine({
     return (
       <Circle
         ref={shapeRef}
+        name={exportable ? "maze-wall-render" : "maze-export-affordance"}
         x={wall.x ?? 0}
         y={wall.y ?? 0}
         radius={(wall.size ?? 120) / 2}
@@ -250,6 +254,7 @@ export function MazeWallLine({
   return (
     <Line
       ref={shapeRef}
+      name={exportable ? "maze-wall-render" : "maze-export-affordance"}
       points={renderPoints}
       closed={isClosedLoop}
       tension={smoothFreehand ? 0.58 : 0}

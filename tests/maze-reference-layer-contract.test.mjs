@@ -14,6 +14,9 @@ const inspector = read("apps/maze/src/components/Inspector.tsx");
 const styles = read("apps/maze/src/styles.css");
 const tools = read("apps/maze/src/components/MazeTools.tsx");
 const types = read("apps/maze/src/types.ts");
+const submissionsApi = read("functions/api/submissions/_lib.js");
+const briefTemplates = read("functions/api/brief-documents/_templates.js");
+const studio = read("studio/submissions/index.html");
 
 test("Maze Builder exposes a temporary image-reference action", () => {
   assert.match(tools, /"Upload reference"/);
@@ -65,14 +68,38 @@ test("reference image is non-interactive and rendered beneath Maze marks", () =>
   assert.ok(referencePosition < shapesPosition);
 });
 
-test("reference image stays outside Maze persistence and final captures", () => {
+test("reference and editing affordances stay outside every Maze render variant", () => {
   assert.match(
     types,
     /export type MazeState = \{\s*canvasLayout: CanvasLayout;\s*canvasMode: CanvasMode;\s*canvasTone: CanvasTone;\s*mazeWalls: MazeWall\[\];\s*mazeShapes: MazeShape\[\];\s*\};/
   );
   assert.match(app, /stage\.find\("\.maze-reference"\)/);
+  assert.match(app, /stage\.find\("\.maze-export-affordance"\)/);
+  assert.match(app, /variant === "canvas" \? \[\] : \[\.\.\.stage\.find\("\.canvas-background"\)\]/);
   assert.match(app, /hiddenNodes\.forEach\(\(node\) => node\.visible\(false\)\)/);
   assert.match(app, /finally \{[\s\S]*node\.visible\(visibility\[index\]\)/);
   assert.match(app, /const url = captureMazeImage\(stage\)/);
-  assert.match(app, /capturePng=\{\(\) => captureMazeImage\(stage\)\}/);
+  assert.match(app, /capturePng=\{\(variant\) => captureMazeImage\(stage, variant\)\}/);
+  assert.match(canvas, /name="maze-export-affordance"/);
+});
+
+test("final Maze submissions generate mode-specific canvas, transparent, and stencil artifacts", () => {
+  assert.match(app, /type MazeImageVariant = "canvas" \| "transparent" \| "stencil"/);
+  assert.match(app, /capturePng\("canvas"\)/);
+  assert.match(app, /canvasMode === "standard" \? capturePng\("transparent"\) : null/);
+  assert.match(app, /capturePng\("stencil"\)/);
+  assert.match(app, /fd\.set\("maze_image"/);
+  assert.match(app, /fd\.set\("maze_transparent_image"/);
+  assert.match(app, /fd\.set\("maze_stencil_image"/);
+  assert.match(app, /fd\.set\("maze_json_file"/);
+  assert.match(app, /stage\.find\("\.maze-wall-render"\)/);
+  assert.match(app, /stage\.find\("\.maze-shape-render"\)/);
+  assert.match(app, /stroke: NEGATIVE_SPACE_CANVAS_COLOR,[\s\S]*strokeWidth: 5/);
+  assert.match(submissionsApi, /maze_design: 4/);
+  assert.match(submissionsApi, /canvasMode === "negative-space"[\s\S]*\["maze_image", "maze_stencil_image"\]/);
+  assert.match(submissionsApi, /\["maze_image", "maze_transparent_image", "maze_stencil_image"\]/);
+  assert.match(studio, /maze_image: "Canvas render"/);
+  assert.match(studio, /maze_transparent_image: "Transparent render"/);
+  assert.match(studio, /maze_stencil_image: "Studio stencil — private"/);
+  assert.match(briefTemplates, /"maze_transparent_image", "maze_stencil_image"/);
 });

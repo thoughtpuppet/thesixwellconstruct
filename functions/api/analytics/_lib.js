@@ -280,15 +280,18 @@ function sampleInterval(row) {
   return Math.max(1, Number(row?.avg?.sampleInterval || 1));
 }
 
-function weightedCount(row) {
-  return Math.round(Number(row?.count || 0) * sampleInterval(row));
+function reportedCount(row) {
+  // Adaptive GraphQL datasets already return an extrapolated estimate in
+  // `count`. sampleInterval describes the sampling applied to that estimate;
+  // multiplying by it again inflates older Web Analytics data.
+  return Math.round(Number(row?.count || 0));
 }
 
-function weightedVisits(row) {
-  return Math.round(Number(row?.sum?.visits || 0) * sampleInterval(row));
+function reportedVisits(row) {
+  return Math.round(Number(row?.sum?.visits || 0));
 }
 
-function sumBy(rows, key, value = weightedCount) {
+function sumBy(rows, key, value = reportedCount) {
   const totals = new Map();
   for (const row of rows || []) {
     const name = safeDimension(key(row) || "Unknown", 300);
@@ -365,9 +368,12 @@ async function fetchRumOverview(env, range, filters) {
   const byDate = new Map();
   for (const row of rows) {
     const date = row.dimensions?.date || "";
-    const point = byDate.get(date) || { date, pageViews: 0, visits: 0 };
-    point.pageViews += weightedCount(row);
-    point.visits += weightedVisits(row);
+    const interval = sampleInterval(row);
+    const point = byDate.get(date) || { date, pageViews: 0, visits: 0, sampled: false, maxSampleInterval: 1 };
+    point.pageViews += reportedCount(row);
+    point.visits += reportedVisits(row);
+    point.sampled ||= interval > 1;
+    point.maxSampleInterval = Math.max(point.maxSampleInterval, interval);
     byDate.set(date, point);
   }
   const paths = sumBy(rows, (row) => normalizeAnalyticsPath(row.dimensions?.requestPath));
@@ -376,6 +382,10 @@ async function fetchRumOverview(env, range, filters) {
   const vitals = filters.group ? {} : account.vitals?.[0]?.quantiles || {};
   return {
     pageViews, visits, series: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    sampling: {
+      sampled: rows.some((row) => sampleInterval(row) > 1),
+      maxInterval: rows.reduce((max, row) => Math.max(max, sampleInterval(row)), 1),
+    },
     paths: paths.slice(0, 25),
     contentGroups: sumBy(paths, (row) => analyticsContentGroup(row.label), (row) => row.value).slice(0, 12),
     sourcePartial: window.partial,

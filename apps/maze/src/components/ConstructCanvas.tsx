@@ -617,6 +617,7 @@ export function ConstructCanvas({
           {draftWall ? (
             <MazeWallLine
               wall={draftWall}
+              exportable={false}
               editable={false}
               erasable={false}
               onSelect={() => onSelect({ type: "wall", id: draftWall.instanceId })}
@@ -685,6 +686,7 @@ export function ConstructCanvas({
           ))}
           <Transformer
             ref={transformerRef}
+            name="maze-export-affordance"
             rotateEnabled
             enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
             boundBoxFunc={(_, nextBox) => {
@@ -696,6 +698,7 @@ export function ConstructCanvas({
           />
           {eraserPoint ? (
             <Circle
+              name="maze-export-affordance"
               x={eraserPoint.x}
               y={eraserPoint.y}
               radius={mazeTool.type === "eraser" ? mazeTool.width / 2 : 24}
