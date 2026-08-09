@@ -11,6 +11,7 @@ const app = read("apps/maze/src/App.tsx");
 const canvas = read("apps/maze/src/components/ConstructCanvas.tsx");
 const referenceImage = read("apps/maze/src/components/ReferenceImage.tsx");
 const inspector = read("apps/maze/src/components/Inspector.tsx");
+const styles = read("apps/maze/src/styles.css");
 const tools = read("apps/maze/src/components/MazeTools.tsx");
 const types = read("apps/maze/src/types.ts");
 
@@ -37,6 +38,20 @@ test("Shape size stays persistent and can target the selected shape or every sha
   assert.match(inspector, /selectedShape\.scale\.toFixed\(2\).*?from.*?selectedShape\.size/);
 });
 
+test("Maze control groups have visible titles connected to their controls", () => {
+  for (const title of ["Drawing tools", "Wall forms", "Shapes", "Apply shape size to", "Drawing color"]) {
+    assert.match(tools, new RegExp(`>${title}<`));
+  }
+  assert.match(tools, /id="drawing-tools-title">Drawing tools<\/h3>[\s\S]*aria-labelledby="drawing-tools-title"/);
+  assert.match(tools, /id="wall-forms-title">Wall forms<\/h3>[\s\S]*aria-labelledby="wall-forms-title"/);
+  assert.match(tools, /id="shapes-title">Shapes<\/h3>[\s\S]*aria-labelledby="shapes-title"/);
+  assert.match(tools, /id="shape-size-scope-title">Apply shape size to<\/h3>[\s\S]*aria-labelledby="shape-size-scope-title"/);
+  assert.match(tools, /id="drawing-color-title">Drawing color<\/h3>[\s\S]*aria-labelledby="drawing-color-title"/);
+  assert.match(inspector, />Selected mark actions<\/h3>/);
+  assert.match(inspector, /className="action-grid"[\s\S]*aria-labelledby="project-actions-title"[\s\S]*id="project-actions-title">Project actions<\/h3>/);
+  assert.match(styles, /\.control-group-title\s*\{[\s\S]*text-transform:\s*uppercase/);
+});
+
 test("reference image is non-interactive and rendered beneath Maze marks", () => {
   assert.match(referenceImage, /name="maze-reference"/);
   assert.match(referenceImage, /listening=\{false\}/);
@@ -53,7 +68,7 @@ test("reference image is non-interactive and rendered beneath Maze marks", () =>
 test("reference image stays outside Maze persistence and final captures", () => {
   assert.match(
     types,
-    /export type MazeState = \{\s*canvasLayout: CanvasLayout;\s*canvasMode: CanvasMode;\s*mazeWalls: MazeWall\[\];\s*mazeShapes: MazeShape\[\];\s*\};/
+    /export type MazeState = \{\s*canvasLayout: CanvasLayout;\s*canvasMode: CanvasMode;\s*canvasTone: CanvasTone;\s*mazeWalls: MazeWall\[\];\s*mazeShapes: MazeShape\[\];\s*\};/
   );
   assert.match(app, /stage\.find\("\.maze-reference"\)/);
   assert.match(app, /hiddenNodes\.forEach\(\(node\) => node\.visible\(false\)\)/);

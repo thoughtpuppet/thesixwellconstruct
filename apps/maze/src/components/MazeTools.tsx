@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useRef } from "react";
-import type { CanvasMode, MazeShapeKind, MazeTool, ShapeSizeScope } from "../types";
+import type { CanvasMode, CanvasTone, MazeShapeKind, MazeTool, ShapeSizeScope } from "../types";
 import { defaultInkColorForMode, inkOptionsForMode } from "../lib/canvas-mode";
 
 type WallPreset = Extract<MazeTool, { type: "wallPreset" }>["preset"];
@@ -85,6 +85,7 @@ type MazeToolsProps = {
   tool: MazeTool;
   onToolChange: (tool: MazeTool) => void;
   canvasMode: CanvasMode;
+  canvasTone: CanvasTone;
   referenceName: string;
   referenceStatus: string;
   onReferenceUpload: (file: File) => void;
@@ -103,6 +104,7 @@ export function MazeTools({
   tool,
   onToolChange,
   canvasMode,
+  canvasTone,
   referenceName,
   referenceStatus,
   onReferenceUpload,
@@ -121,9 +123,9 @@ export function MazeTools({
   const wallTool = tool.type === "wall" ? tool : null;
   const presetTool = tool.type === "wallPreset" ? tool : null;
   const eraserTool = tool.type === "eraser" ? tool : null;
-  const defaultInkColor = defaultInkColorForMode(canvasMode);
+  const defaultInkColor = defaultInkColorForMode(canvasMode, canvasTone);
   const activeColor = shapeTool?.fill ?? wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor;
-  const inkOptions = inkOptionsForMode(canvasMode);
+  const inkOptions = inkOptionsForMode(canvasMode, canvasTone);
   const activeWallWidth = wallTool?.strokeWidth ?? presetTool?.strokeWidth ?? 20;
   const activeEraserWidth = eraserTool?.width ?? 48;
 
@@ -175,61 +177,64 @@ export function MazeTools({
         {referenceStatus ? <p className="reference-upload-status" role="status" aria-live="polite">{referenceStatus}</p> : null}
       </div>
 
-      <div className="tool-row" role="group" aria-label="Maze drawing mode">
-        <button
-          type="button"
-          className={tool.type === "select" ? "active" : ""}
-          onClick={() => onToolChange({ type: "select" })}
-          title="Select and move marks"
-        >
-          <MousePointer2 size={18} />
-        </button>
-        <button
-          type="button"
-          className={tool.type === "eraser" ? "active" : ""}
-          onClick={() => onToolChange({ type: "eraser", width: activeEraserWidth })}
-          title="Scrub erase parts of maze marks"
-        >
-          <Eraser size={18} />
-        </button>
-        <button
-          type="button"
-          className={tool.type === "remove" ? "active" : ""}
-          onClick={() => onToolChange({ type: "remove" })}
-          title="Remove whole maze marks"
-        >
-          <X size={18} />
-        </button>
-        <button
-          type="button"
-          className={wallTool?.variant === "straight" ? "active" : ""}
-          onClick={() =>
-            onToolChange({
-              type: "wall",
-              variant: "straight",
-              stroke: wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor,
-              strokeWidth: activeWallWidth
-            })
-          }
-          title="Draw straight maze walls"
-        >
-          <PenLine size={18} />
-        </button>
-        <button
-          type="button"
-          className={wallTool?.variant === "curve" ? "active" : ""}
-          onClick={() =>
-            onToolChange({
-              type: "wall",
-              variant: "curve",
-              stroke: wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor,
-              strokeWidth: activeWallWidth
-            })
-          }
-          title="Draw curved maze walls"
-        >
-          <Radius size={18} />
-        </button>
+      <div className="control-group">
+        <h3 className="control-group-title" id="drawing-tools-title">Drawing tools</h3>
+        <div className="tool-row" role="group" aria-labelledby="drawing-tools-title">
+          <button
+            type="button"
+            className={tool.type === "select" ? "active" : ""}
+            onClick={() => onToolChange({ type: "select" })}
+            title="Select and move marks"
+          >
+            <MousePointer2 size={18} />
+          </button>
+          <button
+            type="button"
+            className={tool.type === "eraser" ? "active" : ""}
+            onClick={() => onToolChange({ type: "eraser", width: activeEraserWidth })}
+            title="Scrub erase parts of maze marks"
+          >
+            <Eraser size={18} />
+          </button>
+          <button
+            type="button"
+            className={tool.type === "remove" ? "active" : ""}
+            onClick={() => onToolChange({ type: "remove" })}
+            title="Remove whole maze marks"
+          >
+            <X size={18} />
+          </button>
+          <button
+            type="button"
+            className={wallTool?.variant === "straight" ? "active" : ""}
+            onClick={() =>
+              onToolChange({
+                type: "wall",
+                variant: "straight",
+                stroke: wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor,
+                strokeWidth: activeWallWidth
+              })
+            }
+            title="Draw straight maze walls"
+          >
+            <PenLine size={18} />
+          </button>
+          <button
+            type="button"
+            className={wallTool?.variant === "curve" ? "active" : ""}
+            onClick={() =>
+              onToolChange({
+                type: "wall",
+                variant: "curve",
+                stroke: wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor,
+                strokeWidth: activeWallWidth
+              })
+            }
+            title="Draw curved maze walls"
+          >
+            <Radius size={18} />
+          </button>
+        </div>
       </div>
 
       <label className="toggle-line snap-toggle">
@@ -245,42 +250,48 @@ export function MazeTools({
         Joins nearby wall endpoints and aligns moved marks without tiny gaps or overlaps.
       </p>
 
-      <div className="wall-preset-grid" role="group" aria-label="Maze wall forms">
-        {wallPresetOptions.map(({ preset, label, glyph }) => (
-          <button
-            type="button"
-            key={preset}
-            className={presetTool?.preset === preset ? "active" : ""}
-            onClick={() =>
-              onToolChange({
-                type: "wallPreset",
-                preset,
-                stroke: wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor,
-                strokeWidth: activeWallWidth,
-                size: presetTool?.size ?? 128
-              })
-            }
-            title={`Add ${label} wall`}
-            aria-label={`Add ${label} wall`}
-          >
-            <StampGlyph>{glyph}</StampGlyph>
-          </button>
-        ))}
+      <div className="control-group">
+        <h3 className="control-group-title" id="wall-forms-title">Wall forms</h3>
+        <div className="wall-preset-grid" role="group" aria-labelledby="wall-forms-title">
+          {wallPresetOptions.map(({ preset, label, glyph }) => (
+            <button
+              type="button"
+              key={preset}
+              className={presetTool?.preset === preset ? "active" : ""}
+              onClick={() =>
+                onToolChange({
+                  type: "wallPreset",
+                  preset,
+                  stroke: wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor,
+                  strokeWidth: activeWallWidth,
+                  size: presetTool?.size ?? 128
+                })
+              }
+              title={`Add ${label} wall`}
+              aria-label={`Add ${label} wall`}
+            >
+              <StampGlyph>{glyph}</StampGlyph>
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="shape-grid" role="group" aria-label="Geometric shape">
-        {shapeOptions.map(({ kind, label, Icon }) => (
-          <button
-            type="button"
-            key={kind}
-            className={shapeTool?.kind === kind ? "active" : ""}
-            onClick={() => setShapeKind(kind)}
-            title={`Place ${label}`}
-            aria-label={`Place ${label}`}
-          >
-            <Icon size={19} />
-          </button>
-        ))}
+      <div className="control-group">
+        <h3 className="control-group-title" id="shapes-title">Shapes</h3>
+        <div className="shape-grid" role="group" aria-labelledby="shapes-title">
+          {shapeOptions.map(({ kind, label, Icon }) => (
+            <button
+              type="button"
+              key={kind}
+              className={shapeTool?.kind === kind ? "active" : ""}
+              onClick={() => setShapeKind(kind)}
+              title={`Place ${label}`}
+              aria-label={`Place ${label}`}
+            >
+              <Icon size={19} />
+            </button>
+          ))}
+        </div>
       </div>
 
       <label className="range-line shape-size-range">
@@ -296,24 +307,27 @@ export function MazeTools({
         <output>{Math.round(shapeSize)} px</output>
       </label>
 
-      <div className="shape-size-scope" role="group" aria-label="Shape resize scope">
-        <button
-          type="button"
-          className={shapeSizeScope === "selected-future" ? "active" : ""}
-          aria-pressed={shapeSizeScope === "selected-future"}
-          onClick={() => onShapeSizeScopeChange("selected-future")}
-        >
-          Selected + next
-        </button>
-        <button
-          type="button"
-          className={shapeSizeScope === "all" ? "active" : ""}
-          aria-pressed={shapeSizeScope === "all"}
-          onClick={() => onShapeSizeScopeChange("all")}
-          disabled={shapeCount === 0}
-        >
-          All shapes
-        </button>
+      <div className="control-group">
+        <h3 className="control-group-title" id="shape-size-scope-title">Apply shape size to</h3>
+        <div className="shape-size-scope" role="group" aria-labelledby="shape-size-scope-title">
+          <button
+            type="button"
+            className={shapeSizeScope === "selected-future" ? "active" : ""}
+            aria-pressed={shapeSizeScope === "selected-future"}
+            onClick={() => onShapeSizeScopeChange("selected-future")}
+          >
+            Selected + next
+          </button>
+          <button
+            type="button"
+            className={shapeSizeScope === "all" ? "active" : ""}
+            aria-pressed={shapeSizeScope === "all"}
+            onClick={() => onShapeSizeScopeChange("all")}
+            disabled={shapeCount === 0}
+          >
+            All shapes
+          </button>
+        </div>
       </div>
       <p className="shape-size-help" id="shape-size-help">
         {shapeSizeScope === "all"
@@ -323,33 +337,36 @@ export function MazeTools({
             : "Sets the size for the next shape. Select a placed shape to resize it."}
       </p>
 
-      <div className="swatch-row" aria-label="Maze ink color">
-        {inkOptions.map((color) => (
-          <button
-            type="button"
-            key={color}
-            className={activeColor === color ? "active" : ""}
-            style={{ "--swatch-color": color } as CSSProperties}
-            onClick={() => {
-              if (tool.type === "wall") {
-                onToolChange({ ...tool, stroke: color });
-              } else if (tool.type === "wallPreset") {
-                onToolChange({ ...tool, stroke: color });
-              } else {
-                onToolChange({
-                  type: "shape",
-                  kind: shapeTool?.kind ?? "circle",
-                  stroke: color,
-                  fill: color,
-                  filled: shapeTool?.filled ?? true,
-                  size: shapeSize
-                });
-              }
-            }}
-            title={`Use ${color}`}
-            aria-label={`Use ${color}`}
-          />
-        ))}
+      <div className="control-group">
+        <h3 className="control-group-title" id="drawing-color-title">Drawing color</h3>
+        <div className="swatch-row" role="group" aria-labelledby="drawing-color-title">
+          {inkOptions.map((color) => (
+            <button
+              type="button"
+              key={color}
+              className={activeColor === color ? "active" : ""}
+              style={{ "--swatch-color": color } as CSSProperties}
+              onClick={() => {
+                if (tool.type === "wall") {
+                  onToolChange({ ...tool, stroke: color });
+                } else if (tool.type === "wallPreset") {
+                  onToolChange({ ...tool, stroke: color });
+                } else {
+                  onToolChange({
+                    type: "shape",
+                    kind: shapeTool?.kind ?? "circle",
+                    stroke: color,
+                    fill: color,
+                    filled: shapeTool?.filled ?? true,
+                    size: shapeSize
+                  });
+                }
+              }}
+              title={`Use ${color}`}
+              aria-label={`Use ${color}`}
+            />
+          ))}
+        </div>
       </div>
 
       <label className="toggle-line">

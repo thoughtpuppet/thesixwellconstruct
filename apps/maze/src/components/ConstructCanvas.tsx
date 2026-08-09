@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { Circle, Layer, Line, Rect, Stage, Transformer } from "react-konva";
 import type Konva from "konva";
 import { symbolLibrary } from "../data/symbols";
-import type { CanvasItem, CanvasLayout, CanvasMode, CanvasReference, MazeShape, MazeTool, MazeWall, Selection } from "../types";
+import type { CanvasItem, CanvasLayout, CanvasMode, CanvasReference, CanvasTone, MazeShape, MazeTool, MazeWall, Selection } from "../types";
 import { uuid } from "../lib/id";
 import { pathLength, perfectMazeWall, smoothCurvePoints, wallStampPoints } from "../lib/maze";
 import { CANVAS_LAYOUTS } from "../lib/canvas-layout";
-import { canvasBackgroundForMode, defaultInkColorForMode, STANDARD_CANVAS_COLOR } from "../lib/canvas-mode";
+import { canvasBackgroundForMode, defaultInkColorForMode } from "../lib/canvas-mode";
 import {
   applyWallNodePosition,
   SNAP_SCREEN_TOLERANCE,
@@ -29,6 +30,7 @@ type ConstructCanvasProps = {
   mazeTool: MazeTool;
   canvasLayout: CanvasLayout;
   canvasMode: CanvasMode;
+  canvasTone: CanvasTone;
   snapToEdges: boolean;
   reference: CanvasReference | null;
   workspaceMode: "construct" | "maze";
@@ -52,6 +54,13 @@ const CURVE_RESISTANCE = 0.2;
 const CURVE_CLOSE_DISTANCE = 28;
 const DRAW_HOLD_TO_PERFECT_MS = 620;
 
+function colorWithAlpha(color: string, alpha: number) {
+  const hex = color.replace(/^#/, "");
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return color;
+  const value = Number.parseInt(hex, 16);
+  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+}
+
 export function ConstructCanvas({
   items,
   mazeWalls,
@@ -60,6 +69,7 @@ export function ConstructCanvas({
   mazeTool,
   canvasLayout,
   canvasMode,
+  canvasTone,
   snapToEdges,
   reference,
   workspaceMode,
@@ -78,8 +88,8 @@ export function ConstructCanvas({
   onStageReady
 }: ConstructCanvasProps) {
   const { width: canvasWidth, height: canvasHeight } = CANVAS_LAYOUTS[canvasLayout];
-  const canvasBackground = canvasBackgroundForMode(canvasMode);
-  const canvasContrast = defaultInkColorForMode(canvasMode);
+  const canvasBackground = canvasBackgroundForMode(canvasMode, canvasTone);
+  const canvasContrast = defaultInkColorForMode(canvasMode, canvasTone);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
@@ -539,7 +549,11 @@ export function ConstructCanvas({
   };
 
   return (
-    <div className="canvas-shell" ref={containerRef}>
+    <div
+      className="canvas-shell"
+      ref={containerRef}
+      style={{ "--canvas-tone-color": canvasBackground } as CSSProperties}
+    >
       <Stage
         ref={stageRef}
         width={canvasWidth * scale}
@@ -562,25 +576,13 @@ export function ConstructCanvas({
             height={canvasHeight}
             fill={canvasBackground}
           />
-          {canvasMode === "standard" ? (
-            <Rect
-              name="canvas-background"
-              x={canvasWidth / 2 - 165}
-              y={canvasHeight / 2 - 120}
-              width={330}
-              height={240}
-              fill="#d4b271"
-              opacity={0.36}
-              cornerRadius={4}
-            />
-          ) : null}
           <Rect
             name="canvas-background"
             x={28}
             y={28}
             width={canvasWidth - 56}
             height={canvasHeight - 56}
-            stroke={canvasMode === "negative-space" ? STANDARD_CANVAS_COLOR : "#211f1d"}
+            stroke={canvasMode === "negative-space" ? canvasContrast : "#211f1d"}
             strokeWidth={2}
             opacity={0.14}
           />
@@ -700,7 +702,7 @@ export function ConstructCanvas({
               stroke={canvasContrast}
               strokeWidth={2}
               dash={[6, 5]}
-              fill={canvasMode === "negative-space" ? "rgba(184, 143, 78, 0.28)" : "rgba(212, 178, 113, 0.5)"}
+              fill={canvasMode === "negative-space" ? colorWithAlpha(canvasContrast, 0.28) : "rgba(212, 178, 113, 0.5)"}
               listening={false}
             />
           ) : null}

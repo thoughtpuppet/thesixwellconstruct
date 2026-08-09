@@ -65,7 +65,8 @@ export function Inspector({
                 <dd>{selectedSymbol.scale.toFixed(2)}x</dd>
               </div>
             </dl>
-            <div className="button-row">
+            <h3 className="control-group-title">Selected mark actions</h3>
+            <div className="button-row" role="group" aria-label="Selected mark actions">
               <button type="button" onClick={onDuplicate} title="Duplicate selected symbol">
                 <Copy size={18} />
               </button>
@@ -89,7 +90,8 @@ export function Inspector({
                 <dd>{selectedWall.stroke}</dd>
               </div>
             </dl>
-            <div className="button-row">
+            <h3 className="control-group-title">Selected mark actions</h3>
+            <div className="button-row" role="group" aria-label="Selected mark actions">
               <button type="button" onClick={onDuplicate} title="Duplicate selected wall">
                 <Copy size={18} />
               </button>
@@ -117,7 +119,8 @@ export function Inspector({
                 <dd>{selectedShape.scale.toFixed(2)}x from {Math.round(selectedShape.size)} px</dd>
               </div>
             </dl>
-            <div className="button-row">
+            <h3 className="control-group-title">Selected mark actions</h3>
+            <div className="button-row" role="group" aria-label="Selected mark actions">
               <button type="button" onClick={onDuplicate} title="Duplicate selected shape">
                 <Copy size={18} />
               </button>
@@ -169,7 +172,8 @@ export function Inspector({
         </div>
       )}
 
-      <div className="action-grid">
+      <div className="action-grid" role="group" aria-labelledby="project-actions-title">
+        <h3 className="control-group-title" id="project-actions-title">Project actions</h3>
         <button type="button" onClick={onSave}>
           <Save size={18} />
           Save

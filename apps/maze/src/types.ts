@@ -123,6 +123,15 @@ export type CanvasLayout = "tall" | "square" | "wide";
 
 export type CanvasMode = "standard" | "negative-space";
 
+export type CanvasTone =
+  | "light"
+  | "light-medium"
+  | "medium"
+  | "golden-brown"
+  | "medium-deep"
+  | "deep"
+  | "rich-deep";
+
 export type ShapeSizeScope = "selected-future" | "all";
 
 export type CanvasReference = {
@@ -135,6 +144,7 @@ export type CanvasReference = {
 export type MazeState = {
   canvasLayout: CanvasLayout;
   canvasMode: CanvasMode;
+  canvasTone: CanvasTone;
   mazeWalls: MazeWall[];
   mazeShapes: MazeShape[];
 };

@@ -63,6 +63,7 @@ export function fitMazeToLayout(state: MazeState, canvasLayout: CanvasLayout): M
   return {
     canvasLayout,
     canvasMode: state.canvasMode,
+    canvasTone: state.canvasTone,
     mazeWalls: state.mazeWalls.map((wall) => fitWall(wall, scale, offsetX, offsetY)),
     mazeShapes: state.mazeShapes.map((shape) => ({
       ...shape,

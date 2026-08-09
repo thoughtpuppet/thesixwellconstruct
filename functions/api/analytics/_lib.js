@@ -255,7 +255,10 @@ function graphqlConfig(env) {
   const accountId = safeString(env.CLOUDFLARE_ACCOUNT_ID, 64);
   const siteTag = safeString(env.CLOUDFLARE_WEB_ANALYTICS_SITE_TAG, 160);
   const token = safeString(env.CLOUDFLARE_ANALYTICS_API_TOKEN, 512);
-  return { accountId, siteTag, token, ready: Boolean(accountId && siteTag && token) };
+  let requestHost = "";
+  try { requestHost = new URL(safeString(env.PUBLIC_SITE_URL, 300)).hostname.toLowerCase(); } catch {}
+  const scope = requestHost ? { requestHost } : siteTag ? { siteTag } : {};
+  return { accountId, token, scope, ready: Boolean(accountId && token && Object.keys(scope).length) };
 }
 
 async function cloudflareGraphQL(env, query, variables) {
@@ -264,7 +267,7 @@ async function cloudflareGraphQL(env, query, variables) {
   const response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
     method: "POST",
     headers: { authorization: `Bearer ${config.token}`, "content-type": "application/json" },
-    body: JSON.stringify({ query, variables: { ...variables, accountTag: config.accountId, siteTag: config.siteTag } }),
+    body: JSON.stringify({ query, variables: { ...variables, accountTag: config.accountId } }),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.errors?.length) {
@@ -305,11 +308,11 @@ function scoreValue(value) {
   return number < 0 ? 0 : number;
 }
 
-function rumFilter(range, filters) {
+function rumFilter(range, filters, scope) {
   return {
     datetime_geq: range.startIso,
     datetime_lt: range.endIso,
-    siteTag: filters.siteTag,
+    ...scope,
     ...(filters.device !== "all" ? { deviceType: filters.device } : {}),
   };
 }
@@ -352,10 +355,10 @@ const PERFORMANCE_QUERY = `query SitePerformance($accountTag: String!, $vitalsFi
 
 async function fetchRumOverview(env, range, filters) {
   const window = rumQueryWindow(range);
-  const siteTag = graphqlConfig(env).siteTag;
+  const scope = graphqlConfig(env).scope;
   const account = await cloudflareGraphQL(env, OVERVIEW_QUERY, {
-    filter: rumFilter(window.range, { ...filters, siteTag }),
-    vitalsFilter: rumFilter(window.range, { ...filters, siteTag }),
+    filter: rumFilter(window.range, filters, scope),
+    vitalsFilter: rumFilter(window.range, filters, scope),
   });
   const allRows = account.pageloads || [];
   const rows = filters.group ? allRows.filter((row) => analyticsContentGroup(row.dimensions?.requestPath) === filters.group) : allRows;
@@ -387,8 +390,8 @@ async function fetchRumOverview(env, range, filters) {
 
 async function fetchRumAcquisition(env, range, filters) {
   const window = rumQueryWindow(range);
-  const siteTag = graphqlConfig(env).siteTag;
-  const account = await cloudflareGraphQL(env, ACQUISITION_QUERY, { filter: rumFilter(window.range, { ...filters, siteTag }) });
+  const scope = graphqlConfig(env).scope;
+  const account = await cloudflareGraphQL(env, ACQUISITION_QUERY, { filter: rumFilter(window.range, filters, scope) });
   const selected = (rows) => filters.group ? (rows || []).filter((row) => analyticsContentGroup(row.dimensions?.requestPath) === filters.group) : rows || [];
   const list = (key, field) => sumBy(selected(account[key]), (row) => row.dimensions?.[field]).slice(0, 25);
   return {
@@ -402,8 +405,8 @@ async function fetchRumAcquisition(env, range, filters) {
 
 async function fetchRumPerformance(env, range, filters) {
   const window = rumQueryWindow(range);
-  const siteTag = graphqlConfig(env).siteTag;
-  const filter = rumFilter(window.range, { ...filters, siteTag });
+  const scope = graphqlConfig(env).scope;
+  const filter = rumFilter(window.range, filters, scope);
   const account = await cloudflareGraphQL(env, PERFORMANCE_QUERY, { vitalsFilter: filter, performanceFilter: filter });
   const timingByPath = new Map((account.timingsByPath || []).map((row) => [normalizeAnalyticsPath(row.dimensions?.requestPath), row.quantiles || {}]));
   const paths = (account.vitalsByPath || []).map((row) => {
@@ -633,6 +636,14 @@ function filtersFromUrl(url) {
   return { view, rangeName, device, group };
 }
 
+function reconcileOverviewSources(payload) {
+  const customShowsActivity = (payload.custom?.pageActivity || []).some((item) => Number(item.pageViews || 0) > 0)
+    || (payload.custom?.contentGroups || []).some((item) => Number(item.value || 0) > 0);
+  if (!payload.sources.rum?.ready || !payload.sources.custom?.ready || !customShowsActivity || Number(payload.rum?.pageViews || 0) > 0) return;
+  payload.sources.rum = sourceState(false, "Cloudflare RUM returned no page-load rows while first-party site engagement recorded activity.");
+  payload.rum = { pageViews: null, visits: null, series: [], paths: [], contentGroups: [], vitals: {} };
+}
+
 async function buildAnalyticsView(env, options) {
   const range = options.range || dateRange(options.rangeName);
   const filters = { device: options.device || "all", group: options.group || "" };
@@ -654,6 +665,7 @@ async function buildAnalyticsView(env, options) {
     tasks.push(fetchRumPerformance(env, range, filters).then((data) => { payload.rum = data; payload.sources.rum = readyRumState(data, payload.dataThrough); }).catch((error) => { payload.sources.rum = sourceState(false, error.message); }));
   }
   await Promise.all(tasks);
+  if (options.view === "overview") reconcileOverviewSources(payload);
   const rollups = options.includeRollups === false ? [] : await loadRollups(env, range, options.view);
   applyRollupFallback(options.view, payload, rollups);
   const states = Object.values(payload.sources);
@@ -676,8 +688,8 @@ export async function handleAdminAnalytics(request, env) {
     const previousRange = dateRange(options.rangeName, previousEnd);
     const previous = await buildAnalyticsView(env, { ...options, range: previousRange });
     payload.comparison = {
-      pageViews: previous.rum ? Number(previous.rum.pageViews || 0) : null,
-      visits: previous.rum ? Number(previous.rum.visits || 0) : null,
+      pageViews: previous.sources.rum?.ready ? Number(previous.rum?.pageViews || 0) : null,
+      visits: previous.sources.rum?.ready ? Number(previous.rum?.visits || 0) : null,
       sessions: previous.custom ? Number(previous.custom.sessions || 0) : null,
       engagedSessions: previous.custom ? Number(previous.custom.engagedSessions || 0) : null,
       avgActiveSeconds: previous.custom ? Number(previous.custom.avgActiveSeconds || 0) : null,

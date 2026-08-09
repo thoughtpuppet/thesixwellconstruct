@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { CSSProperties, FormEvent } from "react";
 import type Konva from "konva";
 import { ArrowLeft, Magnet, Redo2, Send, Undo2 } from "lucide-react";
 import { ConstructCanvas } from "./components/ConstructCanvas";
@@ -13,13 +13,19 @@ import {
   isCanvasLayout
 } from "./lib/canvas-layout";
 import {
+  CANVAS_TONES,
+  DEFAULT_CANVAS_TONE,
+  canvasToneColor,
   defaultInkColorForMode,
   isCanvasMode,
+  isCanvasTone,
+  normalizeMazeColor,
   sanitizeToolForCanvasMode,
-  switchCanvasMode
+  switchCanvasMode,
+  switchCanvasTone
 } from "./lib/canvas-mode";
 import { shapeTouchedByEraser, splitWallByEraser } from "./lib/maze";
-import type { CanvasLayout, CanvasMode, CanvasReference, MazeShape, MazeState, MazeTool, MazeWall, Selection, ShapeSizeScope } from "./types";
+import type { CanvasLayout, CanvasMode, CanvasReference, CanvasTone, MazeShape, MazeState, MazeTool, MazeWall, Selection, ShapeSizeScope } from "./types";
 import "./maze-submit.css";
 
 const LEGACY_STORAGE_KEY = "art-pill-maze-design";
@@ -76,20 +82,33 @@ type ServerDraft = {
   payload: MazeDraftPayload;
 };
 
-function emptyState(canvasLayout = defaultCanvasLayout(), canvasMode: CanvasMode = "standard"): MazeState {
-  return { canvasLayout, canvasMode, mazeWalls: [], mazeShapes: [] };
+function emptyState(
+  canvasLayout = defaultCanvasLayout(),
+  canvasMode: CanvasMode = "standard",
+  canvasTone: CanvasTone = DEFAULT_CANVAS_TONE
+): MazeState {
+  return { canvasLayout, canvasMode, canvasTone, mazeWalls: [], mazeShapes: [] };
 }
 
 function normalizeMazeState(value: Partial<MazeState> | null | undefined, emptyLayout = defaultCanvasLayout()): MazeState {
-  const mazeWalls = Array.isArray(value?.mazeWalls) ? value.mazeWalls : [];
-  const mazeShapes = Array.isArray(value?.mazeShapes) ? value.mazeShapes : [];
+  const mazeWalls = Array.isArray(value?.mazeWalls)
+    ? value.mazeWalls.map((wall) => ({ ...wall, stroke: normalizeMazeColor(wall.stroke) }))
+    : [];
+  const mazeShapes = Array.isArray(value?.mazeShapes)
+    ? value.mazeShapes.map((shape) => ({
+        ...shape,
+        stroke: normalizeMazeColor(shape.stroke),
+        fill: normalizeMazeColor(shape.fill)
+      }))
+    : [];
   const canvasLayout = isCanvasLayout(value?.canvasLayout)
     ? value.canvasLayout
     : mazeWalls.length || mazeShapes.length
       ? "wide"
       : emptyLayout;
   const canvasMode = isCanvasMode(value?.canvasMode) ? value.canvasMode : "standard";
-  return { canvasLayout, canvasMode, mazeWalls, mazeShapes };
+  const canvasTone = isCanvasTone(value?.canvasTone) ? value.canvasTone : DEFAULT_CANVAS_TONE;
+  return { canvasLayout, canvasMode, canvasTone, mazeWalls, mazeShapes };
 }
 
 function emptyForm(): MazeFormDraft {
@@ -170,6 +189,7 @@ function draftPayload(state: MazeState, form: MazeFormDraft, clientDraftId: stri
     clientDraftId,
     canvasLayout: state.canvasLayout,
     canvasMode: state.canvasMode,
+    canvasTone: state.canvasTone,
     mazeWalls: state.mazeWalls,
     mazeShapes: state.mazeShapes,
     contact: {
@@ -576,40 +596,67 @@ function CanvasLayoutPicker({
   value,
   onChange,
   canvasMode,
-  onCanvasModeChange
+  onCanvasModeChange,
+  canvasTone,
+  onCanvasToneChange
 }: {
   value: CanvasLayout;
   onChange: (layout: CanvasLayout) => void;
   canvasMode: CanvasMode;
   onCanvasModeChange: (mode: CanvasMode) => void;
+  canvasTone: CanvasTone;
+  onCanvasToneChange: (tone: CanvasTone) => void;
 }) {
+  const selectedToneColor = canvasToneColor(canvasTone);
   return (
     <section className="canvas-layout-bar" aria-labelledby="canvas-layout-heading">
-      <div className="canvas-layout-copy">
-        <span>Canvas layout</span>
-        <p id="canvas-layout-heading">{CANVAS_LAYOUTS[value].description}</p>
+      <div className="canvas-layout-primary">
+        <div className="canvas-layout-copy">
+          <span>Canvas layout</span>
+          <p id="canvas-layout-heading">{CANVAS_LAYOUTS[value].description}</p>
+        </div>
+        <div className="canvas-layout-controls">
+          <button
+            type="button"
+            className={`negative-space-toggle${canvasMode === "negative-space" ? " active" : ""}`}
+            aria-pressed={canvasMode === "negative-space"}
+            onClick={() => onCanvasModeChange(canvasMode === "negative-space" ? "standard" : "negative-space")}
+            style={{ "--canvas-tone-color": selectedToneColor } as CSSProperties}
+          >
+            <span className="negative-space-toggle-swatch" aria-hidden="true" />
+            Negative Space Mode
+          </button>
+          <div className="canvas-layout-options" role="group" aria-label="Choose canvas layout">
+            {CANVAS_LAYOUT_OPTIONS.map((layout) => (
+              <button
+                key={layout.id}
+                type="button"
+                className={value === layout.id ? "active" : ""}
+                aria-pressed={value === layout.id}
+                onClick={() => onChange(layout.id)}
+              >
+                <span className={`canvas-layout-icon ${layout.id}`} aria-hidden="true" />
+                <span>{layout.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
-      <div className="canvas-layout-controls">
-        <button
-          type="button"
-          className={`negative-space-toggle${canvasMode === "negative-space" ? " active" : ""}`}
-          aria-pressed={canvasMode === "negative-space"}
-          onClick={() => onCanvasModeChange(canvasMode === "negative-space" ? "standard" : "negative-space")}
-        >
-          <span className="negative-space-toggle-swatch" aria-hidden="true" />
-          Negative Space Mode
-        </button>
-        <div className="canvas-layout-options" role="group" aria-label="Choose canvas layout">
-          {CANVAS_LAYOUT_OPTIONS.map((layout) => (
+      <div className="canvas-tone-control">
+        <span className="canvas-tone-title" id="canvas-tone-title">Canvas tone</span>
+        <div className="canvas-tone-options" role="group" aria-labelledby="canvas-tone-title">
+          {CANVAS_TONES.map((tone) => (
             <button
-              key={layout.id}
+              key={tone.id}
               type="button"
-              className={value === layout.id ? "active" : ""}
-              aria-pressed={value === layout.id}
-              onClick={() => onChange(layout.id)}
+              className={canvasTone === tone.id ? "active" : ""}
+              aria-label={tone.label}
+              aria-pressed={canvasTone === tone.id}
+              title={tone.label}
+              onClick={() => onCanvasToneChange(tone.id)}
+              style={{ "--canvas-tone-color": tone.color } as CSSProperties}
             >
-              <span className={`canvas-layout-icon ${layout.id}`} aria-hidden="true" />
-              <span>{layout.label}</span>
+              <span className="canvas-tone-swatch" aria-hidden="true" />
             </button>
           ))}
         </div>
@@ -622,17 +669,19 @@ function MobileQuickTools({
   tool,
   onToolChange,
   canvasMode,
+  canvasTone,
   snapToEdges,
   onSnapToEdgesChange
 }: {
   tool: MazeTool;
   onToolChange: (tool: MazeTool) => void;
   canvasMode: CanvasMode;
+  canvasTone: CanvasTone;
   snapToEdges: boolean;
   onSnapToEdgesChange: (enabled: boolean) => void;
 }) {
   const eraserWidth = tool.type === "eraser" ? tool.width : 48;
-  const defaultInkColor = defaultInkColorForMode(canvasMode);
+  const defaultInkColor = defaultInkColorForMode(canvasMode, canvasTone);
   return (
     <div className="mobile-quick-tools" role="toolbar" aria-label="Quick maze tools">
       <button
@@ -744,7 +793,7 @@ export default function App() {
   const [mazeTool, setMazeTool] = useState<MazeTool>({
     type: "wall",
     variant: "straight",
-    stroke: defaultInkColorForMode(initialDraft.state.canvasMode),
+    stroke: defaultInkColorForMode(initialDraft.state.canvasMode, initialDraft.state.canvasTone),
     strokeWidth: 20
   });
   const [stage, setStage] = useState<Konva.Stage | null>(null);
@@ -797,8 +846,8 @@ export default function App() {
     stateRef.current = state;
   }, [state]);
   useEffect(() => {
-    setMazeTool((current) => sanitizeToolForCanvasMode(current, state.canvasMode));
-  }, [state.canvasMode]);
+    setMazeTool((current) => sanitizeToolForCanvasMode(current, state.canvasMode, state.canvasTone));
+  }, [state.canvasMode, state.canvasTone]);
   useEffect(() => {
     formDraftRef.current = formDraft;
   }, [formDraft]);
@@ -842,6 +891,10 @@ export default function App() {
     commit((current) => switchCanvasMode(current, canvasMode));
   };
 
+  const requestCanvasTone = (canvasTone: CanvasTone) => {
+    commit((current) => switchCanvasTone(current, canvasTone));
+  };
+
   const fitPendingCanvasLayout = () => {
     if (!pendingCanvasLayout) return;
     const nextLayout = pendingCanvasLayout;
@@ -854,7 +907,7 @@ export default function App() {
     if (!pendingCanvasLayout) return;
     const nextLayout = pendingCanvasLayout;
     setPendingCanvasLayout(null);
-    commit((current) => emptyState(nextLayout, current.canvasMode));
+    commit((current) => emptyState(nextLayout, current.canvasMode, current.canvasTone));
     setSelected(null);
   };
 
@@ -935,6 +988,7 @@ export default function App() {
       const next = {
         canvasLayout: current.canvasLayout,
         canvasMode: current.canvasMode,
+        canvasTone: current.canvasTone,
         mazeWalls: nextWalls.sort(byZ),
         mazeShapes: nextShapes.sort(byZ)
       };
@@ -1051,6 +1105,7 @@ export default function App() {
       state: {
         canvasLayout: payload.canvasLayout,
         canvasMode: payload.canvasMode,
+        canvasTone: payload.canvasTone,
         mazeWalls: payload.mazeWalls,
         mazeShapes: payload.mazeShapes
       },
@@ -1069,7 +1124,7 @@ export default function App() {
       localStorage.removeItem(PREVIOUS_STORAGE_KEY);
       localStorage.removeItem(LEGACY_STORAGE_KEY);
     }
-    commit((current) => emptyState(current.canvasLayout, current.canvasMode));
+    commit((current) => emptyState(current.canvasLayout, current.canvasMode, current.canvasTone));
     setSelected(null);
     removeReference();
   };
@@ -1333,6 +1388,7 @@ export default function App() {
             tool={mazeTool}
             onToolChange={setMazeTool}
             canvasMode={state.canvasMode}
+            canvasTone={state.canvasTone}
             referenceName={reference?.name || ""}
             referenceStatus={referenceStatus}
             onReferenceUpload={uploadReference}
@@ -1353,11 +1409,14 @@ export default function App() {
             onChange={requestCanvasLayout}
             canvasMode={state.canvasMode}
             onCanvasModeChange={requestCanvasMode}
+            canvasTone={state.canvasTone}
+            onCanvasToneChange={requestCanvasTone}
           />
           <MobileQuickTools
             tool={mazeTool}
             onToolChange={setMazeTool}
             canvasMode={state.canvasMode}
+            canvasTone={state.canvasTone}
             snapToEdges={snapToEdges}
             onSnapToEdgesChange={setSnapToEdges}
           />
@@ -1365,6 +1424,7 @@ export default function App() {
             items={[]}
             canvasLayout={state.canvasLayout}
             canvasMode={state.canvasMode}
+            canvasTone={state.canvasTone}
             snapToEdges={snapToEdges}
             reference={reference}
             mazeWalls={state.mazeWalls}

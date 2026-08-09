@@ -102,6 +102,64 @@ test("Studio analytics auth is protected and reports partial source readiness", 
   }
 });
 
+test("Cloudflare RUM uses the public hostname instead of the beacon token", async () => {
+  const originalFetch = globalThis.fetch;
+  const graphqlVariables = [];
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes("/graphql")) {
+      graphqlVariables.push(JSON.parse(options.body).variables);
+      return new Response(JSON.stringify({ data: { viewer: { accounts: [{ pageloads: [], vitals: [] }] } } }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    await handleAdminAnalytics(new Request("https://example.com/api/admin/analytics?view=overview&range=30d", {
+      headers: { authorization: "Bearer secret" },
+    }), {
+      SUBMISSIONS_ADMIN_TOKEN: "secret", CLOUDFLARE_ACCOUNT_ID: "account",
+      PUBLIC_SITE_URL: "https://thesixwellconstruct.com", CLOUDFLARE_WEB_ANALYTICS_SITE_TAG: "public-beacon-token",
+      CLOUDFLARE_ANALYTICS_API_TOKEN: "token",
+    });
+    assert.ok(graphqlVariables.length > 0);
+    for (const variables of graphqlVariables) {
+      assert.equal(variables.filter.requestHost, "thesixwellconstruct.com");
+      assert.equal("siteTag" in variables.filter, false);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("an empty RUM result cannot report current beside proven site activity", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes("/graphql")) return new Response(JSON.stringify({ data: { viewer: { accounts: [{ pageloads: [], vitals: [] }] } } }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+    const sql = String(options.body || "");
+    const data = sql.includes("SELECT blob5 label") ? [{ label: "tattoos", value: 4 }] : [];
+    return new Response(JSON.stringify({ data }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await handleAdminAnalytics(new Request("https://example.com/api/admin/analytics?view=overview&range=30d", {
+      headers: { authorization: "Bearer secret" },
+    }), {
+      SUBMISSIONS_ADMIN_TOKEN: "secret", CLOUDFLARE_ACCOUNT_ID: "account", PUBLIC_SITE_URL: "https://thesixwellconstruct.com",
+      CLOUDFLARE_WEB_ANALYTICS_SITE_TAG: "public-beacon-token", CLOUDFLARE_ANALYTICS_API_TOKEN: "token",
+    });
+    const payload = await response.json();
+    assert.equal(payload.state, "partial");
+    assert.equal(payload.sources.rum.ready, false);
+    assert.match(payload.sources.rum.error, /no page-load rows/);
+    assert.equal(payload.rum.pageViews, null);
+    assert.equal(payload.rum.visits, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Studio analytics exposes rolling last-hour, 24-, 36-, 48-hour and 5-day ranges", async () => {
   const studio = readFileSync(join(ROOT, "studio", "analytics.js"), "utf8");
   const consoleHtml = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");

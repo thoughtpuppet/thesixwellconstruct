@@ -130,11 +130,15 @@ function normalizeMazePayload(payload = {}) {
     ? payload.canvasLayout
     : "wide";
   const canvasMode = payload.canvasMode === "negative-space" ? "negative-space" : "standard";
+  const canvasTone = ["light", "light-medium", "medium", "golden-brown", "medium-deep", "deep", "rich-deep"].includes(payload.canvasTone)
+    ? payload.canvasTone
+    : "golden-brown";
   return {
     version: 1,
     clientDraftId: asString(payload.clientDraftId, 160),
     canvasLayout,
     canvasMode,
+    canvasTone,
     mazeWalls: Array.isArray(payload.mazeWalls) ? payload.mazeWalls : [],
     mazeShapes: Array.isArray(payload.mazeShapes) ? payload.mazeShapes : [],
     contact: normalizeContact(payload.contact),
