@@ -270,8 +270,13 @@
   .availability-manager .section-body { display:grid; gap:14px; padding:16px; }
   .availability-manager .schedule-section:not(.is-open) .section-body { display:none; }
   .availability-manager .schedule-grid { margin:0; grid-template-columns:repeat(4,minmax(0,1fr)); }
-  .availability-manager .day-row { grid-template-columns:110px repeat(3,minmax(0,1fr)); border-bottom:5px solid var(--ring-faint); padding:14px 0; }
-  .availability-manager .day-row:last-child { border-bottom:0; padding-bottom:0; }
+  .availability-manager .weekly-day { border-bottom:5px solid var(--ring-faint); padding:14px 0; display:grid; gap:12px; }
+  .availability-manager .weekly-day:last-child { border-bottom:0; padding-bottom:0; }
+  .availability-manager .weekly-day-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .availability-manager .weekly-day-windows { display:grid; gap:12px; }
+  .availability-manager .day-row { grid-template-columns:repeat(4,minmax(0,1fr)); border:5px solid var(--ring-faint); padding:12px; }
+  .availability-manager .weekly-day-empty { margin:0; }
+  .availability-manager .remove-rule-button { align-self:end; }
   .availability-manager .availability-edit-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; border-top:5px solid var(--ring-faint); padding-top:14px; }
   .availability-manager .availability-edit-form.hidden { display:none; }
   .availability-manager .wide-field { grid-column:1 / -1; }
@@ -544,6 +549,7 @@
     .booking-readiness-grid,
     .availability-manager .availability-edit-form,
     .availability-manager .day-row { grid-template-columns:1fr; }
+    .availability-manager .weekly-day-header { align-items:stretch; flex-direction:column; }
     .availability-manager .wide-field { grid-column:auto; }
     .portfolio-editor-grid .portfolio-card { grid-template-columns:1fr; }
     .portfolio-editor-grid .portfolio-card-media { position:static; }
@@ -6629,22 +6635,9 @@ ${meetingLines}
     await loadAvailability();
   }
 
-  async function loadSchedule() {
-    const payload = await api("/api/admin/booking/schedule");
-    const settings = payload.settings || {};
-    const rules = payload.rules || [];
-    document.getElementById("settingTimezone").value = settings.timezone || "America/New_York";
-    document.getElementById("settingHorizon").value = settings.bookingHorizonDays || 60;
-    document.getElementById("settingNotice").value = settings.minimumNoticeHours || 48;
-    document.getElementById("settingInterval").value = settings.slotIntervalMinutes || 30;
-    document.getElementById("settingMaxDay").value = settings.maxBookingsPerDay || 4;
-    document.getElementById("settingCapacity").value = settings.defaultCapacity || 1;
-    document.getElementById("settingBufferBefore").value = settings.defaultBufferBeforeMinutes || 30;
-    document.getElementById("settingBufferAfter").value = settings.defaultBufferAfterMinutes || 30;
-    const names = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-    const renderRule = (rule) => `
-      <div class="day-row" data-rule-id="${escapeHtml(rule.id)}">
-        <div class="day-name">${escapeHtml(names[rule.dayOfWeek] || "Day")}</div>
+  function weeklyRuleMarkup(rule) {
+    return `
+      <div class="day-row" data-rule-id="${escapeHtml(rule.id || "")}" data-rule-category="${escapeHtml(rule.category || "tattooing")}" data-rule-day="${escapeHtml(rule.dayOfWeek)}">
         <div class="field">
           <label>Open</label>
           <select data-rule-field="active">
@@ -6676,16 +6669,41 @@ ${meetingLines}
           <label>Note</label>
           <input data-rule-field="note" value="${escapeHtml(rule.note || "")}">
         </div>
-      </div>
-    `;
+        <button class="button danger-button remove-rule-button" type="button" data-remove-weekly-rule>Remove Window</button>
+      </div>`;
+  }
+
+  async function loadSchedule() {
+    const payload = await api("/api/admin/booking/schedule");
+    const settings = payload.settings || {};
+    const rules = payload.rules || [];
+    document.getElementById("settingTimezone").value = settings.timezone || "America/New_York";
+    document.getElementById("settingHorizon").value = settings.bookingHorizonDays || 60;
+    document.getElementById("settingNotice").value = settings.minimumNoticeHours || 48;
+    document.getElementById("settingInterval").value = settings.slotIntervalMinutes || 30;
+    document.getElementById("settingMaxDay").value = settings.maxBookingsPerDay || 4;
+    document.getElementById("settingCapacity").value = settings.defaultCapacity || 1;
+    document.getElementById("settingBufferBefore").value = settings.defaultBufferBeforeMinutes || 30;
+    document.getElementById("settingBufferAfter").value = settings.defaultBufferAfterMinutes || 30;
+    const names = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
     const config = AVAILABILITY_CONFIGS[activeTab] || AVAILABILITY_CONFIGS.tattoo;
     config.groups.forEach((group) => {
       const container = document.getElementById(group.containerId);
       if (!container) return;
-      container.innerHTML = rules
-        .filter((rule) => (rule.category || "tattooing") === group.category)
-        .map(renderRule)
-        .join("");
+      const categoryRules = rules.filter((rule) => (rule.category || "tattooing") === group.category);
+      container.innerHTML = names.map((name, dayOfWeek) => {
+        const dayRules = categoryRules.filter((rule) => Number(rule.dayOfWeek) === dayOfWeek);
+        return `
+          <section class="weekly-day" data-weekly-day="${dayOfWeek}" data-weekly-category="${escapeHtml(group.category)}">
+            <div class="weekly-day-header">
+              <div class="day-name">${escapeHtml(name)}</div>
+              <button class="button" type="button" data-add-weekly-rule data-rule-category="${escapeHtml(group.category)}" data-rule-day="${dayOfWeek}">Add Time Window</button>
+            </div>
+            <div class="weekly-day-windows">
+              ${dayRules.length ? dayRules.map(weeklyRuleMarkup).join("") : '<p class="contact weekly-day-empty">No recurring windows.</p>'}
+            </div>
+          </section>`;
+      }).join("");
     });
     enhanceControls(detailEl);
   }
@@ -7043,6 +7061,41 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("click", async (event) => {
+    const addWeeklyRule = event.target.closest("[data-add-weekly-rule]");
+    if (addWeeklyRule) {
+      const weeklyDay = addWeeklyRule.closest("[data-weekly-day]");
+      const windows = weeklyDay?.querySelector(".weekly-day-windows");
+      if (!windows) return;
+      windows.querySelector(".weekly-day-empty")?.remove();
+      windows.insertAdjacentHTML("beforeend", weeklyRuleMarkup({
+        id: "",
+        category: addWeeklyRule.dataset.ruleCategory || "tattooing",
+        dayOfWeek: Number(addWeeklyRule.dataset.ruleDay),
+        active: true,
+        startTime: "12:00",
+        endTime: "18:00",
+        capacity: Number(document.getElementById("settingCapacity")?.value) || 1,
+        bufferBeforeMinutes: Number(document.getElementById("settingBufferBefore")?.value) || 0,
+        bufferAfterMinutes: Number(document.getElementById("settingBufferAfter")?.value) || 0,
+        note: "",
+      }));
+      enhanceControls(windows);
+      setStatus("Time window added; save the schedule to apply it");
+      return;
+    }
+
+    const removeWeeklyRule = event.target.closest("[data-remove-weekly-rule]");
+    if (removeWeeklyRule) {
+      const weeklyDay = removeWeeklyRule.closest("[data-weekly-day]");
+      removeWeeklyRule.closest("[data-rule-id]")?.remove();
+      const windows = weeklyDay?.querySelector(".weekly-day-windows");
+      if (windows && !windows.querySelector("[data-rule-id]")) {
+        windows.innerHTML = '<p class="contact weekly-day-empty">No recurring windows.</p>';
+      }
+      setStatus("Time window removed; save the schedule to apply it");
+      return;
+    }
+
     if (event.target.id === "editTextTemplatesBtn" && activeId) {
       const editor = document.getElementById("textTemplateEditor");
       if (!editor) return;
@@ -8844,10 +8897,12 @@ ${meetingLines}
     if (event.target.id === "scheduleForm") {
       event.preventDefault();
       setStatus("Saving schedule");
-      const rules = [...document.querySelectorAll("[data-rule-id]")].map((row) => {
+      const rules = [...event.target.querySelectorAll("[data-rule-id]")].map((row) => {
         const fields = Object.fromEntries([...row.querySelectorAll("[data-rule-field]")].map((field) => [field.dataset.ruleField, field.value]));
         return {
           id: row.dataset.ruleId,
+          category: row.dataset.ruleCategory,
+          dayOfWeek: Number(row.dataset.ruleDay),
           active: fields.active === "1",
           startTime: fields.startTime,
           endTime: fields.endTime,
@@ -8871,6 +8926,7 @@ ${meetingLines}
             defaultBufferBeforeMinutes: document.getElementById("settingBufferBefore").value,
             defaultBufferAfterMinutes: document.getElementById("settingBufferAfter").value,
           },
+          ruleCategories: availabilityConfig().groups.map((group) => group.category),
           rules,
         }),
       });

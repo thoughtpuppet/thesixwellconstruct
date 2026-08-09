@@ -7988,7 +7988,7 @@ async function tattooSettingsPayload(db, includeInactive = false) {
     db.prepare(
       `SELECT day_of_week, start_time, end_time, note FROM availability_rules
        WHERE venture = 'tattooing' AND category = 'tattooing' AND active = 1
-       ORDER BY day_of_week ASC`
+       ORDER BY day_of_week ASC, start_time ASC, end_time ASC`
     ),
     db.prepare(
       `SELECT * FROM booking_types
@@ -8391,7 +8391,7 @@ export async function handleAdminGetSchedule(request, env) {
       .prepare(
         `SELECT * FROM availability_rules
          WHERE venture = ?
-         ORDER BY category ASC, day_of_week ASC`
+         ORDER BY category ASC, day_of_week ASC, start_time ASC, end_time ASC`
       )
       .bind("tattooing")
       .all();
@@ -8670,8 +8670,7 @@ export async function handleAdminUpdateSchedule(request, env) {
     const db = requireBookingDb(env);
     const now = new Date().toISOString();
     const settings = body.settings || {};
-    await db
-      .prepare(
+    const settingsStatement = db.prepare(
         `UPDATE booking_settings
          SET timezone = ?, booking_horizon_days = ?, minimum_notice_hours = ?,
              slot_interval_minutes = ?, max_bookings_per_day = ?,
@@ -8690,8 +8689,116 @@ export async function handleAdminUpdateSchedule(request, env) {
         asPositiveInteger(settings.defaultBufferAfterMinutes, 30),
         now,
         "tattooing"
-      )
-      .run();
+      );
+
+    const requestedCategories = Array.isArray(body.ruleCategories)
+      ? [...new Set(body.ruleCategories.map(asString))]
+      : [];
+    if (requestedCategories.length) {
+      const allowedCategories = new Set(Object.keys(SCHEDULE_CATEGORY_BOOKING_TYPE_IDS));
+      if (requestedCategories.some((category) => !allowedCategories.has(category))) {
+        return errorResponse("Schedule contains an unknown availability category.", 400);
+      }
+
+      const submittedRules = Array.isArray(body.rules) ? body.rules : [];
+      const existingResult = await db
+        .prepare("SELECT * FROM availability_rules WHERE venture = ?")
+        .bind("tattooing")
+        .all();
+      const existingById = new Map((existingResult.results || []).map((rule) => [rule.id, rule]));
+      const normalizedRules = [];
+      const usedIds = new Set();
+
+      for (const rule of submittedRules) {
+        const category = asString(rule.category);
+        const dayOfWeek = Number(rule.dayOfWeek);
+        const startTime = asString(rule.startTime) || "12:00";
+        const endTime = asString(rule.endTime) || "18:00";
+        if (!requestedCategories.includes(category)) {
+          return errorResponse("Every weekly window must belong to the schedule section being saved.", 400);
+        }
+        if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
+          return errorResponse("Schedule weekdays must be between Sunday and Saturday.", 400);
+        }
+        if (!isValidTime(startTime) || !isValidTime(endTime)) {
+          return errorResponse("Schedule start and end times must use HH:MM format.", 400);
+        }
+        if (minutesFromTime(endTime) <= minutesFromTime(startTime)) {
+          return errorResponse("Schedule end time must be after start time.", 400);
+        }
+
+        const submittedId = asString(rule.id);
+        const existing = existingById.get(submittedId);
+        const id = existing
+          && existing.category === category
+          && Number(existing.day_of_week) === dayOfWeek
+          ? submittedId
+          : `weekly_${category}_${dayOfWeek}_${crypto.randomUUID()}`;
+        if (usedIds.has(id)) return errorResponse("The same weekly window was submitted more than once.", 400);
+        usedIds.add(id);
+        normalizedRules.push({
+          id,
+          category,
+          dayOfWeek,
+          startTime,
+          endTime,
+          active: rule.active !== false,
+          capacity: Math.max(1, asPositiveInteger(rule.capacity, settings.defaultCapacity || 1)),
+          bufferBeforeMinutes: asPositiveInteger(rule.bufferBeforeMinutes, settings.defaultBufferBeforeMinutes || 30),
+          bufferAfterMinutes: asPositiveInteger(rule.bufferAfterMinutes, settings.defaultBufferAfterMinutes || 30),
+          note: asString(rule.note),
+          createdAt: existing?.created_at || now,
+        });
+      }
+
+      const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      for (const category of requestedCategories) {
+        for (let dayOfWeek = 0; dayOfWeek <= 6; dayOfWeek += 1) {
+          const windows = normalizedRules
+            .filter((rule) => rule.active && rule.category === category && rule.dayOfWeek === dayOfWeek)
+            .sort((a, b) => minutesFromTime(a.startTime) - minutesFromTime(b.startTime));
+          for (let index = 1; index < windows.length; index += 1) {
+            if (minutesFromTime(windows[index].startTime) < minutesFromTime(windows[index - 1].endTime)) {
+              return errorResponse(`${dayNames[dayOfWeek]} availability windows cannot overlap.`, 400);
+            }
+          }
+        }
+      }
+
+      const statements = [settingsStatement];
+      for (const category of requestedCategories) {
+        statements.push(
+          db.prepare("DELETE FROM availability_rules WHERE venture = ? AND category = ?")
+            .bind("tattooing", category)
+        );
+      }
+      for (const rule of normalizedRules) {
+        statements.push(db.prepare(
+          `INSERT INTO availability_rules
+           (id, venture, day_of_week, start_time, end_time, active, capacity,
+            buffer_before_minutes, buffer_after_minutes, note, created_at, updated_at, category)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).bind(
+          rule.id,
+          "tattooing",
+          rule.dayOfWeek,
+          rule.startTime,
+          rule.endTime,
+          rule.active ? 1 : 0,
+          rule.capacity,
+          rule.bufferBeforeMinutes,
+          rule.bufferAfterMinutes,
+          rule.note,
+          rule.createdAt,
+          now,
+          rule.category
+        ));
+      }
+      await db.batch(statements);
+      return handleAdminGetSchedule(request, env);
+    }
+
+    await settingsStatement.run();
 
     for (const rule of Array.isArray(body.rules) ? body.rules : []) {
       const startTime = asString(rule.startTime) || "12:00";
