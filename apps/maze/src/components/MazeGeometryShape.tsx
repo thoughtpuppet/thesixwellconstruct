@@ -9,6 +9,8 @@ type MazeGeometryShapeProps = {
   onSelect: () => void;
   onChange: (shape: MazeShape) => void;
   onErase: () => void;
+  onDragMove?: (node: Konva.Node) => void;
+  onDragFinish?: () => void;
   shapeRef?: (node: Konva.Node | null) => void;
 };
 
@@ -54,6 +56,8 @@ export function MazeGeometryShape({
   onSelect,
   onChange,
   onErase,
+  onDragMove,
+  onDragFinish,
   shapeRef
 }: MazeGeometryShapeProps) {
   const handleSelectOrErase = () => {
@@ -66,11 +70,13 @@ export function MazeGeometryShape({
   };
 
   const handleDragEnd = (event: Konva.KonvaEventObject<DragEvent>) => {
+    onDragMove?.(event.target);
     onChange({
       ...shape,
       x: event.target.x(),
       y: event.target.y()
     });
+    onDragFinish?.();
   };
 
   const handleTransformEnd = (event: Konva.KonvaEventObject<Event>) => {
@@ -94,6 +100,8 @@ export function MazeGeometryShape({
         ref={shapeRef}
         {...sharedShapeProps(shape, editable, erasable, handleSelectOrErase)}
         radius={shape.size / 2}
+        onDragStart={onDragFinish}
+        onDragMove={(event) => onDragMove?.(event.target)}
         onDragEnd={handleDragEnd}
         onTransformEnd={handleTransformEnd}
       />
@@ -109,6 +117,8 @@ export function MazeGeometryShape({
         height={shape.size}
         offsetX={shape.size / 2}
         offsetY={shape.size / 2}
+        onDragStart={onDragFinish}
+        onDragMove={(event) => onDragMove?.(event.target)}
         onDragEnd={handleDragEnd}
         onTransformEnd={handleTransformEnd}
       />
@@ -121,6 +131,8 @@ export function MazeGeometryShape({
       {...sharedShapeProps(shape, editable, erasable, handleSelectOrErase)}
       sides={sidesFor(shape.kind)}
       radius={shape.size / 2}
+      onDragStart={onDragFinish}
+      onDragMove={(event) => onDragMove?.(event.target)}
       onDragEnd={handleDragEnd}
       onTransformEnd={handleTransformEnd}
     />

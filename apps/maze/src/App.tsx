@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type Konva from "konva";
-import { ArrowLeft, Redo2, Send, Undo2 } from "lucide-react";
+import { ArrowLeft, Magnet, Redo2, Send, Undo2 } from "lucide-react";
 import { ConstructCanvas } from "./components/ConstructCanvas";
 import { Inspector } from "./components/Inspector";
 import { MazeTools } from "./components/MazeTools";
@@ -227,15 +227,18 @@ function dataUrlToBlob(dataUrl: string): Blob {
 
 function captureMazeImage(stage: Konva.Stage | null): string | null {
   if (!stage) return null;
-  const referenceNodes = stage.find(".maze-reference");
-  const visibility = referenceNodes.map((node) => node.visible());
-  referenceNodes.forEach((node) => node.visible(false));
+  const hiddenNodes = [
+    ...stage.find(".maze-reference"),
+    ...stage.find(".maze-snap-guide")
+  ];
+  const visibility = hiddenNodes.map((node) => node.visible());
+  hiddenNodes.forEach((node) => node.visible(false));
   stage.draw();
   try {
     const stageScale = stage.scaleX() || 1;
     return stage.toDataURL({ pixelRatio: 2 / stageScale });
   } finally {
-    referenceNodes.forEach((node, index) => node.visible(visibility[index]));
+    hiddenNodes.forEach((node, index) => node.visible(visibility[index]));
     stage.draw();
   }
 }
@@ -618,11 +621,15 @@ function CanvasLayoutPicker({
 function MobileQuickTools({
   tool,
   onToolChange,
-  canvasMode
+  canvasMode,
+  snapToEdges,
+  onSnapToEdgesChange
 }: {
   tool: MazeTool;
   onToolChange: (tool: MazeTool) => void;
   canvasMode: CanvasMode;
+  snapToEdges: boolean;
+  onSnapToEdgesChange: (enabled: boolean) => void;
 }) {
   const eraserWidth = tool.type === "eraser" ? tool.width : 48;
   const defaultInkColor = defaultInkColorForMode(canvasMode);
@@ -655,6 +662,16 @@ function MobileQuickTools({
         onClick={() => onToolChange({ type: "eraser", width: eraserWidth })}
       >
         Erase
+      </button>
+      <button
+        type="button"
+        className={snapToEdges ? "active" : ""}
+        aria-pressed={snapToEdges}
+        onClick={() => onSnapToEdgesChange(!snapToEdges)}
+        title="Toggle edge snapping"
+      >
+        <Magnet size={16} aria-hidden="true" />
+        Snap
       </button>
     </div>
   );
@@ -749,6 +766,7 @@ export default function App() {
   const [referenceStatus, setReferenceStatus] = useState("");
   const [shapeSize, setShapeSize] = useState(DEFAULT_SHAPE_SIZE);
   const [shapeSizeScope, setShapeSizeScope] = useState<ShapeSizeScope>("selected-future");
+  const [snapToEdges, setSnapToEdges] = useState(true);
 
   const stateRef = useRef(state);
   const formDraftRef = useRef(formDraft);
@@ -1323,8 +1341,10 @@ export default function App() {
             shapeSizeScope={shapeSizeScope}
             hasSelectedShape={Boolean(selectedShape)}
             shapeCount={state.mazeShapes.length}
+            snapToEdges={snapToEdges}
             onShapeSizeChange={resizeShapes}
             onShapeSizeScopeChange={setShapeSizeScope}
+            onSnapToEdgesChange={setSnapToEdges}
           />
         </aside>
         <div className="canvas-workspace">
@@ -1334,11 +1354,18 @@ export default function App() {
             canvasMode={state.canvasMode}
             onCanvasModeChange={requestCanvasMode}
           />
-          <MobileQuickTools tool={mazeTool} onToolChange={setMazeTool} canvasMode={state.canvasMode} />
+          <MobileQuickTools
+            tool={mazeTool}
+            onToolChange={setMazeTool}
+            canvasMode={state.canvasMode}
+            snapToEdges={snapToEdges}
+            onSnapToEdgesChange={setSnapToEdges}
+          />
           <ConstructCanvas
             items={[]}
             canvasLayout={state.canvasLayout}
             canvasMode={state.canvasMode}
+            snapToEdges={snapToEdges}
             reference={reference}
             mazeWalls={state.mazeWalls}
             mazeShapes={state.mazeShapes}

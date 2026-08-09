@@ -14,6 +14,8 @@ type MazeWallLineProps = {
   onChange: (wall: MazeWall) => void;
   onErase: () => void;
   onPerfect: (wall: MazeWall) => void;
+  onDragMove?: (node: Konva.Node) => void;
+  onDragFinish?: () => void;
   shapeRef?: (node: Konva.Node | null) => void;
 };
 
@@ -60,6 +62,8 @@ export function MazeWallLine({
   onChange,
   onErase,
   onPerfect,
+  onDragMove,
+  onDragFinish,
   shapeRef
 }: MazeWallLineProps) {
   const kind = wall.kind ?? "straight";
@@ -125,14 +129,20 @@ export function MazeWallLine({
           onMouseLeave={clearHoldTimer}
           onTouchStart={selectAndHold}
           onTouchEnd={clearHoldTimer}
-          onDragStart={clearHoldTimer}
+          onDragStart={() => {
+            clearHoldTimer();
+            onDragFinish?.();
+          }}
+          onDragMove={(event) => onDragMove?.(event.target)}
           onDragEnd={(event) => {
             clearHoldTimer();
+            onDragMove?.(event.target);
             onChange({
               ...wall,
               x: event.target.x(),
               y: event.target.y()
             });
+            onDragFinish?.();
           }}
           onTransformEnd={(event) => {
             clearHoldTimer();
@@ -191,14 +201,20 @@ export function MazeWallLine({
         onMouseLeave={clearHoldTimer}
         onTouchStart={selectAndHold}
         onTouchEnd={clearHoldTimer}
-        onDragStart={clearHoldTimer}
+        onDragStart={() => {
+          clearHoldTimer();
+          onDragFinish?.();
+        }}
+        onDragMove={(event) => onDragMove?.(event.target)}
         onDragEnd={(event) => {
           clearHoldTimer();
+          onDragMove?.(event.target);
           onChange({
             ...wall,
             x: event.target.x(),
             y: event.target.y()
           });
+          onDragFinish?.();
         }}
         onTransformEnd={(event) => {
           clearHoldTimer();
@@ -250,10 +266,15 @@ export function MazeWallLine({
       onMouseLeave={clearHoldTimer}
       onTouchStart={selectAndHold}
       onTouchEnd={clearHoldTimer}
-      onDragStart={clearHoldTimer}
+      onDragStart={() => {
+        clearHoldTimer();
+        onDragFinish?.();
+      }}
+      onDragMove={(event) => onDragMove?.(event.target)}
       onDragEnd={(event) => {
         clearHoldTimer();
         const node = event.target;
+        onDragMove?.(node);
         const movedPoints = wall.points.map((point, index) =>
           index % 2 === 0 ? point + node.x() : point + node.y()
         );
@@ -262,6 +283,7 @@ export function MazeWallLine({
           points: movedPoints
         });
         node.position({ x: 0, y: 0 });
+        onDragFinish?.();
       }}
       onTransformEnd={(event) => {
         clearHoldTimer();

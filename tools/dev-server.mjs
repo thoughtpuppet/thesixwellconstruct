@@ -120,7 +120,7 @@ const checkRoutes = [
   ["/tattoos/flash/claim/", 200],
   ["/tattoos/build/", 302],
   ["/tattoos/build/in-person/", 302],
-  ["/tattoos/build/maze/", 302],
+  ["/tattoos/build/maze/", 200],
   ["/tattoos/special-projects/apply/", 200],
   ["/tattoos/policies/", 200],
   ["/tattoos/day-of/", 200],
@@ -157,6 +157,7 @@ const hiddenPublicPaths = new Set([
   "/writings",
 ]);
 const closedPublicPagePaths = ["/about", "/archive", "/tattoos/build"];
+const openPublicPagePaths = new Set(["/tattoos/build/maze"]);
 const hidePublicPagesExceptHome = false;
 const publicFrontDoorPaths = new Set(["/", "/index", "/index/", "/index.html"]);
 const publicEntryRoomAliasPaths = new Set(["/entry-room", "/entry-room/", "/entry-room/index.html"]);
@@ -294,6 +295,7 @@ function isHiddenPublicRoute(urlPath) {
   if (isHiddenByHomeOnlyMode(urlPath)) return true;
   const normalized = normalizeRoute(urlPath);
   const normalizedLower = normalized.toLowerCase();
+  if (openPublicPagePaths.has(normalizedLower)) return false;
   if (
     isPublicPageRoute(urlPath) &&
     closedPublicPagePaths.some((closedPath) => normalizedLower === closedPath || normalizedLower.startsWith(`${closedPath}/`))

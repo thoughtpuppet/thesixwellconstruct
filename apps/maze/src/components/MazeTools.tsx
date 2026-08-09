@@ -93,8 +93,10 @@ type MazeToolsProps = {
   shapeSizeScope: ShapeSizeScope;
   hasSelectedShape: boolean;
   shapeCount: number;
+  snapToEdges: boolean;
   onShapeSizeChange: (size: number) => void;
   onShapeSizeScopeChange: (scope: ShapeSizeScope) => void;
+  onSnapToEdgesChange: (enabled: boolean) => void;
 };
 
 export function MazeTools({
@@ -109,8 +111,10 @@ export function MazeTools({
   shapeSizeScope,
   hasSelectedShape,
   shapeCount,
+  snapToEdges,
   onShapeSizeChange,
-  onShapeSizeScopeChange
+  onShapeSizeScopeChange,
+  onSnapToEdgesChange
 }: MazeToolsProps) {
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
   const shapeTool = tool.type === "shape" ? tool : null;
@@ -227,6 +231,19 @@ export function MazeTools({
           <Radius size={18} />
         </button>
       </div>
+
+      <label className="toggle-line snap-toggle">
+        <input
+          type="checkbox"
+          checked={snapToEdges}
+          aria-describedby="snap-to-edges-help"
+          onChange={(event) => onSnapToEdgesChange(event.target.checked)}
+        />
+        Snap to edges
+      </label>
+      <p className="shape-size-help snap-to-edges-help" id="snap-to-edges-help">
+        Joins nearby wall endpoints and aligns moved marks without tiny gaps or overlaps.
+      </p>
 
       <div className="wall-preset-grid" role="group" aria-label="Maze wall forms">
         {wallPresetOptions.map(({ preset, label, glyph }) => (

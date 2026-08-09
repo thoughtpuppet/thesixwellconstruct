@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import worker from "../_worker.js";
+import { readFileSync } from "node:fs";
 
 const env = {
   ASSETS: {
@@ -44,6 +45,10 @@ test("the Maze Studio remains public while the rest of the Build family is close
     const response = await worker.fetch(new Request(`https://example.test${path}`), env, {});
     assert.equal(response.status, 200, path);
   }
+
+  const devServer = readFileSync(new URL("../tools/dev-server.mjs", import.meta.url), "utf8");
+  assert.match(devServer, /const openPublicPagePaths = new Set\(\["\/tattoos\/build\/maze"\]\)/);
+  assert.match(devServer, /openPublicPagePaths\.has\(normalizedLower\)/);
 });
 
 test("closing the page families does not redirect their static assets or similarly named routes", async () => {

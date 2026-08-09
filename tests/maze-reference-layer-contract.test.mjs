@@ -56,7 +56,7 @@ test("reference image stays outside Maze persistence and final captures", () => 
     /export type MazeState = \{\s*canvasLayout: CanvasLayout;\s*canvasMode: CanvasMode;\s*mazeWalls: MazeWall\[\];\s*mazeShapes: MazeShape\[\];\s*\};/
   );
   assert.match(app, /stage\.find\("\.maze-reference"\)/);
-  assert.match(app, /referenceNodes\.forEach\(\(node\) => node\.visible\(false\)\)/);
+  assert.match(app, /hiddenNodes\.forEach\(\(node\) => node\.visible\(false\)\)/);
   assert.match(app, /finally \{[\s\S]*node\.visible\(visibility\[index\]\)/);
   assert.match(app, /const url = captureMazeImage\(stage\)/);
   assert.match(app, /capturePng=\{\(\) => captureMazeImage\(stage\)\}/);

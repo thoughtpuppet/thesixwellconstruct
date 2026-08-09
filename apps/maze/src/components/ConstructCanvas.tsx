@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Circle, Layer, Rect, Stage, Transformer } from "react-konva";
+import { Circle, Layer, Line, Rect, Stage, Transformer } from "react-konva";
 import type Konva from "konva";
 import { symbolLibrary } from "../data/symbols";
 import type { CanvasItem, CanvasLayout, CanvasMode, CanvasReference, MazeShape, MazeTool, MazeWall, Selection } from "../types";
@@ -7,6 +7,15 @@ import { uuid } from "../lib/id";
 import { pathLength, perfectMazeWall, smoothCurvePoints, wallStampPoints } from "../lib/maze";
 import { CANVAS_LAYOUTS } from "../lib/canvas-layout";
 import { canvasBackgroundForMode, defaultInkColorForMode, STANDARD_CANVAS_COLOR } from "../lib/canvas-mode";
+import {
+  applyWallNodePosition,
+  SNAP_SCREEN_TOLERANCE,
+  snapPointToEdges,
+  snapShapePosition,
+  snapStraightEndpoint,
+  snapWallNodePosition
+} from "../lib/snap";
+import type { SnapGuide } from "../lib/snap";
 import { MazeGeometryShape } from "./MazeGeometryShape";
 import { MazeWallLine } from "./MazeWallLine";
 import { ReferenceImage } from "./ReferenceImage";
@@ -20,6 +29,7 @@ type ConstructCanvasProps = {
   mazeTool: MazeTool;
   canvasLayout: CanvasLayout;
   canvasMode: CanvasMode;
+  snapToEdges: boolean;
   reference: CanvasReference | null;
   workspaceMode: "construct" | "maze";
   onSelect: (selection: Selection) => void;
@@ -50,6 +60,7 @@ export function ConstructCanvas({
   mazeTool,
   canvasLayout,
   canvasMode,
+  snapToEdges,
   reference,
   workspaceMode,
   onSelect,
@@ -79,7 +90,32 @@ export function ConstructCanvas({
   const lastEraserPointRef = useRef<{ x: number; y: number } | null>(null);
   const [draftWall, setDraftWall] = useState<MazeWall | null>(null);
   const [eraserPoint, setEraserPoint] = useState<{ x: number; y: number } | null>(null);
+  const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   const [scale, setScale] = useState(1);
+
+  const updateSnapGuides = (guides: SnapGuide[]) => {
+    setSnapGuides((current) => {
+      const same = current.length === guides.length && current.every((guide, index) =>
+        guide.axis === guides[index]?.axis && Math.abs(guide.position - guides[index].position) < 0.01
+      );
+      return same ? current : guides;
+    });
+  };
+
+  const clearSnapGuides = () => updateSnapGuides([]);
+
+  const snapContext = (excludeId?: string) => ({
+    walls: mazeWalls,
+    shapes: mazeShapes,
+    canvasWidth,
+    canvasHeight,
+    tolerance: SNAP_SCREEN_TOLERANCE / Math.max(scale, 0.01),
+    excludeId
+  });
+
+  useEffect(() => {
+    if (!snapToEdges) clearSnapGuides();
+  }, [snapToEdges]);
 
   useEffect(() => {
     onStageReady(stageRef.current);
@@ -201,10 +237,16 @@ export function ConstructCanvas({
       return;
     }
 
-    const point = stagePoint();
-    if (!point) {
+    const rawPoint = stagePoint();
+    if (!rawPoint) {
       return;
     }
+
+    const pointSnap = snapToEdges && mazeTool.type === "wall"
+      ? snapPointToEdges(rawPoint, snapContext())
+      : { point: rawPoint, guides: [], snapped: false };
+    const point = pointSnap.point;
+    updateSnapGuides(pointSnap.guides);
 
     if (mazeTool.type === "wall") {
       const wall: MazeWall = {
@@ -253,8 +295,19 @@ export function ConstructCanvas({
               strokeWidth: mazeTool.strokeWidth,
               zIndex: nextZIndex()
             };
-      onMazeWallAdd(wall);
-      onSelect({ type: "wall", id: wall.instanceId });
+      const snappedWall = snapToEdges
+        ? applyWallNodePosition(
+            wall,
+            snapWallNodePosition(
+              wall,
+              wall.kind === "culdesac" ? { x: wall.x ?? 0, y: wall.y ?? 0 } : { x: 0, y: 0 },
+              snapContext(wall.instanceId)
+            ).position
+          )
+        : wall;
+      onMazeWallAdd(snappedWall);
+      onSelect({ type: "wall", id: snappedWall.instanceId });
+      clearSnapGuides();
       return;
     }
 
@@ -272,11 +325,17 @@ export function ConstructCanvas({
         filled: mazeTool.filled,
         zIndex: nextZIndex()
       };
-      onMazeShapeAdd(shape);
-      onSelect({ type: "shape", id: shape.instanceId });
+      const snappedPosition = snapToEdges
+        ? snapShapePosition(shape, point, snapContext(shape.instanceId)).position
+        : point;
+      const snappedShape = { ...shape, ...snappedPosition };
+      onMazeShapeAdd(snappedShape);
+      onSelect({ type: "shape", id: snappedShape.instanceId });
+      clearSnapGuides();
       return;
     }
 
+    clearSnapGuides();
     onSelect(null);
   };
 
@@ -334,6 +393,12 @@ export function ConstructCanvas({
         points: smoothCurvePoints(nextPoints, 1)
       };
 
+      if (snapToEdges) {
+        updateSnapGuides(snapPointToEdges(point, snapContext()).guides);
+      } else {
+        clearSnapGuides();
+      }
+
       draftWallRef.current = nextDraft;
       setDraftWall(nextDraft);
       startDrawHoldTimer();
@@ -343,8 +408,16 @@ export function ConstructCanvas({
     // Straight walls snap to the axis the drag leans toward, so they stay
     // strictly horizontal or vertical — never diagonal.
     const horizontal = Math.abs(point.x - x1) >= Math.abs(point.y - y1);
-    const endX = horizontal ? point.x : x1;
-    const endY = horizontal ? y1 : point.y;
+    const endpointSnap = snapToEdges
+      ? snapStraightEndpoint({ x: x1, y: y1 }, point, horizontal, snapContext())
+      : {
+          point: horizontal ? { x: point.x, y: y1 } : { x: x1, y: point.y },
+          guides: [],
+          snapped: false
+        };
+    const endX = endpointSnap.point.x;
+    const endY = endpointSnap.point.y;
+    updateSnapGuides(endpointSnap.guides);
     const nextDraft = {
       ...draftWall,
       points: [x1, y1, endX, endY]
@@ -363,37 +436,48 @@ export function ConstructCanvas({
     }
 
     clearDrawHoldTimer();
-    if (!draftWall) {
+    const finalDraft = draftWallRef.current ?? draftWall;
+    if (!finalDraft) {
       return;
     }
 
-    if (draftWall.kind === "culdesac") {
-      onMazeWallAdd(draftWall);
-      onSelect({ type: "wall", id: draftWall.instanceId });
+    if (finalDraft.kind === "culdesac") {
+      onMazeWallAdd(finalDraft);
+      onSelect({ type: "wall", id: finalDraft.instanceId });
       setDraftWall(null);
       draftWallRef.current = null;
+      clearSnapGuides();
       return;
     }
 
-    const [x1, y1] = draftWall.points;
-    const x2 = draftWall.points[draftWall.points.length - 2];
-    const y2 = draftWall.points[draftWall.points.length - 1];
+    const [x1, y1] = finalDraft.points;
+    const rawX2 = finalDraft.points[finalDraft.points.length - 2];
+    const rawY2 = finalDraft.points[finalDraft.points.length - 1];
+    const releasePoint = stagePoint();
+    const endpointSnap = snapToEdges && finalDraft.kind === "curve" && releasePoint
+      ? snapPointToEdges(releasePoint, snapContext())
+      : { point: { x: rawX2, y: rawY2 }, guides: [], snapped: false };
+    const x2 = endpointSnap.snapped ? endpointSnap.point.x : rawX2;
+    const y2 = endpointSnap.snapped ? endpointSnap.point.y : rawY2;
+    const pointsWithSnappedEnd = finalDraft.kind === "curve"
+      ? [...finalDraft.points.slice(0, -2), x2, y2]
+      : finalDraft.points;
     const drawnLength =
-      draftWall.kind === "curve" ? pathLength(draftWall.points) : Math.hypot(x2 - x1, y2 - y1);
+      finalDraft.kind === "curve" ? pathLength(pointsWithSnappedEnd) : Math.hypot(x2 - x1, y2 - y1);
 
     if (drawnLength > 16) {
       const shouldCloseCurve =
-        draftWall.kind === "curve" &&
-        draftWall.points.length >= 10 &&
+        finalDraft.kind === "curve" &&
+        finalDraft.points.length >= 10 &&
         Math.hypot(x2 - x1, y2 - y1) <= CURVE_CLOSE_DISTANCE;
       const smoothedPoints =
-        draftWall.kind === "curve" ? smoothCurvePoints(draftWall.points) : draftWall.points;
+        finalDraft.kind === "curve" ? smoothCurvePoints(pointsWithSnappedEnd) : finalDraft.points;
       const nextWall = shouldCloseCurve
         ? {
-            ...draftWall,
+            ...finalDraft,
             points: [...smoothedPoints.slice(0, -2), x1, y1]
           }
-        : { ...draftWall, points: smoothedPoints };
+        : { ...finalDraft, points: smoothedPoints };
 
       onMazeWallAdd(nextWall);
       onSelect({ type: "wall", id: nextWall.instanceId });
@@ -402,10 +486,56 @@ export function ConstructCanvas({
     }
     setDraftWall(null);
     draftWallRef.current = null;
+    clearSnapGuides();
+  };
+
+  const snapWallForCommit = (wall: MazeWall) => {
+    if (!snapToEdges) return wall;
+    const basePosition = wall.kind === "culdesac"
+      ? { x: wall.x ?? 0, y: wall.y ?? 0 }
+      : { x: 0, y: 0 };
+    const result = snapWallNodePosition(wall, basePosition, snapContext(wall.instanceId));
+    return applyWallNodePosition(wall, result.position);
+  };
+
+  const snapShapeForCommit = (shape: MazeShape) => {
+    if (!snapToEdges) return shape;
+    const result = snapShapePosition(shape, { x: shape.x, y: shape.y }, snapContext(shape.instanceId));
+    return { ...shape, ...result.position };
+  };
+
+  const handleWallDragMove = (wall: MazeWall, node: Konva.Node) => {
+    if (!snapToEdges) {
+      clearSnapGuides();
+      return;
+    }
+    const result = snapWallNodePosition(
+      wall,
+      { x: node.x(), y: node.y() },
+      snapContext(wall.instanceId)
+    );
+    node.position(result.position);
+    updateSnapGuides(result.guides);
+    node.getLayer()?.batchDraw();
+  };
+
+  const handleShapeDragMove = (shape: MazeShape, node: Konva.Node) => {
+    if (!snapToEdges) {
+      clearSnapGuides();
+      return;
+    }
+    const result = snapShapePosition(
+      shape,
+      { x: node.x(), y: node.y() },
+      snapContext(shape.instanceId)
+    );
+    node.position(result.position);
+    updateSnapGuides(result.guides);
+    node.getLayer()?.batchDraw();
   };
 
   const handlePerfectWall = (wall: MazeWall) => {
-    onMazeWallChange(perfectMazeWall(wall));
+    onMazeWallChange(snapWallForCommit(perfectMazeWall(wall)));
   };
 
   return (
@@ -468,9 +598,11 @@ export function ConstructCanvas({
               editable={workspaceMode === "maze" && mazeTool.type === "select"}
               erasable={workspaceMode === "maze" && mazeTool.type === "remove"}
               onSelect={() => onSelect({ type: "wall", id: wall.instanceId })}
-              onChange={onMazeWallChange}
+              onChange={(nextWall) => onMazeWallChange(snapWallForCommit(nextWall))}
               onErase={() => onMazeWallDelete(wall.instanceId)}
               onPerfect={handlePerfectWall}
+              onDragMove={(node) => handleWallDragMove(wall, node)}
+              onDragFinish={clearSnapGuides}
               shapeRef={(node) => {
                 if (node) {
                   shapeRefs.current.set(wall.instanceId, node);
@@ -498,8 +630,10 @@ export function ConstructCanvas({
               editable={workspaceMode === "maze" && mazeTool.type === "select"}
               erasable={workspaceMode === "maze" && mazeTool.type === "remove"}
               onSelect={() => onSelect({ type: "shape", id: shape.instanceId })}
-              onChange={onMazeShapeChange}
+              onChange={(nextShape) => onMazeShapeChange(snapShapeForCommit(nextShape))}
               onErase={() => onMazeShapeDelete(shape.instanceId)}
+              onDragMove={(node) => handleShapeDragMove(shape, node)}
+              onDragFinish={clearSnapGuides}
               shapeRef={(node) => {
                 if (node) {
                   shapeRefs.current.set(shape.instanceId, node);
@@ -533,6 +667,20 @@ export function ConstructCanvas({
               />
             );
           })}
+          {snapGuides.map((guide) => (
+            <Line
+              key={`${guide.axis}-${guide.position}`}
+              name="maze-snap-guide"
+              points={guide.axis === "x"
+                ? [guide.position, 0, guide.position, canvasHeight]
+                : [0, guide.position, canvasWidth, guide.position]}
+              stroke={canvasContrast}
+              strokeWidth={2}
+              dash={[10, 8]}
+              opacity={0.62}
+              listening={false}
+            />
+          ))}
           <Transformer
             ref={transformerRef}
             rotateEnabled
