@@ -163,6 +163,7 @@ const HIDDEN_PUBLIC_PATHS = [
 ];
 const CLOSED_PUBLIC_PAGE_PATHS = ["/about", "/archive", "/tattoos/build"];
 const OPEN_PUBLIC_PAGE_PATHS = new Set(["/tattoos/build/maze"]);
+const OPEN_PUBLIC_PAGE_PREFIXES = ["/about/exhibitions-appearances"];
 
 const HIDE_PUBLIC_PAGES_EXCEPT_HOME = false;
 const PUBLIC_FRONT_DOOR_PATHS = new Set(["/", "/index", "/index/", "/index.html"]);
@@ -382,10 +383,31 @@ function archiveDynamicAssetPath(pathname) {
   return "";
 }
 
+function appearanceDetailSlug(pathname) {
+  const parts = normalizePath(pathname).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "about" || parts[1] !== "exhibitions-appearances") return "";
+  return hasFileExtension(pathname) || parts[2] === "detail" ? "" : parts[2];
+}
+
+async function isPublishedAppearanceArchivePath(pathname, env) {
+  const parts = normalizePath(pathname).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "archive" || parts[1] !== "records" || !env.SUBMISSIONS_DB) return false;
+  try {
+    return Boolean(await env.SUBMISSIONS_DB.prepare(`SELECT ad.entity_id
+      FROM archive_dossiers ad
+      JOIN content_entities ce ON ce.id=ad.entity_id AND ce.entity_type='appearance' AND ce.visibility='public'
+      JOIN artist_appearances app ON app.id=ce.id AND app.state='published'
+      WHERE ad.archive_slug=? AND ad.state='published' AND ad.public_visible=1 LIMIT 1`).bind(parts[2]).first());
+  } catch {
+    return false;
+  }
+}
+
 function isClosedPublicPagePath(pathname) {
   if (!isPublicPagePath(pathname)) return false;
   const normalizedPath = normalizePath(pathname).toLowerCase();
   if (OPEN_PUBLIC_PAGE_PATHS.has(normalizedPath)) return false;
+  if (OPEN_PUBLIC_PAGE_PREFIXES.some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`))) return false;
   return CLOSED_PUBLIC_PAGE_PATHS.some((closedPath) => (
     normalizedPath === closedPath || normalizedPath.startsWith(`${closedPath}/`)
   ));
@@ -1282,7 +1304,7 @@ export default {
       return notFoundPage(request, env);
     }
 
-    if (isClosedPublicPagePath(url.pathname)) {
+    if (isClosedPublicPagePath(url.pathname) && !await isPublishedAppearanceArchivePath(url.pathname, env)) {
       return redirectToNotFoundPage(request);
     }
 
@@ -1334,6 +1356,7 @@ export default {
       url.pathname === "/api/art" || url.pathname.startsWith("/api/art/") ||
       url.pathname === "/api/archive" || url.pathname.startsWith("/api/archive/") ||
       url.pathname === "/api/archive-collections" || url.pathname.startsWith("/api/archive-collections/") ||
+      url.pathname === "/api/appearances" || url.pathname.startsWith("/api/appearances/") ||
       /^\/api\/admin\/events\/[^/]+\/create-archive-record$/.test(url.pathname) ||
       url.pathname.startsWith("/api/admin/flash") ||
       url.pathname.startsWith("/api/admin/legend") ||
@@ -1342,6 +1365,8 @@ export default {
       url.pathname.startsWith("/api/admin/merch") ||
       url.pathname.startsWith("/api/admin/archive") ||
       url.pathname.startsWith("/api/admin/people") ||
+      url.pathname.startsWith("/api/admin/appearances") ||
+      url.pathname.startsWith("/api/admin/organizations") ||
       url.pathname.startsWith("/api/admin/places") ||
       url.pathname.startsWith("/api/admin/nodes") ||
       url.pathname.startsWith("/api/admin/pathways") ||
@@ -1620,6 +1645,10 @@ export default {
 
     if (isEventDetailPagePath(url.pathname)) {
       return servePublicAsset(request, env, eventDetailAssetPath(url.pathname));
+    }
+
+    if (appearanceDetailSlug(url.pathname)) {
+      return servePublicAsset(request, env, "/about/exhibitions-appearances/detail/index.html");
     }
 
     if (isFlashDetailPagePath(url.pathname)) {

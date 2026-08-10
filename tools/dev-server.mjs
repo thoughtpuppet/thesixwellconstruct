@@ -83,6 +83,8 @@ const checkRoutes = [
   ["/about/ways-in/", 302],
   ["/about/current-state/", 302],
   ["/about/contact-press/", 302],
+  ["/about/exhibitions-appearances/", 200],
+  ["/about/exhibitions-appearances/made-in-public/", 200],
   ["/construct-map/", 200],
   ["/adventure/", 200],
   ["/adventure", 308],
@@ -112,6 +114,7 @@ const checkRoutes = [
   ["/archive/tattoos/", 302],
   ["/archive/writings/", 302],
   ["/archive/records/lostmarbles/", 302],
+  ["/archive/records/made-in-public/", 200],
   ["/archive/timelines/art/", 302],
   ["/tattoos/", 200],
   ["/tattoos/special-projects/", 200],
@@ -158,6 +161,8 @@ const hiddenPublicPaths = new Set([
 ]);
 const closedPublicPagePaths = ["/about", "/archive", "/tattoos/build"];
 const openPublicPagePaths = new Set(["/tattoos/build/maze"]);
+const openPublicPagePrefixes = ["/about/exhibitions-appearances"];
+const openAppearanceArchivePaths = new Set(["/archive/records/made-in-public"]);
 const hidePublicPagesExceptHome = false;
 const publicFrontDoorPaths = new Set(["/", "/index", "/index/", "/index.html"]);
 const publicEntryRoomAliasPaths = new Set(["/entry-room", "/entry-room/", "/entry-room/index.html"]);
@@ -275,6 +280,13 @@ function legendRecordRouteFile(urlPath) {
   return path.resolve(root, "about", "legend", "detail", "index.html");
 }
 
+function appearanceDetailRouteFile(urlPath) {
+  const parts = normalizeRoute(urlPath).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "about" || parts[1] !== "exhibitions-appearances") return null;
+  if (parts[2] === "detail" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(parts[2])) return null;
+  return path.resolve(root, "about", "exhibitions-appearances", "detail", "index.html");
+}
+
 function isHiddenByHomeOnlyMode(urlPath) {
   if (!hidePublicPagesExceptHome) return false;
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
@@ -296,6 +308,8 @@ function isHiddenPublicRoute(urlPath) {
   const normalized = normalizeRoute(urlPath);
   const normalizedLower = normalized.toLowerCase();
   if (openPublicPagePaths.has(normalizedLower)) return false;
+  if (openPublicPagePrefixes.some((prefix) => normalizedLower === prefix || normalizedLower.startsWith(`${prefix}/`))) return false;
+  if (openAppearanceArchivePaths.has(normalizedLower)) return false;
   if (
     isPublicPageRoute(urlPath) &&
     closedPublicPagePaths.some((closedPath) => normalizedLower === closedPath || normalizedLower.startsWith(`${closedPath}/`))
@@ -338,6 +352,8 @@ function safePath(urlPath) {
   if (specialProjectDetailFile) return specialProjectDetailFile;
   const legendRecordFile = legendRecordRouteFile(decoded);
   if (legendRecordFile) return legendRecordFile;
+  const appearanceDetailFile = appearanceDetailRouteFile(decoded);
+  if (appearanceDetailFile) return appearanceDetailFile;
 
   const clean = decoded === "/" ? "/index.html" : decoded;
   if (isEventDetailRoute(clean)) return eventDetailRouteFile(clean);

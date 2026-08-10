@@ -626,6 +626,7 @@
     <button class="tab" type="button" data-tab="art">Art</button>
     <button class="tab" type="button" data-tab="merch">Merch</button>
     <button class="tab" type="button" data-tab="legend">Legend</button>
+    <button class="tab" type="button" data-tab="about">About</button>
     <button class="tab" type="button" data-tab="events">Events</button>
     <button class="tab" type="button" data-tab="archive">Archive</button>
     <button class="tab" type="button" data-tab="site">Site</button>
@@ -1772,6 +1773,8 @@
       html = `<button class="subnav-btn ${subView === "products" ? "is-active" : ""}" type="button" data-subview="products">Products</button>`;
     } else if (activeTab === "legend") {
       html = [["symbols","Symbols"],["categories","Categories"],["composition-rules","Composition Rules"],["themes","Themes"],["examples","Examples"],["usage","Usage and Relationships"],["drafts","Drafts"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+    } else if (activeTab === "about") {
+      html = `<button class="subnav-btn ${subView === "appearances" ? "is-active" : ""}" type="button" data-subview="appearances">Exhibitions &amp; Appearances</button>`;
     } else if (activeTab === "events") {
       html = `<button class="subnav-btn ${subView !== "event-archive" && !selectedEventSlug ? "is-active" : ""}" type="button" data-events-home>Current Events</button><button class="subnav-btn ${subView === "event-archive" ? "is-active" : ""}" type="button" data-subview="event-archive">Event Archive</button>`;
       if (selectedEventSlug) {
@@ -1780,7 +1783,7 @@
       }
       html += `<button class="subnav-btn" type="button" data-event-setup style="margin-left:auto;">Manage / New Events</button>`;
     } else if (activeTab === "archive") {
-      html = [["dossiers","Dossiers"],["failed-experiments","Failed Experiments"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["dossiers","Dossiers"],["failed-experiments","Failed Experiments"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["organizations","Organizations"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "site") {
       html = [["pathways","Homepage Pathways"],["nodes","Construct Nodes"],["navigation","Navigation"],["search","Search"],["visibility","Public Visibility"],["settings","Site Settings"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "shared") {
@@ -4006,7 +4009,7 @@
     activeAppointmentId = "";
     typeValue = "";
     schedulePeriodDraft = null;
-    subView = tab === "analytics" ? (window.StudioAnalytics?.hashState?.().view || "overview") : tab === "tattoo" ? "appointments" : tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
+    subView = tab === "analytics" ? (window.StudioAnalytics?.hashState?.().view || "overview") : tab === "tattoo" ? "appointments" : tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "about" ? "appearances" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
     selectedCalendarDay = "";
     selectedEventSlug = "";
     renderActiveTab();

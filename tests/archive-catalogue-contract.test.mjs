@@ -74,7 +74,7 @@ function request(path, { method = "GET", body, admin = false } = {}) {
 test("migration assigns every existing cultural object an identity from the exact agreed families", () => {
   const db = database();
   const counts = db.prepare(`SELECT
-    (SELECT COUNT(*) FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ce.entity_type<>'event') cultural_objects,
+    (SELECT COUNT(*) FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ce.entity_type NOT IN ('event','appearance')) cultural_objects,
     (SELECT COUNT(*) FROM archive_catalogue_entries) catalogue_entries,
     (SELECT COUNT(*) FROM archive_object_versions) versions,
     (SELECT COUNT(*) FROM archive_object_states) states`).get();
@@ -82,9 +82,9 @@ test("migration assigns every existing cultural object an identity from the exac
   assert.equal(counts.versions, counts.cultural_objects);
   assert.equal(counts.states, counts.cultural_objects);
   assert.equal(db.prepare(`SELECT COUNT(*) count FROM archive_catalogue_entries ace
-    JOIN content_entities ce ON ce.id=ace.entity_id WHERE ce.entity_type='event'`).get().count, 0);
+    JOIN content_entities ce ON ce.id=ace.entity_id WHERE ce.entity_type IN ('event','appearance')`).get().count, 0);
   const eventCounts = db.prepare(`SELECT
-    (SELECT COUNT(*) FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ce.entity_type='event') event_records,
+    (SELECT COUNT(*) FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ce.entity_type IN ('event','appearance')) event_records,
     (SELECT COUNT(*) FROM archive_event_identifiers) event_identifiers`).get();
   assert.equal(eventCounts.event_identifiers, eventCounts.event_records);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_event_identifiers WHERE event_id NOT GLOB 'EVT-[0-9][0-9][0-9]*'").get().count, 0);
@@ -109,7 +109,9 @@ test("migration assigns every existing cultural object an identity from the exac
   const tattooPrefixes = db.prepare("SELECT id,catalogue_prefix FROM archive_cultural_object_types WHERE id IN ('tattoo-design','tattoo-execution') ORDER BY id").all();
   assert.deepEqual(tattooPrefixes.map((row) => row.catalogue_prefix), ["TAT-DES", "TAT-EXE"]);
 
-  const unassigned = db.prepare("SELECT COUNT(*) count FROM archive_materials WHERE state_id IS NULL OR material_reference=''").get();
+  const unassigned = db.prepare(`SELECT COUNT(*) count FROM archive_materials am
+    JOIN content_entities ce ON ce.id=am.dossier_entity_id
+    WHERE ce.entity_type NOT IN ('event','appearance') AND (am.state_id IS NULL OR am.material_reference='')`).get();
   assert.equal(unassigned.count, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_object_versions WHERE publication_state<>'published' OR public_visible<>1").get().count, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_object_states WHERE publication_state<>'published' OR public_visible<>1").get().count, 0);
@@ -895,7 +897,7 @@ test("Studio lists Archive People and Places without requiring sortable columns"
   const placesResponse = await handleConstructApi(request("/api/admin/places", { admin: true }), runtime);
   assert.equal(placesResponse.status, 200);
   const places = (await placesResponse.json()).records;
-  assert.deepEqual(places.map((record) => record.name), ["Alpha Place", "Zulu Place"]);
+  assert.deepEqual(places.map((record) => record.name), ["Alpha Place", "Purple Fish Studios", "Zulu Place"]);
 });
 
 test("Studio and public Archive surfaces expose the catalogue system", () => {

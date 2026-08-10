@@ -269,11 +269,27 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
       : await statement.all();
   const rows = result.results || [];
   const entityIds = rows.map((row) => row.id);
-  const [media, tattooStyles, flashSheetDesigns] = await Promise.all([
+  const [media, tattooStyles, flashSheetDesigns, appearanceSubjects] = await Promise.all([
     entityMedia(database, entityIds),
     resource === "flash" ? loadTattooStyleAssignments(database, entityIds) : Promise.resolve(new Map()),
     resource === "flash" ? loadFlashSheetDesigns(database, entityIds) : Promise.resolve(new Map()),
+    resource === "appearances" && entityIds.length
+      ? database.prepare(`SELECT ads.dossier_entity_id,ads.subject_entity_id,ads.role,ads.sort_order,ce.entity_type,
+          COALESCE(p.name,o.name,pl.name,ev.title,ce.id) name,
+          COALESCE(o.website_url,'') website_url,COALESCE(o.social_url,'') social_url,
+          COALESCE(pl.public_location,'') public_location
+        FROM archive_dossier_subjects ads
+        JOIN content_entities ce ON ce.id=ads.subject_entity_id AND ce.visibility='public'
+        LEFT JOIN people p ON p.id=ce.id AND p.state='published' AND p.privacy='public'
+        LEFT JOIN organizations o ON o.id=ce.id AND o.state='published'
+        LEFT JOIN places pl ON pl.id=ce.id AND pl.state='published' AND pl.privacy='public'
+        LEFT JOIN events ev ON ev.id=ce.id
+        WHERE ads.public_visible=1 AND ads.dossier_entity_id IN (${entityIds.map(()=>"?").join(",")})
+        ORDER BY ads.dossier_entity_id,ads.sort_order`).bind(...entityIds).all()
+      : Promise.resolve({results:[]}),
   ]);
+  const subjectsByAppearance=new Map();
+  for(const subject of appearanceSubjects.results||[]){if(!subjectsByAppearance.has(subject.dossier_entity_id))subjectsByAppearance.set(subject.dossier_entity_id,[]);subjectsByAppearance.get(subject.dossier_entity_id).push(subject)}
   const records = rows.map((row) => {
     const { reserved_submission_id: _reservationOwner, ...publicRow } = row;
     const stylePayload = resource === "flash"
@@ -296,6 +312,7 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
         };
       })(),
       media: media.get(row.id) || [],
+      ...(resource === "appearances" ? { subjects: subjectsByAppearance.get(row.id) || [], archiveRoute: `/archive/records/${encodeURIComponent(row.slug)}/` } : {}),
     };
     if (config.entityType === "visual_symbol") {
       const canonicalRoute = legendCanonicalRoute(row.slug || row.id);
@@ -729,12 +746,13 @@ function archiveEntitySql(where = "1=1") {
       WHEN 'art_work' THEN aw.title WHEN 'merch_item' THEN mi.title
       WHEN 'portfolio_item' THEN COALESCE(NULLIF(pi.title,''),'Untitled tattoo')
       WHEN 'flash_item' THEN fi.title WHEN 'tattoo_design' THEN td.title WHEN 'event' THEN ev.title
+      WHEN 'appearance' THEN app.title
       WHEN 'visual_symbol' THEN vs.name ELSE COALESCE(ar.title,sd.title,ad.archive_slug) END title,
     CASE ce.entity_type
       WHEN 'art_work' THEN aw.statement WHEN 'merch_item' THEN mi.product_type
       WHEN 'portfolio_item' THEN pi.caption WHEN 'flash_item' THEN fi.description
       WHEN 'tattoo_design' THEN td.description
-      WHEN 'event' THEN ev.description WHEN 'visual_symbol' THEN vs.meaning
+      WHEN 'event' THEN ev.description WHEN 'appearance' THEN app.summary WHEN 'visual_symbol' THEN vs.meaning
       ELSE COALESCE(ar.summary,sd.summary,'') END canonical_summary,
     CASE ce.entity_type
       WHEN 'art_work' THEN COALESCE(NULLIF(aw.legacy_path,''),'/art/'||aw.slug||'/')
@@ -743,17 +761,18 @@ function archiveEntitySql(where = "1=1") {
       WHEN 'flash_item' THEN COALESCE(NULLIF(fi.legacy_path,''),'/tattoos/flash/'||fi.slug||'/')
       WHEN 'tattoo_design' THEN ''
       WHEN 'event' THEN '/events/'||ev.slug||'/'
+      WHEN 'appearance' THEN '/about/exhibitions-appearances/'||app.slug||'/'
       WHEN 'visual_symbol' THEN '/about/legend/'||vs.slug||'/'
       ELSE COALESCE(sd.route,'') END canonical_route,
     CASE ce.entity_type
       WHEN 'art_work' THEN aw.year WHEN 'portfolio_item' THEN pi.year
-      WHEN 'event' THEN COALESCE(ev.starts_at,'') ELSE COALESCE(ar.date_or_period,sd.date_label,'') END canonical_date,
+      WHEN 'event' THEN COALESCE(ev.starts_at,'') WHEN 'appearance' THEN COALESCE(app.starts_at,'') ELSE COALESCE(ar.date_or_period,sd.date_label,'') END canonical_date,
     CASE WHEN ar.record_type='community-maze' THEN ar.node_label ELSE '' END public_credit,
     CASE ce.entity_type
       WHEN 'art_work' THEN aw.medium WHEN 'portfolio_item' THEN pi.primary_style
       WHEN 'flash_item' THEN fi.item_type WHEN 'merch_item' THEN mi.product_type
       WHEN 'tattoo_design' THEN td.design_type
-      WHEN 'event' THEN 'event' WHEN 'visual_symbol' THEN 'symbol' ELSE '' END medium,
+      WHEN 'event' THEN 'event' WHEN 'appearance' THEN 'appearance' WHEN 'visual_symbol' THEN 'symbol' ELSE '' END medium,
     COALESCE(
       (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id)
         FROM archive_materials am JOIN media_assets m ON m.id=am.media_id
@@ -819,6 +838,7 @@ function archiveEntitySql(where = "1=1") {
   LEFT JOIN flash_items fi ON ce.entity_type='flash_item' AND fi.id=ce.id
   LEFT JOIN tattoo_designs td ON ce.entity_type='tattoo_design' AND td.id=ce.id
   LEFT JOIN events ev ON ce.entity_type='event' AND ev.id=ce.id
+  LEFT JOIN artist_appearances app ON ce.entity_type='appearance' AND app.id=ce.id
   LEFT JOIN visual_symbols vs ON ce.entity_type='visual_symbol' AND vs.id=ce.id
   LEFT JOIN archive_records ar ON ce.entity_type='archive_record' AND ar.id=ce.id
   LEFT JOIN search_documents sd ON sd.entity_id=ce.id
@@ -2125,6 +2145,7 @@ function searchDocument(resource, row) {
   }
   if (resource === "art") return { ...common, node_id: "art", summary: row.statement || "", date_label: row.year || "", route: artCanonicalRoute(row) };
   if (resource === "archive") return { ...common, node_id: "archive", summary: row.summary || "", body: row.body || "", date_label: row.date_or_period || "", route: `/archive/?record=${encodeURIComponent(row.slug || row.id)}` };
+  if (resource === "appearances") return { ...common, node_id: "about", summary: row.summary || "", body: row.description || "", date_label: row.starts_at || "", route: `/about/exhibitions-appearances/${encodeURIComponent(row.slug || row.id)}/` };
   if (resource === "visual-language") {
     const context = parseJson(row.context_json, {});
     const applications = parseJson(row.applications_json).flatMap((entry) => [entry.title, entry.meaning, entry.note]);
@@ -2294,7 +2315,7 @@ async function adminCreate(request, env, resource) {
   if (resource === "pathways" && values.homepage_enabled) { const c = await database.prepare("SELECT COUNT(*) c FROM construct_pathways WHERE node_id=? AND homepage_enabled=1").bind(values.node_id).first(); if (Number(c?.c || 0) >= 9) return failure("Pathway capacity is 9 per node.", 409); }
   const keys = Object.keys(values); if (!keys.length) return failure("No editable fields supplied.");
   const createStatements = [
-    database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,0,'studio','studio',datetime('now'),datetime('now'))").bind(recordId,config.entityType,values.node_id || (config.entityType==="visual_symbol"?"node-legend":null),"internal"),
+    database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,0,'studio','studio',datetime('now'),datetime('now'))").bind(recordId,config.entityType,values.node_id || (config.entityType==="visual_symbol"?"node-legend":config.entityType==="appearance"||config.entityType==="organization"?"node-about":null),"internal"),
     database.prepare(`INSERT INTO ${config.table}(id,${keys.join(",")},created_at,updated_at) VALUES(?,${keys.map(()=>"?").join(",")},datetime('now'),datetime('now'))`).bind(recordId,...keys.map(k=>values[k])),
   ];
   if (resource === "flash") createStatements.push(...replaceTattooStyleAssignmentStatements(database, recordId, styleSelection));
@@ -2304,6 +2325,7 @@ async function adminCreate(request, env, resource) {
   const publishStatements=[entityVisibilityStatement(database, resource, created),searchSyncStatement(database, resource, created)];
   if(archiveEligibleEntityType(config.entityType))publishStatements.push(archiveShellStatement(database,recordId,config.entityType,archivePreferredSlug(config.entityType,created),archiveRecordType(config.entityType)));
   await database.batch(publishStatements);
+  if(config.entityType==="appearance")await ensureAppearanceEventStructure(database,await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(recordId).first());
   if(archiveEligibleEntityType(config.entityType))await ensureArchiveCatalogueEntry(database,await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(recordId).first());
   await nextRevision(database,recordId,"create",null,created); return json({ record: created },{status:201});
 }
@@ -2406,6 +2428,7 @@ async function adminUpdate(request, env, resource, recordId, archive = false) {
   );
   if(archiveEligibleEntityType(config.entityType))updateStatements.push(archiveShellStatement(database,recordId,config.entityType,archivePreferredSlug(config.entityType,projected),archiveRecordType(config.entityType)));
   await database.batch(updateStatements);
+  if(config.entityType==="appearance")await ensureAppearanceEventStructure(database,await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(recordId).first());
   if(archiveEligibleEntityType(config.entityType))await ensureArchiveCatalogueEntry(database,await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(recordId).first());
   const afterRow = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first();
   const after = resource === "flash" ? { ...afterRow, ...tattooStylePayload(nextStyleSelection) } : afterRow;
@@ -2857,13 +2880,13 @@ function entityDirectorySql(where="1=1"){
       WHEN 'visual_symbol' THEN vs.name WHEN 'archive_record' THEN ar.title WHEN 'archive_collection' THEN ac.name
       WHEN 'archive_failed_experiment' THEN afe.title
       WHEN 'construct_node' THEN own.name WHEN 'construct_pathway' THEN cp.name WHEN 'person' THEN pe.name
-      WHEN 'place' THEN pl.name WHEN 'event' THEN ev.title ELSE ce.id END title,
+      WHEN 'organization' THEN org.name WHEN 'place' THEN pl.name WHEN 'event' THEN ev.title WHEN 'appearance' THEN app.title ELSE ce.id END title,
     CASE ce.entity_type
       WHEN 'flash_item' THEN fi.state WHEN 'flash_series' THEN fs.state WHEN 'special_project' THEN spc.publication_state WHEN 'special_project_series' THEN sps.state WHEN 'art_work' THEN aw.state WHEN 'portfolio_item' THEN pi.state WHEN 'merch_item' THEN mi.state
       WHEN 'visual_symbol' THEN vs.state WHEN 'archive_record' THEN ar.state WHEN 'archive_collection' THEN ac.state
       WHEN 'archive_failed_experiment' THEN afe.state
       WHEN 'construct_node' THEN own.state WHEN 'construct_pathway' THEN cp.state WHEN 'person' THEN pe.state
-      WHEN 'place' THEN pl.state WHEN 'event' THEN ev.status ELSE ce.visibility END state,
+      WHEN 'organization' THEN org.state WHEN 'place' THEN pl.state WHEN 'event' THEN ev.status WHEN 'appearance' THEN app.state ELSE ce.visibility END state,
     CASE ce.entity_type
       WHEN 'flash_item' THEN COALESCE(NULLIF(fi.legacy_path,''),'/tattoos/flash/'||fi.slug||'/')
       WHEN 'flash_series' THEN '/tattoos/flash/?series='||fs.slug
@@ -2877,7 +2900,7 @@ function entityDirectorySql(where="1=1"){
       WHEN 'archive_collection' THEN '/archive/?collection='||ac.slug
       WHEN 'archive_failed_experiment' THEN '/archive/failed-experiments/'||afe.slug||'/'
       WHEN 'construct_node' THEN own.route WHEN 'construct_pathway' THEN cp.route
-      WHEN 'event' THEN '/events/'||ev.slug||'/' ELSE '' END route,
+      WHEN 'event' THEN '/events/'||ev.slug||'/' WHEN 'appearance' THEN '/about/exhibitions-appearances/'||app.slug||'/' ELSE '' END route,
     COALESCE(NULLIF(mi.image_url,''),NULLIF(pi.source_url,''),
       CASE WHEN ce.entity_type='visual_symbol' THEN NULLIF(vs.image_url,'') ELSE NULL END,
       (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id)
@@ -2902,7 +2925,7 @@ function entityDirectorySql(where="1=1"){
       WHEN 'archive_record' THEN COALESCE(NULLIF(ar.record_type,''),'Archive record') WHEN 'archive_collection' THEN 'Archive collection'
       WHEN 'archive_failed_experiment' THEN 'Failed experiment'
       WHEN 'construct_node' THEN 'Construct node' WHEN 'construct_pathway' THEN 'Pathway'
-      WHEN 'person' THEN 'Person' WHEN 'place' THEN 'Place' WHEN 'event' THEN 'Event' ELSE ce.entity_type END kind_label,
+      WHEN 'person' THEN 'Person' WHEN 'organization' THEN 'Organization' WHEN 'place' THEN 'Place' WHEN 'event' THEN 'Event' WHEN 'appearance' THEN 'Appearance' ELSE ce.entity_type END kind_label,
     CASE ce.entity_type
       WHEN 'art_work' THEN trim(COALESCE(aw.year,'')||CASE WHEN aw.year<>'' AND aw.medium<>'' THEN ' · ' ELSE '' END||COALESCE(aw.medium,''))
       WHEN 'portfolio_item' THEN trim(COALESCE(pi.year,'')||CASE WHEN pi.year<>'' AND pi.placement<>'' THEN ' · ' ELSE '' END||COALESCE(pi.placement,'')||CASE WHEN (pi.year<>'' OR pi.placement<>'') AND pi.primary_style<>'' THEN ' · ' ELSE '' END||COALESCE(pi.primary_style,''))
@@ -2929,8 +2952,10 @@ function entityDirectorySql(where="1=1"){
   LEFT JOIN construct_nodes own ON ce.entity_type='construct_node' AND own.id=ce.id
   LEFT JOIN construct_pathways cp ON ce.entity_type='construct_pathway' AND cp.id=ce.id
   LEFT JOIN people pe ON ce.entity_type='person' AND pe.id=ce.id
+  LEFT JOIN organizations org ON ce.entity_type='organization' AND org.id=ce.id
   LEFT JOIN places pl ON ce.entity_type='place' AND pl.id=ce.id
   LEFT JOIN events ev ON ce.entity_type='event' AND ev.id=ce.id
+  LEFT JOIN artist_appearances app ON ce.entity_type='appearance' AND app.id=ce.id
   LEFT JOIN construct_nodes cn ON cn.id=CASE
     WHEN ce.entity_type='archive_failed_experiment' THEN CASE ce.node_id
       WHEN 'art' THEN 'node-art' WHEN 'merch' THEN 'node-merch' WHEN 'tattoos' THEN 'node-tattoos'
@@ -3178,9 +3203,9 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
   return failure("Method not allowed.",405);
 }
 
-function archiveRecordType(entityType){return {art_work:"artwork",merch_item:"merchandise",portfolio_item:"tattoo",flash_item:"flash",tattoo_design:"tattoo-design",event:"event",visual_symbol:"symbol"}[entityType]||String(entityType||"").replace(/_/g,"-");}
+function archiveRecordType(entityType){return {art_work:"artwork",merch_item:"merchandise",portfolio_item:"tattoo",flash_item:"flash",tattoo_design:"tattoo-design",event:"event",appearance:"event",visual_symbol:"symbol"}[entityType]||String(entityType||"").replace(/_/g,"-");}
 function archivePreferredSlug(entityType,row){return slug(row?.archive_slug||row?.slug||row?.shopify_handle||row?.id)||String(row?.id||"");}
-function archiveEligibleEntityType(entityType){return ["art_work","merch_item","portfolio_item","flash_item","tattoo_design","event","visual_symbol","writing_work","film_work","music_work"].includes(entityType);}
+function archiveEligibleEntityType(entityType){return ["art_work","merch_item","portfolio_item","flash_item","tattoo_design","event","appearance","visual_symbol","writing_work","film_work","music_work"].includes(entityType);}
 
 async function archiveDossierEligibleOwner(database,owner){
   if(archiveEligibleEntityType(owner?.entity_type))return true;
@@ -3282,7 +3307,7 @@ async function nextArchiveCatalogueNumber(database,cataloguePrefix){
 }
 
 async function ensureArchiveCatalogueEntry(database,owner){
-  if(!owner?.id||owner.entity_type==="event")return null;
+  if(!owner?.id||["event","appearance"].includes(owner.entity_type))return null;
   if(!await database.prepare("SELECT entity_id FROM archive_dossiers WHERE entity_id=?").bind(owner.id).first())return null;
   let catalogue=await database.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id=?").bind(owner.id).first();
   if(!catalogue){
@@ -3314,6 +3339,18 @@ async function ensureArchiveCatalogueEntry(database,owner){
     state=await database.prepare("SELECT * FROM archive_object_states WHERE id=?").bind(stateId).first();
   }
   return {catalogue,version,state};
+}
+
+async function ensureAppearanceEventStructure(database,owner){
+  if(owner?.entity_type!=="appearance")return null;
+  if(!await database.prepare("SELECT entity_id FROM archive_dossiers WHERE entity_id=?").bind(owner.id).first())return null;
+  await database.prepare("DELETE FROM archive_object_states WHERE version_id IN (SELECT id FROM archive_object_versions WHERE entity_id=?)").bind(owner.id).run();
+  await database.prepare("DELETE FROM archive_object_versions WHERE entity_id=?").bind(owner.id).run();
+  await database.prepare("DELETE FROM archive_catalogue_entries WHERE entity_id=?").bind(owner.id).run();
+  await database.prepare(`INSERT OR IGNORE INTO archive_event_identifiers(entity_id,event_number,event_id,created_by,updated_by,created_at,updated_at)
+    SELECT ?,COALESCE(MAX(event_number),0)+1,'EVT-'||printf('%03d',COALESCE(MAX(event_number),0)+1),'studio','studio',datetime('now'),datetime('now')
+    FROM archive_event_identifiers`).bind(owner.id).run();
+  return database.prepare("SELECT * FROM archive_event_identifiers WHERE entity_id=?").bind(owner.id).first();
 }
 
 async function archiveCatalogueAdminApi(request,env,entityId=""){
@@ -3372,7 +3409,7 @@ async function archiveCatalogueAdminApi(request,env,entityId=""){
       if(before)await database.prepare(`UPDATE archive_catalogue_entries SET medium_id=?,object_type_id=?,catalogue_prefix=?,catalogue_number=?,catalogue_id=?,current_version=?,current_state=?,variant_label=?,current_state_id=?,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(mediumId,objectTypeId,type.catalogue_prefix,catalogueNumber,catalogueId,currentVersion,currentState,variantLabel,currentStateId,entityId).run();
       else await database.prepare(`INSERT INTO archive_catalogue_entries(entity_id,medium_id,object_type_id,catalogue_prefix,catalogue_number,catalogue_id,current_version,current_state,variant_label,current_state_id,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(entityId,mediumId,objectTypeId,type.catalogue_prefix,catalogueNumber,catalogueId,currentVersion,currentState,variantLabel,currentStateId).run();
     }catch(error){const duplicate=/UNIQUE constraint failed/i.test(error.message);return failure(duplicate?"A catalogue number was assigned at the same time. Save again to allocate the next number.":error.message,duplicate?409:400)}
-    try{await ensureArchiveCatalogueEntry(database,owner)}catch(error){return failure(error.message,409)}
+    try{await ensureAppearanceEventStructure(database,owner);await ensureArchiveCatalogueEntry(database,owner)}catch(error){return failure(error.message,409)}
     return archiveCatalogueAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,entityId);
   }
   return failure("Method not allowed.",405);
@@ -3478,7 +3515,7 @@ async function archiveEventIdentifierAdminApi(request,env,entityId=""){
     FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id
     WHERE ad.entity_id=?`).bind(entityId).first();
   if(!owner)return failure("Event dossier not found.",404);
-  if(owner.entity_type!=="event")return failure("Event identifiers are available only for Event records.",409);
+  if(!["event","appearance"].includes(owner.entity_type))return failure("Event identifiers are available only for Event and Appearance records.",409);
   if(request.method==="GET"){
     const record=await database.prepare("SELECT * FROM archive_event_identifiers WHERE entity_id=?").bind(entityId).first();
     return record?json({record}):failure("Event identifier not found.",404);
@@ -3629,7 +3666,7 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
     const archiveSlug=slug(body.archive_slug||body.archiveSlug||body.slug||ownerId);if(!archiveSlug)return failure("archive_slug is required.");const state=text(body.state,30)||"draft",publicVisible=truthy(body.public_visible??body.publicVisible)?1:0;if(!ARCHIVE_STATES.has(state))return failure("Invalid dossier state.");if(state==="published"&&publicVisible&&owner.visibility!=="public")return failure("The canonical entity must be public before its dossier can publish.",409);
     await database.prepare(`INSERT INTO archive_dossiers(entity_id,archive_slug,orientation,story,story_html,empty_materials_note,record_type,state,public_visible,featured,sort_order,published_at,created_by,updated_by,created_at,updated_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' AND ?=1 THEN datetime('now') ELSE NULL END,'studio','studio',datetime('now'),datetime('now'))`).bind(ownerId,archiveSlug,text(body.orientation,8000),text(body.story,50000),text(body.story_html,50000),text(body.empty_materials_note,3000)||"No process materials are public yet.",text(body.record_type,100)||archiveRecordType(owner.entity_type),state,publicVisible,truthy(body.featured)?1:0,Number(body.sort_order)||0,state,publicVisible).run();
-    try{await ensureArchiveCatalogueEntry(database,owner)}catch(error){return failure(error.message,409)}
+    try{await ensureAppearanceEventStructure(database,owner);await ensureArchiveCatalogueEntry(database,owner)}catch(error){return failure(error.message,409)}
     return archiveDossiersAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,ownerId);
   }
   if(request.method==="PATCH"&&entityId){
@@ -4869,7 +4906,7 @@ export async function handleConstructApi(request,env){
   const entityMediaPublic=path.match(/^\/api\/construct\/entity-media\/([^/]+)$/);if(entityMediaPublic)return publicEntityMediaApi(request,env,decodeURIComponent(entityMediaPublic[1]));
   if(path==="/api/legend/categories")return publicLegendCategories(env);
   if(path==="/api/legend/composition-rules")return publicCompositionRules(request,env);
-  const publicMatch=path.match(/^\/api\/(flash|legend|visual-language|art|archive|archive-collections)(?:\/([^/]+))?$/);if(publicMatch)return publicCatalog(request,env,canonicalResource(publicMatch[1]),publicMatch[2]?decodeURIComponent(publicMatch[2]):"");
+  const publicMatch=path.match(/^\/api\/(flash|legend|visual-language|art|archive|archive-collections|appearances)(?:\/([^/]+))?$/);if(publicMatch)return publicCatalog(request,env,canonicalResource(publicMatch[1]),publicMatch[2]?decodeURIComponent(publicMatch[2]):"");
   const auth=requireStudioAdmin(request,env);if(auth)return auth;
   const colorMaterialsAdmin=await handleArchiveColorMaterialsAdmin(request,env,path);if(colorMaterialsAdmin)return colorMaterialsAdmin;
   const failedExperimentMediaPairMatch=path.match(/^\/api\/admin\/archive-failed-experiments\/([^/]+)\/media-pair$/);if(failedExperimentMediaPairMatch)return archiveFailedExperimentMediaPairAdminApi(request,env,decodeURIComponent(failedExperimentMediaPairMatch[1]));
