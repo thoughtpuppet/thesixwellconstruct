@@ -141,3 +141,9 @@ test("Events board contracts retain the shared shell, 5px cards, calendar, and s
   assert.match(studio, /Public stage[\s\S]*Event operations/);
   assert.match(studio, /\["draft", "announced", "published"\]/);
 });
+
+test("SS&F bespoke event page activates the shared entrance transition", () => {
+  const page = readFileSync(join(ROOT, "events", "ss-and-f-live-audience", "index.html"), "utf8");
+  assert.match(page, /class="venture-shell entrance-fade"/);
+  assert.match(page, /<script src="\/js\/transition\.js"><\/script>/);
+});
