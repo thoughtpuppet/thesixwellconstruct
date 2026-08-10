@@ -280,6 +280,10 @@
   .availability-manager .availability-edit-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; border-top:5px solid var(--ring-faint); padding-top:14px; }
   .availability-manager .availability-edit-form.hidden { display:none; }
   .availability-manager .wide-field { grid-column:1 / -1; }
+  .event-occurrence-list { display:grid; gap:12px; margin:8px 0 12px; min-width:0; }
+  .event-occurrence-editor { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; padding:14px; border:5px solid var(--ring-faint); background:var(--bg); min-width:0; }
+  .event-occurrence-editor .wide-field { grid-column:1 / -1; }
+  .event-occurrence-editor .danger-button { justify-self:start; }
   .availability-manager .danger-button { border-color:rgba(110,4,4,0.72); color:var(--text); }
   .availability-manager .danger-button:hover { border-color:var(--signal); color:var(--signal); background:rgba(110,4,4,0.12); }
   .availability-manager .mini-calendar,
@@ -596,6 +600,8 @@
     .day-override-window { grid-template-columns:1fr; }
     .availability-manager .weekly-day-header { align-items:stretch; flex-direction:column; }
     .availability-manager .wide-field { grid-column:auto; }
+    .event-occurrence-editor { grid-template-columns:minmax(0,1fr); }
+    .event-occurrence-editor .wide-field { grid-column:auto; }
     .day-override-window .wide-field { grid-column:auto; }
     .scheduled-window .wide-field { grid-column:auto; }
     .scheduled-period-card { align-items:stretch; flex-direction:column; }
@@ -5860,6 +5866,40 @@ ${meetingLines}
     ).join("");
   }
 
+  function eventOccurrenceEditor(occurrence = {}, index = 0, defaults = {}) {
+    return `<div class="event-occurrence-editor" data-event-occurrence>
+      <input type="hidden" data-occurrence-field="id" value="${escapeHtml(occurrence.id || "")}">
+      <div class="field"><label>Starts</label><input data-occurrence-field="startsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(occurrence.startsAt))}" required></div>
+      <div class="field"><label>Ends</label><input data-occurrence-field="endsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(occurrence.endsAt))}"></div>
+      <div class="field"><label>Operations</label><select data-occurrence-field="status">${eventStatusOptions(occurrence.status || defaults.status || "closed")}</select></div>
+      <div class="field"><label>Capacity</label><input data-occurrence-field="capacity" type="number" min="0" step="1" value="${escapeHtml(String(occurrence.capacity ?? defaults.capacity ?? 0))}"></div>
+      <div class="field"><label>Max seats / order</label><input data-occurrence-field="maxSeatsPerOrder" type="number" min="1" step="1" value="${escapeHtml(String(occurrence.maxSeatsPerOrder ?? defaults.maxSeatsPerOrder ?? 4))}"></div>
+      <div class="field wide-field"><label>Location</label><input data-occurrence-field="location" value="${escapeHtml(occurrence.location || defaults.location || "")}" placeholder="Use the event location or override it here"></div>
+      <button class="button danger-button" type="button" data-remove-event-occurrence aria-label="Remove event date ${index + 1}">Remove date</button>
+    </div>`;
+  }
+
+  function eventOccurrencesMarkup(ev = {}) {
+    const occurrences = Array.isArray(ev.occurrences) ? ev.occurrences : [];
+    const rows = occurrences.length ? occurrences : [];
+    return rows.map((occurrence, index) => eventOccurrenceEditor(occurrence, index, ev)).join("");
+  }
+
+  function collectEventOccurrences(form) {
+    return Array.from(form.querySelectorAll("[data-event-occurrence]")).map((row) => {
+      const value = (field) => row.querySelector(`[data-occurrence-field="${field}"]`)?.value ?? "";
+      return {
+        id:value("id"),
+        startsAt:value("startsAt") ? localDateTimeToIso(value("startsAt")) : "",
+        endsAt:value("endsAt") ? localDateTimeToIso(value("endsAt")) : "",
+        status:value("status") || "closed",
+        capacity:Number(value("capacity")) || 0,
+        maxSeatsPerOrder:Number(value("maxSeatsPerOrder")) || 1,
+        location:value("location"),
+      };
+    });
+  }
+
   function renderEventCard(ev) {
     const dollars = ((Number(ev.priceCents) || 0) / 100).toFixed(2);
     const isFree = (Number(ev.priceCents) || 0) <= 0;
@@ -5878,16 +5918,12 @@ ${meetingLines}
                 <select data-field="publicationState">${eventPublicationOptions(ev.publicationState || "draft")}</select>
               </div>
               <div class="field">
-                <label>Event operations</label>
+                <label>Event operations (new-date default)</label>
                 <select data-field="status">${eventStatusOptions(ev.status || "closed")}</select>
               </div>
               <div class="field">
-                <label>Starts</label>
-                <input data-field="startsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(ev.startsAt))}">
-              </div>
-              <div class="field">
-                <label>Ends</label>
-                <input data-field="endsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(ev.endsAt))}">
+                <label>Recurring event</label>
+                <select data-field="isRecurring"><option value="0" ${ev.isRecurring ? "" : "selected"}>NO</option><option value="1" ${ev.isRecurring ? "selected" : ""}>YES</option></select>
               </div>
               <div class="field">
                 <label>Price per seat (0 = free)</label>
@@ -5898,11 +5934,11 @@ ${meetingLines}
                 <input data-field="currency" value="${escapeHtml(ev.currency || "USD")}" maxlength="3" style="text-transform:uppercase;">
               </div>
               <div class="field">
-                <label>Capacity</label>
+                <label>New-date default capacity</label>
                 <input data-field="capacity" type="number" min="0" step="1" value="${escapeHtml(String(ev.capacity || 0))}">
               </div>
               <div class="field">
-                <label>Max Seats / Order</label>
+                <label>New-date default max seats / order</label>
                 <input data-field="maxSeatsPerOrder" type="number" min="1" step="1" value="${escapeHtml(String(ev.maxSeatsPerOrder || 1))}">
               </div>
               <div class="field wide-field">
@@ -5952,6 +5988,11 @@ ${meetingLines}
                 <label>Contact Note</label>
                 <textarea data-field="contactNote" rows="2">${escapeHtml(ev.contactNote || "")}</textarea>
               </div>
+              <div class="field wide-field">
+                <label>Event dates</label>
+                <div class="event-occurrence-list" data-event-occurrence-list>${eventOccurrencesMarkup(ev)}</div>
+                <button class="button" type="button" data-add-event-occurrence>Add date</button>
+              </div>
             </div>
             <button class="button save-schedule" type="submit">Save Event</button>
           </form>
@@ -5981,16 +6022,12 @@ ${meetingLines}
                 <select data-field="publicationState">${eventPublicationOptions("draft")}</select>
               </div>
               <div class="field">
-                <label>Event operations</label>
+                <label>Event operations (new-date default)</label>
                 <select data-field="status">${eventStatusOptions("closed")}</select>
               </div>
               <div class="field">
-                <label>Starts</label>
-                <input data-field="startsAt" type="datetime-local">
-              </div>
-              <div class="field">
-                <label>Ends</label>
-                <input data-field="endsAt" type="datetime-local">
+                <label>Recurring event</label>
+                <select data-field="isRecurring"><option value="0" selected>NO</option><option value="1">YES</option></select>
               </div>
               <div class="field">
                 <label>Price per seat (0 = free)</label>
@@ -6001,11 +6038,11 @@ ${meetingLines}
                 <input data-field="currency" value="USD" maxlength="3" style="text-transform:uppercase;">
               </div>
               <div class="field">
-                <label>Capacity</label>
+                <label>New-date default capacity</label>
                 <input data-field="capacity" type="number" min="0" step="1" value="0">
               </div>
               <div class="field">
-                <label>Max Seats / Order</label>
+                <label>New-date default max seats / order</label>
                 <input data-field="maxSeatsPerOrder" type="number" min="1" step="1" value="4">
               </div>
               <div class="field wide-field">
@@ -6050,6 +6087,11 @@ ${meetingLines}
               <div class="field wide-field">
                 <label>Contact Note</label>
                 <textarea data-field="contactNote" rows="2"></textarea>
+              </div>
+              <div class="field wide-field">
+                <label>Event dates</label>
+                <div class="event-occurrence-list" data-event-occurrence-list>${eventOccurrenceEditor({}, 0, { status:"closed", capacity:0, maxSeatsPerOrder:4 })}</div>
+                <button class="button" type="button" data-add-event-occurrence>Add date</button>
               </div>
             </div>
             <button class="button save-schedule" type="submit">Create Event</button>
@@ -7526,6 +7568,40 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("click", async (event) => {
+    const addEventOccurrence = event.target.closest("[data-add-event-occurrence]");
+    if (addEventOccurrence) {
+      const form = addEventOccurrence.closest("form");
+      const list = form?.querySelector("[data-event-occurrence-list]");
+      if (!form || !list) return;
+      const fieldValue = (name) => form.querySelector(`[data-field="${name}"]`)?.value ?? "";
+      list.insertAdjacentHTML("beforeend", eventOccurrenceEditor({}, list.children.length, {
+        status:fieldValue("status") || "closed",
+        capacity:Number(fieldValue("capacity")) || 0,
+        maxSeatsPerOrder:Number(fieldValue("maxSeatsPerOrder")) || 4,
+        location:fieldValue("location"),
+      }));
+      if (list.children.length > 1) {
+        const recurring = form.querySelector('[data-field="isRecurring"]');
+        if (recurring) recurring.value = "1";
+      }
+      setStatus("Event date added; save the event to keep it");
+      return;
+    }
+
+    const removeEventOccurrence = event.target.closest("[data-remove-event-occurrence]");
+    if (removeEventOccurrence) {
+      const row = removeEventOccurrence.closest("[data-event-occurrence]");
+      const form = removeEventOccurrence.closest("form");
+      row?.remove();
+      const remaining = form?.querySelectorAll("[data-event-occurrence]").length || 0;
+      if (remaining < 2) {
+        const recurring = form?.querySelector('[data-field="isRecurring"]');
+        if (recurring) recurring.value = "0";
+      }
+      setStatus("Event date removed; save the event to confirm");
+      return;
+    }
+
     const viewSpecialInterest = event.target.closest("[data-view-special-interest]");
     if (viewSpecialInterest) {
       location.hash = `#analytics/tattoo-specials?range=30d&device=all&campaign=${encodeURIComponent(viewSpecialInterest.dataset.viewSpecialInterest)}`;
@@ -9393,8 +9469,6 @@ ${meetingLines}
       const fieldValue = (name) => eventCreateForm.querySelector(`[data-field="${name}"]`)?.value ?? "";
       const title = fieldValue("title").trim();
       if (!title) { setStatus("Title is required"); return; }
-      const startsLocal = fieldValue("startsAt");
-      const endsLocal = fieldValue("endsAt");
       setStatus("Creating event");
       try {
         await api("/api/admin/events", {
@@ -9405,6 +9479,8 @@ ${meetingLines}
             slug: fieldValue("slug"),
             publicationState: fieldValue("publicationState"),
             status: fieldValue("status"),
+            isRecurring: fieldValue("isRecurring") === "1",
+            occurrences: collectEventOccurrences(eventCreateForm),
             location: fieldValue("location"),
             description: fieldValue("description"),
             imageUrl: fieldValue("imageUrl"),
@@ -9415,8 +9491,6 @@ ${meetingLines}
             cancellationPolicy: fieldValue("cancellationPolicy"),
             contactNote: fieldValue("contactNote"),
             waitlistEnabled: fieldValue("waitlistEnabled") !== "0",
-            startsAt: startsLocal ? localDateTimeToIso(startsLocal) : "",
-            endsAt: endsLocal ? localDateTimeToIso(endsLocal) : "",
             priceCents: Math.round((Number(fieldValue("price")) || 0) * 100),
             currency: (fieldValue("currency") || "USD").toUpperCase(),
             capacity: Number(fieldValue("capacity")) || 0,
@@ -9436,8 +9510,6 @@ ${meetingLines}
       event.preventDefault();
       const slug = eventForm.dataset.eventForm;
       const fieldValue = (name) => eventForm.querySelector(`[data-field="${name}"]`)?.value ?? "";
-      const startsLocal = fieldValue("startsAt");
-      const endsLocal = fieldValue("endsAt");
       setStatus("Saving event");
       await api(`/api/admin/events/${encodeURIComponent(slug)}`, {
         method: "PATCH",
@@ -9445,6 +9517,8 @@ ${meetingLines}
         body: JSON.stringify({
           publicationState: fieldValue("publicationState"),
           status: fieldValue("status"),
+          isRecurring: fieldValue("isRecurring") === "1",
+          occurrences: collectEventOccurrences(eventForm),
           title: fieldValue("title"),
           location: fieldValue("location"),
           description: fieldValue("description"),
@@ -9456,8 +9530,6 @@ ${meetingLines}
           cancellationPolicy: fieldValue("cancellationPolicy"),
           contactNote: fieldValue("contactNote"),
           waitlistEnabled: fieldValue("waitlistEnabled") !== "0",
-          startsAt: startsLocal ? localDateTimeToIso(startsLocal) : "",
-          endsAt: endsLocal ? localDateTimeToIso(endsLocal) : "",
           priceCents: Math.round((Number(fieldValue("price")) || 0) * 100),
           currency: (fieldValue("currency") || "USD").toUpperCase(),
           capacity: Number(fieldValue("capacity")) || 0,

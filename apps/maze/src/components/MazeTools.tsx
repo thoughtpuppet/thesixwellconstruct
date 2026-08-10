@@ -84,6 +84,9 @@ const shapeOptions: Array<{
 type MazeToolsProps = {
   tool: MazeTool;
   onToolChange: (tool: MazeTool) => void;
+  onInkColorChange: (color: string) => void;
+  selectedInkColor: string;
+  selectedMarkType: "wall" | "shape" | null;
   canvasMode: CanvasMode;
   canvasTone: CanvasTone;
   referenceName: string;
@@ -103,6 +106,9 @@ type MazeToolsProps = {
 export function MazeTools({
   tool,
   onToolChange,
+  onInkColorChange,
+  selectedInkColor,
+  selectedMarkType,
   canvasMode,
   canvasTone,
   referenceName,
@@ -124,7 +130,9 @@ export function MazeTools({
   const presetTool = tool.type === "wallPreset" ? tool : null;
   const eraserTool = tool.type === "eraser" ? tool : null;
   const defaultInkColor = defaultInkColorForMode(canvasMode, canvasTone);
-  const activeColor = shapeTool?.fill ?? wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor;
+  const activeColor = selectedInkColor || (
+    shapeTool?.fill ?? wallTool?.stroke ?? presetTool?.stroke ?? defaultInkColor
+  );
   const inkOptions = inkOptionsForMode(canvasMode, canvasTone);
   const activeWallWidth = wallTool?.strokeWidth ?? presetTool?.strokeWidth ?? 20;
   const activeEraserWidth = eraserTool?.width ?? 48;
@@ -351,6 +359,13 @@ export function MazeTools({
                   onToolChange({ ...tool, stroke: color });
                 } else if (tool.type === "wallPreset") {
                   onToolChange({ ...tool, stroke: color });
+                } else if (selectedMarkType === "wall") {
+                  onToolChange({
+                    type: "wall",
+                    variant: "straight",
+                    stroke: color,
+                    strokeWidth: activeWallWidth
+                  });
                 } else {
                   onToolChange({
                     type: "shape",
@@ -361,6 +376,7 @@ export function MazeTools({
                     size: shapeSize
                   });
                 }
+                onInkColorChange(color);
               }}
               title={`Use ${color}`}
               aria-label={`Use ${color}`}

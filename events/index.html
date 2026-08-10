@@ -178,10 +178,21 @@
         return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[c];
       });
     }
-    function eventHref(ev) { return "/events/" + encodeURIComponent(ev.slug) + "/"; }
+    function eventHref(ev, occurrence) { return "/events/" + encodeURIComponent(ev.slug) + "/" + (occurrence && occurrence.id ? "?occurrence=" + encodeURIComponent(occurrence.id) : ""); }
     function validDate(value) { var date = value ? new Date(value) : null; return date && !Number.isNaN(date.getTime()) ? date : null; }
-    function eventEnd(ev) { return validDate(ev.endsAt) || validDate(ev.startsAt); }
-    function isPastEvent(ev, now) { var end = eventEnd(ev); return ev.status === "completed" || Boolean(end && end.getTime() < now.getTime()); }
+    function occurrencesForEvent(ev) {
+      if (Array.isArray(ev.occurrences) && ev.occurrences.length) return ev.occurrences;
+      return ev.startsAt ? [{ id:"", startsAt:ev.startsAt, endsAt:ev.endsAt, location:ev.location, status:ev.status }] : [];
+    }
+    function eventEnd(ev) {
+      var dated = occurrencesForEvent(ev).map(function (occurrence) { return validDate(occurrence.endsAt) || validDate(occurrence.startsAt); }).filter(Boolean);
+      return dated.length ? dated.sort(function (a,b) { return b - a; })[0] : validDate(ev.endsAt) || validDate(ev.startsAt);
+    }
+    function isPastEvent(ev, now) {
+      var occurrences = occurrencesForEvent(ev);
+      if (occurrences.length) return occurrences.every(function (occurrence) { var end = validDate(occurrence.endsAt) || validDate(occurrence.startsAt); return occurrence.status === "completed" || Boolean(end && end.getTime() < now.getTime()); });
+      var end = eventEnd(ev); return ev.status === "completed" || Boolean(end && end.getTime() < now.getTime());
+    }
     function dateKey(value) {
       var date = validDate(value);
       if (!date) return "";
@@ -203,6 +214,7 @@
       var href = eventHref(ev);
       if (past) return '<a class="event-action" href="' + href + '">View event</a>';
       if (ev.publicationState === "announced") return '<button class="event-action" type="button" disabled>Announced</button>';
+      if (occurrencesForEvent(ev).length > 1) return '<a class="event-action" href="' + href + '">View dates</a>';
       if (ev.status === "cancelled") return '<button class="event-action" type="button" disabled>Cancelled</button><a class="event-action is-secondary" href="' + href + '">View event</a>';
       if (ev.soldOut) {
         return '<button class="event-action" type="button" disabled>Sold out</button><a class="event-action is-secondary" href="' + href + '">View event</a>' +
@@ -214,9 +226,12 @@
     function cardMarkup(ev, past) {
       var classes = "event-card" + (past ? " is-past" : "") + (ev.publicationState === "announced" ? " is-announced" : "") + (ev.status === "cancelled" ? " is-cancelled" : "");
       var facts = [priceLabel(ev)];
+      var occurrenceCount = occurrencesForEvent(ev).length;
+      if (occurrenceCount > 1) facts.unshift(occurrenceCount + " dates");
       if (Number(ev.capacity) > 0 && ev.publicationState === "published") facts.push(ev.soldOut ? "Sold out" : ev.seatsRemaining + " seats left");
+      var dateLead = (occurrenceCount > 1 ? "Next: " : "") + formatDate(ev.startsAt);
       return '<article class="' + classes + '">' +
-        '<p class="event-card-meta">' + escapeHtml(formatDate(ev.startsAt)) + (ev.location ? " · " + escapeHtml(ev.location) : "") + '</p>' +
+        '<p class="event-card-meta">' + escapeHtml(dateLead) + (ev.location ? " · " + escapeHtml(ev.location) : "") + '</p>' +
         '<h3>' + escapeHtml(ev.title) + '</h3>' +
         '<p class="event-card-copy">' + escapeHtml(ev.description || "") + '</p>' +
         '<div class="event-card-facts">' + facts.map(function (fact) { return '<span class="event-card-fact">' + escapeHtml(fact) + '</span>'; }).join("") + '</div>' +
@@ -240,21 +255,23 @@
     }
     function eventsByDate() {
       return publicEvents.reduce(function (map, ev) {
-        var key = dateKey(ev.startsAt);
-        if (key) (map[key] || (map[key] = [])).push(ev);
+        occurrencesForEvent(ev).forEach(function (occurrence) {
+          var key = dateKey(occurrence.startsAt);
+          if (key) (map[key] || (map[key] = [])).push({ event:ev, occurrence:occurrence });
+        });
         return map;
       }, {});
     }
     function renderAgenda(items, label) {
       dayAgenda.setAttribute("aria-label", "Events on " + label);
-      dayAgenda.innerHTML = items.map(function (ev) {
-        return '<a class="event-day-link" href="' + eventHref(ev) + '"><strong>' + escapeHtml(ev.title) + '</strong><span>' + escapeHtml(formatDayTime(ev.startsAt) || ev.publicationState) + '</span></a>';
+      dayAgenda.innerHTML = items.map(function (item) {
+        return '<a class="event-day-link" href="' + eventHref(item.event, item.occurrence) + '"><strong>' + escapeHtml(item.event.title) + '</strong><span>' + escapeHtml(formatDayTime(item.occurrence.startsAt) || item.event.publicationState) + '</span></a>';
       }).join("");
       dayAgenda.focus?.({ preventScroll:true });
     }
     function openCalendarDay(key, label) {
       var items = eventsByDate()[key] || [];
-      if (items.length === 1) { window.location.href = eventHref(items[0]); return; }
+      if (items.length === 1) { window.location.href = eventHref(items[0].event, items[0].occurrence); return; }
       renderAgenda(items, label);
     }
     function renderCalendar() {
@@ -263,7 +280,7 @@
       var parts = key.split("-").map(Number);
       var year = parts[0], month = parts[1];
       var grouped = eventsByDate();
-      var inMonth = publicEvents.filter(function (ev) { return monthKey(ev.startsAt) === key; });
+      var inMonth = Object.keys(grouped).filter(function (dayKey) { return dayKey.slice(0,7) === key; }).reduce(function (items, dayKey) { return items.concat(grouped[dayKey]); }, []);
       monthSelect.value = key;
       monthCount.textContent = inMonth.length + " event" + (inMonth.length === 1 ? "" : "s");
       monthPrev.disabled = activeMonthIndex === 0;
@@ -282,7 +299,7 @@
           calendarGrid.insertAdjacentHTML("beforeend", '<button class="cal-day' + (past ? " past" : "") + '" type="button" disabled role="gridcell" aria-label="' + dayKey + ', no events">' + day + '</button>');
           continue;
         }
-        var announcedOnly = items.every(function (ev) { return ev.publicationState === "announced"; });
+        var announcedOnly = items.every(function (item) { return item.event.publicationState === "announced"; });
         var label = new Intl.DateTimeFormat("en-US", { month:"long", day:"numeric", year:"numeric" }).format(new Date(year,month - 1,day,12));
         calendarGrid.insertAdjacentHTML("beforeend", '<button class="cal-day has-events' + (past ? " past" : "") + (announcedOnly ? " is-announced" : "") + (items.length > 1 ? " has-multiple" : "") + '" data-date="' + dayKey + '" data-count="' + items.length + '" type="button" role="gridcell" aria-label="' + escapeHtml(label + ", " + items.length + " event" + (items.length === 1 ? "" : "s")) + '">' + day + '</button>');
       }
@@ -291,7 +308,10 @@
       });
     }
     function prepareCalendar() {
-      calendarMonths = Array.from(new Set(publicEvents.map(function (ev) { return monthKey(ev.startsAt); }).filter(Boolean))).sort();
+      calendarMonths = Array.from(new Set(publicEvents.reduce(function (months, ev) {
+        occurrencesForEvent(ev).forEach(function (occurrence) { var key = monthKey(occurrence.startsAt); if (key) months.push(key); });
+        return months;
+      }, []))).sort();
       if (!calendarMonths.length) {
         calendarRoot.hidden = true;
         calendarEmpty.textContent = "No dated public events are available yet.";
@@ -333,7 +353,7 @@
       var at = function (days, hour) { var date = new Date(); date.setDate(date.getDate() + days); date.setHours(hour,0,0,0); return date.toISOString(); };
       renderBoard([
         { slug:"signal-symbol", title:"Signal & Symbol", description:"A sensory mark-making gathering where prompts become visual responses through memory, mood, and imagination.", startsAt:at(12,19), endsAt:at(12,22), location:"Atlanta, GA", priceCents:4500, priceFormatted:"$45.00", free:false, capacity:20, seatsRemaining:12, soldOut:false, status:"open", publicationState:"published", open:true, waitlistEnabled:true },
-        { slug:"cultandshift", title:"Cult [&] Shift", description:"A recurring showcase for performances, readings, sound, and public experiments.", startsAt:at(28,20), endsAt:at(29,1), location:"the six.well construct", priceCents:0, priceFormatted:"$0.00", free:true, capacity:40, seatsRemaining:40, soldOut:false, status:"closed", publicationState:"announced", open:false, waitlistEnabled:false },
+        { slug:"cultandshift", title:"Cult [&] Shift", description:"A recurring showcase for performances, readings, sound, and public experiments.", startsAt:at(28,20), endsAt:at(29,1), location:"the six.well construct", priceCents:0, priceFormatted:"$0.00", free:true, capacity:40, seatsRemaining:40, soldOut:false, status:"closed", publicationState:"announced", open:false, waitlistEnabled:false, isRecurring:true, occurrences:[{id:"preview-cult-1",startsAt:at(28,20),endsAt:at(29,1),location:"the six.well construct",capacity:40,seatsRemaining:40,status:"closed"},{id:"preview-cult-2",startsAt:at(49,20),endsAt:at(50,1),location:"the six.well construct",capacity:32,seatsRemaining:32,status:"closed"}] },
         { slug:"open-studios", title:"Open Studios", description:"Temporary access to works in progress, object studies, and material decisions.", startsAt:at(12,16), endsAt:at(12,20), location:"Atlanta, GA", priceCents:0, priceFormatted:"$0.00", free:true, capacity:30, seatsRemaining:18, soldOut:false, status:"open", publicationState:"published", open:true, waitlistEnabled:true },
         { slug:"ss-and-f-live-audience", title:"SS&F Live Audience", description:"A documented gathering preserved as part of the Events record.", startsAt:at(-35,19), endsAt:at(-35,22), location:"Atlanta, GA", priceCents:0, priceFormatted:"$0.00", free:true, capacity:25, seatsRemaining:0, soldOut:true, status:"completed", publicationState:"published", open:false, waitlistEnabled:false }
       ]);

@@ -54,6 +54,7 @@
         <div class="stack">
           <div class="line-panel">
             <div class="detail-row"><span class="detail-key">When</span><span id="ev-when">Loading</span></div>
+            <div class="detail-row" id="ev-date-choice-row" hidden><label class="detail-key" for="ev-date-choice">Choose date</label><select id="ev-date-choice"></select></div>
             <div class="detail-row"><span class="detail-key">Where</span><span id="ev-where">Loading</span></div>
             <div class="detail-row"><span class="detail-key">Ticket</span><span id="ev-price">Loading</span></div>
             <div class="detail-row"><span class="detail-key">Seats left</span><span id="ev-seats">Loading</span></div>
@@ -166,9 +167,11 @@
     }
     var previewMode = params.get("preview") === "1";
     var priceCents = 0, currency = "USD", isFree = false;
-    var ticketOpen = false;
+    var ticketOpen = false, selectedOccurrenceId = "";
     var els = {
       when: document.getElementById("ev-when"),
+      dateChoiceRow: document.getElementById("ev-date-choice-row"),
+      dateChoice: document.getElementById("ev-date-choice"),
       where: document.getElementById("ev-where"),
       price: document.getElementById("ev-price"),
       seatsLeft: document.getElementById("ev-seats"),
@@ -203,7 +206,15 @@
       var n = Number(els.seats.value) || 1;
       els.total.textContent = isFree ? "Free" : money(priceCents * n);
     }
-    function applyEvent(ev) {
+    function applyEvent(ev, occurrence) {
+      var occurrences = Array.isArray(ev.occurrences) ? ev.occurrences : [];
+      var activeOccurrence = occurrence || (occurrences.length === 1 ? occurrences[0] : null) || occurrences[0] || null;
+      selectedOccurrenceId = activeOccurrence ? activeOccurrence.id : "";
+      if (activeOccurrence) ev = Object.assign({}, ev, activeOccurrence, { publicationState:ev.publicationState, free:ev.free });
+      if (occurrences.length > 1) {
+        els.dateChoiceRow.hidden = false;
+        els.dateChoice.innerHTML = occurrences.map(function (item) { return '<option value="' + item.id + '"' + (item.id === selectedOccurrenceId ? ' selected' : '') + '>' + fmtWhen(item.startsAt) + '</option>'; }).join("");
+      }
       priceCents = ev.priceCents || 0;
       currency = ev.currency || "USD";
       isFree = ev.free || priceCents <= 0;
@@ -304,16 +315,23 @@
       else applyEvent(previewEvent(state));
       applyMicPreview(params.get("mic") || "");
     } else {
-      fetch("/api/events/" + SLUG + "/context")
+      fetch("/api/events/" + SLUG + "/context" + (params.get("occurrence") ? "?occurrence=" + encodeURIComponent(params.get("occurrence")) : ""))
         .then(function (r) { return r.json().then(function (d) { return { ok:r.ok, d:d }; }); })
         .then(function (res) {
           if (!res.ok || !res.d.event) throw new Error(res.d.error || "Event unavailable.");
-          applyEvent(res.d.event);
+          applyEvent(res.d.event, res.d.occurrence);
         })
         .catch(function (error) {
           failEvent(error.message || "Tickets are not open yet.");
         });
     }
+
+    els.dateChoice.addEventListener("change", function () {
+      var next = new URL(window.location.href);
+      next.searchParams.set("occurrence", els.dateChoice.value);
+      next.searchParams.delete("preview");
+      window.location.href = next.toString();
+    });
 
     els.ticketForm.addEventListener("submit", function (event) {
       event.preventDefault();
@@ -336,7 +354,7 @@
       fetch("/api/events/" + SLUG + "/checkout", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify(Object.assign({ name:name, email:email, phone:phone, seats:seats, _gotcha:gotcha }, profileAnswers(els.ticketForm))),
+        body:JSON.stringify(Object.assign({ name:name, email:email, phone:phone, seats:seats, occurrenceId:selectedOccurrenceId, _gotcha:gotcha }, profileAnswers(els.ticketForm))),
       })
         .then(function (r) { return r.json().then(function (d) { return { ok:r.ok, d:d }; }); })
         .then(function (res) {
@@ -381,6 +399,7 @@
           pieceTitle: document.getElementById("pieceTitle").value.trim(),
           requestedSlot: document.getElementById("requestedSlot").value.trim(),
           notes: document.getElementById("notes").value.trim(),
+          occurrenceId: selectedOccurrenceId,
           _gotcha: els.micForm.querySelector("[name='_gotcha']").value,
         }, profileAnswers(els.micForm))),
       })

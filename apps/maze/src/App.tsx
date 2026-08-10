@@ -26,6 +26,7 @@ import {
   switchCanvasTone
 } from "./lib/canvas-mode";
 import { shapeTouchedByEraser, splitWallByEraser } from "./lib/maze";
+import { recolorMazeSelection } from "./lib/recolor-selection";
 import type { CanvasLayout, CanvasMode, CanvasReference, CanvasTone, MazeShape, MazeState, MazeTool, MazeWall, Selection, ShapeSizeScope } from "./types";
 import "./maze-submit.css";
 
@@ -227,14 +228,21 @@ function nextZIndex(state: MazeState) {
   return (zIndexes.length ? Math.max(...zIndexes) : 0) + 1;
 }
 
-function downloadFile(filename: string, contents: string, type: string) {
-  const blob = new Blob([contents], { type });
+function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => {
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }, 1000);
+}
+
+function downloadFile(filename: string, contents: string, type: string) {
+  downloadBlob(filename, new Blob([contents], { type }));
 }
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -1063,6 +1071,10 @@ export default function App() {
     else if (selected?.type === "shape") deleteMazeShape(selected.id);
   };
 
+  const recolorSelected = (color: string) => {
+    commit((current) => recolorMazeSelection(current, selected, color));
+  };
+
   const resizeShapes = (size: number) => {
     const nextSize = Math.max(MIN_SHAPE_SIZE, Math.min(MAX_SHAPE_SIZE, Math.round(size)));
     setShapeSize(nextSize);
@@ -1164,15 +1176,17 @@ export default function App() {
 
   const exportImage = () => {
     const url = captureMazeImage(stage);
-    if (!url) return;
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "art-pill-maze.png";
-    anchor.click();
+    if (!url) {
+      setSaveStatus("The PNG is not ready yet. Try again in a moment.");
+      return;
+    }
+    downloadBlob("art-pill-maze.png", dataUrlToBlob(url));
+    setSaveStatus("PNG download started.");
   };
 
   const exportJson = () => {
     downloadFile("art-pill-maze.json", JSON.stringify(state, null, 2), "application/json");
+    setSaveStatus("JSON download started.");
   };
 
   useEffect(() => {
@@ -1420,6 +1434,13 @@ export default function App() {
           <MazeTools
             tool={mazeTool}
             onToolChange={setMazeTool}
+            onInkColorChange={recolorSelected}
+            selectedInkColor={
+              selectedWall?.stroke ?? (
+                selectedShape ? (selectedShape.filled ? selectedShape.fill : selectedShape.stroke) : ""
+              )
+            }
+            selectedMarkType={selected?.type === "wall" || selected?.type === "shape" ? selected.type : null}
             canvasMode={state.canvasMode}
             canvasTone={state.canvasTone}
             referenceName={reference?.name || ""}

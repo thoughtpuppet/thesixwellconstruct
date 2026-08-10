@@ -14,10 +14,15 @@
 <link rel="stylesheet" href="/css/hero.css">
 <style>
   :root { --venture-color:var(--color-events); --venture-accent:var(--color-events); --venture-dim:var(--color-events-dim); --venture-wash:rgba(0,93,37,0.1); }
+  html,body { background:var(--color-bg); }
+  .ssf-dates { display:grid; gap:12px; }
+  .ssf-date { display:grid; gap:8px; border:5px solid var(--ring-faint); padding:18px; color:var(--text); text-decoration:none; transition:border-color var(--duration-base) var(--ease-out); }
+  .ssf-date:hover,.ssf-date:focus-visible { border-color:var(--color-events); outline:none; }
+  .ssf-date span { color:var(--text-dim); font-family:var(--font-display); font-size:9px; letter-spacing:.12em; text-transform:uppercase; }
+  .ssf-date.is-past { opacity:.55; }
 </style>
 </head>
 <body class="venture-page" data-venture="events">
-  <div class="venture-grain" aria-hidden="true"></div>
   <main class="venture-shell entrance-fade">
     <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="page-title">
       <div>
@@ -44,8 +49,25 @@
         <article class="path-card"><h3>Signal</h3><p>The page keeps the named event findable before and after an active date exists.</p></article>
       </div>
     </section>
+    <section class="section" id="dates">
+      <header class="section-head"><div><span class="section-kicker">public schedule</span><h2 class="section-title">Audience Dates</h2></div><p class="section-copy" id="ssf-stage">Loading the Studio event record.</p></header>
+      <div class="ssf-dates" id="ssf-dates" aria-live="polite"></div>
+    </section>
     <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">events</a><a href="/home/">return to construct</a></div></footer>
   </main>
+  <script>
+  (function () {
+    var root=document.getElementById("ssf-dates"), stage=document.getElementById("ssf-stage");
+    function esc(value){return String(value==null?"":value).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c];});}
+    function when(value){return new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"long",month:"long",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short"}).format(new Date(value));}
+    fetch("/api/events/ss-and-f-live-audience/context").then(function(response){return response.json().then(function(data){return {ok:response.ok,data:data};});}).then(function(result){
+      if(!result.ok||!result.data.event) throw new Error(result.data.error||"Event unavailable.");
+      var event=result.data.event, occurrences=event.occurrences||[];
+      stage.textContent=event.publicationState==="announced"?"Announced. Dates and audience registration will appear here when scheduled.":"Choose a date to view its independent availability and registration.";
+      root.innerHTML=occurrences.length?occurrences.map(function(item){var past=item.status==="completed"||new Date(item.endsAt||item.startsAt).getTime()<Date.now();return '<a class="ssf-date'+(past?' is-past':'')+'" href="/events/detail/?event=ss-and-f-live-audience&amp;occurrence='+encodeURIComponent(item.id)+'"><strong>'+esc(when(item.startsAt))+'</strong><span>'+esc((item.location||"Location to be announced")+" · "+(event.publicationState==="announced"?"announced":item.status)+(item.capacity>0?" · "+item.seatsRemaining+" seats left":""))+'</span></a>';}).join(""):'<p class="section-copy">No audience date has been added yet.</p>';
+    }).catch(function(error){stage.textContent="The audience schedule is temporarily unavailable.";root.innerHTML='<p class="section-copy">'+esc(error.message)+'</p>';});
+  })();
+  </script>
   <script src="/js/transition.js"></script>
   <script src="/js/entity-page-connections.js?v=1"></script>
 </body>

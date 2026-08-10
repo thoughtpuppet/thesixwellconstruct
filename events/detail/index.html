@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event — the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
+<link rel="stylesheet" href="/css/landing-family.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
+<style>
+  :root { --venture-color:var(--color-events); --venture-accent:var(--color-events); --venture-dim:var(--color-events-dim); }
+  html,body { background:var(--color-bg); }
+  .event-detail-grid { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr); gap:16px; }
+  .event-panel { min-width:0; border:5px solid var(--ring-faint); padding:28px; background:var(--color-bg); transition:border-color var(--duration-base) var(--ease-out); }
+  .event-panel:hover,.event-panel:focus-within { border-color:var(--color-events); }
+  .event-copy { color:var(--text-muted); line-height:1.7; white-space:pre-line; }
+  .event-dates { display:grid; gap:12px; margin-top:22px; }
+  .event-date { display:grid; gap:7px; border:5px solid var(--ring-faint); padding:16px; color:var(--text); text-decoration:none; }
+  .event-date:hover,.event-date:focus-visible,.event-date.is-selected { border-color:var(--color-events); outline:none; }
+  .event-date strong { font-size:15px; }
+  .event-date span { color:var(--text-dim); font-family:var(--font-display); font-size:9px; letter-spacing:.12em; line-height:1.5; text-transform:uppercase; }
+  .event-date.is-past { opacity:.55; }
+  .event-status { margin:0 0 18px; color:var(--color-events-bright); font-family:var(--font-display); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
+  .event-form { display:grid; gap:14px; }
+  .event-form label { display:grid; gap:7px; color:var(--text-dim); font-family:var(--font-display); font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+  .event-form input,.event-form select,.event-form textarea { width:100%; min-width:0; border:5px solid var(--ring-faint); padding:12px; background:var(--color-bg); color:var(--text); font:inherit; }
+  .event-form input:focus,.event-form select:focus,.event-form textarea:focus { border-color:var(--color-events); outline:none; }
+  .event-action { min-height:50px; border:5px solid var(--color-events); padding:0 18px; background:transparent; color:var(--text); font-family:var(--font-display); font-size:10px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
+  .event-action:not(:disabled):hover,.event-action:not(:disabled):focus-visible { background:var(--color-events); color:var(--color-bg); outline:none; }
+  .event-action:disabled { border-color:var(--color-events-dim); color:var(--text-dim); cursor:not-allowed; }
+  .event-message { color:var(--text-dim); line-height:1.55; }
+  .event-message[data-state="error"] { color:var(--color-tattoos-bright); }
+  .event-message[data-state="ok"] { color:var(--color-events-bright); }
+  .event-waitlist { margin-top:22px; padding-top:22px; border-top:5px solid var(--ring-faint); }
+  .event-honeypot { position:absolute; left:-10000px; }
+  @media (max-width:760px) { .event-detail-grid { grid-template-columns:minmax(0,1fr); gap:12px; } .event-panel { padding:22px; } }
+</style>
+</head>
+<body class="venture-page" data-venture="events" data-landing-family="events-program">
+  <main class="venture-shell entrance-fade">
+    <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="eventTitle">
+      <div><span class="venture-kicker">event record</span><h1 class="venture-title hero-title" id="eventTitle">Loading event.</h1></div>
+      <div class="hero-copy"><p class="hero-descriptor hero-lede" id="eventDescription">Loading the public event record.</p><div class="hero-actions"><a class="venture-link" href="/events/">all events</a><a class="venture-link" href="#eventDates">dates</a></div></div>
+    </section>
+
+    <section class="section event-detail-grid" aria-live="polite">
+      <article class="event-panel">
+        <span class="section-kicker">schedule</span><h2 class="section-title">Event Dates</h2>
+        <p class="event-copy" id="eventDetails"></p>
+        <div class="event-dates" id="eventDates"></div>
+      </article>
+      <aside class="event-panel" id="registrationPanel">
+        <p class="event-status" id="eventStatus">Loading</p>
+        <form class="event-form" id="registrationForm" novalidate>
+          <label>Name<input id="eventName" autocomplete="name" required></label>
+          <label>Email<input id="eventEmail" type="email" autocomplete="email" required></label>
+          <label>Phone<input id="eventPhone" type="tel" autocomplete="tel" required></label>
+          <label>Seats<select id="eventSeats"></select></label>
+          <label class="event-honeypot" aria-hidden="true">Leave blank<input id="eventGotcha" tabindex="-1" autocomplete="off"></label>
+          <button class="event-action" id="registrationButton" type="submit" disabled>Loading</button>
+          <p class="event-message" id="registrationMessage"></p>
+        </form>
+        <div class="event-waitlist" id="waitlistPanel" hidden>
+          <p class="event-copy">Ask for an update if a seat opens for this date.</p>
+          <button class="event-action" id="waitlistButton" type="button">Join waitlist</button>
+        </div>
+      </aside>
+    </section>
+    <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">events</a><a href="/home/">return to construct</a></div></footer>
+  </main>
+<script>
+(function () {
+  var parts = location.pathname.split("/").filter(Boolean);
+  var params = new URLSearchParams(location.search);
+  var slug = params.get("event") || parts[1] || "";
+  var occurrenceId = params.get("occurrence") || "";
+  var eventData = null;
+  var selected = null;
+  var title = document.getElementById("eventTitle");
+  var description = document.getElementById("eventDescription");
+  var details = document.getElementById("eventDetails");
+  var dates = document.getElementById("eventDates");
+  var status = document.getElementById("eventStatus");
+  var form = document.getElementById("registrationForm");
+  var button = document.getElementById("registrationButton");
+  var message = document.getElementById("registrationMessage");
+  var seats = document.getElementById("eventSeats");
+  var waitlistPanel = document.getElementById("waitlistPanel");
+  var waitlistButton = document.getElementById("waitlistButton");
+  function esc(value) { return String(value == null ? "" : value).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c];}); }
+  function when(value) { if (!value) return "Date to be announced"; return new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"long",month:"long",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short"}).format(new Date(value)); }
+  function href(occurrence) { return params.get("event") ? "/events/detail/?event=" + encodeURIComponent(slug) + "&occurrence=" + encodeURIComponent(occurrence.id) : "/events/" + encodeURIComponent(slug) + "/?occurrence=" + encodeURIComponent(occurrence.id); }
+  function setMessage(text,state) { message.textContent=text || ""; message.dataset.state=state || ""; }
+  function render(data) {
+    eventData = data.event;
+    selected = data.occurrence || eventData.occurrences.find(function(item){return item.id === occurrenceId;}) || (eventData.occurrences.length === 1 ? eventData.occurrences[0] : null);
+    title.textContent = eventData.title;
+    document.title = eventData.title + " — the six.well construct";
+    description.textContent = eventData.description || "A public event attached to the construct.";
+    details.textContent = eventData.details || eventData.included || "Choose a date to view registration availability.";
+    dates.innerHTML = eventData.occurrences.length ? eventData.occurrences.map(function(item){
+      var past = item.status === "completed" || new Date(item.endsAt || item.startsAt).getTime() < Date.now();
+      return '<a class="event-date' + (selected && selected.id === item.id ? ' is-selected' : '') + (past ? ' is-past' : '') + '" href="' + href(item) + '"><strong>' + esc(when(item.startsAt)) + '</strong><span>' + esc((item.location || eventData.location || "Location to be announced") + " · " + item.status + (item.capacity > 0 ? " · " + item.seatsRemaining + " seats left" : "")) + '</span></a>';
+    }).join("") : '<p class="event-message">The date has not been announced yet.</p>';
+    waitlistPanel.hidden = true;
+    if (!selected) {
+      status.textContent = eventData.publicationState === "announced" ? "Announced" : "Choose a date";
+      button.textContent = eventData.publicationState === "announced" ? "Announced" : "Choose a date";
+      button.disabled = true;
+      return;
+    }
+    if (eventData.publicationState === "announced") {
+      status.textContent = "Announced · " + when(selected.startsAt);
+      button.textContent = "Announced"; button.disabled = true;
+      setMessage("Registration has not opened for this announced event."); return;
+    }
+    var past = selected.status === "completed" || new Date(selected.endsAt || selected.startsAt).getTime() < Date.now();
+    var available = selected.status === "open" && !selected.soldOut && !past;
+    status.textContent = when(selected.startsAt) + " · " + (selected.location || eventData.location || "Location to be announced");
+    button.disabled = !available;
+    button.textContent = past ? "Event completed" : selected.status === "cancelled" ? "Cancelled" : selected.soldOut ? "Sold out" : selected.status !== "open" ? "Booking closed" : eventData.free ? "RSVP" : "Reserve a seat";
+    seats.innerHTML = "";
+    var max = selected.capacity > 0 ? Math.min(selected.maxSeatsPerOrder || 1, selected.seatsRemaining || 0) : (selected.maxSeatsPerOrder || 1);
+    for (var i=1;i<=max;i+=1) seats.insertAdjacentHTML("beforeend",'<option value="'+i+'">'+i+(i===1?' seat':' seats')+'</option>');
+    waitlistPanel.hidden = available || past || selected.status === "cancelled" || eventData.waitlistEnabled === false;
+  }
+  fetch("/api/events/" + encodeURIComponent(slug) + "/context" + (occurrenceId ? "?occurrence=" + encodeURIComponent(occurrenceId) : ""))
+    .then(function(response){return response.json().then(function(data){return {ok:response.ok,data:data};});})
+    .then(function(result){if(!result.ok || !result.data.event) throw new Error(result.data.error || "Event unavailable."); render(result.data);})
+    .catch(function(error){title.textContent="Event unavailable."; description.textContent="Return to the events board for current public listings."; status.textContent="Unavailable"; button.textContent="Unavailable"; setMessage(error.message,"error");});
+  form.addEventListener("submit",function(event){
+    event.preventDefault(); if (!eventData || !selected) return;
+    var body={name:document.getElementById("eventName").value.trim(),email:document.getElementById("eventEmail").value.trim(),phone:document.getElementById("eventPhone").value.trim(),seats:Number(seats.value)||1,occurrenceId:selected.id,_gotcha:document.getElementById("eventGotcha").value};
+    if(!body.name || !body.phone || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) return setMessage("Enter your name, valid email, and phone number.","error");
+    button.disabled=true; button.textContent=eventData.free?"Registering":"Opening checkout";
+    fetch("/api/events/"+encodeURIComponent(slug)+"/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+      .then(function(response){return response.json().then(function(data){return {ok:response.ok,data:data};});})
+      .then(function(result){if(!result.ok) throw new Error(result.data.error||"Unable to register."); if(result.data.checkoutUrl) location.href=result.data.checkoutUrl; else location.href="/events/confirmed/?ticket="+encodeURIComponent(result.data.ticketId)+"&event="+encodeURIComponent(slug);})
+      .catch(function(error){setMessage(error.message,"error"); button.disabled=false; button.textContent=eventData.free?"RSVP":"Reserve a seat";});
+  });
+  waitlistButton.addEventListener("click",function(){
+    if(!selected) return; var body={name:document.getElementById("eventName").value.trim(),email:document.getElementById("eventEmail").value.trim(),phone:document.getElementById("eventPhone").value.trim(),seats:Number(seats.value)||1,occurrenceId:selected.id};
+    if(!body.name || !body.phone || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) return setMessage("Enter your contact information above before joining the waitlist.","error");
+    waitlistButton.disabled=true;
+    fetch("/api/events/"+encodeURIComponent(slug)+"/waitlist",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+      .then(function(response){return response.json().then(function(data){return {ok:response.ok,data:data};});})
+      .then(function(result){if(!result.ok) throw new Error(result.data.error||"Unable to join the waitlist."); setMessage("You are on the waitlist for this date.","ok"); waitlistButton.textContent="Waitlist joined";})
+      .catch(function(error){setMessage(error.message,"error"); waitlistButton.disabled=false;});
+  });
+})();
+</script>
+<script src="/js/transition.js"></script>
+<script src="/js/construct-corner.js"></script>
+<script src="/js/construct-nav.js"></script>
+</body>
+</html>

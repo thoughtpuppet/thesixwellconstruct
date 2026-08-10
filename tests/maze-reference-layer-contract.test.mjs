@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { recolorMazeSelection } from "../apps/maze/src/lib/recolor-selection.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (file) => readFileSync(join(ROOT, file), "utf8");
@@ -13,6 +14,7 @@ const referenceImage = read("apps/maze/src/components/ReferenceImage.tsx");
 const inspector = read("apps/maze/src/components/Inspector.tsx");
 const styles = read("apps/maze/src/styles.css");
 const tools = read("apps/maze/src/components/MazeTools.tsx");
+const recolorSelection = read("apps/maze/src/lib/recolor-selection.ts");
 const types = read("apps/maze/src/types.ts");
 const submissionsApi = read("functions/api/submissions/_lib.js");
 const briefTemplates = read("functions/api/brief-documents/_templates.js");
@@ -53,6 +55,48 @@ test("Maze control groups have visible titles connected to their controls", () =
   assert.match(inspector, />Selected mark actions<\/h3>/);
   assert.match(inspector, /className="action-grid"[\s\S]*aria-labelledby="project-actions-title"[\s\S]*id="project-actions-title">Project actions<\/h3>/);
   assert.match(styles, /\.control-group-title\s*\{[\s\S]*text-transform:\s*uppercase/);
+});
+
+test("Drawing color swatches recolor the selected Maze mark in one state commit", () => {
+  assert.match(tools, /selectedInkColor \|\| \([\s\S]*?shapeTool\?\.fill/);
+  assert.match(tools, /onInkColorChange\(color\)/);
+  assert.match(app, /commit\(\(current\) => recolorMazeSelection\(current, selected, color\)\)/);
+  assert.match(app, /selectedShape\.filled \? selectedShape\.fill : selectedShape\.stroke/);
+  assert.match(recolorSelection, /selection\?\.type === "wall"[\s\S]*?\{ \.\.\.wall, stroke: color \}/);
+  assert.match(recolorSelection, /selection\?\.type === "shape"[\s\S]*?\{ \.\.\.shape, stroke: color, fill: color \}/);
+
+  const state = {
+    canvasLayout: "wide",
+    canvasMode: "standard",
+    canvasTone: "golden-brown",
+    mazeWalls: [
+      { instanceId: "wall-a", kind: "straight", points: [0, 0, 20, 0], stroke: "#151413", strokeWidth: 12, zIndex: 1 },
+      { instanceId: "wall-b", kind: "straight", points: [0, 20, 20, 20], stroke: "#1f7c8c", strokeWidth: 18, zIndex: 2 }
+    ],
+    mazeShapes: [
+      { instanceId: "shape-a", kind: "circle", x: 40, y: 40, rotation: 15, scale: 1.25, size: 54, stroke: "#151413", fill: "#151413", filled: false, zIndex: 3 }
+    ]
+  };
+
+  const wallResult = recolorMazeSelection(state, { type: "wall", id: "wall-a" }, "#b51f29");
+  assert.equal(wallResult.mazeWalls[0].stroke, "#b51f29");
+  assert.equal(wallResult.mazeWalls[0].strokeWidth, 12);
+  assert.equal(wallResult.mazeWalls[1], state.mazeWalls[1]);
+
+  const shapeResult = recolorMazeSelection(state, { type: "shape", id: "shape-a" }, "#d9a21b");
+  assert.equal(shapeResult.mazeShapes[0].stroke, "#d9a21b");
+  assert.equal(shapeResult.mazeShapes[0].fill, "#d9a21b");
+  assert.equal(shapeResult.mazeShapes[0].filled, false);
+  assert.equal(shapeResult.mazeShapes[0].rotation, 15);
+  assert.equal(recolorMazeSelection(shapeResult, { type: "shape", id: "shape-a" }, "#d9a21b"), shapeResult);
+});
+
+test("Maze downloads use attached Blob links and delay URL cleanup", () => {
+  assert.match(app, /function downloadBlob\(filename: string, blob: Blob\)/);
+  assert.match(app, /document\.body\.appendChild\(anchor\)[\s\S]*?anchor\.click\(\)[\s\S]*?window\.setTimeout\(\(\) => \{[\s\S]*?anchor\.remove\(\)[\s\S]*?URL\.revokeObjectURL\(url\)[\s\S]*?\}, 1000\)/);
+  assert.match(app, /downloadBlob\("art-pill-maze\.png", dataUrlToBlob\(url\)\)/);
+  assert.match(app, /setSaveStatus\("PNG download started\."\)/);
+  assert.match(app, /setSaveStatus\("JSON download started\."\)/);
 });
 
 test("reference image is non-interactive and rendered beneath Maze marks", () => {

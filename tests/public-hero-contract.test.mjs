@@ -64,6 +64,7 @@ const routes = [
 
   { route: "/events/calendar/", file: "events/calendar/index.html", variant: "supporting", descriptor: true },
   { route: "/events/confirmed/", file: "events/confirmed/index.html", variant: "supporting", descriptor: true },
+  { route: "/events/:slug/", file: "events/detail/index.html", variant: "supporting", descriptor: true, dynamic: true },
   { route: "/events/cultandshift/", file: "events/cultandshift/index.html", variant: "supporting" },
   { route: "/events/open-studios/", file: "events/open-studios/index.html", variant: "supporting", descriptor: true },
   { route: "/events/signal-symbol/", file: "events/signal-symbol/index.html", variant: "supporting", descriptor: true },

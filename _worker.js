@@ -1664,7 +1664,9 @@ export default {
     }
 
     if (isEventDetailPagePath(url.pathname)) {
-      return servePublicAsset(request, env, eventDetailAssetPath(url.pathname));
+      const bespokeEventPage = await servePublicAsset(request, env, eventDetailAssetPath(url.pathname));
+      if (bespokeEventPage.status !== 404) return bespokeEventPage;
+      return servePublicAsset(request, env, "/events/detail/index.html");
     }
 
     if (appearanceDetailSlug(url.pathname)) {

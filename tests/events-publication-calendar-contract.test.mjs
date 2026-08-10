@@ -78,8 +78,23 @@ test("0119 and 0120 separate publication from operations and retire legacy visib
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_connections_events_%'").get().count, 0);
 });
 
+test("0121 backfills dated events and gives SS&F a Studio-managed announced record", () => {
+  const database = databaseThrough("0121_event_occurrences.sql");
+  const signal = database.prepare("SELECT e.id,e.starts_at,o.id AS occurrence_id,o.starts_at AS occurrence_start FROM events e JOIN event_occurrences o ON o.event_id=e.id WHERE e.slug='signal-symbol'").get();
+  assert.equal(signal.occurrence_id, `occ_${signal.id}`);
+  assert.equal(signal.occurrence_start, signal.starts_at);
+  assert.deepEqual(
+    { ...database.prepare("SELECT publication_state,status,is_recurring,starts_at FROM events WHERE slug='ss-and-f-live-audience'").get() },
+    { publication_state:"announced", status:"closed", is_recurring:0, starts_at:null },
+  );
+  assert.deepEqual(
+    { ...database.prepare("SELECT visibility,search_visibility FROM content_entities WHERE id='evt_ss_and_f_live_audience'").get() },
+    { visibility:"public", search_visibility:1 },
+  );
+});
+
 test("public APIs expose Announced details but block every public action", async () => {
-  const database = databaseThrough("0120_event_publication_triggers.sql");
+  const database = databaseThrough("0121_event_occurrences.sql");
   database.prepare("UPDATE events SET publication_state='announced',status='open' WHERE slug='signal-symbol'").run();
   const env = runtime(database);
 
@@ -102,7 +117,7 @@ test("public APIs expose Announced details but block every public action", async
 });
 
 test("admin event creation defaults to Draft and Closed", async () => {
-  const database = databaseThrough("0120_event_publication_triggers.sql");
+  const database = databaseThrough("0121_event_occurrences.sql");
   const response = await handleAdminEventCreate(request("/api/admin/events", {
     method:"POST",
     admin:true,
@@ -129,6 +144,55 @@ test("admin event creation defaults to Draft and Closed", async () => {
   );
 });
 
+test("recurring event dates keep independent operations, capacity, and reservations", async () => {
+  const database = databaseThrough("0121_event_occurrences.sql");
+  const env = runtime(database);
+  const createResponse = await handleAdminEventCreate(request("/api/admin/events", {
+    method:"POST",
+    admin:true,
+    body:{
+      title:"Recurring Studio Night",
+      publicationState:"published",
+      priceCents:0,
+      isRecurring:true,
+      occurrences:[
+        { startsAt:"2030-09-07T23:00:00.000Z", endsAt:"2030-09-08T01:00:00.000Z", location:"Room One", capacity:2, maxSeatsPerOrder:2, status:"open" },
+        { startsAt:"2030-09-14T23:00:00.000Z", endsAt:"2030-09-15T01:00:00.000Z", location:"Room Two", capacity:1, maxSeatsPerOrder:1, status:"open" },
+      ],
+    },
+  }), env);
+  assert.equal(createResponse.status, 201, await createResponse.clone().text());
+  const created = (await createResponse.json()).event;
+  assert.equal(created.isRecurring, true);
+  assert.equal(created.occurrences.length, 2);
+  assert.deepEqual(created.occurrences.map((item) => item.capacity), [2, 1]);
+
+  const list = await (await handleEventsList(request("/api/events"), env)).json();
+  const recurring = list.events.find((event) => event.slug === "recurring-studio-night");
+  assert.equal(recurring.occurrenceCount, 2);
+  assert.deepEqual(recurring.occurrences.map((item) => item.location), ["Room One", "Room Two"]);
+
+  const contact = { name:"Recurring Guest", email:"recurring@example.test", phone:"404-555-0110" };
+  const missingDate = await handleEventCheckout(request("/api/events/recurring-studio-night/checkout", { method:"POST", body:{ ...contact, seats:1 } }), env, recurring.slug);
+  assert.equal(missingDate.status, 400);
+  assert.equal((await missingDate.json()).occurrenceRequired, true);
+
+  const firstDate = recurring.occurrences[0];
+  const secondDate = recurring.occurrences[1];
+  const selectedContext = await (await handleEventContext(request(`/api/events/recurring-studio-night/context?occurrence=${firstDate.id}`), env, recurring.slug)).json();
+  assert.equal(selectedContext.occurrence.id, firstDate.id);
+  assert.equal(selectedContext.occurrence.capacity, 2);
+  assert.equal((await handleEventCheckout(request("/api/events/recurring-studio-night/checkout", { method:"POST", body:{ ...contact, seats:2, occurrenceId:firstDate.id } }), env, recurring.slug)).status, 200);
+  assert.equal((await handleEventCheckout(request("/api/events/recurring-studio-night/checkout", { method:"POST", body:{ ...contact, seats:1, occurrenceId:firstDate.id } }), env, recurring.slug)).status, 409);
+  assert.equal((await handleEventCheckout(request("/api/events/recurring-studio-night/checkout", { method:"POST", body:{ ...contact, seats:1, occurrenceId:secondDate.id } }), env, recurring.slug)).status, 200);
+
+  const reservations = database.prepare("SELECT occurrence_id,seats,status FROM event_tickets WHERE event_id=? ORDER BY created_at").all(created.id);
+  assert.deepEqual(reservations.map((row) => ({ occurrence_id:row.occurrence_id, seats:row.seats, status:row.status })), [
+    { occurrence_id:firstDate.id, seats:2, status:"paid" },
+    { occurrence_id:secondDate.id, seats:1, status:"paid" },
+  ]);
+});
+
 test("Events board contracts retain the shared shell, 5px cards, calendar, and state actions", () => {
   const page = readFileSync(join(ROOT, "events", "index.html"), "utf8");
   const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
@@ -140,10 +204,16 @@ test("Events board contracts retain the shared shell, 5px cards, calendar, and s
   assert.match(page, /has-multiple[\s\S]*event-day-agenda/);
   assert.match(studio, /Public stage[\s\S]*Event operations/);
   assert.match(studio, /\["draft", "announced", "published"\]/);
+  assert.match(studio, /Recurring event[\s\S]*Event dates[\s\S]*Add date/);
+  assert.match(page, /function eventHref\(ev, occurrence\)[\s\S]*occurrence\.id/);
+  assert.match(page, /occurrencesForEvent\(ev\)\.forEach/);
+  assert.match(readFileSync(join(ROOT, "events", "detail", "index.html"), "utf8"), /occurrenceId:selected\.id/);
+  assert.match(readFileSync(join(ROOT, "_worker.js"), "utf8"), /bespokeEventPage\.status !== 404[\s\S]*events\/detail\/index\.html/);
 });
 
 test("SS&F bespoke event page activates the shared entrance transition", () => {
   const page = readFileSync(join(ROOT, "events", "ss-and-f-live-audience", "index.html"), "utf8");
   assert.match(page, /class="venture-shell entrance-fade"/);
   assert.match(page, /<script src="\/js\/transition\.js"><\/script>/);
+  assert.match(page, /api\/events\/ss-and-f-live-audience\/context/);
 });

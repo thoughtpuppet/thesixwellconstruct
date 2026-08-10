@@ -339,6 +339,7 @@
             <h2>Event Details</h2>
             <div class="detail-panel">
               <div class="detail-row"><span class="detail-key">Date</span><span id="ev-date">TBA</span></div>
+              <div class="detail-row" id="ev-date-choice-row" hidden><label class="detail-key" for="ev-date-choice">Choose date</label><select id="ev-date-choice"></select></div>
               <div class="detail-row"><span class="detail-key">Time</span><span id="ev-time">TBA</span></div>
               <div class="detail-row"><span class="detail-key">Location</span><span id="ev-where">Atlanta, GA</span></div>
               <div class="detail-row"><span class="detail-key">Duration</span><span id="ev-duration">Approximately 90-120 minutes</span></div>
@@ -468,9 +469,11 @@
       };
     }
     var previewMode = params.get("preview") === "1";
-    var priceCents = 0, currency = "USD", isFree = false;
+    var priceCents = 0, currency = "USD", isFree = false, selectedOccurrenceId = "";
     var els = {
       date: document.getElementById("ev-date"),
+      dateChoiceRow: document.getElementById("ev-date-choice-row"),
+      dateChoice: document.getElementById("ev-date-choice"),
       time: document.getElementById("ev-time"),
       where: document.getElementById("ev-where"),
       price: document.getElementById("ev-price"),
@@ -526,7 +529,15 @@
       els.ticketState.textContent = message;
     }
 
-    function applyContext(ev) {
+    function applyContext(ev, occurrence) {
+      var occurrences = Array.isArray(ev.occurrences) ? ev.occurrences : [];
+      var activeOccurrence = occurrence || (occurrences.length === 1 ? occurrences[0] : null) || occurrences[0] || null;
+      selectedOccurrenceId = activeOccurrence ? activeOccurrence.id : "";
+      if (activeOccurrence) ev = Object.assign({}, ev, activeOccurrence, { publicationState:ev.publicationState, free:ev.free, waitlistEnabled:ev.waitlistEnabled });
+      if (occurrences.length > 1) {
+        els.dateChoiceRow.hidden = false;
+        els.dateChoice.innerHTML = occurrences.map(function (item) { return '<option value="' + item.id + '"' + (item.id === selectedOccurrenceId ? ' selected' : '') + '>' + eventDate(item.startsAt) + ' · ' + eventTime(item.startsAt) + '</option>'; }).join("");
+      }
       priceCents = ev.priceCents; currency = ev.currency;
       isFree = ev.free || (Number(ev.priceCents) || 0) <= 0;
       document.title = "Signal & Symbol | Six.Well Construct";
@@ -622,14 +633,21 @@
       if (state === "error") failContext("This session could not be loaded.");
       else applyContext(previewContext(state));
     } else {
-      fetch(API_CONTEXT_PATH)
+      fetch(API_CONTEXT_PATH + (params.get("occurrence") ? "?occurrence=" + encodeURIComponent(params.get("occurrence")) : ""))
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
         .then(function (res) {
           if (!res.ok || !res.d.event) throw new Error(res.d.error || "Event unavailable.");
-          applyContext(res.d.event);
+          applyContext(res.d.event, res.d.occurrence);
         })
         .catch(function (e) { failContext(e.message); });
     }
+
+    els.dateChoice.addEventListener("change", function () {
+      var next = new URL(window.location.href);
+      next.searchParams.set("occurrence", els.dateChoice.value);
+      next.searchParams.delete("preview");
+      window.location.href = next.toString();
+    });
 
     els.form.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -653,7 +671,7 @@
       fetch(API_CHECKOUT_PATH, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.assign({ name: name, email: email, phone: phone, seats: seats, _gotcha: gotcha }, profileAnswers(els.form))),
+        body: JSON.stringify(Object.assign({ name: name, email: email, phone: phone, seats: seats, occurrenceId:selectedOccurrenceId, _gotcha: gotcha }, profileAnswers(els.form))),
       })
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
         .then(function (res) {
@@ -696,7 +714,7 @@
       fetch(API_WAITLIST_PATH, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.assign({ name: name, email: email, phone: phone, seats: seats, note: note, _gotcha: gotcha }, profileAnswers(els.waitlistForm))),
+        body: JSON.stringify(Object.assign({ name: name, email: email, phone: phone, seats: seats, note: note, occurrenceId:selectedOccurrenceId, _gotcha: gotcha }, profileAnswers(els.waitlistForm))),
       })
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
         .then(function (res) {
