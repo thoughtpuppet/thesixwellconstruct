@@ -136,7 +136,9 @@ import {
   reapExpiredTattooBuildDrafts,
 } from "./functions/api/build-drafts/_lib.js";
 import {
+  analyticsExcluded,
   handleAdminAnalytics,
+  handleAdminAnalyticsExclusion,
   handleAnalyticsEvents,
   rollupSiteAnalytics,
 } from "./functions/api/analytics/_lib.js";
@@ -247,11 +249,12 @@ function assetPathForRequest(pathname) {
   return pathname;
 }
 
-function shouldInjectSiteAnalytics(request, response) {
+export function shouldInjectSiteAnalytics(request, response) {
   const url = new URL(request.url);
   const pathname = url.pathname.toLowerCase();
   const contentType = response.headers.get("content-type") || "";
   if (request.method !== "GET" || response.status !== 200 || !contentType.includes("text/html")) return false;
+  if (analyticsExcluded(request)) return false;
   if (isLocalPreview(url) || url.searchParams.has("preview")) return false;
   if (
     pathname.startsWith("/api/") || pathname.startsWith("/studio/") || pathname.startsWith("/tools/") ||
@@ -261,12 +264,25 @@ function shouldInjectSiteAnalytics(request, response) {
   return !(response.headers.get("x-robots-tag") || "").toLowerCase().includes("noindex");
 }
 
+export function browserAnalyticsMarkup(env, pathname) {
+  const scripts = ['<script src="/js/site-analytics.js?v=2" defer></script>'];
+  const rumToken = String(env.CLOUDFLARE_WEB_ANALYTICS_SITE_TAG || "").trim();
+  if (/^[A-Za-z0-9_-]{8,200}$/.test(rumToken)) {
+    const config = escapeHtml(JSON.stringify({ token: rumToken }));
+    scripts.push(`<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon="${config}"></script>`);
+  }
+  if (normalizePath(pathname) === "/tattoos/specials") {
+    scripts.push('<script src="/js/tattoo-specials-meta.js?v=1" defer></script>');
+  }
+  return scripts.join("");
+}
+
 async function servePublicAsset(request, env, pathname) {
   const response = await env.ASSETS.fetch(assetRequest(request, pathname));
   if (!shouldInjectSiteAnalytics(request, response) || typeof HTMLRewriter === "undefined") return response;
   return new HTMLRewriter().on("body", {
     element(element) {
-      element.append('<script src="/js/site-analytics.js?v=1" defer></script>', { html: true });
+      element.append(browserAnalyticsMarkup(env, new URL(request.url).pathname), { html: true });
     },
   }).transform(response);
 }
@@ -1337,6 +1353,10 @@ export default {
 
     if (url.pathname === "/api/admin/analytics") {
       return handleAdminAnalytics(request, env);
+    }
+
+    if (url.pathname === "/api/admin/analytics/exclusion") {
+      return handleAdminAnalyticsExclusion(request, env);
     }
 
     if (url.pathname === "/api/admin/merch-workflow" || url.pathname.startsWith("/api/admin/merch-workflow/")) {

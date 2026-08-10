@@ -7,13 +7,17 @@ import { runInNewContext } from "node:vm";
 
 import {
   ANALYTICS_EVENT_NAMES,
+  aggregateTattooSpecialInterest,
+  analyticsExcluded,
   analyticsContentGroup,
   handleAdminAnalytics,
+  handleAdminAnalyticsExclusion,
   handleAnalyticsEvents,
   normalizeAnalyticsPath,
   rollupSiteAnalytics,
   sanitizeAnalyticsEvent,
 } from "../functions/api/analytics/_lib.js";
+import { browserAnalyticsMarkup, shouldInjectSiteAnalytics } from "../_worker.js";
 
 const ROOT = process.cwd();
 
@@ -72,6 +76,153 @@ test("event endpoint caps batch count and rejects unknown payload fields", async
   const events = Array.from({ length: 33 }, () => ({ name: "page_view", path: "/" }));
   assert.equal((await handleAnalyticsEvents(request({ sessionId: "tab_session_123456", events }), env)).status, 400);
   assert.equal((await handleAnalyticsEvents(request({ sessionId: "tab_session_123456", events: events.slice(0, 1), visitorId: "nope" }), env)).status, 400);
+});
+
+test("analytics exclusion is authenticated, secure, reversible, and suppresses ingestion", async () => {
+  const env = { SUBMISSIONS_ADMIN_TOKEN: "secret", SITE_ANALYTICS: { writeDataPoint() { throw new Error("excluded write"); } } };
+  const unauthorized = await handleAdminAnalyticsExclusion(new Request("https://example.com/api/admin/analytics/exclusion"), env);
+  assert.equal(unauthorized.status, 401);
+
+  const enabled = await handleAdminAnalyticsExclusion(new Request("https://example.com/api/admin/analytics/exclusion", {
+    method: "PUT", headers: { authorization: "Bearer secret", "content-type": "application/json" }, body: JSON.stringify({ excluded: true }),
+  }), env);
+  assert.equal(enabled.status, 200);
+  assert.match(enabled.headers.get("set-cookie"), /swc_analytics_excluded=1; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=31536000/);
+  const cookie = "swc_analytics_excluded=1";
+  assert.equal(analyticsExcluded(new Request("https://example.com/", { headers: { cookie } })), true);
+
+  const status = await handleAdminAnalyticsExclusion(new Request("https://example.com/api/admin/analytics/exclusion", {
+    headers: { authorization: "Bearer secret", cookie },
+  }), env);
+  assert.deepEqual(await status.json(), { excluded: true });
+
+  const suppressed = await handleAnalyticsEvents(new Request("https://example.com/api/analytics/events", {
+    method: "POST", headers: { origin: "https://example.com", cookie, "content-type": "application/json" }, body: "{}",
+  }), env);
+  assert.equal(suppressed.status, 204);
+
+  const cleared = await handleAdminAnalyticsExclusion(new Request("https://example.com/api/admin/analytics/exclusion", {
+    method: "PUT", headers: { authorization: "Bearer secret", cookie, "content-type": "application/json" }, body: JSON.stringify({ excluded: false }),
+  }), env);
+  assert.match(cleared.headers.get("set-cookie"), /swc_analytics_excluded=;[\s\S]*Max-Age=0;[\s\S]*Expires=Thu, 01 Jan 1970/);
+});
+
+test("Tattoo Specials aggregation counts tab sessions, repeat clicks, deepest stages, and comparison paths without returning IDs", () => {
+  const row = (session_id, action_name, campaign_id = "camp-one", offer_id = "", event_count = 1, first_sequence = 1) => ({ session_id, action_name, campaign_id, offer_id, event_count, first_sequence });
+  const rows = [
+    row("tab_session_000001", "campaign_opened"), row("tab_session_000001", "offer_viewed", "camp-one", "offer-a", 1, 2),
+    row("tab_session_000001", "offer_selected", "camp-one", "offer-a", 2, 3), row("tab_session_000001", "form_started", "camp-one", "offer-a", 1, 4),
+    row("tab_session_000001", "purchaser_completed", "camp-one", "offer-a", 1, 5), row("tab_session_000001", "project_started", "camp-one", "offer-a", 1, 6),
+    row("tab_session_000001", "project_completed", "camp-one", "offer-a", 1, 7), row("tab_session_000001", "reference_added", "camp-one", "offer-a", 1, 8),
+    row("tab_session_000001", "submit_attempted", "camp-one", "offer-a", 1, 9), row("tab_session_000001", "request_accepted", "camp-one", "offer-a", 1, 10),
+    row("tab_session_000002", "campaign_opened"), row("tab_session_000002", "offer_viewed", "camp-one", "offer-a", 1, 2),
+    row("tab_session_000002", "offer_selected", "camp-one", "offer-a", 1, 3), row("tab_session_000002", "offer_selected", "camp-one", "offer-b", 1, 4),
+    row("tab_session_000002", "form_started", "camp-one", "offer-b", 1, 5), row("tab_session_000003", "campaign_opened"),
+  ];
+  const aggregate = aggregateTattooSpecialInterest(rows, { sessions: 3, page_views: 4, avg_active_seconds: 21.5, avg_scroll: 72, recorded_exits: 3 }, {
+    campaigns: [{ id: "camp-one", title: "August Specials", isPublic: true }],
+    offers: [{ id: "offer-a", campaignId: "camp-one", title: "Special A" }, { id: "offer-b", campaignId: "camp-one", title: "Special B" }],
+  });
+  assert.equal(aggregate.campaignVisitors, 3);
+  assert.equal(aggregate.interestedSessions, 2);
+  assert.equal(aggregate.formStarts, 2);
+  assert.equal(aggregate.acceptedRequests, 1);
+  assert.equal(aggregate.comparedSessions, 1);
+  assert.equal(aggregate.referenceAddedSessions, 1);
+  assert.equal(aggregate.offers.find((item) => item.id === "offer-a").selectionClicks, 3);
+  assert.equal(aggregate.offers.find((item) => item.id === "offer-a").selectingSessions, 2);
+  assert.equal(aggregate.offers.find((item) => item.id === "offer-b").formStarts, 1);
+  assert.deepEqual(aggregate.paths.map((item) => [item.label, item.sessions]), [["Special A → Special B", 1]]);
+  assert.equal(aggregate.deepest.find((item) => item.action === "request_accepted").sessions, 1);
+  assert.equal(aggregate.deepest.find((item) => item.action === "form_started").sessions, 1);
+  assert.equal(JSON.stringify(aggregate).includes("tab_session_"), false);
+});
+
+test("Tattoo Specials admin view applies rolling range, device, and internal campaign filters", async () => {
+  const originalFetch = globalThis.fetch;
+  const queries = [];
+  globalThis.fetch = async (_url, options = {}) => {
+    const sql = String(options.body || "");
+    queries.push(sql);
+    const data = sql.includes("GROUP BY session_id")
+      ? [{ session_id: "tab_session_123456", action_name: "campaign_opened", campaign_id: "camp-one", offer_id: "", first_sequence: 1, event_count: 1 }]
+      : sql.includes("page_views") ? [{ sessions: 1, page_views: 1 }]
+        : sql.includes("avg_active_seconds") ? [{ avg_active_seconds: 12, avg_scroll: 50, recorded_exits: 1 }] : [];
+    return new Response(JSON.stringify({ data }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const database = {
+    prepare(sql) {
+      return { bind() { return this; }, async all() {
+        if (sql.includes("FROM tattoo_special_campaigns")) return { results: [{ id: "camp-one", title: "Campaign One", slug: "campaign-one", is_public: 1, archived_at: null }] };
+        if (sql.includes("FROM tattoo_special_offers")) return { results: [{ id: "offer-a", campaign_id: "camp-one", title: "Offer A", slug: "offer-a", archived_at: null }] };
+        return { results: [] };
+      } };
+    },
+  };
+  try {
+    const response = await handleAdminAnalytics(new Request("https://example.com/api/admin/analytics?view=tattoo-specials&range=36h&device=mobile&campaign=camp-one", {
+      headers: { authorization: "Bearer secret" },
+    }), { SUBMISSIONS_ADMIN_TOKEN: "secret", SUBMISSIONS_DB: database, CLOUDFLARE_ACCOUNT_ID: "account", CLOUDFLARE_ANALYTICS_API_TOKEN: "token" });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.range, "36h");
+    assert.deepEqual(payload.filters, { device: "mobile", group: "", campaign: "camp-one" });
+    assert.equal(payload.custom.campaignVisitors, 1);
+    assert.equal(JSON.stringify(payload).includes("tab_session_123456"), false);
+    assert.ok(queries.every((sql) => sql.includes("blob14 = 'mobile'")));
+    assert.ok(queries.find((sql) => sql.includes("GROUP BY session_id")).includes("blob7 = 'camp-one'"));
+    const rangeQuery = queries[0];
+    const timestamps = [...rangeQuery.matchAll(/toDateTime\('([^']+)'\)/g)].map((match) => new Date(match[1] + "Z"));
+    assert.equal((timestamps[1] - timestamps[0]) / (60 * 60 * 1000), 36);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("Tattoo Specials stale daily rollups preserve the internal campaign filter", async () => {
+  const metric = (metricName, campaign, value, secondary = "") => ({ day: "2026-08-09", source: "custom", metric: metricName, dimension_a: campaign, dimension_b: secondary, value, sample_count: value, updated_at: "2026-08-10T01:00:00Z" });
+  const rows = [
+    metric("campaign_visitors", "camp-one", 4), metric("campaign_interested", "camp-one", 2), metric("campaign_form_starts", "camp-one", 1),
+    metric("campaign_visitors", "camp-two", 9), metric("campaign_interested", "camp-two", 7),
+    metric("campaign_stage_sessions", "camp-one", 4, "campaign_opened"), metric("campaign_stage_sessions", "camp-one", 2, "offer_selected"),
+    metric("campaign_deepest_sessions", "camp-one", 2, "campaign_opened"), metric("campaign_deepest_sessions", "camp-one", 2, "offer_selected"),
+    metric("offer_views", "camp-one", 3, "offer-a"), metric("offer_selecting_sessions", "camp-one", 2, "offer-a"),
+    metric("offer_views", "camp-two", 8, "offer-b"), metric("offer_selecting_sessions", "camp-two", 7, "offer-b"),
+  ];
+  const database = {
+    prepare(sql) { return { bind() { return this; }, async all() {
+      if (sql.includes("FROM tattoo_special_campaigns")) return { results: [{ id: "camp-one", title: "Campaign One", slug: "one", is_public: 1 }, { id: "camp-two", title: "Campaign Two", slug: "two", is_public: 0 }] };
+      if (sql.includes("FROM tattoo_special_offers")) return { results: [{ id: "offer-a", campaign_id: "camp-one", title: "Offer A", slug: "a" }, { id: "offer-b", campaign_id: "camp-two", title: "Offer B", slug: "b" }] };
+      if (sql.includes("FROM site_analytics_daily")) return { results: rows };
+      return { results: [] };
+    } }; },
+  };
+  const response = await handleAdminAnalytics(new Request("https://example.com/api/admin/analytics?view=tattoo-specials&range=7d&campaign=camp-one", {
+    headers: { authorization: "Bearer secret" },
+  }), { SUBMISSIONS_ADMIN_TOKEN: "secret", SUBMISSIONS_DB: database });
+  const payload = await response.json();
+  assert.equal(payload.state, "stale");
+  assert.equal(payload.custom.campaignVisitors, 4);
+  assert.equal(payload.custom.interestedSessions, 2);
+  assert.deepEqual(payload.custom.campaigns.map((item) => item.id), ["camp-one"]);
+  assert.deepEqual(payload.custom.offers.map((item) => item.id), ["offer-a"]);
+  assert.equal(payload.custom.stages.find((item) => item.action === "offer_selected").sessions, 2);
+});
+
+test("Worker conditionally injects manual RUM and Tattoo Specials Meta scripts only for included browsers", () => {
+  const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
+  const page = readFileSync(join(ROOT, "tattoos", "specials", "index.html"), "utf8");
+  assert.match(worker, /analyticsExcluded\(request\)/);
+  assert.match(worker, /static\.cloudflareinsights\.com\/beacon\.min\.js/);
+  assert.match(worker, /CLOUDFLARE_WEB_ANALYTICS_SITE_TAG/);
+  assert.match(worker, /tattoo-specials-meta\.js/);
+  assert.doesNotMatch(page, /connect\.facebook\.net|facebook\.com\/tr|fbq\('init'/);
+  const htmlResponse = new Response("<html><body></body></html>", { headers: { "content-type": "text/html; charset=utf-8" } });
+  assert.equal(shouldInjectSiteAnalytics(new Request("https://example.com/tattoos/specials/"), htmlResponse), true);
+  assert.equal(shouldInjectSiteAnalytics(new Request("https://example.com/tattoos/specials/", { headers: { cookie: "swc_analytics_excluded=1" } }), htmlResponse), false);
+  const specialsMarkup = browserAnalyticsMarkup({ CLOUDFLARE_WEB_ANALYTICS_SITE_TAG: "valid_beacon_token" }, "/tattoos/specials/");
+  assert.match(specialsMarkup, /site-analytics\.js/);
+  assert.match(specialsMarkup, /beacon\.min\.js/);
+  assert.match(specialsMarkup, /tattoo-specials-meta\.js/);
+  assert.doesNotMatch(browserAnalyticsMarkup({ CLOUDFLARE_WEB_ANALYTICS_SITE_TAG: "valid_beacon_token" }, "/home/"), /tattoo-specials-meta\.js/);
 });
 
 test("Studio analytics auth is protected and reports partial source readiness", async () => {
@@ -163,7 +314,7 @@ test("an empty RUM result cannot report current beside proven site activity", as
 test("Studio analytics exposes rolling last-hour, 24-, 36-, 48-hour and 5-day ranges", async () => {
   const studio = readFileSync(join(ROOT, "studio", "analytics.js"), "utf8");
   const consoleHtml = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
-  assert.match(consoleHtml, /\/studio\/analytics\.js\?v=analytics-hourly-activity/);
+  assert.match(consoleHtml, /\/studio\/analytics\.js\?v=tattoo-interest-1/);
   for (const [value, label] of [["1h", "Last hour"], ["24h", "Last 24 hours"], ["36h", "Last 36 hours"], ["48h", "Last 48 hours"], ["5d", "Last 5 days"]]) {
     assert.match(studio, new RegExp(`\\["${value}", "${label}"\\]`));
   }
@@ -201,7 +352,7 @@ test("Studio analytics exposes rolling last-hour, 24-, 36-, 48-hour and 5-day ra
 test("Studio Analytics explains every tab and names the unit behind acquisition counts", () => {
   const studio = readFileSync(join(ROOT, "studio", "analytics.js"), "utf8");
   const css = readFileSync(join(ROOT, "studio", "analytics.css"), "utf8");
-  for (const view of ["overview", "journeys", "acquisition", "performance"]) {
+  for (const view of ["overview", "journeys", "acquisition", "performance", "tattoo-specials"]) {
     assert.match(studio, new RegExp(`analyticsKey\\("${view}"\\)`));
   }
   assert.match(studio, /How to read this tab/);
@@ -367,7 +518,7 @@ test("collector and Studio preserve the privacy and console boundaries", () => {
   assert.match(worker, /site-analytics\.js/);
   assert.match(readFileSync(join(ROOT, "functions", "api", "analytics", "_lib.js"), "utf8"), /\$accountTag: String!/);
   assert.match(consoleHtml, />Analytics</);
-  for (const view of ["overview", "journeys", "acquisition", "performance"]) assert.match(studio, new RegExp(view));
+  for (const view of ["overview", "journeys", "acquisition", "performance", "tattoo-specials"]) assert.match(studio, new RegExp(view));
 });
 
 test("Studio keeps analytics state out of the shared console URL", () => {

@@ -817,6 +817,7 @@ function emptySubmissionProgress() {
     depositPaymentStatus: "none",
     depositPaidAt: "",
     clientAccessStatus: "none",
+    specialBookingPreparedAt: "",
     clientActivity: {
       bookingLinkOpenCount: 0,
       firstBookingLinkOpenedAt: "",
@@ -867,6 +868,18 @@ async function loadSubmissionProgress(database, submissionRows = []) {
       activeAccessBySubmission.set(access.submission_id, access);
       progress.get(access.submission_id).clientAccessStatus = "active";
     }
+  }
+
+  const specialBookingPreparationRows = (await database.prepare(
+    `SELECT submission_id,MAX(created_at) special_booking_prepared_at
+     FROM submission_events
+     WHERE submission_id IN (${placeholders})
+       AND event_type='special_deposit_link_prepared'
+     GROUP BY submission_id`
+  ).bind(...ids).all()).results || [];
+  for (const prepared of specialBookingPreparationRows) {
+    const state = progress.get(prepared.submission_id);
+    if (state) state.specialBookingPreparedAt = prepared.special_booking_prepared_at || "";
   }
 
   const clientActivityRows = (await database.prepare(
@@ -1002,6 +1015,7 @@ function normalizeRow(row) {
     depositPaymentStatus: row.depositPaymentStatus || row.deposit_payment_status || "none",
     depositPaidAt: row.depositPaidAt || row.deposit_paid_at || "",
     clientAccessStatus: row.clientAccessStatus || row.client_access_status || "none",
+    specialBookingPreparedAt: row.specialBookingPreparedAt || row.special_booking_prepared_at || "",
     clientActivity: row.clientActivity || row.client_activity || emptySubmissionProgress().clientActivity,
     flashReservation,
     flashConflict,
@@ -3298,7 +3312,7 @@ export async function handleSubmissionDecisionNotification(request, env, id) {
          FROM tattoo_special_submission_terms WHERE submission_id=?`
       ).bind(id).first();
       if (!details) {
-        return errorResponse("Prepare the Tattoo Special deposit link before sending approval.", 409, {
+        return errorResponse("Prepare the Tattoo Special booking link before sending approval.", 409, {
           code: "DEPOSIT_LINK_REQUIRED",
         });
       }
@@ -3306,7 +3320,7 @@ export async function handleSubmissionDecisionNotification(request, env, id) {
         ? await activeBookingAccessForUrl(db, id, submission.booking_url)
         : null;
       if (!clientAccess) {
-        return errorResponse("Prepare the Tattoo Special client deposit page before sending approval.", 409, {
+        return errorResponse("Prepare the Tattoo Special client booking access before sending approval.", 409, {
           code: "DEPOSIT_CLIENT_LINK_REQUIRED",
         });
       }

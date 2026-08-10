@@ -5,12 +5,13 @@
   var cache = new Map();
   var lastByView = new Map();
   var currentContext = null;
-  var currentState = { view: "overview", range: "30d", device: "all", group: "" };
+  var currentState = { view: "overview", range: "30d", device: "all", group: "", campaign: "" };
+  var exclusionState = null;
   var chartSequence = 0;
   var RANGES = [["1h", "Last hour"], ["24h", "Last 24 hours"], ["36h", "Last 36 hours"], ["48h", "Last 48 hours"], ["5d", "Last 5 days"], ["7d", "Last 7 days"], ["30d", "Last 30 days"], ["90d", "Last 90 days"], ["12m", "Last 12 months"]];
   var RANGE_VALUES = RANGES.map(function (option) { return option[0]; });
   var GROUPS = [["", "All content"], ["entry", "Entry"], ["home", "Home"], ["tattoos", "Tattoos"], ["art", "Art"], ["merch", "Merch"], ["events", "Events"], ["archive", "Archive"], ["about", "About"], ["booking", "Booking"]];
-  var VIEW_TITLES = { overview: "Site overview", journeys: "Visitor journeys", acquisition: "Audience acquisition", performance: "Site performance" };
+  var VIEW_TITLES = { overview: "Site overview", journeys: "Visitor journeys", acquisition: "Audience acquisition", performance: "Site performance", "tattoo-specials": "Tattoo Specials interest" };
   var VIEW_KEYS = {
     overview: {
       summary: "Traffic and attention during the selected range. One person can create several page views, and no persistent visitor identity is used.",
@@ -62,6 +63,23 @@
         ["Status colors", "Green is good, amber needs improvement, red is poor, and gray means no rating is available."],
       ],
     },
+    "tattoo-specials": {
+      summary: "Anonymous interest in each published Tattoo Specials campaign. Recognition ends with the browser tab and is never connected to a contact, request, booking, or payment record.",
+      items: [
+        ["Campaign visitor", "A browser-tab session in which a current internal Tattoo Specials campaign was loaded."],
+        ["Interested session", "A browser-tab session that selected at least one special. Repeated clicks do not create another session."],
+        ["Offer view", "A special card that remained at least 50% visible for one second."],
+        ["Selection clicks", "Every click selecting a special, including repeated clicks. Selecting sessions count each tab once per special."],
+        ["Form started", "The first actual edit to the request form after selecting a special."],
+        ["Step conversion", "The share of sessions at one stage that reached the next stage. A later stage can occasionally exceed an earlier one when browser events are blocked or interrupted."],
+        ["Deepest point", "The last recorded stage reached in each anonymous tab session. It indicates where interest stopped, not why."],
+        ["Compared specials", "A tab session that selected two or more different specials. Paths combine only the ordered special titles; tab IDs are never returned."],
+        ["Request accepted", "A successful Tattoo Specials API response also recorded by browser analytics. Authoritative request, deposit, booking, and cancellation totals remain in the campaign manager."],
+        ["Internal campaign", "The stable campaign record managed in Studio. This is separate from the optional utm_campaign label attached to an incoming promotional link."],
+        ["Identity boundary", "One anonymous ID exists only in sessionStorage for the current browser tab. Closing the tab ends recognition; another tab or browser counts separately."],
+        ["Privacy boundary", "No names, contact details, dates of birth, answers, URLs, filenames, reference files, or uploads are collected here."],
+      ],
+    },
   };
 
   function escapeHtml(value) {
@@ -103,13 +121,14 @@
   }
 
   function readHash() {
-    var match = location.hash.match(/^#analytics\/(overview|journeys|acquisition|performance)(?:\?(.*))?$/);
+    var match = location.hash.match(/^#analytics\/(overview|journeys|acquisition|performance|tattoo-specials)(?:\?(.*))?$/);
     var params = new URLSearchParams(match?.[2] || "");
     return {
       active: Boolean(match), view: match?.[1] || "overview",
       range: RANGE_VALUES.includes(params.get("range")) ? params.get("range") : "30d",
       device: ["all", "desktop", "mobile", "tablet"].includes(params.get("device")) ? params.get("device") : "all",
       group: /^[a-z0-9-]{0,48}$/.test(params.get("group") || "") ? params.get("group") || "" : "",
+      campaign: /^[a-z0-9_-]{0,120}$/.test(params.get("campaign") || "") ? params.get("campaign") || "" : "",
     };
   }
 
@@ -135,10 +154,13 @@
   }
 
   function filtersMarkup(state, payload) {
+    var thirdFilter = state.view === "tattoo-specials"
+      ? select("analyticsCampaign", "Internal campaign", [["", "All campaigns"]].concat((payload.catalog?.campaigns || payload.custom?.campaigns || []).map(function (item) { return [item.id, item.title || item.id]; })), state.campaign)
+      : select("analyticsGroup", "Content", GROUPS, state.group);
     return '<div class="analytics-filters" aria-label="Analytics filters">' +
       select("analyticsRange", "Range", RANGES, state.range) +
       select("analyticsDevice", "Device", [["all", "All devices"], ["desktop", "Desktop"], ["mobile", "Mobile"], ["tablet", "Tablet"]], state.device) +
-      select("analyticsGroup", "Content", GROUPS, state.group) +
+      thirdFilter +
       '<div class="analytics-updated">Data through ' + escapeHtml(dataThrough(payload.dataThrough)) + "<br>Updated " + escapeHtml(new Date(payload.generatedAt || Date.now()).toLocaleString()) + "</div></div>";
   }
 
@@ -170,6 +192,22 @@
     return '<div class="analytics-bars">' + items.map(function (item) {
       var width = Math.max(2, (Number(item.value || 0) / max) * 100);
       return '<div class="analytics-bar-row"><span class="analytics-bar-label" title="' + escapeHtml(item.label) + '">' + escapeHtml(item.label || "Unknown") + '</span><span class="analytics-bar-track" aria-hidden="true"><span class="analytics-bar-fill" style="width:' + width.toFixed(2) + '%"></span></span><strong class="analytics-bar-value">' + number(item.value) + "</strong></div>";
+    }).join("") + "</div>";
+  }
+
+  function interestKpi(label, value, note) {
+    return '<div class="analytics-kpi"><span class="analytics-kpi-label">' + escapeHtml(label) + '</span><strong class="analytics-kpi-value">' + escapeHtml(number(value)) + '</strong><span class="analytics-kpi-compare">' + escapeHtml(note) + "</span></div>";
+  }
+
+  function interestStages(items, valueKey, empty) {
+    items = items || [];
+    if (!items.length) return '<p class="analytics-empty">' + escapeHtml(empty || "No stage activity in this range.") + "</p>";
+    var max = Math.max(1, ...items.map(function (item) { return Number(item[valueKey] || 0); }));
+    return '<div class="analytics-stage-list">' + items.map(function (item, index) {
+      var value = Number(item[valueKey] || 0);
+      var width = value ? Math.max(2, (value / max) * 100) : 0;
+      var conversion = valueKey === "sessions" && index ? number(item.fromPreviousPercent, 1) + "% from prior stage" : valueKey === "sessions" ? "Journey entry" : "sessions stopped here";
+      return '<div class="analytics-stage-row"><div class="analytics-stage-copy"><strong>' + escapeHtml(item.label) + '</strong><span>' + escapeHtml(conversion) + '</span></div><span class="analytics-stage-track" aria-hidden="true"><span style="width:' + width.toFixed(2) + '%"></span></span><strong class="analytics-stage-value">' + number(value) + "</strong></div>";
     }).join("") + "</div>";
   }
 
@@ -279,6 +317,39 @@
       '<p class="analytics-caveat">Cloudflare may adaptively sample Web Analytics data. Detailed problematic-element selectors are shown only when the account dataset exposes them; page-level diagnostics remain available otherwise.</p>';
   }
 
+  function renderTattooSpecials(payload) {
+    var data = payload.custom || {};
+    var campaignFilter = payload.filters?.campaign || "";
+    var campaignNames = new Map((payload.catalog?.campaigns || data.campaigns || []).map(function (item) { return [item.id, item.title || item.id]; }));
+    var offers = (data.offers || []).filter(function (item) { return !campaignFilter || item.campaignId === campaignFilter; });
+    var offerRows = offers.map(function (item) {
+      return ["<strong>" + escapeHtml(item.title || item.id) + "</strong>", escapeHtml(campaignNames.get(item.campaignId) || item.campaignId || "Unknown"), number(item.viewedSessions), number(item.selectionClicks), number(item.selectingSessions), number(item.formStarts), number(item.acceptedRequests), number(item.selectionRatePercent, 1) + "%"];
+    });
+    var pathRows = (data.paths || []).filter(function (item) { return !campaignFilter || item.campaignId === campaignFilter; }).map(function (item) {
+      return ["<strong>" + escapeHtml(item.label) + "</strong>", escapeHtml(campaignNames.get(item.campaignId) || item.campaignId || "Unknown"), number(item.sessions)];
+    });
+    var campaignRows = (data.campaigns || []).filter(function (item) { return !campaignFilter || item.id === campaignFilter; }).map(function (item) {
+      return ["<strong>" + escapeHtml(item.title || item.id) + "</strong>", number(item.visitors), number(item.interestedSessions), number(item.formStarts), number(item.acceptedRequests), number(item.comparedSessions)];
+    });
+    return analyticsKey("tattoo-specials") + '<div class="analytics-kpis analytics-kpis-interest">' +
+      interestKpi("Page entries", data.pageEntries, "Anonymous tabs entering this page") +
+      interestKpi("Campaign visitors", data.campaignVisitors, "Campaign opened in a tab") +
+      interestKpi("Interested sessions", data.interestedSessions, "Selected at least one special") +
+      interestKpi("Form starts", data.formStarts, "First actual form edit") +
+      interestKpi("Accepted requests", data.acceptedRequests, "Successful API response observed") +
+      '</div><div class="analytics-grid equal">' +
+      panel("Interest stages", "Unique anonymous tab sessions at each recorded stage. Conversion is measured from the immediately prior stage.", interestStages(data.stages, "sessions")) +
+      panel("Deepest point reached", "Each tab session appears once at its last recorded stage, showing where the journey stopped.", interestStages(data.deepest, "sessions")) +
+      '</div><div class="analytics-grid equal analytics-interest-grid">' +
+      panel("Campaign summary", "Internal Studio campaign records during the selected range.", dataTable(["Campaign", "Visitors", "Interested", "Form starts", "Accepted", "Compared"], campaignRows, "No campaign activity is recorded in this range.")) +
+      panel("Page engagement context", "Visible-tab time, maximum scroll, and supporting interest signals for the Tattoo Specials page.", '<dl class="analytics-context-list"><div><dt>Average active time</dt><dd>' + duration(data.avgActiveSeconds) + '</dd></div><div><dt>Average maximum scroll</dt><dd>' + number(data.avgScroll, 0) + '%</dd></div><div><dt>Recorded exits</dt><dd>' + number(data.recordedExits) + '</dd></div><div><dt>Compared multiple specials</dt><dd>' + number(data.comparedSessions) + '</dd></div><div><dt>Added a reference</dt><dd>' + number(data.referenceAddedSessions) + '</dd></div></dl>') +
+      '</div><div class="analytics-interest-section">' +
+      panel("Per-special interest", "Views and selecting sessions are unique tab-session counts; selection clicks include repeat clicks.", dataTable(["Special", "Campaign", "Views", "Selection clicks", "Selecting sessions", "Initial form starts", "Accepted", "Selection rate"], offerRows, "No per-special activity is recorded in this range.")) +
+      '</div><div class="analytics-interest-section">' +
+      panel("Selection paths", "Ordered combinations from sessions that selected two or more different specials. No tab identifiers are returned.", dataTable(["Path", "Campaign", "Sessions"], pathRows, "No sessions compared multiple specials in this range.")) +
+      '</div>' + (data.truncated ? '<p class="analytics-caveat">This view reached its activity-row safety limit. Displayed aggregate detail is partial for the selected range.</p>' : "");
+  }
+
   function vitalValue(metric, value) {
     value = Number(value || 0);
     return '<span class="analytics-vital" data-rating="' + rating(metric, value) + '">' + (value ? number(value, metric === "cls" ? 3 : 0) + (metric === "cls" ? "" : "ms") : "—") + "</span>";
@@ -289,31 +360,64 @@
   }
 
   function renderBody(payload) {
+    if (payload.view === "tattoo-specials") return renderTattooSpecials(payload);
     if (payload.view === "journeys") return renderJourneys(payload);
     if (payload.view === "acquisition") return renderAcquisition(payload);
     if (payload.view === "performance") return renderPerformance(payload);
     return renderOverview(payload);
   }
 
-  function shellMarkup(state, payload, stale) {
-    return '<div class="analytics-shell"><div class="analytics-head"><div><p class="analytics-eyebrow">Public website · anonymous aggregate</p><h2>' + escapeHtml(VIEW_TITLES[state.view]) + '</h2><p>Site behavior, audience, and performance only. This area does not read contacts, bookings, payments, revenue, or CRM records.</p></div><button class="button analytics-refresh" type="button" data-analytics-refresh>Refresh analytics</button></div>' + stateMarkup(payload, stale) + '<div class="analytics-body">' + renderBody(payload) + "</div>" + filtersMarkup(state, payload) + "</div>";
+  function exclusionMarkup() {
+    if (exclusionState == null) return '<div class="analytics-exclusion"><span>Browser exclusion status unavailable</span></div>';
+    return '<div class="analytics-exclusion" data-excluded="' + String(Boolean(exclusionState)) + '"><button class="button" type="button" data-analytics-exclusion>' + (exclusionState ? "This browser is excluded" : "Exclude this browser") + '</button><span>' + (exclusionState ? "Select to resume future browser analytics." : "Stops future first-party, RUM, and Meta browser tracking here.") + '</span><small>Each browser or profile must be marked separately. Existing analytics are not removed.</small></div>';
   }
 
-  function cacheKey(state) { return [state.view, state.range, state.device, state.group].join("|"); }
+  async function requestExclusion(context) {
+    try {
+      var response = await fetch("/api/admin/analytics/exclusion", { headers: { authorization: "Bearer " + context.token }, cache: "no-store" });
+      var payload = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(payload.error || "Exclusion status failed.");
+      exclusionState = Boolean(payload.excluded);
+    } catch (_) { exclusionState = null; }
+  }
+
+  async function setExclusion(context, excluded, button) {
+    button.disabled = true;
+    try {
+      var response = await fetch("/api/admin/analytics/exclusion", {
+        method: "PUT", headers: { authorization: "Bearer " + context.token, "content-type": "application/json" },
+        body: JSON.stringify({ excluded: excluded }),
+      });
+      var payload = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(payload.error || "Exclusion update failed.");
+      exclusionState = Boolean(payload.excluded);
+      render(context, false);
+    } catch (error) {
+      button.disabled = false;
+      context.setStatus?.(error.message);
+    }
+  }
+
+  function shellMarkup(state, payload, stale) {
+    return '<div class="analytics-shell"><div class="analytics-head"><div><p class="analytics-eyebrow">Public website · anonymous aggregate</p><h2>' + escapeHtml(VIEW_TITLES[state.view]) + '</h2><p>Site behavior, audience, and performance only. This area does not read contacts, bookings, payments, revenue, or CRM records.</p></div><div class="analytics-head-actions"><button class="button analytics-refresh" type="button" data-analytics-refresh>Refresh analytics</button>' + exclusionMarkup() + "</div></div>" + stateMarkup(payload, stale) + '<div class="analytics-body">' + renderBody(payload) + "</div>" + filtersMarkup(state, payload) + "</div>";
+  }
+
+  function cacheKey(state) { return [state.view, state.range, state.device, state.group, state.campaign].join("|"); }
 
   async function requestPayload(context, state, force) {
     var key = cacheKey(state), cached = cache.get(key);
     if (!force && cached && Date.now() - cached.time < CACHE_MS) return { payload: cached.payload, stale: false };
     var params = new URLSearchParams({ view: state.view, range: state.range, device: state.device });
     if (state.group) params.set("group", state.group);
+    if (state.view === "tattoo-specials" && state.campaign) params.set("campaign", state.campaign);
     try {
       var response = await fetch("/api/admin/analytics?" + params.toString(), { headers: { authorization: "Bearer " + context.token }, cache: "no-store" });
       var payload = await response.json().catch(function () { return {}; });
       if (!response.ok) throw new Error(payload.error || "Analytics request failed.");
-      cache.set(key, { time: Date.now(), payload: payload }); lastByView.set(state.view, payload);
+      cache.set(key, { time: Date.now(), payload: payload }); lastByView.set(key, payload);
       return { payload: payload, stale: false };
     } catch (error) {
-      var last = lastByView.get(state.view);
+      var last = lastByView.get(key);
       if (last) return { payload: last, stale: true, error: error };
       throw error;
     }
@@ -321,9 +425,10 @@
 
   function bind(root, context, state) {
     root.querySelector("[data-analytics-refresh]")?.addEventListener("click", function () { render(context, true); });
-    ["analyticsRange", "analyticsDevice", "analyticsGroup"].forEach(function (id) {
+    root.querySelector("[data-analytics-exclusion]")?.addEventListener("click", function (event) { setExclusion(context, !exclusionState, event.currentTarget); });
+    ["analyticsRange", "analyticsDevice", "analyticsGroup", "analyticsCampaign"].forEach(function (id) {
       root.querySelector("#" + id)?.addEventListener("change", function () {
-        var next = { ...state, range: root.querySelector("#analyticsRange").value, device: root.querySelector("#analyticsDevice").value, group: root.querySelector("#analyticsGroup").value };
+        var next = { ...state, range: root.querySelector("#analyticsRange").value, device: root.querySelector("#analyticsDevice").value, group: root.querySelector("#analyticsGroup")?.value || "", campaign: root.querySelector("#analyticsCampaign")?.value || "" };
         currentState = next;
         clearHash();
         render({ ...context, view: next.view }, false);
@@ -339,13 +444,15 @@
       range: hash.active ? hash.range : currentState.range,
       device: hash.active ? hash.device : currentState.device,
       group: hash.active ? hash.group : currentState.group,
+      campaign: hash.active ? hash.campaign : currentState.campaign,
     };
     currentState = state;
     clearHash();
     context.root.innerHTML = '<div class="analytics-shell"><div class="analytics-head"><div><p class="analytics-eyebrow">Public website · anonymous aggregate</p><h2>' + escapeHtml(VIEW_TITLES[state.view]) + '</h2></div></div><p class="analytics-loading" role="status">Loading analytics…</p></div>';
     context.setStatus?.("Loading analytics");
     try {
-      var result = await requestPayload(context, state, Boolean(force));
+      var results = await Promise.all([requestPayload(context, state, Boolean(force)), requestExclusion(context)]);
+      var result = results[0];
       context.root.innerHTML = shellMarkup(state, result.payload, result.stale);
       bind(context.root, context, state);
       context.setStatus?.(result.stale ? "Analytics stale" : "Analytics ready");

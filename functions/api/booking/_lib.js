@@ -1,8 +1,8 @@
 import {
-  notifyAdminAppointmentConfirmed,
+  appointmentConfirmationTemplateKey,
+  dispatchAppointmentConfirmationNotifications,
   notifyAdminAppointmentRescheduled,
   notifyAppointmentCancelled,
-  notifyAppointmentConfirmed,
   notifyAppointmentRescheduled,
   notifyAdminSubmissionReceived,
   notifySubmissionReceived,
@@ -4744,14 +4744,14 @@ export async function handleCreateBookingCheckout(request, env) {
           `INSERT INTO appointment_events(id,appointment_id,event_type,actor,note,metadata_json,created_at)
            VALUES(?,?,'free_experimental_consultation_confirmed','system',NULL,'{}',?)`
         ).bind(crypto.randomUUID(), result.appointment.id, now),
+        ...pendingAppointmentConfirmationStatements(db, env, result.appointment, now),
       ]);
       if (Number(results?.[0]?.meta?.changes || 0) < 1) {
         return errorResponse("The free consultation could not be confirmed. Refresh and try again.", 409);
       }
       const appointment = normalizeAppointment(await selectAppointmentWithMeeting(db, result.appointment.id));
       await mirrorAppointmentToCrm(db, appointment);
-      await notifyAppointmentConfirmed(env, request, appointment);
-      await notifyAdminAppointmentConfirmed(env, request, appointment);
+      await dispatchAppointmentConfirmationNotifications(env, request, appointment);
       return json({
         ok: true,
         appointmentId: appointment.id,
@@ -5178,6 +5178,51 @@ function orderLooksPaid(order) {
   return order.state === "COMPLETED";
 }
 
+function pendingAppointmentConfirmationStatements(db, env, appointmentRow, now) {
+  const appointment = normalizeAppointment(appointmentRow);
+  const statements = [];
+  if (appointment.clientEmail) {
+    statements.push(db.prepare(
+      `INSERT INTO notification_deliveries (
+        id, channel, template_key, recipient, subject, related_type,
+        related_id, idempotency_key, status, error, sent_at, created_at
+      )
+      SELECT ?, 'email', ?, client_email, NULL, 'appointment',
+             id, ?, 'pending', NULL, NULL, ?
+      FROM appointments
+      WHERE id = ? AND status = 'confirmed' AND updated_at = ?
+        AND TRIM(COALESCE(client_email, '')) != ''
+      ON CONFLICT(idempotency_key) DO NOTHING`
+    ).bind(
+      crypto.randomUUID(),
+      appointmentConfirmationTemplateKey(appointment.bookingTypeId),
+      `appointment_confirmed:${appointment.id}`,
+      now,
+      appointment.id,
+      now,
+    ));
+  }
+  statements.push(db.prepare(
+    `INSERT INTO notification_deliveries (
+      id, channel, template_key, recipient, subject, related_type,
+      related_id, idempotency_key, status, error, sent_at, created_at
+    )
+    SELECT ?, 'email', 'admin_appointment_confirmed', ?, NULL, 'appointment',
+           id, ?, 'pending', NULL, NULL, ?
+    FROM appointments
+    WHERE id = ? AND status = 'confirmed' AND updated_at = ?
+    ON CONFLICT(idempotency_key) DO NOTHING`
+  ).bind(
+    crypto.randomUUID(),
+    env.ADMIN_NOTIFICATION_EMAIL || env.NOTIFICATION_REPLY_TO || DEFAULT_SUPPORT_EMAIL,
+    `admin_appointment_confirmed:${appointment.id}`,
+    now,
+    appointment.id,
+    now,
+  ));
+  return statements;
+}
+
 async function confirmPaidAppointment(db, env, request, appointmentRow, order, paymentId = "") {
   const appointment = normalizeAppointment(appointmentRow);
   const now = new Date().toISOString();
@@ -5424,26 +5469,7 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
       )
     );
   }
-  statements.push(
-    db.prepare(
-      `INSERT INTO notification_deliveries (
-        id, channel, template_key, recipient, subject, related_type,
-        related_id, idempotency_key, status, error, sent_at, created_at
-      )
-      SELECT ?, 'email', 'admin_appointment_confirmed', ?, NULL, 'appointment',
-             id, ?, 'pending', NULL, NULL, ?
-      FROM appointments
-      WHERE id = ? AND status = 'confirmed' AND updated_at = ?
-      ON CONFLICT(idempotency_key) DO NOTHING`
-    ).bind(
-      crypto.randomUUID(),
-      env.ADMIN_NOTIFICATION_EMAIL || env.NOTIFICATION_REPLY_TO || DEFAULT_SUPPORT_EMAIL,
-      `admin_appointment_confirmed:${appointment.id}`,
-      now,
-      appointment.id,
-      now,
-    )
-  );
+  statements.push(...pendingAppointmentConfirmationStatements(db, env, appointment, now));
 
   const results = await db.batch(statements);
   if (Number(results?.[0]?.meta?.changes || 0) < 1) {
@@ -5481,10 +5507,7 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
     normalizeAppointment(appointmentWithType || appointmentRow),
     { includePayment: true },
   );
-  await Promise.all([
-    notifyAppointmentConfirmed(env, request, appointmentWithType || appointmentRow),
-    notifyAdminAppointmentConfirmed(env, request, appointmentWithType || appointmentRow),
-  ]);
+  await dispatchAppointmentConfirmationNotifications(env, request, appointmentWithType || appointmentRow);
 
   const updated = await selectAppointmentWithMeeting(db, appointment.id);
   return normalizeAppointment(updated || appointmentRow);

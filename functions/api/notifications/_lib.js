@@ -444,22 +444,38 @@ async function recordDelivery(db, delivery) {
   }
 }
 
-async function deliveryExists(db, idempotencyKey) {
-  if (!db || !idempotencyKey) return false;
+async function deliveryStatus(db, idempotencyKey) {
+  if (!db || !idempotencyKey) return "";
   try {
     const row = await db
-      .prepare("SELECT id FROM notification_deliveries WHERE idempotency_key = ? AND status = 'sent' LIMIT 1")
+      .prepare("SELECT status FROM notification_deliveries WHERE idempotency_key = ? LIMIT 1")
       .bind(idempotencyKey)
       .first();
-    return Boolean(row);
+    return row?.status || "";
   } catch {
-    return false;
+    return "";
+  }
+}
+
+async function markDeliveryFailed(db, idempotencyKey, error) {
+  if (!db || !idempotencyKey) return;
+  const errorDetail = [error?.code, error?.message].filter(Boolean).join(": ")
+    || "Unknown email delivery error.";
+  try {
+    await db.prepare(
+      `UPDATE notification_deliveries
+       SET status = 'failed', error = ?, sent_at = NULL, created_at = ?
+       WHERE idempotency_key = ? AND status != 'sent'`
+    ).bind(errorDetail, new Date().toISOString(), idempotencyKey).run();
+  } catch (recordingError) {
+    console.warn("Unable to record notification failure.", recordingError.message);
   }
 }
 
 async function sendTransactionalEmail(env, message) {
   const db = notificationDb(env);
-  if (await deliveryExists(db, message.idempotencyKey)) {
+  const existingStatus = await deliveryStatus(db, message.idempotencyKey);
+  if (existingStatus === "sent") {
     lifecycleLog("notification.idempotent_skip", {
       templateKey: message.templateKey,
       relatedType: message.relatedType,
@@ -512,17 +528,20 @@ async function sendTransactionalEmail(env, message) {
   }
 
   if (!env.EMAIL?.send) {
+    const missingBindingStatus = message.durable || ["pending", "failed"].includes(existingStatus)
+      ? "pending"
+      : "skipped";
     await recordDelivery(db, {
       ...outgoing,
       channel: "email",
-      status: "skipped",
+      status: missingBindingStatus,
       error: "Missing EMAIL send_email binding.",
     });
     lifecycleLog("notification.not_configured", {
       templateKey: message.templateKey,
       relatedType: message.relatedType,
       relatedId: message.relatedId,
-      status: "skipped",
+      status: missingBindingStatus,
     });
     return { ok: false, skipped: true, error: "Missing EMAIL send_email binding." };
   }
@@ -1599,6 +1618,7 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
     relatedType: "appointment",
     relatedId: appointment.id,
     idempotencyKey: options.idempotencyKey || `appointment_confirmed:${appointment.id}`,
+    durable: options.durable === true,
   });
 }
 
@@ -1631,6 +1651,7 @@ async function sendInPersonConsultationConfirmed(env, request, appointment, opti
     relatedType: "appointment",
     relatedId: appointment.id,
     idempotencyKey: options.idempotencyKey || `appointment_confirmed:${appointment.id}`,
+    durable: options.durable === true,
   });
 }
 
@@ -1657,6 +1678,7 @@ async function sendVirtualConsultationConfirmed(env, request, appointment, optio
     relatedType: "appointment",
     relatedId: appointment.id,
     idempotencyKey: options.idempotencyKey || `appointment_confirmed:${appointment.id}`,
+    durable: options.durable === true,
   });
 }
 
@@ -1685,6 +1707,7 @@ async function sendBuildSessionConfirmed(env, request, appointment, options = {}
     relatedType: "appointment",
     relatedId: appointment.id,
     idempotencyKey: options.idempotencyKey || `appointment_confirmed:${appointment.id}`,
+    durable: options.durable === true,
   });
 }
 
@@ -1716,7 +1739,22 @@ async function sendStudioBookingConfirmed(env, request, appointment, options = {
     relatedType: "appointment",
     relatedId: appointment.id,
     idempotencyKey: options.idempotencyKey || `appointment_confirmed:${appointment.id}`,
+    durable: options.durable === true,
   });
+}
+
+export function appointmentConfirmationTemplateKey(bookingTypeId) {
+  if (STUDIO_BOOKING_TYPE_IDS.includes(bookingTypeId)) return "studio_booking_confirmed";
+  switch (bookingTypeId) {
+    case IN_PERSON_CONSULTATION_BOOKING_TYPE_ID:
+      return "consultation_confirmed_in_person";
+    case VIRTUAL_CONSULTATION_BOOKING_TYPE_ID:
+      return "consultation_confirmed_virtual";
+    case BUILD_SESSION_BOOKING_TYPE_ID:
+      return "build_session_confirmed";
+    default:
+      return "appointment_confirmed";
+  }
 }
 
 export async function notifyAppointmentConfirmed(env, request, appointmentRow, options = {}) {
@@ -1781,6 +1819,7 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
     relatedType: "appointment",
     relatedId: appointment.id,
     idempotencyKey: options.idempotencyKey || `admin_appointment_confirmed:${appointment.id}`,
+    durable: options.durable === true,
   });
 }
 
@@ -1865,6 +1904,52 @@ export async function notifyTattooSpecialDepositRequested(env, request, details 
     relatedId: details.appointmentId || details.submissionId,
     idempotencyKey: options.idempotencyKey || `tattoo_special_deposit_requested:${details.appointmentId || details.submissionId}`,
   });
+}
+
+async function dispatchAppointmentConfirmation(env, request, appointmentRow, options) {
+  const db = notificationDb(env);
+  try {
+    return options.admin
+      ? await notifyAdminAppointmentConfirmed(env, request, appointmentRow, {
+          idempotencyKey: options.idempotencyKey,
+          durable: true,
+        })
+      : await notifyAppointmentConfirmed(env, request, appointmentRow, {
+          idempotencyKey: options.idempotencyKey,
+          durable: true,
+        });
+  } catch (error) {
+    await markDeliveryFailed(db, options.idempotencyKey, error);
+    lifecycleLog("notification.failed", {
+      templateKey: options.templateKey,
+      relatedType: "appointment",
+      relatedId: appointmentRow?.id,
+      status: "failed",
+    });
+    return {
+      ok: false,
+      error: [error?.code, error?.message].filter(Boolean).join(": ") || "Unknown email delivery error.",
+      code: error?.code || "",
+    };
+  }
+}
+
+export async function dispatchAppointmentConfirmationNotifications(env, request, appointmentRow) {
+  const appointment = normalizeAppointment(appointmentRow);
+  const deliveries = [];
+  if (appointment.clientEmail) {
+    deliveries.push(dispatchAppointmentConfirmation(env, request, appointmentRow, {
+      admin: false,
+      templateKey: appointmentConfirmationTemplateKey(appointment.bookingTypeId),
+      idempotencyKey: `appointment_confirmed:${appointment.id}`,
+    }));
+  }
+  deliveries.push(dispatchAppointmentConfirmation(env, request, appointmentRow, {
+    admin: true,
+    templateKey: "admin_appointment_confirmed",
+    idempotencyKey: `admin_appointment_confirmed:${appointment.id}`,
+  }));
+  return Promise.all(deliveries);
 }
 
 export async function notifyAppointmentRescheduled(env, request, appointmentRow, options = {}) {
@@ -2029,6 +2114,11 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
     .prepare(
       `SELECT a.*, bt.label AS booking_type_label,
               s.type AS submission_type,
+              tst.offer_title AS special_offer_title,
+              tst.variant_label AS special_variant_label,
+              tst.advertised_price_cents AS special_advertised_price_cents,
+              tst.approved_price_cents AS special_approved_price_cents,
+              tst.duration_minutes AS special_duration_minutes,
               spt.project_profile AS special_project_profile,
               spt.project_title AS special_project_title,
               am.provider AS meeting_provider,
@@ -2040,6 +2130,7 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
        FROM appointments a
        LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
        LEFT JOIN submissions s ON s.id = a.submission_id
+       LEFT JOIN tattoo_special_submission_terms tst ON tst.submission_id = a.submission_id
        LEFT JOIN special_project_submission_terms spt ON spt.submission_id = a.submission_id
        LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
        WHERE a.id = ?`
@@ -3057,7 +3148,7 @@ export async function sendDueAppointmentReminders(env) {
   }
 }
 
-export async function retryPendingAdminAppointmentNotifications(env) {
+export async function retryPendingAppointmentNotifications(env) {
   const db = notificationDb(env);
   if (!db) return { sent: 0, skipped: 0, failed: 0 };
 
@@ -3065,19 +3156,19 @@ export async function retryPendingAdminAppointmentNotifications(env) {
   try {
     const result = await db
       .prepare(
-        `SELECT a.*, bt.label AS booking_type_label,
-                am.provider AS meeting_provider,
-                am.provider_meeting_id,
-                am.join_url AS meeting_join_url,
-                am.password AS meeting_password,
-                am.created_at AS meeting_created_at,
-                am.updated_at AS meeting_updated_at,
+        `SELECT nd.related_id AS appointment_id,
+                nd.template_key AS notification_template_key,
                 nd.idempotency_key AS notification_idempotency_key
          FROM notification_deliveries nd
          JOIN appointments a ON a.id = nd.related_id
-         LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
-         LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
-         WHERE nd.template_key = 'admin_appointment_confirmed'
+         WHERE nd.template_key IN (
+           'appointment_confirmed',
+           'consultation_confirmed_in_person',
+           'consultation_confirmed_virtual',
+           'build_session_confirmed',
+           'studio_booking_confirmed',
+           'admin_appointment_confirmed'
+         )
            AND nd.status IN ('pending', 'failed')
            AND nd.created_at <= ?
            AND a.status = 'confirmed'
@@ -3091,7 +3182,18 @@ export async function retryPendingAdminAppointmentNotifications(env) {
     let skipped = 0;
     let failed = 0;
     for (const row of result.results || []) {
-      const delivery = await notifyAdminAppointmentConfirmed(env, null, row, {
+      let appointmentRow;
+      try {
+        appointmentRow = await selectAppointmentWithMeeting(db, row.appointment_id);
+        if (!appointmentRow) throw new Error("Confirmed appointment not found for queued notification.");
+      } catch (error) {
+        await markDeliveryFailed(db, row.notification_idempotency_key, error);
+        failed += 1;
+        continue;
+      }
+      const delivery = await dispatchAppointmentConfirmation(env, null, appointmentRow, {
+        admin: row.notification_template_key === "admin_appointment_confirmed",
+        templateKey: row.notification_template_key,
         idempotencyKey: row.notification_idempotency_key,
       });
       if (delivery.skipped) skipped += 1;
@@ -3100,7 +3202,10 @@ export async function retryPendingAdminAppointmentNotifications(env) {
     }
     return { sent, skipped, failed };
   } catch (error) {
-    console.warn("Unable to retry pending admin appointment notifications.", error.message);
+    console.warn("Unable to retry pending appointment notifications.", error.message);
     return { sent: 0, skipped: 0, failed: 1, error: error.message };
   }
 }
+
+// Compatibility export for the existing scheduled Worker entry point.
+export const retryPendingAdminAppointmentNotifications = retryPendingAppointmentNotifications;

@@ -481,7 +481,7 @@ async function prepareTattooSpecialClientAccess(db, request, env, submission, pr
     new Date(terms.sales_closes_at).getTime(),
   );
   if (!Number.isFinite(expiryMs) || expiryMs <= Date.now()) {
-    throw new Error("The Tattoo Special deposit access window has closed.");
+    throw new Error("The Tattoo Special booking access window has closed.");
   }
   const expiresAt = new Date(expiryMs).toISOString();
   const token = createBookingRawToken();
@@ -1100,7 +1100,7 @@ export async function handleAdminTattooSpecialDeposit(request, env, submissionId
     const db = requireDb(env);
     const submission = await db.prepare("SELECT id,status,type,booking_url FROM submissions WHERE id=?").bind(submissionId).first();
     if (!submission || submission.type !== "tattoo_special") return failure("Tattoo Special request not found.", 404);
-    if (submission.status !== "approved") return failure("Approve the Tattoo Special before preparing its deposit link.", 409);
+    if (submission.status !== "approved") return failure("Approve the Tattoo Special before preparing its booking link.", 409);
     const preparedRequest = await prepareApprovedTattooSpecialRequest(request, env, submissionId);
     const clientAccess = await prepareTattooSpecialClientAccess(db, request, env, submission, preparedRequest);
     await db.prepare(
@@ -1116,6 +1116,6 @@ export async function handleAdminTattooSpecialDeposit(request, env, submissionId
       delivery: { ok: false, skipped: true, reason: "explicit_client_notification_required" },
     });
   } catch (error) {
-    return failure("Unable to prepare the Tattoo Special deposit link.", 500, { detail: error.message });
+    return failure("Unable to prepare the Tattoo Special booking link.", 500, { detail: error.message });
   }
 }

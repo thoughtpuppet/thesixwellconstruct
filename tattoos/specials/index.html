@@ -15,23 +15,6 @@
   <link rel="stylesheet" href="/css/hero.css">
   <link rel="stylesheet" href="/css/forms.css">
   <link rel="stylesheet" href="/css/tattoo-specials.css">
-  <!-- Meta Pixel Code -->
-  <script>
-  !function(f,b,e,v,n,t,s)
-  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-  n.queue=[];t=b.createElement(e);t.async=!0;
-  t.src=v;s=b.getElementsByTagName(e)[0];
-  s.parentNode.insertBefore(t,s)}(window, document,'script',
-  'https://connect.facebook.net/en_US/fbevents.js');
-  fbq('init', '38032225653089853');
-  fbq('track', 'PageView');
-  </script>
-  <noscript><img height="1" width="1" style="display:none"
-  src="https://www.facebook.com/tr?id=38032225653089853&ev=PageView&noscript=1"
-  /></noscript>
-  <!-- End Meta Pixel Code -->
 </head>
 <body class="tattoo-flow" data-venture="tattooing" data-landing-family="tattoo-service">
   <header class="specials-header">
@@ -64,7 +47,7 @@
       </div>
       <form class="public-form" id="specialsForm" enctype="multipart/form-data">
         <input type="hidden" name="offerId" id="offerId">
-        <fieldset>
+        <fieldset id="specialsSelectionFieldset">
           <legend>Your Tattoo Special</legend>
           <div class="field">
             <label for="variantId">Price option</label>
@@ -72,7 +55,7 @@
           </div>
           <div class="specials-selection-terms" id="selectionTerms"></div>
         </fieldset>
-        <fieldset>
+        <fieldset id="specialsPurchaserFieldset" data-specials-stage="purchaser">
           <legend>Primary purchaser</legend>
           <div class="field-grid">
             <div class="field"><label for="specialsName">Full name</label><input id="specialsName" name="name" autocomplete="name" required></div>
@@ -93,7 +76,7 @@
           </div>
           <label class="form-check"><input class="form-check__input" type="checkbox" name="participant2AgeConfirmed" value="yes"><span class="form-check__label">The second participant is at least 18 years old.</span></label>
         </fieldset>
-        <fieldset>
+        <fieldset id="specialsProjectFieldset" data-specials-stage="project">
           <legend>Project</legend>
           <div class="field-grid">
             <div class="field full"><label for="specialsPlacement">Placement</label><input id="specialsPlacement" name="placement" maxlength="500" required placeholder="Where on the body?"></div>
@@ -126,7 +109,7 @@
     </section>
   </main>
   <footer class="specials-footer"><p>© art.pill Tattoo House · the six.well construct</p><a href="/tattoos/inquire/">Normal tattoo inquiry</a></footer>
-  <script src="/js/tattoo-specials.js"></script>
+  <script src="/js/tattoo-specials.js?v=funnel-1"></script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>

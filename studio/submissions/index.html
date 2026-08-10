@@ -15,7 +15,7 @@
 <link rel="stylesheet" href="/studio/archive-failed-experiments.css?v=1">
 <link rel="stylesheet" href="/studio/connections-manager.css?v=1">
 <link rel="stylesheet" href="/studio/admin-collapse.css?v=1">
-<link rel="stylesheet" href="/studio/analytics.css?v=2">
+<link rel="stylesheet" href="/studio/analytics.css?v=tattoo-interest-1">
 <link rel="stylesheet" href="/studio/people-manager.css?v=4">
 <link rel="stylesheet" href="/css/select-menu.css?v=2">
 <style>
@@ -523,6 +523,11 @@
   .tattoo-specials-campaigns { display:grid; gap:16px; }
   .tattoo-special-campaign { border:5px solid var(--ring-faint); padding:16px; background:var(--panel); display:grid; gap:12px; min-width:0; }
   .tattoo-special-campaign.is-public { border-color:rgba(255,255,255,.72); }
+  .tattoo-special-interest-summary { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)) auto; gap:8px; align-items:stretch; padding:10px; border:5px solid var(--ring-faint); background:var(--bg); }
+  .tattoo-special-interest-summary > span { min-width:0; display:grid; gap:4px; padding:8px; border-left:5px solid var(--ring-faint); }
+  .tattoo-special-interest-summary small { color:var(--dim); font-size:8px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+  .tattoo-special-interest-summary strong { color:var(--text); font-size:17px; }
+  .tattoo-special-interest-summary .button { align-self:center; min-height:44px; }
   .tattoo-special-offer { border:5px solid var(--ring-faint); padding:16px; background:var(--panel); display:grid; gap:12px; min-width:0; }
   .tattoo-special-offer__grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; min-width:0; }
   .tattoo-specials-settings > *,
@@ -572,6 +577,8 @@
     .text-template-editor-grid { grid-template-columns:1fr; }
     .tattoo-specials-settings,
     .tattoo-special-offer__grid { grid-template-columns:minmax(0,1fr); }
+    .tattoo-special-interest-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .tattoo-special-interest-summary .button { grid-column:1/-1; width:100%; }
     .studio-console .custom-select > .custom-select-trigger,
     .studio-console .custom-select-option { font-size:var(--studio-type-body-size-active,13px); }
   }
@@ -655,7 +662,7 @@
 
 <script src="/js/select-menu.js?v=2"></script>
 <script src="/studio/admin-collapse.js?v=2"></script>
-<script src="/studio/analytics.js?v=analytics-hourly-activity"></script>
+<script src="/studio/analytics.js?v=tattoo-interest-1"></script>
 <script src="/studio/resumable-media-upload.js?v=1"></script>
 <script src="/studio/portfolio-batch-organizer.js?v=1"></script>
 <script src="/js/manual-text-assist.js?v=1"></script>
@@ -797,6 +804,7 @@
   let specialProjectMediaPreviewUrls = [];
   let specialProjectSeriesEditorCounter = 0;
   let tattooSpecials = { settings: {}, offers: [], media: [], readiness: {} };
+  let tattooSpecialInterest = null;
   let manualTextTemplates = Object.fromEntries(
     (window.ManualTextAssist?.DEFAULT_TEMPLATES || []).map((template) => [template.key, { ...template }])
   );
@@ -1577,6 +1585,7 @@
         const checkoutDeadline = appointment?.paymentDueAt || appointment?.holdExpiresAt || "";
         const checkoutDeadlineMs = checkoutDeadline ? new Date(checkoutDeadline).getTime() : NaN;
         const requestedOnly = appointment?.status === "requested" && !appointment?.holdState;
+        const bookingPrepared = Boolean(submission.specialBookingPreparedAt);
         const checkoutStillOpen = appointmentIsPending(appointment)
           && appointment?.holdState === "active"
           && (!Number.isFinite(checkoutDeadlineMs) || checkoutDeadlineMs > Date.now())
@@ -1586,27 +1595,32 @@
           const control = document.getElementById(id);
           if (control) control.disabled = !clientControlsEnabled;
         });
+        if (!bookingPrepared) {
+          container.innerHTML = "<strong>Booking link not prepared</strong><br>Prepare the booking link before sending approval. Nothing has been sent.";
+          container.style.color = "var(--dim)";
+          return;
+        }
         if (active) {
           const activeUntil = checkoutStillOpen ? checkoutDeadline : active.expiresAt;
           const detail = requestedOnly
-            ? `Client deposit access is active${activeUntil ? ` until ${formatDate(activeUntil)}` : ""}. The requested time is not reserved; availability is checked when the client starts payment.`
+            ? `Client booking access is active${activeUntil ? ` until ${formatDate(activeUntil)}` : ""}. The requested time is not reserved; availability is checked when the client starts payment.`
             : checkoutStillOpen
             ? `Square checkout and client access are active${activeUntil ? ` until ${formatDate(activeUntil)}` : ""}.`
             : `Client access is active${activeUntil ? ` until ${formatDate(activeUntil)}` : ""}; the client can choose a new available time before paying.`;
-          container.innerHTML = `<strong>${requestedOnly ? "Client deposit page active" : "Deposit link active"}</strong><br>${escapeHtml(detail)}`;
+          container.innerHTML = `<strong>Booking link active</strong><br>${escapeHtml(detail)}`;
           container.style.color = "var(--accent)";
           return;
         }
         const salesClosesAt = submission.payload?.sales_closes_at || submission.payload?.salesClosesAt || "";
         const salesClosed = salesClosesAt && new Date(salesClosesAt).getTime() <= Date.now();
         const priorExpiry = checkoutDeadline || tokens.find((token) => token.expiresAt)?.expiresAt || "";
-        const stateLabel = checkoutStillOpen ? "Deposit link needs repair" : "Deposit link expired";
+        const stateLabel = checkoutStillOpen ? "Booking link needs repair" : "Booking link expired";
         const detail = checkoutStillOpen
           ? `The Square checkout remains active${checkoutDeadline ? ` until ${formatDate(checkoutDeadline)}` : ""}, but the client-facing link is not active.`
           : `Client access is no longer active${priorExpiry ? ` as of ${formatDate(priorExpiry)}` : ""}. Reopening creates fresh access so the client can choose an available time.`;
         container.innerHTML = `<strong>${stateLabel}</strong><br>${escapeHtml(detail)}${salesClosed
           ? `<br>The Tattoo Special sales window has closed, so this link cannot be reopened.`
-          : `<div class="booking-actions" style="margin-top:8px;"><button class="button" type="button" data-reopen-special-deposit="${escapeHtml(submissionId)}" data-special-deposit-mode="${checkoutStillOpen ? "repair" : "reopen"}">${checkoutStillOpen ? "Repair Deposit Link" : "Reopen Deposit Link"}</button></div>`}`;
+          : `<div class="booking-actions" style="margin-top:8px;"><button class="button" type="button" data-reopen-special-deposit="${escapeHtml(submissionId)}" data-special-deposit-mode="${checkoutStillOpen ? "repair" : "reopen"}">${checkoutStillOpen ? "Repair Booking Link" : "Reopen Booking Link"}</button></div>`}`;
         container.style.color = salesClosed ? "var(--dim)" : "var(--signal)";
         return;
       }
@@ -1742,7 +1756,7 @@
   function buildSubnav() {
     let html = "";
     if (activeTab === "analytics") {
-      html = [["overview","Overview"],["journeys","Journeys"],["acquisition","Acquisition"],["performance","Performance"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["overview","Overview"],["journeys","Journeys"],["acquisition","Acquisition"],["performance","Performance"],["tattoo-specials","Tattoo Specials"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "people") {
       html = [["directory","Directory"],["attention","Needs Attention"],["outreach","Outreach"],["integrations","Integrations & Imports"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "tattoo") {
@@ -3619,9 +3633,19 @@
     const isNew = !campaign.id;
     const artwork = (tattooSpecials.media || []).find((item) => item.id === campaign.artwork?.mediaId);
     const fallback = tattooSpecials.settings || {};
+    const interest = (tattooSpecialInterest?.campaigns || []).find((item) => item.id === campaign.id);
+    const interestSummary = isNew ? "" : interest ? `<div class="tattoo-special-interest-summary" aria-label="Rolling 30-day interest summary">
+      <span><small>Visitors</small><strong>${escapeHtml(interest.visitors || 0)}</strong></span>
+      <span><small>Interested</small><strong>${escapeHtml(interest.interestedSessions || 0)}</strong></span>
+      <span><small>Form starts</small><strong>${escapeHtml(interest.formStarts || 0)}</strong></span>
+      <span><small>Accepted</small><strong>${escapeHtml(interest.acceptedRequests || 0)}</strong></span>
+      <span><small>Compared</small><strong>${escapeHtml(interest.comparedSessions || 0)}</strong></span>
+      <button class="button" type="button" data-view-special-interest="${escapeHtml(campaign.id)}">Open analytics</button>
+    </div>` : `<div class="tattoo-special-interest-summary"><span><small>Rolling 30 days</small><strong>Unavailable</strong></span><button class="button" type="button" data-view-special-interest="${escapeHtml(campaign.id)}">Open analytics</button></div>`;
     return `<form class="tattoo-special-campaign ${campaign.isPublic ? "is-public" : ""}" data-tattoo-special-campaign-form data-campaign-id="${escapeHtml(campaign.id || "")}">
       <div class="portfolio-head"><div><span class="pill">${isNew ? "New campaign" : campaign.isPublic ? "Published campaign" : campaign.archivedAt ? "Archived campaign" : "Campaign"}</span><h3>${escapeHtml(campaign.title || "New Tattoo Specials Campaign")}</h3></div>${isNew ? "" : `<button class="button danger-button" type="button" data-archive-special-campaign="${escapeHtml(campaign.id)}">Archive Campaign</button>`}</div>
       <p class="contact">A campaign owns its sales window, artwork, default deposit, and specials. Publishing it replaces the campaign currently shown at /tattoos/specials/ without changing historical submissions.</p>
+      ${interestSummary}
       <div class="tattoo-specials-settings">
         <label>Campaign title<input name="title" required maxlength="200" value="${escapeHtml(campaign.title || "")}"></label>
         <label>Slug<input name="slug" required maxlength="160" value="${escapeHtml(campaign.slug || "")}"></label>
@@ -3677,7 +3701,13 @@
   }
 
   async function loadTattooSpecials() {
-    tattooSpecials = await api("/api/admin/tattoo/specials");
+    const [specialsResult, interestResult] = await Promise.allSettled([
+      api("/api/admin/tattoo/specials"),
+      api("/api/admin/analytics?view=tattoo-specials&range=30d&device=all"),
+    ]);
+    if (specialsResult.status === "rejected") throw specialsResult.reason;
+    tattooSpecials = specialsResult.value;
+    tattooSpecialInterest = interestResult.status === "fulfilled" ? interestResult.value.custom || null : null;
   }
 
   async function renderTattooSpecialsManager() {
@@ -4747,7 +4777,8 @@
 
   function tattooSpecialDepositIsPrepared(submission, appointment) {
     if (submission?.type !== "tattoo_special" || submission?.status !== "approved") return false;
-    return Boolean(submission.bookingUrl)
+    return Boolean(submission.specialBookingPreparedAt)
+      && Boolean(submission.bookingUrl)
       && submission.clientAccessStatus === "active";
   }
 
@@ -5248,11 +5279,11 @@ ${meetingLines}
       <div class="value" id="decisionCommunicationState">${escapeHtml(communicationStateLabel(submission))}</div>
       ${submission.status === "declined" ? `<label for="decisionClientMessage" style="margin-top:12px;">Client-facing decline reason</label><textarea id="decisionClientMessage" placeholder="Add the reviewed reason that may be sent to the client.">${escapeHtml(submission.decisionClientMessage || "")}</textarea><p class="contact">Saving this reason sends nothing.</p><div class="booking-actions" style="margin-top:10px;"><button class="button" id="saveDeclineReasonBtn" type="button">Save Decline Reason</button></div><p class="save-feedback" id="declineReasonSaveState" role="status" aria-live="polite"></p>` : ""}
       <div class="booking-actions" style="margin-top:10px;">
-        ${submission.status === "approved" && submission.type === "tattoo_special" && !specialPrepared ? `<button class="button" type="button" data-prepare-special-deposit="${escapeHtml(submission.id)}">Prepare Deposit Link</button>` : ""}
-        ${canSendDecision ? `<button class="button" type="button" data-send-decision-notification="${escapeHtml(submission.id)}">${submission.status === "declined" ? "Send Decline Notification" : "Send Approval Notification"}</button>` : ""}
+        ${submission.status === "approved" && submission.type === "tattoo_special" && !specialPrepared ? `<button class="button" type="button" data-prepare-special-deposit="${escapeHtml(submission.id)}">Prepare Booking Link</button>` : ""}
+        ${canSendDecision ? `<button class="button" type="button" data-send-decision-notification="${escapeHtml(submission.id)}">${submission.status === "declined" ? "Send Decline Notification" : submission.type === "tattoo_special" ? "Send Approval &amp; Booking Link" : "Send Approval Notification"}</button>` : ""}
         ${canResendConfirmation ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}">Resend Confirmation Email</button>` : ""}
       </div>
-      ${submission.status === "approved" && !canSendDecision ? `<p class="contact" style="margin-top:8px;">Prepare the required booking or deposit link before sending approval.</p>` : ""}
+      ${submission.status === "approved" && !canSendDecision ? `<p class="contact" style="margin-top:8px;">Prepare the required booking link before sending approval.</p>` : ""}
     `;
   }
 
@@ -7343,6 +7374,7 @@ ${meetingLines}
         "depositPaymentStatus",
         "depositPaidAt",
         "clientAccessStatus",
+        "specialBookingPreparedAt",
         "clientActivity",
       ];
       let activeClientActivityChanged = false;
@@ -7494,6 +7526,13 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("click", async (event) => {
+    const viewSpecialInterest = event.target.closest("[data-view-special-interest]");
+    if (viewSpecialInterest) {
+      location.hash = `#analytics/tattoo-specials?range=30d&device=all&campaign=${encodeURIComponent(viewSpecialInterest.dataset.viewSpecialInterest)}`;
+      setActiveTab("analytics");
+      return;
+    }
+
     const newScheduledPeriod = event.target.closest("[data-new-scheduled-period]");
     if (newScheduledPeriod) {
       schedulePeriodDraft = newSchedulePeriodDraft(newScheduledPeriod.dataset.newScheduledPeriod);
@@ -8742,8 +8781,8 @@ ${meetingLines}
       const mode = reopenSpecialDeposit.dataset.specialDepositMode || "reopen";
       try {
         setStatus(mode === "repair"
-          ? "Repairing active Tattoo Special deposit access; no email will be sent"
-          : "Reopening Tattoo Special deposit access; no email will be sent");
+          ? "Repairing active Tattoo Special booking access; no email will be sent"
+          : "Reopening Tattoo Special booking access; no email will be sent");
         let payload;
         if (mode === "repair") {
           payload = await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(submissionId)}/deposit`, {
@@ -8766,9 +8805,9 @@ ${meetingLines}
         const reopenedUrl = payload.clientUrl || payload.token?.bookingUrl || payload.token?.path || "";
         if (reopenedUrl) await navigator.clipboard?.writeText(reopenedUrl).catch(() => {});
         await loadAndRender();
-        setStatus("Deposit link reopened and copied; no email sent");
+        setStatus("Booking link reopened and copied; no email sent");
       } catch (error) {
-        setStatus(error.message || "Deposit link could not be reopened");
+        setStatus(error.message || "Booking link could not be reopened");
         if (reopenSpecialDeposit.isConnected) reopenSpecialDeposit.disabled = false;
       }
       return;
@@ -8778,14 +8817,14 @@ ${meetingLines}
     if (prepareSpecialDeposit) {
       prepareSpecialDeposit.disabled = true;
       try {
-        setStatus("Preparing Tattoo Special client deposit page; no time is reserved and no email will be sent");
+        setStatus("Preparing Tattoo Special booking link; no time is reserved and no email will be sent");
         await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(prepareSpecialDeposit.dataset.prepareSpecialDeposit)}/deposit`, {
           method: "POST",
         });
         await loadAndRender();
-        setStatus("Client deposit page prepared; no time reserved and no email sent");
+        setStatus("Booking link prepared; no time reserved and no email sent");
       } catch (error) {
-        setStatus(error.message || "Deposit link could not be prepared");
+        setStatus(error.message || "Booking link could not be prepared");
         if (prepareSpecialDeposit.isConnected) prepareSpecialDeposit.disabled = false;
       }
       return;

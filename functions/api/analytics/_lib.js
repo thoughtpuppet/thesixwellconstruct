@@ -10,6 +10,25 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Stay below that boundary so initial backfill and 12-month views request only
 // the history the source can actually return; D1 continues retaining 366 days.
 const RUM_LIVE_DAYS = 180;
+const ANALYTICS_EXCLUSION_COOKIE = "swc_analytics_excluded";
+const ANALYTICS_EXCLUSION_MAX_AGE = 365 * 24 * 60 * 60;
+const TATTOO_SPECIALS_PATH = "/tattoos/specials/";
+const TATTOO_SPECIAL_ACTIVITY_LIMIT = 10001;
+const TATTOO_SPECIAL_STAGES = [
+  ["campaign_opened", "Campaign opened"],
+  ["offer_viewed", "Offer viewed"],
+  ["offer_selected", "Offer selected"],
+  ["form_started", "Form started"],
+  ["purchaser_completed", "Purchaser completed"],
+  ["project_started", "Project started"],
+  ["project_completed", "Project completed"],
+  ["submit_attempted", "Submit attempted"],
+  ["request_accepted", "Request accepted"],
+];
+const TATTOO_SPECIAL_ACTIONS = new Set([
+  ...TATTOO_SPECIAL_STAGES.map(([action]) => action),
+  "reference_added",
+]);
 
 const ALLOWED_EVENTS = new Set([
   "page_view", "page_exit", "section_view", "navigation", "outbound_link", "cta",
@@ -37,7 +56,7 @@ const RANGE_WINDOWS = {
   "90d": { days: 90 },
   "12m": { days: 366 },
 };
-const VIEWS = new Set(["overview", "journeys", "acquisition", "performance"]);
+const VIEWS = new Set(["overview", "journeys", "acquisition", "performance", "tattoo-specials"]);
 const DEVICES = new Set(["all", "desktop", "mobile", "tablet"]);
 
 function clamp(value, min, max, fallback = 0) {
@@ -102,6 +121,41 @@ function safeSessionId(value) {
 
 function unknownKeys(value, allowed) {
   return Object.keys(value || {}).filter((key) => !allowed.has(key));
+}
+
+export function analyticsExcluded(request) {
+  const cookie = request.headers.get("cookie") || "";
+  return cookie.split(";").some((part) => {
+    const [name, ...value] = part.trim().split("=");
+    return name === ANALYTICS_EXCLUSION_COOKIE && value.join("=") === "1";
+  });
+}
+
+function exclusionCookie(excluded) {
+  const parts = [
+    `${ANALYTICS_EXCLUSION_COOKIE}=${excluded ? "1" : ""}`,
+    "Path=/",
+    "Secure",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${excluded ? ANALYTICS_EXCLUSION_MAX_AGE : 0}`,
+  ];
+  if (!excluded) parts.push("Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+  return parts.join("; ");
+}
+
+export async function handleAdminAnalyticsExclusion(request, env) {
+  const auth = requireStudioAdmin(request, env);
+  if (auth) return auth;
+  if (request.method === "GET") return json({ excluded: analyticsExcluded(request) });
+  if (request.method !== "PUT") return failure("Method not allowed.", 405);
+  let body;
+  try { body = await request.json(); } catch { return failure("Expected JSON body.", 400); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return failure("Expected JSON body.", 400);
+  const extras = unknownKeys(body, new Set(["excluded"]));
+  if (extras.length) return failure(`Unknown exclusion field: ${extras[0]}.`, 400);
+  if (typeof body.excluded !== "boolean") return failure("excluded must be true or false.", 400);
+  return json({ excluded: body.excluded }, { headers: { "set-cookie": exclusionCookie(body.excluded) } });
 }
 
 export function sanitizeAnalyticsEvent(value) {
@@ -171,6 +225,7 @@ function analyticsPoint(event, sessionId, country) {
 export async function handleAnalyticsEvents(request, env) {
   if (request.method !== "POST") return failure("Method not allowed.", 405);
   if (!sameOriginRequest(request)) return failure("Same-origin analytics requests only.", 403);
+  if (analyticsExcluded(request)) return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
   if (!(request.headers.get("content-type") || "").toLowerCase().startsWith("application/json")) {
     return failure("Analytics events require JSON.", 415);
   }
@@ -483,6 +538,220 @@ function queryList(rows, label, value = "value", secondary = "") {
   })).sort((a, b) => b.value - a.value);
 }
 
+async function loadTattooSpecialCatalog(env) {
+  if (!env.SUBMISSIONS_DB) return { campaigns: [], offers: [] };
+  try {
+    const [campaignRows, offerRows] = await Promise.all([
+      d1All(env.SUBMISSIONS_DB, `SELECT id,title,slug,is_public,archived_at
+        FROM tattoo_special_campaigns ORDER BY is_public DESC,sort_order,sales_opens_at DESC,created_at DESC`),
+      d1All(env.SUBMISSIONS_DB, `SELECT id,campaign_id,title,slug,archived_at
+        FROM tattoo_special_offers ORDER BY sort_order,created_at`),
+    ]);
+    return {
+      campaigns: campaignRows.map((row) => ({
+        id: safeSlug(row.id, 120), title: safeDimension(row.title || row.slug || row.id, 200),
+        isPublic: Boolean(row.is_public), archived: Boolean(row.archived_at),
+      })).filter((row) => row.id),
+      offers: offerRows.map((row) => ({
+        id: safeSlug(row.id, 160), campaignId: safeSlug(row.campaign_id, 120),
+        title: safeDimension(row.title || row.slug || row.id, 200), archived: Boolean(row.archived_at),
+      })).filter((row) => row.id),
+    };
+  } catch {
+    return { campaigns: [], offers: [] };
+  }
+}
+
+function tattooCatalogMaps(catalog = {}) {
+  return {
+    campaigns: new Map((catalog.campaigns || []).map((item) => [item.id, item])),
+    offers: new Map((catalog.offers || []).map((item) => [item.id, item])),
+  };
+}
+
+function stageIndex(action) {
+  return TATTOO_SPECIAL_STAGES.findIndex(([name]) => name === action);
+}
+
+function percent(value, total) {
+  return total > 0 ? Math.round((Number(value || 0) / total) * 1000) / 10 : 0;
+}
+
+export function aggregateTattooSpecialInterest(activityRows = [], page = {}, catalog = {}, truncated = false) {
+  const maps = tattooCatalogMaps(catalog);
+  const stageSessions = new Map(TATTOO_SPECIAL_STAGES.map(([action]) => [action, new Set()]));
+  const stageEvents = new Map(TATTOO_SPECIAL_STAGES.map(([action]) => [action, 0]));
+  const deepestBySession = new Map();
+  const campaignState = new Map();
+  const offerState = new Map();
+  const selections = new Map();
+  const comparedSessions = new Set();
+  const pathCounts = new Map();
+
+  function campaignFor(id) {
+    const campaignId = safeSlug(id, 120);
+    if (!campaignId) return null;
+    if (!campaignState.has(campaignId)) {
+      campaignState.set(campaignId, {
+        id: campaignId,
+        sessions: new Map(TATTOO_SPECIAL_STAGES.map(([action]) => [action, new Set()])),
+        compared: new Set(), references: new Set(),
+      });
+    }
+    return campaignState.get(campaignId);
+  }
+
+  function offerFor(id, campaignId = "") {
+    const offerId = safeSlug(id, 160);
+    if (!offerId) return null;
+    if (!offerState.has(offerId)) {
+      offerState.set(offerId, {
+        id: offerId, campaignId: safeSlug(campaignId, 120),
+        sessions: new Map(TATTOO_SPECIAL_STAGES.map(([action]) => [action, new Set()])),
+        events: new Map(), compared: new Set(),
+      });
+    }
+    const state = offerState.get(offerId);
+    if (!state.campaignId && campaignId) state.campaignId = safeSlug(campaignId, 120);
+    return state;
+  }
+
+  for (const row of activityRows || []) {
+    const sessionId = safeSessionId(row.session_id);
+    const action = safeSlug(row.action_name, 96);
+    const campaignId = safeSlug(row.campaign_id, 120);
+    const offerId = safeSlug(row.offer_id, 160);
+    if (!sessionId || !TATTOO_SPECIAL_ACTIONS.has(action)) continue;
+    const events = Math.max(0, Number(row.event_count || 0));
+    const index = stageIndex(action);
+    const campaign = campaignFor(campaignId);
+    const offer = offerFor(offerId, campaignId);
+    if (index >= 0) {
+      stageSessions.get(action).add(sessionId);
+      stageEvents.set(action, (stageEvents.get(action) || 0) + events);
+      if (campaign) campaign.sessions.get(action).add(sessionId);
+      if (offer) {
+        offer.sessions.get(action).add(sessionId);
+        offer.events.set(action, (offer.events.get(action) || 0) + events);
+      }
+      const deepest = deepestBySession.get(sessionId);
+      if (!deepest || index > deepest.index) deepestBySession.set(sessionId, { index, action });
+    }
+    if (action === "offer_selected" && campaign && offer) {
+      const key = `${sessionId}\u0000${campaignId}`;
+      if (!selections.has(key)) selections.set(key, { sessionId, campaignId, offers: new Map() });
+      const selected = selections.get(key).offers.get(offerId) || { offerId, sequence: Number(row.first_sequence || 0), clicks: 0 };
+      selected.sequence = Math.min(selected.sequence || Number.MAX_SAFE_INTEGER, Number(row.first_sequence || 0) || Number.MAX_SAFE_INTEGER);
+      selected.clicks += events;
+      selections.get(key).offers.set(offerId, selected);
+    }
+    if (action === "reference_added" && campaign) campaign.references.add(sessionId);
+  }
+
+  for (const selection of selections.values()) {
+    const ordered = [...selection.offers.values()].sort((a, b) => a.sequence - b.sequence || a.offerId.localeCompare(b.offerId));
+    if (ordered.length < 2) continue;
+    comparedSessions.add(selection.sessionId);
+    campaignFor(selection.campaignId)?.compared.add(selection.sessionId);
+    for (const item of ordered) offerFor(item.offerId, selection.campaignId)?.compared.add(selection.sessionId);
+    const offerIds = ordered.map((item) => item.offerId);
+    const key = `${selection.campaignId}\u0000${offerIds.join(">")}`;
+    const current = pathCounts.get(key) || { campaignId: selection.campaignId, offerIds, sessions: 0 };
+    current.sessions += 1;
+    pathCounts.set(key, current);
+  }
+
+  for (const campaign of catalog.campaigns || []) campaignFor(campaign.id);
+  for (const offer of catalog.offers || []) offerFor(offer.id, offer.campaignId);
+
+  const stages = TATTOO_SPECIAL_STAGES.map(([action, label], index) => {
+    const sessions = stageSessions.get(action)?.size || 0;
+    const previous = index ? stageSessions.get(TATTOO_SPECIAL_STAGES[index - 1][0])?.size || 0 : sessions;
+    return { action, label, sessions, events: stageEvents.get(action) || 0, fromPreviousPercent: index ? percent(sessions, previous) : 100 };
+  });
+  const deepestCounts = new Map(TATTOO_SPECIAL_STAGES.map(([action]) => [action, 0]));
+  for (const item of deepestBySession.values()) deepestCounts.set(item.action, (deepestCounts.get(item.action) || 0) + 1);
+  const deepest = TATTOO_SPECIAL_STAGES.map(([action, label]) => ({ action, label, sessions: deepestCounts.get(action) || 0 }));
+  const campaigns = [...campaignState.values()].map((state) => {
+    const details = maps.campaigns.get(state.id) || {};
+    return {
+      id: state.id, title: details.title || state.id, isPublic: Boolean(details.isPublic), archived: Boolean(details.archived),
+      visitors: state.sessions.get("campaign_opened")?.size || 0,
+      interestedSessions: state.sessions.get("offer_selected")?.size || 0,
+      formStarts: state.sessions.get("form_started")?.size || 0,
+      acceptedRequests: state.sessions.get("request_accepted")?.size || 0,
+      comparedSessions: state.compared.size, referenceAddedSessions: state.references.size,
+    };
+  }).sort((a, b) => Number(b.isPublic) - Number(a.isPublic) || b.visitors - a.visitors || a.title.localeCompare(b.title));
+  const offers = [...offerState.values()].map((state) => {
+    const details = maps.offers.get(state.id) || {};
+    const viewedSessions = state.sessions.get("offer_viewed")?.size || 0;
+    const selectingSessions = state.sessions.get("offer_selected")?.size || 0;
+    return {
+      id: state.id, campaignId: state.campaignId || details.campaignId || "", title: details.title || state.id,
+      viewedSessions, selectionClicks: state.events.get("offer_selected") || 0, selectingSessions,
+      formStarts: state.sessions.get("form_started")?.size || 0,
+      acceptedRequests: state.sessions.get("request_accepted")?.size || 0,
+      comparedSessions: state.compared.size, selectionRatePercent: percent(selectingSessions, viewedSessions),
+    };
+  }).sort((a, b) => b.selectingSessions - a.selectingSessions || b.viewedSessions - a.viewedSessions || a.title.localeCompare(b.title));
+  const paths = [...pathCounts.values()].map((item) => ({
+    ...item,
+    label: item.offerIds.map((id) => maps.offers.get(id)?.title || id).join(" → "),
+  })).sort((a, b) => b.sessions - a.sessions || a.label.localeCompare(b.label));
+  const stageBreakdown = [];
+  const deepestBreakdown = [];
+  for (const campaign of campaignState.values()) {
+    const campaignDeepest = new Map();
+    for (const [action] of TATTOO_SPECIAL_STAGES) {
+      stageBreakdown.push({ campaignId: campaign.id, offerId: "", action, sessions: campaign.sessions.get(action)?.size || 0 });
+      for (const sessionId of campaign.sessions.get(action) || []) {
+        const index = stageIndex(action);
+        if (!campaignDeepest.has(sessionId) || index > campaignDeepest.get(sessionId).index) campaignDeepest.set(sessionId, { action, index });
+      }
+    }
+    for (const [action] of TATTOO_SPECIAL_STAGES) {
+      deepestBreakdown.push({ campaignId: campaign.id, action, sessions: [...campaignDeepest.values()].filter((item) => item.action === action).length });
+    }
+  }
+
+  return {
+    pageEntries: Number(page.sessions || 0), pageViews: Number(page.page_views || 0),
+    campaignVisitors: stageSessions.get("campaign_opened")?.size || 0,
+    interestedSessions: stageSessions.get("offer_selected")?.size || 0,
+    formStarts: stageSessions.get("form_started")?.size || 0,
+    acceptedRequests: stageSessions.get("request_accepted")?.size || 0,
+    comparedSessions: comparedSessions.size,
+    referenceAddedSessions: new Set((activityRows || []).filter((row) => safeSlug(row.action_name, 96) === "reference_added").map((row) => safeSessionId(row.session_id)).filter(Boolean)).size,
+    avgActiveSeconds: Number(page.avg_active_seconds || 0), avgScroll: Number(page.avg_scroll || 0), recordedExits: Number(page.recorded_exits || 0),
+    stages, deepest, campaigns, offers, paths, stageBreakdown, deepestBreakdown, truncated: Boolean(truncated),
+  };
+}
+
+async function fetchCustomTattooSpecials(env, range, filters, catalog = null) {
+  const base = customWhere(range, { device: filters.device || "all", group: "" }, ["interactive_start", "interactive_milestone", "interactive_complete"]);
+  const campaignCondition = filters.campaign ? ` AND blob7 = ${sqlString(filters.campaign)}` : "";
+  const actionList = [...TATTOO_SPECIAL_ACTIONS].map(sqlString).join(",");
+  const pageWhere = `${customWhere(range, { device: filters.device || "all", group: "" }, ["page_view"])} AND blob2 = ${sqlString(TATTOO_SPECIALS_PATH)}`;
+  const exitWhere = `${customWhere(range, { device: filters.device || "all", group: "" }, ["page_exit"])} AND blob2 = ${sqlString(TATTOO_SPECIALS_PATH)}`;
+  const [activity, pageRows, engagementRows, loadedCatalog] = await Promise.all([
+    analyticsSql(env, `SELECT index1 session_id,blob6 action_name,blob7 campaign_id,blob8 offer_id,min(double5) first_sequence,sum(_sample_interval) event_count
+      FROM ${DATASET} WHERE ${base} AND blob2 = ${sqlString(TATTOO_SPECIALS_PATH)} AND blob6 IN (${actionList})${campaignCondition}
+      GROUP BY session_id,action_name,campaign_id,offer_id ORDER BY session_id,first_sequence LIMIT ${TATTOO_SPECIAL_ACTIVITY_LIMIT}`),
+    analyticsSql(env, `SELECT count(DISTINCT index1) sessions,sum(_sample_interval) page_views FROM ${DATASET} WHERE ${pageWhere}`),
+    analyticsSql(env, `SELECT sum(_sample_interval * double1) / sum(_sample_interval) avg_active_seconds,
+      sum(_sample_interval * double2) / sum(_sample_interval) avg_scroll,sum(_sample_interval) recorded_exits
+      FROM ${DATASET} WHERE ${exitWhere}`),
+    catalog ? Promise.resolve(catalog) : loadTattooSpecialCatalog(env),
+  ]);
+  const truncated = activity.length >= TATTOO_SPECIAL_ACTIVITY_LIMIT;
+  const selectedCatalog = filters.campaign ? {
+    campaigns: loadedCatalog.campaigns.filter((item) => item.id === filters.campaign),
+    offers: loadedCatalog.offers.filter((item) => item.campaignId === filters.campaign),
+  } : loadedCatalog;
+  return aggregateTattooSpecialInterest(activity.slice(0, TATTOO_SPECIAL_ACTIVITY_LIMIT - 1), { ...(pageRows[0] || {}), ...(engagementRows[0] || {}) }, selectedCatalog, truncated);
+}
+
 async function fetchCustomOverview(env, range, filters) {
   const [sessions, engagement, daily, groups, pages, hours, pageHours] = await Promise.all([
     analyticsSql(env, `SELECT count(DISTINCT index1) sessions FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_view"])}`),
@@ -557,7 +826,7 @@ function rollupList(rows, source, metric) {
   return [...totals.values()].sort((a, b) => b.value - a.value);
 }
 
-function applyRollupFallback(view, payload, rows) {
+function applyRollupFallback(view, payload, rows, filters = {}) {
   if (!rows.length) return payload;
   const total = (source, metric) => rows
     .filter((row) => row.source === source && row.metric === metric)
@@ -633,6 +902,72 @@ function applyRollupFallback(view, payload, rows) {
       }
     }
     payload.rum = { summary, series: [], paths: [...paths.values()].sort((a, b) => Number(b.lcp || 0) - Number(a.lcp || 0)), elements: [] };
+  } else if (view === "tattoo-specials" && !payload.sources.custom?.ready) {
+    const value = (metric) => total("custom", metric);
+    const selectedCampaign = filters.campaign || "";
+    const campaignValue = (metric) => rollupList(rows, "custom", metric).find((row) => row.label === selectedCampaign)?.value || 0;
+    const stageRows = selectedCampaign
+      ? rollupList(rows, "custom", "campaign_stage_sessions").filter((row) => row.label === selectedCampaign).map((row) => ({ label: row.secondary, value: row.value }))
+      : rollupList(rows, "custom", "stage_sessions");
+    const deepestRows = selectedCampaign
+      ? rollupList(rows, "custom", "campaign_deepest_sessions").filter((row) => row.label === selectedCampaign).map((row) => ({ label: row.secondary, value: row.value }))
+      : rollupList(rows, "custom", "deepest_sessions");
+    const campaignMetrics = new Map();
+    const offerMetrics = new Map();
+    const catalog = tattooCatalogMaps(payload.catalog || {});
+    for (const metric of ["campaign_visitors", "campaign_interested", "campaign_form_starts", "campaign_accepted", "campaign_compared", "campaign_reference_added"]) {
+      for (const row of rollupList(rows, "custom", metric)) {
+        const item = campaignMetrics.get(row.label) || { id: row.label };
+        item[metric] = row.value; campaignMetrics.set(row.label, item);
+      }
+    }
+    for (const metric of ["offer_views", "offer_selection_clicks", "offer_selecting_sessions", "offer_form_starts", "offer_accepted", "offer_compared"]) {
+      for (const row of rollupList(rows, "custom", metric)) {
+        const key = `${row.label}\u0000${row.secondary}`;
+        const item = offerMetrics.get(key) || { campaignId: row.label, id: row.secondary };
+        item[metric] = row.value; offerMetrics.set(key, item);
+      }
+    }
+    payload.custom = {
+      pageEntries: value("page_entries"), pageViews: value("page_views"),
+      campaignVisitors: selectedCampaign ? campaignValue("campaign_visitors") : value("campaign_visitors_total"),
+      interestedSessions: selectedCampaign ? campaignValue("campaign_interested") : value("interested_sessions"),
+      formStarts: selectedCampaign ? campaignValue("campaign_form_starts") : value("form_starts"),
+      acceptedRequests: selectedCampaign ? campaignValue("campaign_accepted") : value("accepted_requests"),
+      comparedSessions: selectedCampaign ? campaignValue("campaign_compared") : value("compared_sessions"),
+      referenceAddedSessions: selectedCampaign ? campaignValue("campaign_reference_added") : value("reference_added_sessions"),
+      avgActiveSeconds: metricRows("custom", "avg_active_seconds").length ? metricRows("custom", "avg_active_seconds").reduce((sum, row) => sum + Number(row.value || 0), 0) / metricRows("custom", "avg_active_seconds").length : 0,
+      avgScroll: metricRows("custom", "avg_scroll").length ? metricRows("custom", "avg_scroll").reduce((sum, row) => sum + Number(row.value || 0), 0) / metricRows("custom", "avg_scroll").length : 0,
+      recordedExits: value("recorded_exits"),
+      stages: TATTOO_SPECIAL_STAGES.map(([action, label], index) => {
+        const sessions = stageRows.find((row) => row.label === action)?.value || 0;
+        const previous = index ? stageRows.find((row) => row.label === TATTOO_SPECIAL_STAGES[index - 1][0])?.value || 0 : sessions;
+        return { action, label, sessions, events: 0, fromPreviousPercent: index ? percent(sessions, previous) : 100 };
+      }),
+      deepest: TATTOO_SPECIAL_STAGES.map(([action, label]) => ({ action, label, sessions: deepestRows.find((row) => row.label === action)?.value || 0 })),
+      campaigns: [...campaignMetrics.values()].filter((item) => !selectedCampaign || item.id === selectedCampaign).map((item) => ({
+        id: item.id, title: catalog.campaigns.get(item.id)?.title || item.id,
+        isPublic: Boolean(catalog.campaigns.get(item.id)?.isPublic), archived: Boolean(catalog.campaigns.get(item.id)?.archived),
+        visitors: item.campaign_visitors || 0, interestedSessions: item.campaign_interested || 0,
+        formStarts: item.campaign_form_starts || 0, acceptedRequests: item.campaign_accepted || 0,
+        comparedSessions: item.campaign_compared || 0, referenceAddedSessions: item.campaign_reference_added || 0,
+      })),
+      offers: [...offerMetrics.values()].filter((item) => !selectedCampaign || item.campaignId === selectedCampaign).map((item) => {
+        const viewedSessions = item.offer_views || 0;
+        const selectingSessions = item.offer_selecting_sessions || 0;
+        return {
+          id: item.id, campaignId: item.campaignId, title: catalog.offers.get(item.id)?.title || item.id,
+          viewedSessions, selectionClicks: item.offer_selection_clicks || 0, selectingSessions,
+          formStarts: item.offer_form_starts || 0, acceptedRequests: item.offer_accepted || 0,
+          comparedSessions: item.offer_compared || 0, selectionRatePercent: percent(selectingSessions, viewedSessions),
+        };
+      }),
+      paths: rollupList(rows, "custom", "selection_path").filter((row) => !selectedCampaign || row.label === selectedCampaign).map((row) => {
+        const offerIds = row.secondary.split(">");
+        return { campaignId: row.label, label: offerIds.map((id) => catalog.offers.get(id)?.title || id).join(" → "), offerIds, sessions: row.value };
+      }),
+      stageBreakdown: [], deepestBreakdown: [], truncated: false,
+    };
   }
   payload.rollupCoverage = { from: rows[0]?.day || "", through: rows.at(-1)?.day || "" };
   return payload;
@@ -643,7 +978,8 @@ function filtersFromUrl(url) {
   const rangeName = RANGE_WINDOWS[url.searchParams.get("range")] ? url.searchParams.get("range") : "30d";
   const device = DEVICES.has(url.searchParams.get("device")) ? url.searchParams.get("device") : "all";
   const group = safeSlug(url.searchParams.get("group"), 48);
-  return { view, rangeName, device, group };
+  const campaign = safeSlug(url.searchParams.get("campaign"), 120);
+  return { view, rangeName, device, group, campaign };
 }
 
 function reconcileOverviewSources(payload) {
@@ -656,7 +992,7 @@ function reconcileOverviewSources(payload) {
 
 async function buildAnalyticsView(env, options) {
   const range = options.range || dateRange(options.rangeName);
-  const filters = { device: options.device || "all", group: options.group || "" };
+  const filters = { device: options.device || "all", group: options.group || "", ...(options.view === "tattoo-specials" ? { campaign: options.campaign || "" } : {}) };
   const coverage = rangeCoverage(range);
   const payload = {
     view: options.view, range: options.rangeName, filters, generatedAt: new Date().toISOString(),
@@ -673,11 +1009,19 @@ async function buildAnalyticsView(env, options) {
     tasks.push(fetchCustomAcquisition(env, range, filters).then((data) => { payload.custom = data; payload.sources.custom = sourceState(true, "", payload.dataThrough); }).catch((error) => { payload.sources.custom = sourceState(false, error.message); }));
   } else if (options.view === "performance") {
     tasks.push(fetchRumPerformance(env, range, filters).then((data) => { payload.rum = data; payload.sources.rum = readyRumState(data, payload.dataThrough); }).catch((error) => { payload.sources.rum = sourceState(false, error.message); }));
+  } else if (options.view === "tattoo-specials") {
+    const catalogPromise = loadTattooSpecialCatalog(env);
+    tasks.push(catalogPromise.then((catalog) => { payload.catalog = catalog; }));
+    tasks.push(catalogPromise.then((catalog) => fetchCustomTattooSpecials(env, range, filters, catalog)).then((data) => {
+      payload.custom = data;
+      payload.sources.custom = sourceState(true, "", payload.dataThrough);
+      if (data.truncated) payload.sources.custom.state = "partial";
+    }).catch((error) => { payload.sources.custom = sourceState(false, error.message); }));
   }
   await Promise.all(tasks);
   if (options.view === "overview") reconcileOverviewSources(payload);
   const rollups = options.includeRollups === false ? [] : await loadRollups(env, range, options.view);
-  applyRollupFallback(options.view, payload, rollups);
+  applyRollupFallback(options.view, payload, rollups, filters);
   const states = Object.values(payload.sources);
   payload.state = states.length && states.every((state) => state.ready)
     ? (states.some((state) => state.state === "partial") ? "partial" : "current")
@@ -747,6 +1091,35 @@ function rowsFromPayload(day, view, payload) {
     for (const item of payload.rum?.paths || []) {
       for (const metric of ["lcp", "inp", "cls", "fcp", "pageLoad"]) add("rum", `${metric}_p75_path`, item[metric], item.path, "", item.samples);
     }
+  } else if (view === "tattoo-specials") {
+    const data = payload.custom || {};
+    add("custom", "page_entries", data.pageEntries || 0); add("custom", "page_views", data.pageViews || 0);
+    add("custom", "campaign_visitors_total", data.campaignVisitors || 0); add("custom", "interested_sessions", data.interestedSessions || 0);
+    add("custom", "form_starts", data.formStarts || 0); add("custom", "accepted_requests", data.acceptedRequests || 0);
+    add("custom", "compared_sessions", data.comparedSessions || 0); add("custom", "reference_added_sessions", data.referenceAddedSessions || 0);
+    add("custom", "avg_active_seconds", data.avgActiveSeconds || 0); add("custom", "avg_scroll", data.avgScroll || 0);
+    add("custom", "recorded_exits", data.recordedExits || 0);
+    for (const stage of data.stages || []) add("custom", "stage_sessions", stage.sessions || 0, stage.action);
+    for (const stage of data.deepest || []) add("custom", "deepest_sessions", stage.sessions || 0, stage.action);
+    for (const campaign of data.campaigns || []) {
+      add("custom", "campaign_visitors", campaign.visitors || 0, campaign.id);
+      add("custom", "campaign_interested", campaign.interestedSessions || 0, campaign.id);
+      add("custom", "campaign_form_starts", campaign.formStarts || 0, campaign.id);
+      add("custom", "campaign_accepted", campaign.acceptedRequests || 0, campaign.id);
+      add("custom", "campaign_compared", campaign.comparedSessions || 0, campaign.id);
+      add("custom", "campaign_reference_added", campaign.referenceAddedSessions || 0, campaign.id);
+    }
+    for (const stage of data.stageBreakdown || []) add("custom", "campaign_stage_sessions", stage.sessions || 0, stage.campaignId, stage.action);
+    for (const stage of data.deepestBreakdown || []) add("custom", "campaign_deepest_sessions", stage.sessions || 0, stage.campaignId, stage.action);
+    for (const offer of data.offers || []) {
+      add("custom", "offer_views", offer.viewedSessions || 0, offer.campaignId, offer.id);
+      add("custom", "offer_selection_clicks", offer.selectionClicks || 0, offer.campaignId, offer.id);
+      add("custom", "offer_selecting_sessions", offer.selectingSessions || 0, offer.campaignId, offer.id);
+      add("custom", "offer_form_starts", offer.formStarts || 0, offer.campaignId, offer.id);
+      add("custom", "offer_accepted", offer.acceptedRequests || 0, offer.campaignId, offer.id);
+      add("custom", "offer_compared", offer.comparedSessions || 0, offer.campaignId, offer.id);
+    }
+    for (const path of data.paths || []) add("custom", "selection_path", path.sessions || 0, path.campaignId, (path.offerIds || []).join(">"));
   }
   return rows;
 }
@@ -781,10 +1154,10 @@ export async function rollupSiteAnalytics(env, now = new Date()) {
     const range = { days: 1, start, end: new Date(start.getTime() + DAY_MS), startIso: start.toISOString(), endIso: new Date(start.getTime() + DAY_MS).toISOString() };
     try {
       let saved = 0;
-      for (const view of ["overview", "journeys", "acquisition", "performance"]) {
-        if (source === "rum" && view === "journeys") continue;
+      for (const view of ["overview", "journeys", "acquisition", "performance", "tattoo-specials"]) {
+        if (source === "rum" && ["journeys", "tattoo-specials"].includes(view)) continue;
         if (source === "custom" && view === "performance") continue;
-        const payload = await buildAnalyticsView(env, { view, rangeName: "1d", range, device: "all", group: "", includeRollups: false });
+        const payload = await buildAnalyticsView(env, { view, rangeName: "1d", range, device: "all", group: "", campaign: "", includeRollups: false });
         if (!payload.sources?.[source]?.ready) throw new Error(payload.sources?.[source]?.error || `${source} analytics is unavailable.`);
         const rows = rowsFromPayload(day, view, payload).filter((row) => row.source === source);
         await saveRollupRows(database, rows); saved += rows.length;

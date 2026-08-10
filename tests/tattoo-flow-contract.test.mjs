@@ -66,6 +66,7 @@ import {
 } from "../functions/api/booking/_lib.js";
 import { ingestCrmSourceRecord } from "../functions/api/crm/ingest.js";
 import {
+  appointmentConfirmationTemplateKey,
   handleAdminEmailDesign,
   handleAdminEmailTemplates,
   handleAdminPreviewNotification,
@@ -802,6 +803,10 @@ test("Studio submission progress reports current client notification delivery an
   database.prepare(
     "UPDATE submissions SET decision_revision=3,decided_at=? WHERE id='progress-request'",
   ).run(decidedAt);
+  database.prepare(
+    `INSERT INTO submission_events (id,submission_id,event_type,actor,note,created_at)
+     VALUES ('progress-booking-prepared','progress-request','special_deposit_link_prepared','admin','approval-first',?)`,
+  ).run("2026-08-03T16:02:00.000Z");
   insertAppointmentFixture(database, {
     id: "progress-appointment",
     submissionId: "progress-request",
@@ -878,8 +883,10 @@ test("Studio submission progress reports current client notification delivery an
   assert.equal(listedSubmission.clientLinkNotificationStatus, "unsent");
   assert.equal(listedSubmission.depositPaymentStatus, "paid");
   assert.ok(listedSubmission.depositPaidAt);
+  assert.equal(listedSubmission.specialBookingPreparedAt, "2026-08-03T16:02:00.000Z");
   assert.equal(cancelledSubmission.depositPaymentStatus, "none");
   assert.equal(cancelledSubmission.depositPaidAt, "");
+  assert.equal(cancelledSubmission.specialBookingPreparedAt, "");
 
   insertDelivery.run(
     "progress-current-sent",
@@ -4112,6 +4119,13 @@ test("Tattoo Specials public copy matches the approval-first booking lifecycle",
   assert.match(script, /After approval, a private link will make it easy to choose an available time and complete the deposit/);
   assert.doesNotMatch(script, /Direct booking|normal private booking link/);
   assert.doesNotMatch(script, /complexity approval|special-anime/);
+  for (const stage of ["campaign_opened", "offer_viewed", "offer_selected", "form_started", "purchaser_completed", "project_started", "project_completed", "reference_added", "submit_attempted", "request_accepted"]) {
+    assert.match(script, new RegExp(`"${stage}"`));
+  }
+  assert.match(script, /intersectionRatio >= 0\.5[\s\S]*?1000/);
+  assert.match(script, /analyticsTrack\(name, action, offerId = selectedOffer\?\.id/);
+  assert.doesNotMatch(script, /analyticsTrack\([^\n]*(?:name|email|phone|dob|placement|projectDetails|referenceLink|scriptText)\.value/);
+  assert.match(page, /id="specialsPurchaserFieldset"[\s\S]*?id="specialsProjectFieldset"/);
   assert.match(reschedule, /flow.*special-request/);
   assert.match(reschedule, /new time is not reserved until your deposit is paid/);
   assert.match(reschedule, /payload\.mode === 'special_request_changed'[\s\S]*?location\.assign\(payload\.clientUrl\)/);
@@ -4135,6 +4149,10 @@ test("Studio Tattoo Specials manager creates complete campaigns and campaign-own
   assert.match(studio, /name="campaignId" required/);
   assert.match(studio, /class="tattoo-special-metrics"[\s\S]*?Requests[\s\S]*?Awaiting deposit[\s\S]*?Booked[\s\S]*?Cancelled[\s\S]*?Conversion/);
   assert.match(studio, /Booked is a lifetime conversion count; Cancelled is included in Booked, and reschedules are not cancellations\./);
+  assert.match(studio, /Promise\.allSettled\([\s\S]*?view=tattoo-specials&range=30d&device=all/);
+  assert.match(studio, /tattoo-special-interest-summary/);
+  assert.match(studio, /data-view-special-interest/);
+  assert.match(studio, /#analytics\/tattoo-specials\?range=30d&device=all&campaign=/);
   assert.match(studio, /\/api\/admin\/tattoo\/specials\/campaigns/);
   assert.match(worker, /handleAdminTattooSpecialCampaign/);
   assert.match(worker, /tattooSpecialCampaignMatch/);
@@ -4151,11 +4169,11 @@ test("Studio request details open an editable native text message to the submitt
 
 test("Studio prepares an approval-first Tattoo Special booking link silently before explicit client email", () => {
   const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
-  assert.match(studio, /data-prepare-special-deposit[\s\S]*?Prepare Deposit Link/);
+  assert.match(studio, /data-prepare-special-deposit[\s\S]*?Prepare Booking Link/);
   assert.match(studio, /\/tattoo\/specials\/submissions\/\$\{encodeURIComponent\(prepareSpecialDeposit\.dataset\.prepareSpecialDeposit\)\}\/deposit/);
-  assert.match(studio, /data-send-decision-notification[\s\S]*?Send Approval Notification/);
-  assert.match(studio, /Prepare the required booking or deposit link before sending approval/);
-  assert.match(studio, /function tattooSpecialDepositIsPrepared\(submission, appointment\)[\s\S]*?Boolean\(submission\.bookingUrl\)[\s\S]*?submission\.clientAccessStatus === "active"/);
+  assert.match(studio, /data-send-decision-notification[\s\S]*?Send Approval &amp; Booking Link/);
+  assert.match(studio, /Prepare the required booking link before sending approval/);
+  assert.match(studio, /function tattooSpecialDepositIsPrepared\(submission, appointment\)[\s\S]*?Boolean\(submission\.specialBookingPreparedAt\)[\s\S]*?Boolean\(submission\.bookingUrl\)[\s\S]*?submission\.clientAccessStatus === "active"/);
   assert.match(studio, /const specialClientUrl = tattooSpecialDepositIsPrepared\(submission, appointment\)[\s\S]*?\? bookingUrl/);
   assert.match(studio, /const specialPrepared = tattooSpecialDepositIsPrepared\(submission, appointment\)/);
   const preparationHelper = studio.match(/(function tattooSpecialDepositIsPrepared\(submission, appointment\) \{[\s\S]*?\r?\n  \})/);
@@ -4164,25 +4182,28 @@ test("Studio prepares an approval-first Tattoo Special booking link silently bef
   runInNewContext(`${preparationHelper[1]}
 result = {
   initialLink: tattooSpecialDepositIsPrepared(
-    { type: "tattoo_special", status: "approved", bookingUrl: "/b/initial", clientAccessStatus: "active" },
+    { type: "tattoo_special", status: "approved", bookingUrl: "/b/initial", clientAccessStatus: "active", specialBookingPreparedAt: "" },
     { status: "requested", holdState: "", approvalState: "approved", paymentDueAt: "" },
   ),
   preparedLink: tattooSpecialDepositIsPrepared(
-    { type: "tattoo_special", status: "approved", bookingUrl: "/b/deposit", clientAccessStatus: "active" },
+    { type: "tattoo_special", status: "approved", bookingUrl: "/b/deposit", clientAccessStatus: "active", specialBookingPreparedAt: "2099-08-07T19:59:00.000Z" },
     { status: "requested", holdState: "", approvalState: "approved", paymentDueAt: "2099-08-07T20:00:00.000Z" },
   ),
 };`, preparationSandbox);
-  assert.deepEqual({ ...preparationSandbox.result }, { initialLink: true, preparedLink: true });
+  assert.deepEqual({ ...preparationSandbox.result }, { initialLink: false, preparedLink: true });
   assert.match(studio, /specialClientUrl: Boolean\(specialClientUrl\)[\s\S]*?booking_url: specialClientUrl \|\| bookingUrl/);
   assert.match(studio, /Prepared booking URL[\s\S]*?id="tokenStateInfo"[\s\S]*?renderBookingTokenControls\(submission\)/);
-  assert.match(studio, /Deposit link active/);
-  assert.match(studio, /Deposit link needs repair/);
-  assert.match(studio, /Deposit link expired/);
+  assert.match(studio, /const bookingPrepared = Boolean\(submission\.specialBookingPreparedAt\)[\s\S]*?if \(!bookingPrepared\)[\s\S]*?Booking link not prepared[\s\S]*?if \(active\)/);
+  assert.match(studio, /Booking link not prepared/);
+  assert.match(studio, /Booking link active/);
+  assert.match(studio, /Booking link needs repair/);
+  assert.match(studio, /Booking link expired/);
   assert.match(studio, /data-reopen-special-deposit="\$\{escapeHtml\(submissionId\)\}"/);
   assert.match(studio, /data-special-deposit-mode="\$\{checkoutStillOpen \? "repair" : "reopen"\}"/);
   assert.match(studio, /mode === "repair"[\s\S]*?\/tattoo\/specials\/submissions\/[\s\S]*?\/deposit/);
   assert.match(studio, /api\("\/api\/admin\/booking\/tokens"[\s\S]*?revokeExisting: true/);
-  assert.match(studio, /Deposit link reopened and copied; no email sent/);
+  assert.match(studio, /Booking link reopened and copied; no email sent/);
+  assert.doesNotMatch(studio, /(?:Prepare|Repair|Reopen) Deposit Link|Deposit link (?:active|expired|needs repair)/);
 });
 
 test("Studio only offers private-booking approval email when current client access is active", () => {
@@ -7131,6 +7152,26 @@ test("a completed Square webhook settles the booking once in People", async () =
     `SELECT COUNT(*) count FROM crm_transactions
      WHERE source_provider='local' AND source_type='deposit_payment' AND source_id=?`
   ).get(paymentRowId).count, 1);
+  assert.deepEqual(
+    database.prepare(
+      `SELECT template_key,idempotency_key,status
+       FROM notification_deliveries
+       WHERE related_type='appointment' AND related_id=?
+       ORDER BY template_key`
+    ).all(appointmentId).map((row) => ({ ...row })),
+    [
+      {
+        template_key: "admin_appointment_confirmed",
+        idempotency_key: `admin_appointment_confirmed:${appointmentId}`,
+        status: "pending",
+      },
+      {
+        template_key: "consultation_confirmed_in_person",
+        idempotency_key: `appointment_confirmed:${appointmentId}`,
+        status: "pending",
+      },
+    ],
+  );
 });
 
 test("a paid replacement updates both appointment states in People", async () => {
@@ -7317,6 +7358,131 @@ test("pending admin appointment notifications survive the request and retry from
   assert.equal(database.prepare(
     "SELECT status FROM notification_deliveries WHERE idempotency_key = ?",
   ).get(`admin_appointment_confirmed:${appointmentId}`).status, "sent");
+});
+
+test("client and admin appointment confirmations fail independently and retry without duplicates", async () => {
+  const database = migratedDatabase();
+  const appointmentId = "durable-client-and-admin-notifications";
+  const createdAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  insertAppointmentFixture(database, {
+    id: appointmentId,
+    status: "confirmed",
+    purpose: "tattoo",
+    bookingTypeId: "tattoo_full",
+    email: "collector@example.test",
+    startAt: new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString(),
+    endAt: new Date(Date.now() + 102 * 60 * 60 * 1000).toISOString(),
+  });
+  const queued = [
+    {
+      id: "durable-client-notification-delivery",
+      templateKey: "appointment_confirmed",
+      recipient: "collector@example.test",
+      idempotencyKey: `appointment_confirmed:${appointmentId}`,
+    },
+    {
+      id: "durable-admin-notification-delivery-2",
+      templateKey: "admin_appointment_confirmed",
+      recipient: "studio@example.test",
+      idempotencyKey: `admin_appointment_confirmed:${appointmentId}`,
+    },
+  ];
+  for (const delivery of queued) {
+    database.prepare(
+      `INSERT INTO notification_deliveries (
+        id, channel, template_key, recipient, subject, related_type,
+        related_id, idempotency_key, status, error, sent_at, created_at
+      ) VALUES (?, 'email', ?, ?, NULL, 'appointment',
+                ?, ?, 'pending', NULL, NULL, ?)`
+    ).run(
+      delivery.id,
+      delivery.templateKey,
+      delivery.recipient,
+      appointmentId,
+      delivery.idempotencyKey,
+      createdAt,
+    );
+  }
+
+  const failedResult = await retryPendingAdminAppointmentNotifications({
+    SUBMISSIONS_DB: new LocalD1(database),
+    ADMIN_NOTIFICATION_EMAIL: "studio@example.test",
+    ADMIN_NOTIFICATION_FROM_EMAIL: "notifications@example.test",
+    NOTIFICATION_REPLY_TO: "studio@example.test",
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: {
+      async send() {
+        const error = new Error("Temporary provider interruption");
+        error.code = "E_INTERNAL_SERVER_ERROR";
+        throw error;
+      },
+    },
+  });
+  assert.deepEqual(failedResult, { sent: 0, skipped: 0, failed: 2 });
+  const failures = database.prepare(
+    `SELECT status,error FROM notification_deliveries
+     WHERE related_id=? ORDER BY template_key`
+  ).all(appointmentId).map((row) => ({ ...row }));
+  assert.deepEqual(failures, [
+    { status: "failed", error: "E_INTERNAL_SERVER_ERROR: Temporary provider interruption" },
+    { status: "failed", error: "E_INTERNAL_SERVER_ERROR: Temporary provider interruption" },
+  ]);
+
+  database.prepare(
+    "UPDATE notification_deliveries SET created_at=? WHERE related_id=? AND status='failed'"
+  ).run(createdAt, appointmentId);
+  const sent = [];
+  const successEnv = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    ADMIN_NOTIFICATION_EMAIL: "studio@example.test",
+    ADMIN_NOTIFICATION_FROM_EMAIL: "notifications@example.test",
+    NOTIFICATION_REPLY_TO: "studio@example.test",
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: {
+      async send(message) {
+        sent.push(message);
+        return { messageId: `retry-${sent.length}` };
+      },
+    },
+  };
+  assert.deepEqual(
+    await retryPendingAdminAppointmentNotifications(successEnv),
+    { sent: 2, skipped: 0, failed: 0 },
+  );
+  assert.deepEqual(sent.map((message) => message.to).sort(), [
+    "collector@example.test",
+    "studio@example.test",
+  ]);
+  assert.deepEqual(
+    database.prepare(
+      "SELECT status FROM notification_deliveries WHERE related_id=? ORDER BY template_key"
+    ).all(appointmentId).map((row) => row.status),
+    ["sent", "sent"],
+  );
+  assert.deepEqual(
+    await retryPendingAdminAppointmentNotifications(successEnv),
+    { sent: 0, skipped: 0, failed: 0 },
+  );
+  assert.equal(sent.length, 2);
+});
+
+test("appointment confirmation outbox keys match each booking email variant", () => {
+  assert.deepEqual(
+    [
+      "consult_in_person",
+      "consult_virtual",
+      "build_in_person",
+      "studio_visit",
+      "tattoo_full",
+    ].map(appointmentConfirmationTemplateKey),
+    [
+      "consultation_confirmed_in_person",
+      "consultation_confirmed_virtual",
+      "build_session_confirmed",
+      "studio_booking_confirmed",
+      "appointment_confirmed",
+    ],
+  );
 });
 
 test("tattoo admin notification subjects use canonical art.pill names without changing client subjects", async () => {

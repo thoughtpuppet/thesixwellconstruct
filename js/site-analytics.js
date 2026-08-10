@@ -118,9 +118,9 @@
       targetPath: properties.targetPath ? normalizePath(properties.targetPath) : "",
       targetHost: host(properties.targetHost), action: slug(properties.action, 96),
       sectionId: slug(properties.sectionId, 120), itemId: slug(properties.itemId, 160),
-      referrerHost: host(properties.referrerHost), utmSource: slug(properties.utmSource, 80),
-      utmMedium: slug(properties.utmMedium, 80), utmCampaign: slug(properties.utmCampaign, 120),
-      utmContent: slug(properties.utmContent, 120), contentGroup: slug(properties.contentGroup || contentGroup(path), 48),
+      referrerHost: host(properties.referrerHost), utmSource: slug(properties.utmSource || campaign.utmSource, 80),
+      utmMedium: slug(properties.utmMedium || campaign.utmMedium, 80), utmCampaign: slug(properties.utmCampaign || campaign.utmCampaign, 120),
+      utmContent: slug(properties.utmContent || campaign.utmContent, 120), contentGroup: slug(properties.contentGroup || contentGroup(path), 48),
       device: properties.device || deviceType(), resultBucket: slug(properties.resultBucket, 48),
       formId: slug(properties.formId, 120), mediaId: slug(properties.mediaId, 160),
       activeSeconds: Number(properties.activeSeconds || 0), maxScroll: Number(properties.maxScroll || 0),
@@ -335,5 +335,6 @@
   global.addEventListener("sixwell:form-complete", function (event) { track("form_complete", { formId: slug(event.detail?.formId || "form", 120) }); });
 
   global.SixWellAnalytics = { track: track, flush: function (beacon) { return flush(Boolean(beacon)); }, normalizePath: normalizePath };
+  global.dispatchEvent(new CustomEvent("sixwell:analytics-ready"));
   markPageView();
 })(window);
