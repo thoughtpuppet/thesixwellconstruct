@@ -302,6 +302,41 @@
   .availability-manager .day-button.booked-dark { background:#3F0808; border-color:#3F0808; color:var(--text); }
   .availability-manager .slot-preview-item { border-bottom:5px solid var(--ring-faint); }
   .availability-manager .save-schedule { width:100%; margin-top:16px; }
+  .scheduled-category { display:grid; gap:12px; border-top:5px solid var(--ring-faint); padding-top:14px; }
+  .scheduled-category:first-child { border-top:0; padding-top:0; }
+  .scheduled-period-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+  .scheduled-period-head h3 { margin:8px 0 0; }
+  .scheduled-period-list { display:grid; gap:10px; }
+  .scheduled-period-card { border:5px solid var(--ring-faint); padding:12px; display:flex; justify-content:space-between; align-items:center; gap:12px; min-width:0; }
+  .scheduled-period-card strong { display:block; color:var(--text); font-family:var(--sans); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; }
+  .scheduled-period-editor { border:5px solid var(--accent); padding:14px; display:grid; gap:14px; margin-top:16px; min-width:0; }
+  .scheduled-weekdays { display:grid; gap:12px; }
+  .scheduled-weekday { border-top:5px solid var(--ring-faint); padding-top:12px; display:grid; gap:10px; }
+  .scheduled-day-windows { display:grid; gap:10px; }
+  .scheduled-window { border:5px solid var(--ring-faint); padding:12px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+  .scheduled-window .wide-field { grid-column:span 3; }
+  .day-override-layout { display:grid; grid-template-columns:minmax(240px,340px) minmax(0,1fr); gap:18px; align-items:start; }
+  .day-override-calendar { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:12px; min-width:0; }
+  .day-override-calendar .day-button { position:relative; overflow:hidden; }
+  .day-override-calendar .day-button.has-custom { border-color:var(--accent); color:var(--text); background:rgba(252,184,103,0.12); }
+  .day-override-calendar .day-button.has-scheduled { border-color:#5C78A7; color:var(--text); background:rgba(92,120,167,0.22); }
+  .day-override-calendar .day-button.has-closed { border-color:var(--signal); color:var(--text); background:rgba(110,4,4,0.5); }
+  .day-override-calendar .day-button.has-mixed { border-color:var(--accent); background:linear-gradient(135deg,rgba(252,184,103,0.14) 0 50%,rgba(110,4,4,0.5) 50% 100%); color:var(--text); }
+  .day-override-calendar .day-button.has-booking::after { content:""; position:absolute; right:5px; bottom:5px; width:7px; height:7px; background:#55BA5A; }
+  .day-override-editor { border:5px solid var(--ring-faint); padding:14px; display:grid; gap:14px; min-width:0; }
+  .day-override-editor-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .day-override-category { border-top:5px solid var(--ring-faint); padding-top:14px; display:grid; gap:12px; }
+  .day-override-category:first-of-type { border-top:0; padding-top:0; }
+  .day-override-windows { display:grid; gap:10px; }
+  .day-override-window { border:5px solid var(--ring-faint); padding:12px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+  .day-override-window .wide-field { grid-column:span 3; }
+  .day-override-actions { display:flex; gap:10px; flex-wrap:wrap; }
+  .day-override-warning { border:5px solid rgba(236,94,38,0.72); padding:10px 12px; color:var(--text); font-family:var(--sans); font-size:10px; line-height:1.6; letter-spacing:0.06em; text-transform:uppercase; }
+  .legend-dot.weekly { background:transparent; }
+  .legend-dot.scheduled { background:#5C78A7; border-color:#5C78A7; }
+  .legend-dot.custom { background:rgba(252,184,103,0.45); border-color:var(--accent); }
+  .legend-dot.closed { background:#6E0404; border-color:var(--signal); }
+  .legend-dot.booked { background:#55BA5A; border-color:#55BA5A; }
   .token-modal { position:fixed; inset:0; display:grid; place-items:center; padding:24px; background:rgba(14,14,14,0.92); z-index:10; }
   .token-card { width:min(520px,100%); border:1px solid var(--line-strong); padding:24px; background:var(--panel); display:grid; gap:14px; }
   .token-card h2 { font-size:22px; }
@@ -548,9 +583,15 @@
     .availability-manager .availability-form,
     .booking-readiness-grid,
     .availability-manager .availability-edit-form,
-    .availability-manager .day-row { grid-template-columns:1fr; }
+    .availability-manager .day-row,
+    .scheduled-window,
+    .day-override-layout,
+    .day-override-window { grid-template-columns:1fr; }
     .availability-manager .weekly-day-header { align-items:stretch; flex-direction:column; }
     .availability-manager .wide-field { grid-column:auto; }
+    .day-override-window .wide-field { grid-column:auto; }
+    .scheduled-window .wide-field { grid-column:auto; }
+    .scheduled-period-card { align-items:stretch; flex-direction:column; }
     .portfolio-editor-grid .portfolio-card { grid-template-columns:1fr; }
     .portfolio-editor-grid .portfolio-card-media { position:static; }
   }
@@ -733,6 +774,13 @@
   let typeValue = "";
   let availabilityPreviewMonth = "";
   let selectedCalendarDay = "";
+  let dateOverrideMonth = "";
+  let selectedOverrideDay = "";
+  let dateOverrides = [];
+  let availabilityScheduleRules = [];
+  let availabilityScheduleSettings = {};
+  let availabilitySchedulePeriods = [];
+  let schedulePeriodDraft = null;
   let homeMonth = "";
   let selectedHomeDay = "";
   let selectedEventSlug = "";
@@ -1591,6 +1639,7 @@
         const error = new Error(payload.error || "Request failed.");
         error.code = payload.code || "";
         error.status = response.status;
+        error.payload = payload;
         throw error;
       }
       return payload;
@@ -3873,6 +3922,9 @@
       layoutEl.classList.add("single");
       listPane.classList.add("hidden");
       selectedCalendarDay = "";
+      dateOverrideMonth = monthKey(new Date().toISOString());
+      selectedOverrideDay = dayKey(new Date().toISOString());
+      dateOverrides = [];
       renderAvailabilityManager().catch((error) => setStatus(error.message));
       return;
     }
@@ -3953,6 +4005,7 @@
     activeId = "";
     activeAppointmentId = "";
     typeValue = "";
+    schedulePeriodDraft = null;
     subView = tab === "analytics" ? (window.StudioAnalytics?.hashState?.().view || "overview") : tab === "tattoo" ? "appointments" : tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
     selectedCalendarDay = "";
     selectedEventSlug = "";
@@ -3967,6 +4020,7 @@
     activeAppointmentId = "";
     statusValue = "";
     typeValue = "";
+    schedulePeriodDraft = null;
     renderActiveTab();
   }
 
@@ -6286,6 +6340,7 @@ ${meetingLines}
     const panel = document.getElementById("bookingTypesPanel");
     if (!panel) return;
     const payload = await api("/api/admin/booking/types");
+    if (!panel.isConnected || panel !== document.getElementById("bookingTypesPanel")) return;
     bookingTypes = payload.bookingTypes || [];
     renderBookingTypePrices();
   }
@@ -6363,6 +6418,7 @@ ${meetingLines}
     const panel = document.getElementById("bookingReadinessPanel");
     if (!panel) return;
     const payload = await api(availabilityApi("/api/admin/booking/readiness"));
+    if (!panel.isConnected || panel !== document.getElementById("bookingReadinessPanel")) return;
     renderBookingReadiness(payload);
   }
 
@@ -6370,6 +6426,7 @@ ${meetingLines}
     const calendar = document.getElementById("bookedCalendar");
     if (!calendar) return;
     const payload = await api(availabilityApi("/api/admin/booking/availability-preview"));
+    if (!calendar.isConnected || calendar !== document.getElementById("bookedCalendar")) return;
     const bookedDays = payload.bookedDays || [];
     const dayStats = dayStatsFromAppointments();
     const visibleAppointments = activeScopedAppointments();
@@ -6383,6 +6440,7 @@ ${meetingLines}
     const monthSelect = document.getElementById("previewMonthSelect");
     const prevButton = document.getElementById("previewPrevMonth");
     const nextButton = document.getElementById("previewNextMonth");
+    if (!monthSelect || !prevButton || !nextButton) return;
     const index = monthKeys.indexOf(availabilityPreviewMonth);
     monthSelect.innerHTML = monthKeys.map((key) => `<option value="${escapeHtml(key)}">${escapeHtml(monthLabel(key))}</option>`).join("");
     monthSelect.value = availabilityPreviewMonth;
@@ -6428,6 +6486,347 @@ ${meetingLines}
         </div>
       </div>
     `;
+  }
+
+  function shiftedMonthKey(value, offset) {
+    const [year, month] = String(value || monthKey(new Date().toISOString())).split("-").map(Number);
+    const shifted = new Date(year, month - 1 + offset, 1);
+    return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function schedulePeriodForDate(category, date = selectedOverrideDay) {
+    return availabilitySchedulePeriods.find((period) => period.category === category
+      && period.startDate <= date && (!period.endDate || period.endDate >= date)) || null;
+  }
+
+  function schedulePeriodWindowMarkup(windowRow = {}) {
+    return `
+      <div class="scheduled-window" data-scheduled-window>
+        <div class="field"><label>Start</label><input data-scheduled-window-field="startTime" type="time" value="${escapeHtml(windowRow.startTime || "12:00")}"></div>
+        <div class="field"><label>End</label><input data-scheduled-window-field="endTime" type="time" value="${escapeHtml(windowRow.endTime || "18:00")}"></div>
+        <div class="field"><label>Capacity</label><input data-scheduled-window-field="capacity" type="number" min="1" step="1" value="${escapeHtml(windowRow.capacity || availabilityScheduleSettings.defaultCapacity || 1)}"></div>
+        <div class="field"><label>Buffer Before</label><input data-scheduled-window-field="bufferBeforeMinutes" type="number" min="0" step="5" value="${escapeHtml(windowRow.bufferBeforeMinutes ?? availabilityScheduleSettings.defaultBufferBeforeMinutes ?? 0)}"></div>
+        <div class="field"><label>Buffer After</label><input data-scheduled-window-field="bufferAfterMinutes" type="number" min="0" step="5" value="${escapeHtml(windowRow.bufferAfterMinutes ?? availabilityScheduleSettings.defaultBufferAfterMinutes ?? 0)}"></div>
+        <div class="field wide-field"><label>Note</label><input data-scheduled-window-field="note" value="${escapeHtml(windowRow.note || "")}" placeholder="Optional studio note"></div>
+        <button class="button danger-button" type="button" data-remove-scheduled-window>Remove Window</button>
+      </div>`;
+  }
+
+  function copiedWeeklySchedule(category) {
+    return availabilityScheduleRules.filter((rule) => (rule.category || "tattooing") === category && rule.active)
+      .map((rule) => ({
+        dayOfWeek: Number(rule.dayOfWeek), startTime: rule.startTime, endTime: rule.endTime,
+        capacity: Number(rule.capacity || availabilityScheduleSettings.defaultCapacity || 1),
+        bufferBeforeMinutes: Number(rule.bufferBeforeMinutes ?? availabilityScheduleSettings.defaultBufferBeforeMinutes ?? 0),
+        bufferAfterMinutes: Number(rule.bufferAfterMinutes ?? availabilityScheduleSettings.defaultBufferAfterMinutes ?? 0),
+        note: rule.note || "",
+      }));
+  }
+
+  function newSchedulePeriodDraft(category) {
+    const date = new Date();
+    date.setDate(date.getDate() + 14);
+    return {
+      id: "", category, label: "", startDate: dayKey(date), endDate: "",
+      windows: copiedWeeklySchedule(category),
+    };
+  }
+
+  function schedulePeriodEditorMarkup() {
+    if (!schedulePeriodDraft) return "";
+    const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return `
+      <form class="scheduled-period-editor" id="scheduledPeriodForm" data-scheduled-category="${escapeHtml(schedulePeriodDraft.category)}" data-scheduled-id="${escapeHtml(schedulePeriodDraft.id || "")}">
+        <div class="scheduled-period-head"><div><span class="pill">${schedulePeriodDraft.id ? "Edit" : "New"} Scheduled Hours</span><h3>${escapeHtml(availabilityConfig().groups.find((group) => group.category === schedulePeriodDraft.category)?.label || schedulePeriodDraft.category)}</h3></div><button class="button" type="button" data-cancel-scheduled-period>Cancel</button></div>
+        <div class="schedule-grid">
+          <div class="field"><label>Label (optional)</label><input data-scheduled-field="label" maxlength="120" value="${escapeHtml(schedulePeriodDraft.label || "")}" placeholder="School Schedule"></div>
+          <div class="field"><label>Start Date</label><input data-scheduled-field="startDate" type="date" required value="${escapeHtml(schedulePeriodDraft.startDate || "")}"></div>
+          <div class="field"><label>End Date (optional)</label><input data-scheduled-field="endDate" type="date" value="${escapeHtml(schedulePeriodDraft.endDate || "")}"></div>
+        </div>
+        <p class="contact">Leave the end date blank to keep these hours active until you edit or delete this change. A day with no windows is closed.</p>
+        <div class="scheduled-weekdays">
+          ${names.map((name, dayOfWeek) => {
+            const windows = (schedulePeriodDraft.windows || []).filter((item) => Number(item.dayOfWeek) === dayOfWeek);
+            return `<section class="scheduled-weekday" data-scheduled-day="${dayOfWeek}">
+              <div class="weekly-day-header"><div><span class="day-name">${name}</span><span class="meta">${windows.length ? `${windows.length} window${windows.length === 1 ? "" : "s"}` : "Closed"}</span></div><button class="button" type="button" data-add-scheduled-window>Add Time Window</button></div>
+              <div class="scheduled-day-windows">${windows.map(schedulePeriodWindowMarkup).join("")}</div>
+            </section>`;
+          }).join("")}
+        </div>
+        <div class="day-override-actions"><button class="button" type="submit">Save Scheduled Hours</button>${schedulePeriodDraft.id ? '<button class="button danger-button" type="button" data-delete-scheduled-period>Delete Change</button>' : ""}</div>
+      </form>`;
+  }
+
+  function renderSchedulePeriods() {
+    const container = document.getElementById("scheduledWeeklyChanges");
+    if (!container) return;
+    const groups = availabilityConfig().groups;
+    container.innerHTML = `${groups.map((group) => {
+      const periods = availabilitySchedulePeriods.filter((period) => period.category === group.category);
+      return `<section class="scheduled-category">
+        <div class="scheduled-period-head"><div><span class="pill">${escapeHtml(group.label)}</span><p class="contact">${escapeHtml(group.note)}</p></div><button class="button" type="button" data-new-scheduled-period="${escapeHtml(group.category)}">Schedule Future Hours</button></div>
+        <div class="scheduled-period-list">${periods.length ? periods.map((period) => `<div class="scheduled-period-card">
+          <div><strong>${escapeHtml(period.label || "Scheduled Weekly Change")}</strong><div class="meta">${escapeHtml(period.startDate)} &mdash; ${escapeHtml(period.endDate || "No end date")} / ${period.windows.length} weekly window${period.windows.length === 1 ? "" : "s"}</div></div>
+          <button class="button" type="button" data-edit-scheduled-period="${escapeHtml(period.id)}">Edit</button>
+        </div>`).join("") : '<p class="empty">No scheduled changes.</p>'}</div>
+      </section>`;
+    }).join("")}${schedulePeriodEditorMarkup()}`;
+    enhanceControls(container);
+  }
+
+  async function loadSchedulePeriods() {
+    const container = document.getElementById("scheduledWeeklyChanges");
+    if (!container) return;
+    const payload = await api(availabilityApi("/api/admin/booking/schedule-periods"));
+    if (!container.isConnected || container !== document.getElementById("scheduledWeeklyChanges")) return;
+    availabilitySchedulePeriods = payload.schedulePeriods || [];
+    if (schedulePeriodDraft?.id) {
+      schedulePeriodDraft = availabilitySchedulePeriods.find((period) => period.id === schedulePeriodDraft.id) || null;
+    }
+    renderSchedulePeriods();
+  }
+
+  function schedulePeriodsMarkup() {
+    return `<section class="schedule-section is-open" data-collapse-section>
+      <button class="section-toggle" type="button">Scheduled Weekly Changes</button>
+      <div class="section-body">
+        <p class="contact">Create future weekly hours now. They activate automatically on the start date; an optional end date returns that category to its baseline weekly schedule.</p>
+        <div id="scheduledWeeklyChanges"><p class="empty">Loading scheduled weekly changes.</p></div>
+      </div>
+    </section>`;
+  }
+
+  function dateOverrideFor(category, date = selectedOverrideDay) {
+    return dateOverrides.find((item) => item.category === category && item.date === date) || null;
+  }
+
+  function weeklyWindowsForDate(category, date = selectedOverrideDay) {
+    const dayOfWeek = new Date(`${date}T12:00:00`).getDay();
+    const scheduled = schedulePeriodForDate(category, date);
+    if (scheduled) {
+      return scheduled.windows.filter((windowRow) => Number(windowRow.dayOfWeek) === dayOfWeek)
+        .map(({ dayOfWeek: ignored, ...windowRow }) => ({ ...windowRow }));
+    }
+    return availabilityScheduleRules
+      .filter((rule) => (rule.category || "tattooing") === category && Number(rule.dayOfWeek) === dayOfWeek && rule.active)
+      .map((rule) => ({
+        startTime: rule.startTime,
+        endTime: rule.endTime,
+        capacity: Number(rule.capacity || availabilityScheduleSettings.defaultCapacity || 1),
+        bufferBeforeMinutes: Number(rule.bufferBeforeMinutes ?? availabilityScheduleSettings.defaultBufferBeforeMinutes ?? 0),
+        bufferAfterMinutes: Number(rule.bufferAfterMinutes ?? availabilityScheduleSettings.defaultBufferAfterMinutes ?? 0),
+        note: rule.note || "",
+      }));
+  }
+
+  function appointmentCategory(appointment) {
+    const bookingTypeId = appointment?.bookingTypeId || "";
+    if (ART_VISIT_BOOKING_TYPE_IDS.includes(bookingTypeId)) return "art_visit";
+    if (STUDIO_SPACE_BOOKING_TYPE_IDS.includes(bookingTypeId)) return "studio_space";
+    if (["consult_in_person", "consult_virtual", "build_in_person"].includes(bookingTypeId)) return "consultation";
+    return "tattooing";
+  }
+
+  function appointmentsForOverrideDate(category, date = selectedOverrideDay) {
+    return activeScopedAppointments().filter((appointment) => (
+      dayKey(appointment.startAt) === date && appointmentCategory(appointment) === category
+    ));
+  }
+
+  function dateOverrideWindowMarkup(windowRow = {}) {
+    return `
+      <div class="day-override-window" data-date-override-window>
+        <div class="field">
+          <label>Start</label>
+          <input data-date-window-field="startTime" type="time" value="${escapeHtml(windowRow.startTime || "12:00")}">
+        </div>
+        <div class="field">
+          <label>End</label>
+          <input data-date-window-field="endTime" type="time" value="${escapeHtml(windowRow.endTime || "18:00")}">
+        </div>
+        <div class="field">
+          <label>Same-Time Capacity</label>
+          <input data-date-window-field="capacity" type="number" min="1" step="1" value="${escapeHtml(windowRow.capacity || availabilityScheduleSettings.defaultCapacity || 1)}">
+        </div>
+        <div class="field">
+          <label>Buffer Before</label>
+          <input data-date-window-field="bufferBeforeMinutes" type="number" min="0" step="5" value="${escapeHtml(windowRow.bufferBeforeMinutes ?? availabilityScheduleSettings.defaultBufferBeforeMinutes ?? 0)}">
+        </div>
+        <div class="field">
+          <label>Buffer After</label>
+          <input data-date-window-field="bufferAfterMinutes" type="number" min="0" step="5" value="${escapeHtml(windowRow.bufferAfterMinutes ?? availabilityScheduleSettings.defaultBufferAfterMinutes ?? 0)}">
+        </div>
+        <div class="field wide-field">
+          <label>Note</label>
+          <input data-date-window-field="note" value="${escapeHtml(windowRow.note || "")}" placeholder="Optional studio note">
+        </div>
+        <button class="button danger-button" type="button" data-remove-date-window>Remove Window</button>
+      </div>`;
+  }
+
+  function renderDateOverrideCalendar() {
+    const calendar = document.getElementById("dateOverrideCalendar");
+    const label = document.getElementById("dateOverrideMonthLabel");
+    if (!calendar || !dateOverrideMonth) return;
+    if (label) label.textContent = monthLabel(dateOverrideMonth);
+    const [year, month] = dateOverrideMonth.split("-").map(Number);
+    const firstDay = new Date(year, month - 1, 1);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const today = dayKey(new Date());
+    const bookedDates = new Set(activeScopedAppointments().map((appointment) => dayKey(appointment.startAt)));
+    const cells = [];
+    for (let blank = 0; blank < firstDay.getDay(); blank += 1) {
+      cells.push('<button class="day-button blank" type="button" tabindex="-1" aria-hidden="true"></button>');
+    }
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = `${dateOverrideMonth}-${String(day).padStart(2, "0")}`;
+      const items = dateOverrides.filter((item) => item.date === date);
+      const modes = new Set(items.map((item) => item.mode));
+      const hasScheduled = availabilityConfig().groups.some((group) => schedulePeriodForDate(group.category, date));
+      const statusClass = modes.size > 1
+        ? " has-mixed"
+        : modes.has("closed")
+          ? " has-closed"
+          : modes.has("custom")
+            ? " has-custom"
+            : hasScheduled ? " has-scheduled" : "";
+      const bookedClass = bookedDates.has(date) ? " has-booking" : "";
+      const selectedClass = date === selectedOverrideDay ? " selected" : "";
+      const todayClass = date === today ? " today" : "";
+      const summaries = availabilityConfig().groups.map((group) => {
+        const override = dateOverrideFor(group.category, date);
+        const scheduled = schedulePeriodForDate(group.category, date);
+        return `${group.label}: ${override ? override.mode === "closed" ? "closed" : "custom hours" : scheduled ? `scheduled hours${scheduled.label ? ` (${scheduled.label})` : ""}` : "baseline weekly schedule"}`;
+      });
+      const bookingSummary = bookedDates.has(date) ? " Existing appointments." : "";
+      cells.push(`
+        <button class="day-button${statusClass}${bookedClass}${selectedClass}${todayClass}" type="button" data-override-day="${escapeHtml(date)}" title="${escapeHtml(`${summaries.join("; ")}.${bookingSummary}`)}" aria-label="${escapeHtml(`${date}: ${summaries.join("; ")}.${bookingSummary}`)}">
+          ${day}
+        </button>`);
+    }
+    calendar.innerHTML = `
+      <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+      <div class="calendar-grid">${cells.join("")}</div>`;
+  }
+
+  function renderDateOverrideEditor() {
+    const editor = document.getElementById("dateOverrideEditor");
+    if (!editor) return;
+    if (!selectedOverrideDay) {
+      editor.innerHTML = '<p class="empty">Select a date to adjust its availability.</p>';
+      return;
+    }
+    const dateLabel = new Date(`${selectedOverrideDay}T12:00:00`).toLocaleDateString([], {
+      weekday: "long", month: "long", day: "numeric", year: "numeric",
+    });
+    editor.innerHTML = `
+      <div class="day-override-editor-head">
+        <div>
+          <span class="pill">Selected Day</span>
+          <h3>${escapeHtml(dateLabel)}</h3>
+        </div>
+        <span class="meta">Date changes override the weekly schedule.</span>
+      </div>
+      ${availabilityConfig().groups.map((group) => {
+        const override = dateOverrideFor(group.category);
+        const mode = override?.mode || "weekly";
+        const scheduled = schedulePeriodForDate(group.category);
+        const existingAppointments = appointmentsForOverrideDate(group.category);
+        return `
+          <section class="day-override-category" data-date-override-category="${escapeHtml(group.category)}">
+            <div>
+              <span class="pill">${escapeHtml(group.label)}</span>
+              <p class="contact">${escapeHtml(group.note)}</p>
+              ${!override && scheduled ? `<p class="meta">Following scheduled weekly hours: ${escapeHtml(scheduled.label || `${scheduled.startDate}${scheduled.endDate ? ` through ${scheduled.endDate}` : " onward"}`)}.</p>` : !override ? '<p class="meta">Following the baseline weekly schedule.</p>' : ""}
+            </div>
+            ${existingAppointments.length ? `<div class="day-override-warning">${escapeHtml(`${existingAppointments.length} existing appointment${existingAppointments.length === 1 ? "" : "s"} on this date will remain booked. Changing availability affects new bookings only.`)}</div>` : ""}
+            <div class="field">
+              <label>Day Setting</label>
+              <select data-date-override-mode>
+                <option value="weekly"${mode === "weekly" ? " selected" : ""}>Follow Weekly Schedule</option>
+                <option value="custom"${mode === "custom" ? " selected" : ""}>Custom Hours</option>
+                <option value="closed"${mode === "closed" ? " selected" : ""}>Closed</option>
+              </select>
+            </div>
+            <div data-date-override-custom${mode === "custom" ? "" : " hidden"}>
+              <div class="day-override-windows" data-date-override-windows>
+                ${mode === "custom" ? (override?.windows || []).map(dateOverrideWindowMarkup).join("") : ""}
+              </div>
+              <button class="button" type="button" data-add-date-window>Add Time Window</button>
+            </div>
+            <div class="day-override-actions">
+              <button class="button" type="button" data-save-date-override>Save Day</button>
+              <button class="button danger-button" type="button" data-reset-date-override${override ? "" : " disabled"}>Reset to Weekly</button>
+            </div>
+          </section>`;
+      }).join("")}`;
+    enhanceControls(editor);
+  }
+
+  async function loadDateOverrides() {
+    const calendar = document.getElementById("dateOverrideCalendar");
+    if (!calendar) return;
+    if (!dateOverrideMonth) dateOverrideMonth = monthKey(new Date().toISOString());
+    const payload = await api(`${availabilityApi("/api/admin/booking/date-overrides")}&month=${encodeURIComponent(dateOverrideMonth)}`);
+    if (!calendar.isConnected || calendar !== document.getElementById("dateOverrideCalendar")) return;
+    dateOverrides = payload.overrides || [];
+    renderDateOverrideCalendar();
+    renderDateOverrideEditor();
+  }
+
+  function dateOverrideWindowsFromSection(section) {
+    return [...section.querySelectorAll("[data-date-override-window]")].map((row) => {
+      const fields = Object.fromEntries([...row.querySelectorAll("[data-date-window-field]")]
+        .map((field) => [field.dataset.dateWindowField, field.value]));
+      return {
+        startTime: fields.startTime,
+        endTime: fields.endTime,
+        capacity: Number(fields.capacity),
+        bufferBeforeMinutes: Number(fields.bufferBeforeMinutes),
+        bufferAfterMinutes: Number(fields.bufferAfterMinutes),
+        note: fields.note || "",
+      };
+    });
+  }
+
+  function confirmOverrideWithAppointments(category, mode) {
+    const existing = appointmentsForOverrideDate(category);
+    if (!existing.length || mode === "weekly") return true;
+    const details = existing.map((appointment) => {
+      const time = new Date(appointment.startAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      return `${time} — ${appointment.clientName || "Unnamed client"}`;
+    }).join("\n");
+    return window.confirm(
+      `This date has ${existing.length} existing appointment${existing.length === 1 ? "" : "s"}:\n\n${details}\n\nThey will remain booked. This change affects new bookings only. Continue?`,
+    );
+  }
+
+  function dateOverridesMarkup() {
+    return `
+      <section class="schedule-section is-open" data-collapse-section>
+        <button class="section-toggle" type="button">Day Overrides</button>
+        <div class="section-body">
+          <p class="contact">Choose a date to use its weekly schedule, replace it with specific hours, or close it to new bookings.</p>
+          <div class="day-override-layout">
+            <div class="day-override-calendar">
+              <div class="calendar-tools">
+                <button class="button icon-button" id="dateOverridePrevMonth" type="button" aria-label="Previous month">&lt;</button>
+                <span class="appt-day-label" id="dateOverrideMonthLabel"></span>
+                <button class="button icon-button" id="dateOverrideNextMonth" type="button" aria-label="Next month">&gt;</button>
+              </div>
+              <div id="dateOverrideCalendar"></div>
+              <div class="calendar-legend" aria-label="Day override legend">
+                <span class="legend-item"><span class="legend-dot weekly"></span>Weekly</span>
+                <span class="legend-item"><span class="legend-dot scheduled"></span>Scheduled</span>
+                <span class="legend-item"><span class="legend-dot custom"></span>Custom</span>
+                <span class="legend-item"><span class="legend-dot closed"></span>Closed</span>
+                <span class="legend-item"><span class="legend-dot booked"></span>Booked</span>
+              </div>
+            </div>
+            <div class="day-override-editor" id="dateOverrideEditor"><p class="empty">Loading day availability.</p></div>
+          </div>
+        </div>
+      </section>`;
   }
 
   async function renderAppointmentsManager() {
@@ -6491,7 +6890,7 @@ ${meetingLines}
         <div class="detail-head">
           <span class="pill">${escapeHtml(scopeLabel)} / Availability</span>
           <h2>${escapeHtml(scopeLabel)} Availability</h2>
-          <p class="contact">Set recurring weekly hours once. Use exceptions only for extra days, closed days, or unusual blocks.</p>
+          <p class="contact">Set baseline weekly hours, schedule future weekly changes, and use Day Overrides for a specific date. Advanced Exceptions remain available for unusual per-session blocks.</p>
         </div>
       <section class="schedule-section is-open" data-collapse-section>
         <button class="section-toggle" type="button">Booking Readiness</button>
@@ -6557,6 +6956,8 @@ ${meetingLines}
           </div>
         </section>
       </form>
+      ${schedulePeriodsMarkup()}
+      ${dateOverridesMarkup()}
       ${config.showWalkIns === false ? "" : `<section class="schedule-section" data-collapse-section>
         <button class="section-toggle" type="button">Walk-In Windows</button>
         <div class="section-body">
@@ -6584,8 +6985,9 @@ ${meetingLines}
       </section>`}
       ${appointmentCalendarSection}
       <section class="schedule-section" data-collapse-section>
-        <button class="section-toggle" type="button">Exceptions</button>
+        <button class="section-toggle" type="button">Advanced Exceptions</button>
         <div class="section-body">
+        <p class="contact">Use this only for a one-off per-session blackout or extra bookable block. Whole-day and custom-day changes belong in Day Overrides.</p>
         <form id="availabilityForm" class="availability-form">
         <div class="field">
           <label for="availabilityStart">Exception Start</label>
@@ -6634,6 +7036,8 @@ ${meetingLines}
     await loadBookingReadiness();
     await loadBookingTypes();
     await loadSchedule();
+    await loadSchedulePeriods();
+    await loadDateOverrides();
     await loadWalkIns();
     if (activeTab === "studio" || activeTab === "art") await loadAvailabilityPreview();
     await loadAvailability();
@@ -6678,9 +7082,14 @@ ${meetingLines}
   }
 
   async function loadSchedule() {
+    const form = document.getElementById("scheduleForm");
+    if (!form) return;
     const payload = await api("/api/admin/booking/schedule");
+    if (!form.isConnected || form !== document.getElementById("scheduleForm")) return;
     const settings = payload.settings || {};
     const rules = payload.rules || [];
+    availabilityScheduleSettings = settings;
+    availabilityScheduleRules = rules;
     document.getElementById("settingTimezone").value = settings.timezone || "America/New_York";
     document.getElementById("settingHorizon").value = settings.bookingHorizonDays || 60;
     document.getElementById("settingNotice").value = settings.minimumNoticeHours || 48;
@@ -6710,12 +7119,14 @@ ${meetingLines}
       }).join("");
     });
     enhanceControls(detailEl);
+    if (document.getElementById("dateOverrideEditor")) renderDateOverrideEditor();
   }
 
   async function loadAvailability() {
     const list = document.getElementById("availabilityList");
     if (!list) return;
     const payload = await api(availabilityApi("/api/admin/booking/availability"));
+    if (!list.isConnected || list !== document.getElementById("availabilityList")) return;
     const windows = payload.availabilityWindows || [];
     list.innerHTML = windows.length ? windows.map((windowItem) => `
       <div class="availability-item" data-availability-item="${escapeHtml(windowItem.id)}">
@@ -6787,6 +7198,7 @@ ${meetingLines}
     const list = document.getElementById("walkInList");
     if (!list) return;
     const payload = await api(availabilityApi("/api/admin/booking/walk-ins"));
+    if (!list.isConnected || list !== document.getElementById("walkInList")) return;
     const windows = payload.walkInWindows || [];
     list.innerHTML = windows.length ? windows.map((windowItem) => `
       <div class="availability-item" data-walk-in-item="${escapeHtml(windowItem.id)}">
@@ -7065,6 +7477,138 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("click", async (event) => {
+    const newScheduledPeriod = event.target.closest("[data-new-scheduled-period]");
+    if (newScheduledPeriod) {
+      schedulePeriodDraft = newSchedulePeriodDraft(newScheduledPeriod.dataset.newScheduledPeriod);
+      renderSchedulePeriods();
+      document.getElementById("scheduledPeriodForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setStatus("Future weekly hours copied from the baseline schedule");
+      return;
+    }
+
+    const editScheduledPeriod = event.target.closest("[data-edit-scheduled-period]");
+    if (editScheduledPeriod) {
+      const period = availabilitySchedulePeriods.find((item) => item.id === editScheduledPeriod.dataset.editScheduledPeriod);
+      schedulePeriodDraft = period ? JSON.parse(JSON.stringify(period)) : null;
+      renderSchedulePeriods();
+      document.getElementById("scheduledPeriodForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    if (event.target.closest("[data-cancel-scheduled-period]")) {
+      schedulePeriodDraft = null;
+      renderSchedulePeriods();
+      setStatus("Scheduled-hours edit cancelled");
+      return;
+    }
+
+    const addScheduledWindow = event.target.closest("[data-add-scheduled-window]");
+    if (addScheduledWindow) {
+      const day = addScheduledWindow.closest("[data-scheduled-day]");
+      day?.querySelector(".scheduled-day-windows")?.insertAdjacentHTML("beforeend", schedulePeriodWindowMarkup());
+      enhanceControls(day);
+      setStatus("Scheduled time window added; save to apply it");
+      return;
+    }
+
+    const removeScheduledWindow = event.target.closest("[data-remove-scheduled-window]");
+    if (removeScheduledWindow) {
+      removeScheduledWindow.closest("[data-scheduled-window]")?.remove();
+      setStatus("Scheduled time window removed; save to apply it");
+      return;
+    }
+
+    if (event.target.closest("[data-delete-scheduled-period]")) {
+      const form = event.target.closest("[data-scheduled-id]");
+      const id = form?.dataset.scheduledId || "";
+      const category = form?.dataset.scheduledCategory || "";
+      if (!id || !category || !window.confirm("Delete this scheduled weekly change? Its category will return to the applicable baseline hours for those dates.")) return;
+      setStatus("Deleting scheduled weekly change");
+      await api(availabilityApi(`/api/admin/booking/schedule-periods/${encodeURIComponent(category)}/${encodeURIComponent(id)}`), { method: "DELETE" });
+      schedulePeriodDraft = null;
+      await loadSchedulePeriods();
+      await loadDateOverrides();
+      await loadAvailabilityPreview();
+      setStatus("Scheduled weekly change deleted");
+      return;
+    }
+
+    const overrideDay = event.target.closest("[data-override-day]");
+    if (overrideDay) {
+      selectedOverrideDay = overrideDay.dataset.overrideDay;
+      renderDateOverrideCalendar();
+      renderDateOverrideEditor();
+      return;
+    }
+
+    if (event.target.id === "dateOverridePrevMonth" || event.target.id === "dateOverrideNextMonth") {
+      dateOverrideMonth = shiftedMonthKey(dateOverrideMonth, event.target.id === "dateOverridePrevMonth" ? -1 : 1);
+      selectedOverrideDay = `${dateOverrideMonth}-01`;
+      setStatus("Loading day availability");
+      await loadDateOverrides();
+      setStatus("Day availability loaded");
+      return;
+    }
+
+    const addDateWindow = event.target.closest("[data-add-date-window]");
+    if (addDateWindow) {
+      const section = addDateWindow.closest("[data-date-override-category]");
+      const container = section?.querySelector("[data-date-override-windows]");
+      if (!container) return;
+      container.insertAdjacentHTML("beforeend", dateOverrideWindowMarkup());
+      enhanceControls(container.lastElementChild);
+      setStatus("Custom time window added; save the day to apply it");
+      return;
+    }
+
+    const removeDateWindow = event.target.closest("[data-remove-date-window]");
+    if (removeDateWindow) {
+      removeDateWindow.closest("[data-date-override-window]")?.remove();
+      setStatus("Custom time window removed; save the day to apply it");
+      return;
+    }
+
+    const resetDateOverride = event.target.closest("[data-reset-date-override]");
+    if (resetDateOverride) {
+      const section = resetDateOverride.closest("[data-date-override-category]");
+      const category = section?.dataset.dateOverrideCategory || "";
+      if (!category || !selectedOverrideDay || !dateOverrideFor(category)) return;
+      if (!window.confirm("Reset this date to its recurring weekly schedule?")) return;
+      setStatus("Resetting date to weekly schedule");
+      await api(availabilityApi(`/api/admin/booking/date-overrides/${encodeURIComponent(category)}/${selectedOverrideDay}`), { method: "DELETE" });
+      await loadDateOverrides();
+      await loadAvailabilityPreview();
+      setStatus("Date reset to weekly schedule");
+      return;
+    }
+
+    const saveDateOverride = event.target.closest("[data-save-date-override]");
+    if (saveDateOverride) {
+      const section = saveDateOverride.closest("[data-date-override-category]");
+      const category = section?.dataset.dateOverrideCategory || "";
+      const mode = section?.querySelector("[data-date-override-mode]")?.value || "weekly";
+      if (!category || !selectedOverrideDay) return;
+      if (!confirmOverrideWithAppointments(category, mode)) return;
+      setStatus(mode === "weekly" ? "Resetting date to weekly schedule" : "Saving date override");
+      const path = availabilityApi(`/api/admin/booking/date-overrides/${encodeURIComponent(category)}/${selectedOverrideDay}`);
+      if (mode === "weekly") {
+        if (dateOverrideFor(category)) await api(path, { method: "DELETE" });
+      } else {
+        await api(path, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            mode,
+            windows: mode === "custom" ? dateOverrideWindowsFromSection(section) : [],
+          }),
+        });
+      }
+      await loadDateOverrides();
+      await loadAvailabilityPreview();
+      setStatus(mode === "weekly" ? "Date follows the weekly schedule" : mode === "closed" ? "Date closed to new bookings" : "Custom date hours saved");
+      return;
+    }
+
     const addWeeklyRule = event.target.closest("[data-add-weekly-rule]");
     if (addWeeklyRule) {
       const weeklyDay = addWeeklyRule.closest("[data-weekly-day]");
@@ -7981,7 +8525,7 @@ ${meetingLines}
       const id = deleteButton.dataset.deleteWindow;
       if (!window.confirm("Delete this exception from availability?")) return;
       setStatus("Deleting exception");
-      await api(`/api/admin/booking/availability/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await api(availabilityApi(`/api/admin/booking/availability/${encodeURIComponent(id)}`), { method: "DELETE" });
       await loadAvailability();
       await loadAvailabilityPreview();
       setStatus("Exception deleted");
@@ -8473,7 +9017,7 @@ ${meetingLines}
     const toggle = event.target.closest("[data-toggle-window]");
     if (toggle) {
       setStatus("Updating window");
-      await api(`/api/admin/booking/availability/${encodeURIComponent(toggle.dataset.toggleWindow)}`, {
+      await api(availabilityApi(`/api/admin/booking/availability/${encodeURIComponent(toggle.dataset.toggleWindow)}`), {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ active: toggle.dataset.active === "1" }),
@@ -8872,7 +9416,7 @@ ${meetingLines}
       event.preventDefault();
       const id = editForm.dataset.editForm;
       setStatus("Saving exception");
-      await api(`/api/admin/booking/availability/${encodeURIComponent(id)}`, {
+      await api(availabilityApi(`/api/admin/booking/availability/${encodeURIComponent(id)}`), {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(editAvailabilityPayload(editForm)),
@@ -8895,6 +9439,56 @@ ${meetingLines}
       });
       await loadWalkIns();
       setStatus("Walk-in saved");
+      return;
+    }
+
+    if (event.target.id === "scheduledPeriodForm") {
+      event.preventDefault();
+      const form = event.target;
+      const category = form.dataset.scheduledCategory || "";
+      const id = form.dataset.scheduledId || "";
+      const field = (name) => form.querySelector(`[data-scheduled-field="${name}"]`)?.value || "";
+      const windows = [...form.querySelectorAll("[data-scheduled-window]")].map((row) => {
+        const dayOfWeek = Number(row.closest("[data-scheduled-day]")?.dataset.scheduledDay);
+        const fields = Object.fromEntries([...row.querySelectorAll("[data-scheduled-window-field]")]
+          .map((input) => [input.dataset.scheduledWindowField, input.value]));
+        return {
+          dayOfWeek,
+          startTime: fields.startTime,
+          endTime: fields.endTime,
+          capacity: Number(fields.capacity),
+          bufferBeforeMinutes: Number(fields.bufferBeforeMinutes),
+          bufferAfterMinutes: Number(fields.bufferAfterMinutes),
+          note: fields.note || "",
+        };
+      });
+      const body = { label: field("label"), startDate: field("startDate"), endDate: field("endDate"), windows };
+      const path = availabilityApi(`/api/admin/booking/schedule-periods/${encodeURIComponent(category)}${id ? `/${encodeURIComponent(id)}` : ""}`);
+      const save = (confirmExistingAppointments = false) => api(path, {
+        method: id ? "PUT" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...body, confirmExistingAppointments }),
+      });
+      setStatus("Saving scheduled weekly change");
+      try {
+        await save(false);
+      } catch (error) {
+        if (!error.payload?.requiresConfirmation) throw error;
+        const details = (error.payload.appointments || []).map((appointment) => {
+          const when = new Date(appointment.startAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+          return `${when} â€” ${appointment.clientName || "Unnamed client"}`;
+        }).join("\n");
+        if (!window.confirm(`These existing appointments fall outside the proposed hours:\n\n${details}\n\nThey will remain booked and unchanged. Save the new hours anyway?`)) {
+          setStatus("Scheduled-hours save cancelled");
+          return;
+        }
+        await save(true);
+      }
+      schedulePeriodDraft = null;
+      await loadSchedulePeriods();
+      await loadDateOverrides();
+      await loadAvailabilityPreview();
+      setStatus("Scheduled weekly change saved");
       return;
     }
 
@@ -8976,7 +9570,7 @@ ${meetingLines}
       return;
     }
     setStatus("Adding exception");
-    await api("/api/admin/booking/availability", {
+    await api(availabilityApi("/api/admin/booking/availability"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -9124,6 +9718,24 @@ ${meetingLines}
     }
   });
   detailEl.addEventListener("change", (event) => {
+    if (event.target.matches("[data-date-override-mode]")) {
+      const section = event.target.closest("[data-date-override-category]");
+      const category = section?.dataset.dateOverrideCategory || "";
+      const custom = section?.querySelector("[data-date-override-custom]");
+      const container = section?.querySelector("[data-date-override-windows]");
+      if (!custom || !container) return;
+      custom.hidden = event.target.value !== "custom";
+      if (event.target.value === "custom" && !container.querySelector("[data-date-override-window]")) {
+        const drafts = dateOverrideFor(category)?.windows?.length
+          ? dateOverrideFor(category).windows
+          : weeklyWindowsForDate(category);
+        const windows = drafts.length ? drafts : [{}];
+        container.innerHTML = windows.map(dateOverrideWindowMarkup).join("");
+        enhanceControls(container);
+      }
+      setStatus("Day setting changed; save the day to apply it");
+      return;
+    }
     if (event.target.id === "homeMonthSelect") {
       homeMonth = event.target.value;
       selectedHomeDay = "";

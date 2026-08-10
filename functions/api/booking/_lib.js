@@ -68,6 +68,12 @@ const SCHEDULE_CATEGORY_BOOKING_TYPE_IDS = {
   // During deployment, legacy rows represent the Studio Visit schedule only.
   studio: ART_VISIT_BOOKING_TYPE_IDS,
 };
+const AVAILABILITY_SCOPE_CATEGORIES = Object.freeze({
+  tattoo: ["tattooing", "consultation"],
+  art: ["art_visit"],
+  studio: ["studio_space"],
+});
+const DATE_OVERRIDE_MODES = new Set(["closed", "custom"]);
 const TATTOO_DAY_SESSION_LABELS = Object.freeze({
   tattoo_quarter: "Quarter Day Session",
   tattoo_half: "Half Day Session",
@@ -294,6 +300,53 @@ function normalizeWindow(row) {
     isBlackout: Boolean(row.is_blackout),
     active: Boolean(row.active),
     note: row.note || "",
+    availabilityScope: row.availability_scope || availabilityScopeForBookingType(row.booking_type_id),
+  };
+}
+
+function normalizeDateOverride(row, windows = []) {
+  return {
+    id: row.id,
+    venture: row.venture,
+    category: row.category,
+    date: row.local_date,
+    mode: row.mode,
+    windows: windows.map((windowRow) => ({
+      id: windowRow.id,
+      startTime: windowRow.start_time,
+      endTime: windowRow.end_time,
+      capacity: Number(windowRow.capacity || 1),
+      bufferBeforeMinutes: Number(windowRow.buffer_before_minutes || 0),
+      bufferAfterMinutes: Number(windowRow.buffer_after_minutes || 0),
+      note: windowRow.note || "",
+      sortOrder: Number(windowRow.sort_order || 0),
+    })),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function normalizeSchedulePeriod(row, windows = []) {
+  return {
+    id: row.id,
+    venture: row.venture,
+    category: row.category,
+    label: row.label || "",
+    startDate: row.start_date,
+    endDate: row.end_date || "",
+    windows: windows.map((windowRow) => ({
+      id: windowRow.id,
+      dayOfWeek: Number(windowRow.day_of_week),
+      startTime: windowRow.start_time,
+      endTime: windowRow.end_time,
+      capacity: Number(windowRow.capacity || 1),
+      bufferBeforeMinutes: Number(windowRow.buffer_before_minutes || 0),
+      bufferAfterMinutes: Number(windowRow.buffer_after_minutes || 0),
+      note: windowRow.note || "",
+      sortOrder: Number(windowRow.sort_order || 0),
+    })),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -493,6 +546,7 @@ function availabilityScopeFromRequest(request) {
     return {
       scope,
       bookingTypeIds: ART_VISIT_BOOKING_TYPE_IDS,
+      categories: AVAILABILITY_SCOPE_CATEGORIES.art,
       includeUnscoped: false,
     };
   }
@@ -500,6 +554,7 @@ function availabilityScopeFromRequest(request) {
     return {
       scope,
       bookingTypeIds: STUDIO_SPACE_BOOKING_TYPE_IDS,
+      categories: AVAILABILITY_SCOPE_CATEGORIES.studio,
       includeUnscoped: false,
     };
   }
@@ -510,14 +565,28 @@ function availabilityScopeFromRequest(request) {
         ...SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing,
         ...SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.consultation,
       ],
+      categories: AVAILABILITY_SCOPE_CATEGORIES.tattoo,
       includeUnscoped: true,
     };
   }
   return {
     scope: "all",
     bookingTypeIds: [],
+    categories: Object.keys(SCHEDULE_CATEGORY_BOOKING_TYPE_IDS).filter((category) => category !== "studio"),
     includeUnscoped: true,
   };
+}
+
+function availabilityScopeForBookingType(bookingTypeId) {
+  if (ART_VISIT_BOOKING_TYPE_IDS.includes(bookingTypeId)) return "art";
+  if (STUDIO_SPACE_BOOKING_TYPE_IDS.includes(bookingTypeId)) return "studio";
+  return "tattoo";
+}
+
+function scheduleCategoryForBookingType(bookingTypeId) {
+  if (isTattooSpecialBookingType(bookingTypeId)) return "tattooing";
+  return Object.entries(SCHEDULE_CATEGORY_BOOKING_TYPE_IDS)
+    .find(([category, ids]) => category !== "studio" && ids.includes(bookingTypeId))?.[0] || "";
 }
 
 function formatMoney(cents, currency) {
@@ -538,9 +607,16 @@ function intervalsOverlap(a, b) {
   return a.start < b.end && b.start < a.end;
 }
 
-function isBlockedByBlackout(windowRow, blackoutRows) {
+function isBlockedByBlackout(windowRow, blackoutRows, candidateBookingTypeId = "") {
   const windowInterval = intervalWithBuffer(windowRow);
-  return blackoutRows.some((blackout) => intervalsOverlap(windowInterval, intervalWithBuffer(blackout)));
+  const bookingTypeId = candidateBookingTypeId || windowRow.booking_type_id || windowRow.bookingTypeId || "";
+  const candidateScope = windowRow.availability_scope || availabilityScopeForBookingType(bookingTypeId);
+  return blackoutRows.some((blackout) => {
+    const blackoutScope = blackout.availability_scope || availabilityScopeForBookingType(blackout.booking_type_id);
+    if (candidateScope !== blackoutScope) return false;
+    if (blackout.booking_type_id && bookingTypeId && blackout.booking_type_id !== bookingTypeId) return false;
+    return intervalsOverlap(windowInterval, intervalWithBuffer(blackout));
+  });
 }
 
 function overlappingAppointmentCount(windowRow, appointmentRows) {
@@ -597,6 +673,138 @@ function isValidTime(value) {
 function minutesFromTime(value) {
   const { hour, minute } = parseTime(value);
   return hour * 60 + minute;
+}
+
+function localDatePartsFromKey(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() + 1 !== month
+    || date.getUTCDate() !== day
+  ) return null;
+  return { year, month, day };
+}
+
+function isValidMonthKey(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})$/);
+  if (!match) return false;
+  const month = Number(match[2]);
+  return month >= 1 && month <= 12;
+}
+
+async function loadDateOverrides(db, startDate, endDate, categories = []) {
+  const scopedCategories = [...new Set((categories || []).filter(Boolean))];
+  const categoryClause = scopedCategories.length
+    ? ` AND o.category IN (${scopedCategories.map(() => "?").join(", ")})`
+    : "";
+  const result = await db.prepare(
+    `SELECT o.*,
+            w.id AS window_id,
+            w.start_time AS window_start_time,
+            w.end_time AS window_end_time,
+            w.capacity AS window_capacity,
+            w.buffer_before_minutes AS window_buffer_before_minutes,
+            w.buffer_after_minutes AS window_buffer_after_minutes,
+            w.note AS window_note,
+            w.sort_order AS window_sort_order,
+            w.created_at AS window_created_at,
+            w.updated_at AS window_updated_at
+     FROM availability_date_overrides o
+     LEFT JOIN availability_date_override_windows w ON w.override_id = o.id
+     WHERE o.venture = ? AND o.local_date >= ? AND o.local_date <= ?${categoryClause}
+     ORDER BY o.local_date ASC, o.category ASC, w.sort_order ASC, w.start_time ASC`
+  ).bind("tattooing", startDate, endDate, ...scopedCategories).all();
+
+  const byId = new Map();
+  for (const row of result.results || []) {
+    let entry = byId.get(row.id);
+    if (!entry) {
+      entry = { row, windows: [] };
+      byId.set(row.id, entry);
+    }
+    if (row.window_id) {
+      entry.windows.push({
+        id: row.window_id,
+        start_time: row.window_start_time,
+        end_time: row.window_end_time,
+        capacity: row.window_capacity,
+        buffer_before_minutes: row.window_buffer_before_minutes,
+        buffer_after_minutes: row.window_buffer_after_minutes,
+        note: row.window_note,
+        sort_order: row.window_sort_order,
+        created_at: row.window_created_at,
+        updated_at: row.window_updated_at,
+      });
+    }
+  }
+  return [...byId.values()].map(({ row, windows }) => normalizeDateOverride(row, windows));
+}
+
+async function loadSchedulePeriods(db, categories = [], startDate = "", endDate = "") {
+  const scopedCategories = [...new Set((categories || []).filter(Boolean))];
+  const categoryClause = scopedCategories.length
+    ? ` AND p.category IN (${scopedCategories.map(() => "?").join(", ")})`
+    : "";
+  const dateClause = startDate && endDate
+    ? " AND p.start_date <= ? AND (p.end_date IS NULL OR p.end_date >= ?)"
+    : "";
+  let result;
+  try {
+    result = await db.prepare(
+      `SELECT p.*,
+            w.id AS window_id,
+            w.day_of_week AS window_day_of_week,
+            w.start_time AS window_start_time,
+            w.end_time AS window_end_time,
+            w.capacity AS window_capacity,
+            w.buffer_before_minutes AS window_buffer_before_minutes,
+            w.buffer_after_minutes AS window_buffer_after_minutes,
+            w.note AS window_note,
+            w.sort_order AS window_sort_order
+     FROM availability_schedule_periods p
+     LEFT JOIN availability_schedule_period_windows w ON w.period_id = p.id
+     WHERE p.venture = ?${categoryClause}${dateClause}
+       ORDER BY p.start_date ASC, p.category ASC, w.day_of_week ASC, w.sort_order ASC, w.start_time ASC`
+    ).bind(
+      "tattooing",
+      ...scopedCategories,
+      ...(dateClause ? [endDate, startDate] : []),
+    ).all();
+  } catch (error) {
+    if (/no such table: availability_schedule_period/i.test(error?.message || "")) return [];
+    throw error;
+  }
+  const byId = new Map();
+  for (const row of result.results || []) {
+    let entry = byId.get(row.id);
+    if (!entry) {
+      entry = { row, windows: [] };
+      byId.set(row.id, entry);
+    }
+    if (row.window_id) entry.windows.push({
+      id: row.window_id,
+      day_of_week: row.window_day_of_week,
+      start_time: row.window_start_time,
+      end_time: row.window_end_time,
+      capacity: row.window_capacity,
+      buffer_before_minutes: row.window_buffer_before_minutes,
+      buffer_after_minutes: row.window_buffer_after_minutes,
+      note: row.window_note,
+      sort_order: row.window_sort_order,
+    });
+  }
+  return [...byId.values()].map(({ row, windows }) => normalizeSchedulePeriod(row, windows));
+}
+
+function schedulePeriodForDate(periods, category, localDate) {
+  return periods.find((period) => period.category === category
+    && period.startDate <= localDate
+    && (!period.endDate || period.endDate >= localDate)) || null;
 }
 
 function zonedLocalToUtcIso(timezone, year, month, day, hour, minute) {
@@ -814,14 +1022,85 @@ function generatedWindowPolicyVersion(rule, settings, bookingType) {
   return (hash >>> 0).toString(36);
 }
 
+function dateOverrideWindowPolicyVersion(windowRow, override, settings, bookingType) {
+  const source = JSON.stringify([
+    override.date,
+    override.category,
+    windowRow.startTime || windowRow.start_time,
+    windowRow.endTime || windowRow.end_time,
+    Number(windowRow.capacity || settings.defaultCapacity),
+    Number(windowRow.bufferBeforeMinutes ?? windowRow.buffer_before_minutes ?? settings.defaultBufferBeforeMinutes),
+    Number(windowRow.bufferAfterMinutes ?? windowRow.buffer_after_minutes ?? settings.defaultBufferAfterMinutes),
+    Number(settings.slotIntervalMinutes || 30),
+    Number(bookingType.duration_minutes || bookingType.durationMinutes),
+  ]);
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function schedulePeriodWindowPolicyVersion(windowRow, period, settings, bookingType) {
+  const source = JSON.stringify([
+    period.id,
+    period.startDate || period.start_date,
+    period.endDate || period.end_date || "",
+    period.category,
+    Number(windowRow.dayOfWeek ?? windowRow.day_of_week),
+    windowRow.startTime || windowRow.start_time,
+    windowRow.endTime || windowRow.end_time,
+    Number(windowRow.capacity || settings.defaultCapacity),
+    Number(windowRow.bufferBeforeMinutes ?? windowRow.buffer_before_minutes ?? settings.defaultBufferBeforeMinutes),
+    Number(windowRow.bufferAfterMinutes ?? windowRow.buffer_after_minutes ?? settings.defaultBufferAfterMinutes),
+    Number(settings.slotIntervalMinutes || 30),
+    Number(bookingType.duration_minutes || bookingType.durationMinutes),
+  ]);
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 function generatedWindowId(ruleId, bookingTypeId, startAt, policyVersion) {
   return `gen:${ruleId}:${bookingTypeId}:${new Date(startAt).getTime()}:${policyVersion}`;
 }
 
+function generatedDateOverrideWindowId(windowId, bookingTypeId, startAt, policyVersion) {
+  return `gen:date:${windowId}:${bookingTypeId}:${new Date(startAt).getTime()}:${policyVersion}`;
+}
+
+function generatedSchedulePeriodWindowId(windowId, bookingTypeId, startAt, policyVersion) {
+  return `gen:period:${windowId}:${bookingTypeId}:${new Date(startAt).getTime()}:${policyVersion}`;
+}
+
 function parseGeneratedWindowId(id) {
   const parts = String(id || "").split(":");
+  if (parts.length === 6 && parts[0] === "gen" && parts[1] === "date") {
+    return {
+      sourceKind: "date",
+      sourceId: parts[2],
+      bookingTypeId: parts[3],
+      startMs: Number(parts[4]),
+      policyVersion: parts[5] || "",
+    };
+  }
+  if (parts.length === 6 && parts[0] === "gen" && parts[1] === "period") {
+    return {
+      sourceKind: "period",
+      sourceId: parts[2],
+      bookingTypeId: parts[3],
+      startMs: Number(parts[4]),
+      policyVersion: parts[5] || "",
+    };
+  }
   if (![4, 5].includes(parts.length) || parts[0] !== "gen") return null;
   return {
+    sourceKind: "weekly",
+    sourceId: parts[1],
     ruleId: parts[1],
     bookingTypeId: parts[2],
     startMs: Number(parts[3]),
@@ -1372,7 +1651,7 @@ async function listPublicWindows(db, bookingTypes) {
 
   const manualWindows = (manualResult.results || [])
     .filter((row) => Number(row.appointment_count || 0) < Number(row.capacity || 1))
-    .filter((row) => !isBlockedByBlackout(row, blackouts))
+    .filter((row) => !isBlockedByBlackout(row, blackouts, row.booking_type_id || soleBookingTypeId))
     .filter((row) => hasSlotCapacity(row, activeAppointments, row.booking_type_id || soleBookingTypeId))
     .map(normalizeWindow);
 
@@ -1397,7 +1676,6 @@ async function listGeneratedWindows(db, bookingTypes, blackouts, activeAppointme
     .bind("tattooing")
     .all();
   const rules = rulesResult.results || [];
-  if (!rules.length) return [];
 
   const now = new Date();
   const earliest = new Date(now.getTime() + settings.minimumNoticeHours * 60 * 60 * 1000);
@@ -1405,53 +1683,122 @@ async function listGeneratedWindows(db, bookingTypes, blackouts, activeAppointme
   const generated = [];
   const bookingsByDay = await loadBookingsByLocalDay(db, settings.timezone, earliest.toISOString());
   const appointmentCounts = await loadAppointmentCounts(db);
+  const calendarDays = [];
 
   for (let offset = 0; offset <= days; offset += 1) {
     const cursor = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
     const local = datePartsInZone(cursor, settings.timezone);
     const localKey = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+    if (!calendarDays.some((item) => item.localKey === localKey)) calendarDays.push({ local, localKey });
+  }
+  if (!calendarDays.length) return [];
+
+  const bookingCategories = [...new Set(bookingTypes.map((type) => scheduleCategoryForBookingType(type.id)).filter(Boolean))];
+  const overrides = await loadDateOverrides(
+    db,
+    calendarDays[0].localKey,
+    calendarDays[calendarDays.length - 1].localKey,
+    bookingCategories,
+  );
+  const overridesByDateCategory = new Map(overrides.map((override) => [`${override.date}:${override.category}`, override]));
+  const schedulePeriods = await loadSchedulePeriods(
+    db,
+    bookingCategories,
+    calendarDays[0].localKey,
+    calendarDays[calendarDays.length - 1].localKey,
+  );
+
+  for (const { local, localKey } of calendarDays) {
     if (Number(bookingsByDay.get(localKey) || 0) >= settings.maxBookingsPerDay) continue;
 
-    for (const rule of rules.filter((item) => Number(item.day_of_week) === local.dayOfWeek)) {
-      const startParts = parseTime(rule.start_time);
-      const endParts = parseTime(rule.end_time);
+    for (const category of bookingCategories) {
+      const override = overridesByDateCategory.get(`${localKey}:${category}`);
+      if (override?.mode === "closed") continue;
+      const schedulePeriod = override ? null : schedulePeriodForDate(schedulePeriods, category, localKey);
+      const sources = override?.mode === "custom"
+        ? override.windows.map((windowRow) => ({
+            id: windowRow.id,
+            venture: override.venture,
+            category: override.category,
+            start_time: windowRow.startTime,
+            end_time: windowRow.endTime,
+            capacity: windowRow.capacity,
+            buffer_before_minutes: windowRow.bufferBeforeMinutes,
+            buffer_after_minutes: windowRow.bufferAfterMinutes,
+            note: windowRow.note,
+            sourceKind: "date",
+            override,
+            normalizedWindow: windowRow,
+          }))
+        : schedulePeriod
+          ? schedulePeriod.windows
+              .filter((windowRow) => Number(windowRow.dayOfWeek) === local.dayOfWeek)
+              .map((windowRow) => ({
+                id: windowRow.id,
+                venture: schedulePeriod.venture,
+                category: schedulePeriod.category,
+                start_time: windowRow.startTime,
+                end_time: windowRow.endTime,
+                capacity: windowRow.capacity,
+                buffer_before_minutes: windowRow.bufferBeforeMinutes,
+                buffer_after_minutes: windowRow.bufferAfterMinutes,
+                note: windowRow.note,
+                sourceKind: "period",
+                schedulePeriod,
+                normalizedWindow: windowRow,
+              }))
+          : rules.filter((item) => Number(item.day_of_week) === local.dayOfWeek && (item.category || "tattooing") === category);
+
+      for (const source of sources) {
+      const startParts = parseTime(source.start_time);
+      const endParts = parseTime(source.end_time);
       const ruleStart = zonedLocalToUtcIso(settings.timezone, local.year, local.month, local.day, startParts.hour, startParts.minute);
       const ruleEnd = zonedLocalToUtcIso(settings.timezone, local.year, local.month, local.day, endParts.hour, endParts.minute);
       if (new Date(ruleEnd).getTime() <= new Date(ruleStart).getTime()) continue;
 
-      const allowedTypeIds = SCHEDULE_CATEGORY_BOOKING_TYPE_IDS[rule.category] || SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing;
-      for (const bookingType of bookingTypes.filter((type) => allowedTypeIds.includes(type.id) || (rule.category === "tattooing" && isTattooSpecialBookingType(type.id)))) {
+      const allowedTypeIds = SCHEDULE_CATEGORY_BOOKING_TYPE_IDS[category] || [];
+      for (const bookingType of bookingTypes.filter((type) => allowedTypeIds.includes(type.id) || (category === "tattooing" && isTattooSpecialBookingType(type.id)))) {
         let slotStart = ruleStart;
         while (new Date(addMinutes(slotStart, bookingType.durationMinutes)).getTime() <= new Date(ruleEnd).getTime()) {
           const slotEnd = addMinutes(slotStart, bookingType.durationMinutes);
+          const policyVersion = source.sourceKind === "date"
+            ? dateOverrideWindowPolicyVersion(source.normalizedWindow, source.override, settings, bookingType)
+            : source.sourceKind === "period"
+              ? schedulePeriodWindowPolicyVersion(source.normalizedWindow, source.schedulePeriod, settings, bookingType)
+            : generatedWindowPolicyVersion(source, settings, bookingType);
           const row = {
-            id: generatedWindowId(
-              rule.id,
-              bookingType.id,
-              slotStart,
-              generatedWindowPolicyVersion(rule, settings, bookingType),
-            ),
-            venture: rule.venture,
+            id: source.sourceKind === "date"
+              ? generatedDateOverrideWindowId(source.id, bookingType.id, slotStart, policyVersion)
+              : source.sourceKind === "period"
+                ? generatedSchedulePeriodWindowId(source.id, bookingType.id, slotStart, policyVersion)
+              : generatedWindowId(source.id, bookingType.id, slotStart, policyVersion),
+            venture: source.venture,
             booking_type_id: bookingType.id,
             start_at: slotStart,
             end_at: slotEnd,
-            capacity: rule.capacity || settings.defaultCapacity,
-            buffer_before_minutes: rule.buffer_before_minutes ?? settings.defaultBufferBeforeMinutes,
-            buffer_after_minutes: rule.buffer_after_minutes ?? settings.defaultBufferAfterMinutes,
+            capacity: source.capacity || settings.defaultCapacity,
+            buffer_before_minutes: source.buffer_before_minutes ?? settings.defaultBufferBeforeMinutes,
+            buffer_after_minutes: source.buffer_after_minutes ?? settings.defaultBufferAfterMinutes,
             is_blackout: 0,
             active: 1,
-            note: rule.note || "Generated from weekly schedule",
+            note: source.note || (source.sourceKind === "date"
+              ? "Generated from custom date hours"
+              : source.sourceKind === "period"
+                ? "Generated from scheduled weekly hours"
+                : "Generated from weekly schedule"),
+            availability_scope: availabilityScopeForBookingType(bookingType.id),
           };
           if (
             new Date(slotStart).getTime() >= earliest.getTime() &&
             Number(appointmentCounts.get(row.id) || 0) < Number(row.capacity || 1) &&
             hasSlotCapacity(row, activeAppointments) &&
-            !isBlockedByBlackout(row, blackouts)
+            !isBlockedByBlackout(row, blackouts, bookingType.id)
           ) {
             generated.push(normalizeWindow(row));
           }
           slotStart = addMinutes(slotStart, settings.slotIntervalMinutes || 30);
         }
+      }
       }
     }
   }
@@ -1736,7 +2083,7 @@ async function ensureAvailable(db, windowId, bookingTypeId, excludeAppointmentId
     )
     .bind(new Date().toISOString())
     .all();
-  if (isBlockedByBlackout(window, blackoutResult.results || [])) {
+  if (isBlockedByBlackout(window, blackoutResult.results || [], bookingTypeId)) {
     return { error: "That appointment time is blocked out." };
   }
   const activeAppointments = (await loadActiveAppointments(
@@ -1749,10 +2096,16 @@ async function ensureAvailable(db, windowId, bookingTypeId, excludeAppointmentId
   return { window };
 }
 
-async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
+export async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
   const parsed = parseGeneratedWindowId(windowId);
   if (!parsed || parsed.bookingTypeId !== bookingTypeId || !Number.isFinite(parsed.startMs)) {
     return { error: "That appointment time is unavailable." };
+  }
+  if (parsed.sourceKind === "date") {
+    return materializeGeneratedDateOverrideWindow(db, windowId, parsed, bookingTypeId);
+  }
+  if (parsed.sourceKind === "period") {
+    return materializeGeneratedSchedulePeriodWindow(db, windowId, parsed, bookingTypeId);
   }
 
   const bookingType = await db
@@ -1786,6 +2139,23 @@ async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
   const startAt = new Date(parsed.startMs).toISOString();
   const endAt = addMinutes(startAt, bookingType.duration_minutes);
   const local = datePartsInZone(new Date(startAt), settings.timezone);
+  const localKey = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+  const activeOverride = await db.prepare(
+    `SELECT id FROM availability_date_overrides
+     WHERE venture = ? AND category = ? AND local_date = ?`
+  ).bind(rule.venture, ruleCategory, localKey).first();
+  if (activeOverride) {
+    return { error: "That appointment time is no longer part of the active schedule. Refresh availability and choose again." };
+  }
+  const activePeriod = await db.prepare(
+    `SELECT id FROM availability_schedule_periods
+     WHERE venture = ? AND category = ? AND start_date <= ?
+       AND (end_date IS NULL OR end_date >= ?)
+     LIMIT 1`
+  ).bind(rule.venture, ruleCategory, localKey, localKey).first();
+  if (activePeriod) {
+    return { error: "That appointment time is no longer part of the active schedule. Refresh availability and choose again." };
+  }
   if (local.dayOfWeek !== Number(rule.day_of_week)) {
     return { error: "That appointment time is outside the current weekly schedule." };
   }
@@ -1798,6 +2168,7 @@ async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
   const earliest = new Date(Date.now() + settings.minimumNoticeHours * 60 * 60 * 1000);
   if (
     new Date(startAt).getTime() < earliest.getTime() ||
+    new Date(startAt).getTime() > Date.now() + Number(settings.bookingHorizonDays || 60) * 24 * 60 * 60 * 1000 ||
     new Date(startAt).getTime() < new Date(ruleStart).getTime() ||
     new Date(endAt).getTime() > new Date(ruleEnd).getTime() ||
     elapsedMinutes < 0 ||
@@ -1807,7 +2178,6 @@ async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
   }
 
   const dayBookings = await loadBookingsByLocalDay(db, settings.timezone, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
-  const localKey = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
   if (Number(dayBookings.get(localKey) || 0) >= settings.maxBookingsPerDay) {
     return { error: "That day has reached its booking limit." };
   }
@@ -1830,8 +2200,8 @@ async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
       `INSERT OR IGNORE INTO availability_windows (
         id, venture, booking_type_id, start_at, end_at, capacity,
         buffer_before_minutes, buffer_after_minutes, is_blackout,
-        active, note, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        active, note, created_at, updated_at, availability_scope
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       windowId,
@@ -1846,7 +2216,8 @@ async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
       1,
       rule.note || "Generated from weekly schedule",
       now,
-      now
+      now,
+      availabilityScopeForBookingType(bookingTypeId)
     )
     .run();
 
@@ -1862,6 +2233,253 @@ async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
     || Number(window.buffer_before_minutes || 0) !== Number(candidateWindow.buffer_before_minutes || 0)
     || Number(window.buffer_after_minutes || 0) !== Number(candidateWindow.buffer_after_minutes || 0)
   ) {
+    return { error: "That generated appointment time is stale. Refresh availability and choose again." };
+  }
+  return { window };
+}
+
+async function materializeGeneratedDateOverrideWindow(db, windowId, parsed, bookingTypeId) {
+  const bookingType = await db
+    .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
+    .bind(bookingTypeId)
+    .first();
+  if (!bookingType) return { error: "Unknown booking type." };
+
+  const source = await db.prepare(
+    `SELECT w.*, o.venture, o.category, o.local_date, o.mode,
+            o.created_at AS override_created_at, o.updated_at AS override_updated_at
+     FROM availability_date_override_windows w
+     JOIN availability_date_overrides o ON o.id = w.override_id
+     WHERE w.id = ? AND o.mode = 'custom'`
+  ).bind(parsed.sourceId).first();
+  if (!source) return { error: "That custom appointment time is no longer available." };
+
+  const allowedTypeIds = SCHEDULE_CATEGORY_BOOKING_TYPE_IDS[source.category] || [];
+  if (!allowedTypeIds.includes(bookingTypeId)
+      && !(source.category === "tattooing" && isTattooSpecialBookingType(bookingTypeId))) {
+    return { error: "That custom appointment time no longer matches the selected session category." };
+  }
+
+  const settingsRow = await db
+    .prepare("SELECT * FROM booking_settings WHERE venture = ?")
+    .bind(source.venture)
+    .first();
+  if (!settingsRow) return { error: "Booking settings are not configured." };
+  const settings = normalizeSettings(settingsRow);
+  const override = {
+    date: source.local_date,
+    category: source.category,
+  };
+  const expectedPolicyVersion = dateOverrideWindowPolicyVersion(source, override, settings, bookingType);
+  if (!parsed.policyVersion || parsed.policyVersion !== expectedPolicyVersion) {
+    return { error: "That generated appointment time is stale. Refresh availability and choose again." };
+  }
+
+  const startAt = new Date(parsed.startMs).toISOString();
+  const endAt = addMinutes(startAt, bookingType.duration_minutes);
+  const local = datePartsInZone(new Date(startAt), settings.timezone);
+  const localKey = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+  if (localKey !== source.local_date) {
+    return { error: "That appointment time is outside the selected custom date." };
+  }
+
+  const startParts = parseTime(source.start_time);
+  const endParts = parseTime(source.end_time);
+  const sourceStart = zonedLocalToUtcIso(settings.timezone, local.year, local.month, local.day, startParts.hour, startParts.minute);
+  const sourceEnd = zonedLocalToUtcIso(settings.timezone, local.year, local.month, local.day, endParts.hour, endParts.minute);
+  const elapsedMinutes = (new Date(startAt).getTime() - new Date(sourceStart).getTime()) / (60 * 1000);
+  const earliest = new Date(Date.now() + settings.minimumNoticeHours * 60 * 60 * 1000);
+  if (
+    new Date(startAt).getTime() < earliest.getTime()
+    || new Date(startAt).getTime() > Date.now() + Number(settings.bookingHorizonDays || 60) * 24 * 60 * 60 * 1000
+    || new Date(startAt).getTime() < new Date(sourceStart).getTime()
+    || new Date(endAt).getTime() > new Date(sourceEnd).getTime()
+    || elapsedMinutes < 0
+    || elapsedMinutes % Number(settings.slotIntervalMinutes || 30) !== 0
+  ) {
+    return { error: "That custom appointment time is no longer available." };
+  }
+
+  const dayBookings = await loadBookingsByLocalDay(
+    db,
+    settings.timezone,
+    new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+  );
+  if (Number(dayBookings.get(localKey) || 0) >= settings.maxBookingsPerDay) {
+    return { error: "That day has reached its booking limit." };
+  }
+
+  const candidateWindow = {
+    start_at: startAt,
+    end_at: endAt,
+    buffer_before_minutes: source.buffer_before_minutes ?? settings.defaultBufferBeforeMinutes,
+    buffer_after_minutes: source.buffer_after_minutes ?? settings.defaultBufferAfterMinutes,
+    capacity: source.capacity || settings.defaultCapacity,
+    availability_scope: availabilityScopeForBookingType(bookingTypeId),
+  };
+  const activeAppointments = await loadActiveAppointments(db, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  if (!hasSlotCapacity(candidateWindow, activeAppointments, bookingTypeId)) {
+    return { error: "That appointment time overlaps another booking." };
+  }
+
+  const now = new Date().toISOString();
+  await db.prepare(
+    `INSERT OR IGNORE INTO availability_windows (
+      id, venture, booking_type_id, start_at, end_at, capacity,
+      buffer_before_minutes, buffer_after_minutes, is_blackout,
+      active, note, created_at, updated_at, availability_scope
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    windowId,
+    source.venture,
+    bookingTypeId,
+    startAt,
+    endAt,
+    candidateWindow.capacity,
+    candidateWindow.buffer_before_minutes,
+    candidateWindow.buffer_after_minutes,
+    0,
+    1,
+    source.note || "Generated from custom date hours",
+    now,
+    now,
+    candidateWindow.availability_scope,
+  ).run();
+
+  const window = await db.prepare("SELECT * FROM availability_windows WHERE id = ? AND active = 1")
+    .bind(windowId)
+    .first();
+  if (
+    !window
+    || window.booking_type_id !== bookingTypeId
+    || window.start_at !== startAt
+    || window.end_at !== endAt
+    || Number(window.capacity || 1) !== Number(candidateWindow.capacity || 1)
+    || Number(window.buffer_before_minutes || 0) !== Number(candidateWindow.buffer_before_minutes || 0)
+    || Number(window.buffer_after_minutes || 0) !== Number(candidateWindow.buffer_after_minutes || 0)
+  ) {
+    return { error: "That generated appointment time is stale. Refresh availability and choose again." };
+  }
+  return { window };
+}
+
+async function materializeGeneratedSchedulePeriodWindow(db, windowId, parsed, bookingTypeId) {
+  const bookingType = await db
+    .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
+    .bind(bookingTypeId)
+    .first();
+  if (!bookingType) return { error: "Unknown booking type." };
+
+  const source = await db.prepare(
+    `SELECT w.*, p.venture, p.category, p.label, p.start_date, p.end_date,
+            p.created_at AS period_created_at, p.updated_at AS period_updated_at
+     FROM availability_schedule_period_windows w
+     JOIN availability_schedule_periods p ON p.id = w.period_id
+     WHERE w.id = ?`
+  ).bind(parsed.sourceId).first();
+  if (!source) return { error: "That scheduled appointment time is no longer available." };
+
+  const allowedTypeIds = SCHEDULE_CATEGORY_BOOKING_TYPE_IDS[source.category] || [];
+  if (!allowedTypeIds.includes(bookingTypeId)
+      && !(source.category === "tattooing" && isTattooSpecialBookingType(bookingTypeId))) {
+    return { error: "That scheduled appointment time no longer matches the selected session category." };
+  }
+
+  const settingsRow = await db.prepare("SELECT * FROM booking_settings WHERE venture = ?")
+    .bind(source.venture).first();
+  if (!settingsRow) return { error: "Booking settings are not configured." };
+  const settings = normalizeSettings(settingsRow);
+  const period = {
+    id: source.period_id,
+    startDate: source.start_date,
+    endDate: source.end_date || "",
+    category: source.category,
+  };
+  const expectedPolicyVersion = schedulePeriodWindowPolicyVersion(source, period, settings, bookingType);
+  if (!parsed.policyVersion || parsed.policyVersion !== expectedPolicyVersion) {
+    return { error: "That generated appointment time is stale. Refresh availability and choose again." };
+  }
+
+  const startAt = new Date(parsed.startMs).toISOString();
+  const endAt = addMinutes(startAt, bookingType.duration_minutes);
+  const local = datePartsInZone(new Date(startAt), settings.timezone);
+  const localKey = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+  if (localKey < source.start_date || (source.end_date && localKey > source.end_date)
+      || local.dayOfWeek !== Number(source.day_of_week)) {
+    return { error: "That appointment time is outside the scheduled weekly change." };
+  }
+  const override = await db.prepare(
+    `SELECT id FROM availability_date_overrides
+     WHERE venture = ? AND category = ? AND local_date = ?`
+  ).bind(source.venture, source.category, localKey).first();
+  if (override) {
+    return { error: "That appointment time is no longer part of the active schedule. Refresh availability and choose again." };
+  }
+  const effectivePeriod = await db.prepare(
+    `SELECT id FROM availability_schedule_periods
+     WHERE venture = ? AND category = ? AND start_date <= ?
+       AND (end_date IS NULL OR end_date >= ?)
+     ORDER BY start_date DESC LIMIT 1`
+  ).bind(source.venture, source.category, localKey, localKey).first();
+  if (!effectivePeriod || effectivePeriod.id !== source.period_id) {
+    return { error: "That scheduled appointment time is stale. Refresh availability and choose again." };
+  }
+
+  const startParts = parseTime(source.start_time);
+  const endParts = parseTime(source.end_time);
+  const sourceStart = zonedLocalToUtcIso(settings.timezone, local.year, local.month, local.day, startParts.hour, startParts.minute);
+  const sourceEnd = zonedLocalToUtcIso(settings.timezone, local.year, local.month, local.day, endParts.hour, endParts.minute);
+  const elapsedMinutes = (new Date(startAt).getTime() - new Date(sourceStart).getTime()) / (60 * 1000);
+  const earliest = new Date(Date.now() + settings.minimumNoticeHours * 60 * 60 * 1000);
+  if (new Date(startAt).getTime() < earliest.getTime()
+      || new Date(startAt).getTime() > Date.now() + Number(settings.bookingHorizonDays || 60) * 24 * 60 * 60 * 1000
+      || new Date(startAt).getTime() < new Date(sourceStart).getTime()
+      || new Date(endAt).getTime() > new Date(sourceEnd).getTime()
+      || elapsedMinutes < 0
+      || elapsedMinutes % Number(settings.slotIntervalMinutes || 30) !== 0) {
+    return { error: "That scheduled appointment time is no longer available." };
+  }
+
+  const dayBookings = await loadBookingsByLocalDay(
+    db, settings.timezone, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+  );
+  if (Number(dayBookings.get(localKey) || 0) >= settings.maxBookingsPerDay) {
+    return { error: "That day has reached its booking limit." };
+  }
+  const candidateWindow = {
+    start_at: startAt,
+    end_at: endAt,
+    buffer_before_minutes: source.buffer_before_minutes ?? settings.defaultBufferBeforeMinutes,
+    buffer_after_minutes: source.buffer_after_minutes ?? settings.defaultBufferAfterMinutes,
+    capacity: source.capacity || settings.defaultCapacity,
+    availability_scope: availabilityScopeForBookingType(bookingTypeId),
+  };
+  const activeAppointments = await loadActiveAppointments(db, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  if (!hasSlotCapacity(candidateWindow, activeAppointments, bookingTypeId)) {
+    return { error: "That appointment time overlaps another booking." };
+  }
+
+  const now = new Date().toISOString();
+  await db.prepare(
+    `INSERT OR IGNORE INTO availability_windows (
+      id, venture, booking_type_id, start_at, end_at, capacity,
+      buffer_before_minutes, buffer_after_minutes, is_blackout,
+      active, note, created_at, updated_at, availability_scope
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    windowId, source.venture, bookingTypeId, startAt, endAt,
+    candidateWindow.capacity, candidateWindow.buffer_before_minutes, candidateWindow.buffer_after_minutes,
+    0, 1, source.note || "Generated from scheduled weekly hours", now, now, candidateWindow.availability_scope,
+  ).run();
+  const window = await db.prepare("SELECT * FROM availability_windows WHERE id = ? AND active = 1")
+    .bind(windowId).first();
+  if (!window
+      || window.booking_type_id !== bookingTypeId
+      || window.start_at !== startAt
+      || window.end_at !== endAt
+      || Number(window.capacity || 1) !== Number(candidateWindow.capacity || 1)
+      || Number(window.buffer_before_minutes || 0) !== Number(candidateWindow.buffer_before_minutes || 0)
+      || Number(window.buffer_after_minutes || 0) !== Number(candidateWindow.buffer_after_minutes || 0)) {
     return { error: "That generated appointment time is stale. Refresh availability and choose again." };
   }
   return { window };
@@ -1914,6 +2532,8 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
         AND NOT EXISTS (
           SELECT 1 FROM availability_windows blackout
           WHERE blackout.active = 1 AND blackout.is_blackout = 1
+            AND blackout.availability_scope = aw.availability_scope
+            AND (blackout.booking_type_id IS NULL OR blackout.booking_type_id = aw.booking_type_id)
             AND (
               unixepoch(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) * 60
                 < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
@@ -2108,6 +2728,8 @@ async function promoteApprovedTattooSpecialRequest(db, values) {
              AND NOT EXISTS (
                SELECT 1 FROM availability_windows blackout
                WHERE blackout.active = 1 AND blackout.is_blackout = 1
+                 AND blackout.availability_scope = aw.availability_scope
+                 AND (blackout.booking_type_id IS NULL OR blackout.booking_type_id = aw.booking_type_id)
                  AND (
                    unixepoch(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) * 60
                      < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
@@ -4326,6 +4948,8 @@ async function insertDirectPublicSession(db, submission, appointment, submission
     AND NOT EXISTS (
       SELECT 1 FROM availability_windows blackout
       WHERE blackout.active = 1 AND blackout.is_blackout = 1
+        AND blackout.availability_scope = aw.availability_scope
+        AND (blackout.booking_type_id IS NULL OR blackout.booking_type_id = aw.booking_type_id)
         AND unixepoch(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) * 60
           < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
         AND unixepoch(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) * 60
@@ -5649,6 +6273,8 @@ async function moveConfirmedAppointment(
              AND NOT EXISTS (
                SELECT 1 FROM availability_windows blackout
                WHERE blackout.active = 1 AND blackout.is_blackout = 1
+                 AND blackout.availability_scope = aw.availability_scope
+                 AND (blackout.booking_type_id IS NULL OR blackout.booking_type_id = aw.booking_type_id)
                  AND unixepoch(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) * 60
                    < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
                  AND unixepoch(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) * 60
@@ -8841,6 +9467,326 @@ export async function handleAdminUpdateSchedule(request, env) {
   }
 }
 
+function validateDateOverrideWindow(windowRow, index) {
+  const startTime = asString(windowRow?.startTime);
+  const endTime = asString(windowRow?.endTime);
+  if (!isValidTime(startTime) || !isValidTime(endTime)) {
+    return { error: `Custom window ${index + 1} must use HH:MM start and end times.` };
+  }
+  if (minutesFromTime(endTime) <= minutesFromTime(startTime)) {
+    return { error: `Custom window ${index + 1} must end after it starts.` };
+  }
+  const capacity = Number(windowRow?.capacity);
+  const bufferBeforeMinutes = Number(windowRow?.bufferBeforeMinutes ?? 0);
+  const bufferAfterMinutes = Number(windowRow?.bufferAfterMinutes ?? 0);
+  if (!Number.isInteger(capacity) || capacity < 1) {
+    return { error: `Custom window ${index + 1} must have a capacity of at least 1.` };
+  }
+  if (!Number.isInteger(bufferBeforeMinutes) || bufferBeforeMinutes < 0) {
+    return { error: `Custom window ${index + 1} has an invalid buffer before value.` };
+  }
+  if (!Number.isInteger(bufferAfterMinutes) || bufferAfterMinutes < 0) {
+    return { error: `Custom window ${index + 1} has an invalid buffer after value.` };
+  }
+  return {
+    startTime,
+    endTime,
+    capacity,
+    bufferBeforeMinutes,
+    bufferAfterMinutes,
+    note: asString(windowRow?.note),
+  };
+}
+
+function validateSchedulePeriodBody(body) {
+  const startDate = asString(body?.startDate);
+  const endDate = asString(body?.endDate);
+  if (!localDatePartsFromKey(startDate)) return { error: "startDate must use a valid YYYY-MM-DD value." };
+  if (endDate && !localDatePartsFromKey(endDate)) return { error: "endDate must use a valid YYYY-MM-DD value." };
+  if (endDate && endDate < startDate) return { error: "endDate cannot be before startDate." };
+  const label = asString(body?.label);
+  if (label.length > 120) return { error: "label cannot exceed 120 characters." };
+  if (!Array.isArray(body?.windows)) return { error: "windows must be an array." };
+  const windows = [];
+  for (let index = 0; index < body.windows.length; index += 1) {
+    const dayOfWeek = Number(body.windows[index]?.dayOfWeek);
+    if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
+      return { error: `Scheduled window ${index + 1} has an invalid weekday.` };
+    }
+    const validated = validateDateOverrideWindow(body.windows[index], index);
+    if (validated.error) return { error: validated.error.replace("Custom window", "Scheduled window") };
+    windows.push({ ...validated, dayOfWeek });
+  }
+  windows.sort((a, b) => a.dayOfWeek - b.dayOfWeek || minutesFromTime(a.startTime) - minutesFromTime(b.startTime));
+  for (let index = 1; index < windows.length; index += 1) {
+    if (windows[index].dayOfWeek === windows[index - 1].dayOfWeek
+        && minutesFromTime(windows[index].startTime) < minutesFromTime(windows[index - 1].endTime)) {
+      return { error: "Scheduled windows on the same weekday cannot overlap." };
+    }
+  }
+  return { startDate, endDate, label, windows };
+}
+
+async function appointmentsAffectedBySchedulePeriod(db, category, period) {
+  const settingsRow = await db.prepare("SELECT * FROM booking_settings WHERE venture = ?")
+    .bind("tattooing").first();
+  const timezone = settingsRow?.timezone || "America/New_York";
+  const ids = SCHEDULE_CATEGORY_BOOKING_TYPE_IDS[category] || [];
+  if (!ids.length) return [];
+  const tattooSpecialClause = category === "tattooing" ? " OR booking_type_id LIKE 'tattoo_special_%'" : "";
+  const result = await db.prepare(
+    `SELECT id, booking_type_id, client_name, start_at, end_at
+     FROM appointments
+     WHERE status IN ('pending_deposit', 'deposit_pending', 'confirmed')
+       AND (booking_type_id IN (${ids.map(() => "?").join(", ")})${tattooSpecialClause})
+     ORDER BY start_at ASC`
+  ).bind(...ids).all();
+  return (result.results || []).filter((appointment) => {
+    const local = datePartsInZone(new Date(appointment.start_at), timezone);
+    const localKey = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+    if (localKey < period.startDate || (period.endDate && localKey > period.endDate)) return false;
+    return !period.windows.some((windowRow) => {
+      if (Number(windowRow.dayOfWeek) !== local.dayOfWeek) return false;
+      const startParts = parseTime(windowRow.startTime);
+      const endParts = parseTime(windowRow.endTime);
+      const windowStart = zonedLocalToUtcIso(timezone, local.year, local.month, local.day, startParts.hour, startParts.minute);
+      const windowEnd = zonedLocalToUtcIso(timezone, local.year, local.month, local.day, endParts.hour, endParts.minute);
+      return new Date(appointment.start_at).getTime() >= new Date(windowStart).getTime()
+        && new Date(appointment.end_at).getTime() <= new Date(windowEnd).getTime();
+    });
+  }).map((appointment) => ({
+    id: appointment.id,
+    bookingTypeId: appointment.booking_type_id,
+    clientName: appointment.client_name || "Client",
+    startAt: appointment.start_at,
+    endAt: appointment.end_at,
+  }));
+}
+
+async function saveSchedulePeriod(request, env, category, periodId = "") {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const scopeError = dateOverrideScopeError(request, category);
+  if (scopeError) return scopeError;
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+  const period = validateSchedulePeriodBody(body);
+  if (period.error) return errorResponse(period.error, 400);
+  try {
+    const db = requireBookingDb(env);
+    const existing = periodId
+      ? await db.prepare("SELECT * FROM availability_schedule_periods WHERE id = ? AND venture = ? AND category = ?")
+          .bind(periodId, "tattooing", category).first()
+      : null;
+    if (periodId && !existing) return errorResponse("Scheduled weekly change not found.", 404);
+    const overlap = await db.prepare(
+      `SELECT id, label, start_date, end_date FROM availability_schedule_periods
+       WHERE venture = ? AND category = ? AND id <> ?
+         AND start_date <= COALESCE(?, '9999-12-31')
+         AND COALESCE(end_date, '9999-12-31') >= ?
+       LIMIT 1`
+    ).bind("tattooing", category, periodId || "", period.endDate || null, period.startDate).first();
+    if (overlap) return errorResponse("That date range overlaps another scheduled weekly change for this category.", 409, {
+      code: "schedule_period_overlap",
+      conflictingPeriod: normalizeSchedulePeriod(overlap),
+    });
+    const affectedAppointments = await appointmentsAffectedBySchedulePeriod(db, category, period);
+    if (affectedAppointments.length && body.confirmExistingAppointments !== true) {
+      return errorResponse("Existing appointments fall outside these scheduled hours.", 409, {
+        code: "schedule_appointment_conflict",
+        requiresConfirmation: true,
+        appointments: affectedAppointments,
+      });
+    }
+    const id = periodId || crypto.randomUUID();
+    const now = new Date().toISOString();
+    const statements = [
+      existing
+        ? db.prepare(
+            `UPDATE availability_schedule_periods
+             SET label = ?, start_date = ?, end_date = ?, updated_at = ?
+             WHERE id = ? AND venture = ? AND category = ?`
+          ).bind(period.label, period.startDate, period.endDate || null, now, id, "tattooing", category)
+        : db.prepare(
+            `INSERT INTO availability_schedule_periods
+             (id, venture, category, label, start_date, end_date, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(id, "tattooing", category, period.label, period.startDate, period.endDate || null, now, now),
+      db.prepare("DELETE FROM availability_schedule_period_windows WHERE period_id = ?").bind(id),
+    ];
+    period.windows.forEach((windowRow, index) => {
+      statements.push(db.prepare(
+        `INSERT INTO availability_schedule_period_windows (
+          id, period_id, day_of_week, start_time, end_time, capacity,
+          buffer_before_minutes, buffer_after_minutes, note, sort_order, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        crypto.randomUUID(), id, windowRow.dayOfWeek, windowRow.startTime, windowRow.endTime,
+        windowRow.capacity, windowRow.bufferBeforeMinutes, windowRow.bufferAfterMinutes,
+        windowRow.note, index, now, now,
+      ));
+    });
+    await db.batch(statements);
+    const saved = (await loadSchedulePeriods(db, [category])).find((item) => item.id === id) || null;
+    return json({ schedulePeriod: saved }, { status: existing ? 200 : 201 });
+  } catch (error) {
+    return errorResponse("Unable to save the scheduled weekly change.", 500, { detail: error.message });
+  }
+}
+
+export async function handleAdminListSchedulePeriods(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const scope = availabilityScopeFromRequest(request);
+  try {
+    const periods = await loadSchedulePeriods(requireBookingDb(env), scope.categories);
+    return json({ scope: scope.scope, schedulePeriods: periods });
+  } catch (error) {
+    return errorResponse("Unable to load scheduled weekly changes.", 500, { detail: error.message });
+  }
+}
+
+export async function handleAdminCreateSchedulePeriod(request, env, category) {
+  return saveSchedulePeriod(request, env, category);
+}
+
+export async function handleAdminPutSchedulePeriod(request, env, category, periodId) {
+  return saveSchedulePeriod(request, env, category, periodId);
+}
+
+export async function handleAdminDeleteSchedulePeriod(request, env, category, periodId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const scopeError = dateOverrideScopeError(request, category);
+  if (scopeError) return scopeError;
+  try {
+    const db = requireBookingDb(env);
+    const result = await db.prepare(
+      "DELETE FROM availability_schedule_periods WHERE id = ? AND venture = ? AND category = ?"
+    ).bind(periodId, "tattooing", category).run();
+    if (!result.meta?.changes) return errorResponse("Scheduled weekly change not found.", 404);
+    return json({ ok: true, deletedId: periodId });
+  } catch (error) {
+    return errorResponse("Unable to delete the scheduled weekly change.", 500, { detail: error.message });
+  }
+}
+
+function dateOverrideScopeError(request, category) {
+  const scope = availabilityScopeFromRequest(request);
+  if (!scope.categories.includes(category)) {
+    return errorResponse("That availability category does not belong to this Studio section.", 400);
+  }
+  return null;
+}
+
+export async function handleAdminListDateOverrides(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const scope = availabilityScopeFromRequest(request);
+  const month = new URL(request.url).searchParams.get("month") || "";
+  if (!isValidMonthKey(month)) return errorResponse("month must use YYYY-MM format.", 400);
+
+  try {
+    const db = requireBookingDb(env);
+    const overrides = await loadDateOverrides(db, `${month}-01`, `${month}-31`, scope.categories);
+    return json({ scope: scope.scope, month, overrides });
+  } catch (error) {
+    return errorResponse("Unable to load date overrides.", 500, { detail: error.message });
+  }
+}
+
+export async function handleAdminPutDateOverride(request, env, category, localDate) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const scopeError = dateOverrideScopeError(request, category);
+  if (scopeError) return scopeError;
+  if (!localDatePartsFromKey(localDate)) return errorResponse("date must use a valid YYYY-MM-DD value.", 400);
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+  const mode = asString(body.mode);
+  if (!DATE_OVERRIDE_MODES.has(mode)) return errorResponse("mode must be closed or custom.", 400);
+
+  const submittedWindows = mode === "custom" && Array.isArray(body.windows) ? body.windows : [];
+  if (mode === "custom" && !submittedWindows.length) {
+    return errorResponse("Custom hours require at least one time window.", 400);
+  }
+  const windows = [];
+  for (let index = 0; index < submittedWindows.length; index += 1) {
+    const validated = validateDateOverrideWindow(submittedWindows[index], index);
+    if (validated.error) return errorResponse(validated.error, 400);
+    windows.push(validated);
+  }
+  windows.sort((a, b) => minutesFromTime(a.startTime) - minutesFromTime(b.startTime));
+  for (let index = 1; index < windows.length; index += 1) {
+    if (minutesFromTime(windows[index].startTime) < minutesFromTime(windows[index - 1].endTime)) {
+      return errorResponse("Custom availability windows cannot overlap.", 400);
+    }
+  }
+
+  try {
+    const db = requireBookingDb(env);
+    const now = new Date().toISOString();
+    const overrideId = `date_override_${category}_${localDate}`;
+    const statements = [
+      db.prepare(
+        `INSERT INTO availability_date_overrides (
+          id, venture, category, local_date, mode, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(venture, category, local_date) DO UPDATE SET
+          mode = excluded.mode,
+          updated_at = excluded.updated_at`
+      ).bind(overrideId, "tattooing", category, localDate, mode, now, now),
+      db.prepare("DELETE FROM availability_date_override_windows WHERE override_id = ?").bind(overrideId),
+    ];
+    for (let index = 0; index < windows.length; index += 1) {
+      const windowRow = windows[index];
+      statements.push(db.prepare(
+        `INSERT INTO availability_date_override_windows (
+          id, override_id, start_time, end_time, capacity,
+          buffer_before_minutes, buffer_after_minutes, note, sort_order,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        crypto.randomUUID(),
+        overrideId,
+        windowRow.startTime,
+        windowRow.endTime,
+        windowRow.capacity,
+        windowRow.bufferBeforeMinutes,
+        windowRow.bufferAfterMinutes,
+        windowRow.note,
+        index,
+        now,
+        now,
+      ));
+    }
+    await db.batch(statements);
+    const override = (await loadDateOverrides(db, localDate, localDate, [category]))[0] || null;
+    return json({ override });
+  } catch (error) {
+    return errorResponse("Unable to save the date override.", 500, { detail: error.message });
+  }
+}
+
+export async function handleAdminDeleteDateOverride(request, env, category, localDate) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const scopeError = dateOverrideScopeError(request, category);
+  if (scopeError) return scopeError;
+  if (!localDatePartsFromKey(localDate)) return errorResponse("date must use a valid YYYY-MM-DD value.", 400);
+
+  try {
+    const db = requireBookingDb(env);
+    const result = await db.prepare(
+      "DELETE FROM availability_date_overrides WHERE venture = ? AND category = ? AND local_date = ?"
+    ).bind("tattooing", category, localDate).run();
+    if (!result.meta?.changes) return errorResponse("Date override not found.", 404);
+    return json({ ok: true, category, date: localDate });
+  } catch (error) {
+    return errorResponse("Unable to reset the date to its weekly schedule.", 500, { detail: error.message });
+  }
+}
+
 export async function handleAdminListAvailability(request, env) {
   const authError = requireAdmin(request, env);
   if (authError) return authError;
@@ -8850,6 +9796,7 @@ export async function handleAdminListAvailability(request, env) {
     const now = new Date().toISOString();
     const scope = availabilityScopeFromRequest(request);
     const typeIds = scope.bookingTypeIds || [];
+    const scopeClause = scope.scope === "all" ? "" : " AND availability_scope = ?";
     const scopedTypeClause = typeIds.length
       ? ` AND (${scope.includeUnscoped ? "booking_type_id IS NULL OR " : ""}booking_type_id IN (${typeIds.map(() => "?").join(", ")}))`
       : "";
@@ -8857,6 +9804,7 @@ export async function handleAdminListAvailability(request, env) {
       .prepare(
         `SELECT * FROM availability_windows
          WHERE venture = ? AND id NOT LIKE 'gen:%'
+         ${scopeClause}
          ${scopedTypeClause}
          ORDER BY
            CASE WHEN end_at >= ? THEN 0 ELSE 1 END ASC,
@@ -8864,7 +9812,7 @@ export async function handleAdminListAvailability(request, env) {
            CASE WHEN end_at < ? THEN start_at END DESC
          LIMIT 100`
       )
-      .bind("tattooing", ...typeIds, now, now, now)
+      .bind("tattooing", ...(scope.scope === "all" ? [] : [scope.scope]), ...typeIds, now, now, now)
       .all();
     return json({ scope: scope.scope, availabilityWindows: (result.results || []).map(normalizeWindow) });
   } catch (error) {
@@ -9025,6 +9973,17 @@ export async function handleAdminCreateAvailability(request, env) {
     const db = requireBookingDb(env);
     const now = new Date().toISOString();
     const venture = asString(body.venture) || "tattooing";
+    const requestScope = availabilityScopeFromRequest(request);
+    const bookingTypeId = asString(body.bookingTypeId);
+    const availabilityScope = requestScope.scope === "all"
+      ? availabilityScopeForBookingType(bookingTypeId)
+      : requestScope.scope;
+    if (!Object.hasOwn(AVAILABILITY_SCOPE_CATEGORIES, availabilityScope)) {
+      return errorResponse("Unknown availability scope.", 400);
+    }
+    if (bookingTypeId && !AVAILABILITY_SCOPE_CATEGORIES[availabilityScope].includes(scheduleCategoryForBookingType(bookingTypeId))) {
+      return errorResponse("That booking type does not belong to this availability section.", 400);
+    }
     const candidate = {
       start_at: new Date(startAt).toISOString(),
       end_at: new Date(endAt).toISOString(),
@@ -9035,9 +9994,9 @@ export async function handleAdminCreateAvailability(request, env) {
       const existing = await db
         .prepare(
           `SELECT * FROM availability_windows
-           WHERE active = 1 AND is_blackout = 0 AND venture = ?`
+           WHERE active = 1 AND is_blackout = 0 AND venture = ? AND availability_scope = ?`
         )
-        .bind(venture)
+        .bind(venture, availabilityScope)
         .all();
       const candidateInterval = intervalWithBuffer(candidate);
       const conflicts = (existing.results || []).some((row) =>
@@ -9053,13 +10012,13 @@ export async function handleAdminCreateAvailability(request, env) {
         `INSERT INTO availability_windows (
           id, venture, booking_type_id, start_at, end_at, capacity,
           buffer_before_minutes, buffer_after_minutes, is_blackout,
-          active, note, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          active, note, created_at, updated_at, availability_scope
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
         venture,
-        asOptionalString(body.bookingTypeId),
+        asOptionalString(bookingTypeId),
         candidate.start_at,
         candidate.end_at,
         Math.max(1, asPositiveInteger(body.capacity, 1)),
@@ -9069,7 +10028,8 @@ export async function handleAdminCreateAvailability(request, env) {
         body.active === false ? 0 : 1,
         asString(body.note),
         now,
-        now
+        now,
+        availabilityScope
       )
       .run();
     const row = await db.prepare("SELECT * FROM availability_windows WHERE id = ?").bind(id).first();
@@ -9123,6 +10083,10 @@ export async function handleAdminUpdateAvailability(request, env, id) {
     const db = requireBookingDb(env);
     const current = await db.prepare("SELECT * FROM availability_windows WHERE id = ?").bind(id).first();
     if (!current) return errorResponse("Availability window not found.", 404);
+    const requestScope = availabilityScopeFromRequest(request);
+    if (requestScope.scope !== "all" && current.availability_scope !== requestScope.scope) {
+      return errorResponse("Availability window not found in this section.", 404);
+    }
     const now = new Date().toISOString();
     const startAt = body.startAt === undefined ? current.start_at : asString(body.startAt);
     const endAt = body.endAt === undefined ? current.end_at : asString(body.endAt);
@@ -9147,7 +10111,14 @@ export async function handleAdminUpdateAvailability(request, env, id) {
       is_blackout: body.isBlackout === undefined ? current.is_blackout : body.isBlackout ? 1 : 0,
       active: body.active === undefined ? current.active : body.active ? 1 : 0,
       note: body.note === undefined ? current.note : asString(body.note),
+      availability_scope: current.availability_scope || availabilityScopeForBookingType(current.booking_type_id),
     };
+    if (
+      next.booking_type_id
+      && !AVAILABILITY_SCOPE_CATEGORIES[next.availability_scope].includes(scheduleCategoryForBookingType(next.booking_type_id))
+    ) {
+      return errorResponse("That booking type does not belong to this availability section.", 400);
+    }
     if (
       !next.is_blackout
       && next.booking_type_id === EXTENDED_DAY_BOOKING_TYPE_ID
@@ -9159,9 +10130,9 @@ export async function handleAdminUpdateAvailability(request, env, id) {
       const existing = await db
         .prepare(
           `SELECT * FROM availability_windows
-           WHERE active = 1 AND is_blackout = 0 AND venture = ? AND id != ?`
+           WHERE active = 1 AND is_blackout = 0 AND venture = ? AND availability_scope = ? AND id != ?`
         )
-        .bind(next.venture, id)
+        .bind(next.venture, next.availability_scope, id)
         .all();
       const candidateInterval = intervalWithBuffer(next);
       const conflicts = (existing.results || []).some((row) =>
@@ -9208,6 +10179,12 @@ export async function handleAdminDeleteAvailability(request, env, id) {
 
   try {
     const db = requireBookingDb(env);
+    const current = await db.prepare("SELECT availability_scope FROM availability_windows WHERE id = ?").bind(id).first();
+    if (!current) return errorResponse("Availability window not found.", 404);
+    const requestScope = availabilityScopeFromRequest(request);
+    if (requestScope.scope !== "all" && current.availability_scope !== requestScope.scope) {
+      return errorResponse("Availability window not found in this section.", 404);
+    }
     const result = await db
       .prepare("DELETE FROM availability_windows WHERE id = ? AND id NOT LIKE 'gen:%'")
       .bind(id)

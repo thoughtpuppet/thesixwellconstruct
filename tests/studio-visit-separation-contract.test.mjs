@@ -218,6 +218,7 @@ test("Studio admin alerts name studio_visit even when its stored label is absent
 test("availability preview scopes never cross Studio Visits into room bookings", async () => {
   const database = databaseBeforeArtVisitSplit();
   database.exec(source("migrations/0072_art_visit_availability.sql"));
+  database.exec(source("migrations/0116_daily_availability_overrides.sql"));
   database.prepare(
     `UPDATE availability_rules
      SET active = CASE WHEN day_of_week IN (0, 1, 2, 3, 6) THEN 1 ELSE 0 END

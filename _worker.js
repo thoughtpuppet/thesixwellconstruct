@@ -39,12 +39,16 @@ import {
   handleAdminCompleteAppointment,
   handleAdminCreateBookingToken,
   handleAdminDeleteAvailability,
+  handleAdminDeleteDateOverride,
+  handleAdminDeleteSchedulePeriod,
   handleAdminGetBookingReadiness,
   handleAdminGetAvailabilityPreview,
   handleAdminGetSchedule,
   handleAdminTattooSessionPlan,
   handleAdminListAppointments,
   handleAdminListAvailability,
+  handleAdminListDateOverrides,
+  handleAdminListSchedulePeriods,
   handleAdminListBookingTypes,
   handleAdminListSubmissionTokens,
   handleAdminListWalkIns,
@@ -62,6 +66,9 @@ import {
   handleAdminUpdateWalkIn,
   handleAdminUpdateSchedule,
   handleAdminUpdateAvailability,
+  handleAdminPutDateOverride,
+  handleAdminCreateSchedulePeriod,
+  handleAdminPutSchedulePeriod,
   handleBookingCalendar,
   handleBookingAccessEvent,
   handleBookingContext,
@@ -1072,6 +1079,40 @@ async function handleBookingApi(request, env) {
     if (method === "GET") return handleAdminListAvailability(request, env);
     if (method === "POST") return handleAdminCreateAvailability(request, env);
     return methodNotAllowed(method, ["GET", "POST"]);
+  }
+
+  if (pathname === "/api/admin/booking/date-overrides") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleAdminListDateOverrides(request, env);
+  }
+
+  if (pathname === "/api/admin/booking/schedule-periods") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleAdminListSchedulePeriods(request, env);
+  }
+
+  const schedulePeriodCategoryMatch = pathname.match(/^\/api\/admin\/booking\/schedule-periods\/([^/]+)$/);
+  if (schedulePeriodCategoryMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminCreateSchedulePeriod(request, env, decodeURIComponent(schedulePeriodCategoryMatch[1]));
+  }
+
+  const schedulePeriodMatch = pathname.match(/^\/api\/admin\/booking\/schedule-periods\/([^/]+)\/([^/]+)$/);
+  if (schedulePeriodMatch) {
+    const category = decodeURIComponent(schedulePeriodMatch[1]);
+    const periodId = decodeURIComponent(schedulePeriodMatch[2]);
+    if (method === "PUT") return handleAdminPutSchedulePeriod(request, env, category, periodId);
+    if (method === "DELETE") return handleAdminDeleteSchedulePeriod(request, env, category, periodId);
+    return methodNotAllowed(method, ["PUT", "DELETE"]);
+  }
+
+  const dateOverrideMatch = pathname.match(/^\/api\/admin\/booking\/date-overrides\/([^/]+)\/(\d{4}-\d{2}-\d{2})$/);
+  if (dateOverrideMatch) {
+    const category = decodeURIComponent(dateOverrideMatch[1]);
+    const localDate = dateOverrideMatch[2];
+    if (method === "PUT") return handleAdminPutDateOverride(request, env, category, localDate);
+    if (method === "DELETE") return handleAdminDeleteDateOverride(request, env, category, localDate);
+    return methodNotAllowed(method, ["PUT", "DELETE"]);
   }
 
   if (pathname === "/api/admin/booking/availability-preview") {
