@@ -60,13 +60,14 @@ function request(path, { method="GET", body, admin=false } = {}) {
   });
 }
 
-test("0119 separates publication from operations and synchronizes Construct visibility", () => {
+test("0119 and 0120 separate publication from operations and synchronize Construct visibility", () => {
   const database = databaseThrough("0118_about_exhibitions_appearances.sql");
   database.exec(`
     INSERT INTO events(id,slug,title,status,created_at,updated_at)
     VALUES('event-private-draft','private-draft','Private draft','draft',datetime('now'),datetime('now'));
   `);
   database.exec(readFileSync(join(ROOT, "migrations", "0119_event_publication_state.sql"), "utf8"));
+  database.exec(readFileSync(join(ROOT, "migrations", "0120_event_publication_triggers.sql"), "utf8"));
 
   const published = database.prepare("SELECT publication_state,status FROM events WHERE slug='signal-symbol'").get();
   const draft = database.prepare("SELECT publication_state,status FROM events WHERE slug='private-draft'").get();
@@ -87,7 +88,7 @@ test("0119 separates publication from operations and synchronizes Construct visi
 });
 
 test("public APIs expose Announced details but block every public action", async () => {
-  const database = databaseThrough("0119_event_publication_state.sql");
+  const database = databaseThrough("0120_event_publication_triggers.sql");
   database.prepare("UPDATE events SET publication_state='announced',status='open' WHERE slug='signal-symbol'").run();
   const env = runtime(database);
 
@@ -110,7 +111,7 @@ test("public APIs expose Announced details but block every public action", async
 });
 
 test("admin event creation defaults to Draft and Closed", async () => {
-  const database = databaseThrough("0119_event_publication_state.sql");
+  const database = databaseThrough("0120_event_publication_triggers.sql");
   const response = await handleAdminEventCreate(request("/api/admin/events", {
     method:"POST",
     admin:true,
