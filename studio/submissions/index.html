@@ -5818,7 +5818,13 @@ ${meetingLines}
   }
 
   function eventStatusOptions(current) {
-    return ["draft", "open", "closed", "completed", "cancelled"].map((value) =>
+    return ["open", "closed", "completed", "cancelled"].map((value) =>
+      `<option value="${value}" ${value === current ? "selected" : ""}>${value.toUpperCase()}</option>`
+    ).join("");
+  }
+
+  function eventPublicationOptions(current) {
+    return ["draft", "announced", "published"].map((value) =>
       `<option value="${value}" ${value === current ? "selected" : ""}>${value.toUpperCase()}</option>`
     ).join("");
   }
@@ -5831,14 +5837,18 @@ ${meetingLines}
       ` · ${ev.paidOrders || 0} ${isFree ? "registration" : "paid order"}${(ev.paidOrders === 1) ? "" : "s"}`;
     return `
       <section class="schedule-section is-open" data-collapse-section>
-        <button class="section-toggle" type="button">${escapeHtml(ev.title)} — ${escapeHtml((ev.status || "").toUpperCase())}</button>
+        <button class="section-toggle" type="button">${escapeHtml(ev.title)} — ${escapeHtml((ev.publicationState || "draft").toUpperCase())} / ${escapeHtml((ev.status || "closed").toUpperCase())}</button>
         <div class="section-body">
           <p class="contact">${escapeHtml(stats)}</p>
           <form data-event-form="${escapeHtml(ev.slug)}">
             <div class="schedule-grid">
               <div class="field">
-                <label>Status</label>
-                <select data-field="status">${eventStatusOptions(ev.status)}</select>
+                <label>Public stage</label>
+                <select data-field="publicationState">${eventPublicationOptions(ev.publicationState || "draft")}</select>
+              </div>
+              <div class="field">
+                <label>Event operations</label>
+                <select data-field="status">${eventStatusOptions(ev.status || "closed")}</select>
               </div>
               <div class="field">
                 <label>Starts</label>
@@ -5936,8 +5946,12 @@ ${meetingLines}
                 <input data-field="slug" placeholder="auto from title">
               </div>
               <div class="field">
-                <label>Status</label>
-                <select data-field="status">${eventStatusOptions("draft")}</select>
+                <label>Public stage</label>
+                <select data-field="publicationState">${eventPublicationOptions("draft")}</select>
+              </div>
+              <div class="field">
+                <label>Event operations</label>
+                <select data-field="status">${eventStatusOptions("closed")}</select>
               </div>
               <div class="field">
                 <label>Starts</label>
@@ -6022,7 +6036,7 @@ ${meetingLines}
         <div class="detail-head">
           <span class="pill">Public / Events</span>
           <h2>Ticketed Events</h2>
-          <p class="contact">Create a new event; manage draft, open, closed, completed, and cancelled states; or create a privacy-safe archive draft. Seat counts reflect paid tickets only.</p>
+          <p class="contact">Create events as private drafts, announce them publicly without opening actions, then publish when registration or participation is ready. Event operations remain independent. Seat counts reflect paid tickets only.</p>
         </div>
         <div class="review-card" id="eventsReadinessCard">
           <div class="review-card-header">Events Readiness</div>
@@ -9350,6 +9364,7 @@ ${meetingLines}
           body: JSON.stringify({
             title,
             slug: fieldValue("slug"),
+            publicationState: fieldValue("publicationState"),
             status: fieldValue("status"),
             location: fieldValue("location"),
             description: fieldValue("description"),
@@ -9389,6 +9404,7 @@ ${meetingLines}
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          publicationState: fieldValue("publicationState"),
           status: fieldValue("status"),
           title: fieldValue("title"),
           location: fieldValue("location"),

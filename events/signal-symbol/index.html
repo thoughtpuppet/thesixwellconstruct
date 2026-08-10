@@ -538,6 +538,16 @@
       if (ev.accessibilityNotes) els.access.textContent = ev.accessibilityNotes;
       els.waitlist.classList.toggle("is-visible", !ev.open && ev.waitlistEnabled !== false);
 
+      if (ev.publicationState === "announced") {
+        els.waitlist.classList.remove("is-visible");
+        els.btn.textContent = "Announced";
+        els.btn.disabled = true;
+        els.seats.disabled = true;
+        updateTotal();
+        showStatePanel("This event has been announced. Registration and event updates are not open yet.");
+        return;
+      }
+
       if (!ev.open) {
         els.btn.textContent = ev.soldOut ? "Sold out" : "Join the next session";
         els.btn.disabled = true;

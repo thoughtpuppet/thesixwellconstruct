@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINES = {
   "merch/index.html": "daeb288eaf41a42974ff18d6d2aed52d57e9be7b37427596489d90835992c8a0",
-  "events/index.html": "16f334ab618223a7eeeb04c0309b7b4571cb3141c81a5de54fb7feffaa3e874d",
+  "events/index.html": "595ba76b18b2ed5fbedc523b5e7ed42a40b2bd9db5fdf9b3453cc92efe82ae70",
 };
 
 function cleanText(value) {

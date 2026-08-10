@@ -213,6 +213,17 @@
       els.price.textContent = isFree ? "Free" : ev.priceFormatted + " per seat";
       els.seatsLeft.textContent = ev.soldOut ? "Sold out" : (ev.seatsRemaining + " of " + ev.capacity);
       els.seats.innerHTML = "";
+      if (ev.publicationState === "announced") {
+        ticketOpen = false;
+        els.ticketBtn.disabled = true;
+        els.ticketBtn.textContent = "Announced";
+        els.ticketNote.textContent = "This event has been announced. Tickets and performer requests are not open yet.";
+        els.micBtn.disabled = true;
+        els.micBtn.textContent = "Announced";
+        Array.from(els.micForm.elements).forEach(function (control) { control.disabled = true; });
+        updateTotal();
+        return;
+      }
       if (!ticketOpen) {
         els.ticketBtn.disabled = true;
         els.ticketBtn.textContent = ev.soldOut ? "Sold out" : "Tickets closed";

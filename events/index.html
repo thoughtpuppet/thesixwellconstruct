@@ -13,57 +13,88 @@
 <link rel="stylesheet" href="/css/landing-family.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/hero.css">
+<link rel="stylesheet" href="/css/booking-calendar.css">
 <style>
   :root {
-    --venture-color: var(--color-events);
-    --venture-accent: var(--color-events);
-    --venture-dim: var(--color-events-dim);
-    --venture-wash: rgba(0, 93, 37, 0.1);
+    --venture-color:var(--color-events);
+    --venture-accent:var(--color-events);
+    --venture-dim:var(--color-events-dim);
+    --venture-wash:rgba(0,93,37,0.1);
   }
-  .event-cta {
-    display: inline-flex;
-    align-items: center;
-    min-height: 48px;
-    margin-top: 18px;
-    border: 5px solid var(--venture-accent);
-    padding: 0 24px;
-    color: var(--text);
-    font-family: var(--font-display);
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    text-decoration: none;
-    transition: color var(--duration-base) var(--ease-out), background var(--duration-base) var(--ease-out);
+  html,body { background:var(--color-bg); }
+  .event-card-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .event-card {
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    border:5px solid var(--ring-faint);
+    padding:28px;
+    background:var(--color-bg);
+    transition:border-color var(--duration-base) var(--ease-out);
   }
-  .event-cta:hover,
-  .event-cta:focus-visible {
-    background: var(--venture-accent);
-    color: #0e0e0e;
-    outline: none;
-  }
-  .event-actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:18px; }
-  .event-actions .event-cta { margin-top:0; }
-  .event-cta.is-secondary { border-color:var(--ring-faint); color:var(--text-muted); }
-  .event-disabled {
+  .event-card.is-announced { border-color:var(--ring-faint); }
+  .event-card.is-past,.event-card.is-cancelled { border-color:var(--ring-faint); opacity:.62; }
+  .event-card:hover,.event-card:focus-within { border-color:var(--color-events); }
+  .event-card-meta { margin:0 0 20px; color:var(--color-events-bright); font-family:var(--font-display); font-size:10px; font-weight:800; letter-spacing:.18em; line-height:1.6; text-transform:uppercase; }
+  .event-card.is-past .event-card-meta,.event-card.is-cancelled .event-card-meta { color:var(--text-dim); }
+  .event-card h3 { margin:0; color:var(--text); font-size:clamp(22px,3vw,34px); line-height:1.02; }
+  .event-card-copy { margin:18px 0 0; color:var(--text-muted); line-height:1.65; }
+  .event-card-facts { display:flex; flex-wrap:wrap; gap:8px; margin:22px 0 0; }
+  .event-card-fact { border:5px solid var(--color-events-dim); padding:7px 10px; color:var(--text-dim); font-family:var(--font-display); font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+  .event-card.is-past .event-card-fact,.event-card.is-cancelled .event-card-fact { border-color:var(--ring-faint); }
+  .event-card-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:auto; padding-top:24px; }
+  .event-action {
+    min-height:48px;
     display:inline-flex;
     align-items:center;
-    min-height:48px;
-    border:5px solid var(--ring-faint);
+    justify-content:center;
+    border:5px solid var(--color-events);
     padding:0 18px;
-    color:var(--text-muted);
     background:transparent;
+    color:var(--text);
     font-family:var(--font-display);
-    font-size:11px;
-    font-weight:800;
-    letter-spacing:0.12em;
+    font-size:10px;
+    font-weight:900;
+    letter-spacing:.14em;
+    text-decoration:none;
     text-transform:uppercase;
   }
-  .seats-pill[data-state="soldout"] { color: var(--color-tattooing); }
+  .event-action:hover,.event-action:focus-visible { background:var(--color-events); color:var(--color-bg); outline:none; }
+  .event-action.is-secondary { border-color:var(--color-events-dim); color:var(--text-muted); }
+  .event-action[disabled] { border-color:var(--color-events-dim); color:var(--text-dim); cursor:not-allowed; opacity:.72; }
+  .event-card.is-past .event-action,.event-card.is-cancelled .event-action { border-color:var(--ring-faint); }
+  .event-board-empty { border:5px solid var(--color-events-dim); padding:24px; color:var(--text-dim); }
+  .events-calendar { --calendar-node-color:var(--color-events); --accent:var(--color-events-bright); --form-control-border:var(--color-events-dim); max-width:920px; }
+  .events-calendar .cal-header { margin-bottom:14px; }
+  .events-calendar .cal-month-select { min-width:190px; border:5px solid var(--ring-faint); }
+  .events-calendar .cal-nav { border:5px solid var(--ring-faint); }
+  .events-calendar .cal-day { cursor:default; border:5px solid var(--ring-faint); }
+  .events-calendar .cal-day.has-events { cursor:pointer; color:var(--color-body); border:5px solid var(--color-events); }
+  .events-calendar .cal-day.has-events:hover,.events-calendar .cal-day.has-events:focus-visible { background:rgba(0,93,37,.12); border-color:var(--color-events-bright); }
+  .events-calendar .cal-day.is-announced { border-color:var(--color-events-dim); color:var(--text-muted); }
+  .events-calendar .cal-day.past.has-events { pointer-events:auto; cursor:pointer; border-color:var(--ring-faint); color:var(--text-dim); background:transparent; }
+  .events-calendar .cal-day.has-multiple::after { content:attr(data-count); align-self:flex-start; margin:4px 4px 0 -2px; color:var(--color-events-bright); font-size:8px; }
+  .event-day-agenda { display:grid; gap:8px; margin-top:16px; }
+  .event-day-agenda:empty { display:none; }
+  .event-day-link { display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; border:5px solid var(--color-events-dim); padding:14px 16px; color:var(--text); text-decoration:none; }
+  .event-day-link:hover,.event-day-link:focus-visible { border-color:var(--color-events); outline:none; }
+  .event-day-link span { color:var(--text-dim); font-family:var(--font-display); font-size:9px; letter-spacing:.12em; text-transform:uppercase; }
+  @media (max-width:768px) {
+    .event-card-list { grid-template-columns:minmax(0,1fr); gap:12px; }
+    .event-card { padding:22px; }
+    .event-card h3 { font-size:24px; }
+    .event-card-actions,.event-action { width:100%; }
+    .events-calendar .cal-header { align-items:stretch; }
+    .events-calendar .cal-month-nav { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; }
+    .events-calendar .cal-month-select { min-width:0; width:100%; }
+    .events-calendar .cal-weekdays,.events-calendar .cal-grid { gap:4px; }
+    .events-calendar .cal-day { font-size:12px; }
+    .event-day-link { grid-template-columns:minmax(0,1fr); }
+  }
 </style>
 </head>
 <body class="venture-page" data-venture="events" data-landing-family="events-program">
-  <div class="venture-grain" aria-hidden="true"></div>
   <main class="venture-shell entrance-fade">
     <section class="landing-hero venture-hero site-hero site-hero--landing" aria-labelledby="page-title">
       <div>
@@ -72,190 +103,247 @@
       </div>
       <div class="hero-copy">
         <p class="hero-descriptor hero-lede">Gatherings, open calls, temporary rooms, and live experiments attached to the construct.</p>
-        <p class="hero-note">Current gatherings are listed first. Reserve from an open card, or join the waitlist when a room fills or booking closes.</p>
+        <p class="hero-note">Announced events mark what is forming. Active events open the path to attend, register, or reserve a seat.</p>
         <div class="hero-actions">
-          <a class="venture-link" href="/about/#construct-accesspoints">access points</a>
-          <a class="venture-link" href="/archive/">past record</a>
+          <a class="venture-link" href="#upcoming">upcoming</a>
+          <a class="venture-link" href="#calendar">calendar</a>
+          <a class="venture-link" href="#past">past events</a>
         </div>
       </div>
     </section>
 
-    <section class="section" id="active">
+    <section class="section" id="upcoming">
       <header class="section-head">
-        <div>
-          <span class="section-kicker">calendar layer</span>
-          <h2 class="section-title">Upcoming / Active</h2>
-        </div>
-        <p class="section-copy">What is currently open, what is forming, and where participation may be useful.</p>
+        <div><span class="section-kicker">public board</span><h2 class="section-title">Upcoming Events</h2></div>
+        <p class="section-copy">What has been announced and what is currently active.</p>
       </header>
-      <div class="feature-grid">
-        <div id="events-feed" class="events-feed">
-          <article class="feature-card is-large">
-            <span class="tile-kicker">live container</span>
-            <h3>Loading events…</h3>
-            <p>Pulling the current calendar.</p>
-          </article>
-        </div>
-        <div class="status-grid">
-          <article class="status-card">
-            <h3>Open-call channel</h3>
-            <p>A future place for calls for readers, helpers, vendors, performers, documenters, and project-specific contributors.</p>
-          </article>
-          <article class="status-card">
-            <h3>Hosting notes</h3>
-            <p>Event language, capacity, location details, accessibility notes, and house rules live alongside each gathering once it is real.</p>
-          </article>
-        </div>
+      <div class="event-card-list" id="upcomingEvents" aria-live="polite">
+        <p class="event-board-empty">Loading the public event board.</p>
       </div>
     </section>
 
-    <section class="section" id="pathways">
+    <section class="section" id="calendar">
       <header class="section-head">
-        <div>
-          <span class="section-kicker">ways in</span>
-          <h2 class="section-title">Event Pathways</h2>
-        </div>
-        <p class="section-copy">The page is structured for several kinds of public time without forcing every event into the same shape.</p>
+        <div><span class="section-kicker">calendar layer</span><h2 class="section-title">Event Calendar</h2></div>
+        <p class="section-copy">Event dates remain visible after they pass. Past dates are quieter, but the record stays open.</p>
       </header>
-      <div class="path-grid">
-        <article class="path-card"><h3>Readings</h3><p>Language-led nights for letters, essays, statements, fragments, and unfinished public thinking.</p></article>
-        <article class="path-card"><h3>Open studios</h3><p>Temporary access to process, works in progress, object studies, and material decisions.</p></article>
-        <article class="path-card"><h3>Pop-ups</h3><p>Small commerce rooms for merch, prints, flash, editions, and experiments that fund the next layer.</p></article>
-        <article class="path-card"><h3>Project nights</h3><p>Focused gatherings attached to a film, archive room, collaborative build, or special tattoo project.</p></article>
+      <div class="cal-wrap events-calendar" id="eventsCalendar" hidden>
+        <div class="cal-header">
+          <span class="cal-month-count" id="eventMonthCount"></span>
+          <div class="cal-month-nav">
+            <button class="cal-nav" id="eventMonthPrev" type="button" aria-label="Previous event month">‹</button>
+            <label><span class="cal-announcement">Event month</span><select class="cal-month-select" id="eventMonthSelect"></select></label>
+            <button class="cal-nav" id="eventMonthNext" type="button" aria-label="Next event month">›</button>
+          </div>
+        </div>
+        <div class="cal-weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+        <div class="cal-grid" id="eventCalendarGrid" role="grid" aria-label="Events by date"></div>
+        <div class="event-day-agenda" id="eventDayAgenda" aria-live="polite"></div>
       </div>
+      <p class="event-board-empty" id="calendarEmpty">Loading event dates.</p>
     </section>
 
-    <section class="section" id="record">
+    <section class="section" id="past">
       <header class="section-head">
-        <div>
-          <span class="section-kicker">record</span>
-          <h2 class="section-title">Past / Recorded</h2>
-        </div>
-        <p class="section-copy">As events happen, this becomes the bridge between calendar and archive: what happened, who helped, what changed, and what evidence remains.</p>
+        <div><span class="section-kicker">record</span><h2 class="section-title">Past Events</h2></div>
+        <p class="section-copy">Completed gatherings remain as a quieter public trail into the wider archive.</p>
       </header>
-      <div class="timeline">
-        <article class="timeline-item">
-          <span class="timeline-date">in development</span>
-          <div><h3>First public record</h3><p>Photo sets, flyers, set lists, readings, recap notes, or participant credits can be added here after the first documented gathering.</p></div>
-        </article>
-        <article class="timeline-item">
-          <span class="timeline-date">archive bridge</span>
-          <div><h3>Event residue</h3><p>Each event should eventually leave a trail into the archive rather than disappearing after the date passes.</p></div>
-        </article>
+      <div class="event-card-list" id="pastEvents" aria-live="polite">
+        <p class="event-board-empty">Loading past events.</p>
       </div>
     </section>
 
-    <footer class="footer">
-      <p>&copy; the six.well construct</p>
-      <div class="page-links">
-        <a href="/home/">return to construct</a>
-        <a href="/archive/">archive</a>
-      </div>
-    </footer>
+    <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/home/">return to construct</a><a href="/archive/events/">event archive</a></div></footer>
   </main>
+
   <script>
   (function () {
-    var feed = document.getElementById("events-feed");
+    var upcomingRoot = document.getElementById("upcomingEvents");
+    var pastRoot = document.getElementById("pastEvents");
+    var calendarRoot = document.getElementById("eventsCalendar");
+    var calendarEmpty = document.getElementById("calendarEmpty");
+    var monthSelect = document.getElementById("eventMonthSelect");
+    var monthCount = document.getElementById("eventMonthCount");
+    var monthPrev = document.getElementById("eventMonthPrev");
+    var monthNext = document.getElementById("eventMonthNext");
+    var calendarGrid = document.getElementById("eventCalendarGrid");
+    var dayAgenda = document.getElementById("eventDayAgenda");
+    var publicEvents = [];
+    var calendarMonths = [];
+    var activeMonthIndex = 0;
+    var TIME_ZONE = "America/New_York";
+
     function escapeHtml(value) {
       return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
-        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c];
+        return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[c];
       });
     }
-    function fmtWhen(value) {
-      if (!value) return "date to be announced";
-      try {
-        return new Date(value).toLocaleString("en-US", {
-          timeZone: "America/New_York", weekday: "short", month: "short",
-          day: "numeric", hour: "numeric", minute: "2-digit",
-        });
-      } catch (e) { return "date to be announced"; }
+    function eventHref(ev) { return "/events/" + encodeURIComponent(ev.slug) + "/"; }
+    function validDate(value) { var date = value ? new Date(value) : null; return date && !Number.isNaN(date.getTime()) ? date : null; }
+    function eventEnd(ev) { return validDate(ev.endsAt) || validDate(ev.startsAt); }
+    function isPastEvent(ev, now) { var end = eventEnd(ev); return ev.status === "completed" || Boolean(end && end.getTime() < now.getTime()); }
+    function dateKey(value) {
+      var date = validDate(value);
+      if (!date) return "";
+      var parts = new Intl.DateTimeFormat("en-US", { timeZone:TIME_ZONE, year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(date);
+      var values = parts.reduce(function (result, part) { result[part.type] = part.value; return result; }, {});
+      return values.year + "-" + values.month + "-" + values.day;
     }
-    function seatsLabel(ev) {
-      if (ev.soldOut) return { text: "sold out", soldout: true };
-      if (!ev.open) return { text: "booking closed", soldout: true };
-      return { text: ev.seatsRemaining + " seat" + (ev.seatsRemaining === 1 ? "" : "s") + " left", soldout: false };
+    function monthKey(value) { var key = dateKey(value); return key ? key.slice(0,7) : ""; }
+    function formatDate(value) {
+      var date = validDate(value);
+      return date ? new Intl.DateTimeFormat("en-US", { timeZone:TIME_ZONE, weekday:"short", month:"short", day:"numeric", year:"numeric", hour:"numeric", minute:"2-digit" }).format(date) : "Date to be announced";
     }
-    function eventImageUrl(ev) {
-      if (ev.slug === "signal-symbol") return "";
-      return ev.imageUrl || "";
+    function formatDayTime(value) {
+      var date = validDate(value);
+      return date ? new Intl.DateTimeFormat("en-US", { timeZone:TIME_ZONE, hour:"numeric", minute:"2-digit" }).format(date) : "";
     }
-    function renderEmpty(message) {
-      if (String(message || "").toLowerCase().indexOf("couldn") !== -1) {
-        renderError("Events could not be loaded right now. Please check back shortly or contact the studio from the main site.");
+    function priceLabel(ev) { return ev.free ? "Free" : (ev.priceFormatted ? ev.priceFormatted + " / seat" : "Ticketed"); }
+    function actionMarkup(ev, past) {
+      var href = eventHref(ev);
+      if (past) return '<a class="event-action" href="' + href + '">View event</a>';
+      if (ev.publicationState === "announced") return '<button class="event-action" type="button" disabled>Announced</button>';
+      if (ev.status === "cancelled") return '<button class="event-action" type="button" disabled>Cancelled</button><a class="event-action is-secondary" href="' + href + '">View event</a>';
+      if (ev.soldOut) {
+        return '<button class="event-action" type="button" disabled>Sold out</button><a class="event-action is-secondary" href="' + href + '">View event</a>' +
+          (ev.waitlistEnabled !== false ? '<a class="event-action is-secondary" href="' + href + '#waitlist">Join waitlist</a>' : '');
+      }
+      if (ev.status === "open") return '<a class="event-action" href="' + href + '">' + (ev.free ? "RSVP" : "Reserve a seat") + '</a>';
+      return '<button class="event-action" type="button" disabled>Booking closed</button><a class="event-action is-secondary" href="' + href + '">View event</a>';
+    }
+    function cardMarkup(ev, past) {
+      var classes = "event-card" + (past ? " is-past" : "") + (ev.publicationState === "announced" ? " is-announced" : "") + (ev.status === "cancelled" ? " is-cancelled" : "");
+      var facts = [priceLabel(ev)];
+      if (Number(ev.capacity) > 0 && ev.publicationState === "published") facts.push(ev.soldOut ? "Sold out" : ev.seatsRemaining + " seats left");
+      return '<article class="' + classes + '">' +
+        '<p class="event-card-meta">' + escapeHtml(formatDate(ev.startsAt)) + (ev.location ? " · " + escapeHtml(ev.location) : "") + '</p>' +
+        '<h3>' + escapeHtml(ev.title) + '</h3>' +
+        '<p class="event-card-copy">' + escapeHtml(ev.description || "") + '</p>' +
+        '<div class="event-card-facts">' + facts.map(function (fact) { return '<span class="event-card-fact">' + escapeHtml(fact) + '</span>'; }).join("") + '</div>' +
+        '<div class="event-card-actions">' + actionMarkup(ev, past) + '</div>' +
+        '</article>';
+    }
+    function sortUpcoming(a, b) {
+      var aDate = validDate(a.startsAt), bDate = validDate(b.startsAt);
+      if (!aDate && !bDate) return a.title.localeCompare(b.title);
+      if (!aDate) return 1;
+      if (!bDate) return -1;
+      return aDate - bDate;
+    }
+    function sortPast(a, b) { return (eventEnd(b)?.getTime() || 0) - (eventEnd(a)?.getTime() || 0); }
+    function renderCards() {
+      var now = new Date();
+      var upcoming = publicEvents.filter(function (ev) { return !isPastEvent(ev, now); }).sort(sortUpcoming);
+      var past = publicEvents.filter(function (ev) { return isPastEvent(ev, now); }).sort(sortPast);
+      upcomingRoot.innerHTML = upcoming.length ? upcoming.map(function (ev) { return cardMarkup(ev, false); }).join("") : '<p class="event-board-empty">No upcoming events are public yet.</p>';
+      pastRoot.innerHTML = past.length ? past.map(function (ev) { return cardMarkup(ev, true); }).join("") : '<p class="event-board-empty">No past events have been recorded yet.</p>';
+    }
+    function eventsByDate() {
+      return publicEvents.reduce(function (map, ev) {
+        var key = dateKey(ev.startsAt);
+        if (key) (map[key] || (map[key] = [])).push(ev);
+        return map;
+      }, {});
+    }
+    function renderAgenda(items, label) {
+      dayAgenda.setAttribute("aria-label", "Events on " + label);
+      dayAgenda.innerHTML = items.map(function (ev) {
+        return '<a class="event-day-link" href="' + eventHref(ev) + '"><strong>' + escapeHtml(ev.title) + '</strong><span>' + escapeHtml(formatDayTime(ev.startsAt) || ev.publicationState) + '</span></a>';
+      }).join("");
+      dayAgenda.focus?.({ preventScroll:true });
+    }
+    function openCalendarDay(key, label) {
+      var items = eventsByDate()[key] || [];
+      if (items.length === 1) { window.location.href = eventHref(items[0]); return; }
+      renderAgenda(items, label);
+    }
+    function renderCalendar() {
+      if (!calendarMonths.length) return;
+      var key = calendarMonths[activeMonthIndex];
+      var parts = key.split("-").map(Number);
+      var year = parts[0], month = parts[1];
+      var grouped = eventsByDate();
+      var inMonth = publicEvents.filter(function (ev) { return monthKey(ev.startsAt) === key; });
+      monthSelect.value = key;
+      monthCount.textContent = inMonth.length + " event" + (inMonth.length === 1 ? "" : "s");
+      monthPrev.disabled = activeMonthIndex === 0;
+      monthNext.disabled = activeMonthIndex === calendarMonths.length - 1;
+      dayAgenda.innerHTML = "";
+      calendarGrid.innerHTML = "";
+      var firstDay = new Date(year, month - 1, 1).getDay();
+      var days = new Date(year, month, 0).getDate();
+      for (var blank = 0; blank < firstDay; blank += 1) calendarGrid.insertAdjacentHTML("beforeend", '<span class="cal-day empty" aria-hidden="true"></span>');
+      var now = new Date(); now.setHours(0,0,0,0);
+      for (var day = 1; day <= days; day += 1) {
+        var dayKey = key + "-" + String(day).padStart(2,"0");
+        var items = grouped[dayKey] || [];
+        var past = new Date(year, month - 1, day, 23, 59, 59).getTime() < now.getTime();
+        if (!items.length) {
+          calendarGrid.insertAdjacentHTML("beforeend", '<button class="cal-day' + (past ? " past" : "") + '" type="button" disabled role="gridcell" aria-label="' + dayKey + ', no events">' + day + '</button>');
+          continue;
+        }
+        var announcedOnly = items.every(function (ev) { return ev.publicationState === "announced"; });
+        var label = new Intl.DateTimeFormat("en-US", { month:"long", day:"numeric", year:"numeric" }).format(new Date(year,month - 1,day,12));
+        calendarGrid.insertAdjacentHTML("beforeend", '<button class="cal-day has-events' + (past ? " past" : "") + (announcedOnly ? " is-announced" : "") + (items.length > 1 ? " has-multiple" : "") + '" data-date="' + dayKey + '" data-count="' + items.length + '" type="button" role="gridcell" aria-label="' + escapeHtml(label + ", " + items.length + " event" + (items.length === 1 ? "" : "s")) + '">' + day + '</button>');
+      }
+      Array.from(calendarGrid.querySelectorAll(".has-events")).forEach(function (button) {
+        button.addEventListener("click", function () { openCalendarDay(button.dataset.date, button.getAttribute("aria-label")); });
+      });
+    }
+    function prepareCalendar() {
+      calendarMonths = Array.from(new Set(publicEvents.map(function (ev) { return monthKey(ev.startsAt); }).filter(Boolean))).sort();
+      if (!calendarMonths.length) {
+        calendarRoot.hidden = true;
+        calendarEmpty.textContent = "No dated public events are available yet.";
         return;
       }
-      feed.innerHTML =
-        '<article class="feature-card is-large">' +
-        '<span class="tile-kicker">live container</span>' +
-        '<h3>No events to show</h3>' +
-        '<p>' + escapeHtml(message) + '</p>' +
-        '</article>';
-    }
-    function renderError(message) {
-      feed.innerHTML =
-        '<article class="feature-card is-large">' +
-        '<span class="tile-kicker">calendar issue</span>' +
-        '<h3>Events could not be loaded</h3>' +
-        '<p>' + escapeHtml(message) + '</p>' +
-        '<div class="event-actions"><a class="event-cta" href="/events/">Try again</a></div>' +
-        '</article>';
-    }
-    function renderEvents(events) {
-      if (!events.length) { renderEmpty("No public gatherings are open for booking yet. Check back as the calendar firms up."); return; }
-      feed.innerHTML = events.map(function (ev, index) {
-        var img = eventImageUrl(ev);
-        var imageStyle = img ? ' style="--feature-image:url(\'' + img + '\')"' : "";
-        var seats = seatsLabel(ev);
-        var price = ev.free ? "Free" : (ev.priceFormatted ? ev.priceFormatted + " / seat" : "ticketed");
-        var kicker = ev.open ? "open for booking" : (ev.soldOut ? "sold out" : "booking closed");
-        var eventHref = "/events/" + encodeURIComponent(ev.slug) + "/";
-        var primary = ev.open
-          ? '<a class="event-cta" href="' + eventHref + '">Reserve a seat</a>'
-          : '<span class="event-disabled" role="status">' + escapeHtml(ev.soldOut ? "Sold out" : "Booking closed") + '</span>';
-        var details = ev.open ? '' : '<a class="event-cta is-secondary" href="' + eventHref + '">View details</a>';
-        var waitlist = (!ev.open && ev.waitlistEnabled !== false)
-          ? '<a class="event-cta is-secondary" href="' + eventHref + '#waitlist">Join waitlist</a>'
-          : '';
-        return '' +
-          '<article class="feature-card' + (index === 0 ? " is-large" : "") + '"' + imageStyle + '>' +
-          '<span class="tile-kicker">' + escapeHtml(kicker) + '</span>' +
-          '<h3>' + escapeHtml(ev.title) + '</h3>' +
-          '<p>' + escapeHtml(ev.description || "") + '</p>' +
-          '<div class="meta-row">' +
-          '<span class="meta-pill">' + escapeHtml(fmtWhen(ev.startsAt)) + '</span>' +
-          '<span class="meta-pill">' + escapeHtml(price) + '</span>' +
-          '<span class="meta-pill seats-pill"' + (seats.soldout ? ' data-state="soldout"' : "") + '>' + escapeHtml(seats.text) + '</span>' +
-          '</div>' +
-          '<div class="event-actions">' + primary + details + waitlist + '</div>' +
-          '</article>';
+      monthSelect.innerHTML = calendarMonths.map(function (key) {
+        var parts = key.split("-").map(Number);
+        var label = new Intl.DateTimeFormat("en-US", { month:"long", year:"numeric" }).format(new Date(parts[0],parts[1] - 1,1));
+        return '<option value="' + key + '">' + escapeHtml(label) + '</option>';
       }).join("");
+      var current = monthKey(new Date().toISOString());
+      var currentIndex = calendarMonths.indexOf(current);
+      if (currentIndex >= 0) activeMonthIndex = currentIndex;
+      else {
+        var nextIndex = calendarMonths.findIndex(function (key) { return key > current; });
+        activeMonthIndex = nextIndex >= 0 ? nextIndex : calendarMonths.length - 1;
+      }
+      calendarRoot.hidden = false;
+      calendarEmpty.hidden = true;
+      renderCalendar();
+    }
+    function renderBoard(events) { publicEvents = events; renderCards(); prepareCalendar(); }
+    function renderFailure() {
+      upcomingRoot.innerHTML = '<p class="event-board-empty">Events could not be loaded right now. Please check back shortly.</p>';
+      pastRoot.innerHTML = '<p class="event-board-empty">The past event record is temporarily unavailable.</p>';
+      calendarRoot.hidden = true;
+      calendarEmpty.hidden = false;
+      calendarEmpty.textContent = "The event calendar is temporarily unavailable.";
     }
 
-    // Events preview hub (?preview=1&state=...): render the board with dummy
-    // events instead of reading the live API.
+    monthSelect.addEventListener("change", function () { activeMonthIndex = calendarMonths.indexOf(monthSelect.value); renderCalendar(); });
+    monthPrev.addEventListener("click", function () { if (activeMonthIndex > 0) { activeMonthIndex -= 1; renderCalendar(); } });
+    monthNext.addEventListener("click", function () { if (activeMonthIndex < calendarMonths.length - 1) { activeMonthIndex += 1; renderCalendar(); } });
+
     var params = new URLSearchParams(window.location.search);
     if (params.get("preview") === "1") {
-      var state = params.get("state") || "list";
-      if (state === "error") { renderEmpty("Events couldn't be loaded right now — please check back shortly."); }
-      else if (state === "empty") { renderEvents([]); }
-      else {
-        renderEvents([
-          { slug: "signal-symbol", title: "Signal & Symbol", description: "A sensory mark-making gathering where prompts become visual responses through each person's horizon of memory, mood, and imagination.", startsAt: "2026-07-25T19:00:00-04:00", priceFormatted: "$45.00", seatsRemaining: 12, capacity: 20, soldOut: false, open: true },
-          { slug: "open-studio", title: "Open Studio Night", description: "Temporary access to process, works in progress, and material decisions.", startsAt: "2026-08-08T18:00:00-04:00", priceFormatted: "$20.00", seatsRemaining: 0, capacity: 15, soldOut: true, open: false },
-        ]);
-      }
+      if (params.get("state") === "error") { renderFailure(); return; }
+      if (params.get("state") === "empty") { renderBoard([]); return; }
+      var at = function (days, hour) { var date = new Date(); date.setDate(date.getDate() + days); date.setHours(hour,0,0,0); return date.toISOString(); };
+      renderBoard([
+        { slug:"signal-symbol", title:"Signal & Symbol", description:"A sensory mark-making gathering where prompts become visual responses through memory, mood, and imagination.", startsAt:at(12,19), endsAt:at(12,22), location:"Atlanta, GA", priceCents:4500, priceFormatted:"$45.00", free:false, capacity:20, seatsRemaining:12, soldOut:false, status:"open", publicationState:"published", open:true, waitlistEnabled:true },
+        { slug:"cultandshift", title:"Cult [&] Shift", description:"A recurring showcase for performances, readings, sound, and public experiments.", startsAt:at(28,20), endsAt:at(29,1), location:"the six.well construct", priceCents:0, priceFormatted:"$0.00", free:true, capacity:40, seatsRemaining:40, soldOut:false, status:"closed", publicationState:"announced", open:false, waitlistEnabled:false },
+        { slug:"open-studios", title:"Open Studios", description:"Temporary access to works in progress, object studies, and material decisions.", startsAt:at(12,16), endsAt:at(12,20), location:"Atlanta, GA", priceCents:0, priceFormatted:"$0.00", free:true, capacity:30, seatsRemaining:18, soldOut:false, status:"open", publicationState:"published", open:true, waitlistEnabled:true },
+        { slug:"ss-and-f-live-audience", title:"SS&F Live Audience", description:"A documented gathering preserved as part of the Events record.", startsAt:at(-35,19), endsAt:at(-35,22), location:"Atlanta, GA", priceCents:0, priceFormatted:"$0.00", free:true, capacity:25, seatsRemaining:0, soldOut:true, status:"completed", publicationState:"published", open:false, waitlistEnabled:false }
+      ]);
       return;
     }
 
-    fetch("/api/events")
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (data) {
-        if (!data || !Array.isArray(data.events)) { renderEmpty("Events couldn't be loaded right now — please check back shortly."); return; }
-        renderEvents(data.events);
-      })
-      .catch(function () {
-        renderEmpty("Events couldn't be loaded right now — please check back shortly.");
-      });
+    fetch("/api/events", { headers:{ accept:"application/json" } })
+      .then(function (response) { if (!response.ok) throw new Error("Unable to load events."); return response.json(); })
+      .then(function (payload) { renderBoard(Array.isArray(payload.events) ? payload.events : []); })
+      .catch(renderFailure);
   })();
   </script>
   <script src="/js/transition.js"></script>

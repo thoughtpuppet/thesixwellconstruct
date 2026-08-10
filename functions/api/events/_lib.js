@@ -547,6 +547,7 @@ function webhookLooksPaid(payload, order) {
 
 function normalizeEvent(row) {
   if (!row) return null;
+  const legacyStatus = row.status || "closed";
   return {
     id: row.id,
     slug: row.slug,
@@ -559,7 +560,8 @@ function normalizeEvent(row) {
     currency: row.currency || "USD",
     capacity: Number(row.capacity) || 0,
     maxSeatsPerOrder: Number(row.max_seats_per_order) || 4,
-    status: row.status || "draft",
+    status: legacyStatus === "draft" ? "closed" : legacyStatus,
+    publicationState: row.publication_state || (legacyStatus === "draft" ? "draft" : "published"),
     imageUrl: row.image_url || "",
     details: row.details || "",
     included: row.included || "",
@@ -1185,6 +1187,7 @@ function publicEventView(event, stats = {}) {
     seatsRemaining,
     soldOut: seatsRemaining <= 0,
     status: event.status,
+    publicationState: event.publicationState,
     open: event.status === "open" && seatsRemaining > 0,
     waitlistEnabled: event.waitlistEnabled,
   };
@@ -1236,13 +1239,21 @@ function buildEventIcs(ticketRow) {
 /* Public handlers                                                     */
 /* ------------------------------------------------------------------ */
 
-// GET /api/events -> all bookable (non-draft) events, soonest first.
+function eventIsPublic(event) {
+  return event?.publicationState === "announced" || event?.publicationState === "published";
+}
+
+function eventAllowsPublicActions(event) {
+  return event?.publicationState === "published";
+}
+
+// GET /api/events -> all announced and published events, soonest first.
 export async function handleEventsList(request, env) {
   try {
     const db = requireEventsDb(env);
     const result = await db
       .prepare(
-        `SELECT * FROM events WHERE status != 'draft'
+        `SELECT * FROM events WHERE publication_state IN ('announced','published')
          ORDER BY (starts_at IS NULL), starts_at ASC`
       )
       .all();
@@ -1293,7 +1304,7 @@ export async function handleEventContext(request, env, slug) {
   try {
     const db = requireEventsDb(env);
     const event = await getEventBySlug(db, slug);
-    if (!event || event.status === "draft") {
+    if (!event || !eventIsPublic(event)) {
       return errorResponse("Event not found.", 404);
     }
     const stats = await ticketStats(db, event.id);
@@ -1338,8 +1349,11 @@ export async function handleEventCheckout(request, env, slug) {
   try {
     const db = requireEventsDb(env);
     const event = await getEventBySlug(db, slug);
-    if (!event || event.status === "draft") {
+    if (!event || !eventIsPublic(event)) {
       return errorResponse("Event not found.", 404);
+    }
+    if (!eventAllowsPublicActions(event)) {
+      return errorResponse("Registration has not opened for this announced event.", 409);
     }
     if (event.status !== "open") {
       return errorResponse("This event is not open for booking.", 409);
@@ -1522,8 +1536,11 @@ export async function handleEventWaitlist(request, env, slug) {
   try {
     const db = requireEventsDb(env);
     const event = await getEventBySlug(db, slug);
-    if (!event || event.status === "draft") {
+    if (!event || !eventIsPublic(event)) {
       return errorResponse("Event not found.", 404);
+    }
+    if (!eventAllowsPublicActions(event)) {
+      return errorResponse("Updates are not open for this announced event.", 409);
     }
     if (!event.waitlistEnabled) {
       return errorResponse("The waitlist is not open for this event.", 409);
@@ -1631,8 +1648,11 @@ export async function handleEventOpenMicSignup(request, env, slug) {
   try {
     const db = requireEventsDb(env);
     const event = await getEventBySlug(db, slug);
-    if (!event || event.status === "draft") {
+    if (!event || !eventIsPublic(event)) {
       return errorResponse("Event not found.", 404);
+    }
+    if (!eventAllowsPublicActions(event)) {
+      return errorResponse("Performer requests are not open for this announced event.", 409);
     }
 
     const id = crypto.randomUUID();
@@ -2234,7 +2254,8 @@ export async function reapStalePendingTickets(env) {
 /* Admin handlers                                                      */
 /* ------------------------------------------------------------------ */
 
-const ADMIN_EVENT_STATUSES = new Set(["draft", "open", "closed", "completed", "cancelled"]);
+const ADMIN_EVENT_STATUSES = new Set(["open", "closed", "completed", "cancelled"]);
+const ADMIN_EVENT_PUBLICATION_STATES = new Set(["draft", "announced", "published"]);
 
 async function eventStats(db, eventId) {
   const row = await db
@@ -2322,7 +2343,10 @@ export async function handleAdminEventCreate(request, env) {
   if (!slug) return errorResponse("A valid slug or title is required.", 400);
 
   if (body.status !== undefined && !ADMIN_EVENT_STATUSES.has(asString(body.status))) {
-    return errorResponse("Status must be draft, open, closed, completed, or cancelled.", 400);
+    return errorResponse("Event operations must be open, closed, completed, or cancelled.", 400);
+  }
+  if (body.publicationState !== undefined && !ADMIN_EVENT_PUBLICATION_STATES.has(asString(body.publicationState))) {
+    return errorResponse("Public stage must be draft, announced, or published.", 400);
   }
 
   try {
@@ -2338,11 +2362,11 @@ export async function handleAdminEventCreate(request, env) {
       .prepare(
         `INSERT INTO events (
           id, slug, title, description, starts_at, ends_at, location,
-          price_cents, currency, capacity, max_seats_per_order, status,
+          price_cents, currency, capacity, max_seats_per_order, status, publication_state,
           image_url, details, included, arrival_notes, accessibility_notes,
           cancellation_policy, contact_note, waitlist_enabled,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -2356,7 +2380,8 @@ export async function handleAdminEventCreate(request, env) {
         asString(body.currency).toUpperCase() || "USD",
         Math.max(0, Math.floor(Number(body.capacity) || 0)),
         Math.max(1, Math.floor(Number(body.maxSeatsPerOrder) || 4)),
-        ADMIN_EVENT_STATUSES.has(asString(body.status)) ? asString(body.status) : "draft",
+        ADMIN_EVENT_STATUSES.has(asString(body.status)) ? asString(body.status) : "closed",
+        ADMIN_EVENT_PUBLICATION_STATES.has(asString(body.publicationState)) ? asString(body.publicationState) : "draft",
         asString(body.imageUrl),
         asString(body.details),
         asString(body.included),
@@ -2393,7 +2418,10 @@ export async function handleAdminEventUpdate(request, env, slug) {
   if (!body) return errorResponse("Expected JSON or form data.", 400);
 
   if (body.status !== undefined && !ADMIN_EVENT_STATUSES.has(asString(body.status))) {
-    return errorResponse("Status must be draft, open, closed, completed, or cancelled.", 400);
+    return errorResponse("Event operations must be open, closed, completed, or cancelled.", 400);
+  }
+  if (body.publicationState !== undefined && !ADMIN_EVENT_PUBLICATION_STATES.has(asString(body.publicationState))) {
+    return errorResponse("Public stage must be draft, announced, or published.", 400);
   }
 
   try {
@@ -2418,6 +2446,7 @@ export async function handleAdminEventUpdate(request, env, slug) {
       setField("max_seats_per_order", Math.max(1, Math.floor(Number(body.maxSeatsPerOrder) || 1)));
     }
     if (body.status !== undefined) setField("status", asString(body.status));
+    if (body.publicationState !== undefined) setField("publication_state", asString(body.publicationState));
     if (body.imageUrl !== undefined) setField("image_url", asString(body.imageUrl));
     if (body.details !== undefined) setField("details", asString(body.details));
     if (body.included !== undefined) setField("included", asString(body.included));
