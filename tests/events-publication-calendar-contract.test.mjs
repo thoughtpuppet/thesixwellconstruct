@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   handleAdminEventCreate,
+  handleAdminEventUpdate,
   handleEventCheckout,
   handleEventContext,
   handleEventOpenMicSignup,
@@ -60,7 +61,7 @@ function request(path, { method="GET", body, admin=false } = {}) {
   });
 }
 
-test("0119 and 0120 separate publication from operations and synchronize Construct visibility", () => {
+test("0119 and 0120 separate publication from operations and retire legacy visibility triggers", () => {
   const database = databaseThrough("0118_about_exhibitions_appearances.sql");
   database.exec(`
     INSERT INTO events(id,slug,title,status,created_at,updated_at)
@@ -74,17 +75,7 @@ test("0119 and 0120 separate publication from operations and synchronize Constru
   assert.deepEqual({ ...published }, { publication_state:"published", status:"open" });
   assert.deepEqual({ ...draft }, { publication_state:"draft", status:"closed" });
 
-  database.prepare("UPDATE events SET publication_state='announced',updated_at=datetime('now') WHERE id='event-private-draft'").run();
-  assert.deepEqual(
-    { ...database.prepare("SELECT visibility,search_visibility FROM content_entities WHERE id='event-private-draft'").get() },
-    { visibility:"public", search_visibility:1 },
-  );
-
-  database.exec(`INSERT INTO events(id,slug,title,created_at,updated_at) VALUES('event-new-default','new-default','New default',datetime('now'),datetime('now'));`);
-  assert.deepEqual(
-    { ...database.prepare("SELECT publication_state,status FROM events WHERE id='event-new-default'").get() },
-    { publication_state:"draft", status:"closed" },
-  );
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_connections_events_%'").get().count, 0);
 });
 
 test("public APIs expose Announced details but block every public action", async () => {
@@ -121,6 +112,21 @@ test("admin event creation defaults to Draft and Closed", async () => {
   const event = (await response.json()).event;
   assert.equal(event.publicationState, "draft");
   assert.equal(event.status, "closed");
+  assert.deepEqual(
+    { ...database.prepare("SELECT visibility,search_visibility FROM content_entities WHERE id=?").get(event.id) },
+    { visibility:"internal", search_visibility:0 },
+  );
+
+  const updateResponse = await handleAdminEventUpdate(request(`/api/admin/events/${event.slug}`, {
+    method:"PATCH",
+    admin:true,
+    body:{ publicationState:"announced" },
+  }), runtime(database), event.slug);
+  assert.equal(updateResponse.status, 200, await updateResponse.clone().text());
+  assert.deepEqual(
+    { ...database.prepare("SELECT visibility,search_visibility FROM content_entities WHERE id=?").get(event.id) },
+    { visibility:"public", search_visibility:1 },
+  );
 });
 
 test("Events board contracts retain the shared shell, 5px cards, calendar, and state actions", () => {

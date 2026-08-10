@@ -570,6 +570,8 @@ function normalizeEvent(row) {
     cancellationPolicy: row.cancellation_policy || "",
     contactNote: row.contact_note || "",
     waitlistEnabled: row.waitlist_enabled !== 0,
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
   };
 }
 
@@ -2257,6 +2259,43 @@ export async function reapStalePendingTickets(env) {
 const ADMIN_EVENT_STATUSES = new Set(["open", "closed", "completed", "cancelled"]);
 const ADMIN_EVENT_PUBLICATION_STATES = new Set(["draft", "announced", "published"]);
 
+async function syncEventContentEntity(db, event) {
+  const isPublic = event.publicationState === "announced" || event.publicationState === "published";
+  const visibility = isPublic ? "public" : "internal";
+  const publicAt = isPublic ? event.updatedAt : null;
+  const updated = await db.prepare(
+    `UPDATE content_entities SET
+       visibility = ?,
+       search_visibility = ?,
+       public_at = CASE WHEN ? = 'public' THEN COALESCE(public_at, ?) ELSE public_at END,
+       updated_by = 'events',
+       updated_at = ?
+     WHERE id = ? AND entity_type = 'event'`
+  ).bind(
+    visibility,
+    isPublic ? 1 : 0,
+    visibility,
+    publicAt,
+    event.updatedAt,
+    event.id,
+  ).run();
+  if (Number(updated?.meta?.changes) > 0) return;
+
+  await db.prepare(
+    `INSERT INTO content_entities (
+       id, entity_type, node_id, visibility, search_visibility, public_at,
+       created_by, updated_by, created_at, updated_at
+     ) VALUES (?, 'event', 'node-events', ?, ?, ?, 'events', 'events', ?, ?)`
+  ).bind(
+    event.id,
+    visibility,
+    isPublic ? 1 : 0,
+    publicAt,
+    event.createdAt,
+    event.updatedAt,
+  ).run();
+}
+
 async function eventStats(db, eventId) {
   const row = await db
     .prepare(
@@ -2396,6 +2435,7 @@ export async function handleAdminEventCreate(request, env) {
       .run();
 
     const created = await getEventBySlug(db, slug);
+    await syncEventContentEntity(db, created);
     const stats = await eventStats(db, created.id);
     return json({
       event: {
@@ -2466,6 +2506,7 @@ export async function handleAdminEventUpdate(request, env, slug) {
       .run();
 
     const updated = await getEventBySlug(db, slug);
+    await syncEventContentEntity(db, updated);
     const stats = await eventStats(db, updated.id);
     return json({
       event: {
