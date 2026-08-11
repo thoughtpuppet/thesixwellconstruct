@@ -34,6 +34,7 @@ const LEGACY_STORAGE_KEY = "art-pill-maze-design";
 const PREVIOUS_STORAGE_KEY = "art-pill-maze-draft:v1";
 const STORAGE_KEY = "art-pill-maze-draft:v2";
 const TOKEN_STORAGE_KEY = "art-pill-maze-resume-token";
+const EDIT_TOKEN_STORAGE_KEY = "art-pill-maze-submission-edit-token";
 const SUBMISSION_IDEMPOTENCY_KEY = "sixwell:submission-idempotency:/tattoos/build/maze/:maze-form";
 const MAX_UNDO_STEPS = 60;
 const AUTOSAVE_DELAY_MS = 600;
@@ -55,7 +56,8 @@ type MazeFormDraft = {
   placement: string;
   scale: string;
   budgetRange: string;
-  mazeExplanation: string;
+  mazeMeaning: string;
+  mazeDescription: string;
 };
 
 type MazeDraftPayload = MazeState & {
@@ -65,8 +67,16 @@ type MazeDraftPayload = MazeState & {
   placement: string;
   scale: string;
   budgetRange: string;
-  mazeExplanation: string;
+  mazeMeaning: string;
+  mazeDescription: string;
   updatedAt: string;
+};
+
+type MazeEditContext = {
+  submissionId: string;
+  status: string;
+  revision: number;
+  editable: boolean;
 };
 
 type MazeDraftEnvelope = {
@@ -123,7 +133,8 @@ function emptyForm(): MazeFormDraft {
     placement: "",
     scale: "",
     budgetRange: "",
-    mazeExplanation: ""
+    mazeMeaning: "",
+    mazeDescription: ""
   };
 }
 
@@ -151,7 +162,14 @@ function loadDraft(): MazeDraftEnvelope {
       const storedState = parsed.state || parsed;
       return {
         state: normalizeMazeState(storedState, fallback.state.canvasLayout),
-        form: { ...emptyForm(), ...(parsed.form || {}) },
+        form: {
+          ...emptyForm(),
+          ...(parsed.form || {}),
+          mazeMeaning: (parsed.form as (Partial<MazeFormDraft> & { mazeExplanation?: string }) | undefined)?.mazeMeaning
+            || (parsed.form as { mazeExplanation?: string } | undefined)?.mazeExplanation
+            || "",
+          mazeDescription: (parsed.form as Partial<MazeFormDraft> | undefined)?.mazeDescription || ""
+        },
         clientDraftId: parsed.clientDraftId || fallback.clientDraftId,
         serverDraftId: parsed.serverDraftId || "",
         serverRevision: Number(parsed.serverRevision || 0)
@@ -185,6 +203,25 @@ function clearResumeToken() {
   try { sessionStorage.removeItem(TOKEN_STORAGE_KEY); } catch { /* storage can be unavailable */ }
 }
 
+function captureEditToken() {
+  if (KIOSK || PREVIEW) return "";
+  const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const linked = fragment.get("edit") || "";
+  if (linked) {
+    try { sessionStorage.setItem(EDIT_TOKEN_STORAGE_KEY, linked); } catch { /* storage can be unavailable */ }
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.hash = "";
+    cleanUrl.searchParams.set("editing", "1");
+    history.replaceState(null, "", cleanUrl.pathname + cleanUrl.search);
+    return linked;
+  }
+  if (new URLSearchParams(window.location.search).get("editing") === "1") {
+    try { return sessionStorage.getItem(EDIT_TOKEN_STORAGE_KEY) || ""; } catch { return ""; }
+  }
+  try { sessionStorage.removeItem(EDIT_TOKEN_STORAGE_KEY); } catch { /* storage can be unavailable */ }
+  return "";
+}
+
 function draftPayload(state: MazeState, form: MazeFormDraft, clientDraftId: string): MazeDraftPayload {
   return {
     version: 1,
@@ -204,7 +241,8 @@ function draftPayload(state: MazeState, form: MazeFormDraft, clientDraftId: stri
     placement: form.placement,
     scale: form.scale,
     budgetRange: form.budgetRange,
-    mazeExplanation: form.mazeExplanation,
+    mazeMeaning: form.mazeMeaning,
+    mazeDescription: form.mazeDescription,
     updatedAt: new Date().toISOString()
   };
 }
@@ -216,7 +254,8 @@ function payloadToForm(payload: Partial<MazeDraftPayload>): MazeFormDraft {
     placement: payload.placement || "",
     scale: payload.scale || "",
     budgetRange: payload.budgetRange || "",
-    mazeExplanation: payload.mazeExplanation || ""
+    mazeMeaning: payload.mazeMeaning || (payload as Partial<MazeDraftPayload> & { mazeExplanation?: string }).mazeExplanation || "",
+    mazeDescription: payload.mazeDescription || ""
   };
 }
 
@@ -310,8 +349,21 @@ function clearMazeSubmissionIdempotencyKey() {
   try { sessionStorage.removeItem(SUBMISSION_IDEMPOTENCY_KEY); } catch { /* storage can be unavailable */ }
 }
 
+function mazeRevisionIdempotencyKey(submissionId: string, revision: number) {
+  const storageKey = `${SUBMISSION_IDEMPOTENCY_KEY}:revision:${submissionId}:${revision}`;
+  try {
+    const saved = sessionStorage.getItem(storageKey);
+    if (saved) return saved;
+    const key = crypto.randomUUID();
+    sessionStorage.setItem(storageKey, key);
+    return key;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
 // Submit a finished maze into the same review -> booking pipeline as a brief.
-// Captures the final Maze render variants + JSON, collects contact details and an explanation,
+// Captures the final Maze render variants + JSON, contact details, and optional meaning/description,
 // and posts as a `maze_design` submission.
 function SubmitDialog({
   open,
@@ -323,6 +375,8 @@ function SubmitDialog({
   formDraft,
   onFormDraftChange,
   resumeToken,
+  editToken,
+  editContext,
   ownerEmail,
   onSubmitted
 }: {
@@ -335,8 +389,10 @@ function SubmitDialog({
   formDraft: MazeFormDraft;
   onFormDraftChange: (next: MazeFormDraft) => void;
   resumeToken: string;
+  editToken: string;
+  editContext: MazeEditContext | null;
   ownerEmail: string;
-  onSubmitted: () => void;
+  onSubmitted: (result: { editToken: string; revision: number }) => void;
 }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -386,6 +442,7 @@ function SubmitDialog({
   }, [open]);
 
   if (!open) return null;
+  const isRevision = Boolean(editToken && editContext);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -411,6 +468,7 @@ function SubmitDialog({
       fd.set("source_path", "/tattoos/build/maze/");
       fd.set("subject", "New Art.Pill Build a Maze submission");
       fd.set("review_consent", "yes");
+      if (editContext) fd.set("base_revision", String(editContext.revision));
 
       const canvasPng = capturePng("canvas");
       const transparentPng = canvasMode === "standard" ? capturePng("transparent") : null;
@@ -427,22 +485,27 @@ function SubmitDialog({
       fd.set("maze_stencil_image", dataUrlToBlob(stencilPng), "maze-stencil.png");
       fd.set("maze_json_file", new Blob([mazeJson], { type: "application/json" }), "maze.json");
 
-      const res = await fetch("/api/submissions", {
+      const res = await fetch(editToken ? "/api/maze-submissions/current" : "/api/submissions", {
         method: "POST",
         headers: {
-          "idempotency-key": mazeSubmissionIdempotencyKey(),
-          ...(resumeToken ? { "x-build-draft-token": resumeToken } : {})
+          "idempotency-key": editToken && editContext
+            ? mazeRevisionIdempotencyKey(editContext.submissionId, editContext.revision)
+            : mazeSubmissionIdempotencyKey(),
+          ...(editToken ? { authorization: `Bearer ${editToken}` } : {}),
+          ...(!editToken && resumeToken ? { "x-build-draft-token": resumeToken } : {})
         },
         body: fd
       });
-      const payload = (await res.json().catch(() => ({}))) as { error?: string; submissionId?: string };
+      const payload = (await res.json().catch(() => ({}))) as { error?: string; submissionId?: string; editToken?: string; revision?: number; mazeRevision?: number };
       if (!res.ok) throw new Error(payload.error || "Submission failed.");
       const destination = new URL("/tattoos/submission-received/", window.location.origin);
       destination.searchParams.set("type", "maze");
       if (payload.submissionId) destination.searchParams.set("ref", payload.submissionId);
-      clearMazeSubmissionIdempotencyKey();
-      onSubmitted();
-      window.location.href = `${destination.pathname}${destination.search}`;
+      const nextEditToken = editToken || payload.editToken || "";
+      const revision = Number(payload.revision || payload.mazeRevision || (editContext ? editContext.revision + 1 : 1));
+      if (!editToken) clearMazeSubmissionIdempotencyKey();
+      onSubmitted({ editToken: nextEditToken, revision });
+      window.location.href = `${destination.pathname}${destination.search}${nextEditToken ? `#edit=${encodeURIComponent(nextEditToken)}&revision=${revision}` : ""}`;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Submission failed. Please try again.");
       setBusy(false);
@@ -453,25 +516,26 @@ function SubmitDialog({
     <div ref={dialogRef} className="maze-submit-overlay" role="dialog" aria-modal="true" aria-labelledby="maze-submit-title" aria-describedby="maze-submit-note">
       <div className="maze-submit-panel">
         <div className="maze-submit-head">
-          <h2 id="maze-submit-title">Submit your maze</h2>
+          <h2 id="maze-submit-title">{isRevision ? `Submit revision ${Number(editContext?.revision || 1) + 1}` : "Submit your maze"}</h2>
           <button ref={closeButtonRef} type="button" className="maze-submit-close" onClick={onClose} disabled={busy} aria-label="Close submit dialog">
             &times;
           </button>
         </div>
         <p className="maze-submit-note" id="maze-submit-note">
-          Your maze is captured as an image and sent for review. If it fits, a private booking link
-          follows. You create the final tattoo from this design.
+          {isRevision
+            ? "Your changes stay on this device until you submit this updated revision. Studio keeps every earlier revision."
+            : "Your maze is captured as an image and sent for review. If it fits, a private booking link follows. You create the final tattoo from this design."}
         </p>
         {isEmpty ? (
           <p className="maze-submit-warn" role="alert">Draw at least one wall or shape before submitting.</p>
         ) : null}
         <form onSubmit={handleSubmit}>
           <div className="maze-submit-grid">
-            <label>First name<input name="firstName" autoComplete="given-name" required value={formDraft.firstName} onChange={(event) => onFormDraftChange({ ...formDraft, firstName: event.target.value })} /></label>
-            <label>Last name<input name="lastName" autoComplete="family-name" required value={formDraft.lastName} onChange={(event) => onFormDraftChange({ ...formDraft, lastName: event.target.value })} /></label>
-            <label>Email<input name="email" type="email" autoComplete="email" required readOnly={Boolean(ownerEmail)} value={formDraft.email} onChange={(event) => onFormDraftChange({ ...formDraft, email: event.target.value })} /></label>
-            <label>Phone (optional)<input name="phone" autoComplete="tel" value={formDraft.phone} onChange={(event) => onFormDraftChange({ ...formDraft, phone: event.target.value })} /></label>
-            <label>Date of birth<input name="dob" type="date" autoComplete="bday" required value={formDraft.dateOfBirth} onChange={(event) => onFormDraftChange({ ...formDraft, dateOfBirth: event.target.value })} /></label>
+            <label>First name<input name="firstName" autoComplete="given-name" required readOnly={isRevision} value={formDraft.firstName} onChange={(event) => onFormDraftChange({ ...formDraft, firstName: event.target.value })} /></label>
+            <label>Last name<input name="lastName" autoComplete="family-name" required readOnly={isRevision} value={formDraft.lastName} onChange={(event) => onFormDraftChange({ ...formDraft, lastName: event.target.value })} /></label>
+            <label>Email<input name="email" type="email" autoComplete="email" required readOnly={isRevision || Boolean(ownerEmail)} value={formDraft.email} onChange={(event) => onFormDraftChange({ ...formDraft, email: event.target.value })} /></label>
+            <label>Phone (optional)<input name="phone" autoComplete="tel" readOnly={isRevision} value={formDraft.phone} onChange={(event) => onFormDraftChange({ ...formDraft, phone: event.target.value })} /></label>
+            <label>Date of birth<input name="dob" type="date" autoComplete="bday" required readOnly={isRevision} value={formDraft.dateOfBirth} onChange={(event) => onFormDraftChange({ ...formDraft, dateOfBirth: event.target.value })} /></label>
             <label>Placement (optional)<input name="placement" placeholder="e.g. forearm, spine" value={formDraft.placement} onChange={(event) => onFormDraftChange({ ...formDraft, placement: event.target.value })} /></label>
             <label>Approx. scale (optional)<input name="scale" placeholder="e.g. palm-size" value={formDraft.scale} onChange={(event) => onFormDraftChange({ ...formDraft, scale: event.target.value })} /></label>
           </div>
@@ -490,10 +554,16 @@ function SubmitDialog({
             <span className="maze-submit-help" id="maze-budget-help">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.</span>
           </label>
           <label className="maze-submit-full">
-            What does this maze carry?
-            <textarea name="maze_explanation" rows={4} required placeholder="Explain the meaning, the path, what it should hold." value={formDraft.mazeExplanation} onChange={(event) => onFormDraftChange({ ...formDraft, mazeExplanation: event.target.value })} />
+            Meaning (optional)
+            <textarea name="maze_meaning" rows={4} placeholder="Share any personal or symbolic meaning this maze carries." value={formDraft.mazeMeaning} onChange={(event) => onFormDraftChange({ ...formDraft, mazeMeaning: event.target.value })} />
           </label>
-          <fieldset className="maze-archive-consent-block">
+          <label className="maze-submit-full">
+            Description (optional)
+            <textarea name="maze_description" rows={4} placeholder="Describe what you were going for visually or conceptually." value={formDraft.mazeDescription} onChange={(event) => onFormDraftChange({ ...formDraft, mazeDescription: event.target.value })} />
+          </label>
+          {isRevision ? (
+            <p className="maze-submit-help maze-submit-full">Your original Maze Archive permission stays unchanged. A public Archive copy remains tied to the exact revision reviewed for it.</p>
+          ) : <fieldset className="maze-archive-consent-block">
             <legend>Public Maze Archive (optional)</legend>
             <label className="maze-submit-consent">
               <input type="checkbox" name="maze_archive_opt_in" value="yes" checked={archiveOptIn} onChange={(event) => setArchiveOptIn(event.target.checked)} />
@@ -515,23 +585,23 @@ function SubmitDialog({
                 ) : null}
                 <label className="maze-submit-consent">
                   <input type="checkbox" name="maze_archive_include_explanation" value="yes" />
-                  <span>Allow my personal explanation to be considered separately for public display. It will not be copied automatically.</span>
+                  <span>Allow my meaning and description to be considered separately for public display. They will not be copied automatically.</span>
                 </label>
               </div>
             ) : null}
-          </fieldset>
-          <label className="maze-submit-consent">
+          </fieldset>}
+          {!isRevision ? <label className="maze-submit-consent">
             <input type="checkbox" name="age_confirmed" value="yes" required />
             <span>I confirm that I am 18 years of age or older.</span>
-          </label>
-          <label className="maze-submit-consent">
+          </label> : null}
+          {!isRevision ? <label className="maze-submit-consent">
             <input type="checkbox" name="review_consent" value="yes" required />
             <span>I understand this is reviewed before a private booking link is sent, and submitting does not guarantee a session.</span>
-          </label>
+          </label> : null}
           <div className="maze-submit-actions">
             <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
             <button type="submit" disabled={busy || isEmpty} className="primary">
-              {busy ? "Submitting…" : "Submit maze"}
+              {busy ? "Submitting…" : isRevision ? "Submit updated maze" : "Submit maze"}
             </button>
           </div>
           {status ? <p className="maze-submit-status" role="status" aria-live="polite">{status}</p> : null}
@@ -851,6 +921,10 @@ export default function App() {
   );
   const [resumeToken, setResumeToken] = useState(() => captureResumeToken());
   const [resumeReady, setResumeReady] = useState(false);
+  const [editToken] = useState(() => captureEditToken());
+  const [editContext, setEditContext] = useState<MazeEditContext | null>(null);
+  const [editLoading, setEditLoading] = useState(Boolean(editToken));
+  const [editLockedMessage, setEditLockedMessage] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [reference, setReference] = useState<CanvasReference | null>(null);
   const [referenceStatus, setReferenceStatus] = useState("");
@@ -892,6 +966,75 @@ export default function App() {
   useEffect(() => {
     formDraftRef.current = formDraft;
   }, [formDraft]);
+
+  useEffect(() => {
+    if (!editToken) {
+      setEditLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/maze-submissions/current", {
+          headers: { authorization: `Bearer ${editToken}`, accept: "application/json" },
+          cache: "no-store"
+        });
+        const result = await response.json().catch(() => ({})) as {
+          error?: string;
+          submissionId?: string;
+          status?: string;
+          revision?: number;
+          editable?: boolean;
+          mazeState?: Partial<MazeState> | null;
+          form?: MazeFormDraft | null;
+        };
+        if (cancelled) return;
+        if (!response.ok || !result.editable || !result.mazeState || !result.form) {
+          setEditContext(result.submissionId ? {
+            submissionId: result.submissionId,
+            status: result.status || "locked",
+            revision: Number(result.revision || 1),
+            editable: false
+          } : null);
+          setEditLockedMessage(result.error || "This submitted Maze is no longer available for editing.");
+          return;
+        }
+        let restored = normalizeMazeState(result.mazeState, "wide");
+        let nextForm = { ...emptyForm(), ...result.form };
+        try {
+          const editStorageKey = `art-pill-maze-submission-edit:${result.submissionId}:v${Number(result.revision || 1)}`;
+          const local = JSON.parse(localStorage.getItem(editStorageKey) || "null") as (MazeDraftEnvelope & { editRevision?: number }) | null;
+          if (local?.editRevision === Number(result.revision || 1)) {
+            restored = normalizeMazeState(local.state, "wide");
+            nextForm = { ...nextForm, ...local.form };
+          }
+        } catch { /* a malformed on-device edit cannot replace the submitted revision */ }
+        stateRef.current = restored;
+        formDraftRef.current = nextForm;
+        setState(restored);
+        setFormDraft(nextForm);
+        setUndoStack([]);
+        setRedoStack([]);
+        setSelected(null);
+        setOwnerEmail(nextForm.email);
+        setEditContext({
+          submissionId: result.submissionId || "",
+          status: result.status || "reviewing",
+          revision: Number(result.revision || 1),
+          editable: true
+        });
+        clearResumeToken();
+        setResumeToken("");
+        serverDraftRef.current = null;
+        setSaveStatus(`Editing submitted Maze revision ${Number(result.revision || 1)}. Changes save on this device until resubmitted.`);
+      } catch (error) {
+        if (!cancelled) setEditLockedMessage(error instanceof Error ? error.message : "This Maze edit link could not be opened.");
+      } finally {
+        if (!cancelled) setEditLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editToken]);
 
   const selectedWall =
     selected?.type === "wall"
@@ -1146,7 +1289,10 @@ export default function App() {
   const persistLocal = (payload = draftPayload(stateRef.current, formDraftRef.current, clientDraftIdRef.current)) => {
     if (KIOSK || PREVIEW) return;
     const server = serverDraftRef.current;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    const storageKey = editContext
+      ? `art-pill-maze-submission-edit:${editContext.submissionId}:v${editContext.revision}`
+      : STORAGE_KEY;
+    localStorage.setItem(storageKey, JSON.stringify({
       state: {
         canvasLayout: payload.canvasLayout,
         canvasMode: payload.canvasMode,
@@ -1157,10 +1303,13 @@ export default function App() {
       form: payloadToForm(payload),
       clientDraftId: payload.clientDraftId,
       serverDraftId: server?.id || "",
-      serverRevision: server?.revision || 0
-    } satisfies MazeDraftEnvelope));
-    localStorage.removeItem(PREVIOUS_STORAGE_KEY);
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
+      serverRevision: server?.revision || 0,
+      ...(editContext ? { editRevision: editContext.revision } : {})
+    } satisfies MazeDraftEnvelope & { editRevision?: number }));
+    if (!editContext) {
+      localStorage.removeItem(PREVIOUS_STORAGE_KEY);
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+    }
   };
 
   const resetMaze = () => {
@@ -1190,7 +1339,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (KIOSK || PREVIEW || (resumeToken && !resumeReady)) return;
+    if (KIOSK || PREVIEW || (resumeToken && !resumeReady) || (editToken && editLoading)) return;
     setSaveStatus("Saving…");
     const timer = window.setTimeout(async () => {
       const payload = draftPayload(stateRef.current, formDraftRef.current, clientDraftIdRef.current);
@@ -1201,6 +1350,10 @@ export default function App() {
         return;
       }
       const server = serverDraftRef.current;
+      if (editContext) {
+        setSaveStatus(`Revision ${editContext.revision} changes saved on this device. Submit the updated maze when ready.`);
+        return;
+      }
       if (!resumeToken || !server) {
         setSaveStatus("Saved on this device.");
         return;
@@ -1227,10 +1380,10 @@ export default function App() {
       }
     }, AUTOSAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [state, formDraft, resumeToken, resumeReady]);
+  }, [state, formDraft, resumeToken, resumeReady, editToken, editLoading, editContext]);
 
   useEffect(() => {
-    if (KIOSK || PREVIEW || !resumeToken) {
+    if (KIOSK || PREVIEW || editToken || !resumeToken) {
       setResumeReady(true);
       return;
     }
@@ -1278,7 +1431,7 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, [resumeToken]);
+  }, [resumeToken, editToken]);
 
   const emailMazeDraft = async (email: string) => {
     if (!state.mazeWalls.length && !state.mazeShapes.length) {
@@ -1334,15 +1487,22 @@ export default function App() {
     }
   };
 
-  const completeDraft = () => {
+  const completeDraft = (result: { editToken: string; revision: number }) => {
     try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(PREVIOUS_STORAGE_KEY);
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      if (editContext) {
+        localStorage.removeItem(`art-pill-maze-submission-edit:${editContext.submissionId}:v${editContext.revision}`);
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(PREVIOUS_STORAGE_KEY);
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+      }
+      if (result.editToken) sessionStorage.setItem(EDIT_TOKEN_STORAGE_KEY, result.editToken);
     } catch { /* storage can be unavailable */ }
-    clearResumeToken();
-    serverDraftRef.current = null;
-    setOwnerEmail("");
+    if (!editContext) {
+      clearResumeToken();
+      serverDraftRef.current = null;
+      setOwnerEmail("");
+    }
   };
 
   // Kiosk: reset to a blank maze after a stretch of inactivity, so the terminal
@@ -1422,14 +1582,21 @@ export default function App() {
             <Redo2 size={18} />
             Redo
           </button>
-          <button type="button" className="submit-maze" onClick={() => setSubmitOpen(true)} title="Submit this maze for review">
+          <button type="button" className="submit-maze" onClick={() => setSubmitOpen(true)} disabled={editLoading || Boolean(editLockedMessage)} title={editContext ? "Submit an updated Maze revision" : "Submit this maze for review"}>
             <Send size={18} />
-            Submit
+            {editContext ? "Submit revision" : "Submit"}
           </button>
         </div>
       </header>
 
-      <section className="workspace">
+      {editLoading || editLockedMessage ? (
+        <section className="maze-edit-state" aria-live="polite">
+          <span className="eyebrow">Private Maze revision</span>
+          <h2>{editLoading ? "Opening your submitted maze..." : editContext ? "Editing is locked." : "This edit link is unavailable."}</h2>
+          <p>{editLoading ? "Loading the exact revision currently held by Studio." : editLockedMessage}</p>
+          {!editLoading ? <a className="back-to-build" href="/tattoos/">Return to Art.Pill</a> : null}
+        </section>
+      ) : <section className="workspace">
         <aside className="palette" aria-label="Maze design palette">
           <MazeTools
             tool={mazeTool}
@@ -1521,7 +1688,7 @@ export default function App() {
           onExportImage={exportImage}
           onExportReading={() => downloadFile("maze-notes.txt", "Maze Studio export uses PNG and project JSON.", "text/plain")}
         />
-      </section>
+      </section>}
 
       <SubmitDialog
         open={submitOpen}
@@ -1533,6 +1700,8 @@ export default function App() {
         formDraft={formDraft}
         onFormDraftChange={setFormDraft}
         resumeToken={resumeToken}
+        editToken={editToken}
+        editContext={editContext}
         ownerEmail={ownerEmail}
         onSubmitted={completeDraft}
       />

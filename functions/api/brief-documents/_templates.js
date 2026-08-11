@@ -42,11 +42,11 @@ const DEFAULTS = Object.freeze({
     copy: {
       eyebrow: "art.pill TATTOO HOUSE",
       title: "Submitted Maze Brief",
-      intro: "A record of the submitted Maze image, explanation, and practical details provided for Studio review.",
+      intro: "A record of the submitted Maze image, optional meaning and description, and practical details provided for Studio review.",
       projectHeading: "Project direction",
       artworkHeading: "Submitted Maze",
       artworkIntro: "The image below is the exact Maze artifact submitted with this brief.",
-      compositionHeading: "Maze explanation",
+      compositionHeading: "Meaning and description",
       referencesHeading: "References",
       disclaimer: "This document records the submitted project brief. {{policy_scope}}",
       footer: "art.pill TATTOO HOUSE / THE SIX.WELL CONSTRUCT",
@@ -202,7 +202,7 @@ export function buildBriefSample(kind = "build") {
   };
   if (kind === "maze") return {
     ...base,
-    payload: { placement: "Outer forearm", scale: "5-6 inches", budget_range: "$900-$1,300", timeline: "Fall 2026", maze_explanation: "The open center represents making room for a new direction while the outer path holds the history that led there.", message: "Keep the final form architectural and readable from a distance." },
+    payload: { placement: "Outer forearm", scale: "5-6 inches", budget_range: "$900-$1,300", timeline: "Fall 2026", maze_meaning: "Making room for a new direction while holding the history that led there.", maze_description: "An open center held by an architectural outer path.", message: "Keep the final form readable from a distance." },
     mazeImageDataUrl: "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760"><rect width="1200" height="760" fill="#d4b271"/><g fill="none" stroke="#211f1d" stroke-width="22"><path d="M120 120H1080V640H120V120ZM260 250H920V510H260V250Z"/><path d="M260 380H470M730 380H920M600 120V270M600 490V640"/></g><circle cx="600" cy="380" r="72" fill="none" stroke="#6E0404" stroke-width="18"/></svg>`),
   };
   return {
@@ -248,7 +248,11 @@ export function renderBriefHtml({ templateKey, content, source, mazeImageDataUrl
     composition = `<p class="reading">${escapeHtml(clientReading)}</p>${themes.length ? `<p class="meta"><strong>Shared themes:</strong> ${escapeHtml(themes.join(", "))}</p>` : ""}${rules.length ? `<ul>${rules.map((rule) => `<li>${escapeHtml(rule.interpretation || rule.type || rule)}</li>`).join("")}</ul>` : ""}`;
   } else {
     artwork = `<p class="section-intro">${escapeHtml(copy.artworkIntro)}</p>${mazeImageDataUrl ? `<figure class="maze"><img src="${escapeHtml(mazeImageDataUrl)}" alt="Submitted Maze design"></figure>` : `<p class="muted">The submitted Maze image is unavailable in this preview.</p>`}`;
-    composition = `<p class="reading">${escapeHtml(valueOf(payload, "maze_explanation"))}</p>`;
+    const meaning = valueOf(payload, "maze_meaning", "maze_explanation");
+    const description = valueOf(payload, "maze_description");
+    composition = meaning || description
+      ? `${meaning ? `<p class="meta"><strong>Meaning</strong></p><p class="reading">${escapeHtml(meaning)}</p>` : ""}${description ? `<p class="meta"><strong>Description</strong></p><p class="reading">${escapeHtml(description)}</p>` : ""}`
+      : `<p class="muted">No meaning or description was provided.</p>`;
   }
   const disclaimer = copy.disclaimer.replaceAll("{{policy_scope}}", POLICY_SCOPE);
   const filenamePrefix = text(copy.filenamePrefix, 80).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "art-pill-brief";

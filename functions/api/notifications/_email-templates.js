@@ -80,6 +80,9 @@ export function buildSubmissionReceivedEmail(data) {
       label: data.briefLabel || "Download submitted brief",
       href: data.briefUrl,
     } : null,
+    secondaryActions: data.editUrl ? [
+      { label: "Edit submitted maze", href: data.editUrl },
+    ] : [],
     sections: [
       requested.length ? {
         title: "Requested sheet designs:",
@@ -92,6 +95,7 @@ export function buildSubmissionReceivedEmail(data) {
       },
     ],
     notice: [
+      data.editUrl ? "Maze changes remain private until you explicitly submit an updated revision. Editing locks when Studio review ends." : "",
       `Questions or corrections? Email ${data.supportEmail}, call or text ${supportPhone}.`,
     ],
     signature: construct ? constructSignature() : tattooSignature(),
@@ -941,6 +945,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       supportEmail: SAMPLE.supportEmail,
       supportPhone: SAMPLE.supportPhone,
       briefUrl: ["build", "maze"].includes(mode) ? "https://thesixwellconstruct.com/api/tattoo/briefs/demo-document?v=1&sig=sample" : "",
+      editUrl: mode === "maze" ? "https://thesixwellconstruct.com/tattoos/build/maze/#edit=demo-private-token" : "",
     });
   } else if (key === "booking_link_created") {
     const consultation = mode === "consultation";

@@ -58,6 +58,8 @@
   .session-plan-panel { border:5px solid rgba(110,4,4,.45); padding:20px; display:grid; gap:16px; }
   .session-plan-title { margin:0; color:var(--color-body); font-family:var(--sans); font-size:20px; font-weight:900; text-transform:uppercase; }
   .session-plan-copy { margin:0; color:var(--color-text-muted, rgba(251,209,157,.66)); font-size:13px; line-height:1.7; }
+  .project-summary { border:5px solid var(--ring-soft); padding:16px; display:grid; gap:8px; }
+  .project-summary-copy { white-space:pre-wrap; }
   .approved-budget { border:5px solid var(--ring-soft); padding:16px; display:grid; gap:8px; }
   .approved-budget-label { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
   .approved-budget-value { color:var(--color-body); font-family:var(--sans); font-size:clamp(24px,4vw,36px); font-weight:900; line-height:1; }
@@ -382,7 +384,11 @@
     return {
       purpose: "tattoo",
       client: { name: "Preview Client", email: "client@example.com", phone: "" },
-      submission: { id: "preview", type: "tattoo_inquiry" },
+      submission: {
+        id: "preview",
+        type: "tattoo_inquiry",
+        projectDescription: "A black-and-grey raven wrapping from the upper arm toward the shoulder, with the wing following the existing shape of the arm.",
+      },
       sessionPlan: {
         sessionCategory: "multiple_sessions",
         splitPolicy: "client_choice",
@@ -396,6 +402,7 @@
         approvedBudgetMinCents: 120000,
         approvedBudgetMaxCents: 180000,
         approvedBudgetCurrency: "USD",
+        includeAdditionalSketchDisclaimer: true,
         budgetAcknowledged: false,
         budgetAcknowledgedAt: "",
         clientPreference: "",
@@ -1075,6 +1082,7 @@
     const sessions = sessionCountRange(plan.estimatedSessionsMin, plan.estimatedSessionsMax);
     const totalTime = totalTimeRange(plan.estimatedTotalMinutesMin, plan.estimatedTotalMinutesMax);
     const estimate = [sessions, totalTime].filter(Boolean).join(" - ");
+    const projectDescription = String(context?.submission?.projectDescription || "").trim();
     const budgetLabel = approvedBudgetRange(plan);
     const fixed = ["required", "not_available"].includes(plan.splitPolicy);
     const flexible = plan.splitPolicy === "client_choice";
@@ -1099,6 +1107,12 @@
     const savedStatus = fixed ? "Your session plan is confirmed." : savedMessage;
     sessionPlanPanel.innerHTML = `
       <h2 class="session-plan-title">${escapeHtml(category)}${estimate ? ` : ${escapeHtml(estimate)}` : ""}</h2>
+      ${projectDescription ? `
+        <div class="project-summary">
+          <span class="approved-budget-label">Tattoo description</span>
+          <p class="session-plan-copy project-summary-copy">${escapeHtml(projectDescription)}</p>
+        </div>
+      ` : ""}
       <p class="session-plan-copy"><strong>Notes from the artist:</strong><br>${sessionCopyHtml(plan.artistNote || copy.fallbackNote)}</p>
       <p class="session-plan-copy">${sessionCopyHtml(policyCopy)}</p>
       ${budgetLabel ? `
@@ -1106,6 +1120,12 @@
           <span class="approved-budget-label">Approved tattoo-work budget</span>
           <strong class="approved-budget-value">${escapeHtml(budgetLabel)}</strong>
           <p class="session-plan-copy">${escapeHtml(approvedBudgetDisclosure(plan))}</p>
+        </div>
+      ` : ""}
+      ${!budgetLabel && plan.includeAdditionalSketchDisclaimer ? `
+        <div class="project-summary">
+          <span class="approved-budget-label">Additional concept drawings</span>
+          <p class="session-plan-copy">${escapeHtml(ADDITIONAL_SKETCH_DISCLAIMER)}</p>
         </div>
       ` : ""}
       ${planIsReady(plan) ? `<div class="status">${escapeHtml(savedStatus)}</div>` : ""}

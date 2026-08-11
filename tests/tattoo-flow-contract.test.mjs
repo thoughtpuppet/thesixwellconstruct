@@ -9,11 +9,14 @@ import { runInNewContext } from "node:vm";
 import {
   handleCreateSubmission,
   handleDeleteSubmission,
+  handleGetMazeRevisionFile,
+  handleGetMazeSubmissionEdit,
   handleGetSubmission,
   handleListSubmissions,
   handlePromoteMazeArchiveSubmission,
   handleSubmissionDecision,
   handleSubmissionDecisionNotification,
+  handleSubmitMazeRevision,
   handleUpdateMazeArchiveSubmission,
   handleUpdateSubmission,
 } from "../functions/api/submissions/_lib.js";
@@ -987,6 +990,17 @@ test("Original-design tattoo paths disclose the additional-rendering drawing fee
   const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
   assert.match(studio, /id="includeAdditionalSketchDisclaimer" name="includeAdditionalSketchDisclaimer" type="checkbox"/);
   assert.match(studio, /includeAdditionalSketchDisclaimer: form\.elements\.includeAdditionalSketchDisclaimer\?\.checked === true/);
+  assert.match(studio, /name="tattooDescription" maxlength="5000"/);
+  assert.match(studio, /name="approvedBudgetDollars" type="number"/);
+  assert.match(studio, /name="presentLongerSessionOption" type="checkbox"/);
+  assert.match(studio, /name="presentShorterSessionsOption" type="checkbox"/);
+  assert.match(studio, /name="includeAdditionalSketchDisclaimer" type="checkbox"/);
+  assert.match(studio, /Present the Extended Day \/ longer-session option/);
+  assert.match(studio, /Present the smaller split-session option/);
+  assert.match(studio, /Include the additional concept drawing fee/);
+  assert.match(bookingPage, /context\?\.submission\?\.projectDescription/);
+  assert.match(bookingPage, /<span class="approved-budget-label">Tattoo description<\/span>/);
+  assert.match(bookingPage, /!budgetLabel && plan\.includeAdditionalSketchDisclaimer/);
 
   const policies = readFileSync(join(ROOT, "tattoos", "policies", "index.html"), "utf8");
   assert.match(policies, /substantially different alternate concept/);
@@ -2874,6 +2888,7 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   assert.ok(columns("special_project_submission_terms").has("series_name"));
   assert.ok(columns("special_project_submission_terms").has("series_slug"));
   assert.ok(columns("special_project_healed_followups").has("media_asset_id"));
+  assert.ok(columns("maze_archive_entries").has("source_revision_number"));
   for (const name of [
     "approved_budget_min_cents",
     "approved_budget_max_cents",
@@ -2894,7 +2909,7 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   ]) assert.ok(columns("appointments").has(name), `appointments.${name}`);
 
   const tables = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name));
-  for (const name of ["appointment_events", "tattoo_settings", "tattoo_rate_cards", "special_project_series", "special_project_calls", "special_project_call_media", "special_project_submission_terms", "experimental_deposit_refunds", "special_project_healed_followups", "special_project_healed_photos", "visual_symbol_composition_rules", "visual_symbol_composition_rule_members"]) {
+  for (const name of ["appointment_events", "tattoo_settings", "tattoo_rate_cards", "special_project_series", "special_project_calls", "special_project_call_media", "special_project_submission_terms", "experimental_deposit_refunds", "special_project_healed_followups", "special_project_healed_photos", "visual_symbol_composition_rules", "visual_symbol_composition_rule_members", "maze_submission_revisions", "maze_submission_edit_tokens"]) {
     assert.ok(tables.has(name), name);
   }
 
@@ -3579,9 +3594,10 @@ test("Maze drafts enforce size, revocation, expiration cleanup, and email rate l
 
 test("Maze submissions require mode-specific render variants and snapshot their artifact contract", async () => {
   const database = migratedDatabase();
+  const bucket = new MemoryBucket();
   const env = {
     SUBMISSIONS_DB: new LocalD1(database),
-    SUBMISSION_FILES: new MemoryBucket(),
+    SUBMISSION_FILES: bucket,
     SUBMISSIONS_ADMIN_TOKEN: "maze-test-admin",
   };
   const payload = {
@@ -3591,7 +3607,6 @@ test("Maze submissions require mode-specific render variants and snapshot their 
     dob: "1990-01-01",
     age_confirmed: "yes",
     budget_range: "$300–$500",
-    maze_explanation: "A route through a protected threshold.",
     review_consent: "yes",
   };
 
@@ -3616,10 +3631,117 @@ test("Maze submissions require mode-specific render variants and snapshot their 
     renderVariants: ["canvas", "transparent", "stencil"],
   });
   assert.equal(createdPayload.filesReceived, 4);
+  assert.match(createdPayload.editToken, /^[a-f0-9]{64}$/);
+  assert.equal(createdPayload.mazeRevision, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM maze_submission_revisions WHERE submission_id=?").get(submissionId).count, 1);
+  const storedToken = database.prepare("SELECT token_hash FROM maze_submission_edit_tokens WHERE submission_id=?").get(submissionId);
+  assert.equal(storedToken.token_hash, await sha256HexForTest(createdPayload.editToken));
+  assert.notEqual(storedToken.token_hash, createdPayload.editToken);
+  assert.equal(saved.maze_meaning, undefined);
+  assert.equal(saved.maze_description, undefined);
+
+  const editResponse = await handleGetMazeSubmissionEdit(draftRequest(
+    "/api/maze-submissions/current", "GET", undefined, createdPayload.editToken,
+  ), env);
+  const editPayload = await editResponse.json();
+  assert.equal(editResponse.status, 200, editPayload.detail || editPayload.error);
+  assert.equal(editPayload.revision, 1);
+  assert.equal(editPayload.form.mazeMeaning, "");
+  assert.equal(editPayload.form.mazeDescription, "");
+  assert.deepEqual(editPayload.mazeState.mazeShapes, [{ id: "shape-1" }]);
+
+  const revisionRequest = multipartRequest(
+    "/api/maze-submissions/current",
+    {
+      base_revision: 1,
+      placement: "Inner forearm",
+      scale: "5 inches",
+      budget_range: "$500–$800",
+      maze_meaning: "A route through a protected threshold.",
+      maze_description: "A dense center opening toward the upper edge.",
+      idempotency_key: "maze-revision-contract-0001",
+    },
+    mazeSubmissionFiles({ mazeShapes: [{ id: "shape-2" }, { id: "shape-3" }] }),
+  );
+  revisionRequest.headers.set("authorization", `Bearer ${createdPayload.editToken}`);
+  const revised = await handleSubmitMazeRevision(revisionRequest, env);
+  const revisedPayload = await revised.json();
+  assert.equal(revised.status, 200, revisedPayload.detail || revisedPayload.error);
+  assert.equal(revisedPayload.revision, 2);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM maze_submission_revisions WHERE submission_id=?").get(submissionId).count, 2);
+  const currentPayload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(submissionId).payload_json);
+  assert.equal(currentPayload.maze_meaning, "A route through a protected threshold.");
+  assert.equal(currentPayload.maze_description, "A dense center opening toward the upper edge.");
+  assert.equal(currentPayload.maze_revision, 2);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM submission_events WHERE submission_id=? AND event_type='client_revision_submitted'").get(submissionId).count, 1);
+
+  const replayRequest = multipartRequest(
+    "/api/maze-submissions/current",
+    { base_revision: 1, budget_range: "$500–$800", idempotency_key: "maze-revision-contract-0001" },
+    mazeSubmissionFiles({ mazeShapes: [{ id: "shape-replay" }] }),
+  );
+  replayRequest.headers.set("authorization", `Bearer ${createdPayload.editToken}`);
+  const replay = await handleSubmitMazeRevision(replayRequest, env);
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).idempotent, true);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM maze_submission_revisions WHERE submission_id=?").get(submissionId).count, 2);
+
+  const detailResponse = await handleGetSubmission(draftRequest(
+    `/api/admin/submissions/${submissionId}`, "GET", undefined, "maze-test-admin",
+  ), env, submissionId);
+  const detail = await detailResponse.json();
+  assert.equal(detail.submission.mazeRevision, 2);
+  assert.deepEqual(detail.submission.mazeRevisions.map((item) => item.revision), [2, 1]);
+  const firstRevisionFile = detail.submission.mazeRevisions[1].files[0];
+  const fileResponse = await handleGetMazeRevisionFile(draftRequest(
+    `/api/admin/submissions/${submissionId}/maze-revisions/1/files/${firstRevisionFile.id}`,
+    "GET",
+    undefined,
+    "maze-test-admin",
+  ), env, submissionId, 1, firstRevisionFile.id);
+  assert.equal(fileResponse.status, 200);
+  assert.match(fileResponse.headers.get("content-disposition"), /maze\.png/);
+
+  database.prepare("UPDATE submissions SET status='approved' WHERE id=?").run(submissionId);
+  const locked = await handleGetMazeSubmissionEdit(draftRequest(
+    "/api/maze-submissions/current", "GET", undefined, createdPayload.editToken,
+  ), env);
+  assert.equal(locked.status, 423);
+  database.prepare("UPDATE submissions SET status='reviewing' WHERE id=?").run(submissionId);
+  const reopened = await handleGetMazeSubmissionEdit(draftRequest(
+    "/api/maze-submissions/current", "GET", undefined, createdPayload.editToken,
+  ), env);
+  assert.equal(reopened.status, 200);
   assert.equal(database.prepare("SELECT status FROM maze_archive_consents WHERE submission_id=?").get(submissionId).status, "not_granted");
   assert.equal(database.prepare("SELECT COUNT(*) count FROM maze_archive_entries WHERE submission_id=?").get(submissionId).count, 0);
   const ineligible = await handlePromoteMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive/promote`, { title:"No Consent",altText:"A maze." }, "maze-test-admin"), env, submissionId);
   assert.equal(ineligible.status, 409);
+  const deleted = await handleDeleteSubmission(draftRequest(
+    `/api/admin/submissions/${submissionId}?force=1`, "DELETE", undefined, "maze-test-admin",
+  ), env, submissionId);
+  assert.equal(deleted.status, 200, await deleted.clone().text());
+  assert.equal(bucket.objects.size, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM maze_submission_revisions WHERE submission_id=?").get(submissionId).count, 0);
+});
+
+test("Maze submission surfaces keep meaning optional and expose private revision controls", () => {
+  const app = readFileSync(join(ROOT, "apps", "maze", "src", "App.tsx"), "utf8");
+  const receipt = readFileSync(join(ROOT, "tattoos", "submission-received", "index.html"), "utf8");
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
+  const email = readFileSync(join(ROOT, "functions", "api", "notifications", "_email-templates.js"), "utf8");
+  assert.match(app, /name="maze_meaning"/);
+  assert.match(app, /Meaning \(optional\)/);
+  assert.match(app, /name="maze_description"/);
+  assert.match(app, /Description \(optional\)/);
+  assert.match(app, /Submit updated maze/);
+  assert.match(app, /\/api\/maze-submissions\/current/);
+  assert.match(receipt, /id="mazeEditLink"[^>]*hidden>Edit submitted maze/);
+  assert.match(receipt, /optional meaning and description/);
+  assert.match(studio, /function renderMazeRevisions\(submission\)/);
+  assert.match(studio, /data-maze-revision/);
+  assert.match(worker, /pathname === "\/api\/maze-submissions\/current"/);
+  assert.match(email, /label: "Edit submitted maze"/);
 });
 
 test("Maze artifact validation rejects missing, duplicate, invalid, and mode-incompatible render variants", async () => {
@@ -5671,6 +5793,90 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(claimedSubmission.internal_notes, "Approved through an offline conversation.");
 });
 
+test("Studio direct tattoo invites can present project details, pacing options, and drawing fees", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+  const response = await handleAdminCreateDirectBookingInvite(adminJsonRequest(
+    "/api/admin/booking/direct-invites",
+    {
+      projectNote: "Private operator context.",
+      tattooDescription: "A black-and-grey raven wrapping from the upper arm toward the shoulder.",
+      approvedBudgetCents: 150000,
+      presentLongerSessionOption: true,
+      presentShorterSessionsOption: true,
+      includeAdditionalSketchDisclaimer: true,
+      purpose: "tattoo",
+      bookingTypeId: "tattoo_full",
+    },
+    adminToken,
+  ), env);
+  assert.equal(response.status, 200, await response.clone().text());
+  const payload = await response.json();
+  assert.deepEqual(payload.token.allowedBookingTypes, [
+    "tattoo_full",
+    "tattoo_extended",
+    "tattoo_quarter",
+    "tattoo_half",
+  ]);
+  assert.deepEqual(payload.token.approvedBudget, {
+    minimumCents: 150000,
+    maximumCents: 150000,
+    currency: "USD",
+  });
+
+  const submission = database.prepare(
+    "SELECT payload_json, internal_notes FROM submissions WHERE id = ?",
+  ).get(payload.directInvite.submissionId);
+  const submissionPayload = JSON.parse(submission.payload_json);
+  assert.equal(
+    submissionPayload.tattoo_description,
+    "A black-and-grey raven wrapping from the upper arm toward the shoulder.",
+  );
+  assert.equal(submission.internal_notes, "Private operator context.");
+
+  const plan = database.prepare(
+    "SELECT * FROM tattoo_session_plans WHERE submission_id = ?",
+  ).get(payload.directInvite.submissionId);
+  assert.equal(plan.split_policy, "client_choice");
+  assert.equal(plan.session_category, "multiple_sessions");
+  assert.equal(plan.estimated_sessions_min, 1);
+  assert.equal(plan.estimated_sessions_max, 2);
+  assert.equal(plan.estimated_total_minutes_min, 480);
+  assert.equal(plan.estimated_total_minutes_max, 480);
+  assert.equal(plan.present_longer_session_option, 1);
+  assert.equal(plan.present_shorter_sessions_option, 1);
+  assert.equal(plan.include_additional_sketch_disclaimer, 1);
+  assert.equal(plan.approved_budget_min_cents, 150000);
+  assert.equal(plan.approved_budget_max_cents, 150000);
+  assert.equal(plan.budget_acknowledged, 0);
+
+  const rawToken = bookingTokenFromUrl(payload.token.bookingUrl);
+  const contextResponse = await handleBookingContext(
+    new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`),
+    env,
+  );
+  assert.equal(contextResponse.status, 200);
+  const context = await contextResponse.json();
+  assert.equal(
+    context.submission.projectDescription,
+    "A black-and-grey raven wrapping from the upper arm toward the shoulder.",
+  );
+  assert.deepEqual(
+    context.bookingTypes.map((bookingType) => bookingType.id).sort(),
+    ["tattoo_extended", "tattoo_full", "tattoo_half", "tattoo_quarter"].sort(),
+  );
+  assert.equal(context.sessionPlan.presentLongerSessionOption, true);
+  assert.equal(context.sessionPlan.presentShorterSessionsOption, true);
+  assert.equal(context.sessionPlan.includeAdditionalSketchDisclaimer, true);
+  assert.equal(context.sessionPlan.approvedBudgetMinCents, 150000);
+  assert.equal(context.sessionPlan.approvedBudgetMaxCents, 150000);
+});
+
 test("unused approved direct booking invites can be permanently deleted with their private links", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
@@ -7100,9 +7306,21 @@ test("a completed Square webhook settles the booking once in People", async () =
     },
     body: rawBody,
   });
+  const confirmationOutboxSnapshots = [];
   const env = squareEnv(database, {
     SQUARE_WEBHOOK_SIGNATURE_KEY: signatureKey,
     SQUARE_WEBHOOK_NOTIFICATION_URL: notificationUrl,
+    EMAIL: {
+      async send() {
+        confirmationOutboxSnapshots.push(database.prepare(
+          `SELECT idempotency_key
+           FROM notification_deliveries
+           WHERE related_type='appointment' AND related_id=?
+           ORDER BY idempotency_key`
+        ).all(appointmentId).map((row) => row.idempotency_key));
+        return { messageId: `crm-paid-confirmation-${confirmationOutboxSnapshots.length}` };
+      },
+    },
   });
 
   const responses = await withMockFetch(async (url) => {
@@ -7120,6 +7338,13 @@ test("a completed Square webhook settles the booking once in People", async () =
   ]);
   for (const response of responses) {
     assert.equal(response.status, 200, await response.text());
+  }
+  assert.ok(confirmationOutboxSnapshots.length >= 2);
+  for (const snapshot of confirmationOutboxSnapshots) {
+    assert.deepEqual(snapshot, [
+      `admin_appointment_confirmed:${appointmentId}`,
+      `appointment_confirmed:${appointmentId}`,
+    ]);
   }
 
   assert.equal(database.prepare(
@@ -7163,12 +7388,12 @@ test("a completed Square webhook settles the booking once in People", async () =
       {
         template_key: "admin_appointment_confirmed",
         idempotency_key: `admin_appointment_confirmed:${appointmentId}`,
-        status: "pending",
+        status: "sent",
       },
       {
         template_key: "consultation_confirmed_in_person",
         idempotency_key: `appointment_confirmed:${appointmentId}`,
-        status: "pending",
+        status: "sent",
       },
     ],
   );
@@ -10670,7 +10895,8 @@ test("Build and Maze brief templates render required client content without sens
         mazeImageDataUrl: source.mazeImageDataUrl || "",
       });
       assert.match(rendered.html, /Submitted Maze design/);
-      assert.match(rendered.html, /open center represents/);
+      assert.match(rendered.html, /Making room for a new direction/);
+      assert.match(rendered.html, /An open center held by an architectural outer path/);
       assert.match(privacyRendered.html, /maze\.png/);
       assert.doesNotMatch(privacyRendered.html, /maze-transparent\.png|maze-stencil\.png|maze\.json/);
     }

@@ -136,7 +136,6 @@ const REQUIRED_FIELDS_BY_TYPE = {
     ["review_consent", "Review consent is required.", "yes"],
   ],
   maze_design: [
-    ["maze_explanation", "A short explanation of your maze is required."],
     ["budget_range", "Budget range is required."],
     ["review_consent", "Review consent is required.", "yes"],
   ],
@@ -275,6 +274,19 @@ async function activeBookingAccessForUrl(db, submissionId, bookingUrl) {
 async function sha256Hex(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function createPrivateToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function bearerToken(request) {
+  const authorization = request.headers.get("authorization") || "";
+  return authorization.toLowerCase().startsWith("bearer ")
+    ? authorization.slice(7).trim()
+    : "";
 }
 
 function submissionNeedsPrerequisiteConsultation(rowOrPayload) {
@@ -726,6 +738,7 @@ function normalizeMazeArchiveConsent(payload, contact = {}) {
 async function loadMazeArchiveState(database, submissionId, payload = {}) {
   const row = await database.prepare(`SELECT c.status consent_status,c.attribution_mode,c.public_credit,c.include_explanation,
       c.consent_version,c.consented_at,c.withdrawn_at,e.curation_status,e.archive_entity_id,e.review_note,e.reviewed_at,
+      e.source_revision_number,
       ad.archive_slug,ar.title archive_title
     FROM maze_archive_consents c
     LEFT JOIN maze_archive_entries e ON e.submission_id=c.submission_id
@@ -747,7 +760,17 @@ async function loadMazeArchiveState(database, submissionId, payload = {}) {
     archiveTitle: row.archive_title || "",
     reviewNote: row.review_note || "",
     reviewedAt: row.reviewed_at || "",
-    permittedExplanation: row.include_explanation ? asString(payload.maze_explanation) : "",
+    sourceRevision: Number(row.source_revision_number || 0),
+    permittedExplanation: row.include_explanation
+      ? [
+          asString(payload.maze_meaning || payload.maze_explanation)
+            ? `Meaning: ${asString(payload.maze_meaning || payload.maze_explanation)}`
+            : "",
+          asString(payload.maze_description)
+            ? `Description: ${asString(payload.maze_description)}`
+            : "",
+        ].filter(Boolean).join("\n\n")
+      : "",
   };
 }
 
@@ -1379,6 +1402,7 @@ async function validateMazeArtifacts(files) {
     return { error: "Draw at least one maze wall or shape before submitting." };
   }
   return {
+    design,
     designSummary: {
       wallCount: walls.length,
       shapeCount: shapes.length,
@@ -1507,6 +1531,7 @@ export async function handleCreateSubmission(request, env) {
   let savedFiles = [];
   let managedSheetSelections = [];
   let specialProjectTerms = null;
+  let mazeDesign = null;
 
   try {
     const db = requireSubmissionDb(env);
@@ -1677,6 +1702,7 @@ export async function handleCreateSubmission(request, env) {
       if (maze.error) {
         return errorResponse(maze.error, 400, { code: "INVALID_MAZE_ARTIFACTS" });
       }
+      mazeDesign = maze.design;
       body.payload.maze_artifact_snapshot = maze.designSummary;
     }
 
@@ -1831,6 +1857,8 @@ export async function handleCreateSubmission(request, env) {
     savedFiles = await saveSubmissionFiles(env, id, body.files);
     const now = new Date().toISOString();
     const tattooStage = isTattooSubmissionType(submission.type) ? "review" : null;
+    const mazeEditToken = submission.type === "maze_design" ? createPrivateToken() : "";
+    const mazeEditTokenHash = mazeEditToken ? await sha256Hex(mazeEditToken) : "";
 
     await db.batch([
       db.prepare(
@@ -1882,6 +1910,28 @@ export async function handleCreateSubmission(request, env) {
       ),
       ...(buildDraftContext?.id
         ? [finalizeSubmissionBuildDraft(db, buildDraftContext.id, id, now)]
+        : []),
+      ...(submission.type === "maze_design"
+        ? [
+            db.prepare(
+              `INSERT INTO maze_submission_revisions
+               (id,submission_id,revision_number,payload_json,files_json,maze_json,idempotency_key,created_at)
+               VALUES(?,?,1,?,?,?,?,?)`
+            ).bind(
+              crypto.randomUUID(),
+              id,
+              JSON.stringify(submission.payload),
+              JSON.stringify(savedFiles),
+              JSON.stringify(mazeDesign),
+              idempotency.value || null,
+              now,
+            ),
+            db.prepare(
+              `INSERT INTO maze_submission_edit_tokens
+               (id,submission_id,token_hash,status,last_used_at,revoked_at,created_at,updated_at)
+               VALUES(?,?,?,'active',NULL,NULL,?,?)`
+            ).bind(crypto.randomUUID(), id, mazeEditTokenHash, now, now),
+          ]
         : []),
       ...(mazeArchiveConsent
         ? [
@@ -1971,6 +2021,9 @@ export async function handleCreateSubmission(request, env) {
       files: savedFiles,
       briefUrl: briefResult?.ok ? briefResult.document?.clientUrl : "",
       briefLabel: "Download submitted brief",
+      editUrl: mazeEditToken
+        ? `${absoluteClientUrl(env, request, "/tattoos/build/maze/")}#edit=${encodeURIComponent(mazeEditToken)}`
+        : "",
     });
     const adminNotification = await notifyAdminSubmissionReceived(env, {
       id,
@@ -1990,6 +2043,8 @@ export async function handleCreateSubmission(request, env) {
       filesStored: savedFiles.filter((file) => file.stored).length,
       filesReceived: savedFiles.length,
       briefDocument: briefResult?.document || null,
+      editToken: mazeEditToken || null,
+      mazeRevision: submission.type === "maze_design" ? 1 : null,
       mazeArchive: mazeArchiveConsent ? await loadMazeArchiveState(db, id, submission.payload) : null,
       notifications: {
         client: notificationOutcome(clientNotification),
@@ -2032,6 +2087,216 @@ export async function handleCreateSubmission(request, env) {
     return errorResponse("Unable to save submission.", 500, {
       detail: error.message,
     });
+  }
+}
+
+async function mazeEditAccess(request, env) {
+  const database = requireSubmissionDb(env);
+  const rawToken = bearerToken(request);
+  if (!rawToken) return { error: errorResponse("This Maze edit link is invalid.", 401, { code: "MAZE_EDIT_INVALID" }) };
+  const tokenHash = await sha256Hex(rawToken);
+  const row = await database.prepare(
+    `SELECT t.id token_id,t.status token_status,s.*
+     FROM maze_submission_edit_tokens t
+     JOIN submissions s ON s.id=t.submission_id
+     WHERE t.token_hash=? AND t.status='active' AND s.type='maze_design'
+     LIMIT 1`
+  ).bind(tokenHash).first();
+  if (!row) return { error: errorResponse("This Maze edit link is invalid or no longer available.", 401, { code: "MAZE_EDIT_INVALID" }) };
+  const latest = await database.prepare(
+    `SELECT * FROM maze_submission_revisions
+     WHERE submission_id=? ORDER BY revision_number DESC LIMIT 1`
+  ).bind(row.id).first();
+  if (!latest) return { error: errorResponse("The submitted Maze revision could not be found.", 409, { code: "MAZE_REVISION_MISSING" }) };
+  return { database, row, latest };
+}
+
+function presentedMazeEdit(access) {
+  const payload = parseJsonField(access.latest.payload_json, {});
+  const contact = parseJsonField(access.row.contact_json, {});
+  return {
+    submissionId: access.row.id,
+    status: access.row.status,
+    revision: Number(access.latest.revision_number || 1),
+    editable: ["new", "reviewing"].includes(access.row.status),
+    mazeState: parseJsonField(access.latest.maze_json, {}),
+    form: {
+      firstName: contact.firstName || "",
+      lastName: contact.lastName || "",
+      email: access.row.contact_email || contact.email || "",
+      phone: access.row.contact_phone || contact.phone || "",
+      dateOfBirth: asString(payload.dob),
+      placement: asString(payload.placement),
+      scale: asString(payload.scale),
+      budgetRange: asString(payload.budget_range),
+      mazeMeaning: asString(payload.maze_meaning || payload.maze_explanation),
+      mazeDescription: asString(payload.maze_description),
+    },
+  };
+}
+
+export async function handleGetMazeSubmissionEdit(request, env) {
+  try {
+    const access = await mazeEditAccess(request, env);
+    if (access.error) return access.error;
+    const presented = presentedMazeEdit(access);
+    if (!presented.editable) {
+      return json({
+        ...presented,
+        mazeState: null,
+        form: null,
+        error: "This Maze submission is locked because Studio review has ended. Reopening review makes the same private link editable again.",
+        code: "MAZE_EDIT_LOCKED",
+      }, { status: 423, headers: { "cache-control": "private, no-store" } });
+    }
+    await access.database.prepare(
+      "UPDATE maze_submission_edit_tokens SET last_used_at=?,updated_at=? WHERE id=?"
+    ).bind(new Date().toISOString(), new Date().toISOString(), access.row.token_id).run();
+    return json(presented, { headers: { "cache-control": "private, no-store" } });
+  } catch (error) {
+    return errorResponse("Unable to open this Maze submission for editing.", 500, { detail: error.message });
+  }
+}
+
+export async function handleSubmitMazeRevision(request, env) {
+  let savedFiles = [];
+  try {
+    const access = await mazeEditAccess(request, env);
+    if (access.error) return access.error;
+    if (!["new", "reviewing"].includes(access.row.status)) {
+      return errorResponse("This Maze submission is locked because Studio review has ended.", 423, { code: "MAZE_EDIT_LOCKED" });
+    }
+
+    const body = await readSubmissionBody(request);
+    if (!body) return errorResponse("Expected form data.", 400);
+    if (body.error) return errorResponse(body.error, body.status || 400);
+    const fileValidation = validateSubmissionFiles("maze_design", body.files, env);
+    if (fileValidation) return errorResponse(fileValidation.error, fileValidation.status);
+    const maze = await validateMazeArtifacts(body.files);
+    if (maze.error) return errorResponse(maze.error, 400, { code: "INVALID_MAZE_ARTIFACTS" });
+
+    const baseRevision = Number(body.payload.base_revision);
+    if (!Number.isInteger(baseRevision) || baseRevision < 1) {
+      return errorResponse("A valid base Maze revision is required.", 400, { code: "MAZE_REVISION_REQUIRED" });
+    }
+    const idempotency = normalizeIdempotencyKey(request, body.payload);
+    if (idempotency.error) return errorResponse(idempotency.error, 400);
+    if (idempotency.value) {
+      const replay = await access.database.prepare(
+        "SELECT submission_id,revision_number FROM maze_submission_revisions WHERE idempotency_key=? LIMIT 1"
+      ).bind(idempotency.value).first();
+      if (replay) {
+        if (replay.submission_id !== access.row.id) {
+          return errorResponse("That idempotency key was already used for a different Maze submission.", 409);
+        }
+        return json({ ok: true, submissionId: replay.submission_id, revision: Number(replay.revision_number), idempotent: true });
+      }
+    }
+    const latestRevision = Number(access.latest.revision_number || 1);
+    if (baseRevision !== latestRevision) {
+      return errorResponse("This Maze was updated in another browser. Reopen the private link before submitting again.", 409, {
+        code: "MAZE_REVISION_CONFLICT",
+        revision: latestRevision,
+      });
+    }
+
+    const budgetRange = asString(body.payload.budget_range).slice(0, 160);
+    if (!budgetRange) return errorResponse("Budget range is required.", 400);
+    const currentPayload = parseJsonField(access.row.payload_json, {});
+    const nextRevision = latestRevision + 1;
+    const nextPayload = {
+      ...currentPayload,
+      placement: asString(body.payload.placement).slice(0, 300),
+      scale: asString(body.payload.scale).slice(0, 160),
+      budget_range: budgetRange,
+      maze_meaning: asString(body.payload.maze_meaning).slice(0, 5000),
+      maze_description: asString(body.payload.maze_description).slice(0, 5000),
+      maze_artifact_snapshot: maze.designSummary,
+      maze_revision: nextRevision,
+    };
+    delete nextPayload.maze_explanation;
+    savedFiles = await saveSubmissionFiles(env, access.row.id, body.files);
+    const now = new Date().toISOString();
+    const results = await access.database.batch([
+      access.database.prepare(
+        `INSERT INTO maze_submission_revisions
+         (id,submission_id,revision_number,payload_json,files_json,maze_json,idempotency_key,created_at)
+         SELECT ?,?,?,?,?,?,?,? FROM submissions
+         WHERE id=? AND type='maze_design' AND status IN ('new','reviewing') AND updated_at=?`
+      ).bind(
+        crypto.randomUUID(), access.row.id, nextRevision, JSON.stringify(nextPayload),
+        JSON.stringify(savedFiles), JSON.stringify(maze.design), idempotency.value || null, now,
+        access.row.id, access.row.updated_at,
+      ),
+      access.database.prepare(
+        `UPDATE submissions SET payload_json=?,files_json=?,updated_at=?
+         WHERE id=? AND type='maze_design' AND status IN ('new','reviewing') AND updated_at=?`
+      ).bind(JSON.stringify(nextPayload), JSON.stringify(savedFiles), now, access.row.id, access.row.updated_at),
+      access.database.prepare(
+        `INSERT INTO submission_events(id,submission_id,event_type,actor,note,created_at)
+         SELECT ?,?,'client_revision_submitted','client',?,? FROM maze_submission_revisions
+         WHERE submission_id=? AND revision_number=?`
+      ).bind(
+        crypto.randomUUID(), access.row.id, `Maze revision ${nextRevision} submitted`, now,
+        access.row.id, nextRevision,
+      ),
+      access.database.prepare(
+        "UPDATE maze_submission_edit_tokens SET last_used_at=?,updated_at=? WHERE id=?"
+      ).bind(now, now, access.row.token_id),
+    ]);
+    if (Number(results?.[0]?.meta?.changes || 0) !== 1 || Number(results?.[1]?.meta?.changes || 0) !== 1) {
+      throw new Error("MAZE_REVISION_CONFLICT");
+    }
+    return json({ ok: true, submissionId: access.row.id, revision: nextRevision });
+  } catch (error) {
+    if (savedFiles.length && env.SUBMISSION_FILES) {
+      await Promise.all(savedFiles.map((file) => file.storageKey ? env.SUBMISSION_FILES.delete(file.storageKey).catch(() => {}) : null));
+    }
+    if (/UNIQUE constraint failed|MAZE_REVISION_CONFLICT/i.test(String(error?.message || error))) {
+      return errorResponse("This Maze was updated before your revision could be saved. Reopen the private link and try again.", 409, { code: "MAZE_REVISION_CONFLICT" });
+    }
+    return errorResponse("Unable to submit the updated Maze.", 500, { detail: error.message });
+  }
+}
+
+async function loadMazeSubmissionRevisions(database, submissionId) {
+  const rows = await database.prepare(
+    `SELECT id,revision_number,payload_json,files_json,created_at
+     FROM maze_submission_revisions WHERE submission_id=? ORDER BY revision_number DESC`
+  ).bind(submissionId).all();
+  return (rows.results || []).map((row) => ({
+    id: row.id,
+    revision: Number(row.revision_number || 0),
+    payload: parseJsonField(row.payload_json, {}),
+    files: parseJsonField(row.files_json, []),
+    createdAt: row.created_at,
+  }));
+}
+
+export async function handleGetMazeRevisionFile(request, env, submissionId, revisionNumber, fileId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  try {
+    const database = requireSubmissionDb(env);
+    const row = await database.prepare(
+      `SELECT files_json FROM maze_submission_revisions
+       WHERE submission_id=? AND revision_number=? LIMIT 1`
+    ).bind(submissionId, Number(revisionNumber)).first();
+    if (!row) return errorResponse("Maze revision not found.", 404);
+    const file = parseJsonField(row.files_json, []).find((entry) => entry.id === fileId);
+    if (!file?.storageKey) return errorResponse("Revision file not found.", 404);
+    const object = await env.SUBMISSION_FILES?.get(file.storageKey);
+    if (!object) return errorResponse("The stored revision file was not found.", 404);
+    return new Response(object.body, {
+      headers: {
+        "content-type": file.contentType || "application/octet-stream",
+        "content-disposition": `attachment; filename="${String(file.fileName || "maze-file").replace(/"/g, "")}"`,
+        "cache-control": "private, no-store",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  } catch (error) {
+    return errorResponse("Unable to download the Maze revision file.", 500, { detail: error.message });
   }
 }
 
@@ -2360,6 +2625,14 @@ export async function handleGetSubmission(request, env, id) {
     const mazeArchive = row.type === "maze_design"
       ? await loadMazeArchiveState(db, id, normalized.payload)
       : null;
+    const mazeRevisions = row.type === "maze_design"
+      ? await loadMazeSubmissionRevisions(db, id)
+      : [];
+    const mazeEditTokenRow = row.type === "maze_design"
+      ? await db.prepare(
+          "SELECT status,last_used_at,updated_at FROM maze_submission_edit_tokens WHERE submission_id=? LIMIT 1"
+        ).bind(id).first()
+      : null;
     const briefDocumentRow = await loadBriefDocument(db, id);
     const briefDocument = await presentBriefDocument(env, request, briefDocumentRow);
     const flashConflict = flashReservation?.conflictSubmissionId
@@ -2376,6 +2649,14 @@ export async function handleGetSubmission(request, env, id) {
         renderingRequests,
         briefDocument,
         mazeArchive,
+        mazeRevisions,
+        mazeRevision: mazeRevisions[0]?.revision || 0,
+        mazeEditState: mazeEditTokenRow ? {
+          tokenStatus: mazeEditTokenRow.status,
+          editable: mazeEditTokenRow.status === "active" && ["new", "reviewing"].includes(row.status),
+          lastUsedAt: mazeEditTokenRow.last_used_at || "",
+          updatedAt: mazeEditTokenRow.updated_at || "",
+        } : null,
         specialProjectTerms,
         healedFollowup,
         experimentalRefunds: experimentalRefundRows.results || [],
@@ -2441,6 +2722,10 @@ export async function handlePromoteMazeArchiveSubmission(request, env, submissio
   if (!submission || submission.type !== "maze_design") return errorResponse("Maze submission not found.", 404);
   const payload = parseJsonField(submission.payload_json, {});
   const files = parseJsonField(submission.files_json, []);
+  const revisionRow = await database.prepare(
+    "SELECT MAX(revision_number) revision_number FROM maze_submission_revisions WHERE submission_id=?"
+  ).bind(submissionId).first();
+  const sourceRevision = Number(revisionRow?.revision_number || 1);
   const consent = await database.prepare(`SELECT c.*,e.curation_status,e.archive_entity_id
     FROM maze_archive_consents c LEFT JOIN maze_archive_entries e ON e.submission_id=c.submission_id
     WHERE c.submission_id=?`).bind(submissionId).first();
@@ -2511,8 +2796,8 @@ export async function handlePromoteMazeArchiveSubmission(request, env, submissio
         .bind(`archive-state-initial:${entityId}`,`archive-version-initial:${entityId}`,now,now),
       database.prepare("UPDATE archive_catalogue_entries SET current_state_id=?,updated_at=? WHERE entity_id=?")
         .bind(`archive-state-initial:${entityId}`,now,entityId),
-      database.prepare("UPDATE maze_archive_entries SET archive_entity_id=?,curation_status='promoted',review_note=?,reviewed_at=?,updated_at=? WHERE submission_id=? AND curation_status='candidate'")
-        .bind(entityId,asString(body.reviewNote||body.review_note).slice(0,2000),now,now,submissionId),
+      database.prepare("UPDATE maze_archive_entries SET archive_entity_id=?,curation_status='promoted',source_revision_number=?,review_note=?,reviewed_at=?,updated_at=? WHERE submission_id=? AND curation_status='candidate'")
+        .bind(entityId,sourceRevision,asString(body.reviewNote||body.review_note).slice(0,2000),now,now,submissionId),
       database.prepare(`INSERT INTO submission_events(id,submission_id,event_type,actor,note,created_at)
         VALUES(?,?,'maze_archive_promoted','admin',?,?)`).bind(crypto.randomUUID(),submissionId,`Private Archive draft ${entityId} created.`,now),
     ]);
@@ -3419,7 +3704,13 @@ export async function handleDeleteSubmission(request, env, id) {
       return errorResponse("Submission owns a Flash reservation. Archive or decline it through the lifecycle workflow instead.", 409);
     }
 
-    const storedFiles = parseJsonField(current.files_json, []).filter((file) => file?.storageKey);
+    const revisionRows = current.type === "maze_design"
+      ? await db.prepare("SELECT files_json FROM maze_submission_revisions WHERE submission_id = ?").bind(id).all()
+      : { results: [] };
+    const storedFiles = [
+      ...parseJsonField(current.files_json, []),
+      ...(revisionRows.results || []).flatMap((row) => parseJsonField(row.files_json, [])),
+    ].filter((file, index, files) => file?.storageKey && files.findIndex((candidate) => candidate?.storageKey === file.storageKey) === index);
     if (!force && storedFiles.length) {
       return errorResponse("Submission has stored files. Archive it instead of deleting so file history is not orphaned.", 409);
     }

@@ -901,6 +901,7 @@ function normalizeSubmission(rowOrSubmission) {
     tattooStage: rowOrSubmission.tattooStage || rowOrSubmission.tattoo_stage || "",
     briefUrl: rowOrSubmission.briefUrl || "",
     briefLabel: rowOrSubmission.briefLabel || "",
+    editUrl: rowOrSubmission.editUrl || "",
     payload,
   };
 }
@@ -1277,6 +1278,8 @@ function submissionDetailLines(submission) {
       "instagram",
     ],
     maze_design: [
+      "maze_meaning",
+      "maze_description",
       "maze_explanation",
       "placement",
       "size",
@@ -1409,6 +1412,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     supportPhone: settings.supportPhone,
     briefUrl: normalized.briefUrl,
     briefLabel: normalized.briefLabel,
+    editUrl: normalized.editUrl,
   });
 
   return sendTransactionalEmail(env, {

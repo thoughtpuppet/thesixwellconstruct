@@ -20,6 +20,8 @@ import {
 import {
   handleCreateSubmission,
   handleDeleteSubmission,
+  handleGetMazeRevisionFile,
+  handleGetMazeSubmissionEdit,
   handleGetSubmission,
   handleGetSubmissionFile,
   handleListSubmissions,
@@ -27,6 +29,7 @@ import {
   handlePromoteMazeArchiveSubmission,
   handleSubmissionDecision,
   handleSubmissionDecisionNotification,
+  handleSubmitMazeRevision,
   handleUpdateMazeArchiveSubmission,
   handleUpdateSubmission,
 } from "./functions/api/submissions/_lib.js";
@@ -891,6 +894,12 @@ async function handleSubmissionsApi(request, env) {
     return handleCreateSubmission(request, env);
   }
 
+  if (pathname === "/api/maze-submissions/current") {
+    if (method === "GET") return handleGetMazeSubmissionEdit(request, env);
+    if (method === "POST") return handleSubmitMazeRevision(request, env);
+    return methodNotAllowed(method, ["GET", "POST"]);
+  }
+
   if (pathname === "/api/admin/submissions") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
     return handleListSubmissions(request, env);
@@ -900,6 +909,18 @@ async function handleSubmissionsApi(request, env) {
   if (fileMatch) {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
     return handleGetSubmissionFile(request, env, decodeURIComponent(fileMatch[1]), decodeURIComponent(fileMatch[2]));
+  }
+
+  const mazeRevisionFileMatch = pathname.match(/^\/api\/admin\/submissions\/([^/]+)\/maze-revisions\/(\d+)\/files\/([^/]+)$/);
+  if (mazeRevisionFileMatch) {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleGetMazeRevisionFile(
+      request,
+      env,
+      decodeURIComponent(mazeRevisionFileMatch[1]),
+      Number(mazeRevisionFileMatch[2]),
+      decodeURIComponent(mazeRevisionFileMatch[3]),
+    );
   }
 
   const submissionTokensMatch = pathname.match(/^\/api\/admin\/submissions\/([^/]+)\/tokens$/);
@@ -1508,6 +1529,7 @@ export default {
 
     if (
       url.pathname === "/api/submissions" ||
+      url.pathname === "/api/maze-submissions/current" ||
       url.pathname.startsWith("/api/admin/submissions")
     ) {
       return handleSubmissionsApi(request, env);

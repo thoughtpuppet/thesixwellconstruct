@@ -372,6 +372,23 @@
   .file-name { color:var(--muted); font-family:var(--sans); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .file-badge { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; white-space:nowrap; }
   .file-badge.stored { color:#55BA5A; }
+  .file-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:wrap; flex-shrink:0; }
+  .file-actions .button { min-height:32px; padding:0 10px; font-size:10px; }
+  body.file-viewer-open { overflow:hidden; }
+  .file-viewer { position:fixed; inset:0; z-index:40; display:grid; place-items:center; padding:16px; background:rgba(5,5,5,.94); }
+  .file-viewer.hidden { display:none; }
+  .file-viewer-card { width:min(1100px,100%); height:min(860px,100%); min-width:0; min-height:0; border:5px solid var(--ring-soft); background:var(--panel); display:grid; grid-template-rows:auto auto minmax(0,1fr); }
+  .studio-console .file-viewer-head { min-width:0; padding:12px 14px; border-bottom:5px solid var(--ring-faint); display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .file-viewer-heading { min-width:0; display:grid; gap:4px; }
+  .file-viewer-heading label { margin:0; }
+  .file-viewer-title { color:var(--text); font-family:var(--sans); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .file-viewer-controls { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:wrap; flex-shrink:0; }
+  .file-viewer-status { min-height:34px; margin:0; padding:8px 14px; border-bottom:5px solid var(--ring-faint); color:var(--dim); font-family:var(--sans); font-size:10px; line-height:1.5; letter-spacing:.08em; text-transform:uppercase; }
+  .file-viewer-stage { min-width:0; min-height:0; overflow:auto; background:#090909; display:grid; place-items:center; }
+  .file-viewer-stage img { display:block; width:100%; height:100%; min-width:0; min-height:0; object-fit:contain; }
+  .file-viewer-stage iframe { display:block; width:100%; height:100%; min-height:0; border:0; background:#fff; }
+  .file-viewer-stage pre { align-self:stretch; justify-self:stretch; margin:0; padding:18px; color:var(--muted); font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace; white-space:pre-wrap; overflow-wrap:anywhere; tab-size:2; }
+  .file-viewer-message { width:min(560px,100%); padding:24px; color:var(--muted); font-family:var(--sans); font-size:12px; line-height:1.7; text-align:center; }
   .type-tag { display:inline-block; padding:2px 7px; font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; border:3px solid rgba(255,231,202,0.22); color:var(--dim); margin-left:6px; }
   .portfolio-manager { display:grid; gap:22px; }
   .portfolio-list-view,.portfolio-editor-view { display:grid; gap:22px; }
@@ -585,6 +602,14 @@
     .tattoo-special-interest-summary .button { grid-column:1/-1; width:100%; }
     .studio-console .custom-select > .custom-select-trigger,
     .studio-console .custom-select-option { font-size:var(--studio-type-body-size-active,13px); }
+    .file-item { align-items:stretch; flex-direction:column; }
+    .file-actions { justify-content:flex-start; }
+    .file-viewer { padding:8px; }
+    .file-viewer-card { width:100%; height:100%; }
+    .studio-console .file-viewer-head { align-items:stretch; flex-direction:column; gap:10px; }
+    .file-viewer-controls { width:100%; justify-content:flex-start; }
+    .file-viewer-controls .button { flex:1 1 120px; }
+    .file-viewer-stage pre { padding:12px; font-size:11px; }
   }
   @media (max-width:900px) {
     .layout { grid-template-columns:1fr; }
@@ -666,6 +691,23 @@
   </form>
 </div>
 
+<div class="file-viewer hidden" id="fileViewer" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="fileViewerTitle">
+  <section class="file-viewer-card">
+    <header class="file-viewer-head">
+      <div class="file-viewer-heading">
+        <label>Private Client Upload</label>
+        <div class="file-viewer-title" id="fileViewerTitle">File preview</div>
+      </div>
+      <div class="file-viewer-controls">
+        <button class="button" id="fileViewerDownload" type="button" disabled>Download</button>
+        <button class="button" id="fileViewerClose" type="button">Close</button>
+      </div>
+    </header>
+    <p class="file-viewer-status" id="fileViewerStatus" aria-live="polite">Choose a stored file to preview.</p>
+    <div class="file-viewer-stage" id="fileViewerStage"></div>
+  </section>
+</div>
+
 <script src="/js/select-menu.js?v=2"></script>
 <script src="/studio/admin-collapse.js?v=2"></script>
 <script src="/studio/analytics.js?v=tattoo-interest-1"></script>
@@ -682,6 +724,12 @@
   const statusEl = document.getElementById("status");
   const listEl = document.getElementById("submissionList");
   const detailEl = document.getElementById("detailPane");
+  const fileViewerEl = document.getElementById("fileViewer");
+  const fileViewerTitleEl = document.getElementById("fileViewerTitle");
+  const fileViewerStatusEl = document.getElementById("fileViewerStatus");
+  const fileViewerStageEl = document.getElementById("fileViewerStage");
+  const fileViewerDownloadBtn = document.getElementById("fileViewerDownload");
+  const fileViewerCloseBtn = document.getElementById("fileViewerClose");
   const refreshBtn = document.getElementById("refreshBtn");
   const testEmailBtn = document.getElementById("testEmailBtn");
   const lockBtn = document.getElementById("lockBtn");
@@ -776,6 +824,12 @@
   const homeCalendarPreview = new URLSearchParams(window.location.search).get("preview") === "1";
   const directInvitePreview = new URLSearchParams(window.location.search).get("preview") === "direct-invite";
   let token = localStorage.getItem(tokenKey) || "";
+  let fileViewerObjectUrl = "";
+  let fileViewerBlob = null;
+  let fileViewerFileName = "";
+  let fileViewerPreviousFocus = null;
+  let fileViewerAbortController = null;
+  let fileViewerRequestId = 0;
   let submissions = [];
   let appointments = [];
   let bookingTypes = [];
@@ -1294,7 +1348,9 @@
           ${field("Instagram", p("instagram"))}
           ${field("Source", submission.sourcePath || "")}
         </div>
-        <div class="field" style="margin-top:16px;"><label>Maze Explanation</label><div class="value full">${escapeHtml(p("maze_explanation"))}</div></div>
+        ${p("maze_meaning") || p("maze_explanation") ? `<div class="field" style="margin-top:16px;"><label>Meaning</label><div class="value full">${escapeHtml(p("maze_meaning") || p("maze_explanation"))}</div></div>` : ""}
+        ${p("maze_description") ? `<div class="field" style="margin-top:16px;"><label>Description</label><div class="value full">${escapeHtml(p("maze_description"))}</div></div>` : ""}
+        ${!p("maze_meaning") && !p("maze_explanation") && !p("maze_description") ? `<div class="field" style="margin-top:16px;"><label>Meaning / Description</label><div class="value full">Not provided</div></div>` : ""}
         ${p("message") ? `<div class="field" style="margin-top:16px;"><label>Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>` : ""}
       `);
     }
@@ -1379,7 +1435,8 @@
           ${field("Session Type", Array.isArray(allowedTypes) ? allowedTypes.map(titleize).join(", ") : allowedTypes)}
           ${field("Source", submission.sourcePath || "")}
         </div>
-        <div class="field" style="margin-top:16px;"><label>Project Note</label><div class="value full">${escapeHtml(p("message"))}</div></div>
+        <div class="field" style="margin-top:16px;"><label>Client-Facing Tattoo Description</label><div class="value full">${escapeHtml(p("tattoo_description"))}</div></div>
+        <div class="field" style="margin-top:16px;"><label>Private Project Note</label><div class="value full">${escapeHtml(p("message"))}</div></div>
       `);
     }
 
@@ -1447,6 +1504,21 @@
     `);
   }
 
+  function submissionFileUrl(submissionId, fileId, mazeRevision = "") {
+    return mazeRevision
+      ? `/api/admin/submissions/${encodeURIComponent(submissionId)}/maze-revisions/${encodeURIComponent(mazeRevision)}/files/${encodeURIComponent(fileId)}`
+      : `/api/admin/submissions/${encodeURIComponent(submissionId)}/files/${encodeURIComponent(fileId)}`;
+  }
+
+  function storedFileActions(file, submissionId, mazeRevision = "") {
+    if (!file?.stored || !file.id || !submissionId) return "";
+    const fileUrl = submissionFileUrl(submissionId, file.id, mazeRevision);
+    const shared = `data-file-url="${escapeHtml(fileUrl)}" data-file-name="${escapeHtml(file.fileName || "file")}" data-file-type="${escapeHtml(file.contentType || "application/octet-stream")}"`;
+    const revision = mazeRevision ? ` data-maze-revision="${escapeHtml(String(mazeRevision))}"` : "";
+    return `<button class="button" type="button" data-view-file="${escapeHtml(file.id)}" data-submission-id="${escapeHtml(submissionId)}"${revision} ${shared}>View</button>
+      <button class="button" type="button" data-download-file="${escapeHtml(file.id)}" data-download-name="${escapeHtml(file.fileName || "file")}" data-submission-id="${escapeHtml(submissionId)}"${revision} ${shared}>Download</button>`;
+  }
+
   function renderFiles(submission) {
     const files = submission.files || [];
     const roleLabels = {
@@ -1471,9 +1543,9 @@
                 <span class="file-role">${escapeHtml(roleLabels[file.fieldName] || titleize(file.fieldName || "Upload"))}</span>
                 <span class="file-name">${escapeHtml(file.fileName)}</span>
               </span>
-              <span style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+              <span class="file-actions">
                 <span class="file-badge ${file.stored ? "stored" : ""}">${file.stored ? "stored" : "received only"}</span>
-                ${file.stored ? `<button class="button" type="button" style="min-height:32px;padding:0 10px;font-size:10px;" data-download-file="${escapeHtml(file.id)}" data-download-name="${escapeHtml(file.fileName)}" data-submission-id="${escapeHtml(submission.id)}">Download</button>` : ""}
+                ${storedFileActions(file, submission.id)}
               </span>
             </div>
           `).join("")}
@@ -1667,6 +1739,42 @@
     });
   }
 
+  function renderMazeRevisions(submission) {
+    if (submission.type !== "maze_design") return "";
+    const revisions = Array.isArray(submission.mazeRevisions) ? submission.mazeRevisions : [];
+    if (!revisions.length) return "";
+    const roleLabels = {
+      maze_image: "Canvas render",
+      maze_transparent_image: "Transparent render",
+      maze_stencil_image: "Studio stencil",
+      maze_json_file: "Editable Maze JSON",
+    };
+    const editState = submission.mazeEditState || {};
+    return `<div class="assist-panel" id="mazeRevisionPanel">
+      <label>Maze revisions</label>
+      <p class="contact">Latest: revision ${escapeHtml(String(submission.mazeRevision || revisions[0].revision || 1))} &middot; Client editing ${editState.editable ? "open" : "locked"}. Reopen Review restores access through the same private link.</p>
+      <div class="event-list">${revisions.map((revision, index) => {
+        const payload = revision.payload || {};
+        const files = Array.isArray(revision.files) ? revision.files : [];
+        const meaning = payload.maze_meaning || payload.maze_explanation || "";
+        const description = payload.maze_description || "";
+        return `<div class="event-item" style="display:block;">
+          <span class="event-time">Revision ${escapeHtml(String(revision.revision))}${index === 0 ? " &middot; current" : ""} &middot; ${escapeHtml(formatDate(revision.createdAt))}</span>
+          ${meaning ? `<span class="event-text"><strong>Meaning:</strong> ${escapeHtml(meaning)}</span>` : ""}
+          ${description ? `<span class="event-text"><strong>Description:</strong> ${escapeHtml(description)}</span>` : ""}
+          ${!meaning && !description ? `<span class="event-text">No meaning or description provided.</span>` : ""}
+          <div class="file-list" style="margin-top:8px;">${files.filter((file) => file.stored).map((file) => `<div class="file-item">
+            <span class="file-copy">
+              <span class="file-role">${escapeHtml(roleLabels[file.fieldName] || titleize(file.fieldName || "File"))}</span>
+              <span class="file-name">${escapeHtml(file.fileName || "Maze file")}</span>
+            </span>
+            <span class="file-actions">${storedFileActions(file, submission.id, revision.revision)}</span>
+          </div>`).join("")}</div>
+        </div>`;
+      }).join("")}</div>
+    </div>`;
+  }
+
   function formatDate(value) {
     if (!value) return "";
     return new Date(value).toLocaleString([], { dateStyle:"medium", timeStyle:"short" });
@@ -1697,6 +1805,145 @@
 
   function setStatus(message) {
     statusEl.textContent = message;
+  }
+
+  function privateFileUrl(button) {
+    if (button?.dataset.fileUrl) return button.dataset.fileUrl;
+    const submissionId = button?.dataset.submissionId || "";
+    const fileId = button?.dataset.viewFile || button?.dataset.downloadFile || "";
+    if (!submissionId || !fileId) return "";
+    return submissionFileUrl(submissionId, fileId, button.dataset.mazeRevision || "");
+  }
+
+  function formatFileSize(bytes) {
+    const size = Number(bytes || 0);
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(size >= 10 * 1024 ? 0 : 1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  }
+
+  function downloadPrivateBlob(blob, fileName) {
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = fileName || "file";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
+
+  function clearFileViewerMedia() {
+    if (fileViewerObjectUrl) URL.revokeObjectURL(fileViewerObjectUrl);
+    fileViewerObjectUrl = "";
+    fileViewerBlob = null;
+    fileViewerFileName = "";
+    fileViewerStageEl.replaceChildren();
+    fileViewerDownloadBtn.disabled = true;
+  }
+
+  function closeFileViewer() {
+    fileViewerRequestId += 1;
+    fileViewerAbortController?.abort();
+    fileViewerAbortController = null;
+    clearFileViewerMedia();
+    fileViewerEl.classList.add("hidden");
+    fileViewerEl.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("file-viewer-open");
+    const previousFocus = fileViewerPreviousFocus;
+    fileViewerPreviousFocus = null;
+    previousFocus?.focus?.();
+  }
+
+  function privateFilePreviewKind(contentType, fileName) {
+    const mime = String(contentType || "").toLowerCase();
+    const name = String(fileName || "").toLowerCase();
+    if (mime.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/.test(name)) return "image";
+    if (mime === "application/pdf" || name.endsWith(".pdf")) return "pdf";
+    if (mime === "application/json" || mime.endsWith("+json") || name.endsWith(".json")) return "json";
+    return "unsupported";
+  }
+
+  async function openFileViewer(button) {
+    const fileUrl = privateFileUrl(button);
+    const fileName = button?.dataset.fileName || button?.dataset.downloadName || "file";
+    if (!fileUrl) return;
+
+    fileViewerAbortController?.abort();
+    clearFileViewerMedia();
+    const requestId = ++fileViewerRequestId;
+    const controller = new AbortController();
+    fileViewerAbortController = controller;
+    fileViewerPreviousFocus = button;
+    fileViewerTitleEl.textContent = fileName;
+    fileViewerStatusEl.textContent = "Loading private preview...";
+    const loading = document.createElement("p");
+    loading.className = "file-viewer-message";
+    loading.textContent = "Loading this client upload inside Studio.";
+    fileViewerStageEl.replaceChildren(loading);
+    fileViewerEl.classList.remove("hidden");
+    fileViewerEl.setAttribute("aria-hidden", "false");
+    document.body.classList.add("file-viewer-open");
+    fileViewerCloseBtn.focus();
+    button.disabled = true;
+    setStatus("Opening private file preview");
+
+    try {
+      const response = await fetch(fileUrl, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`Preview failed (${response.status})`);
+      const blob = await response.blob();
+      if (requestId !== fileViewerRequestId) return;
+      fileViewerAbortController = null;
+      fileViewerBlob = blob;
+      fileViewerFileName = fileName;
+      fileViewerDownloadBtn.disabled = false;
+
+      const kind = privateFilePreviewKind(blob.type || button.dataset.fileType, fileName);
+      if (kind === "image") {
+        fileViewerObjectUrl = URL.createObjectURL(blob);
+        const image = document.createElement("img");
+        image.src = fileViewerObjectUrl;
+        image.alt = `Preview of ${fileName}`;
+        fileViewerStageEl.replaceChildren(image);
+      } else if (kind === "pdf") {
+        fileViewerObjectUrl = URL.createObjectURL(blob);
+        const frame = document.createElement("iframe");
+        frame.src = fileViewerObjectUrl;
+        frame.title = `Preview of ${fileName}`;
+        fileViewerStageEl.replaceChildren(frame);
+      } else if (kind === "json") {
+        const pre = document.createElement("pre");
+        const rawText = await blob.text();
+        try {
+          pre.textContent = JSON.stringify(JSON.parse(rawText), null, 2);
+        } catch {
+          pre.textContent = rawText;
+        }
+        if (requestId !== fileViewerRequestId) return;
+        fileViewerStageEl.replaceChildren(pre);
+      } else {
+        const message = document.createElement("p");
+        message.className = "file-viewer-message";
+        message.textContent = "This file type cannot be shown safely inside Studio. You can still download the original file.";
+        fileViewerStageEl.replaceChildren(message);
+      }
+      fileViewerStatusEl.textContent = `${kind === "unsupported" ? "Download available" : `${kind} preview`} · ${formatFileSize(blob.size)} · private, not saved`;
+      setStatus("Private file preview ready");
+    } catch (error) {
+      if (error?.name === "AbortError" || requestId !== fileViewerRequestId) return;
+      fileViewerAbortController = null;
+      const message = document.createElement("p");
+      message.className = "file-viewer-message";
+      message.textContent = "This private file could not be loaded. Close the viewer and try again.";
+      fileViewerStageEl.replaceChildren(message);
+      fileViewerStatusEl.textContent = error.message || "Preview unavailable";
+      setStatus(error.message || "Private file preview unavailable");
+    } finally {
+      if (button.isConnected) button.disabled = false;
+    }
   }
 
   function setSaveFeedback(id, message, state = "") {
@@ -3746,7 +3993,7 @@
     layoutEl.classList.add("single");
     listPane.classList.add("hidden");
     toolbarEl.innerHTML = "";
-    await loadTattooSettings();
+    if (!directInvitePreview) await loadTattooSettings();
     const estimateCopy = settingValue(
       tattooSettings.settings,
       "sessionEstimateCopy",
@@ -3785,10 +4032,36 @@
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_full"><span>Full Day Session (8 hours)</span></label>
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_extended"><span>Extended Day Session (8-12 hours)</span></label>
             </div>
+            <label class="field">Tattoo description <span class="contact">(client-facing, optional)</span>
+              <textarea name="tattooDescription" maxlength="5000" rows="5" placeholder="Add the tattoo description or project summary you received from the client."></textarea>
+              <span class="contact">This appears in the client's project review before scheduling.</span>
+            </label>
+            <label class="field">Project budget / total (USD) <span class="contact">(client-facing, optional)</span>
+              <input name="approvedBudgetDollars" type="number" min="1" step="1" inputmode="numeric" placeholder="e.g. 1200">
+              <span class="contact">Enter the exact approved tattoo-work total before any optional Extended Day fee. This is not the deposit or an immediate charge.</span>
+            </label>
             <label class="field">Session plan wording <span class="contact">(client-facing)</span>
               <textarea name="clientEstimateNote" maxlength="5000" rows="4">${escapeHtml(DIRECT_INVITE_SESSION_NOTES.tattoo_quarter)}</textarea>
               <span class="contact">This appears inside the client’s Session Estimate section. You can edit it again from the Studio record.</span>
             </label>
+            <div class="field wide">
+              <h3>Optional Information Presented to the Client</h3>
+              <div class="booking-actions" style="align-items:flex-start;">
+                <label class="check" style="margin:0;min-width:240px;">
+                  <input name="presentLongerSessionOption" type="checkbox">
+                  <span class="check-label">Present the Extended Day / longer-session option</span>
+                </label>
+                <label class="check" style="margin:0;min-width:240px;">
+                  <input name="presentShorterSessionsOption" type="checkbox">
+                  <span class="check-label">Present the smaller split-session option</span>
+                </label>
+                <label class="check" style="margin:0;min-width:240px;">
+                  <input name="includeAdditionalSketchDisclaimer" type="checkbox">
+                  <span class="check-label">Include the additional concept drawing fee</span>
+                </label>
+              </div>
+              <p class="contact">Choose only the information and pacing choices that should appear on this direct booking link. Unchecked items remain omitted.</p>
+            </div>
           </fieldset>
           <fieldset class="direct-invite-types hidden" data-direct-invite-types="consultation">
             <legend>Session type</legend>
@@ -3846,6 +4119,16 @@
           `[data-direct-invite-types="${purpose}"] input[type="radio"]:checked`
         )?.value || "";
         if (!bookingTypeId) throw new Error("Choose a session type.");
+        const approvedBudgetValue = purpose === "tattoo"
+          ? (form.elements.approvedBudgetDollars?.value.trim() || "")
+          : "";
+        const approvedBudgetDollars = approvedBudgetValue === "" ? null : Number(approvedBudgetValue);
+        if (
+          approvedBudgetDollars !== null
+          && (!Number.isSafeInteger(approvedBudgetDollars) || approvedBudgetDollars <= 0)
+        ) {
+          throw new Error("Enter the project budget as a positive whole-dollar amount.");
+        }
         const expiresAt = localDateTimeToIso(form.elements.expiresAt.value);
         const payload = await api("/api/admin/booking/direct-invites", {
           method: "POST",
@@ -3853,6 +4136,16 @@
           body: JSON.stringify({
             projectNote: form.elements.projectNote.value.trim(),
             clientEstimateNote: form.elements.clientEstimateNote.value.trim(),
+            tattooDescription: purpose === "tattoo" ? form.elements.tattooDescription.value.trim() : "",
+            approvedBudgetCents: purpose === "tattoo" && approvedBudgetDollars !== null
+              ? approvedBudgetDollars * 100
+              : undefined,
+            presentLongerSessionOption: purpose === "tattoo"
+              && form.elements.presentLongerSessionOption.checked,
+            presentShorterSessionsOption: purpose === "tattoo"
+              && form.elements.presentShorterSessionsOption.checked,
+            includeAdditionalSketchDisclaimer: purpose === "tattoo"
+              && form.elements.includeAdditionalSketchDisclaimer.checked,
             purpose,
             bookingTypeId,
             expiresAt: expiresAt || undefined,
@@ -4985,6 +5278,21 @@ ${meetingLines}
     `;
   }
 
+  function healedPhotoFileItem(photo, followupId) {
+    const fileUrl = `/api/admin/special-projects/healed/${encodeURIComponent(followupId)}/file?photo=${encodeURIComponent(photo.id)}`;
+    const shared = `data-file-url="${escapeHtml(fileUrl)}" data-file-name="${escapeHtml(photo.fileName || "healed-photo")}" data-file-type="${escapeHtml(photo.contentType || "image/jpeg")}"`;
+    return `<div class="file-item">
+      <span class="file-copy">
+        <span class="file-role">Healed photograph</span>
+        <span class="file-name">${escapeHtml(photo.fileName || "Healed photograph")}</span>
+      </span>
+      <span class="file-actions">
+        <button class="button" type="button" data-view-file="${escapeHtml(photo.id)}" ${shared}>View</button>
+        <button class="button" type="button" data-download-file="${escapeHtml(photo.id)}" data-download-name="${escapeHtml(photo.fileName || "healed-photo")}" ${shared}>Download</button>
+      </span>
+    </div>`;
+  }
+
   function renderExperimentalFollowup(submission) {
     const terms = submission.specialProjectTerms;
     if (terms?.profile !== "experimental") return "";
@@ -5004,7 +5312,7 @@ ${meetingLines}
         ${detailField("Linked Shared Media", followup?.mediaAssetId || "None")}
       </div>
       ${refunds.length ? `<div class="field"><label>Refund History</label><div class="value full">${refunds.map((refund) => `${escapeHtml(titleize(refund.status))} · ${escapeHtml(money(refund.amount_cents || 0, refund.currency || "USD"))} · ${escapeHtml(titleize(refund.reason || ""))}${refund.provider_refund_id ? ` · Square ${escapeHtml(refund.provider_refund_id)}` : ""}${refund.exception_note ? `\nPrivate reason: ${escapeHtml(refund.exception_note)}` : ""}`).join("\n\n")}</div></div>` : ""}
-      ${followup ? `<div class="field"><label>Received Healed Photographs</label><div class="file-list">${followup.photos?.length ? followup.photos.map((photo) => `<div class="file-item"><span class="file-copy"><span class="file-name">${escapeHtml(photo.fileName)}</span></span><button class="button" type="button" data-healed-photo="${escapeHtml(photo.id)}" data-followup-id="${escapeHtml(followup.id)}" data-file-name="${escapeHtml(photo.fileName)}">Open</button></div>`).join("") : '<div class="value">None received.</div>'}</div></div>
+      ${followup ? `<div class="field"><label>Received Healed Photographs</label><div class="file-list">${followup.photos?.length ? followup.photos.map((photo) => healedPhotoFileItem(photo, followup.id)).join("") : '<div class="value">None received.</div>'}</div></div>
         ${followup.status === "pending" ? `<div class="booking-actions">
           ${followup.method === "return" ? `<button class="button" type="button" data-healed-action="complete_return" data-followup-id="${escapeHtml(followup.id)}">Mark Return Photo Complete</button>` : `<button class="button" type="button" data-healed-action="regenerate_token" data-followup-id="${escapeHtml(followup.id)}">Regenerate Upload Link</button>`}
           <button class="button danger-button" type="button" data-healed-action="waive" data-followup-id="${escapeHtml(followup.id)}">Waive With Private Reason</button>
@@ -5728,6 +6036,7 @@ ${meetingLines}
 
       ${typeFields(submission)}
       ${renderFiles(submission)}
+      ${renderMazeRevisions(submission)}
       ${renderMazeArchivePanel(submission)}
       ${renderBriefDocument(submission)}
       ${renderPaymentSummary(submission)}
@@ -8329,25 +8638,6 @@ ${meetingLines}
       return;
     }
 
-    const healedPhoto = event.target.closest("[data-healed-photo]");
-    if (healedPhoto) {
-      healedPhoto.disabled = true;
-      try {
-        const response = await fetch(`/api/admin/special-projects/healed/${encodeURIComponent(healedPhoto.dataset.followupId)}/file?photo=${encodeURIComponent(healedPhoto.dataset.healedPhoto)}`, {
-          headers: { authorization: `Bearer ${token}` },
-        });
-        if (!response.ok) throw new Error("Healed photograph could not be opened.");
-        const objectUrl = URL.createObjectURL(await response.blob());
-        window.open(objectUrl, "_blank", "noopener,noreferrer");
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-      } catch (error) {
-        setStatus(error.message);
-      } finally {
-        if (healedPhoto.isConnected) healedPhoto.disabled = false;
-      }
-      return;
-    }
-
     const saveSpecialProjectsButton = event.target.closest("[data-save-special-projects]");
     if (saveSpecialProjectsButton) {
       const form = saveSpecialProjectsButton.closest("[data-special-projects-form]");
@@ -9111,31 +9401,28 @@ ${meetingLines}
       return;
     }
 
+    const viewBtn = event.target.closest("[data-view-file]");
+    if (viewBtn) {
+      await openFileViewer(viewBtn);
+      return;
+    }
+
     const downloadBtn = event.target.closest("[data-download-file]");
     if (downloadBtn) {
-      const fileId = downloadBtn.dataset.downloadFile;
-      const fileName = downloadBtn.dataset.downloadName || "file";
-      const submissionId = downloadBtn.dataset.submissionId;
-      if (!fileId || !submissionId) return;
+      const fileName = downloadBtn.dataset.fileName || downloadBtn.dataset.downloadName || "file";
+      const fileUrl = privateFileUrl(downloadBtn);
+      if (!fileUrl) return;
+      downloadBtn.disabled = true;
       setStatus("Downloading…");
       try {
-        const res = await fetch(
-          `/api/admin/submissions/${encodeURIComponent(submissionId)}/files/${encodeURIComponent(fileId)}`,
-          { headers: { authorization: `Bearer ${token}` } }
-        );
+        const res = await fetch(fileUrl, { headers: { authorization: `Bearer ${token}` } });
         if (!res.ok) { setStatus(`Download failed (${res.status})`); return; }
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
+        downloadPrivateBlob(await res.blob(), fileName);
         setStatus("Downloaded");
       } catch (err) {
         setStatus(`Download error: ${err.message}`);
+      } finally {
+        if (downloadBtn.isConnected) downloadBtn.disabled = false;
       }
       return;
     }
@@ -9877,7 +10164,37 @@ ${meetingLines}
     selectedCalendarDay = "";
     loadAvailabilityPreview().catch((error) => setStatus(error.message));
   });
+  fileViewerCloseBtn.addEventListener("click", closeFileViewer);
+  fileViewerDownloadBtn.addEventListener("click", () => {
+    if (!fileViewerBlob) return;
+    downloadPrivateBlob(fileViewerBlob, fileViewerFileName);
+    setStatus("Downloaded");
+  });
+  fileViewerEl.addEventListener("click", (event) => {
+    if (event.target === fileViewerEl) closeFileViewer();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (fileViewerEl.classList.contains("hidden")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeFileViewer();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(fileViewerEl.querySelectorAll('button:not([disabled]),iframe,[tabindex]:not([tabindex="-1"])'));
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
   lockBtn.addEventListener("click", () => {
+    if (!fileViewerEl.classList.contains("hidden")) closeFileViewer();
     token = "";
     localStorage.removeItem(tokenKey);
     tokenInput.value = "";

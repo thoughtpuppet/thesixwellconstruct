@@ -1903,6 +1903,7 @@ export async function handleBookingContext(request, env) {
       && new Date(pendingAppointment.holdExpiresAt).getTime() > Date.now()
       && pendingAppointment.squareCheckoutUrl
     );
+    const submissionPayload = parseJsonField(context.token.payload_json, {});
 
     return json({
       ok: true,
@@ -1918,19 +1919,17 @@ export async function handleBookingContext(request, env) {
         pendingApproval: Boolean(context.pendingSpecialApproval),
         lifecycleReviewRequired: Boolean(context.token.lifecycle_review_required),
         lifecycleReviewNote: context.token.lifecycle_review_note || "",
+        projectDescription: asString(submissionPayload.tattoo_description),
         special: context.token.submission_type === "tattoo_special"
-          ? (() => {
-              const payload = parseJsonField(context.token.payload_json, {});
-              return {
-                campaign: "Tattoo Special",
-                offerTitle: payload.special_offer_title || "Tattoo Special",
-                variantLabel: payload.special_variant_label || "",
-                quotedPriceCents: Number(payload.approved_price_cents || payload.quoted_price_cents || 0),
-                depositCents: Number(payload.deposit_cents || 0),
-                durationMinutes: Number(payload.duration_minutes || 0),
-                participants: Array.isArray(payload.participants) ? payload.participants : [],
-              };
-            })()
+          ? {
+              campaign: "Tattoo Special",
+              offerTitle: submissionPayload.special_offer_title || "Tattoo Special",
+              variantLabel: submissionPayload.special_variant_label || "",
+              quotedPriceCents: Number(submissionPayload.approved_price_cents || submissionPayload.quoted_price_cents || 0),
+              depositCents: Number(submissionPayload.deposit_cents || 0),
+              durationMinutes: Number(submissionPayload.duration_minutes || 0),
+              participants: Array.isArray(submissionPayload.participants) ? submissionPayload.participants : [],
+            }
           : null,
         experimentalProject: context.experimentalProject,
       },
@@ -5469,7 +5468,7 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
       )
     );
   }
-  statements.push(...pendingAppointmentConfirmationStatements(db, env, appointment, now));
+  statements.push(...pendingAppointmentConfirmationStatements(db, env, appointmentRow, now));
 
   const results = await db.batch(statements);
   if (Number(results?.[0]?.meta?.changes || 0) < 1) {
@@ -8187,14 +8186,48 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
 
   const projectNote = asString(body.projectNote);
   const clientEstimateNote = asString(body.clientEstimateNote);
+  const tattooDescription = asString(body.tattooDescription);
   const purpose = asString(body.purpose) || "tattoo";
   const bookingTypeId = asString(body.bookingTypeId);
+  const presentLongerSessionOption = purpose === "tattoo" && body.presentLongerSessionOption === true;
+  const presentShorterSessionsOption = purpose === "tattoo" && body.presentShorterSessionsOption === true;
+  const includeAdditionalSketchDisclaimer = purpose === "tattoo" && body.includeAdditionalSketchDisclaimer === true;
+  const approvedBudgetCents = purpose === "tattoo" && body.approvedBudgetCents !== undefined
+    && body.approvedBudgetCents !== null && body.approvedBudgetCents !== ""
+    ? Number(body.approvedBudgetCents)
+    : null;
   const allowed = bookingTypeId ? [bookingTypeId] : [];
+  if (purpose === "tattoo" && presentLongerSessionOption && !allowed.includes(EXTENDED_DAY_BOOKING_TYPE_ID)) {
+    allowed.push(EXTENDED_DAY_BOOKING_TYPE_ID);
+  }
+  if (purpose === "tattoo" && presentShorterSessionsOption) {
+    for (const shorterTypeId of ["tattoo_quarter", "tattoo_half"]) {
+      if (!allowed.includes(shorterTypeId)) allowed.push(shorterTypeId);
+    }
+  }
   if (projectNote.length > 2000) {
     return errorResponse("Project note must be 2,000 characters or fewer.", 400);
   }
   if (clientEstimateNote.length > 5000) {
     return errorResponse("Session estimate wording must be 5,000 characters or fewer.", 400);
+  }
+  if (tattooDescription.length > 5000) {
+    return errorResponse("Tattoo description must be 5,000 characters or fewer.", 400);
+  }
+  for (const field of [
+    "presentLongerSessionOption",
+    "presentShorterSessionsOption",
+    "includeAdditionalSketchDisclaimer",
+  ]) {
+    if (Object.prototype.hasOwnProperty.call(body, field) && typeof body[field] !== "boolean") {
+      return errorResponse("Direct-invite presentation choices must be true or false.", 400);
+    }
+  }
+  if (
+    approvedBudgetCents !== null
+    && (!Number.isSafeInteger(approvedBudgetCents) || approvedBudgetCents <= 0)
+  ) {
+    return errorResponse("Project budget must be a positive whole-cent amount.", 400);
   }
   if (!BOOKING_TOKEN_PURPOSES.has(purpose)) {
     return errorResponse("Booking purpose must be consultation or tattoo.", 400);
@@ -8231,6 +8264,7 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
       project_type: "direct_booking_invite",
       direct_booking_invite: "yes",
       message: projectNote,
+      tattoo_description: purpose === "tattoo" ? tattooDescription : "",
       allowed_booking_types: allowed,
       booking_purpose: purpose,
     };
@@ -8279,27 +8313,37 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
     ];
 
     if (purpose === "tattoo") {
-      const durations = typeRows.map((row) => Number(row.duration_minutes || 0)).filter((value) => value > 0);
-      const minimumMinutes = durations.length ? Math.min(...durations) : null;
-      const maximumMinutes = durations.length ? Math.max(...durations) : null;
+      const primaryType = typeRows.find((row) => row.id === bookingTypeId);
+      const recommendedMinutes = Number(primaryType?.duration_minutes || 0) || null;
+      const flexiblePacing = presentLongerSessionOption || presentShorterSessionsOption;
       statements.push(
         db.prepare(
           `INSERT INTO tattoo_session_plans (
             id, submission_id, estimated_sessions_min, estimated_sessions_max,
             estimated_total_minutes_min, estimated_total_minutes_max,
-            split_policy, artist_note, session_category, client_acknowledged,
+            split_policy, artist_note, present_longer_session_option,
+            present_shorter_sessions_option, include_additional_sketch_disclaimer,
+            session_category, approved_budget_min_cents, approved_budget_max_cents,
+            approved_budget_currency, budget_acknowledged, client_acknowledged,
             created_at, updated_at
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
         ).bind(
           crypto.randomUUID(),
           submissionId,
           1,
-          1,
-          minimumMinutes,
-          maximumMinutes,
-          "not_available",
+          presentShorterSessionsOption ? 2 : 1,
+          recommendedMinutes,
+          recommendedMinutes,
+          flexiblePacing ? "client_choice" : "not_available",
           clientEstimateNote || directInviteSessionNote(bookingTypeId),
-          "one_session",
+          presentLongerSessionOption ? 1 : 0,
+          presentShorterSessionsOption ? 1 : 0,
+          includeAdditionalSketchDisclaimer ? 1 : 0,
+          presentShorterSessionsOption ? "multiple_sessions" : "one_session",
+          approvedBudgetCents,
+          approvedBudgetCents,
+          "USD",
+          0,
           0,
           now,
           now,

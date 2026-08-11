@@ -145,7 +145,8 @@ function normalizeMazePayload(payload = {}) {
     placement: asString(payload.placement, 300),
     scale: asString(payload.scale, 160),
     budgetRange: asString(payload.budgetRange || payload.budget_range, 160),
-    mazeExplanation: asString(payload.mazeExplanation, 5000),
+    mazeMeaning: asString(payload.mazeMeaning || payload.mazeExplanation, 5000),
+    mazeDescription: asString(payload.mazeDescription, 5000),
     updatedAt: asString(payload.updatedAt, 80) || new Date().toISOString(),
   };
 }
