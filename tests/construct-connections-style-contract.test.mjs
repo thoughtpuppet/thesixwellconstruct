@@ -16,6 +16,13 @@ test("connection component structural strokes use the shared 5px standard", () =
   assert.match(css, /\.cc-map-dot\s*\{[^}]*border:\s*5px solid var\(--node\)/);
 });
 
+test("connection cards use the shared section-title role and a compact vertical grid", () => {
+  assert.match(css, /\.cc-head \.cc-section-title\s*\{[\s\S]*font-weight:\s*var\(--type-section-weight,\s*900\)/);
+  assert.match(css, /\.cc-cards\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(var\(--cc-card-min\),\s*1fr\)\)/);
+  assert.match(css, /\.cc-card\s*\{[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column/);
+  assert.match(css, /\.cc-card-media\s*\{[\s\S]*aspect-ratio:\s*4\s*\/\s*3/);
+});
+
 test("connection component does not reintroduce sub-5px structural borders or graph strokes", () => {
   assert.doesNotMatch(css, /border(?:-(?:top|right|bottom|left))?:\s*[1-4](?:\.\d+)?px\s+solid/);
   assert.doesNotMatch(css, /stroke-width:\s*[1-4](?:\.\d+)?(?:px)?\s*;/);

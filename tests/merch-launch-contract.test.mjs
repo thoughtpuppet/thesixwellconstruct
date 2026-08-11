@@ -29,6 +29,11 @@ class LocalD1 {
   prepare(sql){return new D1Statement(this.database,sql)}
   async batch(statements){const execute=async()=>{this.database.exec("BEGIN");try{const results=[];for(const statement of statements)results.push(await statement.run());this.database.exec("COMMIT");return results}catch(error){this.database.exec("ROLLBACK");throw error}};const result=this.queue.then(execute,execute);this.queue=result.then(()=>undefined,()=>undefined);return result}
 }
+class MemoryBucket {
+  constructor(){this.objects=new Map()}
+  async put(key,value,options={}){const body=await new Response(value).arrayBuffer();this.objects.set(key,{body,options})}
+  async delete(key){this.objects.delete(key)}
+}
 function migratedDatabase(){const database=new DatabaseSync(":memory:");database.exec("PRAGMA foreign_keys=ON");for(const name of readdirSync(join(ROOT,"migrations")).filter(name=>name.endsWith(".sql")).sort())database.exec(readFileSync(join(ROOT,"migrations",name),"utf8"));return database}
 function request(path,method="GET",body,admin=false){return new Request(`https://example.test${path}`,{method,headers:{...(body===undefined?{}:{"content-type":"application/json"}),...(admin?{authorization:"Bearer studio-secret"}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})})}
 function shopifyResponse(product){return new Response(JSON.stringify({data:{product}}),{status:200,headers:{"content-type":"application/json"}})}
@@ -90,6 +95,19 @@ test("Studio product media supplies the ordered public gallery and admin editor"
   assert.equal(database.prepare("SELECT image_url FROM merch_items WHERE id='merch-maze-puffer-jacket'").get().image_url,"/api/construct/entity-media/media-merch-primary");
 });
 
+test("Studio retains Merch images added across separate upload selections",async()=>{
+  const database=migratedDatabase(),bucket=new MemoryBucket(),env={SUBMISSIONS_DB:new LocalD1(database),SUBMISSIONS_ADMIN_TOKEN:"studio-secret",SUBMISSION_FILES:bucket};
+  const created=await handleAdminMerchApi(request("/api/admin/merch-workflow","POST",{title:"Three View Product",slug:"three-view-product",availability_state:"coming_soon"},true),env);
+  assert.equal(created.status,201,await created.clone().text());const productId=(await created.json()).record.id;
+  async function upload(filename,bytes){const form=new FormData();form.set("file",new File([new Uint8Array(bytes)],filename,{type:"image/png"}));form.set("alt_text",filename);form.set("privacy","public");form.set("consent_status","not-required");form.set("public_presentation","inline");const response=await handleConstructApi(new Request("https://example.test/api/admin/media",{method:"POST",headers:{authorization:"Bearer studio-secret"},body:form}),env);assert.equal(response.status,201,await response.clone().text());return(await response.json()).record.id}
+  async function attach(mediaId,role,sortOrder){const response=await handleConstructApi(request(`/api/admin/entities/${productId}/media`,"POST",{media_id:mediaId,role,sort_order:sortOrder,public_visible:true,alt_text_override:`${role} view`},true),env);assert.equal(response.status,201,await response.clone().text())}
+  const primary=await upload("front.png",[1,2,3]);await attach(primary,"primary",1);
+  const back=await upload("back.png",[4,5,6]);await attach(back,"gallery",2);
+  const detail=await upload("detail.png",[7,8,9]);await attach(detail,"gallery",3);
+  const admin=await handleAdminMerchApi(request("/api/admin/merch-workflow","GET",undefined,true),env),record=(await admin.json()).records.find(item=>item.id===productId);
+  assert.deepEqual(record.media.map(item=>[item.id,item.role,item.sortOrder]),[[primary,"primary",1],[back,"gallery",2],[detail,"gallery",3]]);
+});
+
 test("newsletter consent is separate and Beehiiv failure cannot invalidate a product alert",async()=>{
   const database=migratedDatabase();const sent=[];
   const env={SUBMISSIONS_DB:new LocalD1(database),EMAIL:{async send(message){sent.push(message);return{messageId:"confirmation-1"}}},PUBLIC_SITE_URL:"https://example.test",MERCH_ALERTS_ENABLED:"true",MERCH_EMAIL_SEND_ENABLED:"true",NOTIFICATION_FROM_EMAIL:"notifications@example.test",OUTREACH_CONSENT_SYNC_ENABLED:"true",BEEHIIV_API_KEY:"test-key",BEEHIIV_OUTREACH_PUBLICATION_ID:"pub_test"};
@@ -144,7 +162,7 @@ test("Studio creation never requires or invents a Shopify handle",async()=>{
 });
 
 test("shared Merch routes and alert forms stay contractually connected",()=>{
-  const worker=readFileSync(join(ROOT,"_worker.js"),"utf8"),catalog=readFileSync(join(ROOT,"js","shop-storefront.js"),"utf8"),detailScript=readFileSync(join(ROOT,"js","merch-detail.js"),"utf8"),manager=readFileSync(join(ROOT,"studio","merch-manager.js"),"utf8"),detail=readFileSync(join(ROOT,"merch","detail","index.html"),"utf8"),detailCss=readFileSync(join(ROOT,"css","merch-detail.css"),"utf8"),alertsCss=readFileSync(join(ROOT,"css","merch-alerts.css"),"utf8"),merchApi=readFileSync(join(ROOT,"functions","api","merch","_lib.js"),"utf8");
+  const worker=readFileSync(join(ROOT,"_worker.js"),"utf8"),catalog=readFileSync(join(ROOT,"js","shop-storefront.js"),"utf8"),detailScript=readFileSync(join(ROOT,"js","merch-detail.js"),"utf8"),manager=readFileSync(join(ROOT,"studio","merch-manager.js"),"utf8"),constructManager=readFileSync(join(ROOT,"studio","construct-manager.js"),"utf8"),detail=readFileSync(join(ROOT,"merch","detail","index.html"),"utf8"),detailCss=readFileSync(join(ROOT,"css","merch-detail.css"),"utf8"),alertsCss=readFileSync(join(ROOT,"css","merch-alerts.css"),"utf8"),merchApi=readFileSync(join(ROOT,"functions","api","merch","_lib.js"),"utf8");
   assert.match(worker,/serveMerchRecordPage/);assert.match(worker,/lostmarbleshoodie:\s*"lostmarbles-hoodie"/);assert.match(worker,/status: 410/);assert.match(worker,/merch\/marbles-print\.html/);
   assert.doesNotMatch(catalog,/PLACEHOLDER_PRODUCTS/);assert.match(catalog,/setupLaunchAlertForms\(grid\)/);
   assert.match(detail,/id="merch-record-data"/);assert.match(detail,/css\/merch-detail\.css/);assert.match(detail,/js\/merch-detail\.js/);
@@ -152,7 +170,7 @@ test("shared Merch routes and alert forms stay contractually connected",()=>{
   assert.match(detailCss,/grid-template-columns:1fr 1fr/);assert.match(detailCss,/\.product-image\s*\{/);assert.match(detailCss,/position:sticky; top:73px/);assert.match(detailCss,/\.origin-inner\s*\{/);assert.match(detailCss,/\.cart-drawer\s*\{/);
   assert.doesNotMatch(detailCss,/\.merch-top/);assert.doesNotMatch(detailCss,/\.product-copy/);
   assert.match(alertsCss,/grid-template-columns:1fr!important/);assert.match(merchApi,/AbortSignal\.timeout\(4000\)/);
-  assert.match(manager,/name="product_images"/);assert.match(manager,/uploadProductImages/);assert.match(manager,/data-merch-media-action="primary"/);
+  assert.match(manager,/name="product_images"/);assert.match(manager,/uploadProductImages/);assert.match(manager,/data-merch-media-action="primary"/);assert.match(manager,/data-merch-pending-files/);assert.match(manager,/data-merch-upload-selected/);assert.match(manager,/stageProductImages/);assert.match(manager,/20260811-multi-image-staging/);assert.match(constructManager,/merch-manager\.js\?v=20260811-multi-image-staging/);
   assert.match(catalog,/export function renderProductGallery/);assert.match(detailScript,/renderProductGallery\(product/);assert.match(detailScript,/\sproduct,\s/);
 });
 

@@ -57,13 +57,13 @@ test("public Special Projects reuse the canonical Cards and Graph connection com
   const component = source("js", "construct-connections.js");
   assert.match(page, /id="seriesConnections" hidden/);
   assert.match(page, /id="projectConnections" hidden/);
-  assert.match(page, /\/js\/construct-connections\.js\?v=7/);
-  assert.match(page, /title: "Related"/);
+  assert.match(page, /\/js\/construct-connections\.js\?v=8/);
+  assert.match(page, /title: "Connections to Other Domains"/);
   assert.match(page, /title: "Series Connections"/);
   assert.match(page, /activeSeriesSlug[\s\S]*seriesRecords\.find/);
   assert.match(page, /entityId: project\.id/);
   assert.match(page, /entityId: series\.id/);
-  assert.match(component, /options\.title\|\|"Related"/);
+  assert.match(component, /options\.title\|\|"Connections to Other Domains"/);
   assert.match(component, /mountRequests=new WeakMap/);
   assert.match(component, /window\.ConstructConnections=\{mount,clear\}/);
   assert.match(component, /"Cards"/);

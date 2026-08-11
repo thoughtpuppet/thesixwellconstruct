@@ -43,10 +43,10 @@ test("public detail Related sections place Origin Thread cards before pairwise r
   assert.match(component,/\/archive\/\?origin=/);
   assert.match(component,/const mapView=map\(records,payload\.entity\)/);
   assert.doesNotMatch(component,/map\(originThreads/);
-  assert.match(merch,/ConstructConnections\.mount\(\{ host: section, entityId: product\.id, title: "Related", embedded: true \}\)/);
+  assert.match(merch,/ConstructConnections\.mount\(\{ host: section, entityId: product\.id, title: "Connections to Other Domains", embedded: true \}\)/);
   assert.doesNotMatch(merch,/related-card|originRelatedCard/);
   assert.match(merchPage,/<section class="related" id="productRelated" hidden><\/section>/);
-  assert.match(merchPage,/\/js\/construct-connections\.js\?v=7/);
-  assert.match(projects,/title: "Related"/);
+  assert.match(merchPage,/\/js\/construct-connections\.js\?v=8/);
+  assert.match(projects,/title: "Connections to Other Domains"/);
   assert.match(projects,/title: "Series Connections"/);
 });

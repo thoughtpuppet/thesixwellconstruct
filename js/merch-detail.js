@@ -62,7 +62,7 @@ function showOrigin(product) {
 async function showRelated(product) {
   const section = document.getElementById("productRelated");
   if (!section || !window.ConstructConnections || !product.id) return;
-  await window.ConstructConnections.mount({ host: section, entityId: product.id, title: "Related", embedded: true });
+  await window.ConstructConnections.mount({ host: section, entityId: product.id, title: "Connections to Other Domains", embedded: true });
 }
 
 function hydrateBase(product) {

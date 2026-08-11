@@ -78,8 +78,8 @@ test("public appearance pages preserve the About shell and expose future paintin
     assert.match(html,/\/css\/site-typography\.css/);
   }
   assert.match(index,/hero-descriptor/);
-  assert.match(script,/Paintings shown/);
-  assert.match(script,/relationshipType\?\.slug==="exhibited-at"/);
+  assert.match(script,/Works involved or exhibited/);
+  assert.doesNotMatch(script,/<h2>Paintings shown<\/h2>|<h2>Related<\/h2>/);
   assert.match(script,/LOST MARBLES\. Hoodie/);
   assert.match(script,/archive\/records/);
   assert.match(css,/border[^;]*:\s*5px/);
