@@ -168,7 +168,7 @@
     }
     function ensureConnections() {
       if (global.ConstructConnections) return Promise.resolve();
-      return new Promise((resolve) => { const script=document.createElement("script"); script.src="/js/construct-connections.js?v=8"; script.onload=resolve; script.onerror=resolve; document.head.append(script); });
+      return new Promise((resolve) => { const script=document.createElement("script"); script.src="/js/construct-connections.js?v=9"; script.onload=resolve; script.onerror=resolve; document.head.append(script); });
     }
     function imageRole(image) {
       return ["result","before","process","detail"].includes(image?.imageRole) ? image.imageRole : "result";

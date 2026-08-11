@@ -46,7 +46,7 @@ test("public detail Related sections place Origin Thread cards before pairwise r
   assert.match(merch,/ConstructConnections\.mount\(\{ host: section, entityId: product\.id, title: "Connections to Other Domains", embedded: true \}\)/);
   assert.doesNotMatch(merch,/related-card|originRelatedCard/);
   assert.match(merchPage,/<section class="related" id="productRelated" hidden><\/section>/);
-  assert.match(merchPage,/\/js\/construct-connections\.js\?v=8/);
+  assert.match(merchPage,/\/js\/construct-connections\.js\?v=9/);
   assert.match(projects,/title: "Connections to Other Domains"/);
   assert.match(projects,/title: "Series Connections"/);
 });

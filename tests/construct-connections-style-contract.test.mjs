@@ -18,7 +18,8 @@ test("connection component structural strokes use the shared 5px standard", () =
 
 test("connection cards use the shared section-title role and a compact vertical grid", () => {
   assert.match(css, /\.cc-head \.cc-section-title\s*\{[\s\S]*font-weight:\s*var\(--type-section-weight,\s*900\)/);
-  assert.match(css, /\.cc-cards\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(var\(--cc-card-min\),\s*1fr\)\)/);
+  assert.match(css, /\.cc-groups\s*\{[\s\S]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(var\(--cc-card-min\),\s*1fr\)\)/);
+  assert.match(css, /\.cc-group:has\(\.cc-card:nth-child\(2\)\)\s*\{\s*grid-column:\s*1\s*\/\s*-1/);
   assert.match(css, /\.cc-card\s*\{[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column/);
   assert.match(css, /\.cc-card-media\s*\{[\s\S]*aspect-ratio:\s*4\s*\/\s*3/);
 });
@@ -29,7 +30,7 @@ test("connection component does not reintroduce sub-5px structural borders or gr
 });
 
 test("the Archive group uses the same related-group rhythm without one-off card spacing", () => {
-  assert.match(css, /\.cc-groups\s*\{\s*display:\s*grid;\s*gap:\s*20px/);
+  assert.match(css, /\.cc-groups\s*\{[\s\S]*display:\s*grid;[\s\S]*gap:\s*14px/);
   assert.match(css, /\.cc-group\s*\{\s*display:\s*grid;\s*gap:\s*9px/);
   assert.doesNotMatch(css, /\.cc-card--archive/);
   assert.doesNotMatch(css, /\.cc-group--symbols \.cc-card-meta \.cc-badge:nth-child/);

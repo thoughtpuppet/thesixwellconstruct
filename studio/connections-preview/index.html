@@ -60,8 +60,8 @@
       const win=frame.contentWindow,doc=frame.contentDocument;if(!win||!doc||token!==loadToken)return;
       const nativeFetch=win.fetch.bind(win);win.fetch=(input,init)=>{const url=String(input);if(url.includes(`/api/connections/${page.entity.id}`))return Promise.resolve(new win.Response(JSON.stringify({entity:page.entity,records:page.records,archiveCard:archiveCard(page.entity),count:page.records.length,cardCount:page.records.length+1}),{status:200,headers:{'content-type':'application/json'}}));return nativeFetch(input,init)};
       if(!doc.querySelector('link[href^="/css/construct-connections.css"]'))await addAsset(doc,'link',{rel:'stylesheet',href:'/css/construct-connections.css?v=6'});if(!doc.querySelector('[data-connections-preview-style]')){const style=doc.createElement('style');style.dataset.connectionsPreviewStyle='';style.textContent='#live-text-editor{display:none!important} [data-connections-preview]{scroll-margin-top:110px}';doc.head.appendChild(style)}
-      doc.querySelector('link[href^="/css/construct-connections.css"]')?.setAttribute('href','/css/construct-connections.css?v=7');
-      if(!win.ConstructConnections)await addAsset(doc,'script',{src:'/js/construct-connections.js?v=8'});
+      doc.querySelector('link[href^="/css/construct-connections.css"]')?.setAttribute('href','/css/construct-connections.css?v=8');
+      if(!win.ConstructConnections)await addAsset(doc,'script',{src:'/js/construct-connections.js?v=9'});
       if(token!==loadToken)return;
       const legacy=[...doc.querySelectorAll('[data-legacy-connections]')],host=page.host?.(doc)||fallbackHost(doc);lastHost=host;doc.querySelectorAll('.construct-connections').forEach(node=>{if(node!==host)node.hidden=true});
       await win.ConstructConnections.mount({entityId:page.entity.id,host,embedded:Boolean(page.host)});
