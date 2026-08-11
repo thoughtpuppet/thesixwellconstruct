@@ -38,7 +38,7 @@
   margin: 0;
   color: var(--type-section-color, var(--color-body, #FBD19D));
   font-family: var(--type-section-font, var(--font-display, Inter, Arial, sans-serif));
-  font-size: var(--cc-section-title-size, var(--type-section-size-active, var(--type-section-size, clamp(34px, 6vw, 82px))));
+  font-size: var(--cc-section-title-size, clamp(28px, 3vw, 44px)) !important;
   font-weight: var(--type-section-weight, 900);
   font-style: var(--type-section-style, normal);
   line-height: var(--type-section-leading-active, var(--type-section-leading, .98));
@@ -276,7 +276,7 @@
     align-items: flex-start;
   }
   .cc-head .cc-section-title {
-    font-size: var(--cc-section-title-size-compact, clamp(32px, 9cqi, 56px));
+    font-size: var(--cc-section-title-size-compact, clamp(26px, 6cqi, 36px)) !important;
   }
   .cc-map { min-height: 470px; }
   .cc-map-center-copy { top: 20px; width: 120px; gap: 4px; }
@@ -296,7 +296,7 @@
   .construct-connections:not(.construct-connections--embedded) { margin-top: 34px; padding: 0 15px; }
   .cc-head { align-items: flex-start; gap: 16px; }
   .cc-head .cc-section-title {
-    font-size: var(--cc-section-title-size-mobile, var(--type-section-size-mobile, clamp(28px, 9vw, 44px)));
+    font-size: var(--cc-section-title-size-mobile, clamp(26px, 7vw, 30px)) !important;
     line-height: var(--type-section-leading-mobile, 1);
     letter-spacing: var(--type-section-tracking-mobile, 0);
   }

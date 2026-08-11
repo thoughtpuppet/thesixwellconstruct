@@ -1,5 +1,5 @@
 (function(){
-  const css="/css/construct-connections.css?v=6",mediaRequests=new Map(),mountRequests=new WeakMap();
+  const css="/css/construct-connections.css?v=7",mediaRequests=new Map(),mountRequests=new WeakMap();
   function ensureCss(){if(!document.querySelector(`link[href^="${css.split("?")[0]}"]`)){const link=document.createElement("link");link.rel="stylesheet";link.href=css;document.head.appendChild(link)}}
   function el(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node}
   function legacyArchiveCard(host){const fallback=host?.querySelector?.("[data-archive-card-fallback]");if(!fallback)return null;const title=fallback.querySelector(".related-title")?.textContent?.trim()||"Explore the record of this work.",route=fallback.getAttribute("href")||"",color=fallback.style.getPropertyValue("--item-color").trim()||"var(--color-archive)";if(!route)return null;return {id:"archive-card-fallback",label:"Archive record",related:{id:"archive-dossier-fallback",entityType:"archive_dossier",title,state:"published",visibility:"public",route,imageUrl:"",kindLabel:"Archive record",detailLabel:"Process, history, and documentation",claimable:0,shopifyHandle:"",node:{id:"node-archive",name:"ARCHIVE",slug:"archive",color}}}}
