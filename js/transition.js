@@ -277,10 +277,11 @@
 
     const href = target.getAttribute('href');
 
-    // Ignore links with no href, hash-only links (#section),
+    // Ignore links with no href, same-document fragments,
     // and links with special modifiers (new tab, ctrl+click)
     if (!href) return;
     if (href.startsWith('#')) return;
+    if (isSameDocumentFragment(href)) return;
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     if (target.target === '_blank') return;
 
@@ -326,6 +327,20 @@
       return false;
     }
 
+  }
+
+  function isSameDocumentFragment(href) {
+    try {
+      const url = new URL(href, window.location.href);
+      return (
+        Boolean(url.hash) &&
+        url.origin === window.location.origin &&
+        url.pathname === window.location.pathname &&
+        url.search === window.location.search
+      );
+    } catch (e) {
+      return false;
+    }
   }
 
   /*

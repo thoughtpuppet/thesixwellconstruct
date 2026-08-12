@@ -214,40 +214,26 @@
     margin-bottom:42px;
   }
   .image-grid {
-    --gallery-primary-height:clamp(380px,42vw,520px);
-    display:grid;
+    --gallery-editorial-height:clamp(300px,41vw,620px);
+    display:block;
     gap:18px; border-top:5px solid var(--ring-faint); padding-top:18px; margin-bottom:42px;
   }
   .image-grid[data-gallery-state="placeholder"] {
-    grid-template-columns:1.2fr 0.8fr; grid-template-rows:220px 220px;
+    display:grid; grid-template-columns:1.2fr 0.8fr; grid-template-rows:220px 220px;
   }
   .image-grid[data-gallery-state="media"] {
-    grid-template-columns:max-content minmax(0,1fr); align-items:start;
+    overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; scrollbar-color:var(--ring-faint) transparent;
   }
-  .image-grid[data-primary-orientation="square"] { --gallery-primary-height:460px; }
-  .project-media-primary { height:var(--gallery-primary-height); min-width:0; }
-  .project-media-primary .archive-frame { width:auto; height:100%; aspect-ratio:var(--media-aspect,1); }
-  .project-media-companions {
-    display:flex; flex-flow:column wrap; align-content:flex-start; align-items:flex-start; gap:18px;
-    height:var(--gallery-primary-height); min-width:0;
+  .project-media-editorial {
+    display:flex; justify-content:center; align-items:stretch; gap:18px;
+    width:max-content; min-width:100%;
   }
-  .project-media-companions .archive-frame {
-    flex:0 0 calc((var(--gallery-primary-height) - 18px)/2);
-    width:auto; height:calc((var(--gallery-primary-height) - 18px)/2);
+  .project-media-editorial .archive-frame {
+    flex:0 0 auto; width:auto; height:var(--gallery-editorial-height);
     aspect-ratio:var(--media-aspect,1);
   }
-  .image-grid[data-primary-orientation="landscape"] { grid-template-columns:1fr; }
-  .image-grid[data-primary-orientation="landscape"] .project-media-primary,
-  .image-grid[data-media-count="1"] .project-media-primary { width:100%; height:auto; }
-  .image-grid[data-primary-orientation="landscape"] .project-media-primary .archive-frame,
-  .image-grid[data-media-count="1"] .project-media-primary .archive-frame {
-    width:min(100%,900px); height:auto; aspect-ratio:var(--media-aspect,1);
-  }
-  .image-grid[data-primary-orientation="landscape"] .project-media-companions {
-    height:auto; flex-flow:row wrap;
-  }
-  .image-grid[data-primary-orientation="landscape"] .project-media-companions .archive-frame {
-    flex:0 0 auto; width:auto; height:180px;
+  .project-media-selector {
+    display:none;
   }
   .archive-frame {
     position:relative; overflow:hidden; background:#0f0f0f;
@@ -346,6 +332,12 @@
   .mode-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
   .mode-option { display:flex; gap:10px; align-items:flex-start; min-height:62px; padding:14px; border:5px solid var(--ring-faint); font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
   .terms-box { padding:18px; border:5px solid var(--ring-faint); color:var(--text-mute); font-size:13px; line-height:1.7; }
+  .public-form fieldset.field { min-inline-size:0; margin:0; padding:0; border:0; }
+  .public-form fieldset.field > legend {
+    margin:0 0 8px; padding:0; color:var(--form-control-dim);
+    font-family:var(--sans); font-size:10px; font-weight:700; line-height:1.4;
+    letter-spacing:.16em; text-transform:uppercase;
+  }
   footer.bottom {
     position:relative; z-index:2; max-width:1440px; margin:0 auto;
     padding:56px var(--s6); border-top:5px solid var(--ring-faint);
@@ -384,20 +376,30 @@ main { padding:var(--s6) var(--s5); }
     }
     .image-grid[data-gallery-state="placeholder"] { grid-template-columns:1fr; grid-template-rows:260px 180px 180px; }
     .image-grid[data-gallery-state="placeholder"] > .archive-frame:first-child { grid-row:auto; }
-    .image-grid[data-gallery-state="media"] { grid-template-columns:1fr; }
-    .image-grid[data-gallery-state="media"] .project-media-primary,
-    .image-grid[data-gallery-state="media"] .project-media-companions { width:100%; height:auto; }
-    .image-grid[data-gallery-state="media"] .project-media-primary .archive-frame,
-    .image-grid[data-gallery-state="media"] .project-media-companions .archive-frame {
-      width:100%; height:auto; aspect-ratio:var(--media-aspect,1);
+    .image-grid[data-gallery-state="media"] { overflow:hidden; }
+    .image-grid[data-gallery-state="media"] .project-media-editorial {
+      display:block; width:100%; min-width:0;
     }
-    .image-grid[data-gallery-state="media"] .project-media-companions {
-      display:grid; grid-template-columns:1fr; gap:16px;
+    .image-grid[data-gallery-state="media"] .project-media-editorial .archive-frame {
+      display:none; width:100%; height:clamp(340px,56svh,480px); aspect-ratio:auto;
     }
+    .image-grid[data-gallery-state="media"] .project-media-editorial .archive-frame.is-active { display:flex; }
+    .project-media-selector {
+      display:grid; grid-template-columns:repeat(var(--media-count),minmax(76px,1fr));
+      gap:8px; margin-top:10px; overflow-x:auto; scrollbar-width:thin;
+    }
+    .project-media-selector button {
+      width:100%; height:76px; min-width:76px; padding:0; overflow:hidden;
+      border:5px solid transparent; background:#0f0f0f; cursor:pointer;
+    }
+    .project-media-selector button[aria-pressed="true"] { border-color:var(--signal); }
+    .project-media-selector button:focus-visible { outline:5px solid var(--accent); outline-offset:-5px; }
+    .project-media-selector img { display:block; width:100%; height:100%; object-fit:cover; }
     .project-media-dialog { padding:16px; }
     .meta-grid { grid-template-columns:1fr; }
     .application-row { flex-direction:column; align-items:flex-start; }
     .mode-options { grid-template-columns:1fr; }
+    .public-form fieldset.field > legend { font-size:12px; }
     .series-filter { align-items:stretch; }
     .series-filter button { flex:1 1 140px; }
     .series-context { grid-template-columns:72px minmax(0,1fr); }
@@ -845,15 +847,41 @@ main { padding:var(--s6) var(--s5); }
         return;
       }
       mediaGrid.dataset.galleryState = "media";
-      var primary = document.createElement("div");
-      primary.className = "project-media-primary";
-      primary.append(projectMediaFrame(media[0], project, true));
-      mediaGrid.append(primary);
+      var editorial = document.createElement("div");
+      editorial.className = "project-media-editorial";
+      media.forEach(function(item, index) {
+        var frame = projectMediaFrame(item, project, index === 0);
+        frame.classList.toggle("is-active", index === 0);
+        frame.dataset.mediaIndex = String(index);
+        editorial.append(frame);
+      });
+      mediaGrid.append(editorial);
       if (media.length > 1) {
-        var companions = document.createElement("div");
-        companions.className = "project-media-companions";
-        media.slice(1).forEach(function(item) { companions.append(projectMediaFrame(item, project, false)); });
-        mediaGrid.append(companions);
+        var selector = document.createElement("div");
+        selector.className = "project-media-selector";
+        selector.style.setProperty("--media-count", String(media.length));
+        selector.setAttribute("aria-label", "Choose a project image");
+        media.forEach(function(item, index) {
+          var button = document.createElement("button");
+          button.type = "button";
+          button.setAttribute("aria-label", "Show project image " + (index + 1));
+          button.setAttribute("aria-pressed", String(index === 0));
+          var image = document.createElement("img");
+          image.src = item.url;
+          image.alt = "";
+          image.loading = "eager";
+          button.append(image);
+          button.addEventListener("click", function() {
+            editorial.querySelectorAll(".archive-frame").forEach(function(frame, frameIndex) {
+              frame.classList.toggle("is-active", frameIndex === index);
+            });
+            selector.querySelectorAll("button").forEach(function(entry, entryIndex) {
+              entry.setAttribute("aria-pressed", String(entryIndex === index));
+            });
+          });
+          selector.append(button);
+        });
+        mediaGrid.append(selector);
       }
     }
 

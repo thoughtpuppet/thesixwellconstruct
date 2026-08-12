@@ -212,18 +212,20 @@ test("Special Projects expose an overview card grid and shared dedicated project
   assert.match(source, /series\.cover\.url/);
 });
 
-test("Special Project galleries follow the primary orientation and open an isolated-image overlay", () => {
+test("Special Project galleries use an editorial desktop strip, a controlled mobile selector, and an isolated-image overlay", () => {
   const source = readFileSync(join(ROOT, "tattoos", "special-projects", "index.html"), "utf8");
   assert.match(source, /\.archive-frame:not\(\.has-media\)::before/);
   assert.match(source, /\.archive-frame:not\(\.has-media\)::after/);
   assert.match(source, /\.project-media-open img \{ width:100%; height:100%; object-fit:contain; \}/);
   assert.match(source, /data-gallery-state="media"/);
-  assert.match(source, /data-primary-orientation="landscape"/);
+  assert.match(source, /className = "project-media-editorial"/);
+  assert.match(source, /className = "project-media-selector"/);
+  assert.match(source, /height:clamp\(340px,56svh,480px\)/);
+  assert.match(source, /grid-template-columns:repeat\(var\(--media-count\),minmax\(76px,1fr\)\)/);
+  assert.match(source, /frame\.classList\.toggle\("is-active", index === 0\)/);
+  assert.match(source, /button\.setAttribute\("aria-pressed", String\(index === 0\)\)/);
   assert.match(source, /mediaGrid\.dataset\.primaryOrientation = ratio < 0\.85 \? "portrait" : ratio > 1\.2 \? "landscape" : "square"/);
   assert.match(source, /frame\.style\.setProperty\("--media-aspect", String\(ratio\)\)/);
-  assert.match(source, /className = "project-media-primary"/);
-  assert.match(source, /className = "project-media-companions"/);
-  assert.match(source, /align-content:flex-start; align-items:flex-start/);
   assert.match(source, /image\.loading = "eager"/);
   assert.match(source, /id="projectMediaDialog" aria-labelledby="projectMediaDialogTitle"/);
   assert.match(source, /frame\.className = "archive-frame has-media"/);
@@ -232,6 +234,17 @@ test("Special Project galleries follow the primary orientation and open an isola
   assert.match(source, /max-width:100%; max-height:100%/);
   assert.match(source, /event\.target === mediaDialog/);
   assert.match(source, /mediaDialogTrigger\.focus\(\)/);
+});
+
+test("Special Project application groups are unboxed and same-page Apply links bypass the shared fade", () => {
+  const source = readFileSync(join(ROOT, "tattoos", "special-projects", "index.html"), "utf8");
+  const transition = readFileSync(join(ROOT, "js", "transition.js"), "utf8");
+  assert.match(source, /\.public-form fieldset\.field \{ min-inline-size:0; margin:0; padding:0; border:0; \}/);
+  assert.match(source, /\.public-form fieldset\.field > legend/);
+  assert.match(transition, /if \(isSameDocumentFragment\(href\)\) return;/);
+  assert.match(transition, /function isSameDocumentFragment\(href\)/);
+  assert.match(transition, /url\.pathname === window\.location\.pathname/);
+  assert.match(transition, /url\.search === window\.location\.search/);
 });
 
 test("Studio review shows Series as quiet context without changing the project booking label", () => {
