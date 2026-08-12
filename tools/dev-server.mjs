@@ -159,6 +159,7 @@ const hiddenPublicPaths = new Set([
   "/music",
   "/writings",
 ]);
+const hiddenPublicExactPaths = new Set(["/events"]);
 const closedPublicPagePaths = ["/about", "/archive", "/tattoos/build"];
 const openPublicPagePaths = new Set(["/tattoos/build/maze"]);
 const openPublicPagePrefixes = ["/about/exhibitions-appearances"];
@@ -307,6 +308,7 @@ function isHiddenPublicRoute(urlPath) {
   if (isHiddenByHomeOnlyMode(urlPath)) return true;
   const normalized = normalizeRoute(urlPath);
   const normalizedLower = normalized.toLowerCase();
+  if (hiddenPublicExactPaths.has(normalizedLower)) return true;
   if (openPublicPagePaths.has(normalizedLower)) return false;
   if (openPublicPagePrefixes.some((prefix) => normalizedLower === prefix || normalizedLower.startsWith(`${prefix}/`))) return false;
   if (openAppearanceArchivePaths.has(normalizedLower)) return false;

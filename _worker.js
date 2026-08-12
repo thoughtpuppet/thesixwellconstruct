@@ -166,6 +166,7 @@ const HIDDEN_PUBLIC_PATHS = [
   "/music",
   "/writings"
 ];
+const HIDDEN_PUBLIC_EXACT_PATHS = new Set(["/events"]);
 const CLOSED_PUBLIC_PAGE_PATHS = ["/about", "/archive", "/tattoos/build"];
 const OPEN_PUBLIC_PAGE_PATHS = new Set(["/tattoos/build/maze"]);
 const OPEN_PUBLIC_PAGE_PREFIXES = ["/about/exhibitions-appearances"];
@@ -343,6 +344,7 @@ function normalizePath(pathname) {
 
 function isHiddenPublicPath(pathname) {
   const normalizedPath = normalizePath(pathname);
+  if (HIDDEN_PUBLIC_EXACT_PATHS.has(normalizedPath)) return true;
   return HIDDEN_PUBLIC_PATHS.some((hiddenPath) => {
     const normalizedHidden = normalizePath(hiddenPath);
     return (

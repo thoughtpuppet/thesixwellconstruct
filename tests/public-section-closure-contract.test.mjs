@@ -36,6 +36,23 @@ test("closed public page families temporarily redirect to the 404 page", async (
   }
 });
 
+test("the Events landing page is hidden without closing event detail routes", async () => {
+  for (const path of ["/events", "/events/", "/events/index.html"]) {
+    const response = await worker.fetch(new Request(`https://example.test${path}?source=test`), env, {});
+    assert.equal(response.status, 302, path);
+    assert.equal(response.headers.get("location"), "https://example.test/404.html", path);
+  }
+
+  for (const path of ["/events/signal-symbol/", "/events/ss-and-f-live-audience/", "/api/events"]) {
+    const response = await worker.fetch(new Request(`https://example.test${path}`), env, {});
+    assert.notEqual(response.status, 302, path);
+  }
+
+  const devServer = readFileSync(new URL("../tools/dev-server.mjs", import.meta.url), "utf8");
+  assert.match(devServer, /const hiddenPublicExactPaths = new Set\(\["\/events"\]\)/);
+  assert.match(devServer, /hiddenPublicExactPaths\.has\(normalizedLower\)/);
+});
+
 test("the Maze Studio remains public while the rest of the Build family is closed", async () => {
   for (const path of [
     "/tattoos/build/maze",
