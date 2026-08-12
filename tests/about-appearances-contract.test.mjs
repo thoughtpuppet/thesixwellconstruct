@@ -44,6 +44,24 @@ test("Made in Public seeds participation, venue, flyer, archive, and merch witho
   assert.match(migration,/https:\/\/www\.pfstudios\.co\//);
 });
 
+test("Studio corrects participation, dossier roles, and exhibited works without an editorial migration",async()=>{
+  const database=migratedDatabase(),token="appearance-test-token",headers={authorization:`Bearer ${token}`,"content-type":"application/json"},env={SUBMISSIONS_DB:new LocalD1(database),SUBMISSIONS_ADMIN_TOKEN:token};
+  database.prepare("UPDATE artist_appearances SET summary=?,participation_roles_json=? WHERE id='appearance-made-in-public'").run("Incorrect panelist credit",'["Exhibiting artist","Panelist","Merchandise vendor"]');
+  database.prepare("UPDATE archive_dossier_subjects SET role='exhibiting artist and panelist' WHERE dossier_entity_id='appearance-made-in-public' AND subject_entity_id='person-saiel-dauhn-solehman'").run();
+  const appearanceResponse=await handleConstructApi(new Request("https://example.test/api/admin/appearances/appearance-made-in-public",{method:"PATCH",headers,body:JSON.stringify({summary:"Saiel + ThoughtPuppet participate as exhibiting artist and merchandise vendor.",participation_roles_json:["Exhibiting artist","Merchandise vendor"]})}),env);
+  assert.equal(appearanceResponse.status,200);
+  const dossierResponse=await handleConstructApi(new Request("https://example.test/api/admin/archive-dossiers/appearance-made-in-public",{headers:{authorization:`Bearer ${token}`}}),env),dossier=await dossierResponse.json(),context=dossier.record.context_assignments.map(item=>({...item,role:item.entity_id==="person-saiel-dauhn-solehman"?"exhibiting artist":item.role}));
+  const contextResponse=await handleConstructApi(new Request("https://example.test/api/admin/archive-dossiers/appearance-made-in-public",{method:"PATCH",headers,body:JSON.stringify({context_assignments:context})}),env);
+  assert.equal(contextResponse.status,200);
+  const relationshipResponse=await handleConstructApi(new Request("https://example.test/api/admin/relationships",{method:"POST",headers,body:JSON.stringify({source_entity_id:"art-marbles",target_entity_id:"appearance-made-in-public",relationship_type_id:"rel-exhibited-at",public_visible:true,sort_order:1})}),env);
+  assert.equal(relationshipResponse.status,201);
+  const publicAppearance=await (await handleConstructApi(new Request("https://example.test/api/appearances/made-in-public"),env)).json(),publicConnections=await (await handleConstructApi(new Request("https://example.test/api/connections/appearance-made-in-public"),env)).json();
+  assert.deepEqual(JSON.parse(publicAppearance.record.participation_roles_json),["Exhibiting artist","Merchandise vendor"]);
+  assert.equal(publicAppearance.record.subjects.find(item=>item.subject_entity_id==="person-saiel-dauhn-solehman").role,"exhibiting artist");
+  assert.equal(publicConnections.records.find(item=>item.related.id==="art-marbles").label,"Exhibited");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM entity_revisions WHERE entity_id='appearance-made-in-public' AND action IN ('update','archive-dossier-update','relationship-create')").get().count>=3,true);
+});
+
 test("public and Studio APIs return the seeded appearance, contextual identities, dossier, and hoodie connection",async()=>{
   const database=migratedDatabase(),env={SUBMISSIONS_DB:new LocalD1(database),SUBMISSIONS_ADMIN_TOKEN:"appearance-test-token"};
   const publicResponse=await handleConstructApi(new Request("https://example.test/api/appearances/made-in-public"),env);
@@ -80,18 +98,23 @@ test("public appearance pages preserve the About shell and expose future paintin
   assert.match(index,/hero-descriptor/);
   assert.match(script,/Works involved or exhibited/);
   assert.doesNotMatch(script,/<h2>Paintings shown<\/h2>|<h2>Related<\/h2>/);
-  assert.match(script,/LOST MARBLES\. Hoodie/);
+  assert.doesNotMatch(script,/const fallback=/);
   assert.match(script,/archive\/records/);
   assert.match(css,/border[^;]*:\s*5px/);
   assert.match(css,/@media\(max-width:390px\)/);
 });
 
-test("Studio owns appearances and reusable organizations",async()=>{
-  const [studio,manager,shared]=await Promise.all([source("studio/submissions/index.html"),source("studio/construct-manager.js"),source("functions/api/_shared/construct.js")]);
+test("Studio owns appearances, context, connected works, and reusable organizations",async()=>{
+  const [studio,manager,shared,apiSource]=await Promise.all([source("studio/submissions/index.html"),source("studio/construct-manager.js"),source("functions/api/_shared/construct.js"),source("functions/api/construct/_lib.js")]);
   assert.match(studio,/data-tab="about">About/);
   assert.match(studio,/Exhibitions &amp; Appearances/);
   assert.match(studio,/\["organizations","Organizations"\]/);
   assert.match(manager,/about:new Set\(\["appearances"\]\)/);
+  assert.match(manager,/Hosts, participants &amp; venue/);
+  assert.match(manager,/Works involved or exhibited/);
+  assert.match(manager,/context_assignments:contextAssignments/);
+  assert.match(manager,/relationship_type_id:item\.relationship_type_id/);
+  assert.match(apiSource,/"relationship-create"/);
   assert.match(shared,/appearances:\s*\{ table: "artist_appearances"/);
   assert.match(shared,/organizations:\s*\{ table: "organizations"/);
 });
