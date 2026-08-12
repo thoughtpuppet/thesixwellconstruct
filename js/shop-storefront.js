@@ -739,7 +739,7 @@ export async function initMerchCatalogPage() {
         }
 
         return `
-          <article class="card" style="--src-color:${source.color}">
+          <article class="card" style="--src-color:${source.color};--src-color-bright:${source.brightColor}">
             <a class="card-frame" href="${cardUrl}" aria-label="view ${product.title}">
               <span class="card-plaque">N&deg; ${product.catalogNumber || ""}</span>
               ${imageHtml}

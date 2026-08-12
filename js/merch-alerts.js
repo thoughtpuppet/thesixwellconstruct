@@ -9,11 +9,11 @@ export function launchAlertMarkup(product, compact = false) {
   const panelId = `launch-alert-${compact ? "card" : "detail"}-${slug}`;
   return `<div class="launch-alert${compact ? " launch-alert--compact" : ""}" data-launch-alert data-product-slug="${slug}">
     <button class="launch-alert-toggle" type="button" aria-expanded="false" aria-controls="${panelId}" data-launch-alert-toggle>
-      <span>Notify me when this launches.</span><span class="launch-alert-toggle-mark" aria-hidden="true">+</span>
+      <span class="launch-alert-toggle-label">Notify me when this launches.</span><span class="launch-alert-toggle-mark" aria-hidden="true">+</span>
     </button>
     <form class="launch-alert-form" id="${panelId}" data-launch-alert-form hidden>
       <label>Email address<input name="email" type="email" autocomplete="email" required></label>
-      <label class="launch-alert-check"><input name="newsletter" type="checkbox"> <span>Also send me the Six.Well newsletter. This is optional and requires its own email confirmation.</span></label>
+      <label class="launch-alert-check"><input name="newsletter" type="checkbox"> <span>Also sign me up for The Solehman Letters, the newsletter of the creative ecosystem. This is optional and requires its own email confirmation.</span></label>
       <input name="company" tabindex="-1" autocomplete="off" aria-hidden="true" class="form-honeypot">
       <button class="launch-alert-submit" type="submit"><span>Request launch alert</span><span aria-hidden="true">→</span></button>
       <p class="launch-alert-disclosure">One email when this product launches. Confirm through the email sent after signup. The newsletter choice is separate.</p>

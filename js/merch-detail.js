@@ -8,6 +8,12 @@ const SOURCE_TOKENS = {
   "six.well": "var(--color-merch, #f08f00)",
 };
 
+const SOURCE_BRIGHT_TOKENS = {
+  thoughtpuppet: "var(--color-art-bright, #2054FF)",
+  "art.pill": "var(--color-tattooing-bright, #BE281F)",
+  "six.well": "var(--color-merch-bright, #FF9933)",
+};
+
 function readEmbeddedProduct() {
   try {
     return JSON.parse(document.getElementById("merch-record-data")?.textContent || "{}").product || null;
@@ -70,6 +76,7 @@ function hydrateBase(product) {
   document.body.dataset.productSlug = product.slug;
   document.body.dataset.constructEntity = product.id || "";
   document.documentElement.style.setProperty("--src-color", SOURCE_TOKENS[source.key] || SOURCE_TOKENS["six.well"]);
+  document.documentElement.style.setProperty("--src-color-bright", SOURCE_BRIGHT_TOKENS[source.key] || SOURCE_BRIGHT_TOKENS["six.well"]);
   document.getElementById("sourceLabel").textContent = product.sourceLabel || source.label;
   document.getElementById("sourceDot").style.background = source.color;
   const breadcrumbSource = document.getElementById("breadcrumbSource");
