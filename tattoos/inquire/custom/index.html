@@ -31,6 +31,9 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .page-title { margin-bottom:38px; }
   .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
   .intro-body + .intro-body { margin-top:20px; }
+  .form-note-group { margin-bottom:30px; }
+  .form-note-group .form-note { margin-bottom:0; }
+  .form-note-group .form-note + .form-note { margin-top:20px; }
   .guide-stack { grid-column:1 / -1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:0; max-width:none; }
   .guide-stack details { border:5px solid var(--ring-faint); background:rgba(14,14,14,0.35); }
   .guide-stack summary { cursor:pointer; list-style:none; position:relative; padding:17px 54px 17px 18px; font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; line-height:1.4; text-transform:uppercase; color:var(--accent); }
@@ -106,12 +109,15 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     <div class="layout">
       <section class="site-hero site-hero--supporting">
         <h1 class="page-title hero-title" data-copy-id="inquiry-page-title">Project Inquiry.</h1>
-        <p class="intro-body hero-descriptor" data-copy-id="inquiry-intro-primary">Use this form for an original custom tattoo that is not available flash.&nbsp; Submitting starts review; it does not reserve an appointment.</p>
+        <p class="intro-body hero-descriptor" data-copy-id="inquiry-intro-primary">Use this form for an original custom tattoo that is not available flash.</p>
       </section>
       <section class="form-panel" aria-label="Tattoo inquiry form">
         <aside class="portfolio-reference" id="portfolioReference" hidden aria-live="polite"></aside>
         <h2 class="form-title" data-copy-id="inquiry-form-title">Submit for Review</h2>
-        <p class="form-note" data-copy-id="inquiry-form-note">Reviewed before booking. Approved projects receive a private token link into the studio booking and deposit flow. Please fill out all questions in detail - vague answers may delay approval.</p>
+        <div class="form-note-group" data-copy-id="inquiry-form-note">
+          <p class="form-note">Every request is reviewed and approved before booking. After approval, you will receive a booking link to choose your appointment day &amp; time and pay the deposit.</p>
+          <p class="form-note">Please fill out all questions in detail. Vague answers may delay approval.</p>
+        </div>
         <form class="public-form" id="inquiryForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
           <input type="hidden" name="type" value="tattoo_inquiry">
           <input type="hidden" name="source_path" value="/tattoos/inquire/custom/">
@@ -252,7 +258,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
                 <option value="$2,000+">$2,000+</option>
                 <option value="I’m flexible / I’d like guidance">I’m flexible / I’d like guidance</option>
               </select>
-              <p class="field-note" id="budgetRangeHelp">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.</p>
+              <p class="field-note" id="budgetRangeHelp">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid.</p>
             </div>
             <div class="field">
               <label for="color_preference">Color preference <span class="required-mark">*</span></label>

@@ -131,7 +131,7 @@
     offersSection.hidden = false;
     document.getElementById("specialsDates").textContent = `from ${date(payload.salesOpensAt)} through ${date(payload.salesClosesAt)}`;
     document.getElementById("specialsDeposit").textContent = payload.defaultDeposit;
-    offersEl.innerHTML = payload.offers.map((offer) => `<article class="special-card" data-mode="${escape(offer.mode)}" data-offer-card="${escape(offer.id)}"><h3>${escape(offer.title)}</h3><p>${escape(offer.description)}</p><p class="special-card__prices">${offer.variants.map((variant) => `${escape(variant.label)} ${escape(variant.price)}`).join(" Â· ")}</p><button type="button" data-offer="${escape(offer.id)}">Choose this special â†’</button></article>`).join("");
+    offersEl.innerHTML = payload.offers.map((offer) => `<article class="special-card" data-mode="${escape(offer.mode)}" data-offer-card="${escape(offer.id)}"><h3>${escape(offer.title)}</h3><p>${escape(offer.description)}</p><p class="special-card__prices">${offer.variants.map((variant) => `${escape(variant.label)} ${escape(variant.price)}`).join(" \u00b7 ")}</p><button type="button" data-offer="${escape(offer.id)}">Choose this special \u2192</button></article>`).join("");
     trackStageOnce("campaign_opened", "interactive_start", "");
     observeOffers();
   }
@@ -165,9 +165,9 @@
   function renderSelection() {
     if (!selectedOffer) return;
     document.getElementById("offerId").value = selectedOffer.id;
-    document.getElementById("selectedOfferSummary").textContent = `${selectedOffer.title} Â· ${selectedOffer.duration} Â· ${money(selectedOffer.depositCents)} deposit.`;
+    document.getElementById("selectedOfferSummary").textContent = `${selectedOffer.title} \u00b7 ${selectedOffer.duration} \u00b7 ${money(selectedOffer.depositCents)} deposit.`;
     const select = document.getElementById("variantId");
-    select.innerHTML = selectedOffer.variants.map((variant) => `<option value="${escape(variant.id)}">${escape(variant.label)} â€” ${escape(variant.price)}</option>`).join("");
+    select.innerHTML = selectedOffer.variants.map((variant) => `<option value="${escape(variant.id)}">${escape(variant.label)} \u2014 ${escape(variant.price)}</option>`).join("");
     const participant2 = document.getElementById("participant2Fieldset");
     participant2.hidden = selectedOffer.participantCount !== 2;
     updateSecondParticipantRequirement();
@@ -222,7 +222,7 @@
     trackStageOnce("submit_attempted");
     const status = document.getElementById("specialsFormStatus");
     submitButton.disabled = true;
-    status.textContent = "Sending your Tattoo Special requestâ€¦";
+    status.textContent = "Sending your Tattoo Special request\u2026";
     const data = new FormData(form);
     data.set("idempotencyKey", idempotencyKey);
     try {
@@ -238,7 +238,7 @@
         global.fbq("track", "Lead");
       }
       if (result.bookingUrl) {
-        status.textContent = "Opening the calendarâ€¦";
+        status.textContent = "Opening the calendar\u2026";
         global.SixWellAnalytics?.flush(true);
         location.assign(result.bookingUrl);
         return;

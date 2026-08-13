@@ -20,8 +20,9 @@
   }
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
   html,body { background:var(--bg); color:var(--text); font-family:var(--serif); min-height:100vh; -webkit-font-smoothing:antialiased; }
-  body { display:grid; place-items:center; padding:32px; }
-  main { width:min(100%,720px); border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:44px 0; }
+  body { padding:0; }
+  .receipt-shell { position:relative; z-index:2; width:min(calc(100% - 80px),1440px); margin:0 auto; padding:96px 0 64px; }
+  .receipt-content { width:min(100%,720px); margin:0 auto; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:44px 0; }
   h1 { margin-bottom:28px; }
   p { font-size:15px; line-height:1.75; color:var(--text-mute); margin-bottom:18px; }
   .receipt-meta { display:grid; gap:7px; margin:28px 0; padding:18px; border:5px solid var(--ring-faint); }
@@ -34,11 +35,13 @@
   .next-steps li { counter-increment:step; position:relative; padding-left:40px; font-size:15px; line-height:1.6; color:var(--text-mute); }
   .next-steps li::before { content:counter(step); position:absolute; left:0; top:0; width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:12px; color:var(--accent); border:2px solid var(--ring-soft); border-radius:50%; }
   .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:22px; }
-  a { display:inline-flex; min-height:50px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:var(--text-mute); padding:0 24px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; text-decoration:none; }
-  a:hover { border-color:var(--accent); color:var(--accent); }
+  .actions a { display:inline-flex; min-height:50px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:var(--text-mute); padding:0 24px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; text-decoration:none; }
+  .actions a:hover { border-color:var(--accent); color:var(--accent); }
   .support { margin-top:26px; padding-top:20px; border-top:5px solid var(--ring-faint); }
   .support a { display:inline; min-height:0; padding:0; border:0; font-family:inherit; font-size:inherit; letter-spacing:normal; text-transform:none; color:var(--accent); }
   [hidden] { display:none !important; }
+  @media (max-width:1080px) { .receipt-shell { padding:64px 0; } }
+  @media (max-width:640px) { .receipt-shell { width:min(calc(100% - 40px),1440px); padding:48px 0; } }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
@@ -46,10 +49,11 @@
 <link rel="stylesheet" href="/css/tattoos.css">
 </head>
 <body class="tattoo-flow" data-venture="tattooing">
-  <main class="site-hero site-hero--supporting">
-    <h1 class="hero-title" id="receivedTitle">Inquiry Received.</h1>
-    <p class="hero-descriptor" id="receivedIntro">Your submission was captured for review in the studio submissions system. Booking confirmation follows approval.</p>
-    <p id="receivedContext">Flash claims are checked for availability, placement, and scale. Custom inquiries and Special Projects are reviewed for the strongest path forward. If approved, you will receive a private token booking link to choose a session, place the deposit, and confirm the appointment.</p>
+  <main class="receipt-shell">
+    <div class="receipt-content site-hero site-hero--supporting">
+    <h1 class="hero-title" id="receivedTitle">submission Received.</h1>
+    <p class="hero-descriptor" id="receivedIntro">Your custom tattoo inquiry Has been recieved</p>
+    <p id="receivedContext">You will receive an email and text message if your request has been approved.</p>
     <div class="receipt-meta" aria-label="Submission receipt">
       <p class="receipt-label">Submission reference</p>
       <code class="receipt-reference" id="submissionReference">Checking receipt&hellip;</code>
@@ -58,9 +62,9 @@
     <div class="next-steps">
       <p class="next-steps-label">What happens next</p>
       <ol id="nextSteps">
-        <li id="reviewTimeStep">Most project submissions are reviewed within 5-7 business days.</li>
+        <li id="reviewTimeStep">Most project submissions are reviewed within 24 Hours.</li>
         <li id="pathStep">Watch the email address you submitted for the review decision or next question.</li>
-        <li id="bookingStep">If approved, follow the private link in that email; this receipt is not an appointment.</li>
+        <li id="bookingStep">Approved projects receive booking link. There you can choose your appointment time and pay the deposit.</li>
       </ol>
     </div>
     <div class="actions">
@@ -69,7 +73,8 @@
       <a href="/tattoos/">Return to Art.Pill</a>
       <a href="/tattoos/policies/">Client resources</a>
     </div>
-    <p class="support" id="supportLine">Need help with this receipt? Email <a id="supportLink" href="mailto:saisolehman@artpilltattoohouse.com">saisolehman@artpilltattoohouse.com</a> and include the submission reference.</p>
+      <p class="support" id="supportLine">Need help with this receipt? Email <a href="mailto:saisolehman@artpilltattoohouse.com">saisolehman@artpilltattoohouse.com</a> or Text (770) 820-5800</p>
+    </div>
   </main>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>

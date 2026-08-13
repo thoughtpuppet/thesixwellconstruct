@@ -8,6 +8,15 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const script = readFileSync(join(ROOT, "js", "tattoo-specials.js"), "utf8");
 
+test("Tattoo Specials keeps rendered punctuation encoding-safe", () => {
+  assert.ok(script.includes('join(" \\u00b7 ")'));
+  assert.ok(script.includes("Choose this special \\u2192"));
+  assert.ok(script.includes(" \\u2014 ${escape(variant.price)}"));
+  assert.ok(script.includes("request\\u2026"));
+  assert.ok(script.includes("calendar\\u2026"));
+  assert.doesNotMatch(script, /â|Â/);
+});
+
 test("Tattoo Specials loads in embedded browsers without crypto.randomUUID", async () => {
   const element = {
     addEventListener() {},

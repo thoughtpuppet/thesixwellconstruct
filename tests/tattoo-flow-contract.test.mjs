@@ -982,7 +982,6 @@ test("Tattoo project forms expose the same required total-budget ranges", () => 
 test("Original-design tattoo paths disclose the additional-rendering drawing fee", () => {
   const drawingFeeNotice = "One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.";
   const applicableSources = [
-    ["Custom", join(ROOT, "tattoos", "inquire", "custom", "index.html")],
     ["Build", join(ROOT, "tattoos", "build", "index.html")],
     ["Maze", join(ROOT, "apps", "maze", "src", "App.tsx")],
     ["Special Projects", join(ROOT, "tattoos", "special-projects", "apply", "index.html")],
@@ -990,6 +989,9 @@ test("Original-design tattoo paths disclose the additional-rendering drawing fee
   for (const [label, path] of applicableSources) {
     assert.ok(readFileSync(path, "utf8").includes(drawingFeeNotice), `${label} drawing-fee notice`);
   }
+
+  const customInquiry = readFileSync(join(ROOT, "tattoos", "inquire", "custom", "index.html"), "utf8");
+  assert.doesNotMatch(customInquiry, /Additional concept sketches are \$50 each, require artist approval, and must be paid before drawing begins\./);
 
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   assert.match(bookingPage, /const ADDITIONAL_SKETCH_DISCLAIMER = "Additional concept sketches are \$50 each, require artist approval, and must be paid before drawing begins\."/);
@@ -4215,9 +4217,28 @@ test("Studio Tattoo Specials metrics preserve lifetime conversion and separate g
 
 test("Tattoo index keeps the lower Specials block and reveals a matching brand-band action only while open", () => {
   const source = readFileSync(join(ROOT, "tattoos", "index.html"), "utf8");
+  assert.match(source, /class="brand-band-link" href="\/tattoos\/inquire\/">Book an appointment<\/a>/);
   assert.match(source, /class="brand-band-link" id="tattooSpecialsBandCta" href="\/tattoos\/specials\/" hidden>View Current Specials<\/a>/);
   assert.match(source, /class="booking-cta" id="tattooSpecialsCta" hidden/);
   assert.match(source, /if \(payload\.state !== "open"\) return;[\s\S]*?if \(cta\) cta\.hidden = false;[\s\S]*?if \(bandCta\) bandCta\.hidden = false;/);
+});
+
+test("Custom Tattoo Inquiry explains approval and booking before asking for detail", () => {
+  const source = readFileSync(join(ROOT, "tattoos", "inquire", "custom", "index.html"), "utf8");
+  assert.match(source, /data-copy-id="inquiry-intro-primary">Use this form for an original custom tattoo that is not available flash\.<\/p>/);
+  assert.doesNotMatch(source, /Submitting starts review; it does not reserve an appointment\./);
+  assert.match(source, /class="form-note-group" data-copy-id="inquiry-form-note">[\s\S]*?<p class="form-note">Every request is reviewed and approved before booking\. After approval, you will receive a booking link to choose your appointment day &amp; time and pay the deposit\.<\/p>[\s\S]*?<p class="form-note">Please fill out all questions in detail\. Vague answers may delay approval\.<\/p>/);
+  assert.doesNotMatch(source, /private token link into the studio booking and deposit flow/i);
+});
+
+test("Submission receipt keeps the shared Tattoo breadcrumb outside its narrow content column", () => {
+  const source = readFileSync(join(ROOT, "tattoos", "submission-received", "index.html"), "utf8");
+  assert.match(source, /<body class="tattoo-flow" data-venture="tattooing">\s*<main class="receipt-shell">\s*<div class="receipt-content site-hero site-hero--supporting">/);
+  assert.match(source, /\.receipt-shell\s*\{[^}]*width:min\(calc\(100% - 80px\),1440px\);[^}]*margin:0 auto;[^}]*padding:96px 0 64px;/);
+  assert.match(source, /\.receipt-content\s*\{[^}]*width:min\(100%,720px\);[^}]*margin:0 auto;/);
+  assert.match(source, /\.actions a\s*\{[^}]*min-height:50px/);
+  assert.doesNotMatch(source, /(?:^|\n)\s*a\s*\{[^}]*min-height:50px/);
+  assert.doesNotMatch(source, /body\s*\{[^}]*display:grid;[^}]*place-items:center;/);
 });
 
 test("Tattoo Specials public copy matches the approval-first booking lifecycle", () => {
