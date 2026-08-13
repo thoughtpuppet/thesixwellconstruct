@@ -128,6 +128,7 @@ const checkRoutes = [
   ["/tattoos/policies/", 200],
   ["/tattoos/day-of/", 200],
   ["/tattoos/location-parking/", 200],
+  ["/tattoos/aftercare/", 200],
   ["/merch/", 200],
   ["/art/", 200],
   ["/art/lostmarblespainting", 200],

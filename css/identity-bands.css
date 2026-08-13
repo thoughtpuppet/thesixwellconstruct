@@ -352,41 +352,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 48px;
-  padding: 0 20px;
-  border: 5px solid var(--band-action-fill, var(--band-color));
-  background: var(--band-action-fill, var(--band-color));
-  color: var(--band-action-ink, var(--color-bg));
+  min-height: 50px;
+  padding: 0 24px;
+  border: 5px solid var(--band-action-border, var(--ring-soft, color-mix(in srgb, var(--color-archive) 40%, transparent)));
+  background: transparent;
+  color: var(--band-copy-color);
   text-decoration: none;
   cursor: pointer;
   transition:
-    opacity var(--t-fast, 0.18s cubic-bezier(0.2, 0, 0.2, 1)),
     border-color var(--t-fast, 0.18s cubic-bezier(0.2, 0, 0.2, 1)),
     color var(--t-fast, 0.18s cubic-bezier(0.2, 0, 0.2, 1));
 }
 
 .band-actions .brand-band-link {
-  min-height: 48px;
+  min-height: 50px;
 }
 
-.band-actions .brand-band-link[href^="/about/"] {
-  border-color: var(--band-copy-color);
-  background: transparent;
-  color: var(--band-copy-color);
-}
-
-.band-actions .brand-band-link[href^="/about/"]:is(:hover, :focus-visible) {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-  opacity: 1;
-}
-
-.brand-band-link:hover {
-  opacity: 0.9;
+.brand-band-link:is(:hover, :focus-visible) {
+  border-color: var(--band-color);
+  color: var(--band-color);
 }
 
 .brand-band-link:focus-visible {
-  outline: 5px solid var(--band-focus-color, var(--color-accent));
+  outline: 5px solid var(--band-focus-color, var(--band-color));
   outline-offset: 4px;
 }
 

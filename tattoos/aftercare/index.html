@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aftercare Instructions - Art.Pill Tattoo House</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/tattoos.css">
+<style>
+  :root {
+    --venture-accent: var(--color-tattooing);
+    --venture-accent-dim: var(--color-tattooing-dim);
+    --aftercare-frame: color-mix(in srgb, var(--color-archive) 28%, transparent);
+  }
+  .aftercare-grid {
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:16px;
+  }
+  .tattoos-page .aftercare-grid .section-card {
+    border:5px solid var(--aftercare-frame);
+  }
+  .tattoos-page.tattoo-resource-page .hero-panel,
+  .tattoos-page.tattoo-resource-page .page-section + .page-section,
+  .tattoos-page.tattoo-resource-page .footer-bottom {
+    border-top:5px solid var(--aftercare-frame);
+  }
+  .tattoos-page.tattoo-resource-page .hero-panel {
+    border-bottom:5px solid var(--aftercare-frame);
+  }
+  .tattoos-page.tattoo-resource-page .action-row a {
+    border-width:5px;
+  }
+  .aftercare-list {
+    display:grid;
+    gap:12px;
+    padding-left:20px;
+    color:var(--color-text-muted);
+    line-height:1.65;
+  }
+  .aftercare-list strong {
+    color:var(--color-body);
+  }
+  .medical-alert {
+    padding:28px;
+    border:5px solid color-mix(in srgb,var(--color-tattooing) 58%,transparent);
+  }
+  .medical-alert h3 {
+    margin:8px 0 14px;
+    color:var(--color-body);
+    font-family:var(--font-display);
+    font-size:20px;
+    font-weight:900;
+    text-transform:uppercase;
+  }
+  .medical-alert p {
+    color:var(--color-text-muted);
+    line-height:1.65;
+  }
+  .medical-alert p + p {
+    margin-top:14px;
+  }
+  .source-note {
+    padding-top:28px;
+    border-top:5px solid var(--aftercare-frame);
+  }
+  .source-note p {
+    color:var(--color-text-muted);
+    font-size:13px;
+    line-height:1.65;
+  }
+  .source-note a {
+    color:var(--color-accent);
+    text-decoration:underline;
+    text-underline-offset:3px;
+  }
+  @media (max-width:760px) {
+    .aftercare-grid { grid-template-columns:1fr; }
+  }
+</style>
+<link rel="stylesheet" href="/css/mobile.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
+</head>
+<body class="tattoos-page tattoo-resource-page" data-venture="tattooing">
+  <main class="tattoos-shell">
+    <section class="hero site-hero site-hero--supporting">
+      <div class="hero-copy entrance-fade">
+        <h1 class="hero-title">Aftercare Instructions</h1>
+        <p class="hero-lead hero-descriptor">A practical guide for protecting your new tattoo while your skin heals.</p>
+        <p class="hero-note">Follow the covering and product instructions given at your appointment first. Contact the studio if those instructions are unclear or your covering fails.</p>
+      </div>
+      <aside class="hero-panel entrance-fade entrance-delay-1">
+        <span class="panel-label">First priority</span>
+        <h2 class="panel-title">Keep it clean. Keep it gentle.</h2>
+        <p>A fresh tattoo is healing skin. Wash your hands before touching it, avoid friction, and do not pick, scratch, or peel it.</p>
+      </aside>
+    </section>
+
+    <section class="page-section" aria-labelledby="first-days-title">
+      <div class="section-head">
+        <span class="section-kicker">The first days</span>
+        <h2 class="section-title" id="first-days-title">Clean, dry, and lightly moisturized.</h2>
+      </div>
+      <div class="aftercare-grid">
+        <article class="section-card">
+          <span class="mini-label">Covering</span>
+          <h3>Follow your appointment instructions</h3>
+          <p>Keep the original covering on for the time specified at your appointment. Wash your hands before removing it. Do not re-bandage the tattoo unless the studio directs you to.</p>
+        </article>
+        <article class="section-card">
+          <span class="mini-label">Washing</span>
+          <h3>Use clean hands and lukewarm water</h3>
+          <p>Gently wash with a mild, fragrance-free cleanser. Do not scrub or use a washcloth. Rinse thoroughly, then pat dry with a clean paper towel.</p>
+        </article>
+        <article class="section-card">
+          <span class="mini-label">Moisture</span>
+          <h3>Apply only a thin layer</h3>
+          <p>Use the fragrance-free moisturizer or ointment recommended at your appointment. Apply a light layer; the tattoo should not stay greasy, wet, or smothered.</p>
+        </article>
+        <article class="section-card">
+          <span class="mini-label">Clothing</span>
+          <h3>Prevent sticking and friction</h3>
+          <p>Wear clean, loose, breathable clothing over the area. Avoid tight fabric, repeated rubbing, and anything that can stick to or contaminate the tattoo.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="page-section" aria-labelledby="healing-title">
+      <div class="section-head">
+        <span class="section-kicker">While it heals</span>
+        <h2 class="section-title" id="healing-title">Let the skin complete its process.</h2>
+      </div>
+      <ul class="aftercare-list">
+        <li><strong>Expected changes:</strong> Mild soreness, redness, swelling, clear fluid, itching, flaking, and light scabbing can occur as a tattoo heals.</li>
+        <li><strong>Do not pick:</strong> Let flakes and scabs release naturally. Picking or scratching can injure the skin, remove pigment, and increase infection risk.</li>
+        <li><strong>Avoid soaking:</strong> Showering is fine, but do not submerge the tattoo in baths, pools, hot tubs, lakes, or other shared water until it is fully healed.</li>
+        <li><strong>Avoid direct sun:</strong> Keep a healing tattoo out of direct sunlight. After it is fully healed, use broad-spectrum sunscreen to help protect the skin and pigment.</li>
+        <li><strong>Keep products simple:</strong> Avoid exfoliants, fragranced products, and unapproved treatments on the tattoo while it heals.</li>
+      </ul>
+    </section>
+
+    <section class="page-section" aria-labelledby="medical-title">
+      <div class="medical-alert">
+        <span class="mini-label">Medical attention</span>
+        <h3 id="medical-title">Know when healing is no longer routine.</h3>
+        <p>Contact a doctor or board-certified dermatologist promptly if redness becomes darker or spreads, pain or swelling worsens instead of improving, the skin feels increasingly hot, or you develop pus, significant drainage, odor, open sores, red streaks, fever, chills, or shivering.</p>
+        <p>Seek emergency care for trouble breathing, chest tightness, dizziness, hives, intense swelling, or another serious whole-body reaction. Tell the studio what is happening, but do not rely on a tattoo artist to diagnose or treat a medical problem.</p>
+      </div>
+    </section>
+
+    <section class="page-section">
+      <div class="source-note">
+        <span class="mini-label">Health references</span>
+        <p>This general guide is informed by dermatologist-reviewed guidance from the <a href="https://health.clevelandclinic.org/tattoo-aftercare">Cleveland Clinic</a> and the <a href="https://www.aad.org/public/everyday-care/skin-care-basics/tattoos/tattoo-skin-reactions">American Academy of Dermatology</a>. It does not replace individualized medical advice.</p>
+      </div>
+      <div class="action-row">
+        <a class="tattoos-button-secondary" href="/tattoos/policies/">Studio &amp; Booking Policies</a>
+        <a class="tattoos-button-secondary" href="/tattoos/day-of/">Day-of / Session Prep</a>
+        <a class="tattoos-button-secondary" href="/tattoos/location-parking/">Location and Parking</a>
+      </div>
+    </section>
+
+    <footer class="footer-bottom">
+      <p>art.pill TATTOO HOUSE / client resource packet</p>
+      <a href="/tattoos/">Return to Art.Pill Tattoo House</a>
+    </footer>
+  </main>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>

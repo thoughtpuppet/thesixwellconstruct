@@ -135,26 +135,22 @@ test("Tattoo index keeps its identity bands together without walk-in availabilit
   assert.doesNotMatch(html, /css\/walk-in-windows\.css|js\/walk-in-windows\.js|loadWalkInCards/);
 });
 
-test("shared identity actions are filled, accessible, responsive controls", async () => {
+test("shared identity actions are outlined, node-responsive, accessible controls", async () => {
   const [identityCss, walkinCss, guide] = await Promise.all([
     read("css/identity-bands.css"),
     read("css/walk-in-windows.css"),
     read("tools/ui-guide.html"),
   ]);
 
-  assert.match(identityCss, /\.brand-band-link\s*\{[\s\S]*min-height:\s*48px/);
+  assert.match(identityCss, /\.brand-band-link\s*\{[\s\S]*min-height:\s*50px/);
   assert.match(identityCss, /\.brand-band-link\s*\{[\s\S]*border:\s*5px solid/);
-  assert.match(identityCss, /\.brand-band-link\s*\{[\s\S]*background:\s*var\(--band-action-fill/);
-  assert.match(identityCss, /\.brand-band-link\s*\{[\s\S]*color:\s*var\(--band-action-ink,\s*var\(--color-bg\)\)/);
+  assert.match(identityCss, /\.brand-band-link\s*\{[\s\S]*background:\s*transparent[\s\S]*color:\s*var\(--band-copy-color\)/);
   assert.match(
     identityCss,
-    /\.band-actions \.brand-band-link\[href\^="\/about\/"\]\s*\{[\s\S]*border-color:\s*var\(--band-copy-color\)[\s\S]*background:\s*transparent[\s\S]*color:\s*var\(--band-copy-color\)/,
+    /\.brand-band-link:is\(:hover,\s*:focus-visible\)\s*\{[\s\S]*border-color:\s*var\(--band-color\)[\s\S]*color:\s*var\(--band-color\)/,
   );
-  assert.match(
-    identityCss,
-    /\.band-actions \.brand-band-link\[href\^="\/about\/"\]:is\(:hover,\s*:focus-visible\)\s*\{[\s\S]*border-color:\s*var\(--color-accent\)[\s\S]*color:\s*var\(--color-accent\)[\s\S]*opacity:\s*1/,
-  );
-  assert.match(identityCss, /\.brand-band-link:focus-visible\s*\{[\s\S]*outline:\s*5px solid/);
+  assert.doesNotMatch(identityCss, /\.brand-band-link\[href\^="\/about\/"\]/);
+  assert.match(identityCss, /\.brand-band-link:focus-visible\s*\{[\s\S]*outline:\s*5px solid var\(--band-focus-color,\s*var\(--band-color\)\)/);
   assert.match(identityCss, /@media \(max-width:\s*640px\)[\s\S]*\.brand-band-link\s*\{[\s\S]*width:\s*100%/);
   assert.match(identityCss, /@media \(prefers-reduced-motion:\s*reduce\)/);
   assert.match(identityCss, /\.brand-band\s*\{[\s\S]*--band-title-size:\s*clamp\(34px,\s*8vw,\s*112px\)/);

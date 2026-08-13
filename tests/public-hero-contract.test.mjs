@@ -76,6 +76,7 @@ const routes = [
   { route: "/search/", file: "search/index.html", variant: "supporting" },
 
   { route: "/tattoos/approved/", file: "tattoos/approved/index.html", variant: "supporting", descriptor: true },
+  { route: "/tattoos/aftercare/", file: "tattoos/aftercare/index.html", variant: "supporting", descriptor: true },
   { route: "/tattoos/build/", file: "tattoos/build/index.html", variant: "supporting", descriptor: true },
   { route: "/tattoos/build/in-person/", file: "tattoos/build/in-person/index.html", variant: "supporting", descriptor: true },
   { route: "/tattoos/day-of/", file: "tattoos/day-of/index.html", variant: "supporting", descriptor: true },
@@ -276,17 +277,17 @@ test("Archive keeps search utility and resource links outside the shared landing
   assert.ok(explorer > resources, "archive resources must lead into the archive explorer tools");
 });
 
-test("Tattoo landing keeps the path chooser out of its hero", async () => {
+test("Tattoo landing replaces its lower promotions with client resources", async () => {
   const html = await read("tattoos/index.html");
   const hero = html.match(/<section class="landing-hero[\s\S]*?<\/section>/)?.[0] || "";
 
   assert.ok(hero, "Tattoo landing hero must exist");
   assert.doesNotMatch(hero, /Choose a path|cta-primary/i);
-  assert.match(
-    html,
-    /<div class="booking-cta">[\s\S]*?<h2[^>]*>Choose a Path\.<\/h2>[\s\S]*?<a class="cta-primary" href="\/tattoos\/inquire\/">Choose a path →<\/a>/,
-    "the lower-page inquiry chooser must remain available",
-  );
+  assert.doesNotMatch(html, /class="booking-cta"|id="tattooSpecialsCta"|>Choose a Path\.</);
+  assert.match(html, /<section class="client-resources"[\s\S]*?<h2[^>]*>Client Resources\.<\/h2>/);
+  for (const route of ["policies", "day-of", "location-parking", "aftercare"]) {
+    assert.match(html, new RegExp(`class="client-resource-link" href="/tattoos/${route}/"`));
+  }
 });
 
 test("Tattoo landing hero stacks full-width and left-aligned on mobile", async () => {

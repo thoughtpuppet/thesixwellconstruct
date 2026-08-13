@@ -75,16 +75,6 @@
     display:flex; flex-direction:column; align-items:flex-end;
     gap:20px; max-width:300px;
   }
-  .cta-primary {
-    display:inline-flex; align-items:center; gap:8px;
-    font-family:var(--sans); font-weight:700; font-size:11px;
-    letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--text-mute); background:transparent;
-    border:5px solid var(--ring-soft);
-    padding:12px 24px;
-    transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
-  }
-  .cta-primary:hover { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); }
   .hero-note {
     font-family:var(--serif); font-size:12px; font-weight:400;
     letter-spacing:0.22em; line-height:1.6; text-transform:uppercase;
@@ -97,8 +87,7 @@
   .section-body, .section-body *,
   .note-body, .note-body *,
   .fine-print, .fine-print *,
-  .booking-cta-body, .booking-cta-body *,
-  .booking-cta-note, .booking-cta-note * {
+  .client-resources-body, .client-resources-body * {
     line-height:1.2 !important;
   }
   /* section-body also carries a `line-height:1.7 !important` from the shared
@@ -114,8 +103,7 @@
     .section-body, .section-body *,
     .note-body, .note-body *,
     .fine-print, .fine-print *,
-    .booking-cta-body, .booking-cta-body *,
-    .booking-cta-note, .booking-cta-note *,
+    .client-resources-body, .client-resources-body *,
     /* outrank the data-venture-scoped section-body rule above */
     body[data-venture="tattooing"] .section-body,
     body[data-venture="tattooing"] .section-body * {
@@ -173,14 +161,14 @@
     flex-direction:column;
     gap:26px;
   }
-  .note-title,.ledger-title,.path-title,.fit-title,.booking-cta-title {
+  .note-title,.ledger-title,.path-title,.fit-title,.client-resources-title {
     font-family:var(--sans);
   }
   .note-title {
     font-weight:900; font-size:13px; letter-spacing:0.1em; text-transform:uppercase;
     color:var(--signal); margin-bottom:14px;
   }
-  .note-body,.booking-cta-body {
+  .note-body,.client-resources-body {
     font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
   }
   .ledger {
@@ -207,7 +195,7 @@
   }
   .ledger-row.is-primary > div { padding-top:36px; padding-bottom:36px; }
   .ledger-row > div + div { border-left:5px solid var(--ring-faint); }
-  .ledger-label,.booking-cta-label {
+  .ledger-label,.client-resources-label {
     font-family:var(--serif); font-size:10px;
     letter-spacing:0.22em; text-transform:uppercase;
     color:var(--accent); opacity:0.7; margin-bottom:12px;
@@ -413,28 +401,50 @@
     opacity:0.7;
   }
   .fit-list.secondary li::before { background:var(--text-ghost); }
-  .booking-cta {
+  .client-resources {
     margin-top:96px;
     border-top:5px solid var(--ring-soft);
     border-bottom:5px solid var(--ring-soft);
     background:transparent;
     padding:48px 0;
     display:grid;
-    grid-template-columns:minmax(0,1fr) auto;
-    align-items:center;
+    grid-template-columns:minmax(0,0.72fr) minmax(320px,1fr);
+    align-items:start;
     gap:48px;
   }
-  .booking-cta-left { max-width:480px; }
-  .booking-cta-title {
+  .client-resources-copy { max-width:480px; }
+  .client-resources-title {
     font-weight:900; font-size:clamp(24px,3vw,42px);
     letter-spacing:-0.03em; line-height:0.94; color:var(--accent); margin-bottom:16px;
   }
-  .booking-cta-actions {
-    display:flex; flex-direction:column; align-items:flex-end; gap:12px; flex-shrink:0;
+  .client-resources-actions {
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:12px;
   }
-  .booking-cta-note {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.14em; text-transform:uppercase;
-    color:var(--text-ghost); text-align:right; max-width:200px; line-height:1.6;
+  .client-resource-link {
+    display:inline-flex;
+    min-height:50px;
+    align-items:center;
+    justify-content:center;
+    border:5px solid var(--ring-soft);
+    background:transparent;
+    color:var(--text-mute);
+    padding:10px 24px;
+    font-family:var(--sans);
+    font-weight:700;
+    font-size:11px;
+    line-height:1.35;
+    letter-spacing:0.18em;
+    text-align:center;
+    text-transform:uppercase;
+    transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);
+  }
+  .client-resource-link:hover,
+  .client-resource-link:focus-visible {
+    border-color:var(--accent);
+    background:rgba(252,184,103,0.04);
+    color:var(--accent);
   }
   footer.bottom {
     position:relative; z-index:2; max-width:1440px; margin:0 auto;
@@ -457,12 +467,10 @@
   }
   @media (max-width:768px) {
     .hero { gap:20px; margin-bottom:64px; }
-    .booking-cta-actions { align-items:flex-start; max-width:none; }
-    .booking-cta-note { text-align:left; }
     .side-notes { border-left:none; padding-left:0; border-top:5px solid var(--ring-faint); padding-top:24px; }
     .rate-list li { grid-template-columns:1fr; gap:10px; }
     .session-list > li { grid-template-columns:1fr; gap:12px; }
-    .booking-cta { grid-template-columns:1fr; align-items:flex-start; }
+    .client-resources { grid-template-columns:1fr; }
   }
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
@@ -473,6 +481,7 @@
     .ledger-row > div + div { border-left:none; border-top:1px solid var(--ring-faint); }
     .ledger-row.is-primary > div { padding-top:12px; padding-bottom:12px; }
     .ledger-row > div:first-child { justify-self:start; text-align:left; }
+    .client-resources-actions { grid-template-columns:1fr; }
     /* The title-column label is always an empty <br> here — drop it on mobile
        so titles don't carry a wasted blank line + margin above them. */
     .ledger .ledger-label { display:none; }
@@ -715,28 +724,19 @@
       </ul>
       <p class="section-body section-body--ghost" data-copy-id="tattoos-rates-fine-print">All sessions require a deposit, applied toward the total cost. Rates are confirmed at booking time and subject to change.</p>
     </section>
-    <div class="booking-cta" id="tattooSpecialsCta" hidden>
-      <div class="booking-cta-left">
-        <p class="booking-cta-label">Limited booking window</p>
-        <h2 class="booking-cta-title">Tattoo Specials.</h2>
-        <p class="booking-cta-body" id="tattooSpecialsCtaCopy">Studio-managed Tattoo Specials are currently open.</p>
+    <section class="client-resources" aria-labelledby="client-resources-title">
+      <div class="client-resources-copy">
+        <p class="client-resources-label">Appointment information</p>
+        <h2 class="client-resources-title" id="client-resources-title">Client Resources.</h2>
+        <p class="client-resources-body">Review studio policies, prepare for your session, plan your arrival, and care for your tattoo after the appointment.</p>
       </div>
-      <div class="booking-cta-actions">
-        <a class="cta-primary" href="/tattoos/specials/">View current specials →</a>
-        <p class="booking-cta-note">Pay the deposit during the sales window. Your appointment may happen later.</p>
-      </div>
-    </div>
-    <div class="booking-cta">
-      <div class="booking-cta-left">
-        <p class="booking-cta-label" data-copy-id="tattoos-cta-label">Ready to Begin?</p>
-        <h2 class="booking-cta-title" data-copy-id="tattoos-cta-title">Choose a Path.</h2>
-        <p class="booking-cta-body" data-copy-id="tattoos-cta-body">Submit a project, book planning time, or check a current walk-in window. The chooser explains which path fits before you start.</p>
-      </div>
-      <div class="booking-cta-actions">
-        <a class="cta-primary" href="/tattoos/inquire/">Choose a path →</a>
-        <p class="booking-cta-note" data-copy-id="tattoos-cta-note">Review comes before scheduling. Approved projects receive private token booking access.</p>
-      </div>
-    </div>
+      <nav class="client-resources-actions" aria-label="Client resources">
+        <a class="client-resource-link" href="/tattoos/policies/">Studio &amp; Booking Policies</a>
+        <a class="client-resource-link" href="/tattoos/day-of/">Day-of / Session Prep</a>
+        <a class="client-resource-link" href="/tattoos/location-parking/">Location and Parking</a>
+        <a class="client-resource-link" href="/tattoos/aftercare/">Aftercare Instructions</a>
+      </nav>
+    </section>
   </main>
   <footer class="bottom">
     <p>© Art.Pill Tattoo House · the six.well construct</p>
@@ -747,13 +747,7 @@
       .then(function(response) { if (!response.ok) throw new Error(); return response.json(); })
       .then(function(payload) {
         if (payload.state !== "open") return;
-        var cta = document.getElementById("tattooSpecialsCta");
         var bandCta = document.getElementById("tattooSpecialsBandCta");
-        var copy = document.getElementById("tattooSpecialsCtaCopy");
-        if (copy && payload.salesClosesAt) {
-          copy.textContent = "Current Tattoo Specials close " + new Intl.DateTimeFormat("en-US", { timeZone: payload.timezone || "America/New_York", month: "long", day: "numeric", year: "numeric" }).format(new Date(payload.salesClosesAt)) + ".";
-        }
-        if (cta) cta.hidden = false;
         if (bandCta) bandCta.hidden = false;
       })
       .catch(function() {});

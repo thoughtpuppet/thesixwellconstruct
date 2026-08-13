@@ -4215,12 +4215,27 @@ test("Studio Tattoo Specials metrics preserve lifetime conversion and separate g
   assert.deepEqual(archivedOffer.metrics, measured.offers.find((offer) => offer.id === "special-palm").metrics);
 });
 
-test("Tattoo index keeps the lower Specials block and reveals a matching brand-band action only while open", () => {
+test("Tattoo index keeps Specials in its brand band and closes with client resources", () => {
   const source = readFileSync(join(ROOT, "tattoos", "index.html"), "utf8");
-  assert.match(source, /class="brand-band-link" href="\/tattoos\/inquire\/">Book an appointment<\/a>/);
-  assert.match(source, /class="brand-band-link" id="tattooSpecialsBandCta" href="\/tattoos\/specials\/" hidden>View Current Specials<\/a>/);
-  assert.match(source, /class="booking-cta" id="tattooSpecialsCta" hidden/);
-  assert.match(source, /if \(payload\.state !== "open"\) return;[\s\S]*?if \(cta\) cta\.hidden = false;[\s\S]*?if \(bandCta\) bandCta\.hidden = false;/);
+  assert.match(source, /class="brand-band-link" href="\/tattoos\/inquire\/"[^>]*>Book an appointment<\/a>/);
+  assert.match(source, /class="brand-band-link" id="tattooSpecialsBandCta" href="\/tattoos\/specials\/"[^>]*hidden>View Current Specials<\/a>/);
+  assert.doesNotMatch(source, /id="tattooSpecialsCta"|id="tattooSpecialsCtaCopy"|>Tattoo Specials\.<\/h2>|>Choose a Path\.<\/h2>/);
+  assert.match(source, /if \(payload\.state !== "open"\) return;[\s\S]*?if \(bandCta\) bandCta\.hidden = false;/);
+  assert.match(source, /<section class="client-resources"[\s\S]*?\/tattoos\/policies\/[\s\S]*?\/tattoos\/day-of\/[\s\S]*?\/tattoos\/location-parking\/[\s\S]*?\/tattoos\/aftercare\//);
+});
+
+test("Tattoo aftercare is part of the client resource packet and keeps medical escalation explicit", () => {
+  const aftercare = readFileSync(join(ROOT, "tattoos", "aftercare", "index.html"), "utf8");
+  const policies = readFileSync(join(ROOT, "tattoos", "policies", "index.html"), "utf8");
+  const dayOf = readFileSync(join(ROOT, "tattoos", "day-of", "index.html"), "utf8");
+  const location = readFileSync(join(ROOT, "tattoos", "location-parking", "index.html"), "utf8");
+  assert.match(aftercare, /<h1 class="hero-title">Aftercare Instructions<\/h1>/);
+  assert.match(aftercare, /Follow the covering and product instructions given at your appointment first/);
+  assert.match(aftercare, /Contact a doctor or board-certified dermatologist promptly/);
+  assert.match(aftercare, /Seek emergency care for trouble breathing/);
+  assert.match(aftercare, /health\.clevelandclinic\.org\/tattoo-aftercare/);
+  assert.match(aftercare, /aad\.org\/public\/everyday-care\/skin-care-basics\/tattoos\/tattoo-skin-reactions/);
+  for (const source of [policies, dayOf, location]) assert.match(source, /href="\/tattoos\/aftercare\/"/);
 });
 
 test("Custom Tattoo Inquiry explains approval and booking before asking for detail", () => {
