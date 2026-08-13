@@ -182,7 +182,7 @@
     };
     if (window.ConstructConnections) return run();
     const script = document.createElement("script");
-    script.src = "/js/construct-connections.js?v=9";
+    script.src = "/js/construct-connections.js?v=10";
     script.onload = run;
     document.head.appendChild(script);
   }

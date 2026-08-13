@@ -195,6 +195,11 @@ test("shared connections render a published archive dossier as the final Related
   assert.match(source, /\/api\/shop\/product\?handle=/);
   assert.match(source, /\/api\/legend\//);
   assert.match(source, /function addSymbol\(a,markup\)/);
+  assert.ok(
+    source.indexOf('if(entity.entityType==="visual_symbol"&&entity.mediaMarkup)') < source.indexOf('if(entity.imageUrl)'),
+    "connection cards must choose a Legend symbol's canonical SVG before any image URL",
+  );
+  assert.match(source, /addResolvedMedia\(a,media,entity\.entityType==="visual_symbol"\)/);
   assert.match(source, /meta\.append\(el\("span","cc-badge",entity\.kindLabel\|\|entity\.entityType\.replaceAll\("_"," "\)\),el\("span","cc-badge",entity\.node\.name\)\)/);
   assert.doesNotMatch(source, /meta\.append\([^;]*entity\.state/);
   assert.match(source, /const mapView=map\(records,payload\.entity\)/);
@@ -265,6 +270,14 @@ test("Art print intent is managed and private Merch drafts stay out of public co
       (id,source_entity_id,target_entity_id,relationship_type_id,public_visible,internal_notes,sort_order,created_by,created_at,updated_at)
     VALUES
       ('test-marbles-open-eye','art-marbles','fig-eye','rel-uses-symbol',1,'Test fixture.',3,'test',datetime('now'),datetime('now'));
+    INSERT INTO media_assets
+      (id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,created_by,created_at,updated_at)
+    VALUES
+      ('test-open-eye-variant','https://example.test/open-eye-color.png','open-eye-color.png','image/png','Open Eye color variant','public','not-required','active','test',datetime('now'),datetime('now'));
+    INSERT INTO entity_media
+      (entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at)
+    VALUES
+      ('fig-eye','test-open-eye-variant','legend-variant',1,1,'Open Eye color variant','',datetime('now'));
   `);
 
   const connections = await jsonResponse(await handleConstructApi(request("/api/connections/art-marbles"), env));
@@ -274,7 +287,7 @@ test("Art print intent is managed and private Merch drafts stay out of public co
   assert.equal(print, undefined);
   assert.equal(hoodie.related.imageUrl, "");
   assert.equal(hoodie.related.shopifyHandle, "lostmarbles-hoodie");
-  assert.equal(eye.related.imageUrl, "");
+  assert.equal(eye.related.imageUrl, "", "a public Legend variant must not become the connection card's canonical image");
   assert.match(eye.related.mediaMarkup, /^<svg/);
   assert.equal(connections.payload.archiveCard.label, "Archive record");
   assert.equal(connections.payload.archiveCard.related.title, "Explore the record of this work.");

@@ -2911,11 +2911,10 @@ function entityDirectorySql(where="1=1"){
          AND m.mime_type LIKE 'image/%'
        ORDER BY CASE spm.role WHEN 'primary' THEN 0 ELSE 1 END,spm.sort_order,spm.media_id LIMIT 1),
       (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/entity-media/'||m.id) FROM entity_media em JOIN media_assets m ON m.id=em.media_id
-       WHERE em.entity_id=ce.id AND em.public_visible=1 AND m.state='active' AND m.privacy='public'
+       WHERE ce.entity_type<>'visual_symbol' AND em.entity_id=ce.id AND em.public_visible=1 AND m.state='active' AND m.privacy='public'
           AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline' AND m.mime_type LIKE 'image/%'
           AND (ce.entity_type<>'archive_failed_experiment' OR trim(COALESCE(NULLIF(em.alt_text_override,''),m.alt_text))<>'')
        ORDER BY CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order LIMIT 1),
-      CASE WHEN ce.entity_type='visual_symbol' THEN COALESCE(json_extract(vs.examples_json,'$[0].src'),'') ELSE NULL END,
       CASE WHEN ce.entity_type='portfolio_item' THEN '/api/portfolio/media/'||pi.id ELSE '' END) image_url,
     CASE WHEN ce.entity_type='visual_symbol' THEN COALESCE(vs.svg_markup,'') ELSE '' END media_markup,
     CASE ce.entity_type

@@ -11,12 +11,13 @@
   }
   function addImage(a,url){if(!url||a.querySelector(".cc-card-media"))return;a.classList.add("cc-card--with-media");const img=el("img","cc-card-media");img.src=url;img.alt="";img.loading="lazy";img.addEventListener("error",()=>{a.classList.remove("cc-card--with-media");img.remove()});a.prepend(img)}
   function addSymbol(a,markup){if(!markup||a.querySelector(".cc-card-media"))return;a.classList.add("cc-card--with-media");const media=el("span","cc-card-media cc-card-media--symbol");media.setAttribute("aria-hidden","true");media.innerHTML=markup;a.prepend(media)}
-  function addResolvedMedia(a,media){if(!media)return;if(media.url)addImage(a,media.url);else if(media.markup)addSymbol(a,media.markup)}
+  function addResolvedMedia(a,media,preferMarkup=false){if(!media)return;if(preferMarkup&&media.markup)addSymbol(a,media.markup);else if(media.url)addImage(a,media.url);else if(media.markup)addSymbol(a,media.markup)}
   function addMedia(a,entity){
     if(entity.entityType==="archive_dossier"){a.classList.add("cc-card--with-media");const mark=el("span","cc-card-media cc-card-media--monogram","A");mark.setAttribute("aria-hidden","true");a.prepend(mark);return}
+    if(entity.entityType==="visual_symbol"&&entity.mediaMarkup){addSymbol(a,entity.mediaMarkup);return}
     if(entity.imageUrl){addImage(a,entity.imageUrl);return}
     if(entity.mediaMarkup){addSymbol(a,entity.mediaMarkup);return}
-    remoteMedia(entity).then(media=>addResolvedMedia(a,media));
+    remoteMedia(entity).then(media=>addResolvedMedia(a,media,entity.entityType==="visual_symbol"));
   }
   function clear(host){if(typeof host==="string")host=document.querySelector(host);if(!host)return null;mountRequests.set(host,(mountRequests.get(host)||0)+1);host.replaceChildren();host.hidden=true;return host}
   function card(record,sourceColor){const entity=record.related,a=el("a","cc-card"),stateLabel=record.stateLink?.label||"",detailLabel=[entity.detailLabel,stateLabel].filter(Boolean).join(" · ");a.href=entity.route;a.style.setProperty("--cc-source",sourceColor);a.style.setProperty("--cc-target",entity.node.color);a.setAttribute("aria-label",`${record.label}: ${entity.title}, ${entity.node.name}${stateLabel?`, ${stateLabel}`:""}`);addMedia(a,entity);const body=el("span","cc-card-body"),title=el("span","cc-card-title",entity.title),meta=el("span","cc-card-meta"),details=el("span","cc-card-details",detailLabel);meta.append(el("span","cc-badge",entity.kindLabel||entity.entityType.replaceAll("_"," ")),el("span","cc-badge",entity.node.name));body.append(meta,title);if(detailLabel)body.append(details);a.appendChild(body);return a}
