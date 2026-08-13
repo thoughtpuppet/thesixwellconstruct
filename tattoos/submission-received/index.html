@@ -25,10 +25,6 @@
   .receipt-content { width:min(100%,720px); margin:0 auto; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:44px 0; }
   h1 { margin-bottom:28px; }
   p { font-size:15px; line-height:1.75; color:var(--text-mute); margin-bottom:18px; }
-  .receipt-meta { display:grid; gap:7px; margin:28px 0; padding:18px; border:5px solid var(--ring-faint); }
-  .receipt-label { margin:0; font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--accent); }
-  .receipt-reference { display:block; overflow-wrap:anywhere; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:14px; line-height:1.55; color:var(--text); }
-  .receipt-note { margin:0; font-size:12px; color:var(--text-dim); }
   .next-steps { margin:30px 0 4px; padding-top:24px; border-top:5px solid var(--ring-faint); }
   .next-steps-label { font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--accent); margin-bottom:18px; }
   .next-steps ol { list-style:none; counter-reset:step; display:grid; gap:14px; }
@@ -54,11 +50,6 @@
     <h1 class="hero-title" id="receivedTitle">submission Received.</h1>
     <p class="hero-descriptor" id="receivedIntro">Your custom tattoo inquiry Has been recieved</p>
     <p id="receivedContext">You will receive an email and text message if your request has been approved.</p>
-    <div class="receipt-meta" aria-label="Submission receipt">
-      <p class="receipt-label">Submission reference</p>
-      <code class="receipt-reference" id="submissionReference">Checking receipt&hellip;</code>
-      <p class="receipt-note" id="referenceNote">Keep this reference if you contact the studio about this submission.</p>
-    </div>
     <div class="next-steps">
       <p class="next-steps-label">What happens next</p>
       <ol id="nextSteps">
@@ -88,12 +79,6 @@
     var privateReceipt = new URLSearchParams(location.hash.slice(1));
     var mazeEditToken = privateReceipt.get("edit") || "";
     var mazeRevision = Number(privateReceipt.get("revision") || 0);
-    var ref = params.get("ref") || params.get("submissionId") || params.get("submission") || "";
-    var reference = document.getElementById("submissionReference");
-    var referenceNote = document.getElementById("referenceNote");
-    reference.textContent = ref || "Not included in this legacy receipt";
-    if (!ref) referenceNote.textContent = "This older return link did not include a reference. Keep the confirmation email instead.";
-
     var receipts = {
       flash: {
         title: "Flash Claim Received.",
@@ -146,7 +131,6 @@
     if (type === "maze" && mazeRevision > 1) {
       receipt.title = "Maze Revision Received.";
       receipt.intro = "Revision " + mazeRevision + " of your maze was captured for review. Earlier submitted revisions remain part of the private record.";
-      referenceNote.textContent = "This is revision " + mazeRevision + ". Keep the submission reference if you contact the studio.";
     }
     if (type === "maze" && mazeEditToken) {
       var mazeEditLink = document.getElementById("mazeEditLink");

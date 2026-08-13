@@ -4239,6 +4239,7 @@ test("Submission receipt keeps the shared Tattoo breadcrumb outside its narrow c
   assert.match(source, /\.actions a\s*\{[^}]*min-height:50px/);
   assert.doesNotMatch(source, /(?:^|\n)\s*a\s*\{[^}]*min-height:50px/);
   assert.doesNotMatch(source, /body\s*\{[^}]*display:grid;[^}]*place-items:center;/);
+  assert.doesNotMatch(source, /Submission reference|legacy receipt|submissionReference|referenceNote|receipt-meta/);
 });
 
 test("Tattoo Specials public copy matches the approval-first booking lifecycle", () => {

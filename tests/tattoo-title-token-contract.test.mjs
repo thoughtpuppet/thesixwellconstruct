@@ -20,7 +20,7 @@ const PAGES = {
   "tattoos/flash/detail/index.html": "00e39d142e0609c14a8c2f1e2627a55a62fc18da8e16e14b7b045f715c18dd2a",
   "tattoos/flash/index.html": "14240f03e6db18dbdc812d6abb0c4397df6de183838b6b87be6d824cebfc7578",
   "tattoos/flash/maze/index.html": "c64e277f52d32203d26dfcd3d10d323aabfc5907c2f8041f344caefb9c881674",
-  "tattoos/index.html": "debbe6756a6d3c90e8fb0e40869aa13d5c01c6b8d8128b8d0bf4e443175e7aa8",
+  "tattoos/index.html": "fb344edec079bfd753783a533bbb51b4029d5ca601cbfc9fdb0837bb9ec301bc",
   "tattoos/inquire/consultation/index.html": "7b9c15b091eff6e688b1c8e7bdf6414bb50cce27323edc0cc85d7299635e0536",
   "tattoos/inquire/custom/index.html": "786b8b31e21fe1518244735ca6a906637e4332aebf07ace1ceef30bec3714710",
   "tattoos/inquire/index.html": "8f17808a958f0e404334521a55794d1627259325ad9efd80e355fd7ea3f72979",
@@ -29,7 +29,7 @@ const PAGES = {
   "tattoos/portfolio/index.html": "e0916fd329f2f600fcb7695202e4ffecc14006f92165a8605306a9f7f6690ca2",
   "tattoos/special-projects/apply/index.html": "0bc3a84d2a696c2334f2b84a01072574dd504a2be99495d76f240cb7d0985529",
   "tattoos/special-projects/index.html": "a28751eb7304fd7ad5d6fa3f43d1c7eea69b9dd2899eb27dc3281eb2780d3c93",
-  "tattoos/submission-received/index.html": "c8134bc8bd464b312c38dfa5b9b2481477ab1218bcdc297ec030768d4420e725",
+  "tattoos/submission-received/index.html": "1132c913f018cf928883959bd940639bce379e0b5969bdba7e983f73a5041887",
 };
 
 function cleanText(value) {

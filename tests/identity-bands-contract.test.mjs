@@ -124,27 +124,15 @@ test("brand-band source marks retain the Legend color while titles and rendered 
   assert.doesNotMatch(thoughtPuppetSvg, /<text\b/i);
 });
 
-test("Tattoo availability is a standalone live region between identity bands", async () => {
-  const [html, renderer] = await Promise.all([
-    read("tattoos/index.html"),
-    read("js/walk-in-windows.js"),
-  ]);
+test("Tattoo index keeps its identity bands together without walk-in availability", async () => {
+  const html = await read("tattoos/index.html");
 
   const brandIndex = html.indexOf('class="brand-band ');
-  const availabilityIndex = html.indexOf('class="walkin-section"');
   const artistIndex = html.indexOf('class="artist-band ');
 
-  assert.ok(brandIndex >= 0 && availabilityIndex > brandIndex && artistIndex > availabilityIndex);
-  assert.match(html, /class="walkin-section" id="walk-in-windows"/);
-  assert.match(html, /class="walkin-section__windows"/);
-  assert.match(html, /class="walkin-section__hours"/);
-  assert.match(html, /id="walkInCards"/);
-  assert.match(html, /id="displayedStudioHours" aria-live="polite"/);
-  assert.doesNotMatch(html, /brand-band-walkin|brand-band-hours/);
-
-  for (const state of ["loading", "ready", "empty", "error"]) {
-    assert.match(renderer, new RegExp(`walkInState = "${state}"`));
-  }
+  assert.ok(brandIndex >= 0 && artistIndex > brandIndex);
+  assert.doesNotMatch(html, /walkin-section|walk-in-windows|walkInCards|displayedStudioHours/);
+  assert.doesNotMatch(html, /css\/walk-in-windows\.css|js\/walk-in-windows\.js|loadWalkInCards/);
 });
 
 test("shared identity actions are filled, accessible, responsive controls", async () => {

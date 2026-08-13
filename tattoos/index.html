@@ -8,7 +8,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
-<link rel="stylesheet" href="/css/walk-in-windows.css">
 <style>
   :root {
     --bg: var(--color-bg);
@@ -548,20 +547,10 @@
         <p class="band-copy" data-copy-id="tattoos-brand-copy"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 14px"><span style="font-size: 14px">a private tattoo studio in Atlanta, Georgia, owned and operated by Sai Solehman. The studio specializes in NARRATIVE COMPOSITIONS, FLORAL PIECES, script, and repeatable symbolic patterns, with color work designed thoughtfully for brown skin tones.</span></span></span></p>
         <div class="band-actions">
           <a class="brand-band-link" href="/about/artpilltattoohouse/" data-copy-id="tattoos-brand-action-about">learn more about art.pill</a>
-          <a class="brand-band-link" href="/tattoos/inquire/">Book an appointment</a>
-          <a class="brand-band-link" id="tattooSpecialsBandCta" href="/tattoos/specials/" hidden>View Current Specials</a>
+          <a class="brand-band-link" href="/tattoos/inquire/" data-copy-id="tattoos-brand-action-book">Book an appointment</a>
+          <a class="brand-band-link" id="tattooSpecialsBandCta" href="/tattoos/specials/" data-copy-id="tattoos-brand-action-specials" hidden>View Current Specials</a>
         </div>
       </div>
-    </section>
-    <section class="walkin-section" id="walk-in-windows" aria-labelledby="walk-in-windows-title">
-      <div class="walkin-section__windows">
-        <h2 class="section-title walkin-section__title" id="walk-in-windows-title">Walk-In Windows</h2>
-        <div id="walkInCards"></div>
-      </div>
-      <aside class="walkin-section__hours" aria-labelledby="studio-hours-label">
-        <p class="walkin-section__hours-label" id="studio-hours-label">STUDIO HOURS [APPOINTMENT ONLY]</p>
-        <p class="walkin-section__hours-value" id="displayedStudioHours" aria-live="polite">By appointment&mdash;see live availability.</p>
-      </aside>
     </section>
     <section class="artist-band artist-band--founder" id="saiel-artist-band" aria-labelledby="artist-name-title">
       <div class="band-identity band-portrait">
@@ -753,9 +742,7 @@
     <p>© Art.Pill Tattoo House · the six.well construct</p>
     <a href="/home/">return to construct</a>
   </footer>
-  <script src="/js/walk-in-windows.js"></script>
   <script>
-    loadWalkInCards("walkInCards", { emptyMessage: "No walk-in windows are currently scheduled. Check back soon or submit an inquiry to book an appointment." });
     fetch("/api/tattoo/specials", { cache: "no-store", headers: { accept: "application/json" } })
       .then(function(response) { if (!response.ok) throw new Error(); return response.json(); })
       .then(function(payload) {
@@ -782,22 +769,6 @@
         }).length;
         var status = document.getElementById("specialProjectsStatus");
         if (status) status.textContent = openCount ? openCount + (openCount === 1 ? " open call" : " open calls") : "no open calls";
-
-        var hoursValue = payload.displayedHours !== undefined ? payload.displayedHours : (payload.settings || {}).displayedHours;
-        var hoursText = "";
-        if (typeof hoursValue === "string") {
-          hoursText = hoursValue.trim();
-        } else if (Array.isArray(hoursValue)) {
-          hoursText = hoursValue.map(function(item) {
-            if (typeof item === "string") return item.trim();
-            if (!item || typeof item !== "object") return "";
-            var label = item.dayLabel || item.day || item.label || "";
-            var value = item.hoursText || item.hours || (item.closed ? "Closed" : "");
-            return [label, value].filter(Boolean).join(" ");
-          }).filter(Boolean).join("; ");
-        }
-        var hoursTarget = document.getElementById("displayedStudioHours");
-        if (hoursTarget) hoursTarget.textContent = hoursText || "By appointment—see live availability.";
 
         var publicRateCopy = {
           flash: {
