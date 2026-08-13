@@ -10,4 +10,5 @@ SET artist_statement = summary,
     summary = ''
 WHERE (id = 'self-faith' OR slug = 'self-faith')
   AND artist_statement = ''
-  AND summary LIKE 'This is part of the Classic Cliches series where I reimagine and reorient tattoo imagery%';
+  AND substr(summary, 1, length('This is part of the Classic Cliches series where I reimagine and reorient tattoo imagery'))
+    = 'This is part of the Classic Cliches series where I reimagine and reorient tattoo imagery';
