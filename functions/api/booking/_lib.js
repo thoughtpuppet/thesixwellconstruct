@@ -16,7 +16,7 @@ import {
   reviewedTattooBudgetIsComplete as reviewedBudgetIsComplete,
   tattooPricingSummary as pricingSummaryForAppointment,
 } from "./_pricing.js";
-import { bookingUrlForToken, createBookingRawToken } from "../booking-links.js";
+import { bookingTokenFromUrl, bookingUrlForToken, createBookingRawToken } from "../booking-links.js";
 
 const BOOKING_STATUSES = new Set([
   "pending_deposit",
@@ -1554,7 +1554,7 @@ function normalizeTattooSessionPlan(row) {
     allowedBookingTypes: parseJsonField(row.allowed_booking_types_json, []),
     bookingLinkExpiresAt: row.booking_link_expires_at || "",
     bookingLinkRevokeExisting: row.booking_link_revoke_existing === null || row.booking_link_revoke_existing === undefined
-      ? true
+      ? false
       : Boolean(row.booking_link_revoke_existing),
     clientPreference: row.client_preference || "",
     clientAcknowledged: Boolean(row.client_acknowledged),
@@ -7259,7 +7259,7 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       : (existing?.booking_link_expires_at || "");
     const bookingLinkRevokeExisting = hasOwn("bookingLinkRevokeExisting")
       ? (body.bookingLinkRevokeExisting ? 1 : 0)
-      : (existing?.booking_link_revoke_existing ?? 1);
+      : (existing?.booking_link_revoke_existing ?? 0);
     if (bookingLinkPurpose && !BOOKING_TOKEN_PURPOSES.has(bookingLinkPurpose)) {
       return errorResponse("Choose a valid booking-link purpose.", 400);
     }
@@ -8011,8 +8011,6 @@ export async function handleAdminCreateBookingToken(request, env) {
       }
     }
 
-    const rawToken = createBookingRawToken();
-    const tokenHash = await sha256Hex(rawToken);
     const now = new Date().toISOString();
     const requestedExpiry = asOptionalString(body.expiresAt);
     let expiresAtMs = requestedExpiry
@@ -8051,6 +8049,79 @@ export async function handleAdminCreateBookingToken(request, env) {
       return errorResponse("One or more selected booking types are unavailable.", 409);
     }
 
+    const delivery = { ok: false, skipped: true, reason: "explicit_client_notification_required" };
+    const approvedBudget = reviewedBudgetIsComplete(reviewedSessionPlan)
+      ? {
+          minimumCents: reviewedSessionPlan.approved_budget_min_cents,
+          maximumCents: reviewedSessionPlan.approved_budget_max_cents,
+          currency: reviewedSessionPlan.approved_budget_currency || "USD",
+        }
+      : null;
+
+    if (body.reopenExisting === true && body.revokeExisting === false) {
+      const existingRawToken = bookingTokenFromUrl(submission.booking_url);
+      if (!existingRawToken) {
+        return errorResponse("The existing booking URL cannot be reopened. Check Revoke existing active links to generate a replacement.", 409, {
+          code: "BOOKING_LINK_REPLACEMENT_REQUIRED",
+        });
+      }
+      const existingTokenHash = await sha256Hex(existingRawToken);
+      const existingToken = await db.prepare(
+        `SELECT id FROM booking_tokens
+         WHERE submission_id = ? AND token_hash = ? AND purpose = ? AND used_at IS NULL
+         LIMIT 1`
+      ).bind(submissionId, existingTokenHash, purpose).first();
+      if (!existingToken) {
+        return errorResponse("The existing booking URL cannot be reopened. Check Revoke existing active links to generate a replacement.", 409, {
+          code: "BOOKING_LINK_REPLACEMENT_REQUIRED",
+        });
+      }
+      const reopenResults = await db.batch([
+        db.prepare(
+          `UPDATE booking_tokens
+           SET allowed_booking_types_json = ?, expires_at = ?, revoked_at = NULL, updated_at = ?
+           WHERE id = ? AND submission_id = ? AND purpose = ? AND used_at IS NULL`
+        ).bind(JSON.stringify(allowed), expiresAt, now, existingToken.id, submissionId, purpose),
+        db.prepare(
+          `INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at)
+           SELECT ?, ?, 'booking_link_reopened', 'admin', ?, ?
+           WHERE EXISTS (
+             SELECT 1 FROM booking_tokens
+             WHERE id = ? AND submission_id = ? AND revoked_at IS NULL AND used_at IS NULL
+           )`
+        ).bind(
+          crypto.randomUUID(),
+          submissionId,
+          `${purpose}:${existingToken.id}`,
+          now,
+          existingToken.id,
+          submissionId,
+        ),
+      ]);
+      if (Number(reopenResults?.[0]?.meta?.changes || 0) < 1) {
+        return errorResponse("The existing booking URL changed before it could be reopened.", 409, {
+          code: "BOOKING_LINK_REOPEN_RACED",
+        });
+      }
+      const existingBookingUrl = bookingUrlForToken(baseUrlFromRequest(request), existingRawToken);
+      return json({
+        ok: true,
+        reopened: true,
+        token: {
+          id: existingToken.id,
+          bookingUrl: existingBookingUrl.toString(),
+          path: existingBookingUrl.pathname + existingBookingUrl.search,
+          expiresAt,
+          allowedBookingTypes: allowed,
+          purpose,
+          approvedBudget,
+        },
+        delivery,
+      });
+    }
+
+    const rawToken = createBookingRawToken();
+    const tokenHash = await sha256Hex(rawToken);
     const id = crypto.randomUUID();
     const bookingUrl = bookingUrlForToken(baseUrlFromRequest(request), rawToken);
     const statements = [];
@@ -8150,8 +8221,6 @@ export async function handleAdminCreateBookingToken(request, env) {
       return errorResponse("Submission lifecycle changed before booking access could be created.", 409);
     }
 
-    const delivery = { ok: false, skipped: true, reason: "explicit_client_notification_required" };
-
     return json({
       ok: true,
       token: {
@@ -8161,13 +8230,7 @@ export async function handleAdminCreateBookingToken(request, env) {
         expiresAt,
         allowedBookingTypes: allowed,
         purpose,
-        approvedBudget: reviewedBudgetIsComplete(reviewedSessionPlan)
-          ? {
-              minimumCents: reviewedSessionPlan.approved_budget_min_cents,
-              maximumCents: reviewedSessionPlan.approved_budget_max_cents,
-              currency: reviewedSessionPlan.approved_budget_currency || "USD",
-            }
-          : null,
+        approvedBudget,
       },
       delivery,
     });
@@ -8594,6 +8657,7 @@ function normalizeSpecialProjectCall(row, media = [], series = null) {
     slug: row.slug,
     title: row.title,
     summary: row.summary || "",
+    artistStatement: row.artist_statement || "",
     profile: SPECIAL_PROJECT_PROFILES.has(row.profile) ? row.profile : "extended",
     allowedModes: normalizedSpecialProjectModes(row.allowed_modes_json).length
       ? normalizedSpecialProjectModes(row.allowed_modes_json)
@@ -8942,6 +9006,7 @@ export async function handleAdminTattooSettings(request, env) {
       const refundableDeposit = parseDepositCents(call.refundableDepositCents ?? call.refundable_deposit_cents ?? 0);
       if (refundableDeposit.error) return errorResponse(refundableDeposit.error, 400);
       const healedPhotoDueWeeks = Math.max(1, Math.min(52, asPositiveInteger(call.healedPhotoDueWeeks ?? call.healed_photo_due_weeks, 6)));
+      const artistStatement = asString(call.artistStatement ?? call.artist_statement).slice(0, 10000);
       const applicationInstructions = asString(call.applicationInstructions ?? call.application_instructions).slice(0, 5000);
       const participationTerms = asString(call.participationTerms ?? call.participation_terms).slice(0, 10000);
       const opensAt = asOptionalString(call.opensAt ?? call.opens_at);
@@ -9017,12 +9082,13 @@ export async function handleAdminTattooSettings(request, env) {
       ).bind(id, visibility, visibility === "public" ? now : null, now, now));
       statements.push(db.prepare(
         `INSERT INTO special_project_calls (
-          id, slug, title, summary, status, rate_text, sort_order, opens_at, closes_at,
+          id, slug, title, summary, artist_statement, status, rate_text, sort_order, opens_at, closes_at,
           profile, allowed_modes_json, refundable_deposit_cents, healed_photo_due_weeks,
           application_instructions, participation_terms, series_id, publication_state, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, title = excluded.title,
-          summary = excluded.summary, status = excluded.status, rate_text = excluded.rate_text,
+          summary = excluded.summary, artist_statement = excluded.artist_statement,
+          status = excluded.status, rate_text = excluded.rate_text,
           sort_order = excluded.sort_order, opens_at = excluded.opens_at,
           closes_at = excluded.closes_at, profile = excluded.profile,
           allowed_modes_json = excluded.allowed_modes_json,
@@ -9038,6 +9104,7 @@ export async function handleAdminTattooSettings(request, env) {
         slug,
         title,
         asString(call.summary).slice(0, 5000),
+        artistStatement,
         status,
         asString(call.rateText ?? call.rate_text).slice(0, 200),
         asPositiveInteger(call.sortOrder, 0),

@@ -95,16 +95,18 @@ test("Studio product media supplies the ordered public gallery and admin editor"
   assert.equal(database.prepare("SELECT image_url FROM merch_items WHERE id='merch-maze-puffer-jacket'").get().image_url,"/api/construct/entity-media/media-merch-primary");
 });
 
-test("Studio retains Merch images added across separate upload selections",async()=>{
+test("Studio retains an existing primary while later upload selections append gallery media",async()=>{
   const database=migratedDatabase(),bucket=new MemoryBucket(),env={SUBMISSIONS_DB:new LocalD1(database),SUBMISSIONS_ADMIN_TOKEN:"studio-secret",SUBMISSION_FILES:bucket};
   const created=await handleAdminMerchApi(request("/api/admin/merch-workflow","POST",{title:"Three View Product",slug:"three-view-product",availability_state:"coming_soon"},true),env);
   assert.equal(created.status,201,await created.clone().text());const productId=(await created.json()).record.id;
   async function upload(filename,bytes){const form=new FormData();form.set("file",new File([new Uint8Array(bytes)],filename,{type:"image/png"}));form.set("alt_text",filename);form.set("privacy","public");form.set("consent_status","not-required");form.set("public_presentation","inline");const response=await handleConstructApi(new Request("https://example.test/api/admin/media",{method:"POST",headers:{authorization:"Bearer studio-secret"},body:form}),env);assert.equal(response.status,201,await response.clone().text());return(await response.json()).record.id}
   async function attach(mediaId,role,sortOrder){const response=await handleConstructApi(request(`/api/admin/entities/${productId}/media`,"POST",{media_id:mediaId,role,sort_order:sortOrder,public_visible:true,alt_text_override:`${role} view`},true),env);assert.equal(response.status,201,await response.clone().text())}
   const primary=await upload("front.png",[1,2,3]);await attach(primary,"primary",1);
+  const primaryBefore=database.prepare("SELECT media_id,role,sort_order FROM entity_media WHERE entity_id=? AND role='primary'").get(productId);
   const back=await upload("back.png",[4,5,6]);await attach(back,"gallery",2);
   const detail=await upload("detail.png",[7,8,9]);await attach(detail,"gallery",3);
   const admin=await handleAdminMerchApi(request("/api/admin/merch-workflow","GET",undefined,true),env),record=(await admin.json()).records.find(item=>item.id===productId);
+  assert.deepEqual(database.prepare("SELECT media_id,role,sort_order FROM entity_media WHERE entity_id=? AND role='primary'").get(productId),primaryBefore);
   assert.deepEqual(record.media.map(item=>[item.id,item.role,item.sortOrder]),[[primary,"primary",1],[back,"gallery",2],[detail,"gallery",3]]);
 });
 
@@ -171,7 +173,7 @@ test("shared Merch routes and alert forms stay contractually connected",()=>{
   assert.doesNotMatch(detailCss,/\.merch-top/);assert.doesNotMatch(detailCss,/\.product-copy/);
   assert.match(alertsCss,/grid-template-columns:1fr!important/);assert.match(alertsCss,/--src-color-bright/);assert.match(alertsCss,/input\[type="email"\].*outline:0/);assert.match(alertsCss,/\.launch-alert-toggle\{display:inline-flex/);assert.match(alertsCss,/aria-expanded="true".*border-top-color:var\(--color-accent/);assert.match(merchApi,/AbortSignal\.timeout\(4000\)/);
   assert.match(catalog,/--src-color-bright:\$\{source\.brightColor\}/);assert.match(detailScript,/SOURCE_BRIGHT_TOKENS/);
-  assert.match(manager,/name="product_images"/);assert.match(manager,/uploadProductImages/);assert.match(manager,/data-merch-media-action="primary"/);assert.match(manager,/data-merch-pending-files/);assert.match(manager,/data-merch-upload-selected/);assert.match(manager,/stageProductImages/);assert.match(manager,/20260811-multi-image-staging/);assert.match(constructManager,/merch-manager\.js\?v=20260811-multi-image-staging/);
+  assert.match(manager,/name="product_images"/);assert.match(manager,/uploadProductImages/);assert.match(manager,/data-merch-media-action="primary"/);assert.match(manager,/data-merch-pending-files/);assert.match(manager,/data-merch-upload-selected/);assert.match(manager,/data-merch-pending-remove/);assert.match(manager,/stageProductImages/);assert.match(manager,/updatePendingStatus/);assert.match(manager,/20260813-merch-additive-upload/);assert.match(constructManager,/merch-manager\.js\?v=20260813-merch-additive-upload/);
   assert.match(catalog,/export function renderProductGallery/);assert.match(detailScript,/renderProductGallery\(product/);assert.match(detailScript,/\sproduct,\s/);
 });
 

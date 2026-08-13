@@ -33,13 +33,14 @@ async function hydrateMediaPreviews(scope){clearMediaPreviews();await Promise.al
 async function uploadProductImages(api,entityId,files,altText,existingMedia=[],output){validateProductImages(files);let hasPrimary=existingMedia.some(item=>item.role==="primary"),sortOrder=Math.max(0,...existingMedia.map(item=>Number(item.sortOrder)||0));for(let index=0;index<files.length;index++){const file=files[index],role=hasPrimary?"gallery":"primary",attachmentSort=role==="primary"?1:Math.max(2,sortOrder+1);if(output)output.textContent=`Uploading ${index+1} of ${files.length}: ${file.name}`;const upload=new FormData();upload.append("file",file);upload.append("alt_text",altText);upload.append("privacy","public");upload.append("consent_status","not-required");upload.append("public_presentation","inline");const uploaded=await api("/api/admin/media",{method:"POST",body:upload}),mediaId=uploaded.record?.id;if(!mediaId)throw new Error(`${file.name} uploaded without a media ID.`);try{await api(`/api/admin/entities/${encodeURIComponent(entityId)}/media`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({media_id:mediaId,role,sort_order:attachmentSort,public_visible:true,alt_text_override:altText})})}catch(error){try{await api(`/api/admin/media/${encodeURIComponent(mediaId)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({state:"archived"})})}catch{}throw error}sortOrder=Math.max(sortOrder,attachmentSort);hasPrimary=true}if(output)output.textContent=`${files.length} product image${files.length===1?"":"s"} uploaded and attached.`}
 
 export async function mount(host,api,setStatus){
-  if(!document.querySelector('link[href^="/studio/merch-manager.css"]')){const link=document.createElement("link");link.rel="stylesheet";link.href="/studio/merch-manager.css?v=20260811-multi-image-staging";document.head.appendChild(link)}
+  if(!document.querySelector('link[href^="/studio/merch-manager.css"]')){const link=document.createElement("link");link.rel="stylesheet";link.href="/studio/merch-manager.css?v=20260813-merch-additive-upload";document.head.appendChild(link)}
   host.innerHTML='<section class="construct-manager"><p>Loading Merch workflow…</p></section>';
   let activeEditorId="";
   let pendingFiles=[];
 
   function pendingFileKey(file){return [file.name,file.size,file.type,file.lastModified].join(":")}
   function clearPendingFiles(){pendingFiles.forEach(item=>URL.revokeObjectURL(item.url));pendingFiles=[]}
+  function updatePendingStatus(productForm){const output=productForm?.querySelector("[data-merch-upload-status]");if(output)output.textContent=pendingFiles.length?`${pendingFiles.length} image${pendingFiles.length===1?"":"s"} ready to add.`:"No images selected."}
   function renderPendingFiles(productForm){
     const container=productForm?.querySelector("[data-merch-pending-files]"),uploadButton=productForm?.querySelector("[data-merch-upload-selected]");
     if(!container||!uploadButton)return;
@@ -53,6 +54,7 @@ export async function mount(host,api,setStatus){
     const known=new Set(pendingFiles.map(item=>item.key));
     for(const file of files){const key=pendingFileKey(file);if(known.has(key))continue;known.add(key);pendingFiles.push({file,key,url:URL.createObjectURL(file)})}
     renderPendingFiles(productForm);
+    updatePendingStatus(productForm);
   }
 
   async function paintEditor(editor,record={}){
@@ -79,7 +81,7 @@ export async function mount(host,api,setStatus){
       const fresh=event.target.closest("[data-merch-new]"),edit=event.target.closest("[data-merch-edit]"),cancel=event.target.closest("[data-merch-cancel]"),uploadSelected=event.target.closest("[data-merch-upload-selected]"),pendingRemove=event.target.closest("[data-merch-pending-remove]"),mediaButton=event.target.closest("[data-merch-media-action]"),importButton=event.target.closest("[data-merch-import]"),preview=event.target.closest("[data-merch-preview]"),close=event.target.closest("[data-launch-close]"),confirmButton=event.target.closest("[data-launch-confirm]"),publish=event.target.closest("[data-template-publish]");
       if(fresh||edit){clearPendingFiles();activeEditorId=edit?edit.dataset.merchEdit:"new";const record=edit?records.find(item=>item.id===activeEditorId):{};await paintEditor(editor,record||{});editor.querySelector("input")?.focus();return}
       if(cancel){activeEditorId="";clearPendingFiles();clearMediaPreviews();editor.innerHTML="";return}
-      if(pendingRemove){const index=Number(pendingRemove.dataset.merchPendingRemove),removed=pendingFiles.splice(index,1)[0];if(removed)URL.revokeObjectURL(removed.url);renderPendingFiles(pendingRemove.closest("[data-merch-form]"));return}
+      if(pendingRemove){const productForm=pendingRemove.closest("[data-merch-form]"),index=Number(pendingRemove.dataset.merchPendingRemove),removed=pendingFiles.splice(index,1)[0];if(removed)URL.revokeObjectURL(removed.url);renderPendingFiles(productForm);updatePendingStatus(productForm);return}
       if(uploadSelected){
         const productForm=uploadSelected.closest("[data-merch-form]"),output=productForm?.querySelector("[data-merch-form-status]"),uploadOutput=productForm?.querySelector("[data-merch-upload-status]"),body=values(productForm),before=records.find(record=>record.id===productForm.dataset.id),files=pendingFiles.map(item=>item.file);
         try{
@@ -121,7 +123,7 @@ export async function mount(host,api,setStatus){
     shell.addEventListener("change",event=>{
       const input=event.target.closest('input[name="product_images"]');if(!input)return;
       const productForm=input.closest("[data-merch-form]");
-      try{stageProductImages(productForm,[...(input.files||[])]);input.value="";productForm.querySelector("[data-merch-upload-status]").textContent=`${pendingFiles.length} image${pendingFiles.length===1?"":"s"} ready to add.`}
+      try{stageProductImages(productForm,[...(input.files||[])]);input.value=""}
       catch(error){productForm.querySelector("[data-merch-upload-status]").textContent=error.message;input.value=""}
     });
 

@@ -532,12 +532,12 @@ const DOT_R=DOT_RGB.r,DOT_G=DOT_RGB.g,DOT_B=DOT_RGB.b;
 let dotStartX=new Array(VENTURES.length).fill(0),dotStartY=new Array(VENTURES.length).fill(0);
 
 // Particle field — tunable constants
-const MAX_P_BASE = 0;              // particles disabled on the home canvas
-const STAR_COUNT_MUL = 0;
+const MAX_P_BASE = 100;            // base particle cap
+const STAR_COUNT_MUL = 1.7;        // 0..2 — multiplies cap (stars slider, dense)
 const DEPTH_VAR = 1.35;            // 0..1.6 — particle size variance (depth slider, deep)
 const PARTICLE_SPEED = 1.4;        // motion speed multiplier (paired with pulse)
 const SPAWN_INT = 180, particles=[];
-function getMaxP(){return 0;}
+function getMaxP(){return Math.max(8, Math.round(MAX_P_BASE*STAR_COUNT_MUL));}
 
 function spawnP(pre){
   const ro = RING_OUTER();

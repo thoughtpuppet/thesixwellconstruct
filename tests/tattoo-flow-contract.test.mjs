@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -170,6 +171,8 @@ test("Studio gives Special Projects a dedicated tab with direct Shared Media upl
   assert.match(source, /data-special-card-focal-x type="range" min="0" max="100"/);
   assert.match(source, /data-special-card-focal-y type="range" min="0" max="100"/);
   assert.match(source, /cardFocalX: Number\(item\.querySelector\("\[data-special-card-focal-x\]"\)/);
+  assert.match(source, /Artist statement<textarea data-special-artist-statement maxlength="10000"/);
+  assert.match(source, /artistStatement: row\.querySelector\("\[data-special-artist-statement\]"\)/);
   assert.match(source, /project\?\.querySelectorAll\("\[data-special-media\]"\)\.forEach\(syncSpecialProjectCardCrop\)/);
   assert.match(source, /fetch\(`\/api\/admin\/media\/\$\{encodeURIComponent\(image\.dataset\.specialMediaPreview\)\}\/file`/);
   assert.match(source, /headers: \{ authorization: `Bearer \$\{token\}` \}/);
@@ -210,6 +213,12 @@ test("Special Projects expose an overview card grid and shared dedicated project
   assert.match(source, /document\.getElementById\("applicationProjectId"\)\.value = project\.id/);
   assert.match(source, /document\.getElementById\("applicationProjectSlug"\)\.value = project\.slug/);
   assert.match(source, /series\.cover\.url/);
+  assert.match(source, /id="projectArtistStatement" hidden/);
+  assert.match(source, /class="artist-statement-title">Artist Statement<\/h2>/);
+  assert.match(source, /project\.artistStatement/);
+  assert.match(source, /artistStatement\.classList\.toggle\("is-expanded"\)/);
+  assert.match(source, /artistStatementToggle\.textContent = expanded \? "Read less" : "Read more"/);
+  assert.match(source, /\.artist-statement-copy \{[\s\S]*?--type-body-transform:none;[\s\S]*?-webkit-line-clamp:5;[\s\S]*?text-transform:none;/);
 });
 
 test("Special Project galleries use an editorial desktop strip, a controlled mobile selector, and an isolated-image overlay", () => {
@@ -234,6 +243,19 @@ test("Special Project galleries use an editorial desktop strip, a controlled mob
   assert.match(source, /max-width:100%; max-height:100%/);
   assert.match(source, /event\.target === mediaDialog/);
   assert.match(source, /mediaDialogTrigger\.focus\(\)/);
+});
+
+test("SELF/FAITH migration moves its long summary into the managed artist statement", () => {
+  const database = migratedDatabase({ before: "0124_special_project_artist_statement.sql" });
+  const statement = "This is part of the Classic Cliches series where I reimagine and reorient tattoo imagery that has become classic and/or cliche. This illustration has sat in my procreate gallery for about 3 years.";
+  database.prepare(
+    `INSERT INTO special_project_calls (id,slug,title,summary,status,rate_text,sort_order,updated_at)
+     VALUES ('self-faith','self-faith','SELF/FAITH',?,'open','0',3,?)`,
+  ).run(statement, new Date().toISOString());
+  database.exec(readFileSync(join(ROOT, "migrations", "0124_special_project_artist_statement.sql"), "utf8"));
+  const project = database.prepare("SELECT summary,artist_statement FROM special_project_calls WHERE id='self-faith'").get();
+  assert.equal(project.summary, "");
+  assert.equal(project.artist_statement, statement);
 });
 
 test("Special Project application groups are unboxed and same-page Apply links bypass the shared fade", () => {
@@ -1075,6 +1097,8 @@ test("Studio approved booking links allow per-client tattoo appointment types", 
   assert.match(source, /input\.disabled = !allowed \|\| lockSelection;/);
   assert.doesNotMatch(source, /input\.checked = allowed;/);
   assert.match(source, /Choose at least one session type for this booking link\./);
+  assert.match(source, /savedDraft\.bookingLinkRevokeExisting === true \? "checked" : ""/);
+  assert.match(source, /bookingLinkRevokeExisting: document\.getElementById\("tokenRevokeExisting"\)\?\.checked === true/);
   assert.match(source, /Object\.assign\(values, bookingTokenDraftBody\(submissionId\)\);/);
   assert.match(source, /id="saveBookingChoicesBtn"[^>]*>Save Booking Choices<\/button>/);
   assert.match(source, /id="saveReviewNotesBtn"[^>]*>Save Internal Notes<\/button>/);
@@ -1192,6 +1216,73 @@ test("Studio session-plan saves persist booking choices without preparing access
   assert.equal(flexiblePlan.presentShorterSessionsOption, false);
   assert.equal(flexiblePlan.includeAdditionalSketchDisclaimer, false);
   assert.equal(flexiblePlan.budgetAcknowledged, false, "changing client-facing budget disclosures requires fresh agreement");
+});
+
+test("reopening booking access preserves the stored URL unless replacement is requested", async () => {
+  const database = migratedDatabase();
+  const adminToken = "reopen-existing-booking-admin";
+  const env = squareEnv(database, {
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+  });
+  const submissionId = "reopen-existing-booking";
+  const rawToken = "ReopenToken1";
+  const tokenId = "reopen-existing-token";
+  const expiredAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+  insertSubmissionFixture(database, {
+    id: submissionId,
+    type: "tattoo_inquiry",
+    status: "approved",
+    tattooStage: "ready_to_book",
+    bookingUrl: `/b/${rawToken}`,
+  });
+  database.prepare(
+    `INSERT INTO tattoo_session_plans (
+      id, submission_id, estimated_sessions_min, estimated_sessions_max,
+      split_policy, session_category, approved_budget_min_cents,
+      approved_budget_max_cents, approved_budget_currency, created_at, updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    "reopen-existing-plan", submissionId, 1, 1, "not_available", "one_session",
+    50000, 50000, "USD", now, now,
+  );
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  database.prepare(
+    `INSERT INTO booking_tokens (
+      id, token_hash, submission_id, allowed_booking_types_json, purpose,
+      expires_at, revoked_at, created_at, updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    tokenId, tokenHash, submissionId, JSON.stringify(["tattoo_quarter"]), "tattoo",
+    expiredAt, expiredAt, now, now,
+  );
+
+  const response = await handleAdminCreateBookingToken(adminJsonRequest(
+    "/api/admin/booking/tokens",
+    {
+      submissionId,
+      purpose: "tattoo",
+      allowedBookingTypes: ["tattoo_quarter"],
+      reopenExisting: true,
+      revokeExisting: false,
+    },
+    adminToken,
+  ), env);
+  assert.equal(response.status, 200, await response.clone().text());
+  const payload = await response.json();
+  assert.equal(payload.reopened, true);
+  assert.equal(payload.token.id, tokenId);
+  assert.equal(payload.token.path, `/b/${rawToken}`);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(submissionId).count, 1);
+  const reopenedToken = database.prepare("SELECT revoked_at,used_at,expires_at FROM booking_tokens WHERE id=?").get(tokenId);
+  assert.equal(reopenedToken.revoked_at, null);
+  assert.equal(reopenedToken.used_at, null);
+  assert.ok(reopenedToken.expires_at > now);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM submission_events WHERE submission_id=? AND event_type='booking_link_reopened'").get(submissionId).count,
+    1,
+  );
 });
 
 test("Extended Day client surfaces use the approved optional-session copy", () => {
@@ -2154,6 +2245,7 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
         id: "free-lines",
         slug: "free-lines",
         title: "Free Lines",
+        artistStatement: "A study in movement, tension, and release.",
         profile: "experimental",
         publicationState: "published",
         status: "open",
@@ -2178,6 +2270,7 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
   assert.deepEqual(JSON.parse(saved.allowed_modes_json), ["fresh", "blast_over"]);
   assert.equal(saved.refundable_deposit_cents, 12500);
   assert.equal(saved.healed_photo_due_weeks, 8);
+  assert.equal(saved.artist_statement, "A study in movement, tension, and release.");
   assert.deepEqual(database.prepare(
     "SELECT media_id,role,card_focal_x,card_focal_y FROM special_project_call_media WHERE project_id='free-lines' ORDER BY sort_order"
   ).all().map((item) => [item.media_id, item.role, item.card_focal_x, item.card_focal_y]), [
@@ -2195,6 +2288,7 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
   const savedProject = savedPayload.specialProjects.find((project) => project.id === "free-lines");
   assert.ok(savedProject, JSON.stringify(savedPayload.specialProjects));
   assert.equal(savedProject.publicationState, "published");
+  assert.equal(savedProject.artistStatement, "A study in movement, tension, and release.");
   const savedPrimary = savedProject.media[0];
   assert.deepEqual(
     { cardFocalX: savedPrimary.cardFocalX, cardFocalY: savedPrimary.cardFocalY },
@@ -4373,8 +4467,10 @@ result = {
   assert.match(studio, /data-reopen-special-deposit="\$\{escapeHtml\(submissionId\)\}"/);
   assert.match(studio, /data-special-deposit-mode="\$\{checkoutStillOpen \? "repair" : "reopen"\}"/);
   assert.match(studio, /mode === "repair"[\s\S]*?\/tattoo\/specials\/submissions\/[\s\S]*?\/deposit/);
-  assert.match(studio, /api\("\/api\/admin\/booking\/tokens"[\s\S]*?revokeExisting: true/);
-  assert.match(studio, /Booking link reopened and copied; no email sent/);
+  assert.match(studio, /const revokeExisting = document\.getElementById\("tokenRevokeExisting"\)\?\.checked === true/);
+  assert.match(studio, /api\("\/api\/admin\/booking\/tokens"[\s\S]*?revokeExisting,[\s\S]*?reopenExisting: !revokeExisting/);
+  assert.match(studio, /Existing booking link reopened and copied; no email sent/);
+  assert.match(studio, /Replacement booking link generated and copied; no email sent/);
   assert.doesNotMatch(studio, /(?:Prepare|Repair|Reopen) Deposit Link|Deposit link (?:active|expired|needs repair)/);
 });
 
@@ -4416,7 +4512,7 @@ test("Studio client preview opens synchronously and carries the Tattoo Special l
   assert.match(studio, /sessionPlan\?\.allowedBookingTypes/);
   assert.match(studio, /function clientPreviewContext[\s\S]*?allowedTypeIds[\s\S]*?special_offer_title[\s\S]*?pendingApproval[\s\S]*?pendingCheckout/);
   assert.match(booking, /function adminPreviewContext[\s\S]*?previewSource: payload\.previewSource[\s\S]*?pendingCheckout: payload\.pendingCheckout \|\| null/);
-  assert.match(booking, /id="walkInSection"[\s\S]*?walkInSection\.classList\.toggle\("hidden", Boolean\(special\)\)/);
+  assert.doesNotMatch(booking, /walkInSection|walkInCards|walk-in-windows|loadWalkInCards/);
   assert.match(booking, /<strong>Notes from the artist:<\/strong><br>\$\{sessionCopyHtml\(plan\.artistNote \|\| copy\.fallbackNote\)\}/);
   assert.match(booking, /if \(!renderPendingCheckout\(\)\) appEl\.classList\.remove\("hidden"\)/);
   assert.match(booking, /if \(previewMode\)[\s\S]*?client's Square checkout is not opened from Studio preview/);

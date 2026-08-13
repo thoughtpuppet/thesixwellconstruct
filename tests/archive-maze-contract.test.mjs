@@ -44,6 +44,10 @@ test("Maze Archive entry points and Studio controls are connected to authenticat
   assert.match(builder,/name="maze_archive_include_explanation"/);
   assert.match(builder,/contact details and editable Maze JSON remain private/i);
   assert.match(studio,/Create private Archive draft/);
+  assert.match(studio,/Image alt text \(required\)/);
+  assert.match(studio,/id="mazeArchiveActionState" role="status" aria-live="polite"/);
+  assert.match(studio,/missingInput\.reportValidity\(\)/);
+  assert.match(studio,/Add image alt text describing the visible Maze before creating the private draft\./);
   assert.match(studio,/data-maze-archive-action="withdraw"/);
   assert.match(manager,/data-dossier-collections/);
   assert.match(manager,/collection_ids/);

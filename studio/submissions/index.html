@@ -3422,6 +3422,7 @@
         <label class="check"><input data-special-mode="blast_over" type="checkbox" ${modes.has("blast_over") ? "checked" : ""}><span>Blast-over</span></label>
       </div></div>
       <label class="special-project-wide">Public summary<textarea data-special-summary maxlength="5000">${escapeHtml(project.summary || "")}</textarea></label>
+      <label class="special-project-wide">Artist statement<textarea data-special-artist-statement maxlength="10000" rows="8">${escapeHtml(project.artistStatement || project.artist_statement || "")}</textarea><span class="contact">Shown on the project detail page in regular casing with a Read more control.</span></label>
       <label class="special-project-wide">Application instructions<textarea data-special-instructions maxlength="5000">${escapeHtml(project.applicationInstructions || project.application_instructions || "")}</textarea></label>
       <label class="special-project-wide">Participation terms${profile === "experimental" ? " (required for Experimental Projects)" : ""}<textarea data-special-terms maxlength="10000" ${profile === "experimental" ? "required" : ""}>${escapeHtml(project.participationTerms || project.participation_terms || "")}</textarea></label>
       <div class="special-project-wide"><span class="contact">Ordered Shared Media gallery. Exactly one image must be Primary for an Experimental Project.</span><div class="special-project-media" data-special-media-list>${mediaRows}</div>
@@ -3649,6 +3650,7 @@
       status: row.querySelector("[data-special-status]")?.value || "closed",
       rateText: row.querySelector("[data-special-rate]")?.value.trim() || "",
       summary: row.querySelector("[data-special-summary]")?.value.trim() || "",
+      artistStatement: row.querySelector("[data-special-artist-statement]")?.value.trim() || "",
       opensAt: row.querySelector("[data-special-opens]")?.value || "",
       closesAt: row.querySelector("[data-special-closes]")?.value || "",
       refundableDepositCents: Math.round(Number(row.querySelector("[data-special-deposit]")?.value || 0) * 100),
@@ -5330,12 +5332,13 @@ ${meetingLines}
     let controls = "";
     if (state === "candidate") controls = `
       <div class="grid" style="margin-top:12px;">
-        <div class="field"><label for="mazeArchiveTitle">Reviewed public title</label><input id="mazeArchiveTitle" maxlength="200" value="Maze by ${escapeHtml(archive.publicCredit || "Anonymous")}"></div>
-        <div class="field"><label for="mazeArchiveAlt">Image alt text</label><input id="mazeArchiveAlt" maxlength="500" placeholder="Describe the maze lines and shapes" required></div>
+        <div class="field"><label for="mazeArchiveTitle">Reviewed public title (required)</label><input id="mazeArchiveTitle" maxlength="200" value="Maze by ${escapeHtml(archive.publicCredit || "Anonymous")}" required aria-describedby="mazeArchiveActionState"></div>
+        <div class="field"><label for="mazeArchiveAlt">Image alt text (required)</label><input id="mazeArchiveAlt" maxlength="500" placeholder="Describe the maze lines and shapes" required aria-describedby="mazeArchiveActionState"></div>
       </div>
       ${archive.includeExplanation ? `<div class="field" style="margin-top:12px;"><label for="mazeArchiveExplanation">Reviewed public explanation (optional)</label><textarea id="mazeArchiveExplanation" rows="4" placeholder="Write or edit the approved public version. Nothing is copied automatically."></textarea><p class="contact">Permitted source explanation: ${escapeHtml(archive.permittedExplanation || "No explanation supplied.")}</p></div>` : ""}
       <div class="field" style="margin-top:12px;"><label for="mazeArchiveReviewNote">Private curation note</label><textarea id="mazeArchiveReviewNote" rows="2"></textarea></div>
-      <div class="booking-actions"><button class="button" type="button" data-maze-archive-promote="${escapeHtml(submission.id)}">Create private Archive draft</button><button class="button danger-button" type="button" data-maze-archive-action="reject">Reject candidate</button></div>`;
+      <div class="booking-actions"><button class="button" type="button" data-maze-archive-promote="${escapeHtml(submission.id)}">Create private Archive draft</button><button class="button danger-button" type="button" data-maze-archive-action="reject">Reject candidate</button></div>
+      <p class="save-feedback" id="mazeArchiveActionState" role="status" aria-live="polite"></p>`;
     if (state === "rejected") controls = `<div class="booking-actions"><button class="button" type="button" data-maze-archive-action="restore">Restore candidate</button></div>`;
     if (state === "promoted") controls = `<p class="contact">Private Archive identity: ${escapeHtml(archive.archiveTitle || archive.archiveEntityId)}. Publish it only through the canonical record and dossier gates.</p><div class="booking-actions">${archive.archiveSlug ? `<a class="button" href="/archive/records/${encodeURIComponent(archive.archiveSlug)}/?preview=1" target="_blank" rel="noopener">Preview dossier</a>` : ""}<button class="button danger-button" type="button" data-maze-archive-action="withdraw">Withdraw from Archive</button></div>`;
     if (state === "withdrawn") controls = `<p class="contact">Public eligibility has been removed. The private source submission and audit trail are preserved.</p>`;
@@ -5842,7 +5845,7 @@ ${meetingLines}
     const expiresAt = document.getElementById("tokenExpiresAt");
     if (expiresAt) expiresAt.value = formatDateTimeInput(plan?.bookingLinkExpiresAt || "");
     const revokeExisting = document.getElementById("tokenRevokeExisting");
-    if (revokeExisting) revokeExisting.checked = plan?.bookingLinkRevokeExisting !== false;
+    if (revokeExisting) revokeExisting.checked = plan?.bookingLinkRevokeExisting === true;
     syncBookingTokenTypeControls(submission);
   }
 
@@ -5880,7 +5883,7 @@ ${meetingLines}
             <div class="contact">Blank uses the server default: 30 days.</div>
           </div>
           <label class="check" style="margin:0;align-self:end;">
-            <input id="tokenRevokeExisting" type="checkbox" ${savedDraft.bookingLinkRevokeExisting === false ? "" : "checked"}>
+            <input id="tokenRevokeExisting" type="checkbox" ${savedDraft.bookingLinkRevokeExisting === true ? "checked" : ""}>
             <span class="check-label">Revoke existing active links when generating</span>
           </label>
         </div>
@@ -5909,7 +5912,7 @@ ${meetingLines}
     const body = {
       bookingLinkPurpose: purpose,
       allowedBookingTypes: selected,
-      bookingLinkRevokeExisting: document.getElementById("tokenRevokeExisting")?.checked !== false,
+      bookingLinkRevokeExisting: document.getElementById("tokenRevokeExisting")?.checked === true,
       bookingLinkExpiresAt: "",
     };
     const expiresAt = localDateTimeToIso(document.getElementById("tokenExpiresAt")?.value || "");
@@ -8187,12 +8190,35 @@ ${meetingLines}
     }
     const mazePromote = event.target.closest("[data-maze-archive-promote]");
     if (mazePromote) {
-      const title = document.getElementById("mazeArchiveTitle")?.value.trim() || "";
-      const altText = document.getElementById("mazeArchiveAlt")?.value.trim() || "";
-      if (!title || !altText) { setStatus("A reviewed Maze title and alt text are required"); return; }
+      const titleInput = document.getElementById("mazeArchiveTitle");
+      const altInput = document.getElementById("mazeArchiveAlt");
+      const actionState = document.getElementById("mazeArchiveActionState");
+      const title = titleInput?.value.trim() || "";
+      const altText = altInput?.value.trim() || "";
+      [titleInput, altInput].forEach((input) => input?.removeAttribute("aria-invalid"));
+      if (!title || !altText) {
+        const missingInput = title ? altInput : titleInput;
+        const message = title
+          ? "Add image alt text describing the visible Maze before creating the private draft."
+          : "Add a reviewed public title before creating the private draft.";
+        if (actionState) actionState.textContent = message;
+        if (missingInput) {
+          missingInput.setAttribute("aria-invalid", "true");
+          missingInput.addEventListener("input", () => {
+            missingInput.removeAttribute("aria-invalid");
+            if (actionState) actionState.textContent = "";
+          }, { once: true });
+          missingInput.focus();
+          missingInput.reportValidity();
+        }
+        setStatus(message);
+        return;
+      }
       mazePromote.disabled = true;
       try {
-        setStatus("Copying the reviewed Maze image into a private Archive draft");
+        const pendingMessage = "Copying the reviewed Maze image into a private Archive draft";
+        if (actionState) actionState.textContent = pendingMessage;
+        setStatus(pendingMessage);
         await api(`/api/admin/submissions/${encodeURIComponent(mazePromote.dataset.mazeArchivePromote)}/maze-archive/promote`, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -8201,7 +8227,9 @@ ${meetingLines}
         await refreshActiveSubmissionDetail();
         setStatus("Private Maze Archive draft created");
       } catch (error) {
-        setStatus(error.message || "Maze Archive promotion failed");
+        const message = error.message || "Maze Archive promotion failed";
+        if (actionState) actionState.textContent = message;
+        setStatus(message);
         if (mazePromote.isConnected) mazePromote.disabled = false;
       }
       return;
@@ -9157,13 +9185,15 @@ ${meetingLines}
         } else {
           const submission = submissions.find((item) => item.id === submissionId);
           const bookingTypeId = submission?.payload?.booking_type_id || "";
+          const revokeExisting = document.getElementById("tokenRevokeExisting")?.checked === true;
           payload = await api("/api/admin/booking/tokens", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               submissionId,
               purpose: "tattoo",
-              revokeExisting: true,
+              revokeExisting,
+              reopenExisting: !revokeExisting,
               ...(bookingTypeId ? { allowedBookingTypes: [bookingTypeId] } : {}),
             }),
           });
@@ -9171,7 +9201,9 @@ ${meetingLines}
         const reopenedUrl = payload.clientUrl || payload.token?.bookingUrl || payload.token?.path || "";
         if (reopenedUrl) await navigator.clipboard?.writeText(reopenedUrl).catch(() => {});
         await loadAndRender();
-        setStatus("Booking link reopened and copied; no email sent");
+        setStatus(payload.reopened === true
+          ? "Existing booking link reopened and copied; no email sent"
+          : "Replacement booking link generated and copied; no email sent");
       } catch (error) {
         setStatus(error.message || "Booking link could not be reopened");
         if (reopenSpecialDeposit.isConnected) reopenSpecialDeposit.disabled = false;

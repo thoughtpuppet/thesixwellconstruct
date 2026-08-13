@@ -10,7 +10,6 @@
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/booking-calendar.css">
-<link rel="stylesheet" href="/css/walk-in-windows.css">
 <style>
   :root {
     --bg:#0e0e0e; --signal:var(--color-tattooing); --ring:#6D3D15;
@@ -50,10 +49,6 @@
   .address-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
   .block-kicker{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);opacity:0.68;margin-bottom:var(--s3);}
   .address-lines{font-family:var(--serif);font-size:15px;line-height:1.85;color:var(--text-mute);}
-
-  /* ── WALK-IN WINDOWS ── */
-  .windows-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
-  .windows-note{font-size:13px;line-height:1.7;color:var(--text-dim);margin-bottom:var(--s5);}
 
   /* ── VIRTUAL NOTE ── */
   .virtual-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
@@ -127,14 +122,6 @@
           <p class="block-kicker">Studio Location</p>
           <p class="address-lines" id="addressLines">Loading…</p>
         </div>
-
-        <!-- WALK-IN WINDOWS (in-person only) -->
-        <div class="windows-block" id="windowsBlock">
-          <p class="block-kicker">Walk-In Windows</p>
-          <p class="windows-note" id="windowsNote">Loading availability…</p>
-          <div class="window-list" id="windowList"></div>
-        </div>
-
         <!-- VIRTUAL NOTE (virtual only) -->
         <div class="virtual-block" id="virtualBlock" style="display:none;">
           <p class="block-kicker">Virtual Consultation</p>
@@ -251,27 +238,20 @@
   </footer>
 
   <script src="/js/consultation-context.js"></script>
-  <script src="/js/walk-in-windows.js"></script>
   <script src="/js/booking-calendar.js"></script>
   <script>
   (function(){
     const CONSULTATION_TYPE_IDS = ["consult_in_person", "consult_virtual"];
     const addressBlock = document.getElementById("addressBlock");
-    const windowsBlock = document.getElementById("windowsBlock");
     const virtualBlock = document.getElementById("virtualBlock");
-    let cachedWalkInWindows = [];
 
     initBookingCalendar({
       apiBookingTypeIds: CONSULTATION_TYPE_IDS,
       filterBookingTypes: (type) => CONSULTATION_TYPE_IDS.includes(type.id),
-      walkInEmptyMessage: "No walk-in windows are currently set. Book a consultation or check back soon.",
-      onBookingTypeChange(bookingType, walkInWindows, renderWalkInWindows) {
-        if (walkInWindows) cachedWalkInWindows = walkInWindows;
+      onBookingTypeChange(bookingType) {
         const isVirtual = bookingType && bookingType.id === "consult_virtual";
         addressBlock.style.display = isVirtual ? "none" : "";
-        windowsBlock.style.display = isVirtual ? "none" : "";
         virtualBlock.style.display = isVirtual ? "" : "none";
-        if (!isVirtual) renderWalkInWindows(cachedWalkInWindows);
       },
     });
     hydrateConsultationContext(document);

@@ -10,7 +10,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
-<link rel="stylesheet" href="/css/walk-in-windows.css">
 <style>
   :root {
     --bg:#0e0e0e; --accent:#FCB867; --signal:var(--color-tattooing); --ring:#6D3D15;
@@ -55,11 +54,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .consult-option-title { font-family:var(--sans); font-weight:900; font-size:clamp(22px,3vw,36px); letter-spacing:-0.04em; line-height:0.94; color:var(--text); text-transform:uppercase; margin-bottom:12px; }
   .consult-option-body { font-size:14px; line-height:1.7; color:var(--text-mute); }
   .consult-option-action { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); }
-  .walkin-panel { display:grid; gap:20px; }
-  .walkin-guidance { font-size:14px; line-height:1.75; color:var(--text-mute); max-width:760px; }
-  .walkin-actions { display:flex; flex-wrap:wrap; gap:12px; }
-  .walkin-actions a { display:inline-flex; align-items:center; min-height:44px; padding:0 16px; border:5px solid var(--ring-faint); font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); transition:background var(--t-fast),border-color var(--t-fast); }
-  .walkin-actions a:hover,.walkin-actions a:focus-visible { background:rgba(109,61,21,0.16); border-color:var(--ring-soft); outline:none; }
   footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
   footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
@@ -172,23 +166,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           </a>
         </div>
       </section>
-
-      <section class="lane" aria-labelledby="walkin-lane-title">
-        <div>
-          <p class="lane-index">03 / Same-day availability</p>
-          <h2 class="lane-title" id="walkin-lane-title">Walk-In Windows</h2>
-          <p class="lane-intro">Walk-ins are separate from project review and are offered only during the live windows shown here.</p>
-        </div>
-        <div class="walkin-panel">
-          <p class="walkin-guidance" id="walkInGuidance">Walk-in availability is announced through the site or on social media. Check the tattoo page before traveling to the studio.</p>
-          <div id="walkInCards" aria-live="polite"></div>
-          <div class="walkin-actions" aria-label="Walk-in alternatives">
-            <a href="/tattoos/inquire/custom/">No window? Submit a project</a>
-            <a href="/tattoos/inquire/consultation/">Need planning? Book a consultation</a>
-            <a href="/tattoos/day-of/">Read day-of guidance</a>
-          </div>
-        </div>
-      </section>
     </div>
   </main>
   <footer class="bottom">
@@ -196,22 +173,13 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     <a href="/home/" data-copy-id="inquire-footer-home">the six.well construct</a>
   </footer>
   <script src="/js/consultation-context.js"></script>
-  <script src="/js/walk-in-windows.js"></script>
   <script>
   (function() {
     hydrateConsultationContext(document);
-    loadWalkInCards("walkInCards", {
-      emptyMessage: "No walk-in windows are posted right now. Submit a project or book a consultation below.",
-      errorMessage: "Walk-in availability could not be loaded. Use a project submission or paid consultation instead."
-    });
 
     fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
       .then(function(response) { if (!response.ok) throw new Error(); return response.json(); })
       .then(function(payload) {
-        var settings = payload.settings || {};
-        var guidance = document.getElementById("walkInGuidance");
-        if (guidance && settings.walkInGuidance) guidance.textContent = settings.walkInGuidance;
-
         var calls = Array.isArray(payload.specialProjects) ? payload.specialProjects : [];
         var now = Date.now();
         var openCalls = calls.filter(function(project) {

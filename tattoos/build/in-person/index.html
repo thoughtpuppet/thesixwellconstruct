@@ -11,7 +11,6 @@
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/booking-calendar.css">
-<link rel="stylesheet" href="/css/walk-in-windows.css">
 <style>
   :root {
     --bg:#0e0e0e; --signal:var(--color-tattooing); --ring:#6D3D15;
@@ -51,10 +50,6 @@
   .address-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
   .block-kicker{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);opacity:0.68;margin-bottom:var(--s3);}
   .address-lines{font-family:var(--serif);font-size:15px;line-height:1.85;color:var(--text-mute);}
-
-  /* ── WALK-IN WINDOWS ── */
-  .windows-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
-  .windows-note{font-size:13px;line-height:1.7;color:var(--text-dim);margin-bottom:var(--s5);}
 
   /* ── RIGHT COLUMN — FORM ── */
   .form-panel{border-top:5px solid var(--ring-soft);padding-top:var(--s6);}
@@ -126,13 +121,6 @@
         <div class="address-block" id="addressBlock">
           <p class="block-kicker">Studio Location</p>
           <p class="address-lines" id="addressLines">Loading…</p>
-        </div>
-
-        <!-- WALK-IN WINDOWS -->
-        <div class="windows-block">
-          <p class="block-kicker">Walk-In Windows</p>
-          <p class="windows-note" id="windowsNote">Loading availability…</p>
-          <div class="window-list" id="windowList"></div>
         </div>
       </section>
 
@@ -248,7 +236,6 @@
     <a href="/home/">the six.well construct</a>
   </footer>
 
-  <script src="/js/walk-in-windows.js"></script>
   <script src="/js/booking-calendar.js"></script>
   <script>
   (function(){
@@ -257,8 +244,7 @@
       filterBookingTypes: (type) => type.id === "build_in_person",
       contextUrl: "/api/booking/public-session/context",
       checkoutUrl: "/api/booking/public-session/checkout",
-      walkInEmptyMessage: "No walk-in windows are currently set. Book a private consultation or check back soon.",
-      onBookingTypeChange: function(type, walkInWindows, renderWalkInWindows) {
+      onBookingTypeChange: function(type) {
         var label = document.getElementById("buildSessionLabel");
         var terms = document.getElementById("buildSessionTerms");
         var description = document.getElementById("buildSessionDescription");
@@ -271,7 +257,6 @@
           terms.textContent = "No active public session details were returned.";
           description.textContent = "Return to Build Your Own or choose a consultation path.";
         }
-        if (walkInWindows) renderWalkInWindows(walkInWindows);
       },
     });
   })();

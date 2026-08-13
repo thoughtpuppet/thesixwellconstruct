@@ -63,22 +63,25 @@ test("identity-band landings share one stylesheet and explicit structure", async
 });
 
 test("artist portrait opens an accessible full-size identity dialog", async () => {
-  const [tattoos, identityCss, lightbox] = await Promise.all([
+  const [tattoos, identityCss, lightbox, specialProjects] = await Promise.all([
     read("tattoos/index.html"),
     read("css/identity-bands.css"),
     read("js/identity-band-lightbox.js"),
+    read("tattoos/special-projects/index.html"),
   ]);
 
   assert.match(tattoos, /class="band-portrait-trigger"[^>]*aria-controls="saiel-portrait-dialog"[^>]*aria-haspopup="dialog"/);
   assert.match(tattoos, /<dialog class="band-image-dialog" id="saiel-portrait-dialog"[^>]*aria-label="Full-size portrait of Saiel Solehman"/);
-  assert.match(tattoos, /class="band-image-dialog__close"[^>]*data-band-image-close[^>]*aria-label="Close enlarged portrait"/);
+  assert.match(tattoos, /class="band-image-dialog__close"[^>]*data-band-image-close[^>]*aria-label="Close enlarged portrait">Close<\/button>/);
   assert.match(tattoos, /<script src="\/js\/identity-band-lightbox\.js"><\/script>/);
   assert.match(identityCss, /\.band-portrait-trigger\s*\{[\s\S]*cursor:\s*zoom-in/);
   assert.match(identityCss, /\.band-portrait-trigger:focus-visible\s*\{[\s\S]*outline:\s*5px solid/);
   assert.match(identityCss, /\.band-image-dialog\s*\{[\s\S]*position:\s*fixed[\s\S]*inset:\s*0[\s\S]*border:\s*0[\s\S]*background:\s*rgba\(8,\s*8,\s*8,\s*0\.97\)/);
   assert.match(identityCss, /\.band-image-dialog::backdrop\s*\{/);
   assert.match(identityCss, /\.band-image-dialog__image\s*\{[\s\S]*max-width:\s*92vw[\s\S]*max-height:\s*92vh/);
-  assert.match(identityCss, /\.band-image-dialog__close\s*\{[\s\S]*position:\s*fixed[\s\S]*top:\s*24px[\s\S]*right:\s*40px[\s\S]*border:\s*0[\s\S]*background:\s*transparent/);
+  assert.match(identityCss, /\.band-image-dialog__close\s*\{[\s\S]*position:\s*fixed[\s\S]*top:\s*28px[\s\S]*right:\s*28px[\s\S]*min-height:\s*44px[\s\S]*padding:\s*8px 14px[\s\S]*border:\s*5px solid var\(--signal[\s\S]*color:\s*var\(--accent[\s\S]*font-size:\s*10px[\s\S]*font-weight:\s*900[\s\S]*letter-spacing:\s*0\.14em[\s\S]*text-transform:\s*uppercase/);
+  assert.match(identityCss, /\.band-image-dialog__close:focus-visible\s*\{[\s\S]*outline:\s*5px solid var\(--accent[\s\S]*outline-offset:\s*5px/);
+  assert.match(specialProjects, /\.project-media-dialog__close\s*\{[\s\S]*min-height:44px;\s*padding:8px 14px;\s*border:5px solid var\(--signal\)[\s\S]*font-size:10px;\s*font-weight:900[\s\S]*letter-spacing:\.14em;\s*text-transform:uppercase/);
   assert.match(lightbox, /\.showModal\(\)/);
   assert.match(lightbox, /data-band-image-close/);
   assert.match(lightbox, /event\.target\s*===\s*dialog\s*\|\|\s*event\.target\s*===\s*frame/);
@@ -186,7 +189,7 @@ test("shared identity actions are outlined, node-responsive, accessible controls
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-identity\s*\{[\s\S]*grid-row:\s*1\s*\/\s*span\s*2/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-identity\s*\{[\s\S]*grid-row:\s*1\s*;/,
   );
   assert.match(
     identityCss,
@@ -198,11 +201,11 @@ test("shared identity actions are outlined, node-responsive, accessible controls
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-actions\s*\{[\s\S]*grid-column:\s*2[\s\S]*grid-row:\s*2/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-actions\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1[\s\S]*grid-row:\s*3/,
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-copy\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1[\s\S]*grid-row:\s*3/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-copy\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1[\s\S]*grid-row:\s*2/,
   );
   assert.match(
     identityCss,
@@ -222,11 +225,11 @@ test("shared identity actions are outlined, node-responsive, accessible controls
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.artist-band \.band-actions\s*\{[\s\S]*grid-column:\s*2[\s\S]*grid-row:\s*2/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.artist-band \.band-actions\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1[\s\S]*grid-row:\s*3/,
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.artist-band \.band-copy\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1[\s\S]*grid-row:\s*3/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.artist-band \.band-copy\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1[\s\S]*grid-row:\s*2/,
   );
   assert.match(identityCss, /@media \(max-width:\s*768px\)[\s\S]*\.artist-band \.band-portrait\s*\{[\s\S]*width:\s*100%/);
   assert.match(identityCss, /\.band-content\s*\{[\s\S]*container-type:\s*inline-size/);

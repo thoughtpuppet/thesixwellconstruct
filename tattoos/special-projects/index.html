@@ -213,6 +213,39 @@
     font-family:var(--serif); font-size:17px; line-height:1.7; color:var(--text);
     margin-bottom:42px;
   }
+  .artist-statement {
+    max-width:760px; margin:-8px 0 42px; padding-top:28px;
+    border-top:5px solid var(--ring-faint);
+  }
+  .artist-statement[hidden] { display:none; }
+  .artist-statement-title {
+    --type-body-font:var(--serif); --type-body-size-active:11px;
+    --type-body-weight:400; --type-body-leading-active:1.5;
+    --type-body-tracking-active:.08em; --type-body-transform:none;
+    margin:0 0 14px; color:var(--signal); font-family:var(--serif);
+    font-size:11px; font-weight:400; letter-spacing:.08em; line-height:1.5;
+    text-transform:none;
+  }
+  .artist-statement-copy {
+    --type-body-font:var(--serif); --type-body-size-active:15px;
+    --type-body-leading-active:1.8; --type-body-tracking-active:0;
+    --type-body-transform:none;
+    display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical;
+    -webkit-line-clamp:5; margin:0; color:var(--text-mute);
+    font-family:var(--serif); font-size:15px; letter-spacing:0; line-height:1.8;
+    text-transform:none;
+  }
+  .artist-statement.is-expanded .artist-statement-copy { display:block; overflow:visible; }
+  .artist-statement-toggle {
+    --type-body-font:var(--serif); --type-body-size-active:11px;
+    --type-body-leading-active:1.5; --type-body-tracking-active:.06em;
+    --type-body-transform:none;
+    margin-top:14px; padding:0; border:0; background:transparent; color:var(--accent);
+    font-family:var(--serif); font-size:11px; letter-spacing:.06em; line-height:1.5;
+    text-decoration:underline; text-underline-offset:4px; text-transform:none; cursor:pointer;
+  }
+  .artist-statement-toggle:hover { color:var(--signal); }
+  .artist-statement-toggle:focus-visible { outline:5px solid var(--signal); outline-offset:5px; }
   .image-grid {
     --gallery-editorial-height:clamp(300px,41vw,620px);
     display:block;
@@ -359,6 +392,7 @@ main { padding:var(--s6) var(--s5); }
     .intro { margin-bottom:48px; }
     .intro-body,
     .detail-summary,
+    .artist-statement,
     .intention-body,
     .application-copy {
       max-width:100%;
@@ -480,6 +514,11 @@ main { padding:var(--s6) var(--s5); }
         <h1 class="detail-title" id="projectTitle">Current Calls</h1>
         <p class="detail-summary" id="projectSummary">Loading Special Project records from Studio.</p>
         <div class="image-grid" id="projectMedia" aria-label="Selected project gallery"></div>
+        <section class="artist-statement" id="projectArtistStatement" hidden>
+          <h2 class="artist-statement-title">Artist Statement</h2>
+          <p class="artist-statement-copy" id="projectArtistStatementCopy"></p>
+          <button class="artist-statement-toggle" id="projectArtistStatementToggle" type="button" aria-controls="projectArtistStatementCopy" aria-expanded="false">Read more</button>
+        </section>
         <div class="meta-grid">
           <div class="meta-item"><p class="meta-label">Path</p><p class="meta-value" id="projectMedium">Special Project</p></div>
           <div class="meta-item"><p class="meta-label">Rate</p><p class="meta-value" id="projectStyle">Confirmed after review</p></div>
@@ -595,6 +634,9 @@ main { padding:var(--s6) var(--s5); }
     var applyLink = document.getElementById("projectApply");
     var applicationCopy = document.getElementById("applicationCopy");
     var mediaGrid = document.getElementById("projectMedia");
+    var artistStatement = document.getElementById("projectArtistStatement");
+    var artistStatementCopy = document.getElementById("projectArtistStatementCopy");
+    var artistStatementToggle = document.getElementById("projectArtistStatementToggle");
     var mediaDialog = document.getElementById("projectMediaDialog");
     var mediaDialogImage = document.getElementById("projectMediaDialogImage");
     var mediaDialogTitle = document.getElementById("projectMediaDialogTitle");
@@ -634,6 +676,26 @@ main { padding:var(--s6) var(--s5); }
       if (opens) return "Opens " + opens;
       return "Dates set in Studio";
     }
+
+    function renderArtistStatement(project) {
+      var statement = String(project.artistStatement || "").trim();
+      artistStatement.classList.remove("is-expanded");
+      artistStatementToggle.setAttribute("aria-expanded", "false");
+      artistStatementToggle.textContent = "Read more";
+      artistStatementCopy.textContent = statement;
+      artistStatement.hidden = !statement;
+      artistStatementToggle.hidden = !statement;
+      if (!statement) return;
+      requestAnimationFrame(function() {
+        artistStatementToggle.hidden = artistStatementCopy.scrollHeight <= artistStatementCopy.clientHeight + 1;
+      });
+    }
+
+    artistStatementToggle.addEventListener("click", function() {
+      var expanded = artistStatement.classList.toggle("is-expanded");
+      artistStatementToggle.setAttribute("aria-expanded", String(expanded));
+      artistStatementToggle.textContent = expanded ? "Read less" : "Read more";
+    });
 
     function keyFor(project) {
       return project.slug || project.id;
@@ -969,7 +1031,8 @@ main { padding:var(--s6) var(--s5); }
       setProjectMetadata(project);
       backLink.href = seriesForProject(project) ? seriesUrl(seriesForProject(project)) : "/tattoos/special-projects/";
       backLink.textContent = "← back to Special Projects";
-      fields.summary.textContent = project.summary || "This Studio-managed call does not have a public summary yet.";
+      fields.summary.textContent = project.summary || "";
+      fields.summary.hidden = !project.summary;
       fields.medium.textContent = project.profile === "experimental" ? "Experimental Project" : "Extended Project";
       fields.style.textContent = project.profile === "experimental" ? "Free work / refundable attendance deposit" : (project.rateText || "Confirmed after review");
       fields.format.textContent = callWindow(project);
@@ -995,6 +1058,7 @@ main { padding:var(--s6) var(--s5); }
         applicationCopy.textContent = "This call is not accepting applications. Closed calls stay visible as context; another symbolic commission belongs in Custom.";
       }
       renderMedia(project);
+      renderArtistStatement(project);
       configureApplication(project, status);
       renderProjectConnections(project);
       if (location.hash === "#application" && status === "open") {

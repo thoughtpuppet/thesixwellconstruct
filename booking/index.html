@@ -11,7 +11,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
-<link rel="stylesheet" href="/css/walk-in-windows.css">
 <link rel="stylesheet" href="/css/booking-calendar.css">
 <style>
   :root {
@@ -137,11 +136,6 @@
   <div class="badge"><span class="badge-dot"></span>Private Booking</div>
   <p class="local-edit-note" data-live-edit-ignore="true">Preview editing is local only. Use the toolbar at bottom right, then export the changes for source-file updates.</p>
 
-  <section class="section" id="walkInSection">
-    <p class="section-label">Walk-In Windows</p>
-    <div id="walkInCards"></div>
-  </section>
-
   <div id="status" class="status">Loading private booking access.</div>
   <div id="pendingCheckoutPanel" class="status hidden" role="status" aria-live="polite">
     <span id="pendingCheckoutText"></span>
@@ -238,7 +232,6 @@
   const checkoutUnavailable = params.get("checkout") === "unavailable";
   const bookingPreviewKey = "swc_booking_admin_preview";
   const statusEl = document.getElementById("status");
-  const walkInSection = document.getElementById("walkInSection");
   const pendingCheckoutPanel = document.getElementById("pendingCheckoutPanel");
   const pendingCheckoutText = document.getElementById("pendingCheckoutText");
   const resumeCheckoutLink = document.getElementById("resumeCheckoutLink");
@@ -1143,7 +1136,6 @@
     const windows = context.availabilityWindows || [];
     const special = context?.submission?.special;
     const experimental = context?.submission?.experimentalProject;
-    walkInSection.classList.toggle("hidden", Boolean(special));
     renderSessionPlan();
     renderPaceIntro();
     sessionListEl.innerHTML = special && selectedType ? `
@@ -1494,10 +1486,6 @@
     statusEl.textContent = error.message;
   });
 })();
-</script>
-<script src="/js/walk-in-windows.js"></script>
-<script>
-  loadWalkInCards("walkInCards", { emptyMessage: "No walk-in windows are currently set. Reply to your approval email if you need help." });
 </script>
 <script src="/js/transition.js"></script>
 <script src="/js/construct-corner.js"></script>

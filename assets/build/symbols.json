@@ -84,6 +84,66 @@
       ]
     },
     {
+      "id": "visual_symbol-58d5bf98-9908-4191-9ee2-b82d67dba260",
+      "slug": "apple",
+      "category": "Ritual",
+      "name": "Apple",
+      "meaning": "Fruitful knowledge at the edge of permission. The apple holds curiosity as a nourishing force, while keeping the risk and consequence of forbidden inquiry in view.",
+      "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='8'><path d='M62.7,43c-11-9-26-8-34,4-13,19,1,53,21,56,5,1,9-3,13-3s8,4,13,3c20-3,34-37,21-56-8-12-23-13-34-4Z'/><path d='M62.7,43c0-13,5-23,14-29'/><path d='M61.2,28.8C48.2,10.8,31.2,3.8,16.2,7.8c9,19,26,28,45,26v-5Z'/><path d='M69.2,29.7c10-11,23-13,34-8-8,11-20,15-35,13l1-5Z'/><circle cx='62.7' cy='70.7' r='7.8'/></svg>",
+      "context": {
+        "modes": [
+          "cultural"
+        ],
+        "cultural_context": "The apple carries overlapping associations with nourishment, cultivated knowledge, temptation, and fruit placed beyond permission. It makes learning tangible: something grown, reached for, taken in, and capable of changing the person who receives it.",
+        "personal_relationship": "",
+        "reorientation": {
+          "mode": "",
+          "statement": ""
+        },
+        "overlap_or_tension": "Fruitfulness and prohibition occupy the same form. What feeds understanding may also cross a boundary, and what is forbidden may be exactly what curiosity makes impossible to ignore.",
+        "viewer_opening": "Which knowledge nourishes? Who names an inquiry forbidden? What changes after curiosity acts?",
+        "sources": []
+      },
+      "applications": [
+        {
+          "title": "Fruit and seed",
+          "meaning": "Knowledge contains the conditions for more knowledge. The fruit offers an answer; the seed keeps the next question alive.",
+          "note": "The inner circle makes consequence and continuation part of the same mark.",
+          "svg_markup": ""
+        },
+        {
+          "title": "At the boundary",
+          "meaning": "Placed at a threshold, the apple turns curiosity into a decision: remain within permission or reach toward what has been withheld.",
+          "note": "The reading sharpens beside doors, fences, warnings, or other boundary symbols.",
+          "svg_markup": ""
+        }
+      ],
+      "buildGuidance": {
+        "essence": "Fruitful knowledge at the edge of permission.",
+        "emotionalTones": [
+          "curious",
+          "nourishing",
+          "tempted",
+          "defiant",
+          "consequential"
+        ],
+        "reflectionQuestions": [
+          "What knowledge feels fruitful enough to pursue?",
+          "Who has named the inquiry forbidden?",
+          "What might curiosity nourish, and what might it cost?",
+          "After the first answer, what new question remains?"
+        ]
+      },
+      "examples": [],
+      "themes": [
+        "knowledge",
+        "curiosity",
+        "inquiry",
+        "temptation",
+        "consequence"
+      ]
+    },
+    {
       "id": "visual_symbol-833811ac-a67e-48af-8256-1b1a165ce909",
       "slug": "closed-eye",
       "category": "Figural",
