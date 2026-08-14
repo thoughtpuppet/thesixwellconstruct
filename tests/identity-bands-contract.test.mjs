@@ -79,7 +79,7 @@ test("artist portrait opens an accessible full-size identity dialog", async () =
   assert.match(identityCss, /\.band-image-dialog\s*\{[\s\S]*position:\s*fixed[\s\S]*inset:\s*0[\s\S]*border:\s*0[\s\S]*background:\s*rgba\(8,\s*8,\s*8,\s*0\.97\)/);
   assert.match(identityCss, /\.band-image-dialog::backdrop\s*\{/);
   assert.match(identityCss, /\.band-image-dialog__image\s*\{[\s\S]*max-width:\s*92vw[\s\S]*max-height:\s*92vh/);
-  assert.match(identityCss, /\.band-image-dialog__close\s*\{[\s\S]*position:\s*fixed[\s\S]*top:\s*28px[\s\S]*right:\s*28px[\s\S]*min-height:\s*44px[\s\S]*padding:\s*8px 14px[\s\S]*border:\s*5px solid var\(--signal[\s\S]*color:\s*var\(--accent[\s\S]*font-size:\s*10px[\s\S]*font-weight:\s*900[\s\S]*letter-spacing:\s*0\.14em[\s\S]*text-transform:\s*uppercase/);
+  assert.match(identityCss, /\.band-image-dialog__close\s*\{[\s\S]*--type-body-tracking-active:\s*0\.14em[\s\S]*--type-body-leading-active:\s*1[\s\S]*--type-body-transform:\s*uppercase[\s\S]*position:\s*fixed[\s\S]*top:\s*28px[\s\S]*right:\s*28px[\s\S]*min-height:\s*44px[\s\S]*padding:\s*8px 14px[\s\S]*border:\s*5px solid var\(--signal[\s\S]*color:\s*var\(--accent[\s\S]*font-size:\s*10px[\s\S]*font-weight:\s*900[\s\S]*letter-spacing:\s*0\.14em[\s\S]*text-transform:\s*uppercase/);
   assert.match(identityCss, /\.band-image-dialog__close:focus-visible\s*\{[\s\S]*outline:\s*5px solid var\(--accent[\s\S]*outline-offset:\s*5px/);
   assert.match(specialProjects, /\.project-media-dialog__close\s*\{[\s\S]*min-height:44px;\s*padding:8px 14px;\s*border:5px solid var\(--signal\)[\s\S]*font-size:10px;\s*font-weight:900[\s\S]*letter-spacing:\.14em;\s*text-transform:uppercase/);
   assert.match(lightbox, /\.showModal\(\)/);
@@ -181,15 +181,11 @@ test("shared identity actions are outlined, node-responsive, accessible controls
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-identity\s*\{[\s\S]*align-self:\s*center[\s\S]*width:\s*100%/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-identity\s*\{[\s\S]*grid-row:\s*1\s*\/\s*3[\s\S]*align-self:\s*stretch[\s\S]*height:\s*100%[\s\S]*aspect-ratio:\s*auto/,
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-mark\s*\{[\s\S]*object-position:\s*calc\(100%\s*-\s*20px\)\s+center[\s\S]*transform:\s*scale\(0\.8\)/,
-  );
-  assert.match(
-    identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-identity\s*\{[\s\S]*grid-row:\s*1\s*;/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-mark\s*\{[\s\S]*object-position:\s*calc\(100%\s*-\s*20px\)\s+center[\s\S]*transform:\s*none/,
   );
   assert.match(
     identityCss,
@@ -197,7 +193,7 @@ test("shared identity actions are outlined, node-responsive, accessible controls
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-lockup\s*\{[\s\S]*grid-column:\s*2[\s\S]*grid-row:\s*1[\s\S]*align-self:\s*start[\s\S]*padding-top:\s*10px/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-lockup\s*\{[\s\S]*grid-column:\s*2[\s\S]*grid-row:\s*1[\s\S]*align-self:\s*start[\s\S]*padding-top:\s*0/,
   );
   assert.match(
     identityCss,
@@ -205,15 +201,15 @@ test("shared identity actions are outlined, node-responsive, accessible controls
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-copy\s*\{[\s\S]*grid-column:\s*1\s*\/\s*-1[\s\S]*grid-row:\s*2/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-copy\s*\{[\s\S]*grid-column:\s*2[\s\S]*grid-row:\s*2[\s\S]*margin-top:\s*12px/,
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.artist-band\s*\{[\s\S]*--band-inline-padding:\s*16px[\s\S]*--band-column-gap:\s*4px[\s\S]*grid-template-columns:\s*minmax\(88px,\s*min\(32%,\s*200px\)\)\s+minmax\(0,\s*1fr\)[\s\S]*align-items:\s*start[\s\S]*padding-inline-start:\s*8px/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.artist-band\s*\{[\s\S]*--band-inline-padding:\s*16px[\s\S]*--band-column-gap:\s*4px[\s\S]*grid-template-columns:\s*minmax\(88px,\s*min\(47%,\s*200px,\s*calc\(100%\s*-\s*172px\)\)\)\s+minmax\(0,\s*1fr\)[\s\S]*align-items:\s*start[\s\S]*padding-inline-start:\s*8px/,
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.artist-band \.band-identity\s*\{[\s\S]*align-self:\s*start[\s\S]*margin-top:\s*calc\(var\(--band-kicker-line-height\)\s*\+\s*var\(--band-title-gap\)\)/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.artist-band \.band-identity\s*\{[\s\S]*align-self:\s*stretch[\s\S]*margin-top:\s*0/,
   );
   assert.match(
     identityCss,
@@ -221,7 +217,7 @@ test("shared identity actions are outlined, node-responsive, accessible controls
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.artist-band \.band-lockup\s*\{[\s\S]*grid-column:\s*2[\s\S]*grid-row:\s*1/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.artist-band \.band-lockup\s*\{[^}]*grid-column:\s*2[^}]*grid-row:\s*1[^}]*align-self:\s*end/,
   );
   assert.match(
     identityCss,
@@ -235,7 +231,7 @@ test("shared identity actions are outlined, node-responsive, accessible controls
   assert.match(identityCss, /\.band-content\s*\{[\s\S]*container-type:\s*inline-size/);
   assert.doesNotMatch(identityCss, /--band-mark-height/);
   assert.match(identityCss, /\.brand-band \.band-identity\s*\{[\s\S]*aspect-ratio:\s*var\(--band-logo-aspect\)/);
-  assert.match(identityCss, /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-identity\s*\{[\s\S]*aspect-ratio:\s*4\s*\/\s*5/);
+  assert.match(identityCss, /@media \(max-width:\s*768px\)[\s\S]*\.artist-band \.band-title\s*\{[\s\S]*max-width:\s*min\(100%,\s*200px\)/);
   assert.match(identityCss, /\.brand-band \.band-mark\s*\{[\s\S]*position:\s*absolute[\s\S]*inset:\s*0[\s\S]*object-position:\s*center[\s\S]*translate:\s*var\(--band-logo-shift-x\)\s+0/);
   assert.match(identityCss, /\.band-kicker:empty,\s*\.band-kicker:has\(> br:only-child\)\s*\{\s*display:\s*none/);
   assert.match(identityCss, /\.band-kicker:empty \+ \.band-title,\s*\.band-kicker:has\(> br:only-child\) \+ \.band-title\s*\{\s*margin-top:\s*0/);
