@@ -27,6 +27,8 @@ const routes = [
   { route: "/about/visual-language/", file: "about/visual-language/index.html", variant: "supporting", descriptor: true },
   { route: "/about/ways-in/", file: "about/ways-in/index.html", variant: "supporting", descriptor: true },
 
+  { route: "/tattoos/client-resources/", file: "tattoos/client-resources/index.html", variant: "supporting", descriptor: true },
+
   { route: "/archive/about/", file: "archive/about/index.html", variant: "supporting", descriptor: true },
   { route: "/archive/guide/", file: "archive/guide/index.html", variant: "supporting", descriptor: true },
   { route: "/archive/art/", file: "archive/art/index.html", variant: "supporting", descriptor: true },
@@ -287,6 +289,16 @@ test("Tattoo landing replaces its lower promotions with client resources", async
   assert.match(html, /<section class="client-resources"[\s\S]*?<h2[^>]*>Client Resources\.<\/h2>/);
   for (const route of ["policies", "day-of", "location-parking", "aftercare"]) {
     assert.match(html, new RegExp(`class="client-resource-link" href="/tattoos/${route}/"`));
+  }
+});
+
+test("Client Resources provides the four appointment-resource destinations", async () => {
+  const html = await read("tattoos/client-resources/index.html");
+
+  assert.match(html, /<h1 class="hero-title">Client Resources<\/h1>/);
+  assert.match(html, /<nav class="resource-directory" aria-label="Client resources">/);
+  for (const route of ["policies", "day-of", "location-parking", "aftercare"]) {
+    assert.match(html, new RegExp(`class="tattoos-button" href="/tattoos/${route}/"`));
   }
 });
 

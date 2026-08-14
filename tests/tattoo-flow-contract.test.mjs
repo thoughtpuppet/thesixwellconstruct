@@ -4318,6 +4318,16 @@ test("Tattoo index keeps Specials in its brand band and closes with client resou
   assert.match(source, /<section class="client-resources"[\s\S]*?\/tattoos\/policies\/[\s\S]*?\/tattoos\/day-of\/[\s\S]*?\/tattoos\/location-parking\/[\s\S]*?\/tattoos\/aftercare\//);
 });
 
+test("Tattoos navigation replaces About with the Client Resources landing page", () => {
+  const home = readFileSync(join(ROOT, "home", "index.html"), "utf8");
+  const sharedNavigation = readFileSync(join(ROOT, "js", "construct-nav.js"), "utf8");
+
+  assert.match(home, /'TATTOOS':[\s\S]*?\{name:'Client Resources',url:'\/tattoos\/client-resources\/'\}/);
+  assert.doesNotMatch(home, /'TATTOOS':[\s\S]*?\{name:'About',url:'\/about\/artpilltattoohouse\/'/);
+  assert.match(sharedNavigation, /tattooing:[\s\S]*?\['Client Resources', '\/tattoos\/client-resources\/'\]/);
+  assert.doesNotMatch(sharedNavigation, /tattooing:[\s\S]*?\['About', '\/about\/artpilltattoohouse\/'\]/);
+});
+
 test("Tattoo aftercare is part of the client resource packet and keeps medical escalation explicit", () => {
   const aftercare = readFileSync(join(ROOT, "tattoos", "aftercare", "index.html"), "utf8");
   const policies = readFileSync(join(ROOT, "tattoos", "policies", "index.html"), "utf8");

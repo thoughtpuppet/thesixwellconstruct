@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Client Resources - Art.Pill Tattoo House</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/tattoos.css">
+<style>
+  :root {
+    --venture-accent: var(--color-tattooing);
+    --venture-accent-dim: var(--color-tattooing-dim);
+  }
+  .resource-directory {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    max-width: 900px;
+  }
+  .resource-directory .tattoos-button {
+    min-height: 72px;
+    padding: 16px 24px;
+  }
+  @media (max-width: 640px) {
+    .resource-directory { grid-template-columns: 1fr; }
+  }
+</style>
+<link rel="stylesheet" href="/css/mobile.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
+</head>
+<body class="tattoos-page tattoo-resource-page" data-venture="tattooing">
+  <main class="tattoos-shell">
+    <section class="hero site-hero site-hero--supporting">
+      <div class="hero-copy entrance-fade">
+        <h1 class="hero-title">Client Resources</h1>
+        <p class="hero-lead hero-descriptor">Everything to review before, during, and after your appointment.</p>
+      </div>
+    </section>
+
+    <nav class="resource-directory" aria-label="Client resources">
+      <a class="tattoos-button" href="/tattoos/policies/">Studio &amp; Booking Policies</a>
+      <a class="tattoos-button" href="/tattoos/day-of/">Day-of / Session Prep</a>
+      <a class="tattoos-button" href="/tattoos/location-parking/">Location &amp; Parking</a>
+      <a class="tattoos-button" href="/tattoos/aftercare/">Aftercare Instructions</a>
+    </nav>
+
+    <footer class="footer-bottom">
+      <p>art.pill TATTOO HOUSE / client resource packet</p>
+      <a href="/tattoos/">Return to Art.Pill Tattoo House</a>
+    </footer>
+  </main>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>

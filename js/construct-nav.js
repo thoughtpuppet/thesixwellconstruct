@@ -47,7 +47,7 @@
   /* Bundled pathway fallback. Managed navigation replaces these after hydrate. */
   var PATHWAYS_BY_KEY = {
     tattooing: [
-      ['Art.Pill Tattoo House', '/tattoos/'], ['About', '/about/artpilltattoohouse/'],
+      ['Art.Pill Tattoo House', '/tattoos/'], ['Client Resources', '/tattoos/client-resources/'],
       ['Flash', '/tattoos/flash/'], ['Portfolio', '/tattoos/portfolio/'],
       ['Booking', '/tattoos/inquire/'], ['Special Projects', '/tattoos/special-projects/'],
       ['Build Your Own', '/tattoos/build/'],
