@@ -698,6 +698,10 @@
                 <span class="session-duration">4 hours</span>
                 <div><p class="rate-label session-name">Half Day Session</p><p class="section-body session-description">4 hours for medium approved projects or developed symbolic work.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$100</strong></p></div>
               </li>
+              <li data-booking-type="tattoo_three_quarter">
+                <span class="session-duration">6 hours</span>
+                <div><p class="rate-label session-name">3/4 Day Session</p><p class="section-body session-description">6 hours for larger approved work, detailed compositions, or longer sessions.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$150</strong></p></div>
+              </li>
               <li data-booking-type="tattoo_full">
                 <span class="session-duration">8 hours</span>
                 <div><p class="rate-label session-name">Full Day Session</p><p class="section-body session-description">8 hours for large approved work, special projects, or deeper sessions.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$200</strong></p></div>
@@ -707,7 +711,7 @@
                 <div>
                   <p class="rate-label session-name">Extended Day Session</p>
                   <p class="section-body session-description">Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee.</p>
-                  <p class="section-body session-policy">Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.</p>
+                  <p class="section-body session-policy">Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, 3/4, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.</p>
                   <p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$350</strong></p>
                   <div>
                     <p class="rate-label">10-hour Custom example</p>
@@ -806,7 +810,7 @@
           });
         }
         var tattooSessionTypes = Array.isArray(payload.bookingTypes) ? payload.bookingTypes : [];
-        var tattooSessionIds = ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"];
+        var tattooSessionIds = ["tattoo_quarter", "tattoo_half", "tattoo_three_quarter", "tattoo_full", "tattoo_extended"];
         tattooSessionIds.forEach(function(id) {
           var item = document.querySelector('[data-booking-type="' + id + '"]');
           if (!item) return;

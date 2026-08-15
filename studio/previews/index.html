@@ -134,9 +134,10 @@
     <div class="page-grid">
       <div class="page-card">
         <h3>Booking / Session Selection</h3>
-        <p>Session plan, session list, calendar of available windows, deposit/tip panel, and checkout button.</p>
+        <p>Session plan, session list, calendar of available windows, itemized deposit/tip panel, and checkout button.</p>
         <div class="state-links">
-          <a href="/booking/?preview=1">Open Preview</a>
+          <a href="/booking/?preview=1&amp;multi=0">Single Session</a>
+          <a href="/booking/?preview=1&amp;multi=1&amp;maxSessions=3">Multi-Session / 3 Dates</a>
         </div>
       </div>
       <div class="page-card">
@@ -265,10 +266,12 @@
     <div class="page-grid">
       <div class="page-card">
         <h3>Tattoo Session</h3>
-        <p>Quarter / Half / Full sessions. Deposit language, day-of instructions, location &amp; parking. No Zoom.</p>
+        <p>Quarter / Half / 3/4 / Full sessions. Deposit language, day-of instructions, location &amp; parking. No Zoom.</p>
         <div class="state-links">
           <a href="/booking/confirmed/?preview=1&amp;state=paid">Paid</a>
           <a href="/booking/confirmed/?preview=1&amp;state=paid&amp;tip=1">Paid + Tip</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=paid&amp;multi=1">3 Sessions Paid</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=paid&amp;multi=1&amp;tip=1">3 Sessions + Tip</a>
           <a href="/booking/confirmed/?preview=1&amp;state=paid&amp;hours=72">48h+ Notice</a>
           <a href="/booking/confirmed/?preview=1&amp;state=paid&amp;hours=-2">Past</a>
           <a href="/booking/confirmed/?preview=1&amp;state=pending">Pending</a>
@@ -379,10 +382,11 @@
         "",
         "- Quarter Day Session: 2 hours. Deposit: $50.",
         "- Half Day Session: 4 hours - 4 hours for medium approved projects or developed symbolic work. Deposit: $100.",
+        "- 3/4 Day Session: 6 hours - 6 hours for larger approved work, detailed compositions, or longer sessions. Deposit: $150.",
         "- Full Day Session: 8 hours. Deposit: $200.",
         "- Extended Day Session: Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee. Deposit: $350.",
         "",
-        "Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.",
+        "Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, 3/4, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.",
         "",
         "Before booking, please review:",
         "",

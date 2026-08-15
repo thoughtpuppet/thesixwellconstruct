@@ -77,6 +77,13 @@ const DEFAULT_BOOKING_TYPES = {
     depositCents: 10000,
     currency: "USD",
   },
+  tattoo_three_quarter: {
+    label: "3/4 Day Session",
+    description: "6 hours for larger approved work, detailed compositions, or longer sessions.",
+    durationMinutes: 360,
+    depositCents: 15000,
+    currency: "USD",
+  },
   tattoo_full: {
     label: "Full Day Session",
     description: "8 hours for large approved work, special projects, or deeper sessions.",
@@ -96,6 +103,7 @@ const DEFAULT_BOOKING_TYPES = {
 const TATTOO_DAY_SESSION_LABELS = Object.freeze({
   tattoo_quarter: "Quarter Day Session",
   tattoo_half: "Half Day Session",
+  tattoo_three_quarter: "3/4 Day Session",
   tattoo_full: "Full Day Session",
   tattoo_extended: "Extended Day Session",
 });
@@ -192,6 +200,10 @@ function appointmentConfirmationUrl(env, request, appointment) {
 
 function appointmentCalendarUrl(env, request, appointment) {
   return `${publicBaseUrl(env, request)}/api/booking/calendar?appointment=${encodeURIComponent(appointment.id)}`;
+}
+
+function appointmentRescheduleUrl(env, request, appointment) {
+  return `${publicBaseUrl(env, request)}/booking/reschedule/?appointment=${encodeURIComponent(appointment.id)}`;
 }
 
 function tattooSubject(label) {
@@ -370,7 +382,7 @@ function sessionOptionsText(bookingTypes) {
     const deposit = formatMoney(type.depositCents, type.currency);
     const details = [duration, type.description].filter(Boolean).join(" - ");
     const extended = type.id === EXTENDED_DAY_BOOKING_TYPE_ID
-      ? " Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
+      ? " Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, 3/4, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
       : "";
     return `- ${type.label}${details ? `: ${details}` : ""} Deposit: ${deposit}.${extended}`;
   }).join("\n");
@@ -931,6 +943,9 @@ function normalizeAppointment(row) {
     currency: row.currency || "USD",
     purpose: row.purpose || "",
     status: row.status || "",
+    checkoutGroupId: row.checkout_group_id || row.checkoutGroupId || row.id,
+    checkoutGroupPosition: Number(row.checkout_group_position ?? row.checkoutGroupPosition ?? 1),
+    checkoutGroupSize: Number(row.checkout_group_size ?? row.checkoutGroupSize ?? 1),
     rescheduleCount: Number(row.reschedule_count ?? row.rescheduleCount ?? 0),
     originalStartAt: row.original_start_at || row.originalStartAt || "",
     originalEndAt: row.original_end_at || row.originalEndAt || "",
@@ -943,6 +958,29 @@ function normalizeAppointment(row) {
     isExperimentalProject,
     experimentalProjectTitle,
   };
+}
+
+async function appointmentConfirmationGroup(env, appointment) {
+  const normalized = normalizeAppointment(appointment);
+  const db = notificationDb(env);
+  if (!db || normalized.checkoutGroupSize <= 1 || !normalized.checkoutGroupId) {
+    return [normalized];
+  }
+  try {
+    const result = await db.prepare(
+      `SELECT a.*, bt.label AS booking_type_label, s.type AS submission_type
+       FROM appointments a
+       LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+       LEFT JOIN submissions s ON s.id = a.submission_id
+       WHERE a.checkout_group_id = ? AND a.status IN ('confirmed','completed')
+       ORDER BY a.checkout_group_position ASC, a.created_at ASC`,
+    ).bind(normalized.checkoutGroupId).all();
+    const appointments = (result.results || []).map(normalizeAppointment);
+    return appointments.length ? appointments : [normalized];
+  } catch (error) {
+    console.warn("Grouped appointment email fallback to one session.", error.message);
+    return [normalized];
+  }
 }
 
 function isTattooSpecialAppointment(appointment) {
@@ -1019,7 +1057,7 @@ function extendedDayEmailFields(appointment) {
   }
   return {
     sessionFeeText: `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance at the start of your appointment, before tattooing begins`,
-    billingPolicyText: "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you. The Extended Day fee is not charged again during a no-cost reschedule.",
+    billingPolicyText: "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, 3/4, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you. The Extended Day fee is not charged again during a no-cost reschedule.",
   };
 }
 
@@ -1536,6 +1574,12 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
 
 async function sendTattooAppointmentConfirmed(env, request, appointment, options = {}) {
   const resources = clientResourceUrls(env, request);
+  const groupAppointments = Array.isArray(options.appointments) && options.appointments.length
+    ? options.appointments.map(normalizeAppointment)
+    : [appointment];
+  const grouped = groupAppointments.length > 1;
+  const groupTipCents = groupAppointments.reduce((total, item) => total + Number(item.tipCents || 0), 0);
+  const groupPaidCents = groupAppointments.reduce((total, item) => total + Number(item.totalDueCents || 0), 0);
   const isSpecial = isTattooSpecialAppointment(appointment);
   const specialSession = tattooSpecialSessionLabel(appointment);
   const specialRemaining = Math.max(0, Number(appointment.specialApprovedPriceCents || 0) - Number(appointment.depositCents || 0));
@@ -1568,7 +1612,9 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
         },
       ]
     : ordinaryDetails.balanceDetails;
-  const variant = appointment.isExperimentalProject
+  const variant = grouped
+    ? (groupTipCents ? "tattoo_multi_tip" : "tattoo_multi")
+    : appointment.isExperimentalProject
     ? undefined
     : isSpecial
     ? (appointment.tipCents ? "tattoo_special_tip" : "tattoo_special")
@@ -1586,7 +1632,10 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
       ? `${appointment.bookingTypeLabel} appointment confirmed`
       : isSpecial
       ? "Your Tattoo Special appointment at art.pill TATTOO HOUSE has been confirmed"
+      : grouped
+      ? `Your ${groupAppointments.length} tattoo sessions at art.pill TATTOO HOUSE have been confirmed`
       : "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
+    headline: grouped ? `Your ${groupAppointments.length} tattoo sessions are confirmed.` : "",
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: specialSession,
@@ -1598,16 +1647,26 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
     billingPolicyText: appointment.isExperimentalProject
       ? "The tattoo work is free. This attendance deposit will be refunded after you attend. Cancellation or a no-show forfeits it."
       : appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
-      ? "Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
+      ? "Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, 3/4, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
       : "",
     renderingPolicyText: appointment.isExperimentalProject ? "" : "Your paid tattoo deposit includes one developed design direction. Artist-approved additional concept sketches are separate, non-refundable $50 fees that are not credited toward the tattoo total and must be paid before drawing begins.",
     paymentPolicyText: appointment.isExperimentalProject
       ? "There is no project price or balance due for this experimental tattoo."
       : TATTOO_APPOINTMENT_PAYMENT_AND_ARRIVAL_POLICY,
-    tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
-    totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
+    tipText: groupTipCents ? formatMoney(groupTipCents, appointment.currency) : "",
+    totalPaidText: grouped
+      ? formatMoney(groupPaidCents, appointment.currency)
+      : appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
     confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
     calendarUrl: appointmentCalendarUrl(env, request, appointment),
+    sessions: grouped ? groupAppointments.map((item) => ({
+      when: `${formatDate(item.startAt)} - ${formatDate(item.endAt)}`,
+      session: item.bookingTypeLabel,
+      feeText: `${formatMoney(item.depositCents, item.currency)} received`,
+      confirmationUrl: appointmentConfirmationUrl(env, request, item),
+      calendarUrl: appointmentCalendarUrl(env, request, item),
+      rescheduleUrl: appointmentRescheduleUrl(env, request, item),
+    })) : [],
     resources: [
       { label: "Tattoo policies", href: resources.bookingTermsUrl },
       { label: "Day-of instructions", href: resources.dayOfInstructionsUrl },
@@ -1777,45 +1836,63 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow, o
     case BUILD_SESSION_BOOKING_TYPE_ID:
       return sendBuildSessionConfirmed(env, request, appointment, options);
     default:
-      return sendTattooAppointmentConfirmed(env, request, appointment, options);
+      return sendTattooAppointmentConfirmed(env, request, appointment, {
+        ...options,
+        appointments: await appointmentConfirmationGroup(env, appointment),
+      });
   }
 }
 
 export async function notifyAdminAppointmentConfirmed(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
+  const groupAppointments = await appointmentConfirmationGroup(env, appointment);
+  const grouped = groupAppointments.length > 1;
+  const groupTipCents = groupAppointments.reduce((total, item) => total + Number(item.tipCents || 0), 0);
+  const groupPaidCents = groupAppointments.reduce((total, item) => total + Number(item.totalDueCents || 0), 0);
   const studio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
   const art = ART_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
   const bookingTypeLabel = studio ? studioBookingName(appointment) : appointment.bookingTypeLabel || appointment.bookingTypeId;
   const when = [formatDate(appointment.startAt), formatDate(appointment.endAt)]
     .filter(Boolean)
     .join(" - ");
-  const lines = [
-    "Booking payment confirmed.",
+  const groupLines = grouped ? groupAppointments.flatMap((item, index) => [
+    `Session ${index + 1}`,
+    compactLine("Appointment ID", item.id),
+    compactLine("Booking type", item.bookingTypeLabel || item.bookingTypeId),
+    compactLine("When", [formatDate(item.startAt), formatDate(item.endAt)].filter(Boolean).join(" - ")),
+    compactLine("Deposit", `${formatMoney(item.depositCents, item.currency)} received`),
+    compactLine("Confirmation page", appointmentConfirmationUrl(env, request, item)),
+    compactLine("Calendar", appointmentCalendarUrl(env, request, item)),
     "",
+  ]) : [
     compactLine("Booking type", bookingTypeLabel),
     compactLine("Appointment ID", appointment.id),
-    compactLine("Submission ID", appointment.submissionId),
     compactLine("When", when),
+  ];
+  const lines = [
+    grouped ? `${groupAppointments.length} booking payments confirmed.` : "Booking payment confirmed.",
+    "",
+    compactLine("Submission ID", appointment.submissionId),
     "",
     "Client",
     compactLine("Name", appointment.clientName),
     compactLine("Email", appointment.clientEmail),
     compactLine("Phone", appointment.clientPhone),
     "",
+    ...groupLines,
     "Payment",
-    compactLine("Deposit / fee", `${formatMoney(appointment.depositCents, appointment.currency)} received`),
+    grouped ? compactLine("Deposits", `${formatMoney(groupPaidCents - groupTipCents, appointment.currency)} received across ${groupAppointments.length} sessions`) : compactLine("Deposit / fee", `${formatMoney(appointment.depositCents, appointment.currency)} received`),
     appointment.sessionFeeCents ? compactLine("Extended Day fee", `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with remaining studio balance at the start of the appointment, before tattooing begins`) : "",
-    appointment.tipCents ? compactLine("Optional tip", formatMoney(appointment.tipCents, appointment.currency)) : "",
-    compactLine("Total paid", formatMoney(appointment.totalDueCents, appointment.currency)),
-    "",
-    compactLine("Confirmation page", appointmentConfirmationUrl(env, request, appointment)),
-    compactLine("Calendar", appointmentCalendarUrl(env, request, appointment)),
+    groupTipCents ? compactLine("Optional tip", formatMoney(groupTipCents, appointment.currency)) : "",
+    compactLine("Total paid", formatMoney(groupPaidCents, appointment.currency)),
   ];
 
   return sendAdminNotification(env, request, {
     theme: art ? "construct_art" : studio ? "construct_event" : "tattoo",
     templateVariant: art ? "construct_art" : studio ? "construct_event" : isTattooSpecialAppointment(appointment) ? "tattoo_special" : "tattoo",
-    subject: studio
+    subject: grouped
+      ? `Booking confirmed: ${groupAppointments.length} tattoo sessions`
+      : studio
       ? `Booking confirmed: ${bookingTypeLabel}`
       : tattooAdminBookingSubject(appointment, "Confirmed"),
     lines,

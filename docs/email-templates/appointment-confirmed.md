@@ -15,8 +15,9 @@ Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed
 
 ## Applies To
 
-Paid regular tattoo sessions (`tattoo_quarter`, `tattoo_half`, `tattoo_full`,
-`tattoo_extended`) and the paid Tattoo Special confirmation variants. Consultation
+Paid regular tattoo sessions (`tattoo_quarter`, `tattoo_half`,
+`tattoo_three_quarter`, `tattoo_full`, `tattoo_extended`) and the paid Tattoo
+Special confirmation variants. Consultation
 and build-session bookings use their own templates - see [consultation-confirmed-in-person.md](consultation-confirmed-in-person.md),
 [consultation-confirmed-virtual.md](consultation-confirmed-virtual.md), and
 [build-session-confirmed.md](build-session-confirmed.md).
@@ -70,6 +71,13 @@ Saiel Solehman
 - `{{location_parking_url}}`
 - `{{appointment_id}}`
 
+For a multi-session checkout, use the editable `tattoo_multi` or
+`tattoo_multi_tip` variant. The grouped email is sent once for the checkout and
+uses `{{session_label}}` (for example, `3 tattoo sessions`). It lists every
+appointment with its own date, session type, deposit, confirmation page,
+calendar link, and reschedule link. The fixed 3% processing fee is not derived
+from the number of sessions.
+
 ## Optional Notes For Codex
 
 This email should feel final and clear. It should not over-explain the Square
@@ -79,5 +87,5 @@ This template never includes a Zoom link - regular tattoo sessions are
 in-person only.
 For Extended Day, use: “Optional 8-12 hour session. Reserves a 12-hour
 appointment block with a $200 Extended Day fee.” State that Extended Day is
-always optional and that Quarter, Half, and Full Day sessions do not include
+always optional and that Quarter, Half, 3/4, and Full Day sessions do not include
 the fee.

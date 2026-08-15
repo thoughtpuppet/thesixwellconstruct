@@ -1080,7 +1080,7 @@ test("public tattoo rates and session lengths keep their approved copy and peer 
   assert.match(source, /class="section-body fit-body"/);
   assert.match(source, /class="section-body session-description"/);
 
-  const sessionIds = ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"];
+  const sessionIds = ["tattoo_quarter", "tattoo_half", "tattoo_three_quarter", "tattoo_full", "tattoo_extended"];
   const positions = sessionIds.map((id) => source.indexOf(`data-booking-type="${id}"`));
   positions.forEach((position, index) => assert.ok(position > -1, `${sessionIds[index]} is listed`));
   assert.deepEqual([...positions].sort((a, b) => a - b), positions, "session lengths use booking order");
@@ -1099,6 +1099,11 @@ test("Studio approved booking links allow per-client tattoo appointment types", 
   assert.match(source, /Choose at least one session type for this booking link\./);
   assert.match(source, /savedDraft\.bookingLinkRevokeExisting === true \? "checked" : ""/);
   assert.match(source, /bookingLinkRevokeExisting: document\.getElementById\("tokenRevokeExisting"\)\?\.checked === true/);
+  assert.match(source, /id="tokenAllowMultipleSessions" type="checkbox"/);
+  assert.match(source, /id="tokenMaxSessions" type="number" min="2" max="24"/);
+  assert.match(source, /Allow multiple sessions in one checkout/);
+  assert.match(source, /name="allowMultipleSessions" type="checkbox" data-direct-multi-toggle/);
+  assert.match(source, /allowMultipleSessions: draft\.bookingAllowMultipleSessions/);
   assert.match(source, /Object\.assign\(values, bookingTokenDraftBody\(submissionId\)\);/);
   assert.match(source, /id="saveBookingChoicesBtn"[^>]*>Save Booking Choices<\/button>/);
   assert.match(source, /id="saveReviewNotesBtn"[^>]*>Save Internal Notes<\/button>/);
@@ -1156,6 +1161,8 @@ test("Studio session-plan saves persist booking choices without preparing access
       allowedBookingTypes: ["tattoo_half"],
       bookingLinkExpiresAt: expiresAt,
       bookingLinkRevokeExisting: false,
+      bookingAllowMultipleSessions: true,
+      bookingMaxSessions: 4,
     },
     adminToken,
     "PATCH",
@@ -1169,6 +1176,8 @@ test("Studio session-plan saves persist booking choices without preparing access
   assert.deepEqual(savedPlan.allowedBookingTypes, ["tattoo_half"]);
   assert.equal(savedPlan.bookingLinkExpiresAt, expiresAt);
   assert.equal(savedPlan.bookingLinkRevokeExisting, false);
+  assert.equal(savedPlan.bookingAllowMultipleSessions, true);
+  assert.equal(savedPlan.bookingMaxSessions, 4);
   assert.equal(database.prepare("SELECT status FROM submissions WHERE id = ?").get(submissionId).status, "reviewing");
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM booking_tokens WHERE submission_id = ?").get(submissionId).count, 0);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM notification_deliveries WHERE related_id = ?").get(submissionId).count, 0);
@@ -1183,6 +1192,8 @@ test("Studio session-plan saves persist booking choices without preparing access
   const reloadedPlan = (await reloaded.json()).sessionPlan;
   assert.deepEqual(reloadedPlan.allowedBookingTypes, ["tattoo_half"]);
   assert.equal(reloadedPlan.includeAdditionalSketchDisclaimer, true);
+  assert.equal(reloadedPlan.bookingAllowMultipleSessions, true);
+  assert.equal(reloadedPlan.bookingMaxSessions, 4);
   database.prepare(
     "UPDATE tattoo_session_plans SET budget_acknowledged=1,budget_acknowledged_at=? WHERE submission_id=?",
   ).run(new Date().toISOString(), submissionId);
@@ -1287,7 +1298,7 @@ test("reopening booking access preserves the stored URL unless replacement is re
 
 test("Extended Day client surfaces use the approved optional-session copy", () => {
   const description = "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee.";
-  const optionality = "Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.";
+  const optionality = "Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, 3/4, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.";
   const clientSources = [
     join(ROOT, "tattoos", "index.html"),
     join(ROOT, "booking", "index.html"),
@@ -2984,6 +2995,8 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   assert.ok(columns("submissions").has("tattoo_stage"));
   assert.ok(columns("submissions").has("idempotency_key"));
   assert.ok(columns("booking_tokens").has("purpose"));
+  assert.ok(columns("booking_tokens").has("allow_multiple_sessions"));
+  assert.ok(columns("booking_tokens").has("max_sessions"));
   assert.ok(columns("tattoo_settings").has("session_estimate_copy_json"));
   assert.ok(columns("special_project_calls").has("profile"));
   assert.ok(columns("special_project_calls").has("allowed_modes_json"));
@@ -3005,6 +3018,8 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
     "budget_acknowledged",
     "budget_acknowledged_at",
     "include_additional_sketch_disclaimer",
+    "booking_allow_multiple_sessions",
+    "booking_max_sessions",
   ]) assert.ok(columns("tattoo_session_plans").has(name), `tattoo_session_plans.${name}`);
   assert.ok(columns("visual_symbols").has("build_guidance_json"));
   for (const name of [
@@ -3015,6 +3030,9 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
     "replacement_for_appointment_id",
     "reschedule_count",
     "cancelled_at",
+    "checkout_group_id",
+    "checkout_group_position",
+    "checkout_group_size",
   ]) assert.ok(columns("appointments").has(name), `appointments.${name}`);
 
   const tables = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name));
@@ -3046,13 +3064,14 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   assert.equal(database.prepare("SELECT lead_time_days FROM tattoo_settings WHERE id = 'default'").get().lead_time_days, 14);
   assert.deepEqual(
     database.prepare(
-      "SELECT id, label, duration_minutes, deposit_cents, session_fee_cents, minimum_billable_minutes FROM booking_types WHERE id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended') ORDER BY id"
+      "SELECT id, label, duration_minutes, deposit_cents, session_fee_cents, minimum_billable_minutes FROM booking_types WHERE id IN ('tattoo_quarter','tattoo_half','tattoo_three_quarter','tattoo_full','tattoo_extended') ORDER BY id"
     ).all().map((row) => ({ ...row })),
     [
       { id: "tattoo_extended", label: "Extended Day Session", duration_minutes: 720, deposit_cents: 35000, session_fee_cents: 20000, minimum_billable_minutes: 0 },
       { id: "tattoo_full", label: "Full Day Session", duration_minutes: 480, deposit_cents: 20000, session_fee_cents: 0, minimum_billable_minutes: 0 },
       { id: "tattoo_half", label: "Half Day Session", duration_minutes: 240, deposit_cents: 10000, session_fee_cents: 0, minimum_billable_minutes: 0 },
       { id: "tattoo_quarter", label: "Quarter Day Session", duration_minutes: 120, deposit_cents: 5000, session_fee_cents: 0, minimum_billable_minutes: 0 },
+      { id: "tattoo_three_quarter", label: "3/4 Day Session", duration_minutes: 360, deposit_cents: 15000, session_fee_cents: 0, minimum_billable_minutes: 0 },
     ],
   );
 });
@@ -5782,7 +5801,7 @@ test("manual text assist uses New York greeting boundaries and composes the name
   );
 });
 
-test("Studio can create a direct private booking invite without a prior inquiry", async () => {
+test("Studio can create and hold a six-hour 3/4 Day direct booking invite without a prior inquiry", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
   const env = {
@@ -5823,7 +5842,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
     {
       projectNote: "Approved through an offline conversation.",
       purpose: "tattoo",
-      bookingTypeId: "tattoo_half",
+      bookingTypeId: "tattoo_three_quarter",
     },
     adminToken,
   ), env);
@@ -5831,7 +5850,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   const payload = await response.json();
   assert.equal(payload.delivery.skipped, true);
   assert.equal(payload.delivery.reason, "explicit_client_notification_required");
-  assert.deepEqual(payload.token.allowedBookingTypes, ["tattoo_half"]);
+  assert.deepEqual(payload.token.allowedBookingTypes, ["tattoo_three_quarter"]);
 
   const submission = database.prepare(
     "SELECT * FROM submissions WHERE id = ?"
@@ -5851,10 +5870,10 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(plan.session_category, "one_session");
   assert.equal(plan.split_policy, "not_available");
   assert.equal(plan.estimated_sessions_min, 1);
-  assert.equal(plan.estimated_total_minutes_min, 240);
-  assert.equal(plan.estimated_total_minutes_max, 240);
+  assert.equal(plan.estimated_total_minutes_min, 360);
+  assert.equal(plan.estimated_total_minutes_max, 360);
   assert.equal(plan.client_acknowledged, 0);
-  assert.equal(plan.artist_note, "The composition is planned for a Half Day Session (4 hours).");
+  assert.equal(plan.artist_note, "The composition is planned for a 3/4 Day Session (6 hours).");
   assert.doesNotMatch(plan.artist_note, /offline conversation/i);
 
   const rawToken = bookingTokenFromUrl(payload.token.bookingUrl);
@@ -5866,9 +5885,11 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   const contextPayload = await context.json();
   assert.equal(contextPayload.requiresClientDetails, true);
   assert.equal(contextPayload.client.email, "");
-  assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.id), ["tattoo_half"]);
-  assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.label), ["Half Day Session"]);
-  assert.equal(contextPayload.sessionPlan.artistNote, "The composition is planned for a Half Day Session (4 hours).");
+  assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.id), ["tattoo_three_quarter"]);
+  assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.label), ["3/4 Day Session"]);
+  assert.equal(contextPayload.bookingTypes[0].durationMinutes, 360);
+  assert.equal(contextPayload.bookingTypes[0].depositCents, 15000);
+  assert.equal(contextPayload.sessionPlan.artistNote, "The composition is planned for a 3/4 Day Session (6 hours).");
   assert.equal(contextPayload.sessionEstimateCopy.sectionHeading, "Plan Your Tattoo Session");
   assert.equal(contextPayload.sessionEstimateCopy.confirmButtonLabel, "Accept This Estimate");
   assert.equal(
@@ -5885,7 +5906,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(acknowledged.status, 200);
 
   const start = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
-  const end = new Date(Date.now() + 75 * 60 * 60 * 1000).toISOString();
+  const end = new Date(Date.now() + 78 * 60 * 60 * 1000).toISOString();
   const now = new Date().toISOString();
   database.prepare(
     `INSERT INTO availability_windows (
@@ -5896,7 +5917,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   ).run(
     "direct-invite-window",
     "tattooing",
-    "tattoo_half",
+    "tattoo_three_quarter",
     start,
     end,
     1,
@@ -5910,7 +5931,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   );
   const missingClientDetails = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
     token: rawToken,
-    bookingTypeId: "tattoo_half",
+    bookingTypeId: "tattoo_three_quarter",
     availabilityWindowId: "direct-invite-window",
   }), env);
   assert.equal(missingClientDetails.status, 400);
@@ -5923,7 +5944,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
 
   const hold = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
     token: rawToken,
-    bookingTypeId: "tattoo_half",
+    bookingTypeId: "tattoo_three_quarter",
     availabilityWindowId: "direct-invite-window",
     clientName: "Direct Client",
     clientEmail: "DIRECT@example.test",
@@ -5978,6 +5999,7 @@ test("Studio direct tattoo invites can present project details, pacing options, 
     "tattoo_extended",
     "tattoo_quarter",
     "tattoo_half",
+    "tattoo_three_quarter",
   ]);
   assert.deepEqual(payload.token.approvedBudget, {
     minimumCents: 150000,
@@ -6024,13 +6046,235 @@ test("Studio direct tattoo invites can present project details, pacing options, 
   );
   assert.deepEqual(
     context.bookingTypes.map((bookingType) => bookingType.id).sort(),
-    ["tattoo_extended", "tattoo_full", "tattoo_half", "tattoo_quarter"].sort(),
+    ["tattoo_extended", "tattoo_full", "tattoo_half", "tattoo_quarter", "tattoo_three_quarter"].sort(),
   );
   assert.equal(context.sessionPlan.presentLongerSessionOption, true);
   assert.equal(context.sessionPlan.presentShorterSessionsOption, true);
   assert.equal(context.sessionPlan.includeAdditionalSketchDisclaimer, true);
   assert.equal(context.sessionPlan.approvedBudgetMinCents, 150000);
   assert.equal(context.sessionPlan.approvedBudgetMaxCents, 150000);
+});
+
+test("multi-session direct links collect one Square checkout and confirm separate appointments", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const sentEmails = [];
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    ADMIN_NOTIFICATION_EMAIL: "studio@example.test",
+    PUBLIC_SITE_URL: "https://example.test",
+    SQUARE_ACCESS_TOKEN: "square-token",
+    SQUARE_LOCATION_ID: "square-location",
+    EMAIL: {
+      async send(message) {
+        sentEmails.push(message);
+        return { messageId: `multi-session-email-${sentEmails.length}` };
+      },
+    },
+  };
+  const inviteResponse = await handleAdminCreateDirectBookingInvite(adminJsonRequest(
+    "/api/admin/booking/direct-invites",
+    {
+      purpose: "tattoo",
+      bookingTypeId: "tattoo_three_quarter",
+      allowMultipleSessions: true,
+      maxSessions: 3,
+    },
+    adminToken,
+  ), env);
+  assert.equal(inviteResponse.status, 200, await inviteResponse.clone().text());
+  const invite = await inviteResponse.json();
+  assert.equal(invite.token.allowMultipleSessions, true);
+  assert.equal(invite.token.maxSessions, 3);
+  const tokenRow = database.prepare(
+    "SELECT allow_multiple_sessions,max_sessions FROM booking_tokens WHERE id=?",
+  ).get(invite.token.id);
+  assert.deepEqual(rowObject(tokenRow), { allow_multiple_sessions: 1, max_sessions: 3 });
+  const planRow = database.prepare(
+    `SELECT booking_purpose,allowed_booking_types_json,
+            booking_allow_multiple_sessions,booking_max_sessions
+     FROM tattoo_session_plans WHERE submission_id=?`,
+  ).get(invite.directInvite.submissionId);
+  assert.deepEqual(rowObject(planRow), {
+    booking_purpose: "tattoo",
+    allowed_booking_types_json: JSON.stringify(["tattoo_three_quarter"]),
+    booking_allow_multiple_sessions: 1,
+    booking_max_sessions: 3,
+  });
+
+  const rawToken = bookingTokenFromUrl(invite.token.bookingUrl);
+  const contextResponse = await handleBookingContext(
+    new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`),
+    env,
+  );
+  const context = await contextResponse.json();
+  assert.deepEqual(context.multiSession, { enabled: true, maxSessions: 3 });
+
+  const acknowledged = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+    token: rawToken,
+    preference: "studio_plan",
+    acknowledged: true,
+  }), env);
+  assert.equal(acknowledged.status, 200, await acknowledged.clone().text());
+
+  const windowIds = [];
+  for (let index = 0; index < 3; index += 1) {
+    const start = new Date(Date.now() + (72 + index * 48) * 60 * 60 * 1000);
+    const end = new Date(start.getTime() + 6 * 60 * 60 * 1000);
+    const id = `multi-session-window-${index + 1}`;
+    windowIds.push(id);
+    insertAvailabilityWindow(database, {
+      id,
+      bookingTypeId: "tattoo_three_quarter",
+      startAt: start.toISOString(),
+      endAt: end.toISOString(),
+    });
+  }
+
+  const overLimitResponse = await handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
+    token: rawToken,
+    bookingTypeId: "tattoo_three_quarter",
+    availabilityWindowIds: [...windowIds, "one-session-too-many"],
+    clientName: "Multiple Session Client",
+    clientEmail: "multi@example.test",
+    clientPhone: "404-555-0124",
+  }), env);
+  assert.equal(overLimitResponse.status, 400);
+  assert.match((await overLimitResponse.json()).error, /no more than 3 appointment times/i);
+
+  let squareBody = null;
+  const checkoutResponse = await withMockFetch(async (_url, init) => {
+    squareBody = JSON.parse(init.body);
+    return jsonFetchResponse({
+      payment_link: {
+        id: "multi-session-link",
+        order_id: "multi-session-order",
+        url: "https://square.test/multi-session",
+      },
+    });
+  }, () => handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
+    token: rawToken,
+    bookingTypeId: "tattoo_three_quarter",
+    availabilityWindowIds: windowIds,
+    tipCents: 2500,
+    clientName: "Multiple Session Client",
+    clientEmail: "multi@example.test",
+    clientPhone: "404-555-0124",
+  }), env));
+  assert.equal(checkoutResponse.status, 200, await checkoutResponse.clone().text());
+  const checkout = await checkoutResponse.json();
+  assert.equal(checkout.sessionCount, 3);
+  assert.equal(checkout.appointmentIds.length, 3);
+  assert.deepEqual(
+    squareBody.order.line_items.map((item) => item.base_price_money.amount),
+    [15000, 15000, 15000, 2500],
+  );
+  assert.match(squareBody.order.line_items[0].name, /Session 1/);
+  assert.match(squareBody.order.line_items[2].name, /Session 3/);
+  assert.match(squareBody.order.line_items[0].name, /Session 1.*\d{4}/);
+
+  const appointmentRows = database.prepare(
+    `SELECT id,checkout_group_id,checkout_group_position,checkout_group_size,status,
+            square_order_id,square_payment_link_id
+     FROM appointments WHERE id IN (?,?,?) ORDER BY checkout_group_position`,
+  ).all(...checkout.appointmentIds).map(rowObject);
+  assert.equal(appointmentRows.length, 3);
+  assert.equal(new Set(appointmentRows.map((row) => row.checkout_group_id)).size, 1);
+  assert.deepEqual(appointmentRows.map((row) => row.checkout_group_position), [1, 2, 3]);
+  assert.deepEqual(appointmentRows.map((row) => row.checkout_group_size), [3, 3, 3]);
+  assert.ok(appointmentRows.every((row) => row.status === "deposit_pending"));
+  assert.ok(appointmentRows.every((row) => row.square_order_id === "multi-session-order"));
+
+  const confirmResponse = await withMockFetch(async (url) => {
+    assert.match(String(url), /\/v2\/orders\/multi-session-order$/);
+    return jsonFetchResponse({ order: { id: "multi-session-order", state: "COMPLETED" } });
+  }, () => handleConfirmBooking(
+    new Request(`https://example.test/api/booking/confirm?appointment=${checkout.appointmentId}`),
+    env,
+  ));
+  assert.equal(confirmResponse.status, 200, await confirmResponse.clone().text());
+  const confirmation = await confirmResponse.json();
+  assert.equal(confirmation.appointments.length, 3);
+  assert.equal(confirmation.checkoutTotalPaidCents, 47500);
+  const confirmedRows = database.prepare(
+    "SELECT status,hold_state FROM appointments WHERE checkout_group_id=? ORDER BY checkout_group_position",
+  ).all(appointmentRows[0].checkout_group_id).map(rowObject);
+  assert.deepEqual(confirmedRows, [
+    { status: "confirmed", hold_state: "converted" },
+    { status: "confirmed", hold_state: "converted" },
+    { status: "confirmed", hold_state: "converted" },
+  ]);
+  assert.equal(sentEmails.length, 2);
+  const clientConfirmationEmail = sentEmails.find((message) => message.to === "multi@example.test");
+  const adminConfirmationEmail = sentEmails.find((message) => message.to === "studio@example.test");
+  assert.ok(clientConfirmationEmail);
+  assert.ok(adminConfirmationEmail);
+  assert.match(clientConfirmationEmail.subject, /3 tattoo sessions/i);
+  checkout.appointmentIds.forEach((appointmentId, index) => {
+    assert.match(clientConfirmationEmail.html, new RegExp(
+      `booking/reschedule/\\?appointment=${appointmentId}`,
+    ));
+    assert.match(clientConfirmationEmail.html, new RegExp(`Reschedule Session ${index + 1}`));
+  });
+  assert.match(adminConfirmationEmail.text, /3 booking payments confirmed/);
+
+  database.prepare(
+    `UPDATE appointments SET status='deposit_pending',hold_state='active'
+     WHERE id IN (?,?)`,
+  ).run(checkout.appointmentIds[1], checkout.appointmentIds[2]);
+  const resumedConfirmation = await withMockFetch(async () =>
+    jsonFetchResponse({ order: { id: "multi-session-order", state: "COMPLETED" } }),
+  () => handleConfirmBooking(
+    new Request(`https://example.test/api/booking/confirm?appointment=${checkout.appointmentId}`),
+    env,
+  ));
+  assert.equal(resumedConfirmation.status, 200, await resumedConfirmation.clone().text());
+  assert.deepEqual(
+    database.prepare(
+      "SELECT status FROM appointments WHERE checkout_group_id=? ORDER BY checkout_group_position",
+    ).all(appointmentRows[0].checkout_group_id).map((row) => row.status),
+    ["confirmed", "confirmed", "confirmed"],
+  );
+  assert.equal(sentEmails.length, 2);
+  assert.ok(database.prepare("SELECT used_at FROM booking_tokens WHERE id=?").get(invite.token.id).used_at);
+  assert.equal(
+    database.prepare("SELECT tattoo_stage FROM submissions WHERE id=?").get(invite.directInvite.submissionId).tattoo_stage,
+    "tattoo_scheduled",
+  );
+  assert.equal(
+    database.prepare(
+      "SELECT COUNT(*) AS count FROM notification_deliveries WHERE related_type='appointment' AND related_id IN (?,?,?)",
+    ).get(...checkout.appointmentIds).count,
+    2,
+  );
+  assert.deepEqual(
+    database.prepare(
+      "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? ORDER BY template_key",
+    ).all(checkout.appointmentId).map(rowObject),
+    [
+      { template_key: "admin_appointment_confirmed", template_variant: "tattoo" },
+      { template_key: "appointment_confirmed", template_variant: "tattoo_multi_tip" },
+    ],
+  );
+
+  const cancelResponse = await handleCancelAppointment(jsonRequest("/api/booking/cancel", {
+    appointmentId: checkout.appointmentIds[0],
+    email: "multi@example.test",
+    reason: "Client released one date",
+  }), env);
+  assert.equal(cancelResponse.status, 200, await cancelResponse.clone().text());
+  assert.deepEqual(
+    database.prepare(
+      "SELECT status FROM appointments WHERE checkout_group_id=? ORDER BY checkout_group_position",
+    ).all(appointmentRows[0].checkout_group_id).map((row) => row.status),
+    ["cancelled", "confirmed", "confirmed"],
+  );
+  assert.equal(
+    database.prepare("SELECT status,tattoo_stage FROM submissions WHERE id=?")
+      .get(invite.directInvite.submissionId).tattoo_stage,
+    "tattoo_scheduled",
+  );
 });
 
 test("unused approved direct booking invites can be permanently deleted with their private links", async () => {
@@ -6857,7 +7101,7 @@ test("Extended Day is optional, has no billing minimum, remains acknowledged, an
     {
       submissionId,
       purpose: "tattoo",
-      allowedBookingTypes: ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"],
+      allowedBookingTypes: ["tattoo_quarter", "tattoo_half", "tattoo_three_quarter", "tattoo_full", "tattoo_extended"],
       revokeExisting: true,
     },
     adminToken,
@@ -6867,6 +7111,7 @@ test("Extended Day is optional, has no billing minimum, remains acknowledged, an
   assert.deepEqual(issuedToken.allowedBookingTypes, [
     "tattoo_quarter",
     "tattoo_half",
+    "tattoo_three_quarter",
     "tattoo_full",
     "tattoo_extended",
   ]);
@@ -8055,6 +8300,23 @@ test("client transactional email catalog renders exact HTML and plain-text varia
   assert.equal(nodeVariants.get("studio_booking_confirmed:studio_space"), "events");
   assert.equal(nodeVariants.get("admin_submission_received:construct_art"), "art");
   assert.equal(nodeVariants.get("admin_appointment_confirmed:construct_event"), "events");
+  assert.equal(nodeVariants.get("appointment_confirmed:tattoo_multi"), "tattoo");
+  assert.equal(nodeVariants.get("appointment_confirmed:tattoo_multi_tip"), "tattoo");
+  for (const variant of ["tattoo_multi", "tattoo_multi_tip"]) {
+    const rendered = renderClientEmailPreview("appointment_confirmed", variant);
+    assert.match(rendered.subject, /3 tattoo sessions/);
+    assert.match(rendered.text, /Session 1/);
+    assert.match(rendered.text, /Session 2/);
+    assert.match(rendered.text, /Session 3/);
+    for (const appointmentId of ["demo-appointment-1", "demo-appointment-2", "demo-appointment-3"]) {
+      assert.match(rendered.html, new RegExp(`/booking/reschedule/\\?appointment=${appointmentId}`));
+    }
+    const definition = emailTemplateDefinition("appointment_confirmed", variant);
+    assert.equal(Object.hasOwn(definition.rendered.semantic.variables, "session_count"), false);
+    assert.equal(definition.rendered.semantic.variables.session_label, "3 tattoo sessions");
+    assert.doesNotMatch(definition.defaultContent.outro.join(" "), /\{\{session_label\}\}%/);
+    assert.match(definition.defaultContent.outro.join(" "), /A 3% processing fee/);
+  }
   const tattooSpecialVariants = [
     "submission_received:tattoo_special",
     "booking_link_created:tattoo_special",
@@ -8136,7 +8398,7 @@ test("client transactional email catalog renders exact HTML and plain-text varia
 });
 
 test("paid tattoo confirmations include final-payment, grace-period, and all client-resource guidance", () => {
-  for (const variant of ["tattoo", "tip", "tattoo_extended", "tattoo_extended_tip", "tattoo_special", "tattoo_special_tip"]) {
+  for (const variant of ["tattoo", "tip", "tattoo_multi", "tattoo_multi_tip", "tattoo_extended", "tattoo_extended_tip", "tattoo_special", "tattoo_special_tip"]) {
     const rendered = renderClientEmailPreview("appointment_confirmed", variant);
     const identity = `appointment_confirmed:${variant}`;
     assert.match(rendered.text, /remaining balance must be paid before tattooing begins/, identity);
@@ -8149,7 +8411,6 @@ test("paid tattoo confirmations include final-payment, grace-period, and all cli
     assert.match(rendered.html, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/day-of\/"/, identity);
     assert.match(rendered.html, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/location-parking\/"/, identity);
     const secondaryUrls = [
-      "https://thesixwellconstruct.com/api/booking/calendar?appointment=demo-appointment",
       "https://thesixwellconstruct.com/tattoos/policies/",
       "https://thesixwellconstruct.com/tattoos/day-of/",
       "https://thesixwellconstruct.com/tattoos/location-parking/",
@@ -8158,14 +8419,37 @@ test("paid tattoo confirmations include final-payment, grace-period, and all cli
       const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       assert.equal((rendered.html.match(new RegExp(`href="${escaped}"`, "g")) || []).length, 1, `${identity} should render ${url} once`);
     });
-    assert.match(rendered.html, /<a href="https:\/\/thesixwellconstruct\.com\/api\/booking\/calendar\?appointment=demo-appointment"[^>]*>Add to calendar<\/a>/, identity);
+    if (variant.startsWith("tattoo_multi")) {
+      for (const appointmentId of ["demo-appointment-1", "demo-appointment-2", "demo-appointment-3"]) {
+        assert.match(rendered.html, new RegExp(`<a href="https://thesixwellconstruct\\.com/api/booking/calendar\\?appointment=${appointmentId}"[^>]*>Add Session [123]</a>`), identity);
+      }
+    } else {
+      assert.match(rendered.html, /<a href="https:\/\/thesixwellconstruct\.com\/api\/booking\/calendar\?appointment=demo-appointment"[^>]*>Add to calendar<\/a>/, identity);
+    }
   }
+});
+
+test("Studio previews expose single and multi-session client booking states", () => {
+  const previews = readFileSync(join(ROOT, "studio", "previews", "index.html"), "utf8");
+  const booking = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
+  const confirmation = readFileSync(join(ROOT, "booking", "confirmed", "index.html"), "utf8");
+  assert.match(previews, /\/booking\/\?preview=1&amp;multi=0/);
+  assert.match(previews, /\/booking\/\?preview=1&amp;multi=1&amp;maxSessions=3/);
+  assert.match(previews, /\/booking\/confirmed\/\?preview=1&amp;state=paid&amp;multi=1/);
+  assert.match(previews, /\/booking\/confirmed\/\?preview=1&amp;state=paid&amp;multi=1&amp;tip=1/);
+  assert.match(booking, /id="checkoutItemsRow"/);
+  assert.match(booking, /Square checkout items/);
+  assert.match(booking, /params\.get\("multi"\) !== "0"/);
+  assert.equal((booking.match(/bookingTypeId: "tattoo_three_quarter"/g) || []).length, 3);
+  assert.match(confirmation, /params\.get\("multi"\) === "1"/);
+  assert.match(confirmation, /Reschedule Session \$\{index \+ 1\}/);
+  assert.match(confirmation, /Use the Reschedule link beside the session you want to move/);
 });
 
 test("private booking pacing choices follow the Studio-approved appointment types", () => {
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   assert.match(bookingPage, /function pacingOptionsForContext\(\)/);
-  assert.match(bookingPage, /const longerAvailable = bookingTypeIds\.has\("tattoo_full"\)/);
+  assert.match(bookingPage, /const longerAvailable = bookingTypeIds\.has\("tattoo_three_quarter"\).*bookingTypeIds\.has\("tattoo_full"\)/);
   assert.match(bookingPage, /const shorterAvailable = bookingTypeIds\.has\("tattoo_quarter"\)/);
   assert.match(bookingPage, /const longerSetting = context\?\.sessionPlan\?\.presentLongerSessionOption/);
   assert.match(bookingPage, /longer: longerAvailable && \(longerSetting === null \|\| longerSetting === undefined \|\| longerSetting === true\)/);

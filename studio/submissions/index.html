@@ -753,7 +753,7 @@
   const AVAILABILITY_CONFIGS = {
     tattoo: {
       groups: [
-        { category: "tattooing", label: "Tattooing Hours", note: "Applies to Quarter, Half, Full, and Extended Day sessions. Extended Day appears only where a complete 12-hour block fits.", containerId: "weeklyRulesTattooing" },
+        { category: "tattooing", label: "Tattooing Hours", note: "Applies to Quarter, Half, 3/4, Full, and Extended Day sessions. Extended Day appears only where a complete 12-hour block fits.", containerId: "weeklyRulesTattooing" },
         { category: "consultation", label: "Consultation Hours", note: "Applies to in-person and virtual consultations, and in-person build sessions.", containerId: "weeklyRulesConsultation" },
       ],
       sessionTypeOptions: [
@@ -763,10 +763,11 @@
         ["build_in_person", "In-Person Build Session"],
         ["tattoo_quarter", "Quarter Day Session (2 hours)"],
         ["tattoo_half", "Half Day Session (4 hours)"],
+        ["tattoo_three_quarter", "3/4 Day Session (6 hours)"],
         ["tattoo_full", "Full Day Session (8 hours)"],
         ["tattoo_extended", "Extended Day Session (8-12 hours / 12-hour block)"],
       ],
-      bookingTypeIds: ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended", "consult_in_person", "consult_virtual", "build_in_person"],
+      bookingTypeIds: ["tattoo_quarter", "tattoo_half", "tattoo_three_quarter", "tattoo_full", "tattoo_extended", "consult_in_person", "consult_virtual", "build_in_person"],
       walkInPlaceholder: "Small flash, build consults, or studio note",
       allowUnscopedExceptions: true,
       showWalkIns: true,
@@ -812,14 +813,16 @@
     ["consult_in_person", "In-Person Consultation"],
     ["tattoo_quarter", "Quarter Day Session (2 hours)"],
     ["tattoo_half", "Half Day Session (4 hours)"],
+    ["tattoo_three_quarter", "3/4 Day Session (6 hours)"],
     ["tattoo_full", "Full Day Session (8 hours)"],
     ["tattoo_extended", "Extended Day Session (8-12 hours)"],
   ];
   const DIRECT_INVITE_SESSION_NOTES = {
     tattoo_quarter: "The composition is planned for a Quarter Day Session (2 hours).",
     tattoo_half: "The composition is planned for a Half Day Session (4 hours).",
+    tattoo_three_quarter: "The composition is planned for a 3/4 Day Session (6 hours).",
     tattoo_full: "The composition is planned for a Full Day Session (8 hours).",
-    tattoo_extended: "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.",
+    tattoo_extended: "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, 3/4, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.",
   };
   const homeCalendarPreview = new URLSearchParams(window.location.search).get("preview") === "1";
   const directInvitePreview = new URLSearchParams(window.location.search).get("preview") === "direct-invite";
@@ -4031,6 +4034,7 @@
             <div class="direct-invite-type-grid">
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_quarter" checked><span>Quarter Day Session (2 hours)</span></label>
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_half"><span>Half Day Session (4 hours)</span></label>
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_three_quarter"><span>3/4 Day Session (6 hours)</span></label>
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_full"><span>Full Day Session (8 hours)</span></label>
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_extended"><span>Extended Day Session (8-12 hours)</span></label>
             </div>
@@ -4061,7 +4065,15 @@
                   <input name="includeAdditionalSketchDisclaimer" type="checkbox">
                   <span class="check-label">Include the additional concept drawing fee</span>
                 </label>
+                <label class="check" style="margin:0;min-width:240px;">
+                  <input name="allowMultipleSessions" type="checkbox" data-direct-multi-toggle>
+                  <span class="check-label">Allow the client to book multiple sessions in one checkout</span>
+                </label>
               </div>
+              <label class="field hidden" data-direct-multi-limit style="margin-top:10px;max-width:260px;">Maximum sessions
+                <input name="maxSessions" type="number" min="2" max="24" step="1" inputmode="numeric" value="2">
+                <span class="contact">The client can select up to this many dates for one session type. Square collects every selected session deposit in one checkout.</span>
+              </label>
               <p class="contact">Choose only the information and pacing choices that should appear on this direct booking link. Unchecked items remain omitted.</p>
             </div>
           </fieldset>
@@ -4083,6 +4095,8 @@
     const result = detailEl.querySelector("[data-direct-invite-result]");
     const purposeInput = form.elements.purpose;
     const estimateNoteInput = form.elements.clientEstimateNote;
+    const multiToggle = form.elements.allowMultipleSessions;
+    const multiLimit = form.querySelector("[data-direct-multi-limit]");
     estimateNoteInput.dataset.autoValue = DIRECT_INVITE_SESSION_NOTES.tattoo_quarter;
     const syncDirectInviteEstimateNote = () => {
       const bookingTypeId = form.querySelector(
@@ -4100,8 +4114,12 @@
       form.querySelectorAll("[data-direct-invite-types]").forEach((group) => {
         group.classList.toggle("hidden", group.dataset.directInviteTypes !== purpose);
       });
+      multiToggle.disabled = purpose !== "tattoo";
+      if (purpose !== "tattoo") multiToggle.checked = false;
+      multiLimit.classList.toggle("hidden", purpose !== "tattoo" || !multiToggle.checked);
     };
     purposeInput.addEventListener("change", syncPurpose);
+    multiToggle.addEventListener("change", syncPurpose);
     form.querySelectorAll('[data-direct-invite-types="tattoo"] input[type="radio"]').forEach((input) => {
       input.addEventListener("change", syncDirectInviteEstimateNote);
     });
@@ -4132,6 +4150,11 @@
           throw new Error("Enter the project budget as a positive whole-dollar amount.");
         }
         const expiresAt = localDateTimeToIso(form.elements.expiresAt.value);
+        const allowMultipleSessions = purpose === "tattoo" && form.elements.allowMultipleSessions.checked;
+        const maxSessions = allowMultipleSessions ? Number(form.elements.maxSessions.value) : 1;
+        if (allowMultipleSessions && (!Number.isSafeInteger(maxSessions) || maxSessions < 2 || maxSessions > 24)) {
+          throw new Error("Enter a maximum session count from 2 through 24.");
+        }
         const payload = await api("/api/admin/booking/direct-invites", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -4148,6 +4171,8 @@
               && form.elements.presentShorterSessionsOption.checked,
             includeAdditionalSketchDisclaimer: purpose === "tattoo"
               && form.elements.includeAdditionalSketchDisclaimer.checked,
+            allowMultipleSessions,
+            maxSessions,
             purpose,
             bookingTypeId,
             expiresAt: expiresAt || undefined,
@@ -5383,6 +5408,14 @@ ${meetingLines}
       createdAt: Date.now(),
       previewSource: "saved_draft",
       purpose,
+      multiSession: {
+        enabled: purpose === "tattoo"
+          && submission.type !== "tattoo_special"
+          && sessionPlan?.bookingAllowMultipleSessions === true,
+        maxSessions: sessionPlan?.bookingAllowMultipleSessions === true
+          ? Math.max(2, Number(sessionPlan?.bookingMaxSessions || 2))
+          : 1,
+      },
       client: {
         name: clientName,
         email: submission.contactEmail || "",
@@ -5630,7 +5663,7 @@ ${meetingLines}
     const legacyFlexiblePlan = Boolean(plan.id && plan.splitPolicy === "client_choice");
     return {
       longer: plan.presentLongerSessionOption === null || plan.presentLongerSessionOption === undefined
-        ? legacyFlexiblePlan && (approvedTypes.has("tattoo_full") || approvedTypes.has("tattoo_extended"))
+        ? legacyFlexiblePlan && (approvedTypes.has("tattoo_three_quarter") || approvedTypes.has("tattoo_full") || approvedTypes.has("tattoo_extended"))
         : plan.presentLongerSessionOption === true,
       shorter: plan.presentShorterSessionsOption === null || plan.presentShorterSessionsOption === undefined
         ? legacyFlexiblePlan && (approvedTypes.has("tattoo_quarter") || approvedTypes.has("tattoo_half"))
@@ -5808,7 +5841,7 @@ ${meetingLines}
     }
     return purpose === "consultation"
       ? ["consult_in_person"]
-      : ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"];
+      : ["tattoo_quarter", "tattoo_half", "tattoo_three_quarter", "tattoo_full", "tattoo_extended"];
   }
 
   function sortedTypeList(values) {
@@ -5821,7 +5854,7 @@ ${meetingLines}
       ? new Set([submission.payload?.booking_type_id])
       : purpose === "consultation"
         ? new Set(["consult_in_person"])
-        : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"]);
+        : new Set(["tattoo_quarter", "tattoo_half", "tattoo_three_quarter", "tattoo_full", "tattoo_extended"]);
     const lockSelection = submission.type === "tattoo_special" || purpose === "consultation";
     document.querySelectorAll("[data-token-type]").forEach((input) => {
       const allowed = compatible.has(input.value);
@@ -5829,6 +5862,14 @@ ${meetingLines}
       if (!allowed) input.checked = false;
       else if (resetSelection || lockSelection) input.checked = true;
     });
+    const multiToggle = document.getElementById("tokenAllowMultipleSessions");
+    const multiLimit = document.querySelector("[data-token-multi-limit]");
+    const multiCompatible = purpose === "tattoo" && submission.type !== "tattoo_special";
+    if (multiToggle) {
+      multiToggle.disabled = !multiCompatible;
+      if (!multiCompatible) multiToggle.checked = false;
+    }
+    multiLimit?.classList.toggle("hidden", !multiCompatible || !multiToggle?.checked);
   }
 
   function applyBookingTokenDraftToControls(plan, submission) {
@@ -5846,6 +5887,10 @@ ${meetingLines}
     if (expiresAt) expiresAt.value = formatDateTimeInput(plan?.bookingLinkExpiresAt || "");
     const revokeExisting = document.getElementById("tokenRevokeExisting");
     if (revokeExisting) revokeExisting.checked = plan?.bookingLinkRevokeExisting === true;
+    const allowMultiple = document.getElementById("tokenAllowMultipleSessions");
+    if (allowMultiple) allowMultiple.checked = plan?.bookingAllowMultipleSessions === true;
+    const maxSessions = document.getElementById("tokenMaxSessions");
+    if (maxSessions) maxSessions.value = String(Math.max(2, Number(plan?.bookingMaxSessions || 2)));
     syncBookingTokenTypeControls(submission);
   }
 
@@ -5887,6 +5932,17 @@ ${meetingLines}
             <span class="check-label">Revoke existing active links when generating</span>
           </label>
         </div>
+        <div class="schedule-grid" style="margin-top:10px;" data-token-multi-controls>
+          <label class="check" style="margin:0;align-self:end;">
+            <input id="tokenAllowMultipleSessions" type="checkbox" ${savedDraft.bookingAllowMultipleSessions === true ? "checked" : ""}>
+            <span class="check-label">Allow multiple sessions in one checkout</span>
+          </label>
+          <div class="field ${savedDraft.bookingAllowMultipleSessions === true ? "" : "hidden"}" data-token-multi-limit>
+            <label for="tokenMaxSessions">Maximum sessions</label>
+            <input id="tokenMaxSessions" type="number" min="2" max="24" step="1" inputmode="numeric" value="${escapeHtml(String(Math.max(2, Number(savedDraft.bookingMaxSessions || 2))))}">
+            <div class="contact">All selected dates use one session type. Square collects the deposit for every selected date in one checkout.</div>
+          </div>
+        </div>
         ${TATTOO_PROJECT_TYPES.has(submission.type) && ["new", "reviewing"].includes(submission.status) ? `<div class="booking-actions" style="margin-top:10px;">
           <button class="button" id="saveBookingChoicesBtn" type="button">Save Booking Choices</button>
         </div><p class="save-feedback" id="bookingChoicesSaveState" role="status" aria-live="polite"></p>` : ""}
@@ -5905,7 +5961,7 @@ ${meetingLines}
       ? new Set([submission.payload?.booking_type_id])
       : purpose === "consultation"
       ? new Set(["consult_in_person"])
-      : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"]);
+      : new Set(["tattoo_quarter", "tattoo_half", "tattoo_three_quarter", "tattoo_full", "tattoo_extended"]);
     if (selected.some((type) => !compatibleTypes.has(type))) {
       throw new Error(`The selected session types are not compatible with the ${purpose} link purpose.`);
     }
@@ -5913,8 +5969,18 @@ ${meetingLines}
       bookingLinkPurpose: purpose,
       allowedBookingTypes: selected,
       bookingLinkRevokeExisting: document.getElementById("tokenRevokeExisting")?.checked === true,
+      bookingAllowMultipleSessions: purpose === "tattoo"
+        && document.getElementById("tokenAllowMultipleSessions")?.checked === true,
+      bookingMaxSessions: 1,
       bookingLinkExpiresAt: "",
     };
+    if (body.bookingAllowMultipleSessions) {
+      const maxSessions = Number(document.getElementById("tokenMaxSessions")?.value || 0);
+      if (!Number.isSafeInteger(maxSessions) || maxSessions < 2 || maxSessions > 24) {
+        throw new Error("Enter a maximum session count from 2 through 24.");
+      }
+      body.bookingMaxSessions = maxSessions;
+    }
     const expiresAt = localDateTimeToIso(document.getElementById("tokenExpiresAt")?.value || "");
     if (expiresAt) body.bookingLinkExpiresAt = expiresAt;
     return body;
@@ -5927,6 +5993,8 @@ ${meetingLines}
       submissionId,
       purpose: draft.bookingLinkPurpose,
       revokeExisting: draft.bookingLinkRevokeExisting,
+      allowMultipleSessions: draft.bookingAllowMultipleSessions,
+      maxSessions: draft.bookingMaxSessions,
     };
     if (sortedTypeList(draft.allowedBookingTypes) !== defaultKey) {
       body.allowedBookingTypes = draft.allowedBookingTypes;
@@ -6132,6 +6200,10 @@ ${meetingLines}
       renderTokenState(submission.id);
       const purposeSelect = document.getElementById("tokenPurpose");
       purposeSelect?.addEventListener("change", () => syncBookingTokenTypeControls(submission, { resetSelection: true }));
+      document.getElementById("tokenAllowMultipleSessions")?.addEventListener(
+        "change",
+        () => syncBookingTokenTypeControls(submission),
+      );
       syncBookingTokenTypeControls(submission);
     }
   }

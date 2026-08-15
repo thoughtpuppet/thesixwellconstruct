@@ -66,7 +66,7 @@ art.pill TATTOO HOUSE
 
 ## Optional Notes For Codex
 
-Use the "deposits" wording for `tattoo_quarter`/`tattoo_half`/`tattoo_full`/`tattoo_extended`
+Use the "deposits" wording for `tattoo_quarter`/`tattoo_half`/`tattoo_three_quarter`/`tattoo_full`/`tattoo_extended`
 and the "reservation fees" wording for `consult_in_person`,
 `consult_virtual`, and `build_in_person`. The rebook link points to
 `/tattoos/build/in-person/?rebook=1` for build sessions and

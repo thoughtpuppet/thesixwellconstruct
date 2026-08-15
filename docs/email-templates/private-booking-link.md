@@ -27,7 +27,7 @@ Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200
 Extended Day fee.
 
 Extended day sessions are always optional and are presented as an option for
-clients who want longer sessions. Quarter, Half, and Full Day sessions do not
+clients who want longer sessions. Quarter, Half, 3/4, and Full Day sessions do not
 include the Extended Day fee, and your project may be split across shorter
 appointments if desired. If additional appointments are needed, I will
 coordinate the remaining dates with you.

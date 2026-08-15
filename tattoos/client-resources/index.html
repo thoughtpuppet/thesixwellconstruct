@@ -16,17 +16,37 @@
     --venture-accent-dim: var(--color-tattooing-dim);
   }
   .resource-directory {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
     max-width: 900px;
   }
   .resource-directory .tattoos-button {
-    min-height: 72px;
-    padding: 16px 24px;
+    min-height: 50px;
+    padding: 0 24px;
+    border: 5px solid rgba(109, 61, 21, 0.4);
+    background: transparent;
+    color: var(--color-text-muted, rgba(251, 209, 157, 0.66));
+    font-family: Inter, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    text-decoration: none;
+    transition:
+      border-color var(--duration-base) var(--ease-out),
+      color var(--duration-base) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out);
+  }
+  .resource-directory .tattoos-button:hover,
+  .resource-directory .tattoos-button:focus-visible {
+    border-color: var(--venture-accent);
+    background: rgba(252, 184, 103, 0.045);
+    color: var(--color-about);
+    outline: none;
   }
   @media (max-width: 640px) {
-    .resource-directory { grid-template-columns: 1fr; }
+    .resource-directory .tattoos-button { width: 100%; }
   }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">

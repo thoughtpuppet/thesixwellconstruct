@@ -61,7 +61,7 @@ const STUDIO_SPACE_BOOKING_TYPE_IDS = ["studio_gathering", "studio_rental"];
 const STUDIO_BOOKING_TYPE_IDS = [...ART_VISIT_BOOKING_TYPE_IDS, ...STUDIO_SPACE_BOOKING_TYPE_IDS];
 
 const SCHEDULE_CATEGORY_BOOKING_TYPE_IDS = {
-  tattooing: ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"],
+  tattooing: ["tattoo_quarter", "tattoo_half", "tattoo_three_quarter", "tattoo_full", "tattoo_extended"],
   consultation: ["consult_in_person", "consult_virtual", "build_in_person"],
   art_visit: ART_VISIT_BOOKING_TYPE_IDS,
   studio_space: STUDIO_SPACE_BOOKING_TYPE_IDS,
@@ -77,12 +77,14 @@ const DATE_OVERRIDE_MODES = new Set(["closed", "custom"]);
 const TATTOO_DAY_SESSION_LABELS = Object.freeze({
   tattoo_quarter: "Quarter Day Session",
   tattoo_half: "Half Day Session",
+  tattoo_three_quarter: "3/4 Day Session",
   tattoo_full: "Full Day Session",
   tattoo_extended: "Extended Day Session",
 });
 const TATTOO_DAY_SESSION_DURATION_LABELS = Object.freeze({
   tattoo_quarter: "2 hours",
   tattoo_half: "4 hours",
+  tattoo_three_quarter: "6 hours",
   tattoo_full: "8 hours",
   tattoo_extended: "8-12 hours",
 });
@@ -448,6 +450,9 @@ function normalizeAppointment(row) {
     squareOrderId: row.square_order_id || "",
     squarePaymentLinkId: row.square_payment_link_id || "",
     squareCheckoutUrl: row.square_checkout_url || "",
+    checkoutGroupId: row.checkout_group_id || row.id,
+    checkoutGroupPosition: Number(row.checkout_group_position || 1),
+    checkoutGroupSize: Number(row.checkout_group_size || 1),
     holdExpiresAt: row.hold_expires_at || "",
     holdState: row.hold_state || "",
     approvalState: row.approval_state || "not_required",
@@ -505,7 +510,7 @@ function bookingTypesMatchPurpose(purpose, bookingTypeIds) {
 function pacingOptionsForBookingTypeIds(bookingTypeIds) {
   const ids = new Set((bookingTypeIds || []).filter(Boolean));
   return {
-    longer: ids.has("tattoo_full") || ids.has(EXTENDED_DAY_BOOKING_TYPE_ID),
+    longer: ids.has("tattoo_three_quarter") || ids.has("tattoo_full") || ids.has(EXTENDED_DAY_BOOKING_TYPE_ID),
     shorter: ids.has("tattoo_quarter") || ids.has("tattoo_half"),
   };
 }
@@ -1556,6 +1561,8 @@ function normalizeTattooSessionPlan(row) {
     bookingLinkRevokeExisting: row.booking_link_revoke_existing === null || row.booking_link_revoke_existing === undefined
       ? false
       : Boolean(row.booking_link_revoke_existing),
+    bookingAllowMultipleSessions: Boolean(row.booking_allow_multiple_sessions),
+    bookingMaxSessions: Math.max(1, Number(row.booking_max_sessions || 1)),
     clientPreference: row.client_preference || "",
     clientAcknowledged: Boolean(row.client_acknowledged),
     clientInformedAt: row.client_informed_at || "",
@@ -1936,6 +1943,17 @@ export async function handleBookingContext(request, env) {
       requiresClientDetails: directInviteNeedsClient(context.token),
       purpose: context.purpose,
       expiresAt: context.token.expires_at || "",
+      multiSession: {
+        enabled: context.purpose === "tattoo"
+          && context.token.submission_type !== "tattoo_special"
+          && !context.experimentalProject
+          && Boolean(context.token.allow_multiple_sessions),
+        maxSessions: context.purpose === "tattoo"
+          && !context.experimentalProject
+          && Boolean(context.token.allow_multiple_sessions)
+          ? Math.max(2, Math.min(24, Number(context.token.max_sessions || 2)))
+          : 1,
+      },
       sessionPlan: normalizeTattooSessionPlan(sessionPlan),
       sessionEstimateCopy,
       bookingTypes,
@@ -1952,6 +1970,8 @@ export async function handleBookingContext(request, env) {
         resumable: pendingResumable,
         approvalState: pendingAppointment.approvalState,
         paymentDueAt: pendingAppointment.paymentDueAt,
+        checkoutGroupId: pendingAppointment.checkoutGroupId,
+        sessionCount: pendingAppointment.checkoutGroupSize,
       } : null,
     });
   } catch (error) {
@@ -2514,10 +2534,11 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
         deposit_cents, tip_cents, session_fee_cents,
         extended_day_acknowledged_at, currency, hold_expires_at, hold_state, approval_state,
         replacement_for_appointment_id, reschedule_count, original_start_at,
-        original_end_at, created_at, updated_at
+        original_end_at, checkout_group_id, checkout_group_position,
+        checkout_group_size, created_at, updated_at
       )
        SELECT ?, ?, ?, ?, aw.id, 'pending_deposit', ?, ?, ?, ?, aw.start_at, aw.end_at,
-              ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       FROM availability_windows aw
       WHERE aw.id = ? AND aw.active = 1 AND aw.is_blackout = 0
         AND (aw.booking_type_id IS NULL OR aw.booking_type_id = ?)
@@ -2552,7 +2573,7 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
                 > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
             )
         ) < CASE
-          WHEN ? IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
+          WHEN ? IN ('tattoo_quarter','tattoo_half','tattoo_three_quarter','tattoo_full','tattoo_extended')
             OR ? LIKE 'tattoo_special_%'
           THEN 1 ELSE aw.capacity
         END
@@ -2571,6 +2592,7 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
             WHERE token_hold.booking_token_id = ?
               AND token_hold.status IN ('pending_deposit','deposit_pending')
               AND token_hold.hold_state IN ('active','expiry_attention')
+              AND (? IS NULL OR COALESCE(token_hold.checkout_group_id, token_hold.id) <> ?)
           )
         )
         AND (
@@ -2615,6 +2637,7 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
                 submission_hold.status = 'confirmed'
                 OR submission_hold.hold_state IN ('active','expiry_attention')
               )
+              AND (? IS NULL OR COALESCE(submission_hold.checkout_group_id, submission_hold.id) <> ?)
           )
         )
         AND (
@@ -2650,6 +2673,9 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
       values.rescheduleCount || 0,
       values.originalStartAt || null,
       values.originalEndAt || null,
+      values.checkoutGroupId || values.id,
+      values.checkoutGroupPosition || 1,
+      values.checkoutGroupSize || 1,
       values.now,
       values.now,
       values.availabilityWindowId,
@@ -2666,6 +2692,8 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
       values.replacementForAppointmentId || null,
       values.bookingTokenId || null,
       values.bookingTokenId || null,
+      values.checkoutGroupId || null,
+      values.checkoutGroupId || null,
       values.bookingTokenId || null,
       values.bookingTokenId || null,
       values.submissionId || null,
@@ -2678,6 +2706,8 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
       values.submissionId || null,
       values.submissionId || null,
       values.purpose,
+      values.checkoutGroupId || null,
+      values.checkoutGroupId || null,
       values.replacementForAppointmentId || null,
       values.replacementForAppointmentId || null,
     ),
@@ -2815,7 +2845,15 @@ async function promoteApprovedTattooSpecialRequest(db, values) {
   return Number(results?.[0]?.meta?.changes || 0) > 0;
 }
 
-async function createPendingAppointment(db, tokenContext, bookingTypeId, windowId, tipCents = 0, extendedDayAcknowledged = false) {
+async function createPendingAppointment(
+  db,
+  tokenContext,
+  bookingTypeId,
+  windowId,
+  tipCents = 0,
+  extendedDayAcknowledged = false,
+  options = {},
+) {
   const now = new Date().toISOString();
   const bookingType = await db
     .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
@@ -2897,10 +2935,18 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
          AND availability_window_id = ?
          AND status IN ('pending_deposit', 'deposit_pending')
          AND hold_state = 'active' AND hold_expires_at > ?
+         AND (? IS NULL OR COALESCE(checkout_group_id, id) = ?)
        ORDER BY created_at DESC
        LIMIT 1`
     )
-    .bind(tokenContext.token.id, bookingType.id, windowId, now)
+    .bind(
+      tokenContext.token.id,
+      bookingType.id,
+      windowId,
+      now,
+      options.checkoutGroupId || null,
+      options.checkoutGroupId || null,
+    )
     .first();
   if (existingForSelection) {
     const existingAppointment = normalizeAppointment(existingForSelection);
@@ -2918,10 +2964,15 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
       `SELECT * FROM appointments
        WHERE booking_token_id = ?
          AND status IN ('pending_deposit', 'deposit_pending')
+         AND (? IS NULL OR COALESCE(checkout_group_id, id) <> ?)
        ORDER BY created_at DESC
        LIMIT 1`
     )
-    .bind(tokenContext.token.id)
+    .bind(
+      tokenContext.token.id,
+      options.checkoutGroupId || null,
+      options.checkoutGroupId || null,
+    )
     .first();
   if (existingForToken) {
     return {
@@ -2956,8 +3007,16 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     approvalState: tokenContext.token.submission_type === "tattoo_special"
       ? (tokenContext.pendingSpecialApproval ? "pending" : "approved")
       : "not_required",
+    checkoutGroupId: options.checkoutGroupId || id,
+    checkoutGroupPosition: options.checkoutGroupPosition || 1,
+    checkoutGroupSize: options.checkoutGroupSize || 1,
     now,
-    eventMetadata: { tokenPurpose: tokenContext.purpose },
+    eventMetadata: {
+      tokenPurpose: tokenContext.purpose,
+      checkoutGroupId: options.checkoutGroupId || id,
+      checkoutGroupPosition: options.checkoutGroupPosition || 1,
+      checkoutGroupSize: options.checkoutGroupSize || 1,
+    },
   });
   if (!inserted) return { error: "That appointment time has already been claimed." };
 
@@ -2968,6 +3027,85 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
   normalizedType.depositCents = effectiveDepositCents;
   normalizedType.depositLabel = formatMoney(effectiveDepositCents, normalizedType.currency || "USD");
   return { appointment: normalizedAppointment, bookingType: normalizedType };
+}
+
+function requestedPrivateBookingWindowIds(body, tokenContext) {
+  const supplied = Array.isArray(body.availabilityWindowIds)
+    ? body.availabilityWindowIds.map(asString).filter(Boolean)
+    : [];
+  const fallback = asString(body.availabilityWindowId);
+  const ids = supplied.length ? supplied : (fallback ? [fallback] : []);
+  if (!ids.length) return { error: "Choose at least one appointment time." };
+  if (new Set(ids).size !== ids.length) {
+    return { error: "Each selected appointment time must be unique." };
+  }
+  const multiEnabled = tokenContext.purpose === "tattoo"
+    && tokenContext.token.submission_type !== "tattoo_special"
+    && !tokenContext.experimentalProject
+    && Boolean(tokenContext.token.allow_multiple_sessions);
+  const maxSessions = multiEnabled
+    ? Math.max(2, Math.min(24, Number(tokenContext.token.max_sessions || 2)))
+    : 1;
+  if (ids.length > 1 && !multiEnabled) {
+    return { error: "This booking link allows one appointment time." };
+  }
+  if (ids.length > maxSessions) {
+    return { error: `Choose no more than ${maxSessions} appointment times.` };
+  }
+  return { ids, multiEnabled, maxSessions };
+}
+
+async function releaseUnpaidCheckoutGroup(db, appointments, reason) {
+  for (const appointment of appointments || []) {
+    const row = await selectAppointmentWithMeeting(db, appointment.id);
+    if (!row || !["pending_deposit", "deposit_pending"].includes(row.status)) continue;
+    await releasePendingBookingHold(db, row, "system", reason);
+  }
+}
+
+async function createPendingAppointmentGroup(
+  db,
+  tokenContext,
+  bookingTypeId,
+  windowIds,
+  tipCents,
+  extendedDayAcknowledged,
+) {
+  const checkoutGroupId = crypto.randomUUID();
+  const appointments = [];
+  let bookingType = null;
+  for (let index = 0; index < windowIds.length; index += 1) {
+    const result = await createPendingAppointment(
+      db,
+      tokenContext,
+      bookingTypeId,
+      windowIds[index],
+      index === 0 ? tipCents : 0,
+      extendedDayAcknowledged,
+      {
+        checkoutGroupId,
+        checkoutGroupPosition: index + 1,
+        checkoutGroupSize: windowIds.length,
+      },
+    );
+    if (result.error) {
+      await releaseUnpaidCheckoutGroup(
+        db,
+        appointments,
+        "Multi-session checkout creation rolled back before Square checkout",
+      );
+      return result;
+    }
+    appointments.push(result.appointment);
+    bookingType ||= result.bookingType;
+  }
+  return {
+    appointment: appointments[0],
+    appointments,
+    bookingType,
+    checkoutGroupId,
+    existing: appointments.every((appointment) => Boolean(appointment.squareCheckoutUrl)),
+  };
 }
 
 async function createTattooSpecialTimeRequest(db, tokenContext, bookingTypeId, windowId) {
@@ -4177,6 +4315,19 @@ function squareLineItem(name, amount, currency) {
   };
 }
 
+function squareAppointmentDate(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: DEFAULT_CALENDAR_TIME_ZONE,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 async function createSquarePaymentLink(request, env, appointment, bookingType, options = {}) {
   if (!squareConfiguredForBookingType(env, bookingType.id)) {
     throw new Error("Square is not configured.");
@@ -4184,6 +4335,19 @@ async function createSquarePaymentLink(request, env, appointment, bookingType, o
 
   const redirectUrl = new URL(confirmationPathForBookingType(bookingType.id), baseUrlFromRequest(request));
   redirectUrl.searchParams.set("appointment", appointment.id);
+  const appointments = Array.isArray(options.appointments) && options.appointments.length
+    ? options.appointments
+    : [appointment];
+  const depositLineItems = appointments.map((item, index) => squareLineItem(
+    item.isExperimentalProject
+      ? `Experimental Project refundable attendance deposit — ${item.experimentalProjectTitle || "Project"}`
+      : FULL_PAYMENT_BOOKING_TYPE_IDS.includes(bookingType.id)
+        ? `${bookingType.label} Reservation Fee${appointments.length > 1 ? ` — Appointment ${index + 1}${squareAppointmentDate(item.startAt) ? ` — ${squareAppointmentDate(item.startAt)}` : ""}` : ""}`
+        : `${bookingType.label} Deposit${appointments.length > 1 ? ` — Session ${index + 1}${squareAppointmentDate(item.startAt) ? ` — ${squareAppointmentDate(item.startAt)}` : ""}` : ""}`,
+    item.depositCents,
+    item.currency,
+  ));
+  const totalTipCents = appointments.reduce((total, item) => total + Number(item.tipCents || 0), 0);
 
   const response = await fetch(`${squareBaseUrl(env)}/v2/online-checkout/payment-links`, {
     method: "POST",
@@ -4197,17 +4361,9 @@ async function createSquarePaymentLink(request, env, appointment, bookingType, o
       order: {
         location_id: squareLocationForBookingType(env, bookingType.id),
         line_items: [
-          squareLineItem(
-            appointment.isExperimentalProject
-              ? `Experimental Project refundable attendance deposit — ${appointment.experimentalProjectTitle || "Project"}`
-              : FULL_PAYMENT_BOOKING_TYPE_IDS.includes(bookingType.id)
-                ? `${bookingType.label} Reservation Fee`
-                : `${bookingType.label} Deposit`,
-            appointment.depositCents,
-            appointment.currency,
-          ),
-          ...(appointment.tipCents > 0
-            ? [squareLineItem("Optional Artist Tip", appointment.tipCents, appointment.currency)]
+          ...depositLineItems,
+          ...(totalTipCents > 0
+            ? [squareLineItem("Optional Artist Tip", totalTipCents, appointment.currency)]
             : []),
         ],
       },
@@ -4225,74 +4381,83 @@ async function createSquarePaymentLink(request, env, appointment, bookingType, o
   return payload.payment_link;
 }
 
-async function savePendingPaymentLink(db, appointment, paymentLink) {
+async function savePendingPaymentLink(db, appointment, paymentLink, groupAppointments = [appointment]) {
   const now = new Date().toISOString();
-  const paymentId = crypto.randomUUID();
-  const eventId = crypto.randomUUID();
-  const results = await db.batch([
-    db.prepare(
-      `UPDATE appointments
-       SET status = 'deposit_pending', square_order_id = ?, square_payment_link_id = ?,
-           square_checkout_url = ?, updated_at = ?
-       WHERE id = ? AND status IN ('pending_deposit','deposit_pending')
-         AND hold_state = 'active' AND hold_expires_at > ?`
-    ).bind(
-      paymentLink.order_id || null,
-      paymentLink.id || null,
-      paymentLink.url,
-      now,
-      appointment.id,
-      now,
-    ),
-    db.prepare(
-      `INSERT INTO deposit_payments (
-        id, appointment_id, provider, provider_checkout_id, provider_order_id,
-        amount_cents, tip_cents, currency, status, raw_json, created_at, updated_at
-      )
-      SELECT ?, id, 'square', ?, ?, ?, ?, ?, 'pending', ?, ?, ?
-      FROM appointments
-      WHERE id = ? AND hold_state = 'active' AND hold_expires_at > ?
-        AND NOT EXISTS (
-          SELECT 1 FROM deposit_payments dp
-          WHERE dp.appointment_id = appointments.id
-            AND dp.provider_checkout_id = ?
-        )`
-    ).bind(
-      paymentId,
-      paymentLink.id || null,
-      paymentLink.order_id || null,
-      appointment.totalDueCents,
-      appointment.tipCents || 0,
-      appointment.currency,
-      JSON.stringify(paymentLink),
-      now,
-      now,
-      appointment.id,
-      now,
-      paymentLink.id || null,
-    ),
-    db.prepare(
-      `INSERT INTO appointment_events (
-        id, appointment_id, event_type, actor, note, metadata_json, created_at
-      )
-      SELECT ?, id, 'checkout_created', 'system', NULL, ?, ?
-      FROM appointments
-      WHERE id = ? AND hold_state = 'active' AND hold_expires_at > ?`
-    ).bind(
-      eventId,
-      JSON.stringify({ squarePaymentLinkId: paymentLink.id || "" }),
-      now,
-      appointment.id,
-      now,
-    ),
-  ]);
-  const saved = Number(results?.[0]?.meta?.changes || 0) > 0;
+  const appointments = groupAppointments.length ? groupAppointments : [appointment];
+  const statements = [];
+  for (const item of appointments) {
+    statements.push(
+      db.prepare(
+        `UPDATE appointments
+         SET status = 'deposit_pending', square_order_id = ?, square_payment_link_id = ?,
+             square_checkout_url = ?, updated_at = ?
+         WHERE id = ? AND status IN ('pending_deposit','deposit_pending')
+           AND hold_state = 'active' AND hold_expires_at > ?`
+      ).bind(
+        paymentLink.order_id || null,
+        paymentLink.id || null,
+        paymentLink.url,
+        now,
+        item.id,
+        now,
+      ),
+      db.prepare(
+        `INSERT INTO deposit_payments (
+          id, appointment_id, provider, provider_checkout_id, provider_order_id,
+          amount_cents, tip_cents, currency, status, raw_json, created_at, updated_at
+        )
+        SELECT ?, id, 'square', ?, ?, ?, ?, ?, 'pending', ?, ?, ?
+        FROM appointments
+        WHERE id = ? AND hold_state = 'active' AND hold_expires_at > ?
+          AND NOT EXISTS (
+            SELECT 1 FROM deposit_payments dp
+            WHERE dp.appointment_id = appointments.id
+              AND dp.provider_checkout_id = ?
+          )`
+      ).bind(
+        crypto.randomUUID(),
+        paymentLink.id || null,
+        paymentLink.order_id || null,
+        item.totalDueCents,
+        item.tipCents || 0,
+        item.currency,
+        JSON.stringify(paymentLink),
+        now,
+        now,
+        item.id,
+        now,
+        paymentLink.id || null,
+      ),
+      db.prepare(
+        `INSERT INTO appointment_events (
+          id, appointment_id, event_type, actor, note, metadata_json, created_at
+        )
+        SELECT ?, id, 'checkout_created', 'system', NULL, ?, ?
+        FROM appointments
+        WHERE id = ? AND hold_state = 'active' AND hold_expires_at > ?`
+      ).bind(
+        crypto.randomUUID(),
+        JSON.stringify({
+          squarePaymentLinkId: paymentLink.id || "",
+          checkoutGroupId: item.checkoutGroupId || item.id,
+          checkoutGroupSize: appointments.length,
+        }),
+        now,
+        item.id,
+        now,
+      ),
+    );
+  }
+  const results = await db.batch(statements);
+  const saved = appointments.every((_, index) => Number(results?.[index * 3]?.meta?.changes || 0) > 0);
   if (saved) {
-    const updatedAppointment = await selectAppointmentWithMeeting(db, appointment.id);
-    if (updatedAppointment) {
-      await mirrorAppointmentToCrm(db, normalizeAppointment(updatedAppointment), {
-        includePayment: true,
-      });
+    for (const item of appointments) {
+      const updatedAppointment = await selectAppointmentWithMeeting(db, item.id);
+      if (updatedAppointment) {
+        await mirrorAppointmentToCrm(db, normalizeAppointment(updatedAppointment), {
+          includePayment: true,
+        });
+      }
     }
   }
   return saved;
@@ -4713,12 +4878,14 @@ export async function handleCreateBookingCheckout(request, env) {
 
     const tip = parseTipCents(body.tipCents);
     if (tip.error) return errorResponse(tip.error, 400);
+    const requestedWindows = requestedPrivateBookingWindowIds(body, context);
+    if (requestedWindows.error) return errorResponse(requestedWindows.error, 400);
 
-    const result = await createPendingAppointment(
+    const result = await createPendingAppointmentGroup(
       db,
       context,
       asString(body.bookingTypeId),
-      asString(body.availabilityWindowId),
+      requestedWindows.ids,
       tip.tipCents,
       body.extendedDayAcknowledged === true
     );
@@ -4770,11 +4937,14 @@ export async function handleCreateBookingCheckout(request, env) {
 
     let paymentLink;
     try {
-      paymentLink = await createSquarePaymentLink(request, env, result.appointment, result.bookingType);
+      paymentLink = await createSquarePaymentLink(request, env, result.appointment, result.bookingType, {
+        appointments: result.appointments,
+        idempotencyKey: result.checkoutGroupId,
+      });
     } catch (error) {
       await db
-        .prepare("UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?")
-        .bind("deposit_pending", new Date().toISOString(), result.appointment.id)
+        .prepare("UPDATE appointments SET status = ?, updated_at = ? WHERE checkout_group_id = ?")
+        .bind("deposit_pending", new Date().toISOString(), result.checkoutGroupId)
         .run();
       return errorResponse("Deposit checkout is not configured yet.", 503, {
         detail: error.message,
@@ -4782,7 +4952,12 @@ export async function handleCreateBookingCheckout(request, env) {
       });
     }
 
-    const paymentSaved = await savePendingPaymentLink(db, result.appointment, paymentLink);
+    const paymentSaved = await savePendingPaymentLink(
+      db,
+      result.appointment,
+      paymentLink,
+      result.appointments,
+    );
     if (!paymentSaved) {
       await invalidateUnsavedPaymentLink(env, paymentLink);
       return errorResponse("This checkout hold expired before Square checkout was created. Choose the time again.", 409, {
@@ -4795,6 +4970,8 @@ export async function handleCreateBookingCheckout(request, env) {
       ok: true,
       checkoutReady: true,
       appointmentId: result.appointment.id,
+      appointmentIds: result.appointments.map((appointment) => appointment.id),
+      sessionCount: result.appointments.length,
       holdExpiresAt: result.appointment.holdExpiresAt,
     });
   } catch (error) {
@@ -5159,7 +5336,7 @@ export async function reapExpiredBookingHolds(env) {
       if (orderLooksPaid(order)) {
         const base = asString(env.PUBLIC_SITE_URL) || "https://thesixwellconstruct.com";
         const request = new Request(new URL(`/api/booking/confirm?appointment=${encodeURIComponent(row.id)}`, base));
-        await confirmPaidAppointment(db, env, request, row, order);
+        await confirmPaidCheckoutGroup(db, env, request, row, order);
         summary.confirmed += 1;
       } else {
         await invalidateSquarePaymentLink(env, row.payment_link_id);
@@ -5177,7 +5354,7 @@ function orderLooksPaid(order) {
   return order.state === "COMPLETED";
 }
 
-function pendingAppointmentConfirmationStatements(db, env, appointmentRow, now) {
+function pendingAppointmentConfirmationStatements(db, env, appointmentRow, now, confirmedUpdatedAt = now) {
   const appointment = normalizeAppointment(appointmentRow);
   const statements = [];
   if (appointment.clientEmail) {
@@ -5198,7 +5375,7 @@ function pendingAppointmentConfirmationStatements(db, env, appointmentRow, now) 
       `appointment_confirmed:${appointment.id}`,
       now,
       appointment.id,
-      now,
+      confirmedUpdatedAt,
     ));
   }
   statements.push(db.prepare(
@@ -5217,12 +5394,12 @@ function pendingAppointmentConfirmationStatements(db, env, appointmentRow, now) 
     `admin_appointment_confirmed:${appointment.id}`,
     now,
     appointment.id,
-    now,
+    confirmedUpdatedAt,
   ));
   return statements;
 }
 
-async function confirmPaidAppointment(db, env, request, appointmentRow, order, paymentId = "") {
+async function confirmPaidAppointment(db, env, request, appointmentRow, order, paymentId = "", options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
   const now = new Date().toISOString();
   const wasConfirmed = appointment.status === "confirmed";
@@ -5286,7 +5463,11 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
              WHERE s.id = appointments.submission_id
                AND s.status IN ('approved','booked')
                AND (
-                 s.tattoo_stage = 'ready_to_book'
+               s.tattoo_stage = 'ready_to_book'
+                 OR (
+                   appointments.checkout_group_size > 1
+                   AND s.tattoo_stage = 'tattoo_scheduled'
+                 )
                  OR (appointments.replacement_for_appointment_id IS NOT NULL AND s.tattoo_stage = 'tattoo_scheduled')
                )
            ))
@@ -5468,7 +5649,9 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
       )
     );
   }
-  statements.push(...pendingAppointmentConfirmationStatements(db, env, appointmentRow, now));
+  if (!options.deferNotifications) {
+    statements.push(...pendingAppointmentConfirmationStatements(db, env, appointmentRow, now));
+  }
 
   const results = await db.batch(statements);
   if (Number(results?.[0]?.meta?.changes || 0) < 1) {
@@ -5506,10 +5689,59 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
     normalizeAppointment(appointmentWithType || appointmentRow),
     { includePayment: true },
   );
-  await dispatchAppointmentConfirmationNotifications(env, request, appointmentWithType || appointmentRow);
+  if (!options.deferNotifications) {
+    await dispatchAppointmentConfirmationNotifications(env, request, appointmentWithType || appointmentRow);
+  }
 
   const updated = await selectAppointmentWithMeeting(db, appointment.id);
   return normalizeAppointment(updated || appointmentRow);
+}
+
+async function checkoutGroupAppointmentRows(db, appointmentRow) {
+  const groupId = asString(appointmentRow?.checkout_group_id);
+  const groupSize = Number(appointmentRow?.checkout_group_size || 1);
+  if (!groupId || groupSize <= 1) return [appointmentRow];
+  const result = await db.prepare(
+    `SELECT * FROM appointments
+     WHERE checkout_group_id = ?
+     ORDER BY checkout_group_position ASC, created_at ASC`
+  ).bind(groupId).all();
+  return (result.results || []).length ? result.results : [appointmentRow];
+}
+
+async function confirmPaidCheckoutGroup(db, env, request, appointmentRow, order, paymentId = "") {
+  const rows = await checkoutGroupAppointmentRows(db, appointmentRow);
+  const grouped = rows.length > 1;
+  let requestedAppointment = null;
+  for (const row of rows) {
+    const confirmed = await confirmPaidAppointment(
+      db,
+      env,
+      request,
+      row,
+      order,
+      paymentId,
+      { deferNotifications: grouped },
+    );
+    if (row.id === appointmentRow.id) requestedAppointment = confirmed;
+  }
+  if (grouped) {
+    const anchor = await selectAppointmentWithMeeting(db, rows[0].id);
+    if (anchor && ["confirmed", "completed"].includes(anchor.status)) {
+      const notificationNow = new Date().toISOString();
+      await db.batch(pendingAppointmentConfirmationStatements(
+        db,
+        env,
+        anchor,
+        notificationNow,
+        anchor.updated_at,
+      ));
+      await dispatchAppointmentConfirmationNotifications(env, request, anchor);
+    }
+  }
+  return requestedAppointment || normalizeAppointment(
+    await selectAppointmentWithMeeting(db, appointmentRow.id) || appointmentRow
+  );
 }
 
 export async function handleConfirmBooking(request, env) {
@@ -5524,12 +5756,15 @@ export async function handleConfirmBooking(request, env) {
       `SELECT status FROM deposit_payments
        WHERE appointment_id = ? ORDER BY created_at DESC LIMIT 1`
     ).bind(appointment.id).first();
-    const canConfirm = ["pending_deposit", "deposit_pending"].includes(appointment.status);
+    const initialCheckoutRows = await checkoutGroupAppointmentRows(db, appointmentRow);
+    const canConfirm = initialCheckoutRows.some((row) =>
+      ["pending_deposit", "deposit_pending"].includes(row.status)
+    );
     let squarePaid = false;
     if (canConfirm) {
       const order = await fetchSquareOrder(env, appointment.squareOrderId);
       squarePaid = orderLooksPaid(order);
-      if (squarePaid) appointment = await confirmPaidAppointment(db, env, request, appointmentRow, order);
+      if (squarePaid) appointment = await confirmPaidCheckoutGroup(db, env, request, appointmentRow, order);
     }
     const depositStatus = squarePaid
       || paymentRow?.status === "paid"
@@ -5544,10 +5779,20 @@ export async function handleConfirmBooking(request, env) {
     const sessionPlan = appointment.submissionId
       ? await loadTattooSessionPlan(db, appointment.submissionId)
       : null;
+    const checkoutRows = await checkoutGroupAppointmentRows(
+      db,
+      await selectAppointmentWithMeeting(db, appointment.id) || appointmentRow,
+    );
+    const checkoutAppointments = checkoutRows.map(normalizeAppointment);
 
     return json({
       ok: true,
       appointment,
+      appointments: checkoutAppointments,
+      checkoutTotalPaidCents: checkoutAppointments.reduce(
+        (total, item) => total + Number(item.totalDueCents || 0),
+        0,
+      ),
       pricingSummary: pricingSummaryForAppointment(sessionPlan, appointment),
       depositStatus,
       supportEmail: tattooSettings?.support_email || env.NOTIFICATION_REPLY_TO || DEFAULT_SUPPORT_EMAIL,
@@ -5715,6 +5960,12 @@ export async function handleCancelAppointment(request, env, options = {}) {
              AND EXISTS (
                SELECT 1 FROM appointments a
                WHERE a.id = ? AND a.status = 'cancelled' AND a.updated_at = ?
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM appointments remaining
+               WHERE remaining.submission_id = submissions.id
+                 AND remaining.purpose = 'tattoo'
+                 AND remaining.status = 'confirmed'
              )`
         ).bind(now, appointmentRow.submission_id, appointmentId, now));
       } else if (appointmentPurpose === "prerequisite_consultation") {
@@ -5931,6 +6182,17 @@ async function releasePendingBookingHold(db, appointmentRow, actor, reason) {
   return released;
 }
 
+async function releasePendingBookingHoldGroup(db, appointmentRow, actor, reason) {
+  const rows = await checkoutGroupAppointmentRows(db, appointmentRow);
+  let releasedAny = false;
+  for (const row of rows) {
+    if (!["pending_deposit", "deposit_pending"].includes(row.status)) continue;
+    const released = await releasePendingBookingHold(db, row, actor, reason);
+    releasedAny = releasedAny || released;
+  }
+  return releasedAny;
+}
+
 async function safelyReleasePendingHold(db, env, request, appointmentRow, actor, reason) {
   const payment = await pendingCheckoutIdentifiers(db, appointmentRow.id);
   const reconciliationRow = {
@@ -5949,12 +6211,12 @@ async function safelyReleasePendingHold(db, env, request, appointmentRow, actor,
       }
       const order = await fetchSquareOrderForReconciliation(env, orderId);
       if (orderLooksPaid(order)) {
-        const appointment = await confirmPaidAppointment(db, env, request, appointmentRow, order);
+        const appointment = await confirmPaidCheckoutGroup(db, env, request, appointmentRow, order);
         return { paid: true, appointment };
       }
       await invalidateSquarePaymentLink(env, reconciliationRow.payment_link_id);
     }
-    const released = await releasePendingBookingHold(db, reconciliationRow, actor, reason);
+    const released = await releasePendingBookingHoldGroup(db, reconciliationRow, actor, reason);
     return { released, row: reconciliationRow };
   } catch (error) {
     await markHoldExpiryAttention(db, reconciliationRow, error.message, new Date().toISOString());
@@ -6019,7 +6281,7 @@ export async function handleReleasePendingBookingHold(request, env) {
         }
         const order = await fetchSquareOrderForReconciliation(env, orderId);
         if (orderLooksPaid(order)) {
-          const confirmed = await confirmPaidAppointment(db, env, request, owned.row, order);
+          const confirmed = await confirmPaidCheckoutGroup(db, env, request, owned.row, order);
           return errorResponse("This checkout has already been paid and cannot be released.", 409, {
             code: "CHECKOUT_ALREADY_PAID",
             appointment: confirmed,
@@ -6036,7 +6298,7 @@ export async function handleReleasePendingBookingHold(request, env) {
     }
 
     const reason = asString(body.reason).slice(0, 500) || "Client released pending checkout to choose another time";
-    if (!await releasePendingBookingHold(db, reconciliationRow, "client", reason)) {
+    if (!await releasePendingBookingHoldGroup(db, reconciliationRow, "client", reason)) {
       return errorResponse("This checkout hold changed before it could be released.", 409);
     }
     const updated = normalizeAppointment(await selectAppointmentWithMeeting(db, owned.row.id));
@@ -6313,7 +6575,7 @@ async function moveConfirmedAppointment(
                  AND unixepoch(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) * 60
                    > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
              ) < CASE
-               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
+               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_three_quarter','tattoo_full','tattoo_extended')
                  OR appointments.booking_type_id LIKE 'tattoo_special_%'
                THEN 1 ELSE aw.capacity
              END
@@ -6323,7 +6585,7 @@ async function moveConfirmedAppointment(
                  AND exact_appointment.availability_window_id = aw.id
                  AND exact_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
              ) < CASE
-               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
+               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_three_quarter','tattoo_full','tattoo_extended')
                  OR appointments.booking_type_id LIKE 'tattoo_special_%'
                THEN 1 ELSE aw.capacity
              END
@@ -6552,7 +6814,7 @@ async function changeApprovedTattooSpecialRequestedTime(request, env, db, appoin
       if (!paymentLinkId || !orderId) throw new Error("The existing deposit checkout is missing its Square identifiers.");
       const order = await fetchSquareOrderForReconciliation(env, orderId);
       if (orderLooksPaid(order)) {
-        const confirmed = await confirmPaidAppointment(db, env, request, appointmentRow, order);
+        const confirmed = await confirmPaidCheckoutGroup(db, env, request, appointmentRow, order);
         return {
           error: "This deposit has already been paid, so the appointment is booked and cannot be changed through the approval email.",
           status: 409,
@@ -7109,7 +7371,7 @@ async function processSquareWebhookPayload(request, env, rawBody) {
     return json({ ok: true, paid: true, ignored: true, reason: "Appointment is not eligible for payment confirmation.", appointmentId: appointmentRow.id });
   }
 
-  const appointment = await confirmPaidAppointment(
+  const appointment = await confirmPaidCheckoutGroup(
     db,
     env,
     request,
@@ -7260,6 +7522,25 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
     const bookingLinkRevokeExisting = hasOwn("bookingLinkRevokeExisting")
       ? (body.bookingLinkRevokeExisting ? 1 : 0)
       : (existing?.booking_link_revoke_existing ?? 0);
+    if (
+      hasOwn("bookingAllowMultipleSessions")
+      && typeof body.bookingAllowMultipleSessions !== "boolean"
+    ) {
+      return errorResponse("Allow multiple sessions must be true or false.", 400);
+    }
+    const bookingAllowMultipleSessions = bookingLinkPurpose === "tattoo"
+      && (hasOwn("bookingAllowMultipleSessions")
+        ? body.bookingAllowMultipleSessions === true
+        : Boolean(existing?.booking_allow_multiple_sessions));
+    const bookingMaxSessions = bookingAllowMultipleSessions
+      ? Number(hasOwn("bookingMaxSessions") ? body.bookingMaxSessions : (existing?.booking_max_sessions || 2))
+      : 1;
+    if (
+      bookingAllowMultipleSessions
+      && (!Number.isSafeInteger(bookingMaxSessions) || bookingMaxSessions < 2 || bookingMaxSessions > 24)
+    ) {
+      return errorResponse("Maximum sessions must be a whole number from 2 through 24.", 400);
+    }
     if (bookingLinkPurpose && !BOOKING_TOKEN_PURPOSES.has(bookingLinkPurpose)) {
       return errorResponse("Choose a valid booking-link purpose.", 400);
     }
@@ -7290,7 +7571,9 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       || bookingLinkPurpose !== (existing.booking_purpose || "")
       || allowedBookingTypesChanged
       || bookingLinkExpiresAt !== (existing.booking_link_expires_at || "")
-      || bookingLinkRevokeExisting !== (existing.booking_link_revoke_existing ?? 1);
+      || bookingLinkRevokeExisting !== (existing.booking_link_revoke_existing ?? 1)
+      || bookingAllowMultipleSessions !== Boolean(existing.booking_allow_multiple_sessions)
+      || bookingMaxSessions !== Number(existing.booking_max_sessions || 1);
     if (
       planChanged
       && ["approved", "declined"].includes(submission.status)
@@ -7340,10 +7623,11 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
         approved_budget_max_cents,approved_budget_currency,budget_acknowledged,
         budget_acknowledged_at,booking_purpose,allowed_booking_types_json,
         booking_link_expires_at,booking_link_revoke_existing,
+        booking_allow_multiple_sessions,booking_max_sessions,
         client_preference,client_acknowledged,
         client_informed_at,client_selected_at,created_at,updated_at
       )
-      SELECT ?,s.id,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,0,NULL,NULL,?,?
+      SELECT ?,s.id,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,0,NULL,NULL,?,?
       FROM submissions s
       WHERE s.id = ? AND COALESCE(s.tattoo_stage, 'review') NOT IN ('tattoo_scheduled','closed')
         AND NOT EXISTS (
@@ -7381,6 +7665,8 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
         allowed_booking_types_json=excluded.allowed_booking_types_json,
         booking_link_expires_at=excluded.booking_link_expires_at,
         booking_link_revoke_existing=excluded.booking_link_revoke_existing,
+        booking_allow_multiple_sessions=excluded.booking_allow_multiple_sessions,
+        booking_max_sessions=excluded.booking_max_sessions,
         client_preference=NULL,
         client_acknowledged=0,client_informed_at=NULL,client_selected_at=NULL,
         updated_at=excluded.updated_at`
@@ -7405,6 +7691,8 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       allowedBookingTypes.length ? JSON.stringify(allowedBookingTypes) : null,
       bookingLinkExpiresAt || null,
       bookingLinkRevokeExisting,
+      bookingAllowMultipleSessions ? 1 : 0,
+      bookingMaxSessions,
       existing?.created_at || now,
       now,
       submissionId,
@@ -7892,7 +8180,10 @@ export async function handleAdminResolveTattooLifecycleReview(request, env, subm
 }
 
 async function releaseTokenCheckoutRows(db, env, request, rows, reason) {
+  const releasedGroups = new Set();
   for (const row of rows || []) {
+    const groupKey = asString(row.checkout_group_id) || row.id;
+    if (releasedGroups.has(groupKey)) continue;
     const release = await safelyReleasePendingHold(db, env, request, row, "admin", reason);
     if (release.paid) {
       return {
@@ -7908,6 +8199,7 @@ async function releaseTokenCheckoutRows(db, env, request, rows, reason) {
         detail: release.error || "Square reconciliation is required.",
       };
     }
+    releasedGroups.add(groupKey);
   }
   return { ok: true };
 }
@@ -8048,6 +8340,22 @@ export async function handleAdminCreateBookingToken(request, env) {
     if ((configuredTypes.results || []).length !== new Set(allowed).size) {
       return errorResponse("One or more selected booking types are unavailable.", 409);
     }
+    if (
+      Object.prototype.hasOwnProperty.call(body, "allowMultipleSessions")
+      && typeof body.allowMultipleSessions !== "boolean"
+    ) {
+      return errorResponse("Allow multiple sessions must be true or false.", 400);
+    }
+    const allowMultipleSessions = purpose === "tattoo"
+      && !specialTerms
+      && body.allowMultipleSessions === true;
+    const maxSessions = allowMultipleSessions ? Number(body.maxSessions) : 1;
+    if (
+      allowMultipleSessions
+      && (!Number.isSafeInteger(maxSessions) || maxSessions < 2 || maxSessions > 24)
+    ) {
+      return errorResponse("Maximum sessions must be a whole number from 2 through 24.", 400);
+    }
 
     const delivery = { ok: false, skipped: true, reason: "explicit_client_notification_required" };
     const approvedBudget = reviewedBudgetIsComplete(reviewedSessionPlan)
@@ -8079,9 +8387,13 @@ export async function handleAdminCreateBookingToken(request, env) {
       const reopenResults = await db.batch([
         db.prepare(
           `UPDATE booking_tokens
-           SET allowed_booking_types_json = ?, expires_at = ?, revoked_at = NULL, updated_at = ?
+           SET allowed_booking_types_json = ?, expires_at = ?, allow_multiple_sessions = ?,
+               max_sessions = ?, revoked_at = NULL, updated_at = ?
            WHERE id = ? AND submission_id = ? AND purpose = ? AND used_at IS NULL`
-        ).bind(JSON.stringify(allowed), expiresAt, now, existingToken.id, submissionId, purpose),
+        ).bind(
+          JSON.stringify(allowed), expiresAt, allowMultipleSessions ? 1 : 0,
+          maxSessions, now, existingToken.id, submissionId, purpose,
+        ),
         db.prepare(
           `INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at)
            SELECT ?, ?, 'booking_link_reopened', 'admin', ?, ?
@@ -8114,6 +8426,8 @@ export async function handleAdminCreateBookingToken(request, env) {
           expiresAt,
           allowedBookingTypes: allowed,
           purpose,
+          allowMultipleSessions,
+          maxSessions,
           approvedBudget,
         },
         delivery,
@@ -8153,9 +8467,9 @@ export async function handleAdminCreateBookingToken(request, env) {
       db.prepare(
         `INSERT INTO booking_tokens (
           id, token_hash, submission_id, allowed_booking_types_json, purpose,
-          expires_at, created_at, updated_at
+          expires_at, allow_multiple_sessions, max_sessions, created_at, updated_at
         )
-        SELECT ?, ?, s.id, ?, ?, ?, ?, ? FROM submissions s
+        SELECT ?, ?, s.id, ?, ?, ?, ?, ?, ?, ? FROM submissions s
         WHERE s.id = ? AND s.status = 'approved' AND s.tattoo_stage = ?
           AND (
             ? = 0 OR NOT EXISTS (
@@ -8170,6 +8484,8 @@ export async function handleAdminCreateBookingToken(request, env) {
         JSON.stringify(allowed),
         purpose,
         expiresAt,
+        allowMultipleSessions ? 1 : 0,
+        maxSessions,
         now,
         now,
         submissionId,
@@ -8230,6 +8546,8 @@ export async function handleAdminCreateBookingToken(request, env) {
         expiresAt,
         allowedBookingTypes: allowed,
         purpose,
+        allowMultipleSessions,
+        maxSessions,
         approvedBudget,
       },
       delivery,
@@ -8252,6 +8570,8 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
   const tattooDescription = asString(body.tattooDescription);
   const purpose = asString(body.purpose) || "tattoo";
   const bookingTypeId = asString(body.bookingTypeId);
+  const allowMultipleSessions = purpose === "tattoo" && body.allowMultipleSessions === true;
+  const maxSessions = allowMultipleSessions ? Number(body.maxSessions) : 1;
   const presentLongerSessionOption = purpose === "tattoo" && body.presentLongerSessionOption === true;
   const presentShorterSessionsOption = purpose === "tattoo" && body.presentShorterSessionsOption === true;
   const includeAdditionalSketchDisclaimer = purpose === "tattoo" && body.includeAdditionalSketchDisclaimer === true;
@@ -8264,7 +8584,7 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
     allowed.push(EXTENDED_DAY_BOOKING_TYPE_ID);
   }
   if (purpose === "tattoo" && presentShorterSessionsOption) {
-    for (const shorterTypeId of ["tattoo_quarter", "tattoo_half"]) {
+    for (const shorterTypeId of ["tattoo_quarter", "tattoo_half", "tattoo_three_quarter"]) {
       if (!allowed.includes(shorterTypeId)) allowed.push(shorterTypeId);
     }
   }
@@ -8281,6 +8601,7 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
     "presentLongerSessionOption",
     "presentShorterSessionsOption",
     "includeAdditionalSketchDisclaimer",
+    "allowMultipleSessions",
   ]) {
     if (Object.prototype.hasOwnProperty.call(body, field) && typeof body[field] !== "boolean") {
       return errorResponse("Direct-invite presentation choices must be true or false.", 400);
@@ -8297,6 +8618,12 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
   }
   if (!allowed.length || !bookingTypesMatchPurpose(purpose, allowed)) {
     return errorResponse("Choose a session type that matches the link purpose.", 400);
+  }
+  if (
+    allowMultipleSessions
+    && (!Number.isSafeInteger(maxSessions) || maxSessions < 2 || maxSessions > 24)
+  ) {
+    return errorResponse("Maximum sessions must be a whole number from 2 through 24.", 400);
   }
 
   const requestedExpiry = asOptionalString(body.expiresAt);
@@ -8388,8 +8715,11 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
             present_shorter_sessions_option, include_additional_sketch_disclaimer,
             session_category, approved_budget_min_cents, approved_budget_max_cents,
             approved_budget_currency, budget_acknowledged, client_acknowledged,
+            booking_purpose, allowed_booking_types_json, booking_link_expires_at,
+            booking_link_revoke_existing, booking_allow_multiple_sessions,
+            booking_max_sessions,
             created_at, updated_at
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
         ).bind(
           crypto.randomUUID(),
           submissionId,
@@ -8408,6 +8738,12 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
           "USD",
           0,
           0,
+          purpose,
+          JSON.stringify(allowed),
+          requestedExpiry || null,
+          1,
+          allowMultipleSessions ? 1 : 0,
+          maxSessions,
           now,
           now,
         ),
@@ -8429,6 +8765,8 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
           purpose,
           allowedBookingTypes: allowed,
           expiresAt: requestedExpiry || undefined,
+          allowMultipleSessions,
+          maxSessions,
           revokeExisting: true,
           sendEmail: false,
         }),
@@ -11257,7 +11595,7 @@ export async function handleAdminReleasePendingAppointment(request, env, appoint
         }
         const order = await fetchSquareOrderForReconciliation(env, orderId);
         if (orderLooksPaid(order)) {
-          const confirmed = await confirmPaidAppointment(db, env, request, row, order);
+          const confirmed = await confirmPaidCheckoutGroup(db, env, request, row, order);
           return errorResponse("This checkout has already been paid and cannot be released.", 409, {
             code: "CHECKOUT_ALREADY_PAID",
             appointment: confirmed,
@@ -11273,7 +11611,7 @@ export async function handleAdminReleasePendingAppointment(request, env, appoint
       }
     }
 
-    if (!await releasePendingBookingHold(
+    if (!await releasePendingBookingHoldGroup(
       db,
       reconciliationRow,
       "admin",
@@ -11302,7 +11640,8 @@ export async function handleAdminListSubmissionTokens(request, env, submissionId
     const now = new Date().toISOString();
     const result = await db
       .prepare(
-        `SELECT id, purpose, allowed_booking_types_json, created_at, expires_at, revoked_at, used_at, updated_at
+        `SELECT id, purpose, allowed_booking_types_json, allow_multiple_sessions, max_sessions,
+                created_at, expires_at, revoked_at, used_at, updated_at
          FROM booking_tokens WHERE submission_id = ? ORDER BY created_at DESC`
       )
       .bind(submissionId)
@@ -11312,6 +11651,8 @@ export async function handleAdminListSubmissionTokens(request, env, submissionId
       id: t.id,
       purpose: t.purpose || "tattoo",
       allowedBookingTypes: parseJsonField(t.allowed_booking_types_json, []),
+      allowMultipleSessions: Boolean(t.allow_multiple_sessions),
+      maxSessions: Math.max(1, Number(t.max_sessions || 1)),
       createdAt: t.created_at,
       expiresAt: t.expires_at,
       revokedAt: t.revoked_at,

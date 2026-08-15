@@ -158,7 +158,7 @@ export function buildBookingLinkEmail(data) {
         ? "Your project review is ready for the required in-person planning consultation. This consultation happens before tattoo scheduling."
         : tattooSpecial
           ? "Your Tattoo Special was approved, but no appointment is booked yet. Choose an available time and complete the Square deposit to confirm the appointment."
-          : "Your tattoo project and final session plan are ready for tattoo booking. Choose Quarter Day, Half Day, Full Day, or the optional Extended Day. You may use one longer appointment or split the project across shorter appointments.",
+          : "Your tattoo project and final session plan are ready for tattoo booking. Choose Quarter Day, Half Day, 3/4 Day, Full Day, or the optional Extended Day. You may use one longer appointment or split the project across shorter appointments.",
     ],
     sections: [
       approvedDesigns.length ? {
@@ -442,17 +442,43 @@ export function buildAppointmentConfirmedEmail(data) {
     label: resource.label,
     href: resource.href,
   }));
+  const sessions = list(data.sessions);
+  const grouped = sessions.length > 1;
+  const sessionLabel = grouped ? `${sessions.length} tattoo sessions` : "";
+  const sessionSections = grouped ? sessions.map((session, index) => ({
+    title: `Session ${index + 1}`,
+    editableTitle: false,
+    editableParagraphs: false,
+    items: [
+      { label: "Date and time", value: session.when },
+      { label: "Session type", value: session.session },
+      { label: profile.feeLabel, value: session.feeText },
+      { label: "View confirmation", value: `Open Session ${index + 1}`, href: session.confirmationUrl },
+      { label: "Add to calendar", value: `Add Session ${index + 1}`, href: session.calendarUrl },
+      { label: "Reschedule", value: `Reschedule Session ${index + 1}`, href: session.rescheduleUrl },
+    ],
+  })) : [];
   return renderClientEmail({
     templateKey: data.templateKey || (["studio_visit", "studio_space"].includes(data.kind) ? "studio_booking_confirmed" : data.kind === "consultation_in_person" ? "consultation_confirmed_in_person" : data.kind === "consultation_virtual" ? "consultation_confirmed_virtual" : data.kind === "build_session" ? "build_session_confirmed" : "appointment_confirmed"),
     templateVariant: data.variant || (data.kind === "tattoo" ? (data.tipText ? "tip" : "tattoo") : "default"),
-    variables: { client_name: data.clientName || "there" },
+    variables: {
+      client_name: data.clientName || "there",
+      ...(grouped ? { session_label: sessionLabel } : {}),
+    },
     theme: profile.theme,
     subject: data.subject,
-    preheader: "Date, time, payment details, and everything you need before arriving.",
-    classification: profile.classification,
-    headline: profile.headline,
+    preheader: data.preheader || (grouped
+      ? `${sessionLabel} are booked, with payment details and a separate reschedule link for each date.`
+      : "Date, time, payment details, and everything you need before arriving."),
+    classification: data.classification || profile.classification,
+    headline: data.headline || (grouped ? `Your ${sessions.length} tattoo sessions are confirmed.` : profile.headline),
     greeting: `Hi ${data.clientName || "there"},`,
-    details: [
+    details: grouped ? [
+      ...list(data.pricingDetails),
+      ...list(data.balanceDetails),
+      data.tipText ? { id: "optional_tip", label: "Optional tip", value: data.tipText } : null,
+      data.totalPaidText ? { id: "total_paid_today", label: "Total paid today", value: data.totalPaidText } : null,
+    ] : [
       { id: "when", label: "When", value: data.when },
       { id: "session", label: ["studio_visit", "studio_space"].includes(data.kind) ? "Booking" : "Session", value: data.session },
       ...list(data.pricingDetails),
@@ -462,11 +488,14 @@ export function buildAppointmentConfirmedEmail(data) {
       data.totalPaidText ? { id: "total_paid_today", label: "Total paid today", value: data.totalPaidText } : null,
       data.zoomUrl ? { id: "zoom_link", label: "Zoom link", value: data.zoomUrl } : null,
     ],
-    primaryAction: { label: "View confirmation", href: data.confirmationUrl },
-    secondaryActions: [
-      { label: "Add to calendar", href: data.calendarUrl },
-      ...resourceActions,
-    ],
+    sections: sessionSections,
+    primaryAction: {
+      label: grouped ? "View all booked sessions" : "View confirmation",
+      href: data.confirmationUrl,
+    },
+    secondaryActions: grouped
+      ? resourceActions
+      : [{ label: "Add to calendar", href: data.calendarUrl }, ...resourceActions],
     outro: [data.billingPolicyText, data.renderingPolicyText, data.paymentPolicyText, profile.body],
     signature: profile.signature,
   });
@@ -771,6 +800,8 @@ const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "tattoo_rendering_payment_confirmed", variant: "default", label: "Additional concept sketch payment confirmation", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_confirmed", variant: "tattoo", label: "Tattoo appointment confirmed", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_confirmed", variant: "tip", label: "Tattoo confirmed with tip", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_confirmed", variant: "tattoo_multi", label: "Multi-session tattoo booking confirmed", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_confirmed", variant: "tattoo_multi_tip", label: "Multi-session tattoo booking confirmed with tip", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_confirmed", variant: "tattoo_extended", label: "Extended Day appointment confirmed", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_confirmed", variant: "tattoo_extended_tip", label: "Extended Day confirmed with tip", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_confirmed", variant: "tattoo_legacy", label: "Legacy tattoo confirmation without reviewed total", brand: "tattoo", stage: "legacy" },
@@ -865,6 +896,8 @@ function previewConfirmation(kind, subject, overrides = {}) {
     kind,
     variant: overrides.variant,
     subject,
+    headline: overrides.headline || "",
+    preheader: overrides.preheader || "",
     clientName: SAMPLE.clientName,
     when: overrides.when || SAMPLE.when,
     session: overrides.session || SAMPLE.session,
@@ -881,6 +914,7 @@ function previewConfirmation(kind, subject, overrides = {}) {
       : ""),
     confirmationUrl: overrides.confirmationUrl || SAMPLE.confirmationUrl,
     calendarUrl: SAMPLE.calendarUrl,
+    sessions: overrides.sessions || [],
     resources: overrides.resources || [
       { label: "Tattoo policies", href: SAMPLE.bookingTermsUrl },
       { label: "Day-of instructions", href: SAMPLE.dayOfInstructionsUrl },
@@ -1005,6 +1039,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
         : "The Studio will follow up with the next coordination step.",
     });
   } else if (key === "appointment_confirmed") {
+    const multi = mode === "tattoo_multi" || mode === "tattoo_multi_tip";
     const tattooSpecial = mode === "tattoo_special" || mode === "tattoo_special_tip";
     const extended = mode === "tattoo_extended"
       || mode === "tattoo_extended_tip"
@@ -1015,6 +1050,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       || mode === "tattoo_extended_legacy"
       || mode === "tattoo_extended_legacy_tip";
     const tipped = mode === "tip"
+      || mode === "tattoo_multi_tip"
       || mode === "tattoo_special_tip"
       || mode === "tattoo_extended_tip"
       || mode === "tattoo_legacy_tip"
@@ -1023,6 +1059,8 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       tattooSpecial ? "tattoo_special" : "tattoo",
       tattooSpecial
         ? "Your Tattoo Special appointment at art.pill TATTOO HOUSE has been confirmed"
+        : multi
+          ? "Your 3 tattoo sessions at art.pill TATTOO HOUSE have been confirmed"
         : "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
       {
         variant: mode,
@@ -1035,6 +1073,22 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
           balanceDetails: [
             { id: "remaining_balance", label: "Remaining balance", value: "$500" },
           ],
+        } : {}),
+        ...(multi ? {
+          headline: "Your 3 tattoo sessions are confirmed.",
+          totalPaidText: tipped ? "$325" : "$300",
+          sessions: [
+            ["demo-appointment-1", "Friday, June 12, 2026 at 2:00 PM EDT - Friday, June 12, 2026 at 6:00 PM EDT"],
+            ["demo-appointment-2", "Friday, June 26, 2026 at 2:00 PM EDT - Friday, June 26, 2026 at 6:00 PM EDT"],
+            ["demo-appointment-3", "Friday, July 10, 2026 at 2:00 PM EDT - Friday, July 10, 2026 at 6:00 PM EDT"],
+          ].map(([id, when]) => ({
+            when,
+            session: "Half Day Session",
+            feeText: "$100 received",
+            confirmationUrl: `https://thesixwellconstruct.com/booking/confirmed/?appointment=${id}`,
+            calendarUrl: `https://thesixwellconstruct.com/api/booking/calendar?appointment=${id}`,
+            rescheduleUrl: `https://thesixwellconstruct.com/booking/reschedule/?appointment=${id}`,
+          })),
         } : {}),
         ...(extended ? {
           session: "Extended Day Session",

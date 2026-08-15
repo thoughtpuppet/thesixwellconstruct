@@ -98,5 +98,5 @@ include the Zoom join link (link only, no password) directly under the
 session line.
 Extended Day reminders state: “Optional 8-12 hour session. Reserves a 12-hour
 appointment block with a $200 Extended Day fee.” They also state that Extended
-Day is always optional and that Quarter, Half, and Full Day sessions do not
+Day is always optional and that Quarter, Half, 3/4, and Full Day sessions do not
 include the fee.

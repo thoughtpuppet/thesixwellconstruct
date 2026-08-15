@@ -86,7 +86,11 @@
   .price-label { display:block; margin-top:4px; color:rgba(252,184,103,0.42); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
   .panel { border-top:5px solid var(--ring-soft); padding-top:20px; position:sticky; top:100px; }
   .panel-row { display:flex; justify-content:space-between; gap:16px; padding:14px 0; border-bottom:5px solid var(--ring-faint); color:var(--muted); font-size:13px; line-height:1.5; }
+  .panel-row--stack { display:grid; }
   .panel-key { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; }
+  .checkout-item-list { display:grid; gap:8px; }
+  .checkout-item { display:flex; justify-content:space-between; gap:14px; color:var(--muted); font-size:12px; line-height:1.5; }
+  .checkout-item strong { flex:0 0 auto; color:var(--color-body); font-family:var(--sans); font-size:11px; }
   .tip-control { display:grid; gap:10px; padding:18px 0; border-bottom:5px solid var(--ring-faint); }
   .tip-options { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
   .tip-button { min-height:38px; border:5px solid var(--ring-faint); background:transparent; color:var(--color-body); font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
@@ -201,6 +205,7 @@
       <div class="panel-row"><span class="panel-key">Session</span><span id="sessionValue">Select a session</span></div>
       <div class="panel-row"><span class="panel-key">Window</span><span id="windowValue">Select a time</span></div>
       <div class="panel-row"><span class="panel-key" id="depositKey">Deposit</span><span id="depositValue">-</span></div>
+      <div id="checkoutItemsRow" class="panel-row panel-row--stack hidden"><span class="panel-key">Square checkout items</span><div id="checkoutItemList" class="checkout-item-list"></div></div>
       <div id="sessionFeeRow" class="panel-row hidden"><span class="panel-key">Extended Day Fee</span><span id="sessionFeeValue">-</span></div>
       <div id="estimatedTotalRow" class="panel-row hidden"><span class="panel-key">Estimated Total</span><span id="estimatedTotalValue">-</span></div>
       <div id="remainingBalanceRow" class="panel-row hidden"><span class="panel-key">Estimated Remaining</span><span id="remainingBalanceValue">-</span></div>
@@ -262,6 +267,8 @@
   const sessionValue = document.getElementById("sessionValue");
   const windowValue = document.getElementById("windowValue");
   const depositValue = document.getElementById("depositValue");
+  const checkoutItemsRow = document.getElementById("checkoutItemsRow");
+  const checkoutItemList = document.getElementById("checkoutItemList");
   const sessionFeeRow = document.getElementById("sessionFeeRow");
   const sessionFeeValue = document.getElementById("sessionFeeValue");
   const estimatedTotalRow = document.getElementById("estimatedTotalRow");
@@ -283,6 +290,7 @@
   let context = null;
   let selectedType = null;
   let selectedWindow = null;
+  let selectedWindows = [];
   let selectedMonthKey = "";
   let selectedDayKey = "";
   let selectedTipCents = 0;
@@ -374,8 +382,16 @@
     const fifth = futureDate(35, 12, 0, 90);
     const sixth = futureDate(63, 14, 0, 180);
     const seventh = futureDate(12, 9, 0, 600);
+    const eighth = futureDate(10, 11, 0, 360);
+    const ninth = futureDate(12, 11, 0, 360);
+    const previewMultiEnabled = params.get("multi") !== "0";
+    const previewMaxSessions = Math.max(2, Math.min(24, Number(params.get("maxSessions") || 3)));
     return {
       purpose: "tattoo",
+      multiSession: {
+        enabled: previewMultiEnabled,
+        maxSessions: previewMultiEnabled ? previewMaxSessions : 1,
+      },
       client: { name: "Preview Client", email: "client@example.com", phone: "" },
       submission: {
         id: "preview",
@@ -423,6 +439,15 @@
           currency: "USD",
         },
         {
+          id: "tattoo_three_quarter",
+          label: "3/4 Day Session",
+          description: "6 hours for larger approved work, detailed compositions, or longer sessions.",
+          durationMinutes: 360,
+          depositCents: 15000,
+          depositLabel: "$150",
+          currency: "USD",
+        },
+        {
           id: "tattoo_full",
           label: "Full Day Session",
           description: "8 hours for large approved work, special projects, or deeper sessions.",
@@ -447,7 +472,9 @@
         { id: "preview-1", bookingTypeId: "tattoo_quarter", note: "", ...first },
         { id: "preview-2", bookingTypeId: "tattoo_quarter", note: "", ...second },
         { id: "preview-3", bookingTypeId: "tattoo_half", note: "", ...third },
-        { id: "preview-4", bookingTypeId: "tattoo_full", note: "", ...fourth },
+        { id: "preview-4", bookingTypeId: "tattoo_three_quarter", note: "", ...fourth },
+        { id: "preview-8", bookingTypeId: "tattoo_three_quarter", note: "", ...eighth },
+        { id: "preview-9", bookingTypeId: "tattoo_three_quarter", note: "", ...ninth },
         { id: "preview-5", bookingTypeId: "tattoo_quarter", note: "", ...fifth },
         { id: "preview-6", bookingTypeId: "tattoo_half", note: "", ...sixth },
         { id: "preview-7", bookingTypeId: "tattoo_extended", note: "", ...seventh },
@@ -472,6 +499,7 @@
     return {
       previewSource: payload.previewSource || "saved_draft",
       purpose: payload.purpose || "tattoo",
+      multiSession: payload.multiSession || { enabled: false, maxSessions: 1 },
       client: payload.client || { name: "Preview Client", email: "", phone: "" },
       requiresClientDetails: Boolean(payload.requiresClientDetails),
       submission: payload.submission || { id: "preview", type: "tattoo_inquiry" },
@@ -544,13 +572,27 @@
     return Boolean(name && phone && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
   }
 
+  function multiSessionEnabled() {
+    return context?.multiSession?.enabled === true;
+  }
+
+  function maximumSessions() {
+    return multiSessionEnabled()
+      ? Math.max(2, Math.min(24, Number(context?.multiSession?.maxSessions || 2)))
+      : 1;
+  }
+
+  function selectedAppointmentWindows() {
+    return multiSessionEnabled() ? selectedWindows : (selectedWindow ? [selectedWindow] : []);
+  }
+
   function updateCheckoutState() {
     const enteredName = clientNameInput.value.trim();
     clientValue.textContent = context?.requiresClientDetails
       ? enteredName || "Enter your information"
       : context?.client?.name || context?.client?.email || "-";
     checkoutBtn.disabled = !selectedType
-      || !selectedWindow
+      || !selectedAppointmentWindows().length
       || !planIsReady(context?.sessionPlan)
       || !clientDetailsAreReady()
       || (selectedType.id === EXTENDED_DAY_BOOKING_TYPE_ID && !extendedDayAcknowledged);
@@ -615,13 +657,14 @@
 
   function renderWindowButton(windowItem, options = {}) {
     const meta = `Ends ${escapeHtml(formatDate(windowItem.endAt))}`;
+    const selected = selectedAppointmentWindows().some((item) => item.id === windowItem.id);
     return `
-      <button class="booking-window-option ${selectedWindow?.id === windowItem.id ? "active" : ""}" type="button" data-window="${escapeHtml(windowItem.id)}">
+      <button class="booking-window-option ${selected ? "active" : ""}" type="button" data-window="${escapeHtml(windowItem.id)}" aria-pressed="${selected ? "true" : "false"}">
         <span>
           <span class="booking-window-title">${escapeHtml(formatDate(windowItem.startAt))}</span>
           <span class="booking-window-meta">${meta}</span>
         </span>
-        ${options.next ? '<span class="booking-next-tag">Next Available</span>' : ""}
+        ${selected && multiSessionEnabled() ? '<span class="booking-next-tag">Selected</span>' : options.next ? '<span class="booking-next-tag">Next Available</span>' : ""}
       </button>
     `;
   }
@@ -774,14 +817,14 @@
         <div><span>Deposit paid at booking</span><strong>−$350</strong></div>
         <div><span>Remaining balance</span><strong>$1,850</strong></div>
       </div>
-      <p class="fine">Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.</p>
-      <label class="form-check"><input class="form-check__input" id="extendedDayAck" type="checkbox" ${extendedDayAcknowledged ? "checked" : ""}><span class="form-check__label">I understand that Extended Day is optional, reserves a 12-hour appointment block, and adds a $200 Extended Day fee. I may instead choose a Quarter, Half, or Full Day session and split my project across shorter appointments.</span></label>
+      <p class="fine">Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, 3/4, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.</p>
+      <label class="form-check"><input class="form-check__input" id="extendedDayAck" type="checkbox" ${extendedDayAcknowledged ? "checked" : ""}><span class="form-check__label">I understand that Extended Day is optional, reserves a 12-hour appointment block, and adds a $200 Extended Day fee. I may instead choose a Quarter, Half, 3/4, or Full Day session and split my project across shorter appointments.</span></label>
     `;
   }
 
   function pacingOptionsForContext() {
     const bookingTypeIds = new Set((context?.bookingTypes || []).map((type) => type.id));
-    const longerAvailable = bookingTypeIds.has("tattoo_full") || bookingTypeIds.has(EXTENDED_DAY_BOOKING_TYPE_ID);
+    const longerAvailable = bookingTypeIds.has("tattoo_three_quarter") || bookingTypeIds.has("tattoo_full") || bookingTypeIds.has(EXTENDED_DAY_BOOKING_TYPE_ID);
     const shorterAvailable = bookingTypeIds.has("tattoo_quarter") || bookingTypeIds.has("tattoo_half");
     const longerSetting = context?.sessionPlan?.presentLongerSessionOption;
     const shorterSetting = context?.sessionPlan?.presentShorterSessionsOption;
@@ -883,14 +926,16 @@
         ? pendingSpecialApproval
           ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Select a time for review. This records the request but does not reserve the appointment.`
           : `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Your approved total is ${money(special.quotedPriceCents || 0)} for ${minutesLabel(special.durationMinutes || 0)}. The ${money(special.depositCents || 0)} deposit is credited toward that total; the remaining balance is ${money(Math.max(0, (special.quotedPriceCents || 0) - (special.depositCents || 0)))}.`
-      : "Your project and final session plan are ready for tattoo scheduling. Select a session, complete the tattoo deposit through Square, and return here for confirmation.";
+      : multiSessionEnabled()
+        ? `Your project and final session plan are ready for tattoo scheduling. Choose one session type, then select up to ${maximumSessions()} dates. Square collects the deposit for every selected session in one checkout.`
+        : "Your project and final session plan are ready for tattoo scheduling. Select a session, complete the tattoo deposit through Square, and return here for confirmation.";
     sessionSectionLabel.textContent = experimental
       ? consultation ? "Free Project Consultation" : "Experimental Project Appointment"
       : consultation
       ? "Consultation & Reservation Fee"
       : special
         ? "Your Tattoo Special & Deposit"
-        : "Session & Deposit";
+        : multiSessionEnabled() ? "Session, Dates & Deposits" : "Session & Deposit";
     depositKey.textContent = experimental
       ? consultation ? "Due today" : "Refundable attendance deposit"
       : consultation ? "Reservation Fee" : pendingSpecialApproval ? "Deposit after approval" : "Deposit";
@@ -924,7 +969,10 @@
     const expiresMs = Date.parse(expiresAt);
     const activeState = pending.holdState === "active";
     const active = activeState && Number.isFinite(expiresMs) && expiresMs > Date.now();
-    const service = context?.purpose === "consultation" ? "consultation" : "tattoo appointment";
+    const sessionCount = Math.max(1, Number(pending.sessionCount || 1));
+    const service = context?.purpose === "consultation"
+      ? "consultation"
+      : sessionCount > 1 ? `${sessionCount} tattoo appointments` : "tattoo appointment";
     if (pending.approvalState === "pending") {
       pendingCheckoutText.textContent = `Your requested time, ${formatRequestedTime(pending.startAt || pending.heldStartAt)}, has been submitted for review. The appointment has not been booked yet, and the deposit is not due until approval.`;
       pendingCheckoutPanel.classList.remove("hidden");
@@ -962,7 +1010,7 @@
     }
     if (activeState) {
       pendingCheckoutText.textContent = active
-        ? `Your ${service} time is held until ${formatDate(expiresAt)}. Resume the existing Square checkout; a second checkout will not be created.`
+        ? `Your ${service}${sessionCount > 1 ? " are" : " time is"} held until ${formatDate(expiresAt)}. Resume the existing Square checkout; a second checkout will not be created.`
         : `This ${service} checkout has reached its hold time and is awaiting Square reconciliation. It continues to block the selected time until that check succeeds.`;
       if (active && pending.checkoutReady) {
         resumeCheckoutLink.href = "#";
@@ -1153,7 +1201,7 @@
           <span class="choice-meta">${escapeHtml(type.durationRangeLabel || minutesLabel(type.durationMinutes))} / ${escapeHtml(type.description)}</span>
           ${type.id === EXTENDED_DAY_BOOKING_TYPE_ID && !windows.some((windowItem) => windowMatchesType(windowItem, type)) ? '<span class="availability-note">No Extended Day dates are currently available. Shorter sessions remain bookable.</span>' : ""}
         </span>
-        <span class="price-wrap"><span class="price">${escapeHtml(type.depositLabel)}</span><span class="price-label">${experimental ? context?.purpose === "consultation" ? "Free" : "Refundable attendance deposit" : context?.purpose === "consultation" ? "Reservation fee" : "Deposit"}</span></span>
+        <span class="price-wrap"><span class="price">${escapeHtml(type.depositLabel)}</span><span class="price-label">${experimental ? context?.purpose === "consultation" ? "Free" : "Refundable attendance deposit" : context?.purpose === "consultation" ? "Reservation fee" : multiSessionEnabled() ? "Deposit per session" : "Deposit"}</span></span>
       </button>
     `).join("");
 
@@ -1180,7 +1228,7 @@
 
     if (!visibleWindows.length) {
       windowListEl.innerHTML = selectedType?.id === EXTENDED_DAY_BOOKING_TYPE_ID
-        ? '<div class="status">No Extended Day dates are currently available. You may choose Quarter, Half, or Full Day and split the project across appointments.</div>'
+        ? '<div class="status">No Extended Day dates are currently available. You may choose Quarter, Half, 3/4, or Full Day and split the project across appointments.</div>'
         : '<div class="status">No open booking windows are available yet. Reply to your approval email if you need help.</div>';
     } else if (!selectedMonthKey) {
       windowListEl.innerHTML = renderWindowButton(visibleWindows[0], { next: true });
@@ -1191,13 +1239,30 @@
     }
 
     clientDetailsSection.classList.toggle("hidden", !context.requiresClientDetails);
+    const chosenWindows = selectedAppointmentWindows();
+    const sessionCount = chosenWindows.length;
     sessionValue.textContent = experimental
       ? `Experimental Project — ${experimental.title}`
       : special
       ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}`
-      : selectedType ? selectedType.label : "Select a session";
-    windowValue.textContent = selectedWindow ? formatDate(selectedWindow.startAt) : "Select a time";
-    depositValue.textContent = selectedType ? selectedType.depositLabel : "-";
+      : selectedType ? `${selectedType.label}${multiSessionEnabled() && sessionCount ? ` × ${sessionCount}` : ""}` : "Select a session";
+    windowValue.textContent = sessionCount
+      ? chosenWindows.map((windowItem) => formatDate(windowItem.startAt)).join(" · ")
+      : multiSessionEnabled() ? `Select up to ${maximumSessions()} dates` : "Select a time";
+    windowValue.title = sessionCount ? chosenWindows.map((windowItem) => formatDate(windowItem.startAt)).join("\n") : "";
+    depositValue.textContent = selectedType
+      ? money(Number(selectedType.depositCents || 0) * Math.max(1, sessionCount), selectedType.currency || "USD")
+      : "-";
+    const showCheckoutItems = multiSessionEnabled() && sessionCount > 0 && Boolean(selectedType);
+    checkoutItemsRow.classList.toggle("hidden", !showCheckoutItems);
+    checkoutItemList.innerHTML = showCheckoutItems
+      ? chosenWindows.map((windowItem, index) => `
+          <div class="checkout-item">
+            <span>Session ${index + 1} &middot; ${escapeHtml(formatDate(windowItem.startAt))}</span>
+            <strong>${escapeHtml(money(selectedType.depositCents, selectedType.currency || "USD"))}</strong>
+          </div>
+        `).join("")
+      : "";
     const extendedPricingSummary = extendedDayPricing();
     sessionFeeRow.classList.toggle("hidden", !extendedPricingSummary);
     estimatedTotalRow.classList.toggle("hidden", !extendedPricingSummary || !extendedPricingSummary.laborMin);
@@ -1211,7 +1276,12 @@
     tipControl.classList.toggle("hidden", pendingSpecialApproval || Boolean(experimental));
     tipRow.classList.toggle("hidden", pendingSpecialApproval || Boolean(experimental));
     totalDueRow.querySelector(".panel-key").textContent = experimental && context?.purpose === "consultation" ? "Due Today" : pendingSpecialApproval ? "Due Today" : "Total Due Today";
-    totalValue.textContent = experimental && context?.purpose === "consultation" ? "$0" : pendingSpecialApproval ? "$0" : selectedType ? money(Number(selectedType.depositCents || 0) + selectedTipCents, selectedType.currency || "USD") : "-";
+    totalValue.textContent = experimental && context?.purpose === "consultation" ? "$0" : pendingSpecialApproval ? "$0" : selectedType ? money((Number(selectedType.depositCents || 0) * Math.max(1, sessionCount)) + selectedTipCents, selectedType.currency || "USD") : "-";
+    if (!pendingSpecialApproval && !(experimental && context?.purpose === "consultation")) {
+      checkoutBtn.textContent = multiSessionEnabled() && sessionCount > 1
+        ? `Continue to Square — ${sessionCount} sessions`
+        : "Continue to Square";
+    }
     checkoutNote.textContent = experimental
       ? context?.purpose === "consultation"
         ? "This consultation is free. No Square checkout or payment is required."
@@ -1224,7 +1294,9 @@
       ? `Square collects only the ${selectedType.depositLabel} deposit${selectedTipCents ? " and your optional tip" : ""} today. The $200 Extended Day fee is included in the final studio balance, and the deposit is credited toward your final total.`
       : context?.purpose === "consultation"
         ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
-        : "The tattoo deposit is applied toward the appointment total.";
+        : multiSessionEnabled()
+          ? `Each ${selectedType?.depositLabel || "session"} deposit is applied to its appointment total. Select up to ${maximumSessions()} dates for one session type.`
+          : "The tattoo deposit is applied toward the appointment total.";
     updateCheckoutState();
     window.dispatchEvent(new CustomEvent("sixwell:booking-rendered"));
   }
@@ -1353,7 +1425,11 @@
   sessionListEl.addEventListener("click", (event) => {
     const button = event.target.closest("[data-type]");
     if (!button) return;
-    if (selectedType?.id !== button.dataset.type) extendedDayAcknowledged = false;
+    if (selectedType?.id !== button.dataset.type) {
+      extendedDayAcknowledged = false;
+      selectedWindow = null;
+      selectedWindows = [];
+    }
     selectedType = context.bookingTypes.find((type) => type.id === button.dataset.type) || null;
     if (selectedWindow?.bookingTypeId && selectedWindow.bookingTypeId !== selectedType?.id) selectedWindow = null;
     selectedMonthKey = selectedWindow ? monthKey(selectedWindow.startAt) : "";
@@ -1407,7 +1483,25 @@
   windowListEl.addEventListener("click", (event) => {
     const button = event.target.closest("[data-window]");
     if (!button) return;
-    selectedWindow = context.availabilityWindows.find((windowItem) => windowItem.id === button.dataset.window) || null;
+    const windowItem = context.availabilityWindows.find((item) => item.id === button.dataset.window) || null;
+    if (!windowItem) return;
+    if (multiSessionEnabled()) {
+      const existingIndex = selectedWindows.findIndex((item) => item.id === windowItem.id);
+      if (existingIndex >= 0) {
+        selectedWindows.splice(existingIndex, 1);
+        selectedWindow = selectedWindows.at(-1) || null;
+      } else if (selectedWindows.length >= maximumSessions()) {
+        checkoutNote.textContent = `This link allows up to ${maximumSessions()} sessions. Remove a selected date before adding another.`;
+        return;
+      } else {
+        selectedWindows.push(windowItem);
+        selectedWindows.sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime());
+        selectedWindow = windowItem;
+      }
+    } else {
+      selectedWindow = windowItem;
+      selectedWindows = windowItem ? [windowItem] : [];
+    }
     selectedMonthKey = selectedWindow ? monthKey(selectedWindow.startAt) : selectedMonthKey;
     selectedDayKey = selectedWindow ? dayKey(selectedWindow.startAt) : selectedDayKey;
     render();
@@ -1423,9 +1517,10 @@
   });
 
   checkoutBtn.addEventListener("click", async () => {
-    if (!selectedType || !selectedWindow) return;
+    const chosenWindows = selectedAppointmentWindows();
+    if (!selectedType || !chosenWindows.length) return;
     if (previewMode) {
-      checkoutNote.textContent = "Preview selected: " + selectedType.label + " / " + formatDate(selectedWindow.startAt);
+      checkoutNote.textContent = "Preview selected: " + selectedType.label + " / " + chosenWindows.map((item) => formatDate(item.startAt)).join(" · ");
       return;
     }
     checkoutBtn.disabled = true;
@@ -1435,14 +1530,17 @@
       ? "Recording your requested time for review."
       : experimental && context?.purpose === "consultation"
         ? "Booking your free consultation."
-        : "Preparing your Square deposit checkout.";
+        : chosenWindows.length > 1
+          ? `Preparing one Square checkout for ${chosenWindows.length} session deposits.`
+          : "Preparing your Square deposit checkout.";
     const response = await fetch(pendingSpecialApproval ? "/api/booking/hold" : "/api/booking/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         token,
         bookingTypeId: selectedType.id,
-        availabilityWindowId: selectedWindow.id,
+        availabilityWindowId: chosenWindows[0].id,
+        availabilityWindowIds: chosenWindows.map((item) => item.id),
         tipCents: pendingSpecialApproval ? 0 : selectedTipCents,
         extendedDayAcknowledged: selectedType.id === EXTENDED_DAY_BOOKING_TYPE_ID && extendedDayAcknowledged,
         clientName: clientNameInput.value.trim(),
