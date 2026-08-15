@@ -610,6 +610,85 @@ async function getEventOccurrences(db, event) {
   return (result.results || []).map((row) => normalizeEventOccurrence(row, event));
 }
 
+function normalizeEventAdmissionOption(row, event, stats = {}) {
+  if (!row) return null;
+  const capacity = row.capacity === null || row.capacity === undefined
+    ? null
+    : Math.max(0, Number(row.capacity) || 0);
+  const paidSeats = Number(stats.paidSeats) || 0;
+  const pendingSeats = Number(stats.pendingSeats) || 0;
+  const seatsHeld = paidSeats + pendingSeats;
+  const seatsRemaining = capacity === null ? null : Math.max(0, capacity - seatsHeld);
+  const registrationStatus = row.registration_status || "closed";
+  return {
+    id:row.id,
+    eventId:row.event_id,
+    occurrenceId:row.occurrence_id || null,
+    slug:row.slug,
+    title:row.title,
+    description:row.description || "",
+    admissionKind:row.admission_kind || "rsvp",
+    attendanceMode:row.attendance_mode || "in_person",
+    startsAt:row.starts_at,
+    endsAt:row.ends_at || null,
+    location:row.location || event?.location || "",
+    priceCents:Math.max(0, Number(row.price_cents) || 0),
+    priceFormatted:formatMoney(row.price_cents, row.currency || "USD"),
+    free:Number(row.price_cents) <= 0,
+    currency:row.currency || "USD",
+    capacity,
+    maxSeatsPerOrder:Math.max(1, Number(row.max_seats_per_order) || 1),
+    registrationStatus,
+    reminderEnabled:row.reminder_enabled !== 0,
+    sortOrder:Number(row.sort_order) || 0,
+    paidSeats,
+    pendingSeats,
+    paidOrders:Number(stats.paidOrders) || 0,
+    pendingOrders:Number(stats.pendingOrders) || 0,
+    seatsRemaining,
+    soldOut:capacity !== null && seatsRemaining <= 0,
+    open:registrationStatus === "open" && (capacity === null || seatsRemaining > 0),
+    createdAt:row.created_at || null,
+    updatedAt:row.updated_at || null,
+  };
+}
+
+async function getEventAdmissionOptions(db, event) {
+  const result = await db.prepare(
+    `SELECT * FROM event_admission_options
+     WHERE event_id=?
+     ORDER BY sort_order ASC,starts_at ASC,id ASC`
+  ).bind(event.id).all();
+  return result.results || [];
+}
+
+async function eventAdmissionOptionsWithStats(db, event) {
+  const rows = await getEventAdmissionOptions(db, event);
+  const options = [];
+  for (const row of rows) {
+    options.push(normalizeEventAdmissionOption(
+      row,
+      event,
+      await ticketStats(db, event.id, null, row.id),
+    ));
+  }
+  return options;
+}
+
+async function resolveEventAdmissionOption(db, event, requestedValue) {
+  const value = asString(requestedValue);
+  const rows = await getEventAdmissionOptions(db, event);
+  if (!rows.length) return { options:[], option:null, required:false, invalid:false };
+  if (!value) return { options:rows, option:null, required:true, invalid:false };
+  const row = rows.find((candidate) => candidate.id === value || candidate.slug === value) || null;
+  return {
+    options:rows,
+    option:row ? normalizeEventAdmissionOption(row, event) : null,
+    required:false,
+    invalid:!row,
+  };
+}
+
 function nextEventOccurrence(occurrences, now = Date.now()) {
   return occurrences.find((occurrence) => {
     const end = Date.parse(occurrence.endsAt || occurrence.startsAt || "");
@@ -1188,7 +1267,7 @@ async function seatsTaken(db, eventId, occurrenceId = null) {
   return Number(row?.taken) || 0;
 }
 
-async function ticketStats(db, eventId, occurrenceId = null) {
+async function ticketStats(db, eventId, occurrenceId = null, admissionOptionId = null) {
   const row = await db
     .prepare(
       `SELECT
@@ -1197,9 +1276,11 @@ async function ticketStats(db, eventId, occurrenceId = null) {
          COALESCE(SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END), 0) AS paid_orders,
          COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_orders
        FROM event_tickets
-       WHERE event_id = ? AND (? IS NULL OR occurrence_id = ?)`
+       WHERE event_id = ?
+         AND (? IS NULL OR occurrence_id = ?)
+         AND (? IS NULL OR admission_option_id = ?)`
     )
-    .bind(eventId, occurrenceId, occurrenceId)
+    .bind(eventId, occurrenceId, occurrenceId, admissionOptionId, admissionOptionId)
     .first();
   return {
     paidSeats: Number(row?.paid_seats) || 0,
@@ -1236,7 +1317,7 @@ async function eventOccurrencesWithStats(db, event) {
   return views;
 }
 
-function publicEventView(event, stats = {}, occurrences = []) {
+function publicEventView(event, stats = {}, occurrences = [], admissionOptions = []) {
   const primary = nextEventOccurrence(occurrences) || null;
   const paidSeats = Number(stats.paidSeats) || 0;
   const pendingSeats = Number(stats.pendingSeats) || 0;
@@ -1273,13 +1354,19 @@ function publicEventView(event, stats = {}, occurrences = []) {
     soldOut: capacity > 0 && seatsRemaining <= 0,
     status: operationalStatus,
     publicationState: event.publicationState,
-    open: occurrences.length
-      ? occurrences.some((occurrence) => occurrence.open)
-      : operationalStatus === "open" && (capacity <= 0 || seatsRemaining > 0),
+    open: admissionOptions.length
+      ? admissionOptions.some((option) => option.open)
+      : occurrences.length
+        ? occurrences.some((occurrence) => occurrence.open)
+        : operationalStatus === "open" && (capacity <= 0 || seatsRemaining > 0),
     waitlistEnabled: event.waitlistEnabled,
     isRecurring: event.isRecurring || occurrences.length > 1,
     occurrenceCount: occurrences.length,
     occurrences,
+    hasAdmissionOptions:admissionOptions.length > 0,
+    registrationOpen:admissionOptions.some((option) => option.open),
+    paidSalesOpen:admissionOptions.some((option) => option.open && !option.free),
+    admissionOptions,
   };
 }
 
@@ -1353,7 +1440,8 @@ export async function handleEventsList(request, env) {
       const event = normalizeEvent(row);
       const stats = await ticketStats(db, event.id);
       const occurrences = await eventOccurrencesWithStats(db, event);
-      events.push(publicEventView(event, stats, occurrences));
+      const admissionOptions = await eventAdmissionOptionsWithStats(db, event);
+      events.push(publicEventView(event, stats, occurrences, admissionOptions));
     }
     events.sort((a, b) => {
       const aTime = Date.parse(a.startsAt || "");
@@ -1375,12 +1463,14 @@ export async function handleEventTicketCalendar(request, env, ticketId) {
     const row = await db
       .prepare(
         `SELECT t.id, t.seats, t.status,
-                e.title AS event_title, COALESCE(o.starts_at,e.starts_at) AS event_starts_at,
-                COALESCE(o.ends_at,e.ends_at) AS event_ends_at,
-                COALESCE(NULLIF(o.location,''),e.location) AS event_location
+                CASE WHEN a.id IS NULL THEN e.title ELSE e.title||' — '||a.title END AS event_title,
+                COALESCE(a.starts_at,o.starts_at,e.starts_at) AS event_starts_at,
+                COALESCE(a.ends_at,o.ends_at,e.ends_at) AS event_ends_at,
+                COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS event_location
          FROM event_tickets t
          JOIN events e ON e.id = t.event_id
          LEFT JOIN event_occurrences o ON o.id=t.occurrence_id
+         LEFT JOIN event_admission_options a ON a.id=t.admission_option_id
          WHERE t.id = ?`
       )
       .bind(ticketId)
@@ -1410,6 +1500,7 @@ export async function handleEventContext(request, env, slug) {
     }
     const stats = await ticketStats(db, event.id);
     const occurrences = await eventOccurrencesWithStats(db, event);
+    const admissionOptions = await eventAdmissionOptionsWithStats(db, event);
     const requestedOccurrenceId = asString(new URL(request.url).searchParams.get("occurrence"));
     const selectedOccurrence = requestedOccurrenceId
       ? occurrences.find((occurrence) => occurrence.id === requestedOccurrenceId) || null
@@ -1418,7 +1509,7 @@ export async function handleEventContext(request, env, slug) {
       return errorResponse("Event date not found.", 404);
     }
     return json({
-      event:publicEventView(event, stats, occurrences),
+      event:publicEventView(event, stats, occurrences, admissionOptions),
       occurrence:selectedOccurrence,
     });
   } catch (error) {
@@ -1467,35 +1558,63 @@ export async function handleEventCheckout(request, env, slug) {
     if (!eventAllowsPublicActions(event)) {
       return errorResponse("Registration has not opened for this announced event.", 409);
     }
-    const occurrenceResult = await resolveEventOccurrence(db, event, asString(body.occurrenceId || body.occurrence_id));
+    const requestedAdmission = body.admissionOptionId
+      || body.admission_option_id
+      || body.admissionOption
+      || body.admission_option;
+    const admissionResult = await resolveEventAdmissionOption(db, event, requestedAdmission);
+    if (admissionResult.invalid) return errorResponse("Admission option not found.", 404);
+    if (admissionResult.required) {
+      return errorResponse("Choose an RSVP or ticket option before continuing.", 400, {
+        admissionOptionRequired:true,
+      });
+    }
+    const admission = admissionResult.option;
+    const requestedOccurrenceId = asString(body.occurrenceId || body.occurrence_id);
+    if (admission?.occurrenceId && requestedOccurrenceId && requestedOccurrenceId !== admission.occurrenceId) {
+      return errorResponse("That admission option does not belong to the selected event date.", 400);
+    }
+    const occurrenceResult = await resolveEventOccurrence(
+      db,
+      event,
+      admission?.occurrenceId || requestedOccurrenceId,
+    );
     if (occurrenceResult.invalid) return errorResponse("Event date not found.", 404);
     if (occurrenceResult.required) {
       return errorResponse("Choose an event date before reserving seats.", 400, { occurrenceRequired:true });
     }
     const occurrence = occurrenceResult.occurrence;
     if (!occurrence) return errorResponse("This event does not have a scheduled date yet.", 409);
-    if (occurrence.status !== "open") {
+    if (admission ? admission.registrationStatus !== "open" : occurrence.status !== "open") {
       return errorResponse("This event is not open for booking.", 409);
     }
-    if (seats > occurrence.maxSeatsPerOrder) {
+    const maxSeatsPerOrder = admission?.maxSeatsPerOrder || occurrence.maxSeatsPerOrder;
+    if (seats > maxSeatsPerOrder) {
       return errorResponse(
-        `You can reserve at most ${occurrence.maxSeatsPerOrder} seats per order.`,
+        `You can reserve at most ${maxSeatsPerOrder} seats per order.`,
         400
       );
     }
 
     const bookingEvent = {
       ...event,
-      startsAt:occurrence.startsAt,
-      endsAt:occurrence.endsAt,
-      location:occurrence.location,
-      capacity:occurrence.capacity,
-      maxSeatsPerOrder:occurrence.maxSeatsPerOrder,
-      status:occurrence.status,
+      title:admission ? `${event.title} — ${admission.title}` : event.title,
+      parentTitle:event.title,
+      admissionTitle:admission?.title || "",
+      admissionMode:admission?.attendanceMode || "in_person",
+      startsAt:admission?.startsAt || occurrence.startsAt,
+      endsAt:admission?.endsAt || occurrence.endsAt,
+      location:admission?.location || occurrence.location,
+      priceCents:admission?.priceCents ?? event.priceCents,
+      currency:admission?.currency || event.currency,
+      capacity:admission ? admission.capacity : occurrence.capacity,
+      maxSeatsPerOrder,
+      status:admission?.registrationStatus || occurrence.status,
       occurrenceId:occurrence.id,
+      admissionOptionId:admission?.id || null,
     };
 
-    const isFree = event.priceCents <= 0;
+    const isFree = bookingEvent.priceCents <= 0;
 
     if (!isFree && !eventsSquareConfigured(env)) {
       return errorResponse("Ticket checkout is not configured yet.", 503);
@@ -1503,14 +1622,16 @@ export async function handleEventCheckout(request, env, slug) {
 
     // Capacity guard against paid tickets plus active pending Square holds.
     // The scheduled reaper clears abandoned pending holds after the hold window.
-    const stats = await ticketStats(db, event.id, occurrence.id);
-    const seatsRemaining = occurrence.capacity > 0
-      ? Math.max(0, occurrence.capacity - stats.paidSeats - stats.pendingSeats)
+    const stats = await ticketStats(db, event.id, occurrence.id, admission?.id || null);
+    const capacity = bookingEvent.capacity;
+    const hasCapacity = capacity !== null && capacity > 0;
+    const seatsRemaining = hasCapacity
+      ? Math.max(0, capacity - stats.paidSeats - stats.pendingSeats)
       : Number.POSITIVE_INFINITY;
-    if (occurrence.capacity > 0 && seatsRemaining <= 0) {
+    if (hasCapacity && seatsRemaining <= 0) {
       return errorResponse("This event is sold out.", 409, { soldOut: true });
     }
-    if (occurrence.capacity > 0 && seats > seatsRemaining) {
+    if (hasCapacity && seats > seatsRemaining) {
       return errorResponse(
         `Only ${seatsRemaining} ${seatsRemaining === 1 ? "seat" : "seats"} remain.`,
         409,
@@ -1518,7 +1639,7 @@ export async function handleEventCheckout(request, env, slug) {
       );
     }
 
-    const amountCents = isFree ? 0 : event.priceCents * seats;
+    const amountCents = isFree ? 0 : bookingEvent.priceCents * seats;
     const ticketId = crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -1526,8 +1647,9 @@ export async function handleEventCheckout(request, env, slug) {
       id: ticketId,
       seats,
       amountCents,
-      currency: event.currency,
+      currency: bookingEvent.currency,
       occurrenceId: occurrence.id,
+      admissionOptionId:admission?.id || null,
       ...profile,
     };
 
@@ -1537,13 +1659,13 @@ export async function handleEventCheckout(request, env, slug) {
       await db
         .prepare(
           `INSERT INTO event_tickets (
-            id, event_id, occurrence_id, contact_name, contact_email, contact_phone, seats,
+            id, event_id, occurrence_id, admission_option_id, contact_name, contact_email, contact_phone, seats,
             amount_cents, currency, status, preferred_name, pronouns, instagram,
             preferred_contact_method, referral_source, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
-          ticketId, event.id, occurrence.id, name, email, phone, seats, amountCents, event.currency,
+          ticketId, event.id, occurrence.id, admission?.id || null, name, email, phone, seats, amountCents, bookingEvent.currency,
           profile.preferredName, profile.pronouns, profile.instagram,
           profile.preferredContactMethod, profile.referralSource, now, now
         )
@@ -1583,22 +1705,23 @@ export async function handleEventCheckout(request, env, slug) {
     await db
       .prepare(
           `INSERT INTO event_tickets (
-            id, event_id, occurrence_id, contact_name, contact_email, contact_phone, seats,
+            id, event_id, occurrence_id, admission_option_id, contact_name, contact_email, contact_phone, seats,
             amount_cents, currency, status, square_order_id,
             square_payment_link_id, square_checkout_url, preferred_name, pronouns,
             instagram, preferred_contact_method, referral_source, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         ticketId,
         event.id,
         occurrence.id,
+        admission?.id || null,
         name,
         email,
         phone,
         seats,
         amountCents,
-        event.currency,
+        bookingEvent.currency,
         paymentLink.order_id || null,
         paymentLink.id || null,
         paymentLink.url || null,
@@ -1921,6 +2044,9 @@ async function recordEventSubmission(db, env, request, {
       ticket_id: ticket.id,
       occurrence_id: event.occurrenceId || ticket.occurrenceId || "",
       occurrence_starts_at: event.startsAt || "",
+      admission_option_id: event.admissionOptionId || ticket.admissionOptionId || "",
+      admission_title: event.admissionTitle || "",
+      attendance_mode: event.admissionMode || "in_person",
       preferred_name: profile.preferredName || "",
       pronouns: profile.pronouns || "",
       instagram: profile.instagram || "",
@@ -1959,12 +2085,15 @@ export async function handleEventTicketStatus(request, env, ticketId) {
     const db = requireEventsDb(env);
     const row = await db
       .prepare(
-        `SELECT t.*, e.title AS event_title, e.slug AS event_slug,
-                COALESCE(o.starts_at,e.starts_at) AS event_starts_at,
-                COALESCE(NULLIF(o.location,''),e.location) AS event_location
+        `SELECT t.*, e.slug AS event_slug,
+                CASE WHEN a.id IS NULL THEN e.title ELSE e.title||' — '||a.title END AS event_title,
+                COALESCE(a.starts_at,o.starts_at,e.starts_at) AS event_starts_at,
+                COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS event_location,
+                a.title AS admission_title,a.attendance_mode AS admission_mode
          FROM event_tickets t
          JOIN events e ON e.id = t.event_id
          LEFT JOIN event_occurrences o ON o.id=t.occurrence_id
+         LEFT JOIN event_admission_options a ON a.id=t.admission_option_id
          WHERE t.id = ?`
       )
       .bind(ticketId)
@@ -1998,6 +2127,8 @@ export async function handleEventTicketStatus(request, env, ticketId) {
         eventSlug: row.event_slug,
         eventStartsAt: row.event_starts_at,
         eventLocation: row.event_location,
+        admissionTitle:row.admission_title || "",
+        attendanceMode:row.admission_mode || "in_person",
         contactName: row.contact_name,
         contactEmail: row.contact_email,
       },
@@ -2522,6 +2653,7 @@ export async function handleAdminEventsList(request, env) {
       const event = normalizeEvent(row);
       const stats = await eventStats(db, event.id);
       const occurrences = await eventOccurrencesWithStats(db, event);
+      const admissionOptions = await eventAdmissionOptionsWithStats(db, event);
       const primary = nextEventOccurrence(occurrences);
       events.push({
         ...event,
@@ -2530,6 +2662,8 @@ export async function handleAdminEventsList(request, env) {
         isRecurring:event.isRecurring || occurrences.length > 1,
         occurrences,
         occurrenceCount:occurrences.length,
+        admissionOptions,
+        admissionOptionCount:admissionOptions.length,
         startsAt:primary?.startsAt || event.startsAt,
         endsAt:primary?.endsAt || event.endsAt,
         seatsRemaining:primary
@@ -2578,6 +2712,88 @@ function occurrenceInputs(body, defaults = {}) {
       sortOrder:index,
     };
   });
+}
+
+function admissionOptionInputs(body, event) {
+  if (!Array.isArray(body.admissionOptions)) return null;
+  return body.admissionOptions.map((input, index) => {
+    const id = asString(input?.id);
+    if (!id) throw new Error(`Admission option ${index + 1} is missing its permanent id.`);
+    const startsAt = asString(input?.startsAt || input?.starts_at);
+    if (!startsAt || !Number.isFinite(Date.parse(startsAt))) {
+      throw new Error(`Admission option ${index + 1} needs a valid start time.`);
+    }
+    const endsAt = asString(input?.endsAt || input?.ends_at) || null;
+    if (endsAt && (!Number.isFinite(Date.parse(endsAt)) || Date.parse(endsAt) < Date.parse(startsAt))) {
+      throw new Error(`Admission option ${index + 1} needs an end time after its start.`);
+    }
+    const registrationStatus = asString(input?.registrationStatus || input?.registration_status || "closed");
+    if (!["open", "closed", "cancelled"].includes(registrationStatus)) {
+      throw new Error(`Admission option ${index + 1} has an invalid registration state.`);
+    }
+    const admissionKind = asString(input?.admissionKind || input?.admission_kind || "rsvp");
+    if (!["rsvp", "ticket", "queue"].includes(admissionKind)) {
+      throw new Error(`Admission option ${index + 1} has an invalid admission kind.`);
+    }
+    const attendanceMode = asString(input?.attendanceMode || input?.attendance_mode || "in_person");
+    if (!["in_person", "virtual"].includes(attendanceMode)) {
+      throw new Error(`Admission option ${index + 1} has an invalid attendance mode.`);
+    }
+    const capacityValue = input?.capacity;
+    const capacity = capacityValue === null || capacityValue === undefined || asString(capacityValue) === ""
+      ? null
+      : Math.max(0, Math.floor(Number(capacityValue) || 0));
+    return {
+      id,
+      occurrenceId:asString(input?.occurrenceId || input?.occurrence_id) || null,
+      title:asString(input?.title),
+      description:asString(input?.description),
+      admissionKind,
+      attendanceMode,
+      startsAt,
+      endsAt,
+      location:asString(input?.location || event.location),
+      priceCents:Math.max(0, Math.floor(Number(input?.priceCents ?? input?.price_cents) || 0)),
+      currency:asString(input?.currency).toUpperCase() || "USD",
+      capacity,
+      maxSeatsPerOrder:Math.max(1, Math.floor(Number(input?.maxSeatsPerOrder ?? input?.max_seats_per_order) || 1)),
+      registrationStatus,
+      reminderEnabled:input?.reminderEnabled !== false && input?.reminder_enabled !== 0,
+      sortOrder:index,
+    };
+  });
+}
+
+async function updateEventAdmissionOptions(db, event, options, now) {
+  const existingResult = await db.prepare(
+    "SELECT id FROM event_admission_options WHERE event_id=?"
+  ).bind(event.id).all();
+  const existingIds = new Set((existingResult.results || []).map((row) => row.id));
+  if (options.length !== existingIds.size) {
+    throw new Error("Admission options cannot be added or removed from this editor yet.");
+  }
+  for (const option of options) {
+    if (!existingIds.has(option.id)) throw new Error("An admission option does not belong to this event.");
+    if (option.occurrenceId) {
+      const occurrence = await db.prepare(
+        "SELECT id FROM event_occurrences WHERE id=? AND event_id=?"
+      ).bind(option.occurrenceId, event.id).first();
+      if (!occurrence) throw new Error("An admission option references a date outside this event.");
+    }
+    await db.prepare(
+      `UPDATE event_admission_options SET
+         occurrence_id=?,title=?,description=?,admission_kind=?,attendance_mode=?,
+         starts_at=?,ends_at=?,location=?,price_cents=?,currency=?,capacity=?,
+         max_seats_per_order=?,registration_status=?,reminder_enabled=?,sort_order=?,updated_at=?
+       WHERE id=? AND event_id=?`
+    ).bind(
+      option.occurrenceId, option.title, option.description, option.admissionKind,
+      option.attendanceMode, option.startsAt, option.endsAt, option.location,
+      option.priceCents, option.currency, option.capacity, option.maxSeatsPerOrder,
+      option.registrationStatus, option.reminderEnabled ? 1 : 0, option.sortOrder,
+      now, option.id, event.id,
+    ).run();
+  }
 }
 
 async function replaceEventOccurrences(db, event, occurrences, now) {
@@ -2772,6 +2988,14 @@ export async function handleAdminEventUpdate(request, env, slug) {
         return errorResponse(error.message, 400);
       }
     }
+    let admissionOptions = null;
+    if (Array.isArray(body.admissionOptions)) {
+      try {
+        admissionOptions = admissionOptionInputs(body, event);
+      } catch (error) {
+        return errorResponse(error.message, 400);
+      }
+    }
 
     // Only update the fields actually provided.
     const fields = [];
@@ -2813,23 +3037,30 @@ export async function handleAdminEventUpdate(request, env, slug) {
       setField("is_recurring", body.isRecurring ? 1 : 0);
     }
 
-    if (!fields.length) return errorResponse("No fields to update.", 400);
+    if (!fields.length && admissionOptions === null) return errorResponse("No fields to update.", 400);
 
-    setField("updated_at", new Date().toISOString());
-    values.push(event.id);
-    await db
-      .prepare(`UPDATE events SET ${fields.join(", ")} WHERE id = ?`)
-      .bind(...values)
-      .run();
+    const updatedAt = new Date().toISOString();
+    if (fields.length) {
+      setField("updated_at", updatedAt);
+      values.push(event.id);
+      await db
+        .prepare(`UPDATE events SET ${fields.join(", ")} WHERE id = ?`)
+        .bind(...values)
+        .run();
+    }
 
     if (occurrences !== null) {
-      await replaceEventOccurrences(db, event, occurrences, new Date().toISOString());
+      await replaceEventOccurrences(db, event, occurrences, updatedAt);
+    }
+    if (admissionOptions !== null) {
+      await updateEventAdmissionOptions(db, event, admissionOptions, updatedAt);
     }
 
     const updated = await getEventBySlug(db, slug);
     await syncEventContentEntity(db, updated);
     const stats = await eventStats(db, updated.id);
     const occurrenceViews = await eventOccurrencesWithStats(db, updated);
+    const admissionOptionViews = await eventAdmissionOptionsWithStats(db, updated);
     return json({
       event: {
         ...updated,
@@ -2838,6 +3069,7 @@ export async function handleAdminEventUpdate(request, env, slug) {
         seatsRemaining: Math.max(0, updated.capacity - stats.paidSeats - stats.pendingSeats),
         isRecurring:updated.isRecurring || occurrenceViews.length > 1,
         occurrences:occurrenceViews,
+        admissionOptions:admissionOptionViews,
       },
     });
   } catch (error) {

@@ -2948,8 +2948,18 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
   let event = null;
   if (db) {
     event = await db
-      .prepare("SELECT title, slug, starts_at, location FROM events WHERE id = ?")
-      .bind(ticketRow.event_id)
+      .prepare(
+        `SELECT
+           CASE WHEN a.id IS NULL THEN e.title ELSE e.title||' — '||a.title END AS title,
+           e.slug,
+           COALESCE(a.starts_at,o.starts_at,e.starts_at) AS starts_at,
+           COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS location
+         FROM events e
+         LEFT JOIN event_occurrences o ON o.id=?
+         LEFT JOIN event_admission_options a ON a.id=?
+         WHERE e.id=?`
+      )
+      .bind(ticketRow.occurrence_id || null, ticketRow.admission_option_id || null, ticketRow.event_id)
       .first()
       .catch(() => null);
   }
@@ -2997,8 +3007,17 @@ export async function notifyEventTicketCancelled(env, request, ticketRow, option
   let event = null;
   if (db) {
     event = await db
-      .prepare("SELECT title, starts_at, location FROM events WHERE id = ?")
-      .bind(ticketRow.event_id)
+      .prepare(
+        `SELECT
+           CASE WHEN a.id IS NULL THEN e.title ELSE e.title||' — '||a.title END AS title,
+           COALESCE(a.starts_at,o.starts_at,e.starts_at) AS starts_at,
+           COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS location
+         FROM events e
+         LEFT JOIN event_occurrences o ON o.id=?
+         LEFT JOIN event_admission_options a ON a.id=?
+         WHERE e.id=?`
+      )
+      .bind(ticketRow.occurrence_id || null, ticketRow.admission_option_id || null, ticketRow.event_id)
       .first()
       .catch(() => null);
   }
@@ -3073,15 +3092,20 @@ export async function sendDueEventTicketReminders(env) {
   try {
     const result = await db
       .prepare(
-        `SELECT t.*, e.title AS event_title, e.starts_at AS event_starts_at,
-                e.location AS event_location
+        `SELECT t.*,
+                CASE WHEN a.id IS NULL THEN e.title ELSE e.title||' — '||a.title END AS event_title,
+                COALESCE(a.starts_at,o.starts_at,e.starts_at) AS event_starts_at,
+                COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS event_location
          FROM event_tickets t
          JOIN events e ON e.id = t.event_id
+         LEFT JOIN event_occurrences o ON o.id=t.occurrence_id
+         LEFT JOIN event_admission_options a ON a.id=t.admission_option_id
          WHERE t.status = 'paid'
            AND t.reminder_sent_at IS NULL
-           AND e.starts_at >= ?
-           AND e.starts_at < ?
-         ORDER BY e.starts_at ASC
+           AND COALESCE(a.reminder_enabled,1)=1
+           AND COALESCE(a.starts_at,o.starts_at,e.starts_at) >= ?
+           AND COALESCE(a.starts_at,o.starts_at,e.starts_at) < ?
+         ORDER BY COALESCE(a.starts_at,o.starts_at,e.starts_at) ASC
          LIMIT 100`
       )
       .bind(from, to)

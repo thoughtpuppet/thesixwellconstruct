@@ -2,8 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Solehman's New Year - the six.well construct</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e0e">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="SOLEHMAN'S NEW YEAR I — an annual showcase of the work made across the creative ecosystem.">
+<title>SOLEHMAN'S NEW YEAR I - the six.well construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
@@ -12,40 +15,197 @@
 <link rel="stylesheet" href="/css/venture-pages.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/hero.css">
+<link rel="stylesheet" href="/css/forms.css">
 <style>
-  :root { --venture-color:var(--color-events); --venture-accent:var(--color-events); --venture-dim:var(--color-events-dim); --venture-wash:rgba(0,93,37,0.1); }
+  :root {
+    --venture-color:var(--color-events);
+    --venture-accent:var(--color-events);
+    --venture-dim:var(--color-events-dim);
+    --venture-wash:rgba(0,93,37,.1);
+  }
+  html,body,.venture-page,.venture-shell { background:var(--color-bg); }
+  .construct-breadcrumb { margin-bottom:clamp(34px,5vw,64px); }
+  .event-state {
+    display:inline-flex;
+    width:max-content;
+    border:5px solid var(--venture-dim);
+    padding:8px 10px;
+    color:var(--venture-accent);
+    font-family:var(--font-display);
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+  }
+  .event-state[data-state="published"] { border-color:var(--venture-accent); }
+  .event-overview { display:grid; grid-template-columns:minmax(0,1fr) minmax(280px,.7fr); gap:clamp(28px,5vw,72px); align-items:start; }
+  .location-block { border:5px solid var(--ring-faint); padding:clamp(20px,3vw,32px); }
+  .location-name { display:block; color:var(--text); font-family:var(--font-display); font-size:clamp(22px,3vw,34px); font-weight:900; line-height:1; text-transform:none; }
+  .location-area { display:block; margin-top:10px; color:var(--venture-accent); font-family:var(--font-serif); font-size:13px; letter-spacing:.08em; text-transform:uppercase; }
+  .location-address { display:block; margin-top:16px; color:var(--text-dim); font-family:var(--font-serif); font-size:10px; letter-spacing:.04em; line-height:1.5; }
+  .overview-note { color:var(--text-muted); font-size:14px; line-height:1.75; }
+  .program-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .program-day { min-width:0; border:5px solid var(--ring-faint); padding:clamp(20px,3vw,32px); }
+  .program-day--bonus { border-color:var(--venture-dim); }
+  .day-label { color:var(--venture-accent); font-family:var(--font-display); font-size:12px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+  .day-title { margin-top:10px; color:var(--text); font-family:var(--font-display); font-size:clamp(27px,4vw,48px); font-weight:900; line-height:.95; text-transform:uppercase; }
+  .day-hours { display:block; margin-top:12px; color:var(--text-dim); font-family:var(--font-serif); font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
+  .session-list { display:grid; gap:0; margin-top:24px; }
+  .session { border-top:5px solid var(--ring-faint); padding:18px 0; }
+  .session:last-child { padding-bottom:0; }
+  .session-time { display:block; color:var(--venture-accent); font-family:var(--font-display); font-size:11px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+  .session h3 { margin-top:8px; color:var(--text); font-family:var(--font-display); font-size:18px; font-weight:900; line-height:1.1; text-transform:uppercase; }
+  .session p { margin-top:8px; color:var(--text-muted); font-size:13px; line-height:1.7; }
+  .session strong { color:var(--venture-accent); }
+  .admission-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .admission-card { display:grid; grid-template-rows:auto auto 1fr auto; min-width:0; border:5px solid var(--ring-faint); padding:20px; }
+  .admission-card[data-open="true"] { border-color:var(--venture-dim); }
+  .admission-card.is-selected { border-color:var(--venture-accent); }
+  .admission-meta { display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px; color:var(--venture-accent); font-family:var(--font-display); font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+  .admission-card h3 { margin-top:18px; color:var(--text); font-family:var(--font-display); font-size:20px; font-weight:900; line-height:1.08; text-transform:uppercase; }
+  .admission-card p { margin:12px 0 20px; color:var(--text-muted); font-size:13px; line-height:1.7; }
+  .admission-action,.register-submit { min-height:50px; border:5px solid var(--venture-accent); padding:10px 14px; color:var(--text); font-family:var(--font-display); font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; cursor:pointer; }
+  .admission-action:hover:not(:disabled),.admission-action:focus-visible:not(:disabled),.register-submit:hover:not(:disabled),.register-submit:focus-visible:not(:disabled) { background:var(--venture-accent); color:var(--color-bg); outline:0; }
+  .admission-action:disabled,.register-submit:disabled { border-color:var(--ring-faint); color:var(--text-dim); cursor:not-allowed; }
+  .registration-layout { display:grid; grid-template-columns:minmax(0,.72fr) minmax(320px,1fr); gap:clamp(28px,5vw,72px); align-items:start; }
+  .registration-copy { display:grid; gap:18px; }
+  .registration-copy p { color:var(--text-muted); font-size:14px; line-height:1.75; }
+  .register-card { border:5px solid var(--ring-faint); padding:clamp(20px,3vw,30px); }
+  .register-card form { display:grid; gap:14px; }
+  .register-title { color:var(--venture-accent); font-family:var(--font-display); font-size:12px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+  .form-status { min-height:1.5em; }
+  .form-status[data-state="ok"] { color:var(--venture-accent); }
+  .form-status[data-state="error"] { color:var(--color-error,#ef8b72); }
+  .honeypot { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+  @media (max-width:900px) {
+    .event-overview,.registration-layout { grid-template-columns:minmax(0,1fr); }
+  }
+  @media (max-width:700px) {
+    .program-grid,.admission-grid { grid-template-columns:minmax(0,1fr); gap:12px; }
+    .location-block,.program-day,.admission-card,.register-card { padding:18px; }
+  }
 </style>
 </head>
 <body class="venture-page" data-venture="events">
-  <div class="venture-grain" aria-hidden="true"></div>
+  <header class="top"></header>
   <main class="venture-shell entrance-fade">
+    <nav class="construct-breadcrumb" aria-label="Breadcrumb"><a href="/home/">construct</a><span aria-hidden="true">/</span><a href="/events/">events</a><span aria-hidden="true">/</span><span>solehman's new year i</span></nav>
+
     <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="page-title">
       <div>
-        <span class="venture-kicker">annual ritual</span>
-        <h1 class="venture-title hero-title" id="page-title">Solehman's New Year.</h1>
+        <span class="venture-kicker">annual showcase · edition i</span>
+        <h1 class="venture-title hero-title" id="page-title">SOLEHMAN'S NEW YEAR I.</h1>
       </div>
       <div class="hero-copy">
-        <p class="hero-lede hero-descriptor">A future annual gathering for closing a cycle, naming the next one, and turning the construct's year into a room.</p>
-        <p class="hero-note">Details, date, capacity, and booking state will route through the public events board once the next session is ready.</p>
-        <div class="hero-actions">
-          <a class="venture-link" href="/events/#active">calendar</a>
-          <a class="venture-link" href="/archive/events/">event archive</a>
-        </div>
+        <p class="hero-descriptor">An annual showcase presenting the work made across the creative ecosystem during the year.</p>
+        <p class="hero-note">October 15–17, 2027 · bonus viewing October 18</p>
+        <span class="event-state" id="eventState" data-state="draft">Draft · RSVP and sales not public</span>
+        <div class="hero-actions"><a class="venture-link" href="#program">program</a><a class="venture-link" href="#admission">RSVP + tickets</a></div>
       </div>
     </section>
-    <section class="section">
+
+    <section class="section" aria-labelledby="overview-title">
       <header class="section-head">
-        <div><span class="section-kicker">shape</span><h2 class="section-title">Cycle Room</h2></div>
-        <p class="section-copy">This route holds the named event container so it can be linked from the homepage before the live booking card opens.</p>
+        <div><span class="section-kicker">the room</span><h2 class="section-title" id="overview-title">One year, made visible.</h2></div>
+        <p class="section-copy">The exhibition, fashion, tattooing, conversation, tools, and objects meet in one annual threshold: a record of the year completed and the next cycle beginning.</p>
       </header>
-      <div class="path-grid">
-        <article class="path-card"><h3>Ritual</h3><p>A yearly threshold for intention, release, witness, and record.</p></article>
-        <article class="path-card"><h3>Artifacts</h3><p>Tickets, recaps, photos, readings, or objects can become part of the archive after the room happens.</p></article>
-        <article class="path-card"><h3>Calendar</h3><p>The public board remains the source of truth for date and seat availability.</p></article>
+      <div class="event-overview">
+        <p class="overview-note">The main program runs Friday through Sunday. Art and new merch remain available for viewing from 11 AM–11 PM on Saturday and Sunday, followed by a bonus Monday viewing day for anyone who missed the weekend.</p>
+        <address class="location-block">
+          <span class="location-name">art.pill Tattoo House</span>
+          <span class="location-area">Castleberry Hill, Atlanta</span>
+          <span class="location-address">364 Nelson Street SW<br>Atlanta, GA 30313</span>
+        </address>
       </div>
     </section>
-    <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">events</a><a href="/home/">return to construct</a></div></footer>
+
+    <section class="section" id="program" aria-labelledby="program-title">
+      <header class="section-head">
+        <div><span class="section-kicker">october 15–18 · 2027</span><h2 class="section-title" id="program-title">Program.</h2></div>
+        <p class="section-copy">Three programmed days and one additional open-studio viewing day. Each RSVP or ticket follows its own time and reminder.</p>
+      </header>
+      <div class="program-grid">
+        <article class="program-day">
+          <span class="day-label">Day 1 · Friday, October 15</span>
+          <h3 class="day-title">Opening.</h3>
+          <span class="day-hours">7 PM–11 PM · free entry</span>
+          <div class="session-list">
+            <div class="session"><span class="session-time">7 PM</span><h3>Exhibition Opening</h3><p>The annual exhibition opens with the year's work gathered into the studio.</p></div>
+            <div class="session"><span class="session-time">8:30 PM</span><h3>Fashion Show</h3><p>A live presentation of new merch made during the year.</p></div>
+          </div>
+        </article>
+        <article class="program-day">
+          <span class="day-label">Day 2 · Saturday, October 16</span>
+          <h3 class="day-title">Tattooing.</h3>
+          <span class="day-hours">studio viewing · 11 AM–11 PM</span>
+          <div class="session-list">
+            <div class="session"><span class="session-time">11 AM–2 PM</span><h3>Public Live Tattoo</h3><p>Watch a live tattoo and ask questions in person or virtually. <strong>12 in-person seats · unlimited virtual access.</strong></p></div>
+            <div class="session"><span class="session-time">6 PM–11 PM</span><h3>Tattoo Party</h3><p>Ten first-come places for $60 small tattoos by Saiel Solehman. Prepayment saves each person's place in line.</p></div>
+          </div>
+        </article>
+        <article class="program-day">
+          <span class="day-label">Day 3 · Sunday, October 17</span>
+          <h3 class="day-title">Ecosystem.</h3>
+          <span class="day-hours">studio viewing · 11 AM–11 PM · free entry</span>
+          <div class="session-list">
+            <div class="session"><span class="session-time">3 PM</span><h3>Artist Talk</h3><p>A talk about the year of work, followed by a showing of the website and tools forming the creative ecosystem.</p></div>
+            <div class="session"><span class="session-time">Closing</span><h3>The Cycle Ends</h3><p>The exhibition remains open through 11 PM for the final night of the main program.</p></div>
+          </div>
+        </article>
+        <article class="program-day program-day--bonus">
+          <span class="day-label">Bonus · Monday, October 18</span>
+          <h3 class="day-title">Another look.</h3>
+          <span class="day-hours">11 AM–11 PM · free entry</span>
+          <div class="session-list">
+            <div class="session"><span class="session-time">final viewing day</span><h3>Open Studio</h3><p>A bonus day to view the exhibition and new merch for anyone who missed the weekend.</p></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="admission" aria-labelledby="admission-title">
+      <header class="section-head">
+        <div><span class="section-kicker">choose how you enter</span><h2 class="section-title" id="admission-title">RSVP + tickets.</h2></div>
+        <p class="section-copy">Free sessions use RSVP registration. Paid admissions remain closed until sales are deliberately opened. Every confirmed registration receives its own calendar link and reminder.</p>
+      </header>
+      <div class="admission-grid" id="admissionGrid">
+        <article class="admission-card" data-admission="exhibition-opening"><div class="admission-meta"><span>Friday · 7 PM</span><span>Free RSVP</span></div><h3>Exhibition Opening + Fashion Show</h3><p>Opening-night entry, including the 8:30 PM fashion show.</p><button class="admission-action" type="button" disabled>Draft</button></article>
+        <article class="admission-card" data-admission="saturday-open-studio"><div class="admission-meta"><span>Saturday · 11 AM</span><span>Free RSVP</span></div><h3>Saturday Open Studio Viewing</h3><p>General viewing access. This does not include live-tattoo audience admission or a Tattoo Party place.</p><button class="admission-action" type="button" disabled>Draft</button></article>
+        <article class="admission-card" data-admission="live-tattoo-in-person"><div class="admission-meta"><span>Saturday · 11 AM</span><span>$100 · 12 seats</span></div><h3>Live Tattoo — In Person</h3><p>Watch in the studio and ask questions during the tattoo.</p><button class="admission-action" type="button" disabled>Sales closed</button></article>
+        <article class="admission-card" data-admission="live-tattoo-virtual"><div class="admission-meta"><span>Saturday · 11 AM</span><span>$50 · unlimited</span></div><h3>Live Tattoo — Virtual</h3><p>Watch online and submit questions during the live event.</p><button class="admission-action" type="button" disabled>Sales closed</button></article>
+        <article class="admission-card" data-admission="tattoo-party"><div class="admission-meta"><span>Saturday · 6 PM</span><span>$60 · 10 places</span></div><h3>Tattoo Party</h3><p>One prepaid place in the first-come tattoo line.</p><button class="admission-action" type="button" disabled>Sales closed</button></article>
+        <article class="admission-card" data-admission="sunday-open-studio"><div class="admission-meta"><span>Sunday · 11 AM</span><span>Free RSVP</span></div><h3>Sunday Open Studio Viewing</h3><p>General viewing access throughout the final programmed day.</p><button class="admission-action" type="button" disabled>Draft</button></article>
+        <article class="admission-card" data-admission="artist-talk-and-closing"><div class="admission-meta"><span>Sunday · 3 PM</span><span>Free RSVP</span></div><h3>Artist Talk + Ecosystem Showing + Closing</h3><p>The artist talk, website and tools presentation, and closing program.</p><button class="admission-action" type="button" disabled>Draft</button></article>
+        <article class="admission-card" data-admission="bonus-open-studio"><div class="admission-meta"><span>Monday · 11 AM</span><span>Free RSVP</span></div><h3>Bonus Open Studio Viewing</h3><p>The final viewing day for anyone who missed the weekend.</p><button class="admission-action" type="button" disabled>Draft</button></article>
+      </div>
+    </section>
+
+    <section class="section" id="register" aria-labelledby="register-title">
+      <div class="registration-layout">
+        <div class="registration-copy"><span class="section-kicker">reminders follow the session</span><h2 class="section-title" id="register-title">Register.</h2><p>Select one RSVP or ticket option. Free RSVPs are confirmed immediately when the Event is published. Paid options will continue to read “Sales closed” until checkout is opened.</p></div>
+        <article class="register-card">
+          <form class="public-form" id="registrationForm" novalidate>
+            <span class="register-title">Event admission</span>
+            <div class="field"><label for="admissionOption">RSVP or ticket</label><select id="admissionOption" name="admissionOptionId" required disabled><option value="">Event is in draft</option></select></div>
+            <div class="field"><label for="registrationName">Your name</label><input id="registrationName" name="name" autocomplete="name" required></div>
+            <div class="field"><label for="registrationEmail">Email</label><input id="registrationEmail" name="email" type="email" autocomplete="email" required></div>
+            <div class="field"><label for="registrationPhone">Phone</label><input id="registrationPhone" name="phone" type="tel" autocomplete="tel" required></div>
+            <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="newsletter_consent" value="yes"><span class="form-check__label">Send me The Six.Well newsletter by email (optional).</span></label>
+            <input class="honeypot" type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true">
+            <button class="register-submit" id="registerSubmit" type="submit" disabled>Draft · registration unavailable</button>
+            <p class="form-message form-status" id="registrationStatus" aria-live="polite">This Event is saved as a draft. RSVP functionality is ready but not public.</p>
+          </form>
+        </article>
+      </div>
+    </section>
+
+    <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">events</a><a href="/archive/events/">event archive</a><a href="/home/">return to construct</a></div></footer>
   </main>
+  <script src="/js/solehmans-new-year.js?v=1"></script>
   <script src="/js/entity-page-connections.js?v=1"></script>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+  <script src="/js/construct-wayfinding.js"></script>
 </body>
 </html>

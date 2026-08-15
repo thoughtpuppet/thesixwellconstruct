@@ -10,10 +10,12 @@ import {
   handleAdminEventUpdate,
   handleEventCheckout,
   handleEventContext,
+  handleEventTicketCalendar,
   handleEventOpenMicSignup,
   handleEventWaitlist,
   handleEventsList,
 } from "../functions/api/events/_lib.js";
+import { sendDueEventTicketReminders } from "../functions/api/notifications/_lib.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TOKEN = "events-publication-contract-token";
@@ -94,7 +96,7 @@ test("0121 backfills dated events and gives SS&F a Studio-managed announced reco
 });
 
 test("public APIs expose Announced details but block every public action", async () => {
-  const database = databaseThrough("0121_event_occurrences.sql");
+  const database = databaseThrough();
   database.prepare("UPDATE events SET publication_state='announced',status='open' WHERE slug='signal-symbol'").run();
   const env = runtime(database);
 
@@ -117,7 +119,7 @@ test("public APIs expose Announced details but block every public action", async
 });
 
 test("admin event creation defaults to Draft and Closed", async () => {
-  const database = databaseThrough("0121_event_occurrences.sql");
+  const database = databaseThrough();
   const response = await handleAdminEventCreate(request("/api/admin/events", {
     method:"POST",
     admin:true,
@@ -145,7 +147,7 @@ test("admin event creation defaults to Draft and Closed", async () => {
 });
 
 test("recurring event dates keep independent operations, capacity, and reservations", async () => {
-  const database = databaseThrough("0121_event_occurrences.sql");
+  const database = databaseThrough();
   const env = runtime(database);
   const createResponse = await handleAdminEventCreate(request("/api/admin/events", {
     method:"POST",
@@ -193,6 +195,137 @@ test("recurring event dates keep independent operations, capacity, and reservati
   ]);
 });
 
+test("0127 creates SOLEHMAN'S NEW YEAR I as one draft event with session-specific admission", async () => {
+  const database = databaseThrough();
+  const event = database.prepare(
+    "SELECT title,publication_state,status,starts_at,ends_at,is_recurring FROM events WHERE slug='solehmans-new-year'"
+  ).get();
+  assert.deepEqual({ ...event }, {
+    title:"SOLEHMAN'S NEW YEAR I",
+    publication_state:"draft",
+    status:"closed",
+    starts_at:"2027-10-15T19:00:00-04:00",
+    ends_at:"2027-10-18T23:00:00-04:00",
+    is_recurring:1,
+  });
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM event_occurrences WHERE event_id='evt_solehmans_new_year_i'").get().count, 4);
+
+  const options = database.prepare(
+    `SELECT slug,price_cents,capacity,registration_status,attendance_mode
+     FROM event_admission_options WHERE event_id='evt_solehmans_new_year_i'
+     ORDER BY sort_order`
+  ).all();
+  assert.equal(options.length, 8);
+  assert.deepEqual({ ...options.find((option) => option.slug === "live-tattoo-in-person") }, {
+    slug:"live-tattoo-in-person", price_cents:10000, capacity:12, registration_status:"closed", attendance_mode:"in_person",
+  });
+  assert.deepEqual({ ...options.find((option) => option.slug === "live-tattoo-virtual") }, {
+    slug:"live-tattoo-virtual", price_cents:5000, capacity:null, registration_status:"closed", attendance_mode:"virtual",
+  });
+  assert.deepEqual({ ...options.find((option) => option.slug === "tattoo-party") }, {
+    slug:"tattoo-party", price_cents:6000, capacity:10, registration_status:"closed", attendance_mode:"in_person",
+  });
+  assert.equal(options.filter((option) => option.price_cents === 0 && option.registration_status === "open").length, 5);
+  assert.deepEqual(
+    { ...database.prepare("SELECT visibility,search_visibility FROM content_entities WHERE id='evt_solehmans_new_year_i'").get() },
+    { visibility:"internal", search_visibility:0 },
+  );
+
+  database.prepare("UPDATE events SET publication_state='published' WHERE id='evt_solehmans_new_year_i'").run();
+  const env = runtime(database);
+  const contextResponse = await handleEventContext(
+    request("/api/events/solehmans-new-year/context"),
+    env,
+    "solehmans-new-year",
+  );
+  assert.equal(contextResponse.status, 200, await contextResponse.clone().text());
+  const context = await contextResponse.json();
+  assert.equal(context.event.admissionOptions.length, 8);
+  assert.equal(context.event.registrationOpen, true);
+  assert.equal(context.event.paidSalesOpen, false);
+
+  const revisedAdmissions = context.event.admissionOptions.map((option) => ({
+    ...option,
+    startsAt:option.id === "adm_sny_i_artist_talk" ? "2027-10-17T16:00:00-04:00" : option.startsAt,
+  }));
+  const admissionUpdate = await handleAdminEventUpdate(request("/api/admin/events/solehmans-new-year", {
+    method:"PATCH",
+    admin:true,
+    body:{ admissionOptions:revisedAdmissions },
+  }), env, "solehmans-new-year");
+  assert.equal(admissionUpdate.status, 200, await admissionUpdate.clone().text());
+  assert.equal(
+    database.prepare("SELECT starts_at FROM event_admission_options WHERE id='adm_sny_i_artist_talk'").get().starts_at,
+    "2027-10-17T16:00:00-04:00",
+  );
+
+  const contact = { name:"Annual Guest", email:"annual@example.test", phone:"404-555-0130", seats:1 };
+  const rsvp = await handleEventCheckout(request("/api/events/solehmans-new-year/checkout", {
+    method:"POST",
+    body:{ ...contact, admissionOptionId:"adm_sny_i_artist_talk" },
+  }), env, "solehmans-new-year");
+  assert.equal(rsvp.status, 200, await rsvp.clone().text());
+  const savedRsvp = database.prepare(
+    "SELECT admission_option_id,occurrence_id,amount_cents,status FROM event_tickets WHERE contact_email=?"
+  ).get(contact.email);
+  assert.deepEqual({ ...savedRsvp }, {
+    admission_option_id:"adm_sny_i_artist_talk",
+    occurrence_id:"occ_sny_i_2027_10_17",
+    amount_cents:0,
+    status:"paid",
+  });
+  const calendar = await handleEventTicketCalendar(
+    request("/api/events/tickets/calendar-admission"),
+    env,
+    database.prepare("SELECT id FROM event_tickets WHERE contact_email=?").get(contact.email).id,
+  );
+  assert.equal(calendar.status, 200);
+  const calendarText = await calendar.text();
+  assert.match(calendarText, /SUMMARY:SOLEHMAN'S NEW YEAR I — Artist Talk \+ Creative Ecosystem Showing \+ Closing/);
+  assert.match(calendarText, /DTSTART:20271017T200000Z/);
+
+  const paidClosed = await handleEventCheckout(request("/api/events/solehmans-new-year/checkout", {
+    method:"POST",
+    body:{ ...contact, admissionOptionId:"adm_sny_i_live_in_person" },
+  }), env, "solehmans-new-year");
+  assert.equal(paidClosed.status, 409);
+
+  database.prepare("UPDATE event_admission_options SET registration_status='open' WHERE id='adm_sny_i_live_in_person'").run();
+  const paidWithoutSquare = await handleEventCheckout(request("/api/events/solehmans-new-year/checkout", {
+    method:"POST",
+    body:{ ...contact, admissionOptionId:"adm_sny_i_live_in_person" },
+  }), env, "solehmans-new-year");
+  assert.equal(paidWithoutSquare.status, 503);
+});
+
+test("event reminders follow the selected admission time and title", async () => {
+  const database = databaseThrough();
+  const startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  database.prepare(
+    "UPDATE event_admission_options SET starts_at=?,registration_status='open' WHERE id='adm_sny_i_artist_talk'"
+  ).run(startsAt);
+  database.prepare(
+    `INSERT INTO event_tickets (
+      id,event_id,occurrence_id,admission_option_id,contact_name,contact_email,contact_phone,
+      seats,amount_cents,currency,status,created_at,updated_at
+    ) VALUES ('reminder-admission-ticket','evt_solehmans_new_year_i','occ_sny_i_2027_10_17',
+      'adm_sny_i_artist_talk','Reminder Guest','reminder@example.test','404-555-0199',
+      1,0,'USD','paid',datetime('now'),datetime('now'))`
+  ).run();
+  const sent = [];
+  const result = await sendDueEventTicketReminders({
+    SUBMISSIONS_DB:new LocalD1(database),
+    EMAIL:{ async send(message) { sent.push(message); return { messageId:"event-reminder-1" }; } },
+    PUBLIC_SITE_URL:"https://example.test",
+    NOTIFICATION_FROM_EMAIL:"notifications@example.test",
+  });
+  assert.equal(result.sent, 1);
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].subject, /SOLEHMAN'S NEW YEAR I/);
+  assert.match(sent[0].subject, /Artist Talk/);
+  assert.ok(database.prepare("SELECT reminder_sent_at FROM event_tickets WHERE id='reminder-admission-ticket'").get().reminder_sent_at);
+});
+
 test("Events board contracts retain the shared shell, 5px cards, calendar, and state actions", () => {
   const page = readFileSync(join(ROOT, "events", "index.html"), "utf8");
   const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
@@ -216,4 +349,34 @@ test("SS&F bespoke event page activates the shared entrance transition", () => {
   assert.match(page, /class="venture-shell entrance-fade"/);
   assert.match(page, /<script src="\/js\/transition\.js"><\/script>/);
   assert.match(page, /api\/events\/ss-and-f-live-audience\/context/);
+});
+
+test("SOLEHMAN'S NEW YEAR I page publishes the confirmed program and draft registration states", () => {
+  const page = readFileSync(join(ROOT, "events", "solehmans-new-year", "index.html"), "utf8");
+  const behavior = readFileSync(join(ROOT, "js", "solehmans-new-year.js"), "utf8");
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  for (const value of [
+    "SOLEHMAN'S NEW YEAR I.",
+    "October 15–17, 2027",
+    "bonus viewing October 18",
+    "8:30 PM",
+    "11 AM–2 PM",
+    "$100 · 12 seats",
+    "$50 · unlimited",
+    "$60 · 10 places",
+    "Artist Talk",
+    "364 Nelson Street SW",
+  ]) assert.match(page, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(page, /class="location-address"/);
+  assert.match(page, /class="venture-hero site-hero site-hero--supporting"/);
+  assert.match(page, /class="hero-descriptor"/);
+  assert.match(page, /border:5px solid/);
+  assert.match(page, /id="registrationForm"/);
+  assert.match(page, /Draft · RSVP and sales not public/);
+  assert.match(page, /<script src="\/js\/transition\.js"><\/script>/);
+  assert.match(behavior, /admissionOptionId/);
+  assert.match(behavior, /Confirm RSVP/);
+  assert.match(behavior, /Paid-session sales are still closed/);
+  assert.match(studio, /RSVP \+ ticket options/);
+  assert.match(studio, /collectEventAdmissionOptions/);
 });

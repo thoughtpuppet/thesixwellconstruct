@@ -3029,14 +3029,31 @@ async function createPendingAppointment(
   return { appointment: normalizedAppointment, bookingType: normalizedType };
 }
 
-function requestedPrivateBookingWindowIds(body, tokenContext) {
-  const supplied = Array.isArray(body.availabilityWindowIds)
-    ? body.availabilityWindowIds.map(asString).filter(Boolean)
-    : [];
-  const fallback = asString(body.availabilityWindowId);
-  const ids = supplied.length ? supplied : (fallback ? [fallback] : []);
-  if (!ids.length) return { error: "Choose at least one appointment time." };
-  if (new Set(ids).size !== ids.length) {
+function requestedPrivateBookingSessions(body, tokenContext) {
+  let sessions = [];
+  if (body.sessions !== undefined) {
+    if (!Array.isArray(body.sessions) || !body.sessions.length) {
+      return { error: "Choose at least one appointment time." };
+    }
+    sessions = body.sessions.map((session) => ({
+      bookingTypeId: asString(session?.bookingTypeId),
+      availabilityWindowId: asString(session?.availabilityWindowId),
+    }));
+    if (sessions.some((session) => !session.bookingTypeId || !session.availabilityWindowId)) {
+      return { error: "Each appointment must include a session type and appointment time." };
+    }
+  } else {
+    const supplied = Array.isArray(body.availabilityWindowIds)
+      ? body.availabilityWindowIds.map(asString).filter(Boolean)
+      : [];
+    const fallback = asString(body.availabilityWindowId);
+    const ids = supplied.length ? supplied : (fallback ? [fallback] : []);
+    const bookingTypeId = asString(body.bookingTypeId);
+    sessions = ids.map((availabilityWindowId) => ({ bookingTypeId, availabilityWindowId }));
+  }
+  if (!sessions.length) return { error: "Choose at least one appointment time." };
+  const windowIds = sessions.map((session) => session.availabilityWindowId);
+  if (new Set(windowIds).size !== windowIds.length) {
     return { error: "Each selected appointment time must be unique." };
   }
   const multiEnabled = tokenContext.purpose === "tattoo"
@@ -3046,13 +3063,13 @@ function requestedPrivateBookingWindowIds(body, tokenContext) {
   const maxSessions = multiEnabled
     ? Math.max(2, Math.min(24, Number(tokenContext.token.max_sessions || 2)))
     : 1;
-  if (ids.length > 1 && !multiEnabled) {
+  if (sessions.length > 1 && !multiEnabled) {
     return { error: "This booking link allows one appointment time." };
   }
-  if (ids.length > maxSessions) {
+  if (sessions.length > maxSessions) {
     return { error: `Choose no more than ${maxSessions} appointment times.` };
   }
-  return { ids, multiEnabled, maxSessions };
+  return { sessions, multiEnabled, maxSessions };
 }
 
 async function releaseUnpaidCheckoutGroup(db, appointments, reason) {
@@ -3066,26 +3083,26 @@ async function releaseUnpaidCheckoutGroup(db, appointments, reason) {
 async function createPendingAppointmentGroup(
   db,
   tokenContext,
-  bookingTypeId,
-  windowIds,
+  requestedSessions,
   tipCents,
   extendedDayAcknowledged,
 ) {
   const checkoutGroupId = crypto.randomUUID();
   const appointments = [];
   let bookingType = null;
-  for (let index = 0; index < windowIds.length; index += 1) {
+  for (let index = 0; index < requestedSessions.length; index += 1) {
+    const requestedSession = requestedSessions[index];
     const result = await createPendingAppointment(
       db,
       tokenContext,
-      bookingTypeId,
-      windowIds[index],
+      requestedSession.bookingTypeId,
+      requestedSession.availabilityWindowId,
       index === 0 ? tipCents : 0,
       extendedDayAcknowledged,
       {
         checkoutGroupId,
         checkoutGroupPosition: index + 1,
-        checkoutGroupSize: windowIds.length,
+        checkoutGroupSize: requestedSessions.length,
       },
     );
     if (result.error) {
@@ -4341,9 +4358,9 @@ async function createSquarePaymentLink(request, env, appointment, bookingType, o
   const depositLineItems = appointments.map((item, index) => squareLineItem(
     item.isExperimentalProject
       ? `Experimental Project refundable attendance deposit — ${item.experimentalProjectTitle || "Project"}`
-      : FULL_PAYMENT_BOOKING_TYPE_IDS.includes(bookingType.id)
-        ? `${bookingType.label} Reservation Fee${appointments.length > 1 ? ` — Appointment ${index + 1}${squareAppointmentDate(item.startAt) ? ` — ${squareAppointmentDate(item.startAt)}` : ""}` : ""}`
-        : `${bookingType.label} Deposit${appointments.length > 1 ? ` — Session ${index + 1}${squareAppointmentDate(item.startAt) ? ` — ${squareAppointmentDate(item.startAt)}` : ""}` : ""}`,
+      : FULL_PAYMENT_BOOKING_TYPE_IDS.includes(item.bookingTypeId || bookingType.id)
+        ? `${item.bookingTypeLabel || bookingType.label} Reservation Fee${appointments.length > 1 ? ` — Appointment ${index + 1}${squareAppointmentDate(item.startAt) ? ` — ${squareAppointmentDate(item.startAt)}` : ""}` : ""}`
+        : `${item.bookingTypeLabel || bookingType.label} Deposit${appointments.length > 1 ? ` — Session ${index + 1}${squareAppointmentDate(item.startAt) ? ` — ${squareAppointmentDate(item.startAt)}` : ""}` : ""}`,
     item.depositCents,
     item.currency,
   ));
@@ -4878,14 +4895,13 @@ export async function handleCreateBookingCheckout(request, env) {
 
     const tip = parseTipCents(body.tipCents);
     if (tip.error) return errorResponse(tip.error, 400);
-    const requestedWindows = requestedPrivateBookingWindowIds(body, context);
-    if (requestedWindows.error) return errorResponse(requestedWindows.error, 400);
+    const requestedSessions = requestedPrivateBookingSessions(body, context);
+    if (requestedSessions.error) return errorResponse(requestedSessions.error, 400);
 
     const result = await createPendingAppointmentGroup(
       db,
       context,
-      asString(body.bookingTypeId),
-      requestedWindows.ids,
+      requestedSessions.sessions,
       tip.tipCents,
       body.extendedDayAcknowledged === true
     );
@@ -8570,6 +8586,10 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
   const tattooDescription = asString(body.tattooDescription);
   const purpose = asString(body.purpose) || "tattoo";
   const bookingTypeId = asString(body.bookingTypeId);
+  const hasSuppliedBookingTypes = body.allowedBookingTypes !== undefined;
+  if (hasSuppliedBookingTypes && !Array.isArray(body.allowedBookingTypes)) {
+    return errorResponse("Allowed booking types must be a non-empty list.", 400);
+  }
   const allowMultipleSessions = purpose === "tattoo" && body.allowMultipleSessions === true;
   const maxSessions = allowMultipleSessions ? Number(body.maxSessions) : 1;
   const presentLongerSessionOption = purpose === "tattoo" && body.presentLongerSessionOption === true;
@@ -8579,11 +8599,13 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
     && body.approvedBudgetCents !== null && body.approvedBudgetCents !== ""
     ? Number(body.approvedBudgetCents)
     : null;
-  const allowed = bookingTypeId ? [bookingTypeId] : [];
-  if (purpose === "tattoo" && presentLongerSessionOption && !allowed.includes(EXTENDED_DAY_BOOKING_TYPE_ID)) {
+  const allowed = hasSuppliedBookingTypes
+    ? body.allowedBookingTypes.map(asString).filter(Boolean)
+    : bookingTypeId ? [bookingTypeId] : [];
+  if (!hasSuppliedBookingTypes && purpose === "tattoo" && presentLongerSessionOption && !allowed.includes(EXTENDED_DAY_BOOKING_TYPE_ID)) {
     allowed.push(EXTENDED_DAY_BOOKING_TYPE_ID);
   }
-  if (purpose === "tattoo" && presentShorterSessionsOption) {
+  if (!hasSuppliedBookingTypes && purpose === "tattoo" && presentShorterSessionsOption) {
     for (const shorterTypeId of ["tattoo_quarter", "tattoo_half", "tattoo_three_quarter"]) {
       if (!allowed.includes(shorterTypeId)) allowed.push(shorterTypeId);
     }
@@ -8615,6 +8637,12 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
   }
   if (!BOOKING_TOKEN_PURPOSES.has(purpose)) {
     return errorResponse("Booking purpose must be consultation or tattoo.", 400);
+  }
+  if (new Set(allowed).size !== allowed.length) {
+    return errorResponse("Allowed booking types must not contain duplicates.", 400);
+  }
+  if (bookingTypeId && !allowed.includes(bookingTypeId)) {
+    return errorResponse("The recommended session type must be included in the client choices.", 400);
   }
   if (!allowed.length || !bookingTypesMatchPurpose(purpose, allowed)) {
     return errorResponse("Choose a session type that matches the link purpose.", 400);

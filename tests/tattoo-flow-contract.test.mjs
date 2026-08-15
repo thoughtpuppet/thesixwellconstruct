@@ -1103,6 +1103,9 @@ test("Studio approved booking links allow per-client tattoo appointment types", 
   assert.match(source, /id="tokenMaxSessions" type="number" min="2" max="24"/);
   assert.match(source, /Allow multiple sessions in one checkout/);
   assert.match(source, /name="allowMultipleSessions" type="checkbox" data-direct-multi-toggle/);
+  assert.match(source, /name="allowedTattooBookingType" value="tattoo_three_quarter"/);
+  assert.match(source, /allowedBookingTypes,[\s\S]*?expiresAt:/);
+  assert.match(source, /Session lengths the client may combine/);
   assert.match(source, /allowMultipleSessions: draft\.bookingAllowMultipleSessions/);
   assert.match(source, /Object\.assign\(values, bookingTokenDraftBody\(submissionId\)\);/);
   assert.match(source, /id="saveBookingChoicesBtn"[^>]*>Save Booking Choices<\/button>/);
@@ -6055,7 +6058,7 @@ test("Studio direct tattoo invites can present project details, pacing options, 
   assert.equal(context.sessionPlan.approvedBudgetMaxCents, 150000);
 });
 
-test("multi-session direct links collect one Square checkout and confirm separate appointments", async () => {
+test("mixed-session direct links collect one itemized Square checkout and confirm separate appointments", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
   const sentEmails = [];
@@ -6077,7 +6080,8 @@ test("multi-session direct links collect one Square checkout and confirm separat
     "/api/admin/booking/direct-invites",
     {
       purpose: "tattoo",
-      bookingTypeId: "tattoo_three_quarter",
+      bookingTypeId: "tattoo_quarter",
+      allowedBookingTypes: ["tattoo_quarter", "tattoo_half", "tattoo_three_quarter"],
       allowMultipleSessions: true,
       maxSessions: 3,
     },
@@ -6098,7 +6102,7 @@ test("multi-session direct links collect one Square checkout and confirm separat
   ).get(invite.directInvite.submissionId);
   assert.deepEqual(rowObject(planRow), {
     booking_purpose: "tattoo",
-    allowed_booking_types_json: JSON.stringify(["tattoo_three_quarter"]),
+    allowed_booking_types_json: JSON.stringify(["tattoo_quarter", "tattoo_half", "tattoo_three_quarter"]),
     booking_allow_multiple_sessions: 1,
     booking_max_sessions: 3,
   });
@@ -6118,15 +6122,20 @@ test("multi-session direct links collect one Square checkout and confirm separat
   }), env);
   assert.equal(acknowledged.status, 200, await acknowledged.clone().text());
 
-  const windowIds = [];
-  for (let index = 0; index < 3; index += 1) {
+  const sessionSpecs = [
+    { id: "mixed-session-window-1", bookingTypeId: "tattoo_quarter", durationHours: 2 },
+    { id: "mixed-session-window-2", bookingTypeId: "tattoo_half", durationHours: 4 },
+    { id: "mixed-session-window-3", bookingTypeId: "tattoo_three_quarter", durationHours: 6 },
+  ];
+  const sessions = [];
+  for (let index = 0; index < sessionSpecs.length; index += 1) {
+    const spec = sessionSpecs[index];
     const start = new Date(Date.now() + (72 + index * 48) * 60 * 60 * 1000);
-    const end = new Date(start.getTime() + 6 * 60 * 60 * 1000);
-    const id = `multi-session-window-${index + 1}`;
-    windowIds.push(id);
+    const end = new Date(start.getTime() + spec.durationHours * 60 * 60 * 1000);
+    sessions.push({ bookingTypeId: spec.bookingTypeId, availabilityWindowId: spec.id });
     insertAvailabilityWindow(database, {
-      id,
-      bookingTypeId: "tattoo_three_quarter",
+      id: spec.id,
+      bookingTypeId: spec.bookingTypeId,
       startAt: start.toISOString(),
       endAt: end.toISOString(),
     });
@@ -6134,14 +6143,34 @@ test("multi-session direct links collect one Square checkout and confirm separat
 
   const overLimitResponse = await handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
     token: rawToken,
-    bookingTypeId: "tattoo_three_quarter",
-    availabilityWindowIds: [...windowIds, "one-session-too-many"],
+    sessions: [...sessions, {
+      bookingTypeId: "tattoo_quarter",
+      availabilityWindowId: "one-session-too-many",
+    }],
     clientName: "Multiple Session Client",
     clientEmail: "multi@example.test",
     clientPhone: "404-555-0124",
   }), env);
   assert.equal(overLimitResponse.status, 400);
   assert.match((await overLimitResponse.json()).error, /no more than 3 appointment times/i);
+
+  const unauthorizedTypeResponse = await handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
+    token: rawToken,
+    sessions: [{
+      bookingTypeId: "tattoo_full",
+      availabilityWindowId: sessions[0].availabilityWindowId,
+    }],
+    clientName: "Multiple Session Client",
+    clientEmail: "multi@example.test",
+    clientPhone: "404-555-0124",
+  }), env);
+  assert.equal(unauthorizedTypeResponse.status, 400);
+  assert.match((await unauthorizedTypeResponse.json()).error, /does not include that session type/i);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS count FROM appointments WHERE booking_token_id=?")
+      .get(invite.token.id).count,
+    0,
+  );
 
   let squareBody = null;
   const checkoutResponse = await withMockFetch(async (_url, init) => {
@@ -6155,8 +6184,7 @@ test("multi-session direct links collect one Square checkout and confirm separat
     });
   }, () => handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
     token: rawToken,
-    bookingTypeId: "tattoo_three_quarter",
-    availabilityWindowIds: windowIds,
+    sessions,
     tipCents: 2500,
     clientName: "Multiple Session Client",
     clientEmail: "multi@example.test",
@@ -6168,14 +6196,17 @@ test("multi-session direct links collect one Square checkout and confirm separat
   assert.equal(checkout.appointmentIds.length, 3);
   assert.deepEqual(
     squareBody.order.line_items.map((item) => item.base_price_money.amount),
-    [15000, 15000, 15000, 2500],
+    [5000, 10000, 15000, 2500],
   );
+  assert.match(squareBody.order.line_items[0].name, /Quarter Day Session Deposit/);
+  assert.match(squareBody.order.line_items[1].name, /Half Day Session Deposit/);
+  assert.match(squareBody.order.line_items[2].name, /3\/4 Day Session Deposit/);
   assert.match(squareBody.order.line_items[0].name, /Session 1/);
   assert.match(squareBody.order.line_items[2].name, /Session 3/);
   assert.match(squareBody.order.line_items[0].name, /Session 1.*\d{4}/);
 
   const appointmentRows = database.prepare(
-    `SELECT id,checkout_group_id,checkout_group_position,checkout_group_size,status,
+    `SELECT id,booking_type_id,deposit_cents,checkout_group_id,checkout_group_position,checkout_group_size,status,
             square_order_id,square_payment_link_id
      FROM appointments WHERE id IN (?,?,?) ORDER BY checkout_group_position`,
   ).all(...checkout.appointmentIds).map(rowObject);
@@ -6183,6 +6214,10 @@ test("multi-session direct links collect one Square checkout and confirm separat
   assert.equal(new Set(appointmentRows.map((row) => row.checkout_group_id)).size, 1);
   assert.deepEqual(appointmentRows.map((row) => row.checkout_group_position), [1, 2, 3]);
   assert.deepEqual(appointmentRows.map((row) => row.checkout_group_size), [3, 3, 3]);
+  assert.deepEqual(appointmentRows.map((row) => row.booking_type_id), [
+    "tattoo_quarter", "tattoo_half", "tattoo_three_quarter",
+  ]);
+  assert.deepEqual(appointmentRows.map((row) => row.deposit_cents), [5000, 10000, 15000]);
   assert.ok(appointmentRows.every((row) => row.status === "deposit_pending"));
   assert.ok(appointmentRows.every((row) => row.square_order_id === "multi-session-order"));
 
@@ -6196,7 +6231,7 @@ test("multi-session direct links collect one Square checkout and confirm separat
   assert.equal(confirmResponse.status, 200, await confirmResponse.clone().text());
   const confirmation = await confirmResponse.json();
   assert.equal(confirmation.appointments.length, 3);
-  assert.equal(confirmation.checkoutTotalPaidCents, 47500);
+  assert.equal(confirmation.checkoutTotalPaidCents, 32500);
   const confirmedRows = database.prepare(
     "SELECT status,hold_state FROM appointments WHERE checkout_group_id=? ORDER BY checkout_group_position",
   ).all(appointmentRows[0].checkout_group_id).map(rowObject);
@@ -6211,6 +6246,9 @@ test("multi-session direct links collect one Square checkout and confirm separat
   assert.ok(clientConfirmationEmail);
   assert.ok(adminConfirmationEmail);
   assert.match(clientConfirmationEmail.subject, /3 tattoo sessions/i);
+  assert.match(clientConfirmationEmail.html, /Quarter Day Session/);
+  assert.match(clientConfirmationEmail.html, /Half Day Session/);
+  assert.match(clientConfirmationEmail.html, /3\/4 Day Session/);
   checkout.appointmentIds.forEach((appointmentId, index) => {
     assert.match(clientConfirmationEmail.html, new RegExp(
       `booking/reschedule/\\?appointment=${appointmentId}`,
@@ -8434,12 +8472,15 @@ test("Studio previews expose single and multi-session client booking states", ()
   const booking = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   const confirmation = readFileSync(join(ROOT, "booking", "confirmed", "index.html"), "utf8");
   assert.match(previews, /\/booking\/\?preview=1&amp;multi=0/);
-  assert.match(previews, /\/booking\/\?preview=1&amp;multi=1&amp;maxSessions=3/);
+  assert.match(previews, /\/booking\/\?preview=1&amp;multi=1&amp;maxSessions=3&amp;mixed=1/);
   assert.match(previews, /\/booking\/confirmed\/\?preview=1&amp;state=paid&amp;multi=1/);
   assert.match(previews, /\/booking\/confirmed\/\?preview=1&amp;state=paid&amp;multi=1&amp;tip=1/);
   assert.match(booking, /id="checkoutItemsRow"/);
   assert.match(booking, /Square checkout items/);
   assert.match(booking, /params\.get\("multi"\) !== "0"/);
+  assert.match(booking, /function selectedAppointmentSessions\(\)/);
+  assert.match(booking, /sessions: chosenSessions\.map/);
+  assert.match(booking, /itemized deposit is applied to its own appointment/);
   assert.equal((booking.match(/bookingTypeId: "tattoo_three_quarter"/g) || []).length, 3);
   assert.match(confirmation, /params\.get\("multi"\) === "1"/);
   assert.match(confirmation, /Reschedule Session \$\{index \+ 1\}/);

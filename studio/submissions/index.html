@@ -284,6 +284,9 @@
   .event-occurrence-editor { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; padding:14px; border:5px solid var(--ring-faint); background:var(--bg); min-width:0; }
   .event-occurrence-editor .wide-field { grid-column:1 / -1; }
   .event-occurrence-editor .danger-button { justify-self:start; }
+  .event-admission-list { display:grid; gap:12px; margin:8px 0 12px; min-width:0; }
+  .event-admission-editor { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; padding:14px; border:5px solid var(--ring-faint); background:var(--bg); min-width:0; }
+  .event-admission-editor .wide-field { grid-column:1 / -1; }
   .availability-manager .danger-button { border-color:rgba(110,4,4,0.72); color:var(--text); }
   .availability-manager .danger-button:hover { border-color:var(--signal); color:var(--signal); background:rgba(110,4,4,0.12); }
   .availability-manager .mini-calendar,
@@ -627,6 +630,8 @@
     .availability-manager .wide-field { grid-column:auto; }
     .event-occurrence-editor { grid-template-columns:minmax(0,1fr); }
     .event-occurrence-editor .wide-field { grid-column:auto; }
+    .event-admission-editor { grid-template-columns:minmax(0,1fr); }
+    .event-admission-editor .wide-field { grid-column:auto; }
     .day-override-window .wide-field { grid-column:auto; }
     .scheduled-window .wide-field { grid-column:auto; }
     .scheduled-period-card { align-items:stretch; flex-direction:column; }
@@ -4010,7 +4015,7 @@
         <div class="detail-head">
           <span class="pill">Tattoo Booking / Private Access</span>
           <h2>Direct Invite</h2>
-          <p class="contact">Choose the link purpose, session type, and expiration. The client enters their own contact information after opening the private link.</p>
+          <p class="contact">Choose the link purpose, recommended session length, client booking choices, and expiration. The client enters their own contact information after opening the private link.</p>
         </div>
         <form class="direct-invite-form" data-direct-invite-form>
           <div class="direct-invite-form-grid">
@@ -4030,7 +4035,7 @@
             </label>
           </div>
           <fieldset class="direct-invite-types" data-direct-invite-types="tattoo">
-            <legend>Session type</legend>
+            <legend>Recommended session length</legend>
             <div class="direct-invite-type-grid">
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_quarter" checked><span>Quarter Day Session (2 hours)</span></label>
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_half"><span>Half Day Session (4 hours)</span></label>
@@ -4070,10 +4075,20 @@
                   <span class="check-label">Allow the client to book multiple sessions in one checkout</span>
                 </label>
               </div>
-              <label class="field hidden" data-direct-multi-limit style="margin-top:10px;max-width:260px;">Maximum sessions
-                <input name="maxSessions" type="number" min="2" max="24" step="1" inputmode="numeric" value="2">
-                <span class="contact">The client can select up to this many dates for one session type. Square collects every selected session deposit in one checkout.</span>
-              </label>
+              <div class="field hidden" data-direct-multi-limit style="margin-top:10px;max-width:520px;">
+                <label>Maximum sessions
+                  <input name="maxSessions" type="number" min="2" max="24" step="1" inputmode="numeric" value="2">
+                  <span class="contact">The client can combine up to this many appointments across the authorized session lengths. Square itemizes every session deposit in one checkout.</span>
+                </label>
+                <span class="contact" style="margin-top:10px;">Session lengths the client may combine</span>
+                <div class="direct-invite-type-grid" data-direct-mixed-types>
+                  <label class="check"><input type="checkbox" name="allowedTattooBookingType" value="tattoo_quarter" checked><span>Quarter Day Session</span></label>
+                  <label class="check"><input type="checkbox" name="allowedTattooBookingType" value="tattoo_half"><span>Half Day Session</span></label>
+                  <label class="check"><input type="checkbox" name="allowedTattooBookingType" value="tattoo_three_quarter"><span>3/4 Day Session</span></label>
+                  <label class="check"><input type="checkbox" name="allowedTattooBookingType" value="tattoo_full"><span>Full Day Session</span></label>
+                  <label class="check"><input type="checkbox" name="allowedTattooBookingType" value="tattoo_extended"><span>Extended Day Session</span></label>
+                </div>
+              </div>
               <p class="contact">Choose only the information and pacing choices that should appear on this direct booking link. Unchecked items remain omitted.</p>
             </div>
           </fieldset>
@@ -4097,11 +4112,14 @@
     const estimateNoteInput = form.elements.clientEstimateNote;
     const multiToggle = form.elements.allowMultipleSessions;
     const multiLimit = form.querySelector("[data-direct-multi-limit]");
+    const allowedTypeInputs = [...form.querySelectorAll('[name="allowedTattooBookingType"]')];
     estimateNoteInput.dataset.autoValue = DIRECT_INVITE_SESSION_NOTES.tattoo_quarter;
     const syncDirectInviteEstimateNote = () => {
       const bookingTypeId = form.querySelector(
         '[data-direct-invite-types="tattoo"] input[type="radio"]:checked'
       )?.value || "";
+      const recommendedAllowedInput = allowedTypeInputs.find((input) => input.value === bookingTypeId);
+      if (recommendedAllowedInput) recommendedAllowedInput.checked = true;
       const nextValue = DIRECT_INVITE_SESSION_NOTES[bookingTypeId] || "";
       const currentValue = estimateNoteInput.value.trim();
       if (!currentValue || currentValue === estimateNoteInput.dataset.autoValue || currentValue === estimateCopy.fallbackNote) {
@@ -4117,6 +4135,12 @@
       multiToggle.disabled = purpose !== "tattoo";
       if (purpose !== "tattoo") multiToggle.checked = false;
       multiLimit.classList.toggle("hidden", purpose !== "tattoo" || !multiToggle.checked);
+      if (purpose === "tattoo" && !multiToggle.checked) {
+        const recommendedTypeId = form.querySelector(
+          '[data-direct-invite-types="tattoo"] input[type="radio"]:checked'
+        )?.value || "";
+        allowedTypeInputs.forEach((input) => { input.checked = input.value === recommendedTypeId; });
+      }
     };
     purposeInput.addEventListener("change", syncPurpose);
     multiToggle.addEventListener("change", syncPurpose);
@@ -4155,6 +4179,13 @@
         if (allowMultipleSessions && (!Number.isSafeInteger(maxSessions) || maxSessions < 2 || maxSessions > 24)) {
           throw new Error("Enter a maximum session count from 2 through 24.");
         }
+        const allowedBookingTypes = purpose === "tattoo" && allowMultipleSessions
+          ? allowedTypeInputs.filter((input) => input.checked).map((input) => input.value)
+          : [bookingTypeId];
+        if (!allowedBookingTypes.length) throw new Error("Choose at least one session length for the client.");
+        if (!allowedBookingTypes.includes(bookingTypeId)) {
+          throw new Error("Include the recommended session length in the client choices.");
+        }
         const payload = await api("/api/admin/booking/direct-invites", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -4175,6 +4206,7 @@
             maxSessions,
             purpose,
             bookingTypeId,
+            allowedBookingTypes,
             expiresAt: expiresAt || undefined,
           }),
         });
@@ -5940,7 +5972,7 @@ ${meetingLines}
           <div class="field ${savedDraft.bookingAllowMultipleSessions === true ? "" : "hidden"}" data-token-multi-limit>
             <label for="tokenMaxSessions">Maximum sessions</label>
             <input id="tokenMaxSessions" type="number" min="2" max="24" step="1" inputmode="numeric" value="${escapeHtml(String(Math.max(2, Number(savedDraft.bookingMaxSessions || 2))))}">
-            <div class="contact">All selected dates use one session type. Square collects the deposit for every selected date in one checkout.</div>
+            <div class="contact">The client may combine the authorized session lengths across selected dates. Square itemizes every session deposit in one checkout.</div>
           </div>
         </div>
         ${TATTOO_PROJECT_TYPES.has(submission.type) && ["new", "reviewing"].includes(submission.status) ? `<div class="booking-actions" style="margin-top:10px;">
@@ -6284,6 +6316,58 @@ ${meetingLines}
     });
   }
 
+  function eventAdmissionStatusOptions(current) {
+    return ["open", "closed", "cancelled"].map((value) =>
+      `<option value="${value}" ${value === current ? "selected" : ""}>${value.toUpperCase()}</option>`
+    ).join("");
+  }
+
+  function eventAdmissionEditor(option = {}) {
+    const dollars = ((Number(option.priceCents) || 0) / 100).toFixed(2);
+    const capacity = option.capacity === null || option.capacity === undefined ? "" : String(option.capacity);
+    return `<div class="event-admission-editor" data-event-admission>
+      <input type="hidden" data-admission-field="id" value="${escapeHtml(option.id || "")}">
+      <input type="hidden" data-admission-field="occurrenceId" value="${escapeHtml(option.occurrenceId || "")}">
+      <input type="hidden" data-admission-field="currency" value="${escapeHtml(option.currency || "USD")}">
+      <div class="field wide-field"><label>Admission title</label><input data-admission-field="title" value="${escapeHtml(option.title || "")}" required></div>
+      <div class="field"><label>Starts</label><input data-admission-field="startsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(option.startsAt))}" required></div>
+      <div class="field"><label>Ends</label><input data-admission-field="endsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(option.endsAt))}"></div>
+      <div class="field"><label>RSVP / sales</label><select data-admission-field="registrationStatus">${eventAdmissionStatusOptions(option.registrationStatus || "closed")}</select></div>
+      <div class="field"><label>Price</label><input data-admission-field="price" type="number" min="0" step="0.01" value="${escapeHtml(dollars)}"></div>
+      <div class="field"><label>Capacity <span class="contact">blank = unlimited</span></label><input data-admission-field="capacity" type="number" min="0" step="1" value="${escapeHtml(capacity)}"></div>
+      <div class="field"><label>Max / order</label><input data-admission-field="maxSeatsPerOrder" type="number" min="1" step="1" value="${escapeHtml(String(option.maxSeatsPerOrder || 1))}"></div>
+      <div class="field"><label>Mode</label><select data-admission-field="attendanceMode"><option value="in_person" ${option.attendanceMode === "virtual" ? "" : "selected"}>IN PERSON</option><option value="virtual" ${option.attendanceMode === "virtual" ? "selected" : ""}>VIRTUAL</option></select></div>
+      <div class="field"><label>Kind</label><select data-admission-field="admissionKind"><option value="rsvp" ${option.admissionKind === "rsvp" ? "selected" : ""}>RSVP</option><option value="ticket" ${option.admissionKind === "ticket" ? "selected" : ""}>TICKET</option><option value="queue" ${option.admissionKind === "queue" ? "selected" : ""}>QUEUE</option></select></div>
+      <div class="field"><label>Reminder</label><select data-admission-field="reminderEnabled"><option value="1" ${option.reminderEnabled === false ? "" : "selected"}>ENABLED</option><option value="0" ${option.reminderEnabled === false ? "selected" : ""}>DISABLED</option></select></div>
+      <div class="field wide-field"><label>Location / access</label><input data-admission-field="location" value="${escapeHtml(option.location || "")}"></div>
+      <div class="field wide-field"><label>Description</label><textarea data-admission-field="description" rows="2">${escapeHtml(option.description || "")}</textarea></div>
+    </div>`;
+  }
+
+  function collectEventAdmissionOptions(form) {
+    if (!form.querySelector("[data-event-admission-list]")) return undefined;
+    return Array.from(form.querySelectorAll("[data-event-admission]")).map((row) => {
+      const value = (field) => row.querySelector(`[data-admission-field="${field}"]`)?.value ?? "";
+      return {
+        id:value("id"),
+        occurrenceId:value("occurrenceId"),
+        title:value("title"),
+        startsAt:value("startsAt") ? localDateTimeToIso(value("startsAt")) : "",
+        endsAt:value("endsAt") ? localDateTimeToIso(value("endsAt")) : "",
+        registrationStatus:value("registrationStatus"),
+        priceCents:Math.round((Number(value("price")) || 0) * 100),
+        currency:value("currency") || "USD",
+        capacity:value("capacity"),
+        maxSeatsPerOrder:Number(value("maxSeatsPerOrder")) || 1,
+        attendanceMode:value("attendanceMode"),
+        admissionKind:value("admissionKind"),
+        reminderEnabled:value("reminderEnabled") !== "0",
+        location:value("location"),
+        description:value("description"),
+      };
+    });
+  }
+
   function renderEventCard(ev) {
     const dollars = ((Number(ev.priceCents) || 0) / 100).toFixed(2);
     const isFree = (Number(ev.priceCents) || 0) <= 0;
@@ -6377,6 +6461,11 @@ ${meetingLines}
                 <div class="event-occurrence-list" data-event-occurrence-list>${eventOccurrencesMarkup(ev)}</div>
                 <button class="button" type="button" data-add-event-occurrence>Add date</button>
               </div>
+              ${Array.isArray(ev.admissionOptions) && ev.admissionOptions.length ? `<div class="field wide-field">
+                <label>RSVP + ticket options</label>
+                <p class="contact">Each option owns its time, price, capacity, attendance mode, registration state, and reminder. Blank capacity means unlimited. Opening a free option enables RSVP; opening a paid option enables Square checkout.</p>
+                <div class="event-admission-list" data-event-admission-list>${ev.admissionOptions.map(eventAdmissionEditor).join("")}</div>
+              </div>` : ""}
             </div>
             <button class="button save-schedule" type="submit">Save Event</button>
           </form>
@@ -9910,6 +9999,7 @@ ${meetingLines}
           status: fieldValue("status"),
           isRecurring: fieldValue("isRecurring") === "1",
           occurrences: collectEventOccurrences(eventForm),
+          admissionOptions: collectEventAdmissionOptions(eventForm),
           title: fieldValue("title"),
           location: fieldValue("location"),
           description: fieldValue("description"),
