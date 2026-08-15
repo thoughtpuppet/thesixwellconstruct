@@ -1028,9 +1028,14 @@ test("Original-design tattoo paths disclose the additional-rendering drawing fee
   assert.match(studio, /id="includeAdditionalSketchDisclaimer" name="includeAdditionalSketchDisclaimer" type="checkbox"/);
   assert.match(studio, /includeAdditionalSketchDisclaimer: form\.elements\.includeAdditionalSketchDisclaimer\?\.checked === true/);
   assert.match(studio, /name="tattooDescription" maxlength="5000"/);
-  assert.match(studio, /name="approvedBudgetDollars" type="number"/);
-  assert.match(studio, /name="presentLongerSessionOption" type="checkbox"/);
-  assert.match(studio, /name="presentShorterSessionsOption" type="checkbox"/);
+  assert.match(studio, /name="approvedBudgetMinDollars" type="number"/);
+  assert.match(studio, /name="approvedBudgetMaxDollars" type="number"/);
+  assert.match(studio, /name="splitPolicy" data-direct-split-policy/);
+  assert.match(studio, /name="estimatedSessionsMin" type="number"/);
+  assert.match(studio, /name="estimatedSessionsMax" type="number"/);
+  assert.match(studio, /name="artistNote" maxlength="5000"/);
+  assert.match(studio, /name="presentLongerSessionOption" type="checkbox" data-direct-pacing-choice/);
+  assert.match(studio, /name="presentShorterSessionsOption" type="checkbox" data-direct-pacing-choice/);
   assert.match(studio, /name="includeAdditionalSketchDisclaimer" type="checkbox"/);
   assert.match(studio, /Present the Extended Day \/ longer-session option/);
   assert.match(studio, /Present the smaller split-session option/);
@@ -6082,6 +6087,12 @@ test("mixed-session direct links collect one itemized Square checkout and confir
       purpose: "tattoo",
       bookingTypeId: "tattoo_quarter",
       allowedBookingTypes: ["tattoo_quarter", "tattoo_half", "tattoo_three_quarter"],
+      splitPolicy: "required",
+      estimatedSessionsMin: 2,
+      estimatedSessionsMax: 3,
+      estimatedTotalMinutesMin: 720,
+      estimatedTotalMinutesMax: 1080,
+      artistNote: "This project is planned across two or three appointments.",
       allowMultipleSessions: true,
       maxSessions: 3,
     },
@@ -6113,7 +6124,13 @@ test("mixed-session direct links collect one itemized Square checkout and confir
     env,
   );
   const context = await contextResponse.json();
-  assert.deepEqual(context.multiSession, { enabled: true, maxSessions: 3 });
+  assert.deepEqual(context.multiSession, { enabled: true, maxSessions: 3, minimumSessions: 2 });
+  assert.equal(context.sessionPlan.splitPolicy, "required");
+  assert.equal(context.sessionPlan.estimatedSessionsMin, 2);
+  assert.equal(context.sessionPlan.estimatedSessionsMax, 3);
+  assert.equal(context.sessionPlan.estimatedTotalMinutesMin, 720);
+  assert.equal(context.sessionPlan.estimatedTotalMinutesMax, 1080);
+  assert.equal(context.sessionPlan.artistNote, "This project is planned across two or three appointments.");
 
   const acknowledged = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
     token: rawToken,
@@ -6141,6 +6158,16 @@ test("mixed-session direct links collect one itemized Square checkout and confir
     });
   }
 
+  const belowMinimumResponse = await handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
+    token: rawToken,
+    sessions: [sessions[0]],
+    clientName: "Multiple Session Client",
+    clientEmail: "multi@example.test",
+    clientPhone: "404-555-0124",
+  }), env);
+  assert.equal(belowMinimumResponse.status, 400);
+  assert.match((await belowMinimumResponse.json()).error, /at least 2 appointment times/i);
+
   const overLimitResponse = await handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
     token: rawToken,
     sessions: [...sessions, {
@@ -6156,10 +6183,13 @@ test("mixed-session direct links collect one itemized Square checkout and confir
 
   const unauthorizedTypeResponse = await handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
     token: rawToken,
-    sessions: [{
-      bookingTypeId: "tattoo_full",
-      availabilityWindowId: sessions[0].availabilityWindowId,
-    }],
+    sessions: [
+      {
+        bookingTypeId: "tattoo_full",
+        availabilityWindowId: sessions[0].availabilityWindowId,
+      },
+      sessions[1],
+    ],
     clientName: "Multiple Session Client",
     clientEmail: "multi@example.test",
     clientPhone: "404-555-0124",

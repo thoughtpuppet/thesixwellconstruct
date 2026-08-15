@@ -829,6 +829,13 @@
     tattoo_full: "The composition is planned for a Full Day Session (8 hours).",
     tattoo_extended: "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, 3/4, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.",
   };
+  const DIRECT_INVITE_SESSION_MINUTES = {
+    tattoo_quarter: [120, 120],
+    tattoo_half: [240, 240],
+    tattoo_three_quarter: [360, 360],
+    tattoo_full: [480, 480],
+    tattoo_extended: [480, 720],
+  };
   const homeCalendarPreview = new URLSearchParams(window.location.search).get("preview") === "1";
   const directInvitePreview = new URLSearchParams(window.location.search).get("preview") === "direct-invite";
   let token = localStorage.getItem(tokenKey) || "";
@@ -1217,7 +1224,6 @@
     standalone: "Standalone tattoo",
     unsure: "Unsure - needs assessment",
   };
-
   function tattooInquiryValue(submission, key) {
     const value = submission.payload?.[key];
     const values = Array.isArray(value) ? value : [value];
@@ -4047,23 +4053,39 @@
               <textarea name="tattooDescription" maxlength="5000" rows="5" placeholder="Add the tattoo description or project summary you received from the client."></textarea>
               <span class="contact">This appears in the client's project review before scheduling.</span>
             </label>
-            <label class="field">Project budget / total (USD) <span class="contact">(client-facing, optional)</span>
-              <input name="approvedBudgetDollars" type="number" min="1" step="1" inputmode="numeric" placeholder="e.g. 1200">
-              <span class="contact">Enter the exact approved tattoo-work total before any optional Extended Day fee. This is not the deposit or an immediate charge.</span>
-            </label>
-            <label class="field">Session plan wording <span class="contact">(client-facing)</span>
-              <textarea name="clientEstimateNote" maxlength="5000" rows="4">${escapeHtml(DIRECT_INVITE_SESSION_NOTES.tattoo_quarter)}</textarea>
-              <span class="contact">This appears inside the client’s Session Estimate section. You can edit it again from the Studio record.</span>
-            </label>
             <div class="field wide">
-              <h3>Optional Information Presented to the Client</h3>
+              <h3>Session Plan</h3>
+              <p class="contact">Set the complete plan the client will review before scheduling. The generated link uses these values immediately.</p>
+            </div>
+            <label class="field">Splitting policy
+              <select name="splitPolicy" data-direct-split-policy data-select-menu-skip>
+                <option value="not_available">Splitting unavailable</option>
+                <option value="required">Splitting required</option>
+                <option value="client_choice">Client choice after estimate</option>
+              </select>
+            </label>
+            <p class="contact wide">Choose whether this project must remain one session, must be completed across multiple sessions, or may be split at the client’s choice.</p>
+            <div class="field"><label>Sessions minimum<input name="estimatedSessionsMin" type="number" min="1" max="24" step="1" value="1"></label></div>
+            <div class="field"><label>Sessions maximum<input name="estimatedSessionsMax" type="number" min="1" max="24" step="1" value="1"></label></div>
+            <div class="field"><label>Estimated total project time — minimum (minutes)<input name="estimatedTotalMinutesMin" type="number" min="0" step="15" value="120"></label></div>
+            <div class="field"><label>Estimated total project time — maximum (minutes)<input name="estimatedTotalMinutesMax" type="number" min="0" step="15" value="120"></label></div>
+            <p class="contact wide">Total project time covers every planned session. It is shown to the client as an estimate and does not calculate price.</p>
+            <label class="field wide">Client-facing session note
+              <textarea name="artistNote" maxlength="5000" rows="4">${escapeHtml(DIRECT_INVITE_SESSION_NOTES.tattoo_quarter)}</textarea>
+              <span class="contact">Explain the recommended pacing, breaks, or anything the client should know before scheduling.</span>
+            </label>
+            <div class="field"><label>Approved minimum (USD)<input name="approvedBudgetMinDollars" type="number" min="1" step="1" inputmode="numeric" placeholder="e.g. 1200"></label></div>
+            <div class="field"><label>Approved maximum (USD)<input name="approvedBudgetMaxDollars" type="number" min="1" step="1" inputmode="numeric" placeholder="e.g. 1200"></label></div>
+            <p class="contact wide">Optional. Enter both values, using the same amount twice for an exact tattoo-work total. This is not the deposit or an immediate charge.</p>
+            <div class="field wide">
+              <h3>Client Pacing &amp; Booking Choices</h3>
               <div class="booking-actions" style="align-items:flex-start;">
                 <label class="check" style="margin:0;min-width:240px;">
-                  <input name="presentLongerSessionOption" type="checkbox">
+                  <input name="presentLongerSessionOption" type="checkbox" data-direct-pacing-choice>
                   <span class="check-label">Present the Extended Day / longer-session option</span>
                 </label>
                 <label class="check" style="margin:0;min-width:240px;">
-                  <input name="presentShorterSessionsOption" type="checkbox">
+                  <input name="presentShorterSessionsOption" type="checkbox" data-direct-pacing-choice>
                   <span class="check-label">Present the smaller split-session option</span>
                 </label>
                 <label class="check" style="margin:0;min-width:240px;">
@@ -4089,7 +4111,7 @@
                   <label class="check"><input type="checkbox" name="allowedTattooBookingType" value="tattoo_extended"><span>Extended Day Session</span></label>
                 </div>
               </div>
-              <p class="contact">Choose only the information and pacing choices that should appear on this direct booking link. Unchecked items remain omitted.</p>
+              <p class="contact">Pacing prompts appear only with Client choice after estimate. When splitting is required, multi-session checkout is required and must allow the complete planned range.</p>
             </div>
           </fieldset>
           <fieldset class="direct-invite-types hidden" data-direct-invite-types="consultation">
@@ -4109,11 +4131,19 @@
     const status = form.querySelector("[data-direct-invite-status]");
     const result = detailEl.querySelector("[data-direct-invite-result]");
     const purposeInput = form.elements.purpose;
-    const estimateNoteInput = form.elements.clientEstimateNote;
+    const estimateNoteInput = form.elements.artistNote;
+    const splitPolicyInput = form.elements.splitPolicy;
+    const sessionsMinInput = form.elements.estimatedSessionsMin;
+    const sessionsMaxInput = form.elements.estimatedSessionsMax;
+    const minutesMinInput = form.elements.estimatedTotalMinutesMin;
+    const minutesMaxInput = form.elements.estimatedTotalMinutesMax;
+    const pacingInputs = [...form.querySelectorAll("[data-direct-pacing-choice]")];
     const multiToggle = form.elements.allowMultipleSessions;
     const multiLimit = form.querySelector("[data-direct-multi-limit]");
     const allowedTypeInputs = [...form.querySelectorAll('[name="allowedTattooBookingType"]')];
     estimateNoteInput.dataset.autoValue = DIRECT_INVITE_SESSION_NOTES.tattoo_quarter;
+    minutesMinInput.dataset.autoValue = "120";
+    minutesMaxInput.dataset.autoValue = "120";
     const syncDirectInviteEstimateNote = () => {
       const bookingTypeId = form.querySelector(
         '[data-direct-invite-types="tattoo"] input[type="radio"]:checked'
@@ -4121,18 +4151,64 @@
       const recommendedAllowedInput = allowedTypeInputs.find((input) => input.value === bookingTypeId);
       if (recommendedAllowedInput) recommendedAllowedInput.checked = true;
       const nextValue = DIRECT_INVITE_SESSION_NOTES[bookingTypeId] || "";
+      const [nextMinimum, nextMaximum] = DIRECT_INVITE_SESSION_MINUTES[bookingTypeId] || ["", ""];
       const currentValue = estimateNoteInput.value.trim();
       if (!currentValue || currentValue === estimateNoteInput.dataset.autoValue || currentValue === estimateCopy.fallbackNote) {
         estimateNoteInput.value = nextValue;
       }
       estimateNoteInput.dataset.autoValue = nextValue;
+      if (!minutesMinInput.value || minutesMinInput.value === minutesMinInput.dataset.autoValue) {
+        minutesMinInput.value = String(nextMinimum);
+      }
+      if (!minutesMaxInput.value || minutesMaxInput.value === minutesMaxInput.dataset.autoValue) {
+        minutesMaxInput.value = String(nextMaximum);
+      }
+      minutesMinInput.dataset.autoValue = String(nextMinimum);
+      minutesMaxInput.dataset.autoValue = String(nextMaximum);
+    };
+    const syncSessionPlan = () => {
+      const policy = splitPolicyInput.value;
+      const fixedOneSession = policy === "not_available";
+      const requiredSplit = policy === "required";
+      sessionsMinInput.readOnly = fixedOneSession;
+      sessionsMaxInput.readOnly = fixedOneSession;
+      if (fixedOneSession) {
+        sessionsMinInput.value = "1";
+        sessionsMaxInput.value = "1";
+      } else if (requiredSplit) {
+        if (Number(sessionsMinInput.value || 0) < 2) sessionsMinInput.value = "2";
+        if (Number(sessionsMaxInput.value || 0) < Number(sessionsMinInput.value)) {
+          sessionsMaxInput.value = sessionsMinInput.value;
+        }
+      } else {
+        if (Number(sessionsMinInput.value || 0) < 1) sessionsMinInput.value = "1";
+        if (Number(sessionsMaxInput.value || 0) < Math.max(2, Number(sessionsMinInput.value))) {
+          sessionsMaxInput.value = String(Math.max(2, Number(sessionsMinInput.value)));
+        }
+      }
+      const pacingAvailable = policy === "client_choice";
+      pacingInputs.forEach((input) => {
+        input.disabled = !pacingAvailable;
+        if (!pacingAvailable) input.checked = false;
+      });
+      if (requiredSplit) {
+        multiToggle.checked = true;
+        multiToggle.disabled = true;
+        form.elements.maxSessions.value = String(Math.max(
+          Number(form.elements.maxSessions.value || 2),
+          Number(sessionsMaxInput.value || 2),
+        ));
+      } else {
+        multiToggle.disabled = purposeInput.value !== "tattoo";
+      }
+      multiLimit.classList.toggle("hidden", purposeInput.value !== "tattoo" || !multiToggle.checked);
     };
     const syncPurpose = () => {
       const purpose = purposeInput.value;
       form.querySelectorAll("[data-direct-invite-types]").forEach((group) => {
         group.classList.toggle("hidden", group.dataset.directInviteTypes !== purpose);
       });
-      multiToggle.disabled = purpose !== "tattoo";
+      multiToggle.disabled = purpose !== "tattoo" || splitPolicyInput.value === "required";
       if (purpose !== "tattoo") multiToggle.checked = false;
       multiLimit.classList.toggle("hidden", purpose !== "tattoo" || !multiToggle.checked);
       if (purpose === "tattoo" && !multiToggle.checked) {
@@ -4141,9 +4217,13 @@
         )?.value || "";
         allowedTypeInputs.forEach((input) => { input.checked = input.value === recommendedTypeId; });
       }
+      if (purpose === "tattoo") syncSessionPlan();
     };
     purposeInput.addEventListener("change", syncPurpose);
     multiToggle.addEventListener("change", syncPurpose);
+    splitPolicyInput.addEventListener("change", syncSessionPlan);
+    sessionsMinInput.addEventListener("input", syncSessionPlan);
+    sessionsMaxInput.addEventListener("input", syncSessionPlan);
     form.querySelectorAll('[data-direct-invite-types="tattoo"] input[type="radio"]').forEach((input) => {
       input.addEventListener("change", syncDirectInviteEstimateNote);
     });
@@ -4163,15 +4243,25 @@
           `[data-direct-invite-types="${purpose}"] input[type="radio"]:checked`
         )?.value || "";
         if (!bookingTypeId) throw new Error("Choose a session type.");
-        const approvedBudgetValue = purpose === "tattoo"
-          ? (form.elements.approvedBudgetDollars?.value.trim() || "")
+        const approvedBudgetMinValue = purpose === "tattoo"
+          ? (form.elements.approvedBudgetMinDollars?.value.trim() || "")
           : "";
-        const approvedBudgetDollars = approvedBudgetValue === "" ? null : Number(approvedBudgetValue);
+        const approvedBudgetMaxValue = purpose === "tattoo"
+          ? (form.elements.approvedBudgetMaxDollars?.value.trim() || "")
+          : "";
+        const approvedBudgetMinDollars = approvedBudgetMinValue === "" ? null : Number(approvedBudgetMinValue);
+        const approvedBudgetMaxDollars = approvedBudgetMaxValue === "" ? null : Number(approvedBudgetMaxValue);
         if (
-          approvedBudgetDollars !== null
-          && (!Number.isSafeInteger(approvedBudgetDollars) || approvedBudgetDollars <= 0)
+          (approvedBudgetMinDollars === null) !== (approvedBudgetMaxDollars === null)
+          || (approvedBudgetMinDollars !== null && (
+            !Number.isSafeInteger(approvedBudgetMinDollars)
+            || !Number.isSafeInteger(approvedBudgetMaxDollars)
+            || approvedBudgetMinDollars <= 0
+            || approvedBudgetMaxDollars <= 0
+            || approvedBudgetMaxDollars < approvedBudgetMinDollars
+          ))
         ) {
-          throw new Error("Enter the project budget as a positive whole-dollar amount.");
+          throw new Error("Enter both approved budget values as positive whole-dollar amounts, with the maximum greater than or equal to the minimum.");
         }
         const expiresAt = localDateTimeToIso(form.elements.expiresAt.value);
         const allowMultipleSessions = purpose === "tattoo" && form.elements.allowMultipleSessions.checked;
@@ -4186,15 +4276,47 @@
         if (!allowedBookingTypes.includes(bookingTypeId)) {
           throw new Error("Include the recommended session length in the client choices.");
         }
+        const splitPolicy = purpose === "tattoo" ? form.elements.splitPolicy.value : "not_available";
+        const estimatedSessionsMin = purpose === "tattoo" ? Number(form.elements.estimatedSessionsMin.value) : 1;
+        const estimatedSessionsMax = purpose === "tattoo" ? Number(form.elements.estimatedSessionsMax.value) : 1;
+        const estimatedTotalMinutesMin = purpose === "tattoo" && form.elements.estimatedTotalMinutesMin.value !== ""
+          ? Number(form.elements.estimatedTotalMinutesMin.value)
+          : null;
+        const estimatedTotalMinutesMax = purpose === "tattoo" && form.elements.estimatedTotalMinutesMax.value !== ""
+          ? Number(form.elements.estimatedTotalMinutesMax.value)
+          : null;
+        if (!Number.isSafeInteger(estimatedSessionsMin) || !Number.isSafeInteger(estimatedSessionsMax) || estimatedSessionsMin < 1 || estimatedSessionsMax < estimatedSessionsMin) {
+          throw new Error("Enter a valid planned session range.");
+        }
+        if (splitPolicy === "required" && estimatedSessionsMin < 2) {
+          throw new Error("Required splitting needs a minimum of at least two sessions.");
+        }
+        if (splitPolicy === "required" && (!allowMultipleSessions || maxSessions < estimatedSessionsMax)) {
+          throw new Error("Required splitting must allow the client to book the complete planned session range.");
+        }
+        if ([estimatedTotalMinutesMin, estimatedTotalMinutesMax].some((value) => value !== null && (!Number.isSafeInteger(value) || value < 0))) {
+          throw new Error("Estimated project time must use non-negative whole minutes.");
+        }
+        if (estimatedTotalMinutesMin !== null && estimatedTotalMinutesMax !== null && estimatedTotalMinutesMin > estimatedTotalMinutesMax) {
+          throw new Error("Minimum total project time cannot exceed the maximum.");
+        }
         const payload = await api("/api/admin/booking/direct-invites", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             projectNote: form.elements.projectNote.value.trim(),
-            clientEstimateNote: form.elements.clientEstimateNote.value.trim(),
+            artistNote: form.elements.artistNote.value.trim(),
+            splitPolicy,
+            estimatedSessionsMin,
+            estimatedSessionsMax,
+            estimatedTotalMinutesMin,
+            estimatedTotalMinutesMax,
             tattooDescription: purpose === "tattoo" ? form.elements.tattooDescription.value.trim() : "",
-            approvedBudgetCents: purpose === "tattoo" && approvedBudgetDollars !== null
-              ? approvedBudgetDollars * 100
+            approvedBudgetMinCents: purpose === "tattoo" && approvedBudgetMinDollars !== null
+              ? approvedBudgetMinDollars * 100
+              : undefined,
+            approvedBudgetMaxCents: purpose === "tattoo" && approvedBudgetMaxDollars !== null
+              ? approvedBudgetMaxDollars * 100
               : undefined,
             presentLongerSessionOption: purpose === "tattoo"
               && form.elements.presentLongerSessionOption.checked,

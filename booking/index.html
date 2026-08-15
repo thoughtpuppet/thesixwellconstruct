@@ -391,6 +391,7 @@
       multiSession: {
         enabled: previewMultiEnabled,
         maxSessions: previewMultiEnabled ? previewMaxSessions : 1,
+        minimumSessions: 1,
       },
       client: { name: "Preview Client", email: "client@example.com", phone: "" },
       submission: {
@@ -582,6 +583,12 @@
       : 1;
   }
 
+  function minimumSessions() {
+    return multiSessionEnabled()
+      ? Math.max(1, Math.min(maximumSessions(), Number(context?.multiSession?.minimumSessions || 1)))
+      : 1;
+  }
+
   function selectedAppointmentSessions() {
     if (multiSessionEnabled()) return selectedSessions;
     return selectedType && selectedWindow
@@ -626,6 +633,7 @@
       : context?.client?.name || context?.client?.email || "-";
     checkoutBtn.disabled = !selectedType
       || !selectedAppointmentWindows().length
+      || selectedAppointmentSessions().length < minimumSessions()
       || !planIsReady(context?.sessionPlan)
       || !clientDetailsAreReady()
       || (extendedDayIsSelected() && !extendedDayAcknowledged);
@@ -965,7 +973,9 @@
           ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Select a time for review. This records the request but does not reserve the appointment.`
           : `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Your approved total is ${money(special.quotedPriceCents || 0)} for ${minutesLabel(special.durationMinutes || 0)}. The ${money(special.depositCents || 0)} deposit is credited toward that total; the remaining balance is ${money(Math.max(0, (special.quotedPriceCents || 0) - (special.depositCents || 0)))}.`
       : multiSessionEnabled()
-        ? `Your project and final session plan are ready for tattoo scheduling. Add up to ${maximumSessions()} appointments across the available session lengths. Square itemizes every selected session deposit in one checkout.`
+        ? minimumSessions() > 1
+          ? `Your project and final session plan are ready for tattoo scheduling. Add ${minimumSessions()} to ${maximumSessions()} appointments across the available session lengths. Square itemizes every selected session deposit in one checkout.`
+          : `Your project and final session plan are ready for tattoo scheduling. Add up to ${maximumSessions()} appointments across the available session lengths. Square itemizes every selected session deposit in one checkout.`
         : "Your project and final session plan are ready for tattoo scheduling. Select a session, complete the tattoo deposit through Square, and return here for confirmation.";
     sessionSectionLabel.textContent = experimental
       ? consultation ? "Free Project Consultation" : "Experimental Project Appointment"
@@ -1294,7 +1304,11 @@
         : selectedType?.label || "Select a session";
     windowValue.textContent = sessionCount
       ? chosenWindows.map((windowItem) => formatDate(windowItem.startAt)).join(" · ")
-      : multiSessionEnabled() ? `Add up to ${maximumSessions()} appointments` : "Select a time";
+      : multiSessionEnabled()
+        ? minimumSessions() > 1
+          ? `Add ${minimumSessions()} to ${maximumSessions()} appointments`
+          : `Add up to ${maximumSessions()} appointments`
+        : "Select a time";
     windowValue.title = sessionCount ? chosenWindows.map((windowItem) => formatDate(windowItem.startAt)).join("\n") : "";
     depositValue.textContent = selectedType
       ? money(depositDueCents, checkoutCurrency)
@@ -1344,7 +1358,9 @@
       : context?.purpose === "consultation"
         ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
         : multiSessionEnabled()
-          ? `Each itemized deposit is applied to its own appointment. You may combine the authorized session lengths across up to ${maximumSessions()} appointments.`
+          ? sessionCount < minimumSessions()
+            ? `Choose at least ${minimumSessions()} appointments for this session plan. Each deposit will be itemized in Square.`
+            : `Each itemized deposit is applied to its own appointment. You may combine the authorized session lengths across up to ${maximumSessions()} appointments.`
           : "The tattoo deposit is applied toward the appointment total.";
     updateCheckoutState();
     window.dispatchEvent(new CustomEvent("sixwell:booking-rendered"));
@@ -1573,7 +1589,7 @@
   checkoutBtn.addEventListener("click", async () => {
     const chosenSessions = selectedAppointmentSessions();
     const chosenWindows = chosenSessions.map((session) => session.window);
-    if (!selectedType || !chosenSessions.length) return;
+    if (!selectedType || chosenSessions.length < minimumSessions()) return;
     if (previewMode) {
       checkoutNote.textContent = "Preview selected: " + chosenSessions.map((session) => {
         const type = bookingTypeForSession(session);

@@ -1891,6 +1891,7 @@ export async function handleBookingContext(request, env) {
     const sessionPlan = context.purpose === "tattoo" && !isTattooSpecial
       ? await loadTattooSessionPlan(db, context.token.submission_id)
       : null;
+    const normalizedSessionPlan = normalizeTattooSessionPlan(sessionPlan);
     const sessionEstimateCopy = context.purpose === "tattoo" && !isTattooSpecial
       ? await loadSessionEstimateCopy(db)
       : null;
@@ -1953,8 +1954,13 @@ export async function handleBookingContext(request, env) {
           && Boolean(context.token.allow_multiple_sessions)
           ? Math.max(2, Math.min(24, Number(context.token.max_sessions || 2)))
           : 1,
+        minimumSessions: context.purpose === "tattoo"
+          && Boolean(context.token.allow_multiple_sessions)
+          && sessionPlan?.split_policy === "required"
+          ? Math.max(2, Math.min(24, Number(sessionPlan.estimated_sessions_min || 2)))
+          : 1,
       },
-      sessionPlan: normalizeTattooSessionPlan(sessionPlan),
+      sessionPlan: normalizedSessionPlan,
       sessionEstimateCopy,
       bookingTypes,
       availabilityWindows: windows,
@@ -3068,6 +3074,12 @@ function requestedPrivateBookingSessions(body, tokenContext) {
   }
   if (sessions.length > maxSessions) {
     return { error: `Choose no more than ${maxSessions} appointment times.` };
+  }
+  const minimumSessions = multiEnabled && tokenContext.sessionPlan?.split_policy === "required"
+    ? Math.max(2, Math.min(maxSessions, Number(tokenContext.sessionPlan.estimated_sessions_min || 2)))
+    : 1;
+  if (sessions.length < minimumSessions) {
+    return { error: `Choose at least ${minimumSessions} appointment times for this session plan.` };
   }
   return { sessions, multiEnabled, maxSessions };
 }
@@ -4885,13 +4897,16 @@ export async function handleCreateBookingCheckout(request, env) {
         code: "SPECIAL_APPROVAL_REQUIRED",
       });
     }
+    let checkoutSessionPlan = null;
     if (context.purpose === "tattoo") {
       const sessionPlanCheck = await ensureSessionPlanResponse(db, context);
       if (sessionPlanCheck.error) return errorResponse(sessionPlanCheck.error, 409);
+      checkoutSessionPlan = sessionPlanCheck.plan;
     }
     const clientClaim = await claimDirectInviteClient(db, context, body);
     if (clientClaim.error) return errorResponse(clientClaim.error, clientClaim.status);
     context = clientClaim.context;
+    context.sessionPlan = checkoutSessionPlan;
 
     const tip = parseTipCents(body.tipCents);
     if (tip.error) return errorResponse(tip.error, 400);
@@ -8583,22 +8598,57 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
 
   const projectNote = asString(body.projectNote);
   const clientEstimateNote = asString(body.clientEstimateNote);
+  const artistNote = asString(body.artistNote || clientEstimateNote);
   const tattooDescription = asString(body.tattooDescription);
   const purpose = asString(body.purpose) || "tattoo";
   const bookingTypeId = asString(body.bookingTypeId);
+  const hasOwn = (key) => Object.prototype.hasOwnProperty.call(body, key);
+  const integer = (value) => value === "" || value === null || value === undefined
+    ? null
+    : Math.round(Number(value));
   const hasSuppliedBookingTypes = body.allowedBookingTypes !== undefined;
   if (hasSuppliedBookingTypes && !Array.isArray(body.allowedBookingTypes)) {
     return errorResponse("Allowed booking types must be a non-empty list.", 400);
   }
+  const suppliedSplitPolicy = asString(body.splitPolicy);
+  const legacyFlexiblePacing = body.presentLongerSessionOption === true || body.presentShorterSessionsOption === true;
+  const splitPolicy = purpose === "tattoo"
+    ? (suppliedSplitPolicy || (legacyFlexiblePacing ? "client_choice" : "not_available"))
+    : "not_available";
+  const sessionCategory = splitPolicy === "not_available" ? "one_session" : "multiple_sessions";
+  let estimatedSessionsMin = hasOwn("estimatedSessionsMin") ? integer(body.estimatedSessionsMin) : null;
+  let estimatedSessionsMax = hasOwn("estimatedSessionsMax") ? integer(body.estimatedSessionsMax) : null;
+  if (splitPolicy === "not_available") estimatedSessionsMin = estimatedSessionsMax = 1;
+  if (splitPolicy === "required") {
+    estimatedSessionsMin = estimatedSessionsMin && estimatedSessionsMin >= 2 ? estimatedSessionsMin : 2;
+    estimatedSessionsMax = estimatedSessionsMax && estimatedSessionsMax >= estimatedSessionsMin
+      ? estimatedSessionsMax
+      : estimatedSessionsMin;
+  }
+  if (splitPolicy === "client_choice") {
+    estimatedSessionsMin = estimatedSessionsMin && estimatedSessionsMin > 0 ? estimatedSessionsMin : 1;
+    estimatedSessionsMax = estimatedSessionsMax && estimatedSessionsMax >= estimatedSessionsMin
+      ? estimatedSessionsMax
+      : Math.max(2, estimatedSessionsMin);
+  }
   const allowMultipleSessions = purpose === "tattoo" && body.allowMultipleSessions === true;
   const maxSessions = allowMultipleSessions ? Number(body.maxSessions) : 1;
-  const presentLongerSessionOption = purpose === "tattoo" && body.presentLongerSessionOption === true;
-  const presentShorterSessionsOption = purpose === "tattoo" && body.presentShorterSessionsOption === true;
+  const presentLongerSessionOption = purpose === "tattoo" && splitPolicy === "client_choice"
+    && body.presentLongerSessionOption === true;
+  const presentShorterSessionsOption = purpose === "tattoo" && splitPolicy === "client_choice"
+    && body.presentShorterSessionsOption === true;
   const includeAdditionalSketchDisclaimer = purpose === "tattoo" && body.includeAdditionalSketchDisclaimer === true;
   const approvedBudgetCents = purpose === "tattoo" && body.approvedBudgetCents !== undefined
     && body.approvedBudgetCents !== null && body.approvedBudgetCents !== ""
     ? Number(body.approvedBudgetCents)
     : null;
+  const hasBudgetRange = hasOwn("approvedBudgetMinCents") || hasOwn("approvedBudgetMaxCents");
+  const approvedBudgetMinCents = purpose === "tattoo" && hasBudgetRange
+    ? integer(body.approvedBudgetMinCents)
+    : approvedBudgetCents;
+  const approvedBudgetMaxCents = purpose === "tattoo" && hasBudgetRange
+    ? integer(body.approvedBudgetMaxCents)
+    : approvedBudgetCents;
   const allowed = hasSuppliedBookingTypes
     ? body.allowedBookingTypes.map(asString).filter(Boolean)
     : bookingTypeId ? [bookingTypeId] : [];
@@ -8613,7 +8663,7 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
   if (projectNote.length > 2000) {
     return errorResponse("Project note must be 2,000 characters or fewer.", 400);
   }
-  if (clientEstimateNote.length > 5000) {
+  if (artistNote.length > 5000) {
     return errorResponse("Session estimate wording must be 5,000 characters or fewer.", 400);
   }
   if (tattooDescription.length > 5000) {
@@ -8630,13 +8680,37 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
     }
   }
   if (
-    approvedBudgetCents !== null
-    && (!Number.isSafeInteger(approvedBudgetCents) || approvedBudgetCents <= 0)
+    (approvedBudgetMinCents === null) !== (approvedBudgetMaxCents === null)
+    || (approvedBudgetMinCents !== null && (
+      !Number.isSafeInteger(approvedBudgetMinCents)
+      || !Number.isSafeInteger(approvedBudgetMaxCents)
+      || approvedBudgetMinCents <= 0
+      || approvedBudgetMaxCents <= 0
+      || approvedBudgetMaxCents < approvedBudgetMinCents
+    ))
   ) {
-    return errorResponse("Project budget must be a positive whole-cent amount.", 400);
+    return errorResponse("Enter both approved project budget values with the maximum greater than or equal to the minimum.", 400);
   }
   if (!BOOKING_TOKEN_PURPOSES.has(purpose)) {
     return errorResponse("Booking purpose must be consultation or tattoo.", 400);
+  }
+  if (purpose === "tattoo" && !["required", "client_choice", "not_available"].includes(splitPolicy)) {
+    return errorResponse("Choose whether splitting is required, optional, or unavailable.", 400);
+  }
+  if (
+    purpose === "tattoo"
+    && (
+      !Number.isSafeInteger(estimatedSessionsMin)
+      || !Number.isSafeInteger(estimatedSessionsMax)
+      || estimatedSessionsMin < 1
+      || estimatedSessionsMax < estimatedSessionsMin
+      || estimatedSessionsMax > 24
+    )
+  ) {
+    return errorResponse("Enter a valid planned session range from 1 through 24.", 400);
+  }
+  if (splitPolicy === "required" && estimatedSessionsMin < 2) {
+    return errorResponse("Required splitting needs a minimum of at least two sessions.", 400);
   }
   if (new Set(allowed).size !== allowed.length) {
     return errorResponse("Allowed booking types must not contain duplicates.", 400);
@@ -8652,6 +8726,9 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
     && (!Number.isSafeInteger(maxSessions) || maxSessions < 2 || maxSessions > 24)
   ) {
     return errorResponse("Maximum sessions must be a whole number from 2 through 24.", 400);
+  }
+  if (splitPolicy === "required" && (!allowMultipleSessions || maxSessions < estimatedSessionsMax)) {
+    return errorResponse("Required splitting must allow the client to book the complete planned session range.", 400);
   }
 
   const requestedExpiry = asOptionalString(body.expiresAt);
@@ -8733,7 +8810,21 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
     if (purpose === "tattoo") {
       const primaryType = typeRows.find((row) => row.id === bookingTypeId);
       const recommendedMinutes = Number(primaryType?.duration_minutes || 0) || null;
-      const flexiblePacing = presentLongerSessionOption || presentShorterSessionsOption;
+      const estimatedTotalMinutesMin = hasOwn("estimatedTotalMinutesMin")
+        ? integer(body.estimatedTotalMinutesMin)
+        : recommendedMinutes;
+      const estimatedTotalMinutesMax = hasOwn("estimatedTotalMinutesMax")
+        ? integer(body.estimatedTotalMinutesMax)
+        : recommendedMinutes;
+      if (
+        [estimatedTotalMinutesMin, estimatedTotalMinutesMax].some(
+          (value) => value !== null && (!Number.isSafeInteger(value) || value < 0)
+        )
+        || (estimatedTotalMinutesMin !== null && estimatedTotalMinutesMax !== null
+          && estimatedTotalMinutesMin > estimatedTotalMinutesMax)
+      ) {
+        return errorResponse("Enter a valid estimated total project-time range.", 400);
+      }
       statements.push(
         db.prepare(
           `INSERT INTO tattoo_session_plans (
@@ -8751,18 +8842,18 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
         ).bind(
           crypto.randomUUID(),
           submissionId,
-          1,
-          presentShorterSessionsOption ? 2 : 1,
-          recommendedMinutes,
-          recommendedMinutes,
-          flexiblePacing ? "client_choice" : "not_available",
-          clientEstimateNote || directInviteSessionNote(bookingTypeId),
+          estimatedSessionsMin,
+          estimatedSessionsMax,
+          estimatedTotalMinutesMin,
+          estimatedTotalMinutesMax,
+          splitPolicy,
+          artistNote || directInviteSessionNote(bookingTypeId),
           presentLongerSessionOption ? 1 : 0,
           presentShorterSessionsOption ? 1 : 0,
           includeAdditionalSketchDisclaimer ? 1 : 0,
-          presentShorterSessionsOption ? "multiple_sessions" : "one_session",
-          approvedBudgetCents,
-          approvedBudgetCents,
+          sessionCategory,
+          approvedBudgetMinCents,
+          approvedBudgetMaxCents,
           "USD",
           0,
           0,
