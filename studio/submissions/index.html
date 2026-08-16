@@ -4888,14 +4888,8 @@
     const defaultDue = formatDateTimeInput(new Date(Math.min(Date.now() + 48 * 60 * 60 * 1000, firstSlotStartMs)).toISOString());
     const isReschedule = state.mode === "reschedule";
     const contactName = appointment?.clientName || "";
-    const rescheduleCount = Number(appointment?.rescheduleCount ?? appointment?.reschedule_count ?? 0);
-    const hoursUntilStart = appointment?.startAt
-      ? (new Date(appointment.startAt).getTime() - Date.now()) / (60 * 60 * 1000)
-      : Number.POSITIVE_INFINITY;
-    const policyOverrideRequired = isReschedule
-      && (hoursUntilStart < CLIENT_RESCHEDULE_CUTOFF_HOURS || rescheduleCount >= 1);
     return `
-      <form class="appointment-editor" data-appointment-editor data-mode="${isReschedule ? "reschedule" : "create"}" data-policy-override="${policyOverrideRequired ? "1" : "0"}" data-appointment-id="${escapeHtml(appointment?.id || "")}">
+      <form class="appointment-editor" data-appointment-editor data-mode="${isReschedule ? "reschedule" : "create"}" data-appointment-id="${escapeHtml(appointment?.id || "")}">
         <div class="appointment-editor-head">
           <div><span class="pill">${isReschedule ? "Reschedule Appointment" : "Schedule Appointment"}</span><h3>${isReschedule ? escapeHtml(contactName || "Client") : "New Studio-scheduled appointment"}</h3></div>
           <button class="button" type="button" data-close-appointment-editor>Close</button>
@@ -4920,12 +4914,8 @@
           <h4>Time</h4>
           <div class="appointment-editor-grid">
             ${isReschedule ? `
-              <input name="timeMode" type="hidden" value="slot">
-              <div class="field wide" data-appointment-slot-field><label>New appointment time</label><select name="availabilityWindowId" data-appointment-slot>${slots.length ? slots.map((slot) => `<option value="${escapeHtml(slot.id)}">${escapeHtml(formatDate(slot.startAt))}</option>`).join("") : '<option value="">No available times</option>'}</select></div>
-              <div class="field wide" data-appointment-custom-field hidden><label>Custom start time</label><input name="customStartAt" type="datetime-local"><button class="button" type="button" data-appointment-use-slot style="margin-top:8px;">Use an Available Time</button></div>
-              <div class="field wide" data-appointment-custom-action><button class="button" type="button" data-appointment-use-custom>Enter a Custom Time</button></div>
-              ${policyOverrideRequired ? `<div class="field wide"><div class="contact">This appointment is ${rescheduleCount >= 1 ? "using an additional reschedule" : "inside the 48-hour client cutoff"}. Studio authorization and a reason will be recorded automatically.</div></div>` : ""}
-              <div class="field wide" data-appointment-reason-field${policyOverrideRequired ? "" : " hidden"}><label data-appointment-reason-label>${policyOverrideRequired ? "Studio override reason" : "Custom-time reason"}</label><textarea name="note" rows="3" maxlength="2000"${policyOverrideRequired ? " required" : ""}></textarea></div>
+              <input name="timeMode" type="hidden" value="custom">
+              <div class="field wide"><label>New appointment time</label><input name="customStartAt" type="datetime-local" required></div>
             ` : `
               <div class="field"><label>Time source</label><select name="timeMode" data-appointment-time-mode><option value="slot">Available slot</option><option value="custom">Custom time override</option></select></div>
               <div class="field" data-appointment-slot-field><label>Available slot</label><select name="availabilityWindowId" data-appointment-slot>${slots.length ? slots.map((slot) => `<option value="${escapeHtml(slot.id)}">${escapeHtml(formatDate(slot.startAt))}</option>`).join("") : '<option value="">No available slots</option>'}</select></div>
@@ -4990,10 +4980,8 @@
     const timeMode = form.elements.timeMode?.value || "slot";
     const slotField = form.querySelector("[data-appointment-slot-field]");
     const customField = form.querySelector("[data-appointment-custom-field]");
-    const customAction = form.querySelector("[data-appointment-custom-action]");
     if (slotField) slotField.hidden = timeMode !== "slot";
     if (customField) customField.hidden = timeMode !== "custom";
-    if (customAction) customAction.hidden = timeMode === "custom";
     const paymentMode = form.elements.paymentMode?.value || "none";
     form.querySelector("[data-appointment-deposit-field]")?.toggleAttribute("hidden", paymentMode === "none");
     form.querySelector("[data-appointment-deadline-field]")?.toggleAttribute("hidden", paymentMode !== "square_link");
@@ -5002,14 +4990,6 @@
     if (deposit && deposit.dataset.bookingTypeId !== typeId) {
       deposit.value = priceInputValue(type?.depositCents || 0);
       deposit.dataset.bookingTypeId = typeId;
-    }
-    const policyOverrideRequired = form.dataset.policyOverride === "1";
-    const reasonField = form.querySelector("[data-appointment-reason-field]");
-    const reasonLabel = form.querySelector("[data-appointment-reason-label]");
-    if (reasonField) reasonField.hidden = !policyOverrideRequired && timeMode !== "custom";
-    if (reasonLabel) reasonLabel.textContent = policyOverrideRequired ? "Studio override reason" : "Custom-time reason";
-    if (form.elements.note && form.dataset.mode === "reschedule") {
-      form.elements.note.required = policyOverrideRequired || timeMode === "custom";
     }
   }
 
@@ -8537,26 +8517,6 @@ ${meetingLines}
       return;
     }
 
-    const useCustomTime = event.target.closest("[data-appointment-use-custom]");
-    if (useCustomTime) {
-      const form = useCustomTime.closest("[data-appointment-editor]");
-      if (!form) return;
-      form.elements.timeMode.value = "custom";
-      syncAppointmentEditorControls(form);
-      form.elements.customStartAt?.focus();
-      return;
-    }
-
-    const useAvailableTime = event.target.closest("[data-appointment-use-slot]");
-    if (useAvailableTime) {
-      const form = useAvailableTime.closest("[data-appointment-editor]");
-      if (!form) return;
-      form.elements.timeMode.value = "slot";
-      syncAppointmentEditorControls(form);
-      form.elements.availabilityWindowId?.focus();
-      return;
-    }
-
     const personChoice = event.target.closest("[data-appointment-person-id]");
     if (personChoice) {
       const form = personChoice.closest("[data-appointment-editor]");
@@ -10400,11 +10360,29 @@ ${meetingLines}
         };
         let payload;
         if (mode === "reschedule") {
-          payload = await api(`/api/admin/booking/appointments/${encodeURIComponent(appointmentId)}/reschedule`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ ...common, overridePolicy: appointmentForm.dataset.policyOverride === "1" }),
-          });
+          const moveAppointment = (overrideConflict = false) => api(
+            `/api/admin/booking/appointments/${encodeURIComponent(appointmentId)}/reschedule`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ ...common, overridePolicy: true, overrideConflict }),
+            },
+          );
+          try {
+            payload = await moveAppointment(false);
+          } catch (error) {
+            if (error.code !== "APPOINTMENT_TIME_CONFLICT") throw error;
+            const conflictTimes = (error.payload?.conflicts || [])
+              .map((conflict) => formatDate(conflict.startAt))
+              .filter(Boolean)
+              .join("\n");
+            const detail = conflictTimes ? `\n\nConflicting appointment${conflictTimes.includes("\n") ? "s" : ""}:\n${conflictTimes}` : "";
+            if (!window.confirm(`That time conflicts with another active appointment.${detail}\n\nReschedule anyway?`)) {
+              if (status) status.textContent = "Choose a different appointment time.";
+              setStatus("Reschedule conflict not overridden");
+              return;
+            }
+            payload = await moveAppointment(true);
+          }
         } else {
           const paymentMode = String(values.paymentMode || "none");
           payload = await api("/api/admin/booking/appointments", {

@@ -981,6 +981,11 @@ test("Studio keeps scheduling controls separate from a confirmed-only reschedule
   assert.match(studio, /appointmentCanStudioReschedule\(appointment\)/);
   assert.match(studio, /function appointmentCanStudioReschedule\(appointment\) \{\s*return appointmentIsConfirmed\(appointment\);\s*\}/);
   assert.doesNotMatch(studio, /appointmentIsConfirmed\(appointment\).*startMs > Date\.now\(\)/);
+  assert.match(studio, /<label>New appointment time<\/label><input name="customStartAt" type="datetime-local" required>/);
+  assert.doesNotMatch(studio, /Use an Available Time|Enter a Custom Time/);
+  assert.match(studio, /APPOINTMENT_TIME_CONFLICT/);
+  assert.match(studio, /Reschedule anyway\?/);
+  assert.match(studio, /overridePolicy: true, overrideConflict/);
   assert.doesNotMatch(studio, /appointment\.isManual && appointmentIsPending\(appointment\)/);
   assert.doesNotMatch(booking, /movePendingManualAppointment|manual_hold_moved|pending_deposit_moved/);
   assert.match(booking, /Only confirmed appointments can be rescheduled/);
@@ -9668,7 +9673,7 @@ test("expired replacement holds never expose a stale Square checkout URL", async
   assert.equal(wrongEmail.status, 403);
 });
 
-test("admin reschedule atomically enforces availability and increments calendar revision state", async () => {
+test("admin reschedule warns on a conflicting new time and can explicitly override it", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
   const env = {
@@ -9726,6 +9731,28 @@ test("admin reschedule atomically enforces availability and increments calendar 
     now,
     now,
   );
+  database.prepare(
+    `INSERT INTO appointments (
+      id, booking_type_id, status, purpose, client_name, client_email,
+      start_at, end_at, deposit_cents, currency, hold_state,
+      reschedule_count, created_at, updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    "admin-reschedule-conflict",
+    "consult_in_person",
+    "confirmed",
+    "standalone_consultation",
+    "Existing Client",
+    "existing@example.test",
+    targetStart,
+    targetEnd,
+    0,
+    "USD",
+    "converted",
+    0,
+    now,
+    now,
+  );
   insertPaymentFixture(database, {
     id: "admin-reschedule-paid-deposit",
     appointmentId: "admin-reschedule-contract",
@@ -9736,9 +9763,23 @@ test("admin reschedule atomically enforces availability and increments calendar 
     amountCents: 5000,
   });
 
+  const conflictResponse = await handleAdminRescheduleAppointment(adminJsonRequest(
+    "/api/admin/booking/appointments/admin-reschedule-contract/reschedule",
+    { customStartAt: targetStart, overridePolicy: true, notifyClient: false },
+    adminToken,
+  ), env, "admin-reschedule-contract");
+  const conflictPayload = await conflictResponse.json();
+  assert.equal(conflictResponse.status, 409);
+  assert.equal(conflictPayload.code, "APPOINTMENT_TIME_CONFLICT");
+  assert.equal(conflictPayload.conflicts[0].id, "admin-reschedule-conflict");
+  assert.equal(
+    database.prepare("SELECT start_at FROM appointments WHERE id=?").get("admin-reschedule-contract").start_at,
+    originalStart,
+  );
+
   const response = await handleAdminRescheduleAppointment(adminJsonRequest(
     "/api/admin/booking/appointments/admin-reschedule-contract/reschedule",
-    { availabilityWindowId: "reschedule-target", note: "Contract move", notifyClient: false },
+    { customStartAt: targetStart, overridePolicy: true, overrideConflict: true, notifyClient: false },
     adminToken,
   ), env, "admin-reschedule-contract");
   const payload = await response.json();

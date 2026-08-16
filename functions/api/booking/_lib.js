@@ -6811,7 +6811,7 @@ async function moveConfirmedAppointment(
 }
 
 async function moveConfirmedAppointmentToPrivateWindow(
-  request, env, db, appointmentRow, window, note, overridePolicy, notifyClient,
+  request, env, db, appointmentRow, window, note, overridePolicy, notifyClient, overrideConflict = false,
 ) {
   const original = normalizeAppointment(appointmentRow);
   const hoursUntilStart = (new Date(original.startAt).getTime() - Date.now()) / (60 * 60 * 1000);
@@ -6821,8 +6821,7 @@ async function moveConfirmedAppointmentToPrivateWindow(
   if (!overridePolicy && original.rescheduleCount >= 1) {
     return { error: "This appointment has already used its reschedule.", status: 409 };
   }
-  const eventNote = asString(note).slice(0, 2000);
-  if (!eventNote) return { error: "A reason is required for a custom-time override.", status: 400 };
+  const eventNote = asString(note).slice(0, 2000) || null;
   const now = new Date().toISOString();
   const results = await db.batch([
     db.prepare(
@@ -6833,7 +6832,7 @@ async function moveConfirmedAppointmentToPrivateWindow(
            reschedule_count=reschedule_count+1,rescheduled_at=?,updated_at=?
        WHERE id=? AND status='confirmed' AND replaced_by_appointment_id IS NULL
          AND (?=1 OR reschedule_count=0)
-         AND NOT EXISTS (
+         AND (?=1 OR NOT EXISTS (
            SELECT 1 FROM appointments overlap_appointment
            LEFT JOIN availability_windows overlap_window ON overlap_window.id=overlap_appointment.availability_window_id
            WHERE overlap_appointment.id<>appointments.id
@@ -6842,9 +6841,10 @@ async function moveConfirmedAppointmentToPrivateWindow(
                < unixepoch(?) + ?*60
              AND unixepoch(overlap_appointment.end_at)+COALESCE(overlap_window.buffer_after_minutes,0)*60
                > unixepoch(?) - ?*60
-         )`
+         ))`
     ).bind(
       window.id, window.start_at, window.end_at, now, now, original.id, overridePolicy ? 1 : 0,
+      overrideConflict ? 1 : 0,
       window.end_at, Number(window.buffer_after_minutes || 0),
       window.start_at, Number(window.buffer_before_minutes || 0),
     ),
@@ -6856,13 +6856,18 @@ async function moveConfirmedAppointmentToPrivateWindow(
       JSON.stringify({
         fromStartAt: original.startAt, fromEndAt: original.endAt,
         toStartAt: window.start_at, toEndAt: window.end_at,
-        paymentRequired: false, policyOverride: Boolean(overridePolicy), customTime: true,
+        paymentRequired: false, policyOverride: Boolean(overridePolicy),
+        conflictOverride: Boolean(overrideConflict), customTime: true,
       }), now, original.id, now, now,
     ),
   ]);
   if (Number(results?.[0]?.meta?.changes || 0) < 1) {
     await cleanupManualAppointmentDraft(db, env, "", window.id);
-    return { error: "The custom time became unavailable before the move completed.", status: 409 };
+    return {
+      error: "That time conflicts with another active appointment.",
+      status: 409,
+      code: "APPOINTMENT_TIME_CONFLICT",
+    };
   }
   await updatePendingRenderingExpiry(db, original.id, window.start_at);
   if (String(original.availabilityWindowId || "").startsWith("manual:")) {
@@ -7222,9 +7227,6 @@ export async function handleAdminRescheduleAppointment(request, env, appointment
   if (Boolean(availabilityWindowId) === Boolean(customStartAt)) {
     return errorResponse("Choose one available slot or one custom start time.", 400);
   }
-  if (body.overridePolicy === true && !note) {
-    return errorResponse("A reason is required for a Studio policy override.", 400);
-  }
   try {
     const db = requireBookingDb(env);
     const row = await selectAppointmentWithMeeting(db, appointmentId);
@@ -7236,14 +7238,19 @@ export async function handleAdminRescheduleAppointment(request, env, appointment
     if (customStartAt) {
       const bookingType = await db.prepare("SELECT * FROM booking_types WHERE id=? AND active=1").bind(row.booking_type_id).first();
       if (!bookingType) return errorResponse("This appointment type is no longer available.", 409);
-      const created = await createPrivateManualWindow(db, bookingType, customStartAt, note, appointmentId);
-      if (created.error) return errorResponse(created.error, 409);
+      const created = await createPrivateManualWindow(
+        db, bookingType, customStartAt, note, appointmentId, body.overrideConflict === true,
+      );
+      if (created.error) {
+        return errorResponse(created.error, 409, { code: created.code || "", conflicts: created.conflicts || [] });
+      }
       privateWindow = created.window;
     }
     let moved;
     if (privateWindow) {
       moved = await moveConfirmedAppointmentToPrivateWindow(
-        request, env, db, row, privateWindow, note, body.overridePolicy === true, body.notifyClient !== false,
+        request, env, db, row, privateWindow, note, body.overridePolicy === true,
+        body.notifyClient !== false, body.overrideConflict === true,
       );
     } else {
       moved = await moveConfirmedAppointment(
@@ -7259,7 +7266,7 @@ export async function handleAdminRescheduleAppointment(request, env, appointment
       );
     }
     if (moved?.error && privateWindow) await cleanupManualAppointmentDraft(db, env, "", privateWindow.id);
-    if (moved.error) return errorResponse(moved.error, moved.status || 409);
+    if (moved.error) return errorResponse(moved.error, moved.status || 409, { code: moved.code || "" });
     return json({
       ok: true,
       mode: "moved",
@@ -11082,7 +11089,9 @@ async function cleanupManualAppointmentDraft(db, env, appointmentId, windowId = 
   }
 }
 
-async function createPrivateManualWindow(db, bookingType, startAt, note, excludeAppointmentId = "") {
+async function createPrivateManualWindow(
+  db, bookingType, startAt, note, excludeAppointmentId = "", overrideConflict = false,
+) {
   const startMs = new Date(startAt).getTime();
   const durationMinutes = Number(bookingType.duration_minutes || 0);
   if (!Number.isFinite(startMs) || startMs <= Date.now()) return { error: "Custom appointment time must be in the future." };
@@ -11105,8 +11114,19 @@ async function createPrivateManualWindow(db, bookingType, startAt, note, exclude
   const activeAppointments = (await loadActiveAppointments(
     db, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
   )).filter((appointment) => appointment.id !== excludeAppointmentId);
-  if (!hasSlotCapacity(candidate, activeAppointments, bookingType.id)) {
-    return { error: "That custom time overlaps another active appointment." };
+  const conflicts = activeAppointments.filter((appointment) =>
+    intervalsOverlap(intervalWithBuffer(candidate), intervalWithBuffer(appointment))
+  );
+  if (conflicts.length && !overrideConflict) {
+    return {
+      error: "That time conflicts with another active appointment.",
+      code: "APPOINTMENT_TIME_CONFLICT",
+      conflicts: conflicts.map((appointment) => ({
+        id: appointment.id,
+        startAt: appointment.start_at,
+        endAt: appointment.end_at,
+      })),
+    };
   }
   const now = new Date().toISOString();
   await db.prepare(
