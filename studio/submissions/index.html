@@ -178,6 +178,17 @@
   .booking-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
   .assist-panel { border:5px solid var(--ring-faint); padding:14px; margin-top:16px; display:grid; gap:10px; }
   .assist-panel textarea { min-height:112px; }
+  .appointment-editor { border:5px solid rgba(252,184,103,.34); padding:16px; margin:0 0 22px; display:grid; gap:16px; min-width:0; }
+  .appointment-editor-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .appointment-editor-head h3 { margin:0; color:var(--accent); font-family:var(--sans); font-size:18px; letter-spacing:.04em; text-transform:uppercase; }
+  .appointment-editor-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; min-width:0; }
+  .appointment-editor-grid .wide { grid-column:1/-1; }
+  .appointment-editor-results { display:grid; gap:6px; max-height:180px; overflow:auto; }
+  .appointment-editor-result { width:100%; text-align:left; border:5px solid var(--ring-faint); background:transparent; color:var(--text); padding:10px; display:grid; gap:3px; }
+  .appointment-editor-result:hover { border-color:var(--accent); }
+  .appointment-editor-section { border-top:5px solid var(--ring-faint); padding-top:14px; display:grid; gap:12px; }
+  .appointment-editor-section h4 { margin:0; color:var(--accent); font:800 11px/1.4 var(--sans); letter-spacing:.14em; text-transform:uppercase; }
+  .appointment-editor-status { min-height:20px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:.08em; text-transform:uppercase; }
   .text-template-editor { border:5px solid var(--ring-faint); padding:14px; display:grid; gap:12px; margin-top:6px; min-width:0; max-width:100%; }
   .text-template-editor-grid { display:grid; grid-template-columns:minmax(180px,.65fr) minmax(0,1.35fr); gap:12px; align-items:start; min-width:0; }
   .text-template-editor-grid > label,.text-template-editor select,.text-template-editor textarea { min-width:0; max-width:100%; }
@@ -628,6 +639,8 @@
     .day-override-window { grid-template-columns:1fr; }
     .availability-manager .weekly-day-header { align-items:stretch; flex-direction:column; }
     .availability-manager .wide-field { grid-column:auto; }
+    .appointment-editor-grid { grid-template-columns:1fr; }
+    .appointment-editor-grid .wide { grid-column:auto; }
     .event-occurrence-editor { grid-template-columns:minmax(0,1fr); }
     .event-occurrence-editor .wide-field { grid-column:auto; }
     .event-admission-editor { grid-template-columns:minmax(0,1fr); }
@@ -848,6 +861,10 @@
   let submissions = [];
   let appointments = [];
   let bookingTypes = [];
+  let appointmentEditorState = null;
+  let appointmentEditorWindows = [];
+  let appointmentEditorPeople = [];
+  let appointmentEditorSearchTimer = 0;
   let events = [];
   let activeId = "";
   let activeAppointmentId = "";
@@ -4784,6 +4801,154 @@
     return appointment?.bookingTypeLabel || titleize(appointment?.bookingTypeId || "studio booking");
   }
 
+  function appointmentEditorScopeFor(appointment = null) {
+    if (appointment) {
+      if (isArtVisitAppointment(appointment)) return "art";
+      if (isStudioSpaceAppointment(appointment)) return "studio";
+      return "tattoo";
+    }
+    return activeTab === "art" ? "art" : activeTab === "studio" ? "studio" : "tattoo";
+  }
+
+  function appointmentEditorTypes() {
+    const ids = new Set(AVAILABILITY_CONFIGS[appointmentEditorState?.scope || "tattoo"]?.bookingTypeIds || []);
+    return bookingTypes.filter((type) => ids.has(type.id) && type.active !== false);
+  }
+
+  function appointmentEditorSlots(typeId) {
+    return appointmentEditorWindows
+      .filter((windowItem) => !windowItem.bookingTypeId || windowItem.bookingTypeId === typeId)
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+  }
+
+  function appointmentEditorRequestOptions(scope, selectedId = "") {
+    const visible = submissions.filter((submission) => {
+      if (["cancelled", "declined", "archived"].includes(submission.status)) return false;
+      if (scope === "studio") return submission.type === "studio_booking";
+      if (scope === "art") return ["art_acquisition", "art_inquiry"].includes(submission.type);
+      return TAB_TYPES.tattoo.includes(submission.type) && submission.type !== "tattoo_special";
+    });
+    return `<option value="">No linked request</option>${visible.map((submission) => `
+      <option value="${escapeHtml(submission.id)}"${submission.id === selectedId ? " selected" : ""}>${escapeHtml(submission.contactName || "Unnamed")} / ${escapeHtml(titleize(submission.type || "request"))}</option>
+    `).join("")}`;
+  }
+
+  function appointmentEditorMarkup() {
+    const state = appointmentEditorState;
+    if (!state) return "";
+    const appointment = state.appointmentId
+      ? appointments.find((item) => item.id === state.appointmentId) || null
+      : null;
+    const types = appointmentEditorTypes();
+    const selectedTypeId = appointment?.bookingTypeId || state.bookingTypeId || types[0]?.id || "";
+    state.bookingTypeId = selectedTypeId;
+    const selectedType = types.find((type) => type.id === selectedTypeId) || null;
+    const slots = appointmentEditorSlots(selectedTypeId);
+    const firstSlotStartMs = slots[0]?.startAt ? new Date(slots[0].startAt).getTime() : Number.POSITIVE_INFINITY;
+    const defaultDue = formatDateTimeInput(new Date(Math.min(Date.now() + 48 * 60 * 60 * 1000, firstSlotStartMs)).toISOString());
+    const isReschedule = state.mode === "reschedule";
+    const contactName = appointment?.clientName || "";
+    return `
+      <form class="appointment-editor" data-appointment-editor data-mode="${isReschedule ? "reschedule" : "create"}" data-appointment-id="${escapeHtml(appointment?.id || "")}">
+        <div class="appointment-editor-head">
+          <div><span class="pill">${isReschedule ? "Reschedule Appointment" : "Schedule Appointment"}</span><h3>${isReschedule ? escapeHtml(contactName || "Client") : "New Studio-scheduled appointment"}</h3></div>
+          <button class="button" type="button" data-close-appointment-editor>Close</button>
+        </div>
+        ${isReschedule ? `
+          <div class="contact">${escapeHtml(appointmentTypeLabel(appointment))}<br>${escapeHtml(formatDate(appointment.startAt))}<br>Duration remains fixed at ${escapeHtml(String(selectedType?.durationMinutes || ""))} minutes.</div>
+          <input name="bookingTypeId" type="hidden" value="${escapeHtml(selectedTypeId)}">
+        ` : `
+          <section class="appointment-editor-section">
+            <h4>Client and request</h4>
+            <div class="appointment-editor-grid">
+              <div class="field wide"><label>Find a person</label><input type="search" data-appointment-person-search placeholder="Search People by name, email, or phone" autocomplete="off"><input name="crmPersonId" type="hidden" value=""><div class="appointment-editor-results" data-appointment-person-results></div></div>
+              <div class="field"><label>Client name</label><input name="clientName" required maxlength="200"></div>
+              <div class="field"><label>Email</label><input name="clientEmail" type="email" maxlength="320"></div>
+              <div class="field"><label>Phone</label><input name="clientPhone" type="tel" maxlength="80"></div>
+              <div class="field"><label>Compatible request (optional)</label><select name="submissionId">${appointmentEditorRequestOptions(state.scope)}</select></div>
+              <div class="field wide"><label>Booking type</label><select name="bookingTypeId" data-appointment-booking-type required>${types.map((type) => `<option value="${escapeHtml(type.id)}"${type.id === selectedTypeId ? " selected" : ""}>${escapeHtml(type.label || titleize(type.id))} / ${escapeHtml(String(type.durationMinutes || 0))} minutes</option>`).join("")}</select></div>
+            </div>
+          </section>
+        `}
+        <section class="appointment-editor-section">
+          <h4>Time</h4>
+          <div class="appointment-editor-grid">
+            <div class="field"><label>Time source</label><select name="timeMode" data-appointment-time-mode><option value="slot">Available slot</option><option value="custom">Custom time override</option></select></div>
+            <div class="field" data-appointment-slot-field><label>Available slot</label><select name="availabilityWindowId" data-appointment-slot>${slots.length ? slots.map((slot) => `<option value="${escapeHtml(slot.id)}">${escapeHtml(formatDate(slot.startAt))}</option>`).join("") : '<option value="">No available slots</option>'}</select></div>
+            <div class="field" data-appointment-custom-field hidden><label>Custom start</label><input name="customStartAt" type="datetime-local"></div>
+            ${isReschedule ? `<div class="field"><label><input name="overridePolicy" type="checkbox" value="1"> Override client reschedule policy</label></div><div class="field wide" data-appointment-override-reason hidden><label>Override reason</label><textarea name="note" rows="3" maxlength="2000"></textarea></div>` : `<div class="field wide"><label>Internal scheduling note</label><textarea name="note" rows="3" maxlength="2000"></textarea></div>`}
+          </div>
+          <p class="contact">Custom time bypasses public hours, notice, horizon, blackouts, and daily caps. Appointment overlap is always blocked.</p>
+        </section>
+        ${isReschedule ? "" : `
+          <section class="appointment-editor-section">
+            <h4>Payment</h4>
+            <div class="appointment-editor-grid">
+              <div class="field"><label>Payment handling</label><select name="paymentMode" data-appointment-payment-mode><option value="none">No deposit</option><option value="external_paid">Paid elsewhere</option><option value="square_link">Square deposit link</option></select></div>
+              <div class="field" data-appointment-deposit-field hidden><label>Deposit amount</label><input name="depositDollars" type="number" min="0.01" step="0.01" value="${escapeHtml(priceInputValue(selectedType?.depositCents || 0))}"></div>
+              <div class="field" data-appointment-deadline-field hidden><label>Pay by</label><input name="paymentDueAt" type="datetime-local" value="${escapeHtml(defaultDue)}"></div>
+              <div class="field wide" data-appointment-payment-note-field hidden><label>Payment note</label><textarea name="paymentNote" rows="2" maxlength="2000" placeholder="Receipt, payment method, or internal reference"></textarea></div>
+            </div>
+          </section>
+        `}
+        <div class="appointment-editor-status" data-appointment-editor-status></div>
+        <div class="booking-actions">
+          <button class="button" type="submit" data-notify-client="0">Save only</button>
+          <button class="button" type="submit" data-notify-client="1">Save + Email Client</button>
+        </div>
+      </form>`;
+  }
+
+  function renderAppointmentEditorSurface() {
+    const active = activeAppointmentId ? appointments.find((item) => item.id === activeAppointmentId) : null;
+    if (active) renderStudioAppointmentDetail(active);
+    else if (activeTab === "tattoo") renderAppointmentsManager().catch((error) => setStatus(error.message));
+    else renderStudioAppointmentDetail(null);
+  }
+
+  async function openAppointmentEditor(mode, appointmentId = "") {
+    const appointment = appointmentId ? appointments.find((item) => item.id === appointmentId) || null : null;
+    appointmentEditorState = {
+      mode,
+      appointmentId: appointment?.id || "",
+      scope: appointmentEditorScopeFor(appointment),
+      bookingTypeId: appointment?.bookingTypeId || "",
+    };
+    if (appointment) activeAppointmentId = appointment.id;
+    setStatus(mode === "reschedule" ? "Loading reschedule options" : "Loading appointment options");
+    const payload = await api(`/api/admin/booking/availability-preview?scope=${encodeURIComponent(appointmentEditorState.scope)}`);
+    bookingTypes = payload.bookingTypes || bookingTypes;
+    appointmentEditorWindows = payload.availabilityWindows || [];
+    renderAppointmentEditorSurface();
+    enhanceControls(detailEl);
+    syncAppointmentEditorControls(detailEl.querySelector("[data-appointment-editor]"));
+    detailEl.querySelector("[data-appointment-editor]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setStatus(mode === "reschedule" ? "Choose the new appointment time" : "Appointment editor ready");
+  }
+
+  function syncAppointmentEditorControls(form) {
+    if (!form) return;
+    const typeId = form.elements.bookingTypeId?.value || appointmentEditorState?.bookingTypeId || "";
+    if (appointmentEditorState) appointmentEditorState.bookingTypeId = typeId;
+    const type = bookingTypes.find((item) => item.id === typeId);
+    const timeMode = form.elements.timeMode?.value || "slot";
+    const slotField = form.querySelector("[data-appointment-slot-field]");
+    const customField = form.querySelector("[data-appointment-custom-field]");
+    if (slotField) slotField.hidden = timeMode !== "slot";
+    if (customField) customField.hidden = timeMode !== "custom";
+    const paymentMode = form.elements.paymentMode?.value || "none";
+    form.querySelector("[data-appointment-deposit-field]")?.toggleAttribute("hidden", paymentMode === "none");
+    form.querySelector("[data-appointment-deadline-field]")?.toggleAttribute("hidden", paymentMode !== "square_link");
+    form.querySelector("[data-appointment-payment-note-field]")?.toggleAttribute("hidden", paymentMode === "none");
+    const deposit = form.elements.depositDollars;
+    if (deposit && deposit.dataset.bookingTypeId !== typeId) {
+      deposit.value = priceInputValue(type?.depositCents || 0);
+      deposit.dataset.bookingTypeId = typeId;
+    }
+    const overrideReason = form.querySelector("[data-appointment-override-reason]");
+    if (overrideReason) overrideReason.hidden = !form.elements.overridePolicy?.checked;
+  }
+
   function studioBookingAppointments() {
     return appointments
       .filter(appointmentBelongsToActiveBookingView)
@@ -4833,7 +4998,16 @@
       ? (appointment?.isTattooSpecial ? "Tattoo Special" : "Tattoo Appointment")
       : isArtVisit ? "Open Studio Visit" : "Room Booking";
     if (!appointment) {
-      detailEl.innerHTML = `<p class="empty">Select a ${bookingLabel.toLowerCase()} to manage details.</p>`;
+      detailEl.innerHTML = `
+        <div class="detail-head">
+          <span class="pill">${escapeHtml(bookingLabel)}</span>
+          <h2>${escapeHtml(bookingLabel)}s</h2>
+          <p class="contact">Select an appointment to manage it, or schedule one directly for a client.</p>
+          <div class="booking-actions"><button class="button" type="button" data-open-appointment-editor="create">Schedule Appointment</button></div>
+        </div>
+        ${appointmentEditorMarkup()}`;
+      enhanceControls(detailEl);
+      syncAppointmentEditorControls(detailEl.querySelector("[data-appointment-editor]"));
       return;
     }
     const related = appointmentRelatedSubmission(appointment);
@@ -4860,6 +5034,8 @@
         </p>
         <div class="booking-actions">
           ${isTattooAppointment ? '<button class="button" type="button" data-back-appointments>Back to Appointments</button>' : ""}
+          <button class="button" type="button" data-open-appointment-editor="create">Schedule Appointment</button>
+          ${(appointmentIsConfirmed(appointment) || (appointment.isManual && appointmentIsPending(appointment))) ? `<button class="button" type="button" data-reschedule-appointment="${escapeHtml(appointment.id)}">Reschedule Appointment</button>` : ""}
           ${calendarHref ? `<a class="button" href="${escapeHtml(calendarHref)}" target="_blank" rel="noopener noreferrer">Add to Calendar</a>` : ""}
           ${calendarHref ? `<button class="button" type="button" data-copy-calendar="${escapeHtml(calendarHref)}">Copy Calendar Link</button>` : ""}
           ${checkoutHref ? `<a class="button" href="${escapeHtml(checkoutHref)}" target="_blank" rel="noopener noreferrer">Open Square Checkout</a>` : ""}
@@ -4889,7 +5065,10 @@
             ${escapeHtml(related.payload?.details || related.payload?.message || related.internalNotes || "No request notes.")}
           </div>
         </div>` : ""}
+      ${appointmentEditorState?.appointmentId === appointment.id ? appointmentEditorMarkup() : ""}
     `;
+    enhanceControls(detailEl);
+    syncAppointmentEditorControls(detailEl.querySelector("[data-appointment-editor]"));
   }
 
   function refreshStudioBookingViews() {
@@ -5351,7 +5530,7 @@ Session: ${escapeHtml(appointment.isExperimentalProject ? `Experimental Project 
 Purpose: ${escapeHtml(titleize(appointment.purpose || "unspecified"))}
 When: ${escapeHtml(formatDate(appointment.startAt))}
 Ends: ${escapeHtml(formatDate(appointment.endAt))}
-${holdExpiresAt ? `Checkout hold expires: ${escapeHtml(formatDate(holdExpiresAt))}\n` : ""}${appointment.status === "expiry_attention" ? "Hold reconciliation: needs Studio attention; capacity remains blocked\n" : ""}${completedAt ? `Completed: ${escapeHtml(formatDate(completedAt))}\n` : ""}Reschedules used: ${escapeHtml(String(appointment.rescheduleCount ?? appointment.reschedule_count ?? 0))} / 1
+${holdExpiresAt ? `Checkout hold expires: ${escapeHtml(formatDate(holdExpiresAt))}\n` : ""}${appointment.status === "expiry_attention" ? "Hold reconciliation: needs Studio attention; capacity remains blocked\n" : ""}${completedAt ? `Completed: ${escapeHtml(formatDate(completedAt))}\n` : ""}Reschedules recorded: ${escapeHtml(String(appointment.rescheduleCount ?? appointment.reschedule_count ?? 0))} (client allowance: 1)
 ${replacementFor ? `Replacement for: ${escapeHtml(replacementFor)}\n` : ""}${replacedBy ? `Replaced by: ${escapeHtml(replacedBy)}\n` : ""}
 ${appointmentIsConfirmed(appointment) && !isVirtual ? `Location: ${escapeHtml(STUDIO_ADDRESS)}\n` : ""}
 ${sessionFeeCents ? `Extended Day fee due with final balance: ${escapeHtml(money(sessionFeeCents, currency))}\n` : ""}
@@ -5361,6 +5540,7 @@ ${meetingLines}
         <div class="booking-actions" style="margin-top:10px;">
           ${calendarHref ? `<a class="button" href="${escapeHtml(calendarHref)}" target="_blank" rel="noopener noreferrer">Add to Calendar</a>` : ""}
           ${calendarHref ? `<button class="button" type="button" data-copy-calendar="${escapeHtml(calendarHref)}">Copy Calendar Link</button>` : ""}
+          ${(appointmentIsConfirmed(appointment) || (appointment.isManual && appointmentIsPending(appointment))) ? `<button class="button" type="button" data-reschedule-appointment="${escapeHtml(appointment.id)}">Reschedule Appointment</button>` : ""}
           ${appointmentIsPending(appointment) ? `<button class="button danger-button" type="button" data-release-pending="${escapeHtml(appointment.id)}">Release Pending Checkout</button>` : ""}
           ${appointmentIsConfirmed(appointment) ? `<button class="button danger-button" type="button" data-cancel-appointment="${escapeHtml(appointment.id)}">Cancel Appointment</button>` : ""}
           ${appointment.canPermanentlyDelete ? `<button class="button danger-button" type="button" data-delete-appointment="${escapeHtml(appointment.id)}">Permanently Delete Appointment</button>` : ""}
@@ -5370,6 +5550,7 @@ ${meetingLines}
           ${canIssueExperimentalException && !canRetryExperimentalRefund ? `<button class="button" type="button" data-experimental-action="exception_refund" data-appointment-id="${escapeHtml(appointment.id)}">Issue Exception Refund</button>` : ""}
           ${appointmentIsConfirmed(appointment) ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}">Resend Confirmation Email</button>` : ""}
         </div>
+        ${appointmentEditorState?.appointmentId === appointment.id ? appointmentEditorMarkup() : ""}
       </div>
     `;
   }
@@ -6165,6 +6346,61 @@ ${meetingLines}
     const adjustablePrice = payload.special_offer_id === "special-anime";
     const heldAppointment = primaryAppointmentFor(submission.id);
     const participants = Array.isArray(payload.participants) ? payload.participants : [];
+    const adjusted = submission.adjustedOffer || null;
+    const adjustedPrice = adjusted
+      ? `${money(adjusted.amountCents, adjusted.currency || "USD")}${adjusted.pricingType === "hourly" ? "/hour" : " flat"}`
+      : "";
+    const adjustedState = `${adjusted ? `<div class="assist-panel" id="adjustedOfferPanel" style="margin-top:16px;">
+      <label>Adjusted Offer — ${escapeHtml(String(adjusted.status || "").toUpperCase())}</label>
+      <div class="tattoo-special-offer__grid">
+        ${detailField("Rate", adjustedPrice)}
+        ${detailField("Reason", titleize(adjusted.reasonCode || ""))}
+        ${detailField("Sent", formatDate(adjusted.sentAt))}
+        ${detailField("Response deadline", formatDate(adjusted.expiresAt))}
+        ${adjusted.respondedAt ? detailField("Responded", formatDate(adjusted.respondedAt)) : ""}
+        ${adjusted.responseSource ? detailField("Response source", titleize(adjusted.responseSource)) : ""}
+      </div>
+      ${adjusted.clientNote ? `<p class="contact"><strong>Client note:</strong> ${escapeHtml(adjusted.clientNote)}</p>` : ""}
+      ${adjusted.responseNote ? `<p class="contact"><strong>Response note:</strong> ${escapeHtml(adjusted.responseNote)}</p>` : ""}
+      ${adjusted.status === "pending" ? `<div class="booking-actions">
+        <button class="button" type="button" data-adjusted-offer-action="copy" data-submission-id="${escapeHtml(submission.id)}" data-offer-id="${escapeHtml(adjusted.id)}">Copy Response Link</button>
+        <button class="button" type="button" data-adjusted-offer-action="preview" data-submission-id="${escapeHtml(submission.id)}" data-offer-id="${escapeHtml(adjusted.id)}">Preview</button>
+        <button class="button" type="button" data-adjusted-offer-action="resend" data-submission-id="${escapeHtml(submission.id)}" data-offer-id="${escapeHtml(adjusted.id)}">Resend Link</button>
+        <button class="button" type="button" data-adjusted-offer-action="withdraw" data-submission-id="${escapeHtml(submission.id)}" data-offer-id="${escapeHtml(adjusted.id)}">Withdraw</button>
+      </div>
+      <div class="tattoo-special-offer__grid" style="margin-top:14px;">
+        <label>Outside response note<input id="adjustedResponseNote" maxlength="1000" placeholder="Verbal approval, text reply, or other source"></label>
+        <label>Outside response source<select id="adjustedResponseSource"><option value="studio_verbal">Verbal</option><option value="studio_message">Text or email</option></select></label>
+      </div>
+      <div class="booking-actions">
+        <label class="check"><input id="adjustedAcceptEmail" type="checkbox" checked><span class="check-label">Send booking link email</span></label>
+        <button class="button" type="button" data-adjusted-offer-action="accept" data-submission-id="${escapeHtml(submission.id)}" data-offer-id="${escapeHtml(adjusted.id)}">Mark Accepted by Client</button>
+      </div>
+      <div class="booking-actions">
+        <label class="check"><input id="adjustedDeclineEmail" type="checkbox"><span class="check-label">Send closing email</span></label>
+        <button class="button danger-button" type="button" data-adjusted-offer-action="decline" data-submission-id="${escapeHtml(submission.id)}" data-offer-id="${escapeHtml(adjusted.id)}">Mark Declined by Client</button>
+      </div>
+      <p class="contact" id="adjustedOfferActionState" role="status" aria-live="polite"></p>
+    </div>` : ""}
+    </div>` : ""}
+    ${(!adjusted || ["withdrawn", "expired"].includes(adjusted.status)) && review && ["new", "reviewing"].includes(submission.status) ? `<div class="assist-panel" id="adjustedOfferPanel" style="margin-top:16px;">
+      <label>${adjusted ? "Replacement Adjusted Offer" : "Adjusted Offer"}</label>
+      <p class="contact">Use when the project is approved to proceed but does not qualify for the Tattoo Special. Sending this supersedes the unreserved requested time.</p>
+      <div class="tattoo-special-offer__grid">
+        <label>Reason<select id="adjustedReason"><option value="cover_up">Cover-up</option><option value="rework">Rework</option><option value="complexity">Complexity</option><option value="size">Size</option><option value="other">Other</option></select></label>
+        <label>Other reason<input id="adjustedReasonText" maxlength="500" placeholder="Required only for Other"></label>
+        <label>Pricing<select id="adjustedPricingType"><option value="flat">Flat total</option><option value="hourly">Hourly rate</option></select></label>
+        <label>Adjusted amount (dollars)<input id="adjustedAmount" type="number" min="1" step="1" required></label>
+        <label>Response deadline<input id="adjustedExpiresAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(new Date(Date.now() + 7 * 86400000).toISOString()))}" required></label>
+        <label>Maximum sessions<input id="adjustedMaxSessions" type="number" min="2" max="24" step="1" value="2" disabled></label>
+        <label style="grid-column:span 2;">Studio note to client<textarea id="adjustedClientNote" rows="3" maxlength="2000"></textarea></label>
+      </div>
+      <label>Eligible regular tattoo session types</label>
+      <div class="booking-type-checks">${PRIVATE_BOOKING_TYPE_OPTIONS.filter(([id]) => id.startsWith("tattoo_")).map(([id, label]) => `<label class="check"><input type="checkbox" data-adjusted-booking-type value="${escapeHtml(id)}" ${id === "tattoo_half" ? "checked" : ""}><span class="check-label">${escapeHtml(label)}</span></label>`).join("")}</div>
+      <label class="check" style="margin-top:10px;"><input id="adjustedAllowMultiple" type="checkbox"><span class="check-label">Allow the client to choose multiple appointment dates</span></label>
+      <div class="booking-actions"><button class="button" type="button" data-adjusted-offer-create="${escapeHtml(submission.id)}">Send Adjusted Offer</button></div>
+      <p class="contact" id="adjustedOfferActionState" role="status" aria-live="polite"></p>
+    </div>` : ""}`;
     return `<section class="tattoo-special-review">
       <div><span class="pill">Tattoo Special</span><h3>${escapeHtml(payload.special_offer_title || "Tattoo Special")}${payload.special_variant_label ? ` — ${escapeHtml(payload.special_variant_label)}` : ""}</h3></div>
       <div class="tattoo-special-offer__grid">
@@ -6184,6 +6420,7 @@ ${meetingLines}
         <button class="button" type="button" data-special-review-outcome="save" data-submission-id="${escapeHtml(submission.id)}">Save Review Details</button>
         ${adjustablePrice ? `<button class="button" type="button" data-special-review-outcome="simplification_requested" data-submission-id="${escapeHtml(submission.id)}">Record Simplification Request</button><button class="button" type="button" data-send-simplification="${escapeHtml(submission.id)}">Send Simplification Email</button>` : ""}
       </div>` : `<p class="contact">${review ? "The recorded decision is preserved in event history. Client email remains a separate explicit action." : "This historical direct-booking special uses its system-owned lifecycle."}</p>`}
+      ${adjustedState}
     </section>`;
   }
 
@@ -6275,7 +6512,7 @@ ${meetingLines}
           <label>Status</label>
           <div class="value" id="detailStatus" data-status="${escapeHtml(submission.status)}">${escapeHtml(titleize(submission.status))}</div>
           ${isReviewable ? `<div class="booking-actions" id="decisionActions" style="margin-top:10px;">
-            ${["new","reviewing"].includes(submission.status) ? `<button class="button" type="button" data-decision-action="approve">Approve</button><button class="button danger-button" type="button" data-decision-action="decline">Decline</button>` : ""}
+            ${["new","reviewing"].includes(submission.status) && submission.adjustedOffer?.status !== "pending" ? `<button class="button" type="button" data-decision-action="approve">Approve</button>${submission.type === "tattoo_special" && submission.payload?.booking_mode === "review" ? `<button class="button" type="button" data-open-adjusted-offer>Adjusted Offer</button>` : ""}<button class="button danger-button" type="button" data-decision-action="decline">Decline</button>` : ""}
             ${["approved","declined"].includes(submission.status) ? `<button class="button" type="button" data-decision-action="reopen">Reopen Review</button>` : ""}
           </div><p class="contact">Decision actions record Studio state only. No client notification is sent.</p><div id="decisionConfirmation" hidden></div><p class="contact" id="decisionActionState" role="status" aria-live="polite"></p>` : `<p class="contact">This lifecycle is advanced by its appointment, payment, event, or direct-booking workflow.</p>`}
           ${TATTOO_PROJECT_TYPES.has(submission.type) ? `<label style="margin-top:10px;">Tattoo lifecycle stage</label><div class="value">${escapeHtml(titleize(tattooStage || "review"))}</div><p class="contact">Lifecycle stages advance only through review, paid booking, consultation completion, and finalized session-plan actions.</p>` : ""}
@@ -7528,7 +7765,9 @@ ${meetingLines}
           <span class="pill">Tattoo Booking / Appointments</span>
           <h2>Tattoo Appointments</h2>
           <p class="contact">Active tattoo sessions, consultations, and in-person build sessions appear on the calendar. Cancelled appointments and expired checkout attempts remain available in history below.</p>
+          <div class="booking-actions"><button class="button" type="button" data-open-appointment-editor="create">Schedule Appointment</button></div>
         </div>
+        ${appointmentEditorMarkup()}
         ${appointmentCalendarMarkup()}
         <section class="review-card" style="margin-top:16px;">
           <div class="portfolio-head">
@@ -7543,6 +7782,7 @@ ${meetingLines}
       </div>
     `;
     enhanceControls(detailEl);
+    syncAppointmentEditorControls(detailEl.querySelector("[data-appointment-editor]"));
     await loadAvailabilityPreview();
     renderCancelledAppointmentHistory();
   }
@@ -8105,6 +8345,33 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("input", (event) => {
+    if (event.target.matches("[data-appointment-person-search]")) {
+      window.clearTimeout(appointmentEditorSearchTimer);
+      const input = event.target;
+      const form = input.closest("[data-appointment-editor]");
+      const output = form?.querySelector("[data-appointment-person-results]");
+      const query = input.value.trim();
+      if (!output) return;
+      if (query.length < 2) {
+        output.innerHTML = "";
+        return;
+      }
+      appointmentEditorSearchTimer = window.setTimeout(async () => {
+        try {
+          const payload = await api(`/api/admin/crm/people?q=${encodeURIComponent(query)}&limit=8`);
+          if (!input.isConnected || input.value.trim() !== query) return;
+          appointmentEditorPeople = payload.people || [];
+          output.innerHTML = appointmentEditorPeople.length ? appointmentEditorPeople.map((person) => `
+            <button class="appointment-editor-result" type="button" data-appointment-person-id="${escapeHtml(person.id)}">
+              <strong>${escapeHtml(person.displayName || "Unnamed")}</strong>
+              <span>${escapeHtml(person.primaryEmail || "No email")} / ${escapeHtml(person.primaryPhone || "No phone")}</span>
+            </button>`).join("") : '<span class="contact">No matching People records.</span>';
+        } catch (error) {
+          output.innerHTML = `<span class="contact">${escapeHtml(error.message || "People search failed")}</span>`;
+        }
+      }, 250);
+      return;
+    }
     if (event.target.id === "textAssist") {
       textAssistDirty = true;
       textAssistDraft = event.target.value;
@@ -8138,6 +8405,21 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("change", (event) => {
+    if (event.target.matches("[data-appointment-booking-type]")) {
+      const form = event.target.closest("[data-appointment-editor]");
+      if (appointmentEditorState) appointmentEditorState.bookingTypeId = event.target.value;
+      const slot = form?.querySelector("[data-appointment-slot]");
+      if (slot) {
+        const windows = appointmentEditorSlots(event.target.value);
+        slot.innerHTML = windows.length ? windows.map((windowItem) => `<option value="${escapeHtml(windowItem.id)}">${escapeHtml(formatDate(windowItem.startAt))}</option>`).join("") : '<option value="">No available slots</option>';
+      }
+      syncAppointmentEditorControls(form);
+      return;
+    }
+    if (event.target.matches("[data-appointment-time-mode], [data-appointment-payment-mode], [name='overridePolicy']")) {
+      syncAppointmentEditorControls(event.target.closest("[data-appointment-editor]"));
+      return;
+    }
     if (event.target.matches("[data-special-series]") && event.target.value === "__create__") {
       addSpecialProjectSeriesEditor(event.target.closest("[data-special-projects-form]"), event.target.closest("[data-special-project]"));
       return;
@@ -8163,6 +8445,41 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("click", async (event) => {
+    const openEditor = event.target.closest("[data-open-appointment-editor]");
+    if (openEditor) {
+      await openAppointmentEditor(openEditor.dataset.openAppointmentEditor || "create");
+      return;
+    }
+
+    const rescheduleAppointment = event.target.closest("[data-reschedule-appointment]");
+    if (rescheduleAppointment) {
+      await openAppointmentEditor("reschedule", rescheduleAppointment.dataset.rescheduleAppointment);
+      return;
+    }
+
+    const closeEditor = event.target.closest("[data-close-appointment-editor]");
+    if (closeEditor) {
+      appointmentEditorState = null;
+      appointmentEditorPeople = [];
+      renderAppointmentEditorSurface();
+      setStatus("Appointment editor closed");
+      return;
+    }
+
+    const personChoice = event.target.closest("[data-appointment-person-id]");
+    if (personChoice) {
+      const form = personChoice.closest("[data-appointment-editor]");
+      const person = appointmentEditorPeople.find((item) => item.id === personChoice.dataset.appointmentPersonId);
+      if (!form || !person) return;
+      form.elements.crmPersonId.value = person.id;
+      form.elements.clientName.value = person.displayName || "";
+      form.elements.clientEmail.value = person.primaryEmail || "";
+      form.elements.clientPhone.value = person.primaryPhone || "";
+      form.querySelector("[data-appointment-person-search]").value = person.displayName || person.primaryEmail || "";
+      form.querySelector("[data-appointment-person-results]").innerHTML = `<span class="contact">Selected ${escapeHtml(person.displayName || "person")}</span>`;
+      return;
+    }
+
     const addEventOccurrence = event.target.closest("[data-add-event-occurrence]");
     if (addEventOccurrence) {
       const form = addEventOccurrence.closest("form");
@@ -8424,6 +8741,120 @@ ${meetingLines}
       setStatus("Refreshing Tattoo Specials");
       await renderTattooSpecialsManager();
       setStatus("Tattoo Specials refreshed");
+      return;
+    }
+    if (event.target.matches("#adjustedAllowMultiple")) {
+      const max = document.getElementById("adjustedMaxSessions");
+      if (max) max.disabled = !event.target.checked;
+      return;
+    }
+    const openAdjustedOffer = event.target.closest("[data-open-adjusted-offer]");
+    if (openAdjustedOffer) {
+      const panel = document.getElementById("adjustedOfferPanel");
+      panel?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("adjustedAmount")?.focus();
+      return;
+    }
+    const createAdjustedOffer = event.target.closest("[data-adjusted-offer-create]");
+    if (createAdjustedOffer) {
+      const state = document.getElementById("adjustedOfferActionState");
+      const amountDollars = Number(document.getElementById("adjustedAmount")?.value || 0);
+      const allowedBookingTypes = [...document.querySelectorAll("[data-adjusted-booking-type]:checked")].map((input) => input.value);
+      const expiresAt = localDateTimeToIso(document.getElementById("adjustedExpiresAt")?.value || "");
+      if (!Number.isFinite(amountDollars) || amountDollars <= 0 || !allowedBookingTypes.length || !expiresAt) {
+        const message = "Enter a positive adjusted amount, a future deadline, and at least one eligible session type.";
+        if (state) state.textContent = message;
+        setStatus(message);
+        return;
+      }
+      const allowMultipleSessions = document.getElementById("adjustedAllowMultiple")?.checked === true;
+      createAdjustedOffer.disabled = true;
+      if (state) state.textContent = "Sending the adjusted offer…";
+      try {
+        await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(createAdjustedOffer.dataset.adjustedOfferCreate)}/adjusted-offers`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            reasonCode: document.getElementById("adjustedReason")?.value || "cover_up",
+            reasonText: document.getElementById("adjustedReasonText")?.value.trim() || "",
+            pricingType: document.getElementById("adjustedPricingType")?.value || "flat",
+            amountCents: Math.round(amountDollars * 100),
+            clientNote: document.getElementById("adjustedClientNote")?.value.trim() || "",
+            allowedBookingTypes,
+            allowMultipleSessions,
+            maxSessions: allowMultipleSessions ? Number(document.getElementById("adjustedMaxSessions")?.value || 2) : 1,
+            expiresAt,
+          }),
+        });
+        await loadAndRender();
+        setStatus("Adjusted offer sent; awaiting the client");
+      } catch (error) {
+        if (state) state.textContent = error.message || "Adjusted offer could not be sent";
+        setStatus(error.message || "Adjusted offer could not be sent");
+        if (createAdjustedOffer.isConnected) createAdjustedOffer.disabled = false;
+      }
+      return;
+    }
+    const adjustedOfferAction = event.target.closest("[data-adjusted-offer-action]");
+    if (adjustedOfferAction) {
+      const action = adjustedOfferAction.dataset.adjustedOfferAction;
+      if (["copy", "preview"].includes(action)) {
+        const previewWindow = action === "preview" ? window.open("about:blank", "_blank") : null;
+        try {
+          const link = await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(adjustedOfferAction.dataset.submissionId)}/adjusted-offers/${encodeURIComponent(adjustedOfferAction.dataset.offerId)}/link`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "{}",
+          });
+          const responseUrl = new URL(link.responseUrl, window.location.origin).toString();
+          if (action === "copy") {
+            await navigator.clipboard?.writeText(responseUrl);
+            setStatus("Adjusted-offer response link copied");
+          } else {
+            previewWindow.location.replace(responseUrl);
+          }
+        } catch (error) {
+          previewWindow?.close();
+          setStatus(error.message || "Adjusted-offer response link could not be loaded");
+        }
+        return;
+      }
+      if (action === "withdraw" && !window.confirm("Withdraw this adjusted offer? Its private response link will stop working.")) return;
+      if (action === "accept" && !window.confirm("Mark this adjusted rate accepted by the client and create their normal booking access?")) return;
+      if (action === "decline" && !window.confirm("Mark this adjusted offer declined by the client and close the request?")) return;
+      const state = document.getElementById("adjustedOfferActionState");
+      adjustedOfferAction.disabled = true;
+      if (state) state.textContent = `${titleize(action)} in progress…`;
+      try {
+        const body = {};
+        if (["accept", "decline"].includes(action)) {
+          body.source = document.getElementById("adjustedResponseSource")?.value || (action === "accept" ? "studio_verbal" : "studio_message");
+          body.note = document.getElementById("adjustedResponseNote")?.value.trim() || "";
+          body.sendClientEmail = action === "accept"
+            ? document.getElementById("adjustedAcceptEmail")?.checked !== false
+            : document.getElementById("adjustedDeclineEmail")?.checked === true;
+        } else if (action === "withdraw") {
+          body.note = document.getElementById("adjustedResponseNote")?.value.trim() || "";
+        }
+        const result = await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(adjustedOfferAction.dataset.submissionId)}/adjusted-offers/${encodeURIComponent(adjustedOfferAction.dataset.offerId)}/${action}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (action === "accept" && result.token?.bookingUrl) {
+          await navigator.clipboard?.writeText(result.token.bookingUrl).catch(() => {});
+        }
+        await loadAndRender();
+        setStatus(action === "accept"
+          ? "Adjusted rate accepted; booking access created and copied"
+          : action === "decline"
+            ? "Adjusted offer declined and request closed"
+            : action === "resend" ? "Adjusted-offer link resent" : "Adjusted offer withdrawn");
+      } catch (error) {
+        if (state) state.textContent = error.message || `Adjusted offer could not be ${action}ed`;
+        setStatus(error.message || "Adjusted offer action failed");
+        if (adjustedOfferAction.isConnected) adjustedOfferAction.disabled = false;
+      }
       return;
     }
     const archiveCampaign = event.target.closest("[data-archive-special-campaign]");
@@ -9856,6 +10287,70 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("submit", async (event) => {
+    const appointmentForm = event.target.closest("[data-appointment-editor]");
+    if (appointmentForm) {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(appointmentForm));
+      const mode = appointmentForm.dataset.mode;
+      const appointmentId = appointmentForm.dataset.appointmentId || "";
+      const notifyClient = event.submitter?.dataset.notifyClient === "1";
+      const timeMode = String(values.timeMode || "slot");
+      const status = appointmentForm.querySelector("[data-appointment-editor-status]");
+      const buttons = [...appointmentForm.querySelectorAll("button[type='submit']")];
+      buttons.forEach((button) => { button.disabled = true; });
+      if (status) status.textContent = mode === "reschedule" ? "Moving appointment..." : "Saving appointment...";
+      setStatus(mode === "reschedule" ? "Rescheduling appointment" : "Scheduling appointment");
+      try {
+        const common = {
+          availabilityWindowId: timeMode === "slot" ? String(values.availabilityWindowId || "") : "",
+          customStartAt: timeMode === "custom" ? localDateTimeToIso(values.customStartAt) : "",
+          note: String(values.note || "").trim(),
+          notifyClient,
+        };
+        let payload;
+        if (mode === "reschedule") {
+          payload = await api(`/api/admin/booking/appointments/${encodeURIComponent(appointmentId)}/reschedule`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ...common, overridePolicy: appointmentForm.elements.overridePolicy?.checked === true }),
+          });
+        } else {
+          const paymentMode = String(values.paymentMode || "none");
+          payload = await api("/api/admin/booking/appointments", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              ...common,
+              bookingTypeId: String(values.bookingTypeId || ""),
+              crmPersonId: String(values.crmPersonId || ""),
+              submissionId: String(values.submissionId || ""),
+              clientName: String(values.clientName || "").trim(),
+              clientEmail: String(values.clientEmail || "").trim(),
+              clientPhone: String(values.clientPhone || "").trim(),
+              paymentMode,
+              depositCents: paymentMode === "none" ? 0 : Math.round(Number(values.depositDollars || 0) * 100),
+              paymentDueAt: paymentMode === "square_link" ? localDateTimeToIso(values.paymentDueAt) : "",
+              paymentNote: String(values.paymentNote || "").trim(),
+            }),
+          });
+        }
+        const savedAppointmentId = payload.appointment?.id || appointmentId;
+        appointmentEditorState = null;
+        appointmentEditorPeople = [];
+        await loadAndRender();
+        if (savedAppointmentId) openAppointment(savedAppointmentId);
+        const emailNote = notifyClient ? " Client email requested." : " Saved without client email.";
+        const linkNote = payload.checkoutUrl ? " Square checkout link created." : "";
+        setStatus(`${mode === "reschedule" ? "Appointment rescheduled." : "Appointment scheduled."}${linkNote}${emailNote}`);
+      } catch (error) {
+        const message = error.message || "Appointment could not be saved";
+        if (status) status.textContent = message;
+        setStatus(message);
+        buttons.forEach((button) => { if (button.isConnected) button.disabled = false; });
+      }
+      return;
+    }
+
     const specialCampaignForm = event.target.closest("[data-tattoo-special-campaign-form]");
     if (specialCampaignForm) {
       event.preventDefault();

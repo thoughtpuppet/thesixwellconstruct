@@ -292,6 +292,37 @@ export function buildTattooSpecialDepositRequestEmail(data) {
   });
 }
 
+export function buildManualAppointmentDepositRequestEmail(data) {
+  const studio = data.kind === "studio_visit" || data.kind === "studio_space";
+  return renderClientEmail({
+    templateKey: "manual_appointment_deposit_requested",
+    templateVariant: data.kind || "tattoo",
+    variables: { client_name: data.clientName || "there" },
+    theme: data.kind === "studio_visit" ? "art" : data.kind === "studio_space" ? "events" : "tattoo",
+    subject: data.subject || `Deposit requested for your ${data.label || "appointment"}`,
+    preheader: `Complete the ${data.depositLabel || "deposit"} by the deadline to confirm the reserved time.`,
+    classification: studio ? "APPOINTMENT DEPOSIT" : "DEPOSIT REQUESTED",
+    headline: "Your appointment time is being held.",
+    greeting: `Hi ${data.clientName || "there"},`,
+    intro: [
+      `The Studio has selected the appointment time below. Complete the ${data.depositLabel || "deposit"} by the deadline to confirm it.`,
+    ],
+    details: [
+      { label: "Appointment", value: data.when },
+      { label: "Session", value: data.session },
+      { label: data.depositLabel || "Deposit due", value: data.depositText },
+      { label: "Pay by", value: data.dueAt },
+    ],
+    primaryAction: { label: `Pay ${data.depositLabel || "Deposit"}`, href: data.checkoutUrl },
+    secondaryActions: [],
+    notice: [
+      "The selected time remains reserved until the payment deadline.",
+      "If payment is not completed by then, the hold is released automatically.",
+    ],
+    signature: studio ? constructSignature() : tattooSignature(true),
+  });
+}
+
 export function buildTattooSpecialReviewEmail(data) {
   const declined = data.outcome === "declined";
   const specialName = [data.offerTitle, data.variantLabel].filter(Boolean).join(" — ") || "Tattoo Special";
@@ -785,6 +816,10 @@ const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "booking_link_created", variant: "tattoo", label: "Private tattoo booking link", brand: "tattoo", stage: "booking" },
   { templateKey: "booking_link_created", variant: "tattoo_special", label: "Legacy Tattoo Special calendar link", brand: "tattoo", stage: "legacy" },
   { templateKey: "tattoo_special_deposit_requested", variant: "default", label: "Tattoo Special approved / deposit payment", brand: "tattoo", stage: "specials" },
+  { templateKey: "manual_appointment_deposit_requested", variant: "tattoo", label: "Studio-scheduled tattoo deposit", brand: "tattoo", stage: "appointment" },
+  { templateKey: "manual_appointment_deposit_requested", variant: "consultation", label: "Studio-scheduled consultation payment", brand: "tattoo", stage: "appointment" },
+  { templateKey: "manual_appointment_deposit_requested", variant: "studio_visit", label: "Studio-scheduled Open Studio Visit payment", brand: "art", stage: "appointment" },
+  { templateKey: "manual_appointment_deposit_requested", variant: "studio_space", label: "Studio-scheduled room booking payment", brand: "events", stage: "appointment" },
   { templateKey: "booking_link_created", variant: "consultation", label: "Prerequisite consultation link", brand: "tattoo", stage: "booking" },
   { templateKey: "tattoo_special_review", variant: "simplification_requested", label: "Tattoo Special simplification requested", brand: "tattoo", stage: "specials" },
   { templateKey: "tattoo_special_review", variant: "declined", label: "Tattoo Special declined", brand: "tattoo", stage: "specials" },
@@ -1016,6 +1051,18 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       depositText: "$50",
       checkoutUrl: "https://square.link/u/demo-tattoo-special-deposit",
       changeTimeUrl: "https://example.com/booking/reschedule/?appointment=demo-special&flow=special-request",
+    });
+  } else if (key === "manual_appointment_deposit_requested") {
+    rendered = buildManualAppointmentDepositRequestEmail({
+      kind: mode || "tattoo",
+      label: mode === "studio_visit" ? "Open Studio Visit" : mode === "studio_space" ? "studio booking" : mode === "consultation" ? "consultation" : "tattoo appointment",
+      clientName: SAMPLE.clientName,
+      when: "Saturday, September 19, 2026 at 1:00 PM EDT - Saturday, September 19, 2026 at 5:00 PM EDT",
+      session: mode === "studio_visit" ? "Open Studio Visit" : mode === "studio_space" ? "Private Studio Gathering" : mode === "consultation" ? "In-Person Consultation" : "Half Day Session",
+      depositLabel: mode === "consultation" ? "Reservation fee" : "Deposit due",
+      depositText: "$100",
+      dueAt: "Tuesday, September 15, 2026 at 1:00 PM EDT",
+      checkoutUrl: "https://square.link/u/demo-manual-appointment",
     });
   } else if (key === "tattoo_special_review") {
     rendered = buildTattooSpecialReviewEmail({

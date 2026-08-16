@@ -36,6 +36,7 @@ import {
 import {
   handleAdminCreateAvailability,
   handleAdminCreateAppointmentMeeting,
+  handleAdminCreateAppointment,
   handleAdminCreateTattooRenderingRequest,
   handleAdminCancelAppointment,
   handleAdminDeleteAppointment,
@@ -113,11 +114,23 @@ import {
   handleAdminEmailTemplates,
   handleAdminPreviewNotification,
   handleAdminResendNotification,
+  retryPendingAdjustedOfferNotifications,
   retryPendingAdminAppointmentNotifications,
   sendDueAppointmentReminders,
   sendDueEventTicketReminders,
   sendDueExperimentalHealedReminders,
 } from "./functions/api/notifications/_lib.js";
+import {
+  handleAdminAcceptAdjustedOffer,
+  handleAdminCreateAdjustedOffer,
+  handleAdminDeclineAdjustedOffer,
+  handleAdminGetAdjustedOfferLink,
+  handleAdminResendAdjustedOffer,
+  handleAdminWithdrawAdjustedOffer,
+  handlePublicAdjustedOfferContext,
+  handlePublicAdjustedOfferResponse,
+  reapExpiredAdjustedOffers,
+} from "./functions/api/tattoo-adjusted-offers/_lib.js";
 import {
   handleAdminSpecialProjectHealed,
   handlePublicSpecialProjectHealed,
@@ -289,6 +302,18 @@ async function servePublicAsset(request, env, pathname) {
       element.append(browserAnalyticsMarkup(env, new URL(request.url).pathname), { html: true });
     },
   }).transform(response);
+}
+
+function privateLinkResponse(response) {
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", "no-store");
+  headers.set("referrer-policy", "no-referrer");
+  headers.set("x-robots-tag", "noindex, nofollow, noarchive");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 function isFrontDoorPath(pathname) {
@@ -1224,8 +1249,9 @@ async function handleBookingApi(request, env) {
   }
 
   if (pathname === "/api/admin/booking/appointments") {
-    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
-    return handleAdminListAppointments(request, env);
+    if (method === "GET") return handleAdminListAppointments(request, env);
+    if (method === "POST") return handleAdminCreateAppointment(request, env);
+    return methodNotAllowed(method, ["GET", "POST"]);
   }
 
   const appointmentMeetingMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)\/meeting$/);
@@ -1356,6 +1382,12 @@ export default {
         return redirectToNotFoundPage(request);
       }
       return servePublicAsset(request, env, "/booking/index.html");
+    }
+
+    if (/^\/o\/[A-Za-z0-9_-]{12}\/?$/.test(url.pathname)) {
+      return privateLinkResponse(
+        await servePublicAsset(request, env, "/tattoos/specials/adjusted-offer/index.html")
+      );
     }
 
     if (url.pathname === "/explore" || url.pathname === "/explore/" || url.pathname === "/explore/index.html") {
@@ -1572,6 +1604,16 @@ export default {
       return handleCreateTattooSpecialSubmission(request, env);
     }
 
+    if (url.pathname === "/api/tattoo/adjusted-offers/context") {
+      if (request.method !== "GET") return methodNotAllowed(request.method, ["GET"]);
+      return handlePublicAdjustedOfferContext(request, env);
+    }
+
+    if (url.pathname === "/api/tattoo/adjusted-offers/respond") {
+      if (request.method !== "POST") return methodNotAllowed(request.method, ["POST"]);
+      return handlePublicAdjustedOfferResponse(request, env);
+    }
+
     if (url.pathname === "/api/admin/tattoo/specials") {
       if (!["GET", "PATCH"].includes(request.method)) return methodNotAllowed(request.method, ["GET", "PATCH"]);
       return handleAdminTattooSpecials(request, env);
@@ -1603,6 +1645,25 @@ export default {
     if (tattooSpecialReviewMatch) {
       if (request.method !== "PATCH") return methodNotAllowed(request.method, ["PATCH"]);
       return handleAdminTattooSpecialReview(request, env, decodeURIComponent(tattooSpecialReviewMatch[1]));
+    }
+
+    const adjustedOfferCreateMatch = url.pathname.match(/^\/api\/admin\/tattoo\/specials\/submissions\/([^/]+)\/adjusted-offers$/);
+    if (adjustedOfferCreateMatch) {
+      if (request.method !== "POST") return methodNotAllowed(request.method, ["POST"]);
+      return handleAdminCreateAdjustedOffer(request, env, decodeURIComponent(adjustedOfferCreateMatch[1]));
+    }
+
+    const adjustedOfferActionMatch = url.pathname.match(/^\/api\/admin\/tattoo\/specials\/submissions\/([^/]+)\/adjusted-offers\/([^/]+)\/(link|resend|withdraw|accept|decline)$/);
+    if (adjustedOfferActionMatch) {
+      if (request.method !== "POST") return methodNotAllowed(request.method, ["POST"]);
+      const submissionId = decodeURIComponent(adjustedOfferActionMatch[1]);
+      const offerId = decodeURIComponent(adjustedOfferActionMatch[2]);
+      const action = adjustedOfferActionMatch[3];
+      if (action === "link") return handleAdminGetAdjustedOfferLink(request, env, submissionId, offerId);
+      if (action === "resend") return handleAdminResendAdjustedOffer(request, env, submissionId, offerId);
+      if (action === "withdraw") return handleAdminWithdrawAdjustedOffer(request, env, submissionId, offerId);
+      if (action === "accept") return handleAdminAcceptAdjustedOffer(request, env, submissionId, offerId);
+      return handleAdminDeclineAdjustedOffer(request, env, submissionId, offerId);
     }
 
     const tattooSpecialDepositMatch = url.pathname.match(/^\/api\/admin\/tattoo\/specials\/submissions\/([^/]+)\/deposit$/);
@@ -1709,6 +1770,8 @@ export default {
     return servePublicAsset(request, env, assetPathForRequest(url.pathname));
   },
   async scheduled(controller, env, ctx) {
+    ctx.waitUntil(retryPendingAdjustedOfferNotifications(env));
+    ctx.waitUntil(reapExpiredAdjustedOffers(env));
     ctx.waitUntil(retryPendingAdminAppointmentNotifications(env));
     ctx.waitUntil(sendDueAppointmentReminders(env));
     ctx.waitUntil(sendDueEventTicketReminders(env));

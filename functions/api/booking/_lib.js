@@ -3,6 +3,7 @@ import {
   dispatchAppointmentConfirmationNotifications,
   notifyAdminAppointmentRescheduled,
   notifyAppointmentCancelled,
+  notifyManualAppointmentDepositRequested,
   notifyAppointmentRescheduled,
   notifyAdminSubmissionReceived,
   notifySubmissionReceived,
@@ -480,6 +481,7 @@ function normalizeAppointment(row) {
       updatedAt: row.experimental_refund_updated_at || "",
     } : null,
     canPermanentlyDelete: Boolean(row.can_permanently_delete),
+    isManual: Boolean(row.is_manual || row.isManual),
     meeting: normalizeMeeting(row),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1334,10 +1336,13 @@ async function loadTokenContext(db, rawToken) {
         spt.project_profile AS special_project_profile,
         spt.project_title AS special_project_title,
         spt.refundable_deposit_cents AS special_project_deposit_cents,
-        spt.healed_photo_method, spt.healed_photo_due_weeks
+        spt.healed_photo_method, spt.healed_photo_due_weeks,
+        tao.id AS adjusted_offer_id,tao.pricing_type AS adjusted_offer_pricing_type,
+        tao.amount_cents AS adjusted_offer_amount_cents,tao.currency AS adjusted_offer_currency
        FROM booking_tokens bt
        JOIN submissions s ON s.id = bt.submission_id
        LEFT JOIN special_project_submission_terms spt ON spt.submission_id = s.id
+       LEFT JOIN tattoo_adjusted_offers tao ON tao.booking_token_id=bt.id AND tao.status='accepted'
        WHERE bt.token_hash = ?`
     )
     .bind(tokenHash)
@@ -1371,6 +1376,12 @@ async function loadTokenContext(db, rawToken) {
     purpose,
     allowedBookingTypes,
     pendingSpecialApproval,
+    adjustedOffer: token.adjusted_offer_id ? {
+      id: token.adjusted_offer_id,
+      pricingType: token.adjusted_offer_pricing_type,
+      amountCents: Number(token.adjusted_offer_amount_cents || 0),
+      currency: token.adjusted_offer_currency || "USD",
+    } : null,
     experimentalProject: token.special_project_profile === "experimental" ? {
       title: token.special_project_title || "Experimental Project",
       refundableDepositCents: Number(token.special_project_deposit_cents || 0),
@@ -1591,7 +1602,7 @@ function sessionPlanResponseComplete(plan) {
 
 async function ensureSessionPlanResponse(db, tokenContext) {
   const plan = await loadTattooSessionPlan(db, tokenContext?.token?.submission_id);
-  if (tokenContext?.token?.submission_type === "tattoo_special") {
+  if (tokenContext?.token?.submission_type === "tattoo_special" && !tokenContext?.adjustedOffer) {
     return { plan };
   }
   const responseComplete = tokenContext?.experimentalProject
@@ -1887,7 +1898,7 @@ export async function handleBookingContext(request, env) {
       }));
     }
     const windows = await listPublicWindows(db, bookingTypes);
-    const isTattooSpecial = context.token.submission_type === "tattoo_special";
+    const isTattooSpecial = context.token.submission_type === "tattoo_special" && !context.adjustedOffer;
     const sessionPlan = context.purpose === "tattoo" && !isTattooSpecial
       ? await loadTattooSessionPlan(db, context.token.submission_id)
       : null;
@@ -1928,7 +1939,7 @@ export async function handleBookingContext(request, env) {
         lifecycleReviewRequired: Boolean(context.token.lifecycle_review_required),
         lifecycleReviewNote: context.token.lifecycle_review_note || "",
         projectDescription: asString(submissionPayload.tattoo_description),
-        special: context.token.submission_type === "tattoo_special"
+        special: isTattooSpecial
           ? {
               campaign: "Tattoo Special",
               offerTitle: submissionPayload.special_offer_title || "Tattoo Special",
@@ -1939,6 +1950,7 @@ export async function handleBookingContext(request, env) {
               participants: Array.isArray(submissionPayload.participants) ? submissionPayload.participants : [],
             }
           : null,
+        adjustedOffer: context.adjustedOffer,
         experimentalProject: context.experimentalProject,
       },
       requiresClientDetails: directInviteNeedsClient(context.token),
@@ -1946,7 +1958,7 @@ export async function handleBookingContext(request, env) {
       expiresAt: context.token.expires_at || "",
       multiSession: {
         enabled: context.purpose === "tattoo"
-          && context.token.submission_type !== "tattoo_special"
+          && (!isTattooSpecial)
           && !context.experimentalProject
           && Boolean(context.token.allow_multiple_sessions),
         maxSessions: context.purpose === "tattoo"
@@ -1998,7 +2010,7 @@ export async function handleSaveBookingSessionPlan(request, env) {
     if (context.purpose !== "tattoo") {
       return errorResponse("Prerequisite consultation links do not use a final tattoo session plan.", 409);
     }
-    if (context.token.submission_type === "tattoo_special") {
+    if (context.token.submission_type === "tattoo_special" && !context.adjustedOffer) {
       return errorResponse("Tattoo Specials use the chosen selection and do not require session-plan approval.", 409);
     }
     const plan = await loadTattooSessionPlan(db, context.token.submission_id);
@@ -2721,10 +2733,11 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
       `INSERT INTO appointment_events (
         id, appointment_id, event_type, actor, note, metadata_json, created_at
       )
-      SELECT ?, id, ?, 'system', ?, ?, ? FROM appointments WHERE id = ?`
+      SELECT ?, id, ?, ?, ?, ?, ? FROM appointments WHERE id = ?`
     ).bind(
       crypto.randomUUID(),
       eventType,
+      values.eventActor || "system",
       values.eventNote || null,
       JSON.stringify(values.eventMetadata || {}),
       values.now,
@@ -2887,7 +2900,7 @@ async function createPendingAppointment(
     ? (purpose === "prerequisite_consultation" ? 0 : tokenContext.experimentalProject.refundableDepositCents)
     : Number(bookingType.deposit_cents || 0);
 
-  if (tokenContext.token.submission_type === "tattoo_special" && !tokenContext.pendingSpecialApproval) {
+  if (tokenContext.token.submission_type === "tattoo_special" && !tokenContext.adjustedOffer && !tokenContext.pendingSpecialApproval) {
     const requestedSpecial = await db.prepare(
       `SELECT * FROM appointments
        WHERE submission_id = ? AND booking_token_id = ? AND booking_type_id = ?
@@ -3009,8 +3022,8 @@ async function createPendingAppointment(
     currency: bookingType.currency || "USD",
     holdExpiresAt: tokenContext.pendingSpecialApproval
       ? approvalHoldExpiry(tokenContext.token.expires_at)
-      : holdExpiryFromNow(tokenContext.token.submission_type === "tattoo_special" ? tokenContext.token.expires_at : ""),
-    approvalState: tokenContext.token.submission_type === "tattoo_special"
+      : holdExpiryFromNow(tokenContext.token.submission_type === "tattoo_special" && !tokenContext.adjustedOffer ? tokenContext.token.expires_at : ""),
+    approvalState: tokenContext.token.submission_type === "tattoo_special" && !tokenContext.adjustedOffer
       ? (tokenContext.pendingSpecialApproval ? "pending" : "approved")
       : "not_required",
     checkoutGroupId: options.checkoutGroupId || id,
@@ -3063,7 +3076,7 @@ function requestedPrivateBookingSessions(body, tokenContext) {
     return { error: "Each selected appointment time must be unique." };
   }
   const multiEnabled = tokenContext.purpose === "tattoo"
-    && tokenContext.token.submission_type !== "tattoo_special"
+    && (tokenContext.token.submission_type !== "tattoo_special" || Boolean(tokenContext.adjustedOffer))
     && !tokenContext.experimentalProject
     && Boolean(tokenContext.token.allow_multiple_sessions);
   const maxSessions = multiEnabled
@@ -4631,6 +4644,12 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
               edr.updated_at AS experimental_refund_updated_at,
               dp.status AS payment_status,
               dp.amount_cents AS payment_amount_cents,
+              EXISTS (
+                SELECT 1 FROM appointment_events manual_event
+                WHERE manual_event.appointment_id = a.id
+                  AND manual_event.event_type = 'manual_scheduled'
+                  AND manual_event.actor = 'admin'
+              ) AS is_manual,
               CASE WHEN a.status IN ('requested','pending_deposit','deposit_pending','cancelled','archived')
                 AND NOT EXISTS (
                   SELECT 1 FROM deposit_payments protected_payment
@@ -5385,10 +5404,10 @@ function orderLooksPaid(order) {
   return order.state === "COMPLETED";
 }
 
-function pendingAppointmentConfirmationStatements(db, env, appointmentRow, now, confirmedUpdatedAt = now) {
+function pendingAppointmentConfirmationStatements(db, env, appointmentRow, now, confirmedUpdatedAt = now, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
   const statements = [];
-  if (appointment.clientEmail) {
+  if (options.client !== false && appointment.clientEmail) {
     statements.push(db.prepare(
       `INSERT INTO notification_deliveries (
         id, channel, template_key, recipient, subject, related_type,
@@ -5409,7 +5428,7 @@ function pendingAppointmentConfirmationStatements(db, env, appointmentRow, now, 
       confirmedUpdatedAt,
     ));
   }
-  statements.push(db.prepare(
+  if (options.admin !== false) statements.push(db.prepare(
     `INSERT INTO notification_deliveries (
       id, channel, template_key, recipient, subject, related_type,
       related_id, idempotency_key, status, error, sent_at, created_at
@@ -5501,6 +5520,12 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
                  )
                  OR (appointments.replacement_for_appointment_id IS NOT NULL AND s.tattoo_stage = 'tattoo_scheduled')
                )
+           ))
+           OR (purpose = 'tattoo' AND EXISTS (
+             SELECT 1 FROM appointment_events manual_event
+             WHERE manual_event.appointment_id = appointments.id
+               AND manual_event.event_type = 'manual_scheduled'
+               AND manual_event.actor = 'admin'
            ))
            OR (purpose = 'prerequisite_consultation' AND EXISTS (
              SELECT 1 FROM submissions s
@@ -6544,6 +6569,7 @@ async function moveConfirmedAppointment(
   actor,
   note = "",
   overridePolicy = false,
+  notifyClient = true,
 ) {
   const original = normalizeAppointment(appointmentRow);
   const hoursUntilStart = (new Date(original.startAt).getTime() - Date.now()) / (60 * 60 * 1000);
@@ -6688,11 +6714,11 @@ async function moveConfirmedAppointment(
   });
   const notificationKey = `${original.id}:${now}`;
   const [delivery, adminDelivery] = await Promise.all([
-    notifyAppointmentRescheduled(env, request, updatedRow, {
+    notifyClient ? notifyAppointmentRescheduled(env, request, updatedRow, {
       previousStartAt: original.startAt,
       previousEndAt: original.endAt,
       idempotencyKey: `appointment_rescheduled:${notificationKey}`,
-    }),
+    }) : Promise.resolve({ ok: false, skipped: true, reason: "save_only" }),
     notifyAdminAppointmentRescheduled(env, request, updatedRow, {
       previousStartAt: original.startAt,
       previousEndAt: original.endAt,
@@ -6708,6 +6734,196 @@ async function moveConfirmedAppointment(
     meetingNeedsAttention,
     meetingError,
   };
+}
+
+async function moveConfirmedAppointmentToPrivateWindow(
+  request, env, db, appointmentRow, window, note, overridePolicy, notifyClient,
+) {
+  const original = normalizeAppointment(appointmentRow);
+  const hoursUntilStart = (new Date(original.startAt).getTime() - Date.now()) / (60 * 60 * 1000);
+  if (!overridePolicy && hoursUntilStart < RESCHEDULE_CUTOFF_HOURS) {
+    return { error: "This move requires a Studio policy override.", status: 409 };
+  }
+  if (!overridePolicy && original.rescheduleCount >= 1) {
+    return { error: "This appointment has already used its reschedule.", status: 409 };
+  }
+  const eventNote = asString(note).slice(0, 2000);
+  if (!eventNote) return { error: "A reason is required for a custom-time override.", status: 400 };
+  const now = new Date().toISOString();
+  const results = await db.batch([
+    db.prepare(
+      `UPDATE appointments
+       SET availability_window_id=?,start_at=?,end_at=?,
+           original_start_at=COALESCE(original_start_at,start_at),
+           original_end_at=COALESCE(original_end_at,end_at),
+           reschedule_count=reschedule_count+1,rescheduled_at=?,updated_at=?
+       WHERE id=? AND status='confirmed' AND replaced_by_appointment_id IS NULL
+         AND (?=1 OR reschedule_count=0)
+         AND NOT EXISTS (
+           SELECT 1 FROM appointments overlap_appointment
+           LEFT JOIN availability_windows overlap_window ON overlap_window.id=overlap_appointment.availability_window_id
+           WHERE overlap_appointment.id<>appointments.id
+             AND overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
+             AND unixepoch(overlap_appointment.start_at)-COALESCE(overlap_window.buffer_before_minutes,0)*60
+               < unixepoch(?) + ?*60
+             AND unixepoch(overlap_appointment.end_at)+COALESCE(overlap_window.buffer_after_minutes,0)*60
+               > unixepoch(?) - ?*60
+         )`
+    ).bind(
+      window.id, window.start_at, window.end_at, now, now, original.id, overridePolicy ? 1 : 0,
+      window.end_at, Number(window.buffer_after_minutes || 0),
+      window.start_at, Number(window.buffer_before_minutes || 0),
+    ),
+    db.prepare(
+      `INSERT INTO appointment_events (id,appointment_id,event_type,actor,note,metadata_json,created_at)
+       SELECT ?,id,'rescheduled','admin',?,?,? FROM appointments WHERE id=? AND rescheduled_at=? AND updated_at=?`
+    ).bind(
+      crypto.randomUUID(), eventNote,
+      JSON.stringify({
+        fromStartAt: original.startAt, fromEndAt: original.endAt,
+        toStartAt: window.start_at, toEndAt: window.end_at,
+        paymentRequired: false, policyOverride: Boolean(overridePolicy), customTime: true,
+      }), now, original.id, now, now,
+    ),
+  ]);
+  if (Number(results?.[0]?.meta?.changes || 0) < 1) {
+    await cleanupManualAppointmentDraft(db, env, "", window.id);
+    return { error: "The custom time became unavailable before the move completed.", status: 409 };
+  }
+  await updatePendingRenderingExpiry(db, original.id, window.start_at);
+  if (String(original.availabilityWindowId || "").startsWith("manual:")) {
+    await cleanupManualAppointmentDraft(db, env, "", original.availabilityWindowId);
+  }
+  let meetingNeedsAttention = false;
+  let meetingError = "";
+  if (appointmentRow.meeting_provider === "zoom") {
+    const cleanup = await cleanupZoomMeetingForAppointment(db, env, original.id);
+    meetingNeedsAttention = !cleanup.cleaned;
+    meetingError = cleanup.error || "";
+    if (cleanup.cleaned) {
+      const recreation = await maybeCreateVirtualMeeting(db, env, await selectAppointmentWithMeeting(db, original.id));
+      if (recreation?.error) {
+        meetingNeedsAttention = true;
+        meetingError = recreation.error;
+      }
+    }
+  }
+  const updatedRow = await selectAppointmentWithMeeting(db, original.id);
+  await mirrorAppointmentToCrm(db, normalizeAppointment(updatedRow), { includePayment: true });
+  const notificationKey = `${original.id}:${now}`;
+  const [delivery, adminDelivery] = await Promise.all([
+    notifyClient ? notifyAppointmentRescheduled(env, request, updatedRow, {
+      previousStartAt: original.startAt,
+      previousEndAt: original.endAt,
+      idempotencyKey: `appointment_rescheduled:${notificationKey}`,
+    }) : Promise.resolve({ ok: false, skipped: true, reason: "save_only" }),
+    notifyAdminAppointmentRescheduled(env, request, updatedRow, {
+      previousStartAt: original.startAt,
+      previousEndAt: original.endAt,
+      idempotencyKey: `admin_appointment_rescheduled:${notificationKey}`,
+    }),
+  ]);
+  return {
+    appointment: normalizeAppointment(updatedRow), hoursUntilStart, delivery, adminDelivery,
+    overridePolicy: Boolean(overridePolicy), meetingNeedsAttention, meetingError,
+  };
+}
+
+async function movePendingManualAppointment(
+  request, env, db, appointmentRow, window, note, notifyClient,
+) {
+  const original = normalizeAppointment(appointmentRow);
+  if (!["pending_deposit", "deposit_pending"].includes(original.status) || original.holdState !== "active") {
+    return { error: "This unpaid appointment is no longer movable.", status: 409 };
+  }
+  if (new Date(original.holdExpiresAt).getTime() <= Date.now()) {
+    return { error: "The deposit deadline has passed. Release this hold and schedule a new appointment.", status: 409 };
+  }
+  const manualEvent = await db.prepare(
+    "SELECT id FROM appointment_events WHERE appointment_id=? AND event_type='manual_scheduled' AND actor='admin' LIMIT 1"
+  ).bind(original.id).first();
+  if (!manualEvent) return { error: "Only Studio-created unpaid appointments can be moved here.", status: 409 };
+  if (original.squarePaymentLinkId) {
+    try {
+      await invalidateSquarePaymentLink(env, original.squarePaymentLinkId);
+    } catch (error) {
+      return { error: "The existing Square checkout could not be invalidated.", status: 409, detail: error.message };
+    }
+  }
+  const now = new Date().toISOString();
+  const results = await db.batch([
+    db.prepare(
+      `UPDATE appointments SET availability_window_id=?,start_at=?,end_at=?,status='pending_deposit',
+       square_order_id=NULL,square_payment_link_id=NULL,square_checkout_url=NULL,updated_at=?
+       WHERE id=? AND status IN ('pending_deposit','deposit_pending') AND hold_state='active'
+         AND NOT EXISTS (
+           SELECT 1 FROM appointments overlap_appointment
+           LEFT JOIN availability_windows overlap_window ON overlap_window.id=overlap_appointment.availability_window_id
+           WHERE overlap_appointment.id<>appointments.id
+             AND overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
+             AND unixepoch(overlap_appointment.start_at)-COALESCE(overlap_window.buffer_before_minutes,0)*60
+               < unixepoch(?) + ?*60
+             AND unixepoch(overlap_appointment.end_at)+COALESCE(overlap_window.buffer_after_minutes,0)*60
+               > unixepoch(?) - ?*60
+         )`
+    ).bind(
+      window.id, window.start_at, window.end_at, now, original.id,
+      window.end_at, Number(window.buffer_after_minutes || 0),
+      window.start_at, Number(window.buffer_before_minutes || 0),
+    ),
+    db.prepare(
+      `UPDATE deposit_payments SET status='cancelled',updated_at=?
+       WHERE appointment_id=? AND status='pending'`
+    ).bind(now, original.id),
+    db.prepare(
+      `INSERT INTO appointment_events (id,appointment_id,event_type,actor,note,metadata_json,created_at)
+       SELECT ?,id,'manual_hold_moved','admin',?,?,? FROM appointments WHERE id=? AND updated_at=?`
+    ).bind(
+      crypto.randomUUID(), asString(note).slice(0, 2000) || null,
+      JSON.stringify({ fromStartAt: original.startAt, fromEndAt: original.endAt, toStartAt: window.start_at, toEndAt: window.end_at }),
+      now, original.id, now,
+    ),
+  ]);
+  if (Number(results?.[0]?.meta?.changes || 0) < 1) {
+    return { error: "The new appointment time became unavailable before the hold moved.", status: 409 };
+  }
+  if (String(original.availabilityWindowId || "").startsWith("manual:")) {
+    await cleanupManualAppointmentDraft(db, env, "", original.availabilityWindowId);
+  }
+  const bookingTypeRow = await db.prepare("SELECT * FROM booking_types WHERE id=? AND active=1").bind(original.bookingTypeId).first();
+  let movedRow = await selectAppointmentWithMeeting(db, original.id);
+  let paymentLink;
+  try {
+    paymentLink = await createSquarePaymentLink(
+      request, env, normalizeAppointment(movedRow), normalizeBookingType(bookingTypeRow),
+      { idempotencyKey: `manual-move:${original.id}:${window.start_at}` },
+    );
+  } catch (error) {
+    return { error: "The appointment moved, but its replacement Square link could not be created.", status: 503, detail: error.message };
+  }
+  if (!await savePendingPaymentLink(db, normalizeAppointment(movedRow), paymentLink)) {
+    await invalidateUnsavedPaymentLink(env, paymentLink);
+    return { error: "The appointment moved, but its replacement Square link could not be saved.", status: 409 };
+  }
+  movedRow = await selectAppointmentWithMeeting(db, original.id);
+  let delivery = { ok: false, skipped: true, reason: "save_only" };
+  if (notifyClient && movedRow?.client_email) {
+    const appointment = normalizeAppointment(movedRow);
+    const notificationNow = new Date().toISOString();
+    await db.prepare(
+      `INSERT INTO notification_deliveries (
+        id,channel,template_key,recipient,subject,related_type,related_id,idempotency_key,status,error,sent_at,created_at
+      ) VALUES (?,'email','manual_appointment_deposit_requested',?,NULL,'appointment',?,?,'pending',NULL,NULL,?)
+      ON CONFLICT(idempotency_key) DO NOTHING`
+    ).bind(
+      crypto.randomUUID(), appointment.clientEmail, appointment.id,
+      `manual_appointment_deposit_requested:${appointment.id}:${appointment.squarePaymentLinkId || appointment.startAt}`,
+      notificationNow,
+    ).run();
+    delivery = await notifyManualAppointmentDepositRequested(env, request, movedRow, { durable: true });
+  }
+  await mirrorAppointmentToCrm(db, normalizeAppointment(movedRow), { includePayment: true });
+  return { appointment: normalizeAppointment(movedRow), delivery, checkoutUrl: paymentLink.url, pendingDeposit: true };
 }
 
 export async function handleCreateReplacementCheckout(request, env) {
@@ -7000,6 +7216,7 @@ export async function handleRescheduleAppointment(request, env) {
       "client",
       "",
       false,
+      true,
     );
     if (moved.error) return errorResponse(moved.error, moved.status || 409);
     return json({
@@ -7023,30 +7240,69 @@ export async function handleAdminRescheduleAppointment(request, env, appointment
   const body = await readJsonBody(request);
   if (!body) return errorResponse("Expected JSON body.", 400);
   const availabilityWindowId = asString(body.availabilityWindowId);
-  if (!availabilityWindowId) return errorResponse("availabilityWindowId is required.", 400);
+  const customStartAt = asString(body.customStartAt);
+  const note = asString(body.note).slice(0, 2000);
+  if (Boolean(availabilityWindowId) === Boolean(customStartAt)) {
+    return errorResponse("Choose one available slot or one custom start time.", 400);
+  }
+  if (body.overridePolicy === true && !note) {
+    return errorResponse("A reason is required for a Studio policy override.", 400);
+  }
   try {
     const db = requireBookingDb(env);
     const row = await selectAppointmentWithMeeting(db, appointmentId);
     if (!row) return errorResponse("Appointment not found.", 404);
-    const moved = await moveConfirmedAppointment(
-      request,
-      env,
-      db,
-      row,
-      availabilityWindowId,
-      "admin",
-      asString(body.note),
-      body.overridePolicy === true,
-    );
+    let privateWindow = null;
+    if (customStartAt) {
+      const bookingType = await db.prepare("SELECT * FROM booking_types WHERE id=? AND active=1").bind(row.booking_type_id).first();
+      if (!bookingType) return errorResponse("This appointment type is no longer available.", 409);
+      const created = await createPrivateManualWindow(db, bookingType, customStartAt, note, appointmentId);
+      if (created.error) return errorResponse(created.error, 409);
+      privateWindow = created.window;
+    }
+    let moved;
+    if (["pending_deposit", "deposit_pending"].includes(row.status)) {
+      let window = privateWindow;
+      if (!window) {
+        const availability = await ensureAvailable(db, availabilityWindowId, row.booking_type_id, appointmentId);
+        if (availability.error) return errorResponse(availability.error, 409);
+        window = availability.window;
+      }
+      if (row.hold_expires_at && new Date(row.hold_expires_at).getTime() > new Date(window.start_at).getTime()) {
+        if (privateWindow) await cleanupManualAppointmentDraft(db, env, "", privateWindow.id);
+        return errorResponse("The existing payment deadline is later than the new appointment start.", 409);
+      }
+      moved = await movePendingManualAppointment(
+        request, env, db, row, window, note, body.notifyClient !== false,
+      );
+    } else if (privateWindow) {
+      moved = await moveConfirmedAppointmentToPrivateWindow(
+        request, env, db, row, privateWindow, note, body.overridePolicy === true, body.notifyClient !== false,
+      );
+    } else {
+      moved = await moveConfirmedAppointment(
+        request,
+        env,
+        db,
+        row,
+        availabilityWindowId,
+        "admin",
+        note,
+        body.overridePolicy === true,
+        body.notifyClient !== false,
+      );
+    }
+    if (moved?.error && privateWindow) await cleanupManualAppointmentDraft(db, env, "", privateWindow.id);
     if (moved.error) return errorResponse(moved.error, moved.status || 409);
     return json({
       ok: true,
-      mode: "moved",
+      mode: moved.pendingDeposit ? "pending_deposit_moved" : "moved",
       appointment: moved.appointment,
       hoursUntilStart: moved.hoursUntilStart,
       policyOverride: moved.overridePolicy,
       delivery: moved.delivery,
       adminDelivery: moved.adminDelivery,
+      checkoutUrl: moved.checkoutUrl || "",
       meetingNeedsAttention: moved.meetingNeedsAttention,
       meetingError: moved.meetingError,
     });
@@ -8272,12 +8528,20 @@ export async function handleAdminCreateBookingToken(request, env) {
     }
     let reviewedSessionPlan = null;
     let specialTerms = null;
+    let acceptedAdjustedOffer = null;
     const experimentalProject = submission.type === "special_project"
       ? await db.prepare(
         "SELECT * FROM special_project_submission_terms WHERE submission_id=? AND project_profile='experimental'"
       ).bind(submissionId).first()
       : null;
     if (purpose === "tattoo") {
+      if (submission.type === "tattoo_special") {
+        acceptedAdjustedOffer = await db.prepare(
+          `SELECT id,pricing_type,amount_cents,currency,allowed_booking_types_json,allow_multiple_sessions,max_sessions
+           FROM tattoo_adjusted_offers WHERE submission_id=? AND status='accepted'
+           ORDER BY revision DESC LIMIT 1`
+        ).bind(submissionId).first();
+      }
       reviewedSessionPlan = await loadTattooSessionPlan(db, submissionId);
       if (!reviewedSessionPlan || reviewedSessionPlan.session_category === "artist_review" || reviewedSessionPlan.split_policy === "artist_review") {
         return errorResponse("Finish and save the client's session estimate before generating booking access.", 409);
@@ -8285,13 +8549,14 @@ export async function handleAdminCreateBookingToken(request, env) {
       if (
         submission.source_path !== "/studio/direct-booking-invite"
         && !experimentalProject
+        && !acceptedAdjustedOffer
         && !reviewedBudgetIsComplete(reviewedSessionPlan)
       ) {
         return errorResponse("Set the approved project budget before generating tattoo booking access.", 409, {
           code: "APPROVED_BUDGET_REQUIRED",
         });
       }
-      if (submission.type === "tattoo_special") {
+      if (submission.type === "tattoo_special" && !acceptedAdjustedOffer) {
         specialTerms = await db.prepare(
           `SELECT booking_type_id, sales_closes_at, approved_price_cents, offer_title, variant_label
            FROM tattoo_special_submission_terms WHERE submission_id = ?`
@@ -8348,10 +8613,15 @@ export async function handleAdminCreateBookingToken(request, env) {
     if (hasSuppliedBookingTypes && !Array.isArray(body.allowedBookingTypes)) {
       return errorResponse("Allowed booking types must be a non-empty list.", 400);
     }
+    const adjustedAllowed = acceptedAdjustedOffer
+      ? parseJsonField(acceptedAdjustedOffer.allowed_booking_types_json, [])
+      : [];
     const allowed = specialTerms
       ? [specialTerms.booking_type_id]
       : hasSuppliedBookingTypes
         ? body.allowedBookingTypes.map(asString).filter(Boolean)
+        : adjustedAllowed.length
+          ? adjustedAllowed
         : purpose === "consultation"
           ? ["consult_in_person"]
           : [...SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing];
@@ -8379,8 +8649,10 @@ export async function handleAdminCreateBookingToken(request, env) {
     }
     const allowMultipleSessions = purpose === "tattoo"
       && !specialTerms
-      && body.allowMultipleSessions === true;
-    const maxSessions = allowMultipleSessions ? Number(body.maxSessions) : 1;
+      && (body.allowMultipleSessions === true || (body.allowMultipleSessions === undefined && Boolean(acceptedAdjustedOffer?.allow_multiple_sessions)));
+    const maxSessions = allowMultipleSessions
+      ? Number(body.maxSessions ?? acceptedAdjustedOffer?.max_sessions)
+      : 1;
     if (
       allowMultipleSessions
       && (!Number.isSafeInteger(maxSessions) || maxSessions < 2 || maxSessions > 24)
@@ -10394,7 +10666,7 @@ export async function handleAdminListAvailability(request, env) {
     const result = await db
       .prepare(
         `SELECT * FROM availability_windows
-         WHERE venture = ? AND id NOT LIKE 'gen:%'
+         WHERE venture = ? AND id NOT LIKE 'gen:%' AND id NOT LIKE 'manual:%'
          ${scopeClause}
          ${scopedTypeClause}
          ORDER BY
@@ -10789,6 +11061,365 @@ export async function handleAdminDeleteAvailability(request, env, id) {
   }
 }
 
+const MANUAL_APPOINTMENT_PAYMENT_MODES = new Set(["none", "external_paid", "square_link"]);
+
+function manualAppointmentPurpose(bookingTypeId, submission) {
+  const prerequisite = Boolean(
+    submission
+    && TATTOO_PROJECT_SUBMISSION_TYPES.has(submission.type)
+    && ["consult_in_person", "consult_virtual"].includes(bookingTypeId)
+  );
+  return purposeForBookingType(bookingTypeId, prerequisite);
+}
+
+function manualAppointmentSubmissionError(submission, bookingTypeId, purpose) {
+  if (!submission) return "";
+  if (submission.type === "tattoo_special" || isTattooSpecialBookingType(bookingTypeId)) {
+    return "Tattoo Special appointments must remain in the approved Tattoo Special workflow.";
+  }
+  if (purpose === "tattoo") {
+    if (!TATTOO_PROJECT_SUBMISSION_TYPES.has(submission.type)) return "That request cannot be linked to a tattoo appointment.";
+    if (!["approved", "booked"].includes(submission.status) || !["ready_to_book", "tattoo_scheduled"].includes(submission.tattoo_stage)) {
+      return "That tattoo request is not ready to schedule.";
+    }
+  }
+  if (purpose === "prerequisite_consultation" && !["approved", "booked"].includes(submission.status)) {
+    return "That request is not ready to schedule a consultation.";
+  }
+  if (purpose === "studio" && !["studio_visit", "studio_booking"].includes(submission.type)) {
+    return "That request does not match this Studio appointment type.";
+  }
+  return "";
+}
+
+async function cleanupManualAppointmentDraft(db, env, appointmentId, windowId = "") {
+  const row = await selectAppointmentWithMeeting(db, appointmentId);
+  if (row?.square_payment_link_id) {
+    try {
+      await invalidateSquarePaymentLink(env, row.square_payment_link_id);
+    } catch {
+      // The draft remains non-confirmed and is removed below; provider cleanup is best-effort here.
+    }
+  }
+  await db.prepare(
+    `DELETE FROM appointments WHERE id = ? AND status IN ('pending_deposit','deposit_pending')
+      AND NOT EXISTS (
+        SELECT 1 FROM deposit_payments paid
+        WHERE paid.appointment_id = appointments.id
+          AND lower(paid.status) IN ('paid','completed','settled','payment_attention')
+      )`
+  ).bind(appointmentId).run();
+  if (String(windowId || "").startsWith("manual:")) {
+    await db.prepare(
+      `DELETE FROM availability_windows WHERE id = ? AND active = 0
+       AND NOT EXISTS (SELECT 1 FROM appointments WHERE availability_window_id = availability_windows.id)`
+    ).bind(windowId).run();
+  }
+}
+
+async function createPrivateManualWindow(db, bookingType, startAt, note, excludeAppointmentId = "") {
+  const startMs = new Date(startAt).getTime();
+  const durationMinutes = Number(bookingType.duration_minutes || 0);
+  if (!Number.isFinite(startMs) || startMs <= Date.now()) return { error: "Custom appointment time must be in the future." };
+  if (!Number.isSafeInteger(durationMinutes) || durationMinutes <= 0) return { error: "The selected booking type has an invalid duration." };
+  const endAt = new Date(startMs + durationMinutes * 60 * 1000).toISOString();
+  const normalizedStartAt = new Date(startMs).toISOString();
+  const settings = await db.prepare("SELECT * FROM booking_settings WHERE venture = ?").bind("tattooing").first();
+  const candidate = {
+    id: `manual:${crypto.randomUUID()}`,
+    venture: "tattooing",
+    booking_type_id: bookingType.id,
+    start_at: normalizedStartAt,
+    end_at: endAt,
+    capacity: 1,
+    buffer_before_minutes: Number(settings?.default_buffer_before_minutes || 0),
+    buffer_after_minutes: Number(settings?.default_buffer_after_minutes || 0),
+    availability_scope: availabilityScopeForBookingType(bookingType.id),
+    note: asString(note).slice(0, 2000) || "Studio custom-time override",
+  };
+  const activeAppointments = (await loadActiveAppointments(
+    db, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+  )).filter((appointment) => appointment.id !== excludeAppointmentId);
+  if (!hasSlotCapacity(candidate, activeAppointments, bookingType.id)) {
+    return { error: "That custom time overlaps another active appointment." };
+  }
+  const now = new Date().toISOString();
+  await db.prepare(
+    `INSERT INTO availability_windows (
+      id,venture,booking_type_id,start_at,end_at,capacity,buffer_before_minutes,
+      buffer_after_minutes,is_blackout,active,note,created_at,updated_at,availability_scope
+    ) VALUES (?,?,?,?,?,?,?, ?,0,0,?,?,?,?)`
+  ).bind(
+    candidate.id, candidate.venture, candidate.booking_type_id, candidate.start_at, candidate.end_at,
+    candidate.capacity, candidate.buffer_before_minutes, candidate.buffer_after_minutes,
+    candidate.note, now, now, candidate.availability_scope,
+  ).run();
+  return { window: candidate };
+}
+
+async function insertPrivateManualAppointment(db, values, window) {
+  const results = await db.batch([
+    db.prepare(
+      `INSERT INTO appointments (
+        id,submission_id,booking_type_id,availability_window_id,status,purpose,
+        client_name,client_email,client_phone,start_at,end_at,deposit_cents,tip_cents,
+        session_fee_cents,currency,hold_expires_at,hold_state,approval_state,
+        checkout_group_id,checkout_group_position,checkout_group_size,created_at,updated_at
+      )
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,1,?,?
+      WHERE NOT EXISTS (
+        SELECT 1 FROM appointments overlap_appointment
+        LEFT JOIN availability_windows overlap_window ON overlap_window.id = overlap_appointment.availability_window_id
+        WHERE overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
+          AND unixepoch(overlap_appointment.start_at) - COALESCE(overlap_window.buffer_before_minutes,0) * 60
+            < unixepoch(?) + ? * 60
+          AND unixepoch(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes,0) * 60
+            > unixepoch(?) - ? * 60
+      )`
+    ).bind(
+      values.id, values.submissionId || null, values.bookingTypeId, window.id, "pending_deposit", values.purpose,
+      values.clientName, values.clientEmail, values.clientPhone || null, window.start_at, window.end_at,
+      values.depositCents, 0, values.sessionFeeCents || 0, values.currency, values.holdExpiresAt,
+      "active", "not_required", values.id, values.now, values.now,
+      window.end_at, Number(window.buffer_after_minutes || 0), window.start_at, Number(window.buffer_before_minutes || 0),
+    ),
+    db.prepare(
+      `INSERT INTO appointment_events (id,appointment_id,event_type,actor,note,metadata_json,created_at)
+       SELECT ?,id,'manual_scheduled','admin',?,?,? FROM appointments WHERE id=?`
+    ).bind(
+      crypto.randomUUID(), values.note || null,
+      JSON.stringify({ customTime: true, crmPersonId: values.crmPersonId || "", notifyClient: values.notifyClient }),
+      values.now, values.id,
+    ),
+  ]);
+  return Number(results?.[0]?.meta?.changes || 0) > 0;
+}
+
+function manualSubmissionUpdateStatements(db, appointment, now) {
+  if (!appointment.submissionId) return [];
+  if (appointment.purpose === "tattoo") {
+    return [db.prepare(
+      `UPDATE submissions SET status='booked',tattoo_stage='tattoo_scheduled',
+       booking_url=?,updated_at=? WHERE id=? AND status IN ('approved','booked')`
+    ).bind(`${confirmationPathForBookingType(appointment.bookingTypeId)}?appointment=${appointment.id}`, now, appointment.submissionId)];
+  }
+  if (appointment.purpose === "prerequisite_consultation") {
+    return [db.prepare(
+      `UPDATE submissions SET tattoo_stage='consultation_scheduled',booking_url=?,updated_at=?
+       WHERE id=? AND status IN ('approved','booked')`
+    ).bind(`${confirmationPathForBookingType(appointment.bookingTypeId)}?appointment=${appointment.id}`, now, appointment.submissionId)];
+  }
+  return [db.prepare(
+    `UPDATE submissions SET status='booked',booking_url=?,updated_at=?
+     WHERE id=? AND status IN ('new','approved','booked')`
+  ).bind(`${confirmationPathForBookingType(appointment.bookingTypeId)}?appointment=${appointment.id}`, now, appointment.submissionId)];
+}
+
+async function confirmManualAppointment(db, env, request, appointmentRow, paymentMode, paymentNote, notifyClient) {
+  const appointment = normalizeAppointment(appointmentRow);
+  const now = new Date().toISOString();
+  const statements = [
+    db.prepare(
+      `UPDATE appointments SET status='confirmed',hold_state='converted',hold_reconciled_at=?,updated_at=?
+       WHERE id=? AND status='pending_deposit' AND hold_state='active'`
+    ).bind(now, now, appointment.id),
+    db.prepare(
+      `INSERT INTO appointment_events (id,appointment_id,event_type,actor,note,metadata_json,created_at)
+       SELECT ?,id,'manual_confirmed','admin',?,?,? FROM appointments
+       WHERE id=? AND status='confirmed' AND updated_at=?`
+    ).bind(
+      crypto.randomUUID(), paymentNote || null, JSON.stringify({ paymentMode, notifyClient: Boolean(notifyClient) }),
+      now, appointment.id, now,
+    ),
+    ...manualSubmissionUpdateStatements(db, appointment, now),
+  ];
+  if (paymentMode === "external_paid") {
+    statements.push(db.prepare(
+      `INSERT INTO deposit_payments (
+        id,appointment_id,provider,provider_payment_id,amount_cents,tip_cents,currency,status,raw_json,created_at,updated_at
+      )
+      SELECT ?,id,'manual',?,deposit_cents,0,currency,'paid',?,?,? FROM appointments
+      WHERE id=? AND status='confirmed' AND updated_at=?`
+    ).bind(
+      crypto.randomUUID(), asString(paymentNote).slice(0, 500) || null,
+      JSON.stringify({ source: "studio_manual", note: asString(paymentNote).slice(0, 2000) }),
+      now, now, appointment.id, now,
+    ));
+  }
+  statements.push(...pendingAppointmentConfirmationStatements(
+    db, env, appointmentRow, now, now, { client: Boolean(notifyClient), admin: false },
+  ));
+  const results = await db.batch(statements);
+  if (Number(results?.[0]?.meta?.changes || 0) < 1) throw new Error("Appointment could not be confirmed because it changed.");
+  let updated = await selectAppointmentWithMeeting(db, appointment.id);
+  await maybeCreateVirtualMeeting(db, env, updated || appointmentRow);
+  updated = await selectAppointmentWithMeeting(db, appointment.id);
+  await mirrorAppointmentToCrm(db, normalizeAppointment(updated || appointmentRow), { includePayment: true });
+  if (notifyClient) {
+    await dispatchAppointmentConfirmationNotifications(env, request, updated || appointmentRow, { client: true, admin: false });
+  }
+  return normalizeAppointment(await selectAppointmentWithMeeting(db, appointment.id) || updated || appointmentRow);
+}
+
+export async function handleAdminCreateAppointment(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+  const bookingTypeId = asString(body.bookingTypeId);
+  const paymentMode = asString(body.paymentMode || "none");
+  const clientName = asString(body.clientName).slice(0, 200);
+  const clientEmail = asString(body.clientEmail).toLowerCase().slice(0, 320);
+  const clientPhone = asString(body.clientPhone).slice(0, 80);
+  const submissionId = asString(body.submissionId);
+  const crmPersonId = asString(body.crmPersonId);
+  const availabilityWindowId = asString(body.availabilityWindowId);
+  const customStartAt = asString(body.customStartAt);
+  const note = asString(body.note).slice(0, 2000);
+  const notifyClient = body.notifyClient === true;
+  if (!bookingTypeId) return errorResponse("Booking type is required.", 400);
+  if (!MANUAL_APPOINTMENT_PAYMENT_MODES.has(paymentMode)) return errorResponse("Choose a valid payment option.", 400);
+  if (!clientName) return errorResponse("Client name is required.", 400);
+  if (notifyClient && !/^\S+@\S+\.\S+$/.test(clientEmail)) {
+    return errorResponse("A valid client email is required to email the client.", 400);
+  }
+  if (Boolean(availabilityWindowId) === Boolean(customStartAt)) {
+    return errorResponse("Choose one available slot or one custom start time.", 400);
+  }
+  try {
+    const db = requireBookingDb(env);
+    const bookingType = await db.prepare("SELECT * FROM booking_types WHERE id=? AND active=1").bind(bookingTypeId).first();
+    if (!bookingType || isTattooSpecialBookingType(bookingTypeId)) return errorResponse("That booking type is unavailable for manual scheduling.", 409);
+    const submission = submissionId
+      ? await db.prepare("SELECT * FROM submissions WHERE id=?").bind(submissionId).first()
+      : null;
+    if (submissionId && !submission) return errorResponse("Linked request not found.", 404);
+    const purpose = manualAppointmentPurpose(bookingTypeId, submission);
+    const submissionError = manualAppointmentSubmissionError(submission, bookingTypeId, purpose);
+    if (submissionError) return errorResponse(submissionError, 409);
+    if (crmPersonId) {
+      const person = await db.prepare(
+        "SELECT id FROM crm_people WHERE id=? AND merged_into_id IS NULL AND anonymized_at IS NULL"
+      ).bind(crmPersonId).first();
+      if (!person) return errorResponse("Selected person is no longer available.", 409);
+    }
+    const configuredDeposit = Number(bookingType.deposit_cents || 0);
+    const depositCents = paymentMode === "none" ? 0 : Number(body.depositCents ?? configuredDeposit);
+    if (!Number.isSafeInteger(depositCents) || depositCents <= 0 && paymentMode !== "none") {
+      return errorResponse("Deposit amount must be a positive whole number of cents.", 400);
+    }
+    let requestedPaymentDueMs = Number.NaN;
+    if (paymentMode === "square_link") {
+      const requestedDue = asString(body.paymentDueAt);
+      requestedPaymentDueMs = requestedDue ? new Date(requestedDue).getTime() : Number.NaN;
+      if (requestedDue && (!Number.isFinite(requestedPaymentDueMs) || requestedPaymentDueMs <= Date.now())) {
+        return errorResponse("Payment deadline must be in the future.", 400);
+      }
+    }
+    const now = new Date().toISOString();
+    const appointmentId = crypto.randomUUID();
+    let window;
+    let inserted = false;
+    let paymentDueAt = "";
+    if (customStartAt) {
+      const created = await createPrivateManualWindow(db, bookingType, customStartAt, note);
+      if (created.error) return errorResponse(created.error, 409);
+      window = created.window;
+      if (paymentMode === "square_link") {
+        const startMs = new Date(window.start_at).getTime();
+        const dueMs = Number.isFinite(requestedPaymentDueMs)
+          ? requestedPaymentDueMs
+          : Math.min(Date.now() + 48 * 60 * 60 * 1000, startMs);
+        paymentDueAt = new Date(dueMs).toISOString();
+      }
+      if (paymentDueAt && new Date(paymentDueAt).getTime() > new Date(window.start_at).getTime()) {
+        await cleanupManualAppointmentDraft(db, env, appointmentId, window.id);
+        return errorResponse("Payment deadline cannot be later than the appointment start.", 400);
+      }
+      inserted = await insertPrivateManualAppointment(db, {
+        id: appointmentId, submissionId, bookingTypeId, purpose, clientName, clientEmail, clientPhone,
+        depositCents, sessionFeeCents: Number(bookingType.session_fee_cents || 0), currency: bookingType.currency || "USD",
+        holdExpiresAt: paymentMode === "square_link" ? paymentDueAt : new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        note, crmPersonId, notifyClient, now,
+      }, window);
+    } else {
+      const availability = await ensureAvailable(db, availabilityWindowId, bookingTypeId);
+      if (availability.error) return errorResponse(availability.error, 409);
+      window = availability.window;
+      if (paymentMode === "square_link") {
+        const startMs = new Date(window.start_at).getTime();
+        const dueMs = Number.isFinite(requestedPaymentDueMs)
+          ? requestedPaymentDueMs
+          : Math.min(Date.now() + 48 * 60 * 60 * 1000, startMs);
+        paymentDueAt = new Date(dueMs).toISOString();
+      }
+      if (paymentDueAt && new Date(paymentDueAt).getTime() > new Date(window.start_at).getTime()) {
+        return errorResponse("Payment deadline cannot be later than the appointment start.", 400);
+      }
+      inserted = await insertPendingAppointment(db, {
+        id: appointmentId, submissionId, bookingTokenId: null, bookingTypeId, availabilityWindowId: window.id,
+        purpose, clientName, clientEmail, clientPhone, depositCents, sessionFeeCents: Number(bookingType.session_fee_cents || 0),
+        currency: bookingType.currency || "USD",
+        holdExpiresAt: paymentMode === "square_link" ? paymentDueAt : new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        approvalState: "not_required", now, eventActor: "admin", eventNote: note,
+        eventMetadata: { customTime: false, crmPersonId, notifyClient },
+      }, "manual_scheduled");
+    }
+    if (!inserted) {
+      if (window?.id) await cleanupManualAppointmentDraft(db, env, appointmentId, window.id);
+      return errorResponse("That appointment time was claimed before it could be scheduled.", 409);
+    }
+    let appointmentRow = await selectAppointmentWithMeeting(db, appointmentId);
+    if (paymentMode !== "square_link") {
+      const appointment = await confirmManualAppointment(
+        db, env, request, appointmentRow, paymentMode, asString(body.paymentNote).slice(0, 2000), notifyClient,
+      );
+      return json({ ok: true, appointment, paymentMode, checkoutUrl: "", delivery: { requested: notifyClient } }, { status: 201 });
+    }
+    let paymentLink;
+    try {
+      paymentLink = await createSquarePaymentLink(request, env, normalizeAppointment(appointmentRow), normalizeBookingType(bookingType), {
+        idempotencyKey: `manual:${appointmentId}`,
+      });
+    } catch (error) {
+      await cleanupManualAppointmentDraft(db, env, appointmentId, window?.id);
+      return errorResponse("Square deposit link could not be created.", 503, { detail: error.message });
+    }
+    if (!await savePendingPaymentLink(db, normalizeAppointment(appointmentRow), paymentLink)) {
+      await invalidateUnsavedPaymentLink(env, paymentLink);
+      await cleanupManualAppointmentDraft(db, env, appointmentId, window?.id);
+      return errorResponse("The appointment changed before its deposit link could be saved.", 409);
+    }
+    appointmentRow = await selectAppointmentWithMeeting(db, appointmentId);
+    let delivery = { ok: false, skipped: true, reason: "save_only" };
+    if (notifyClient && appointmentRow?.client_email) {
+      const appointment = normalizeAppointment(appointmentRow);
+      const notificationNow = new Date().toISOString();
+      await db.prepare(
+        `INSERT INTO notification_deliveries (
+          id,channel,template_key,recipient,subject,related_type,related_id,idempotency_key,status,error,sent_at,created_at
+        ) VALUES (?,'email','manual_appointment_deposit_requested',?,NULL,'appointment',?,?,'pending',NULL,NULL,?)
+        ON CONFLICT(idempotency_key) DO NOTHING`
+      ).bind(
+        crypto.randomUUID(), appointment.clientEmail, appointment.id,
+        `manual_appointment_deposit_requested:${appointment.id}:${appointment.squarePaymentLinkId || appointment.startAt}`,
+        notificationNow,
+      ).run();
+      delivery = await notifyManualAppointmentDepositRequested(env, request, appointmentRow, { durable: true });
+    }
+    await mirrorAppointmentToCrm(db, normalizeAppointment(appointmentRow), { includePayment: true });
+    return json({
+      ok: true,
+      appointment: normalizeAppointment(appointmentRow),
+      paymentMode,
+      checkoutUrl: paymentLink.url,
+      delivery,
+    }, { status: 201 });
+  } catch (error) {
+    return errorResponse("Unable to schedule appointment.", 500, { detail: error.message });
+  }
+}
+
 export async function handleAdminListAppointments(request, env) {
   const authError = requireAdmin(request, env);
   if (authError) return authError;
@@ -10811,6 +11442,12 @@ export async function handleAdminListAppointments(request, env) {
                 edr.updated_at AS experimental_refund_updated_at,
                 dp.status AS payment_status,
                 dp.amount_cents AS payment_amount_cents,
+                EXISTS (
+                  SELECT 1 FROM appointment_events manual_event
+                  WHERE manual_event.appointment_id = a.id
+                    AND manual_event.event_type = 'manual_scheduled'
+                    AND manual_event.actor = 'admin'
+                ) AS is_manual,
                 CASE WHEN a.status IN ('requested','pending_deposit','deposit_pending','cancelled','archived')
                   AND NOT EXISTS (
                     SELECT 1 FROM deposit_payments protected_payment

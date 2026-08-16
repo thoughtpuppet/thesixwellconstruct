@@ -34,6 +34,7 @@ import {
 import {
   handleAdminCancelAppointment,
   handleAdminCompleteAppointment,
+  handleAdminCreateAppointment,
   handleAdminCreateAppointmentMeeting,
   handleAdminDeleteAppointment,
   handleAdminExperimentalAppointmentAction,
@@ -82,6 +83,7 @@ import {
   notifyAppointmentCancelled,
   notifyAppointmentRescheduled,
   notifySubmissionReceived,
+  retryPendingAdjustedOfferNotifications,
   retryPendingAdminAppointmentNotifications,
   sendDueAppointmentReminders,
   sendDueExperimentalHealedReminders,
@@ -127,6 +129,13 @@ import {
 } from "../functions/api/tattoo-specials/_lib.js";
 import { handleAdminManualTextTemplates } from "../functions/api/communications/_lib.js";
 import { bookingTokenFromUrl } from "../functions/api/booking-links.js";
+import {
+  handleAdminAcceptAdjustedOffer,
+  handleAdminCreateAdjustedOffer,
+  handleAdminDeclineAdjustedOffer,
+  handlePublicAdjustedOfferContext,
+  handlePublicAdjustedOfferResponse,
+} from "../functions/api/tattoo-adjusted-offers/_lib.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -954,6 +963,21 @@ test("Studio submission progress reports current client notification delivery an
   const submissionsApiSource = readFileSync(join(ROOT, "functions", "api", "submissions", "_lib.js"), "utf8");
   assert.match(submissionsApiSource, /const paid = \["paid", "completed", "settled"\]\.includes\(status\);/);
   assert.doesNotMatch(submissionsApiSource, /const paid = [^\n]*provider_payment_id/);
+});
+
+test("Studio exposes one manual appointment editor across booking scopes with explicit save and email actions", () => {
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
+  assert.match(studio, /data-open-appointment-editor="create"/);
+  assert.match(studio, /data-reschedule-appointment/);
+  assert.match(studio, /Custom time override/);
+  assert.match(studio, /No deposit/);
+  assert.match(studio, /Paid elsewhere/);
+  assert.match(studio, /Square deposit link/);
+  assert.match(studio, /Save \+ Email Client/);
+  assert.match(studio, /\/api\/admin\/crm\/people\?q=/);
+  assert.match(studio, /api\("\/api\/admin\/booking\/appointments"/);
+  assert.match(worker, /method === "POST"[\s\S]*?handleAdminCreateAppointment\(request, env\)/);
 });
 
 function validCustomForProject(projectType, overrides = {}) {
@@ -9705,6 +9729,172 @@ test("admin reschedule atomically enforces availability and increments calendar 
   assert.equal(payload.appointment.startAt, targetStart);
 });
 
+test("Studio can manually schedule a confirmed appointment without a deposit or client email", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+  const now = new Date().toISOString();
+  const startAt = new Date(Date.now() + 120 * 60 * 60 * 1000).toISOString();
+  const endAt = new Date(Date.now() + 122 * 60 * 60 * 1000).toISOString();
+  database.prepare(
+    `INSERT INTO availability_windows (
+      id, venture, booking_type_id, start_at, end_at, capacity,
+      buffer_before_minutes, buffer_after_minutes, is_blackout, active,
+      note, created_at, updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run("manual-create-slot", "tattooing", "tattoo_quarter", startAt, endAt, 1, 0, 0, 0, 1, "Manual create test", now, now);
+
+  const response = await handleAdminCreateAppointment(adminJsonRequest(
+    "/api/admin/booking/appointments",
+    {
+      bookingTypeId: "tattoo_quarter",
+      availabilityWindowId: "manual-create-slot",
+      clientName: "Manual Client",
+      clientEmail: "",
+      paymentMode: "none",
+      notifyClient: false,
+    },
+    adminToken,
+  ), env);
+  const payload = await response.json();
+  assert.equal(response.status, 201, JSON.stringify(payload));
+  assert.equal(payload.appointment.status, "confirmed");
+  assert.equal(payload.appointment.depositCents, 0);
+  assert.equal(payload.appointment.isManual, true);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM deposit_payments WHERE appointment_id=?").get(payload.appointment.id).count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM appointment_events WHERE appointment_id=? AND event_type='manual_scheduled'").get(payload.appointment.id).count, 1);
+
+  const externalResponse = await handleAdminCreateAppointment(adminJsonRequest(
+    "/api/admin/booking/appointments",
+    {
+      bookingTypeId: "tattoo_quarter",
+      customStartAt: new Date(Date.now() + 168 * 60 * 60 * 1000).toISOString(),
+      clientName: "Externally Paid Client",
+      paymentMode: "external_paid",
+      depositCents: 12345,
+      paymentNote: "Cash receipt 42",
+      notifyClient: false,
+    },
+    adminToken,
+  ), env);
+  const externalPayload = await externalResponse.json();
+  assert.equal(externalResponse.status, 201, JSON.stringify(externalPayload));
+  assert.equal(externalPayload.appointment.status, "confirmed");
+  const externalPayment = database.prepare(
+    "SELECT provider,amount_cents,status FROM deposit_payments WHERE appointment_id=?"
+  ).get(externalPayload.appointment.id);
+  assert.equal(externalPayment.provider, "manual");
+  assert.equal(externalPayment.amount_cents, 12345);
+  assert.equal(externalPayment.status, "paid");
+});
+
+test("manual custom-time scheduling bypasses public rules but still rejects appointment overlap", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+  const now = new Date().toISOString();
+  const startAt = new Date(Date.now() + 144 * 60 * 60 * 1000).toISOString();
+  const endAt = new Date(Date.now() + 146 * 60 * 60 * 1000).toISOString();
+  database.prepare(
+    `INSERT INTO appointments (
+      id, booking_type_id, status, purpose, client_name, client_email,
+      start_at, end_at, deposit_cents, currency, hold_state, created_at, updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run("manual-overlap-existing", "tattoo_quarter", "confirmed", "tattoo", "Existing Client", "existing@example.test", startAt, endAt, 0, "USD", "converted", now, now);
+
+  const response = await handleAdminCreateAppointment(adminJsonRequest(
+    "/api/admin/booking/appointments",
+    {
+      bookingTypeId: "tattoo_quarter",
+      customStartAt: new Date(Date.now() + 145 * 60 * 60 * 1000).toISOString(),
+      clientName: "Overlap Client",
+      paymentMode: "none",
+      notifyClient: false,
+    },
+    adminToken,
+  ), env);
+  const payload = await response.json();
+  assert.equal(response.status, 409, JSON.stringify(payload));
+  assert.match(payload.error, /overlap|conflict|already/i);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM appointments WHERE client_name='Overlap Client'").get().count, 0);
+});
+
+test("Studio reschedules its unpaid manual Square hold with a replacement link and no client reschedule charge", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = squareEnv(database, { SUBMISSIONS_ADMIN_TOKEN: adminToken });
+  const now = new Date().toISOString();
+  const firstStart = new Date(Date.now() + 120 * 60 * 60 * 1000).toISOString();
+  const secondStart = new Date(Date.now() + 144 * 60 * 60 * 1000).toISOString();
+  for (const [id, startAt] of [["manual-square-first", firstStart], ["manual-square-second", secondStart]]) {
+    database.prepare(
+      `INSERT INTO availability_windows (
+        id, venture, booking_type_id, start_at, end_at, capacity,
+        buffer_before_minutes, buffer_after_minutes, is_blackout, active,
+        note, created_at, updated_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(id, "tattooing", "consult_in_person", startAt, new Date(new Date(startAt).getTime() + 45 * 60 * 1000).toISOString(), 1, 0, 0, 0, 1, "Manual Square test", now, now);
+  }
+  let createCount = 0;
+  let invalidatedOldLink = false;
+  await withMockFetch(async (input, init = {}) => {
+    const target = String(input);
+    if (target.endsWith("/v2/online-checkout/payment-links") && init.method === "POST") {
+      createCount += 1;
+      return jsonFetchResponse({ payment_link: {
+        id: createCount === 1 ? "manual-square-old" : "manual-square-new",
+        order_id: createCount === 1 ? "manual-square-order-old" : "manual-square-order-new",
+        url: createCount === 1 ? "https://square.test/manual-old" : "https://square.test/manual-new",
+      } });
+    }
+    if (target.endsWith("/v2/online-checkout/payment-links/manual-square-old") && init.method === "DELETE") {
+      invalidatedOldLink = true;
+      return new Response(null, { status: 200 });
+    }
+    throw new Error(`Unexpected Square request: ${target}`);
+  }, async () => {
+    const createdResponse = await handleAdminCreateAppointment(adminJsonRequest(
+      "/api/admin/booking/appointments",
+      {
+        bookingTypeId: "consult_in_person",
+        availabilityWindowId: "manual-square-first",
+        clientName: "Manual Square Client",
+        paymentMode: "square_link",
+        depositCents: 5000,
+        paymentDueAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+        notifyClient: false,
+      },
+      adminToken,
+    ), env);
+    const created = await createdResponse.json();
+    assert.equal(createdResponse.status, 201, JSON.stringify(created));
+    assert.equal(created.appointment.status, "deposit_pending");
+    assert.equal(created.checkoutUrl, "https://square.test/manual-old");
+
+    const movedResponse = await handleAdminRescheduleAppointment(adminJsonRequest(
+      `/api/admin/booking/appointments/${created.appointment.id}/reschedule`,
+      { availabilityWindowId: "manual-square-second", notifyClient: false, note: "Studio moved hold" },
+      adminToken,
+    ), env, created.appointment.id);
+    const moved = await movedResponse.json();
+    assert.equal(movedResponse.status, 200, JSON.stringify(moved));
+    assert.equal(moved.appointment.id, created.appointment.id);
+    assert.equal(moved.appointment.startAt, secondStart);
+    assert.equal(moved.appointment.rescheduleCount, 0);
+    assert.equal(moved.checkoutUrl, "https://square.test/manual-new");
+  });
+  assert.equal(createCount, 2);
+  assert.equal(invalidatedOldLink, true);
+});
+
 test("Zoom meetings send Eastern wall-clock time without applying the UTC offset twice", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
@@ -11572,4 +11762,230 @@ test("brief PDF routes, Studio controls, Browser binding, and client email templ
   assert.match(submissionsStudio, /Generate &amp; Email Client/);
   assert.match(templates, /tattoo_brief_ready/);
   assert.match(templates, /Download submitted brief/);
+});
+
+test("Adjusted Offers support private web responses and Studio verbal acceptance as normal tattoo booking access", async () => {
+  const database = migratedDatabase();
+  const adminToken = "adjusted-offer-admin";
+  const sent = [];
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: { send: async (message) => { sent.push(message); return { messageId: crypto.randomUUID() }; } },
+  };
+  const sourceTerms = database.prepare(
+    `SELECT o.id offer_id,v.id offer_version_id,ov.id variant_id,o.title offer_title,ov.label variant_label,
+            ov.price_cents,v.deposit_cents,v.duration_minutes,v.booking_mode,v.booking_type_id,
+            c.sales_closes_at
+     FROM tattoo_special_offers o
+     JOIN tattoo_special_offer_versions v ON v.id=o.current_version_id
+     JOIN tattoo_special_offer_variants ov ON ov.offer_version_id=v.id
+     LEFT JOIN tattoo_special_campaigns c ON c.id=o.campaign_id
+     WHERE v.booking_mode='review' LIMIT 1`
+  ).get();
+  assert.ok(sourceTerms, "a review-mode Tattoo Special fixture must exist");
+
+  function addReviewSubmission(id, email) {
+    const now = new Date().toISOString();
+    const specialClose = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    database.prepare(
+      `INSERT INTO submissions (
+        id,type,status,source_path,subject,contact_name,contact_email,contact_phone,
+        contact_json,payload_json,request_meta_json,files_json,internal_notes,booking_url,created_at,updated_at,tattoo_stage
+      ) VALUES (?,'tattoo_special','reviewing','/tattoos/specials/','Adjusted offer fixture','Adjusted Client',?,'4045550111','{}',?,'{}','[]','','',?,?,'review')`
+    ).run(id, email, JSON.stringify({ booking_mode: "review", special_offer_title: sourceTerms.offer_title, special_variant_label: sourceTerms.variant_label }), now, now);
+    database.prepare(
+      `INSERT INTO tattoo_special_submission_terms (
+        submission_id,offer_id,offer_version_id,variant_id,offer_title,variant_label,
+        advertised_price_cents,approved_price_cents,deposit_cents,duration_minutes,booking_mode,
+        booking_type_id,sales_closes_at,participant_count,review_outcome,created_at,updated_at
+      ) VALUES (?,?,?,?,?,?,?,NULL,?,?, 'review',?,?,1,'pending',?,?)`
+    ).run(
+      id, sourceTerms.offer_id, sourceTerms.offer_version_id, sourceTerms.variant_id,
+      sourceTerms.offer_title, sourceTerms.variant_label, sourceTerms.price_cents,
+      sourceTerms.deposit_cents, sourceTerms.duration_minutes, sourceTerms.booking_type_id,
+      specialClose, now, now,
+    );
+    return specialClose;
+  }
+
+  const verbalSubmissionId = "adjusted-verbal-submission";
+  const specialClose = addReviewSubmission(verbalSubmissionId, "verbal-adjusted@example.com");
+  const createResponse = await handleAdminCreateAdjustedOffer(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${verbalSubmissionId}/adjusted-offers`,
+    {
+      reasonCode: "cover_up",
+      pricingType: "hourly",
+      amountCents: 17500,
+      clientNote: "The final time depends on the existing tattoo.",
+      allowedBookingTypes: ["tattoo_half", "tattoo_full"],
+      allowMultipleSessions: true,
+      maxSessions: 3,
+      expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+    },
+    adminToken,
+  ), env, verbalSubmissionId);
+  assert.equal(createResponse.status, 200, await createResponse.clone().text());
+  const created = await createResponse.json();
+  assert.match(created.offer.responseUrl, /^\/o\/[A-Za-z0-9_-]{12}$/);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM tattoo_adjusted_offers WHERE submission_id=? AND status='pending'").get(verbalSubmissionId).count, 1);
+  assert.equal(database.prepare("SELECT status,tattoo_stage FROM submissions WHERE id=?").get(verbalSubmissionId).status, "reviewing");
+
+  const secondOffer = await handleAdminCreateAdjustedOffer(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${verbalSubmissionId}/adjusted-offers`,
+    { reasonCode: "cover_up", pricingType: "flat", amountCents: 40000, allowedBookingTypes: ["tattoo_half"] },
+    adminToken,
+  ), env, verbalSubmissionId);
+  assert.equal(secondOffer.status, 409);
+
+  const offerToken = created.offer.responseUrl.split("/").pop();
+  const storedOffer = database.prepare("SELECT token_hash FROM tattoo_adjusted_offers WHERE id=?").get(created.offer.id);
+  assert.notEqual(storedOffer.token_hash, offerToken);
+  assert.equal(database.prepare("PRAGMA table_info(tattoo_adjusted_offers)").all().some((column) => column.name === "response_url"), false);
+  const contextResponse = await handlePublicAdjustedOfferContext(new Request(
+    `https://example.test/api/tattoo/adjusted-offers/context?token=${offerToken}`,
+  ), env);
+  assert.equal(contextResponse.status, 200);
+  const offerContext = await contextResponse.json();
+  assert.equal(offerContext.offer.copy, "Your tattoo request has been approved, but this project does not qualify for the current special because it is a cover-up.");
+  assert.equal(offerContext.offer.priceLabel, "Adjusted rate: $175.00/hour");
+  assert.equal("submissionId" in offerContext.offer, false);
+
+  const verbalAccept = await handleAdminAcceptAdjustedOffer(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${verbalSubmissionId}/adjusted-offers/${created.offer.id}/accept`,
+    { source: "studio_verbal", note: "Approved by phone.", sendClientEmail: true },
+    adminToken,
+  ), env, verbalSubmissionId, created.offer.id);
+  assert.equal(verbalAccept.status, 200, await verbalAccept.clone().text());
+  const accepted = await verbalAccept.json();
+  assert.match(accepted.token.path, /^\/b\/[A-Za-z0-9_-]{12}$/);
+  const acceptedRow = database.prepare("SELECT status,response_source,response_note,booking_token_id FROM tattoo_adjusted_offers WHERE id=?").get(created.offer.id);
+  assert.deepEqual({ status: acceptedRow.status, source: acceptedRow.response_source, note: acceptedRow.response_note }, {
+    status: "accepted", source: "studio_verbal", note: "Approved by phone.",
+  });
+  const acceptedSubmission = database.prepare("SELECT status,tattoo_stage,booking_url FROM submissions WHERE id=?").get(verbalSubmissionId);
+  assert.equal(acceptedSubmission.status, "approved");
+  assert.equal(acceptedSubmission.tattoo_stage, "ready_to_book");
+  assert.equal(acceptedSubmission.booking_url, accepted.token.path);
+  const acceptedToken = database.prepare("SELECT * FROM booking_tokens WHERE id=?").get(acceptedRow.booking_token_id);
+  assert.deepEqual(JSON.parse(acceptedToken.allowed_booking_types_json), ["tattoo_half", "tattoo_full"]);
+  assert.equal(acceptedToken.allow_multiple_sessions, 1);
+  assert.equal(acceptedToken.max_sessions, 3);
+  assert.ok(new Date(acceptedToken.expires_at).getTime() > new Date(specialClose).getTime(), "normal 30-day access must not inherit the Special closing date");
+  const bookingContext = await handleBookingContext(new Request(`https://example.test/api/booking/context?token=${bookingTokenFromUrl(accepted.token.path)}`), env);
+  assert.equal(bookingContext.status, 200, await bookingContext.clone().text());
+  const bookingPayload = await bookingContext.json();
+  assert.equal(bookingPayload.submission.special, null);
+  assert.equal(bookingPayload.submission.adjustedOffer.amountCents, 17500);
+  assert.equal(bookingPayload.multiSession.enabled, true);
+  assert.equal(sent.some((message) => message.to === "verbal-adjusted@example.com" && /choose your tattoo appointment/i.test(message.subject)), true);
+
+  const declinedSubmissionId = "adjusted-declined-submission";
+  addReviewSubmission(declinedSubmissionId, "declined-adjusted@example.com");
+  const declineOfferResponse = await handleAdminCreateAdjustedOffer(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${declinedSubmissionId}/adjusted-offers`,
+    {
+      reasonCode: "cover_up", pricingType: "flat", amountCents: 45000,
+      allowedBookingTypes: ["tattoo_half"], expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+    }, adminToken,
+  ), env, declinedSubmissionId);
+  assert.equal(declineOfferResponse.status, 200, await declineOfferResponse.clone().text());
+  const declineOffer = await declineOfferResponse.json();
+  const declineToken = declineOffer.offer.responseUrl.split("/").pop();
+  const declineResponse = await handlePublicAdjustedOfferResponse(jsonRequest(
+    "/api/tattoo/adjusted-offers/respond", { token: declineToken, action: "decline" },
+  ), env);
+  assert.equal(declineResponse.status, 200, await declineResponse.clone().text());
+  const declined = await declineResponse.json();
+  assert.equal(declined.message, "Thank you for your time. I wish you luck getting your project completed elsewhere.");
+  assert.equal(database.prepare("SELECT status FROM submissions WHERE id=?").get(declinedSubmissionId).status, "declined");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(declinedSubmissionId).count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=? AND template_key='admin_adjusted_offer_declined' AND status='sent'").get(declineOffer.offer.id).count, 1);
+
+  const webAcceptSubmissionId = "adjusted-web-accept-submission";
+  addReviewSubmission(webAcceptSubmissionId, "web-accept-adjusted@example.com");
+  const webOfferResponse = await handleAdminCreateAdjustedOffer(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${webAcceptSubmissionId}/adjusted-offers`,
+    {
+      reasonCode: "cover_up", pricingType: "flat", amountCents: 50000,
+      allowedBookingTypes: ["tattoo_full"], expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+    }, adminToken,
+  ), env, webAcceptSubmissionId);
+  assert.equal(webOfferResponse.status, 200, await webOfferResponse.clone().text());
+  const webOffer = await webOfferResponse.json();
+  const webOfferToken = webOffer.offer.responseUrl.split("/").pop();
+  const webAcceptRequest = () => handlePublicAdjustedOfferResponse(jsonRequest(
+    "/api/tattoo/adjusted-offers/respond", { token: webOfferToken, action: "accept" },
+  ), env);
+  const firstWebAccept = await webAcceptRequest();
+  assert.equal(firstWebAccept.status, 200, await firstWebAccept.clone().text());
+  assert.equal((await firstWebAccept.json()).status, "accepted");
+  const replayedWebAccept = await webAcceptRequest();
+  assert.equal(replayedWebAccept.status, 200, await replayedWebAccept.clone().text());
+  assert.equal((await replayedWebAccept.json()).replayed, true);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(webAcceptSubmissionId).count, 1);
+
+  const manualDeclineSubmissionId = "adjusted-manual-decline-submission";
+  addReviewSubmission(manualDeclineSubmissionId, "manual-decline-adjusted@example.com");
+  const manualDeclineOfferResponse = await handleAdminCreateAdjustedOffer(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${manualDeclineSubmissionId}/adjusted-offers`,
+    {
+      reasonCode: "cover_up", pricingType: "flat", amountCents: 42000,
+      allowedBookingTypes: ["tattoo_half"], expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+    }, adminToken,
+  ), env, manualDeclineSubmissionId);
+  const manualDeclineOffer = await manualDeclineOfferResponse.json();
+  const manualDecline = await handleAdminDeclineAdjustedOffer(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${manualDeclineSubmissionId}/adjusted-offers/${manualDeclineOffer.offer.id}/decline`,
+    { source: "studio_message", note: "Client replied na.", sendClientEmail: false }, adminToken,
+  ), env, manualDeclineSubmissionId, manualDeclineOffer.offer.id);
+  assert.equal(manualDecline.status, 200, await manualDecline.clone().text());
+  assert.deepEqual({ ...database.prepare("SELECT status,response_source,response_note FROM tattoo_adjusted_offers WHERE id=?").get(manualDeclineOffer.offer.id) }, {
+    status: "declined", response_source: "studio_message", response_note: "Client replied na.",
+  });
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=? AND template_key='tattoo_adjusted_offer_declined'").get(manualDeclineOffer.offer.id).count, 0);
+
+  const retrySubmissionId = "adjusted-retry-submission";
+  addReviewSubmission(retrySubmissionId, "retry-adjusted@example.com");
+  env.EMAIL.send = async () => { throw new Error("Temporary adjusted-offer email failure"); };
+  const retryOfferResponse = await handleAdminCreateAdjustedOffer(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${retrySubmissionId}/adjusted-offers`,
+    {
+      reasonCode: "cover_up", pricingType: "flat", amountCents: 39000,
+      allowedBookingTypes: ["tattoo_half"], expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+    }, adminToken,
+  ), env, retrySubmissionId);
+  assert.equal(retryOfferResponse.status, 200, await retryOfferResponse.clone().text());
+  const retryOffer = await retryOfferResponse.json();
+  assert.equal(database.prepare("SELECT status FROM notification_deliveries WHERE related_id=? AND template_key='tattoo_adjusted_offer_sent'").get(retryOffer.offer.id).status, "failed");
+  database.prepare("UPDATE notification_deliveries SET created_at=? WHERE related_id=?").run(new Date(Date.now() - 5 * 60000).toISOString(), retryOffer.offer.id);
+  env.EMAIL.send = async (message) => { sent.push(message); return { messageId: crypto.randomUUID() }; };
+  const retried = await retryPendingAdjustedOfferNotifications(env);
+  assert.equal(retried.sent, 1);
+  assert.equal(database.prepare("SELECT status FROM notification_deliveries WHERE related_id=? AND template_key='tattoo_adjusted_offer_sent'").get(retryOffer.offer.id).status, "sent");
+});
+
+test("Adjusted Offer client and Studio surfaces preserve the private response contract", () => {
+  const page = readFileSync(join(ROOT, "tattoos", "specials", "adjusted-offer", "index.html"), "utf8");
+  const script = readFileSync(join(ROOT, "js", "tattoo-adjusted-offer.js"), "utf8");
+  const styles = readFileSync(join(ROOT, "css", "tattoo-adjusted-offer.css"), "utf8");
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
+  assert.match(page, /meta name="referrer" content="no-referrer"/);
+  assert.match(page, />Accept Adjusted Rate</);
+  assert.match(page, />Decline</);
+  assert.match(script, /Thank you for your time\. I wish you luck getting your project completed elsewhere\./);
+  assert.match(styles, /background:\s*var\(--color-bg\)/);
+  assert.doesNotMatch(styles, /gradient|background-image|grain/i);
+  assert.match(studio, />Adjusted Offer<\/button>/);
+  assert.match(studio, />Mark Accepted by Client<\/button>/);
+  assert.match(studio, /id="adjustedAcceptEmail" type="checkbox" checked/);
+  assert.match(studio, />Mark Declined by Client<\/button>/);
+  assert.match(studio, /id="adjustedDeclineEmail" type="checkbox"/);
+  assert.match(worker, /servePublicAsset\(request, env, "\/tattoos\/specials\/adjusted-offer\/index\.html"\)/);
+  assert.match(worker, /headers\.set\("cache-control", "no-store"\)/);
+  assert.match(worker, /headers\.set\("referrer-policy", "no-referrer"\)/);
+  assert.match(worker, /privateLinkResponse\([\s\S]*servePublicAsset\(request, env, "\/tattoos\/specials\/adjusted-offer\/index\.html"\)/);
+  assert.match(worker, /retryPendingAdjustedOfferNotifications/);
 });

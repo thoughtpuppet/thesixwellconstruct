@@ -17,6 +17,7 @@ import {
   buildTattooDraftResumeEmail,
   buildTattooRenderingPaymentConfirmedEmail,
   buildTattooRenderingPaymentRequestEmail,
+  buildManualAppointmentDepositRequestEmail,
   buildTattooSpecialDepositRequestEmail,
   buildTattooSpecialReviewEmail,
   clientEmailPreviewCatalog,
@@ -1642,7 +1643,9 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
     pricingDetails,
     feeText: appointment.isExperimentalProject
       ? `${formatMoney(appointment.depositCents, appointment.currency)} refundable attendance deposit received`
-      : `${formatMoney(appointment.depositCents, appointment.currency)} received`,
+      : appointment.depositCents > 0
+        ? `${formatMoney(appointment.depositCents, appointment.currency)} received`
+        : "No deposit was required for this appointment.",
     balanceDetails,
     billingPolicyText: appointment.isExperimentalProject
       ? "The tattoo work is free. This attendance deposit will be refunded after you attend. Cancellation or a no-show forfeits it."
@@ -1697,7 +1700,9 @@ async function sendInPersonConsultationConfirmed(env, request, appointment, opti
     session: appointment.bookingTypeLabel,
     feeText: appointment.isExperimentalProject
       ? "This prerequisite consultation is free; no payment was collected."
-      : `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`,
+      : appointment.depositCents > 0
+        ? `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`
+        : "No reservation fee was required for this consultation.",
     tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
     totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
     confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
@@ -1725,7 +1730,9 @@ async function sendVirtualConsultationConfirmed(env, request, appointment, optio
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: appointment.bookingTypeLabel,
-    feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`,
+    feeText: appointment.depositCents > 0
+      ? `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`
+      : "No reservation fee was required for this consultation.",
     tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
     totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
     zoomUrl: appointment.meeting?.joinUrl || "",
@@ -1753,7 +1760,9 @@ async function sendBuildSessionConfirmed(env, request, appointment, options = {}
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: appointment.bookingTypeLabel,
-    feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for the build session, not a deposit toward a future tattoo.`,
+    feeText: appointment.depositCents > 0
+      ? `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for the build session, not a deposit toward a future tattoo.`
+      : "No reservation fee was required for this build session.",
     tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
     totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
     confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
@@ -1786,7 +1795,9 @@ async function sendStudioBookingConfirmed(env, request, appointment, options = {
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: studioBookingName(appointment),
-    feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received - this holds your date; any balance is settled with the studio.`,
+    feeText: appointment.depositCents > 0
+      ? `${formatMoney(appointment.depositCents, appointment.currency)} received - this holds your date; any balance is settled with the studio.`
+      : "No deposit was required for this appointment.",
     confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
     calendarUrl: appointmentCalendarUrl(env, request, appointment),
     resources: [],
@@ -1987,6 +1998,39 @@ export async function notifyTattooSpecialDepositRequested(env, request, details 
   });
 }
 
+export async function notifyManualAppointmentDepositRequested(env, request, appointmentRow, options = {}) {
+  const appointment = normalizeAppointment(appointmentRow);
+  if (!appointment.clientEmail) return { ok: false, skipped: true, error: "Appointment deposit recipient is required." };
+  const profile = rescheduledAppointmentProfile(appointment);
+  const consultation = [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID, VIRTUAL_CONSULTATION_BOOKING_TYPE_ID, BUILD_SESSION_BOOKING_TYPE_ID]
+    .includes(appointment.bookingTypeId);
+  const kind = profile.art ? "studio_visit" : profile.studio ? "studio_space" : consultation ? "consultation" : "tattoo";
+  const depositLabel = consultation ? "Reservation fee" : "Deposit due";
+  const message = buildManualAppointmentDepositRequestEmail({
+    kind,
+    label: profile.label,
+    clientName: appointment.clientName,
+    when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    session: profile.studio ? studioBookingName(appointment) : appointment.bookingTypeLabel || appointment.bookingTypeId,
+    depositLabel,
+    depositText: formatMoney(appointment.depositCents || 0, appointment.currency || "USD"),
+    dueAt: formatDate(appointment.holdExpiresAt),
+    checkoutUrl: appointment.squareCheckoutUrl,
+  });
+  const identity = profile.studio ? eventsEmailIdentity(env) : {};
+  return sendTransactionalEmail(env, {
+    to: appointment.clientEmail,
+    ...identity,
+    ...message,
+    templateKey: "manual_appointment_deposit_requested",
+    templateVariant: kind,
+    relatedType: "appointment",
+    relatedId: appointment.id,
+    idempotencyKey: options.idempotencyKey || `manual_appointment_deposit_requested:${appointment.id}:${appointment.squarePaymentLinkId || appointment.startAt}`,
+    durable: options.durable === true,
+  });
+}
+
 async function dispatchAppointmentConfirmation(env, request, appointmentRow, options) {
   const db = notificationDb(env);
   try {
@@ -2015,21 +2059,23 @@ async function dispatchAppointmentConfirmation(env, request, appointmentRow, opt
   }
 }
 
-export async function dispatchAppointmentConfirmationNotifications(env, request, appointmentRow) {
+export async function dispatchAppointmentConfirmationNotifications(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
   const deliveries = [];
-  if (appointment.clientEmail) {
+  if (options.client !== false && appointment.clientEmail) {
     deliveries.push(dispatchAppointmentConfirmation(env, request, appointmentRow, {
       admin: false,
       templateKey: appointmentConfirmationTemplateKey(appointment.bookingTypeId),
       idempotencyKey: `appointment_confirmed:${appointment.id}`,
     }));
   }
-  deliveries.push(dispatchAppointmentConfirmation(env, request, appointmentRow, {
-    admin: true,
-    templateKey: "admin_appointment_confirmed",
-    idempotencyKey: `admin_appointment_confirmed:${appointment.id}`,
-  }));
+  if (options.admin !== false) {
+    deliveries.push(dispatchAppointmentConfirmation(env, request, appointmentRow, {
+      admin: true,
+      templateKey: "admin_appointment_confirmed",
+      idempotencyKey: `admin_appointment_confirmed:${appointment.id}`,
+    }));
+  }
   return Promise.all(deliveries);
 }
 
@@ -3272,11 +3318,16 @@ export async function retryPendingAppointmentNotifications(env) {
            'consultation_confirmed_virtual',
            'build_session_confirmed',
            'studio_booking_confirmed',
-           'admin_appointment_confirmed'
+           'admin_appointment_confirmed',
+           'manual_appointment_deposit_requested'
          )
            AND nd.status IN ('pending', 'failed')
            AND nd.created_at <= ?
-           AND a.status = 'confirmed'
+           AND (
+             (nd.template_key = 'manual_appointment_deposit_requested'
+               AND a.status IN ('pending_deposit','deposit_pending') AND a.hold_state = 'active')
+             OR (nd.template_key != 'manual_appointment_deposit_requested' AND a.status = 'confirmed')
+           )
          ORDER BY nd.created_at ASC
          LIMIT 25`
       )
@@ -3296,11 +3347,16 @@ export async function retryPendingAppointmentNotifications(env) {
         failed += 1;
         continue;
       }
-      const delivery = await dispatchAppointmentConfirmation(env, null, appointmentRow, {
-        admin: row.notification_template_key === "admin_appointment_confirmed",
-        templateKey: row.notification_template_key,
-        idempotencyKey: row.notification_idempotency_key,
-      });
+      const delivery = row.notification_template_key === "manual_appointment_deposit_requested"
+        ? await notifyManualAppointmentDepositRequested(env, null, appointmentRow, {
+            durable: true,
+            idempotencyKey: row.notification_idempotency_key,
+          })
+        : await dispatchAppointmentConfirmation(env, null, appointmentRow, {
+            admin: row.notification_template_key === "admin_appointment_confirmed",
+            templateKey: row.notification_template_key,
+            idempotencyKey: row.notification_idempotency_key,
+          });
       if (delivery.skipped) skipped += 1;
       else if (delivery.ok) sent += 1;
       else failed += 1;
@@ -3308,6 +3364,201 @@ export async function retryPendingAppointmentNotifications(env) {
     return { sent, skipped, failed };
   } catch (error) {
     console.warn("Unable to retry pending appointment notifications.", error.message);
+    return { sent: 0, skipped: 0, failed: 1, error: error.message };
+  }
+}
+
+function adjustedOfferPriceLabel(offer = {}) {
+  const amount = formatMoney(offer.amount_cents ?? offer.amountCents, offer.currency || "USD");
+  return (offer.pricing_type || offer.pricingType) === "hourly"
+    ? `Adjusted rate: ${amount}/hour`
+    : `Adjusted flat rate: ${amount}`;
+}
+
+function adjustedOfferClientMessage(offer = {}) {
+  if ((offer.reason_code || offer.reasonCode) === "cover_up") {
+    return "Your tattoo request has been approved, but this project does not qualify for the current special because it is a cover-up.";
+  }
+  const reason = asString(offer.reason_text || offer.reasonText);
+  return reason
+    ? `Your tattoo request has been approved, but this project does not qualify for the current special because ${reason}.`
+    : "Your tattoo request has been approved, but this project does not qualify for the current special.";
+}
+
+async function adjustedOfferResponseUrl(env, request, offerId) {
+  const secret = asString(env.ADJUSTED_OFFER_TOKEN_SECRET || env.SUBMISSIONS_ADMIN_TOKEN);
+  if (!secret) throw new Error("Missing Adjusted Offer token secret.");
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`adjusted-offer:${offerId}`))).slice(0, 9);
+  let binary = "";
+  for (const byte of signature) binary += String.fromCharCode(byte);
+  const token = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return `${publicBaseUrl(env, request)}/o/${token}`;
+}
+
+export async function notifyAdjustedOfferSent(env, request, submission = {}, offer = {}, options = {}) {
+  const normalized = normalizeSubmission(submission);
+  if (!normalized.contactEmail || !offer.responseUrl) return { ok: false, skipped: true };
+  const responseUrl = new URL(offer.responseUrl, publicBaseUrl(env, request)).toString();
+  const rendered = renderClientEmail({
+    templateKey: "tattoo_adjusted_offer_sent",
+    templateVariant: "tattoo",
+    theme: "tattoo",
+    subject: "Your adjusted tattoo offer",
+    preheader: "Review the adjusted rate and accept or decline privately.",
+    classification: "ADJUSTED OFFER",
+    headline: "Your adjusted offer is ready.",
+    greeting: `Hi ${normalized.contactName || "there"},`,
+    intro: [adjustedOfferClientMessage(offer)],
+    details: [
+      { label: "Adjusted offer", value: adjustedOfferPriceLabel(offer) },
+      offer.expiresAt || offer.expires_at ? { label: "Respond by", value: formatDate(offer.expiresAt || offer.expires_at) } : null,
+    ].filter(Boolean),
+    sections: asString(offer.client_note || offer.clientNote) ? [{ title: "Studio note", paragraphs: [asString(offer.client_note || offer.clientNote)] }] : [],
+    primaryAction: { label: "Review Adjusted Offer", href: responseUrl },
+    notice: ["Use the private link to accept or decline. Booking access is created only after acceptance."],
+    signature: { closing: "Thank you,", name: "Saiel Solehman", mark: "[art.pill TATTOO HOUSE]" },
+  });
+  return sendTransactionalEmail(env, {
+    to: normalized.contactEmail,
+    ...rendered,
+    durable: options.durable !== false,
+    templateKey: "tattoo_adjusted_offer_sent",
+    relatedType: "adjusted_offer",
+    relatedId: offer.id,
+    idempotencyKey: options.idempotencyKey || `adjusted_offer_sent:${offer.id}:${offer.sent_at || offer.sentAt || "initial"}`,
+  });
+}
+
+export async function notifyAdjustedOfferAccepted(env, request, submission = {}, offer = {}, token = {}, options = {}) {
+  const normalized = normalizeSubmission(submission);
+  if (!normalized.contactEmail || !token.bookingUrl) return { ok: false, skipped: true };
+  const bookingUrl = new URL(token.bookingUrl, publicBaseUrl(env, request)).toString();
+  const rendered = renderClientEmail({
+    templateKey: "tattoo_adjusted_offer_accepted",
+    templateVariant: "tattoo",
+    theme: "tattoo",
+    subject: "Your adjusted offer is accepted - choose your tattoo appointment",
+    preheader: "Your private booking access is ready.",
+    classification: "READY TO BOOK",
+    headline: "Choose your appointment.",
+    greeting: `Hi ${normalized.contactName || "there"},`,
+    intro: ["Your adjusted rate has been accepted.", adjustedOfferPriceLabel(offer)],
+    primaryAction: { label: "Choose Date & Time", href: bookingUrl },
+    notice: ["This project will be booked as a regular discounted tattoo project. The deposit is set by the session type you choose."],
+    signature: { closing: "Thank you,", name: "Saiel Solehman", mark: "[art.pill TATTOO HOUSE]" },
+  });
+  return sendTransactionalEmail(env, {
+    to: normalized.contactEmail,
+    ...rendered,
+    durable: options.durable !== false,
+    templateKey: "tattoo_adjusted_offer_accepted",
+    relatedType: "adjusted_offer",
+    relatedId: offer.id,
+    idempotencyKey: options.idempotencyKey || `adjusted_offer_accepted:${offer.id}`,
+  });
+}
+
+export async function notifyAdjustedOfferClosing(env, request, submission = {}, offer = {}, options = {}) {
+  const normalized = normalizeSubmission(submission);
+  if (!normalized.contactEmail) return { ok: false, skipped: true };
+  const rendered = renderClientEmail({
+    templateKey: "tattoo_adjusted_offer_declined",
+    templateVariant: "tattoo",
+    theme: "tattoo",
+    subject: "Your adjusted tattoo offer",
+    preheader: "Thank you for your response.",
+    classification: "OFFER CLOSED",
+    headline: "Thank you for your time.",
+    greeting: `Hi ${normalized.contactName || "there"},`,
+    intro: ["Thank you for your time. I wish you luck getting your project completed elsewhere."],
+    signature: { closing: "Take care,", name: "Saiel Solehman", mark: "[art.pill TATTOO HOUSE]" },
+  });
+  return sendTransactionalEmail(env, {
+    to: normalized.contactEmail,
+    ...rendered,
+    durable: options.durable !== false,
+    templateKey: "tattoo_adjusted_offer_declined",
+    relatedType: "adjusted_offer",
+    relatedId: offer.id,
+    idempotencyKey: options.idempotencyKey || `adjusted_offer_declined:${offer.id}`,
+  });
+}
+
+export async function notifyAdminAdjustedOfferResponse(env, request, submission = {}, offer = {}, options = {}) {
+  const normalized = normalizeSubmission(submission);
+  const status = asString(offer.status).toLowerCase();
+  const source = asString(offer.response_source || offer.responseSource) || "client_web";
+  return sendAdminNotification(env, request, {
+    theme: "tattoo",
+    templateVariant: "tattoo",
+    subject: `Adjusted offer ${status}: ${normalized.contactName || normalized.id}`,
+    preheader: `The adjusted tattoo offer was ${status}.`,
+    classification: `ADJUSTED OFFER ${status.toUpperCase()}`,
+    headline: `Adjusted offer ${status}.`,
+    lines: [
+      compactLine("Client", normalized.contactName),
+      compactLine("Submission", normalized.id),
+      compactLine("Rate", adjustedOfferPriceLabel(offer)),
+      compactLine("Response source", source.replace(/_/g, " ")),
+      compactLine("Response note", offer.response_note || offer.responseNote),
+    ],
+    durable: options.durable !== false,
+    templateKey: `admin_adjusted_offer_${status}`,
+    relatedType: "adjusted_offer",
+    relatedId: offer.id,
+    idempotencyKey: options.idempotencyKey || `admin_adjusted_offer_${status}:${offer.id}`,
+  });
+}
+
+export async function retryPendingAdjustedOfferNotifications(env) {
+  const db = notificationDb(env);
+  if (!db) return { sent: 0, skipped: 0, failed: 0 };
+  const retryBefore = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  try {
+    const result = await db.prepare(
+      `SELECT nd.template_key,nd.idempotency_key,o.*,s.contact_name,s.contact_email,s.type,s.payload_json,s.source_path
+       FROM notification_deliveries nd
+       JOIN tattoo_adjusted_offers o ON o.id=nd.related_id
+       JOIN submissions s ON s.id=o.submission_id
+       WHERE nd.related_type='adjusted_offer'
+         AND nd.status IN ('pending','failed') AND nd.created_at <= ?
+       ORDER BY nd.created_at ASC LIMIT 25`
+    ).bind(retryBefore).all();
+    let sent = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const row of result.results || []) {
+      const submission = { id: row.submission_id, type: row.type, contact_name: row.contact_name, contact_email: row.contact_email, payload_json: row.payload_json, source_path: row.source_path };
+      const offer = {
+        ...row,
+        responseUrl: row.template_key === "tattoo_adjusted_offer_sent"
+          ? await adjustedOfferResponseUrl(env, null, row.id)
+          : "",
+      };
+      const token = row.booking_token_id
+        ? await db.prepare("SELECT bt.*,s.booking_url FROM booking_tokens bt JOIN submissions s ON s.id=bt.submission_id WHERE bt.id=?").bind(row.booking_token_id).first()
+        : null;
+      const options = { durable: true, idempotencyKey: row.idempotency_key };
+      let delivery;
+      if (row.template_key === "tattoo_adjusted_offer_sent") delivery = await notifyAdjustedOfferSent(env, null, submission, offer, options);
+      else if (row.template_key === "tattoo_adjusted_offer_accepted") delivery = await notifyAdjustedOfferAccepted(env, null, submission, offer, { bookingUrl: token?.booking_url }, options);
+      else if (row.template_key === "tattoo_adjusted_offer_declined") delivery = await notifyAdjustedOfferClosing(env, null, submission, offer, options);
+      else if (row.template_key.startsWith("admin_adjusted_offer_")) delivery = await notifyAdminAdjustedOfferResponse(env, null, submission, offer, options);
+      else { skipped += 1; continue; }
+      if (delivery.skipped) skipped += 1;
+      else if (delivery.ok) sent += 1;
+      else failed += 1;
+    }
+    return { sent, skipped, failed };
+  } catch (error) {
+    console.warn("Unable to retry adjusted offer notifications.", error.message);
     return { sent: 0, skipped: 0, failed: 1, error: error.message };
   }
 }

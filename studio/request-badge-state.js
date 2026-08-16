@@ -23,9 +23,15 @@
     const activeAccess = submission.clientAccessStatus === "active" && Boolean(submission.bookingUrl);
     const directInviteWaiting = submission.payload?.direct_booking_invite === "yes" && !submission.contactName;
     const consultRequired = submission.payload?.consult_required === "yes";
+    const adjustedOffer = submission.adjustedOffer || submission.adjusted_offer || null;
 
     if (payment === "paid_attention") return badge("PAYMENT NEEDS REVIEW", "error");
     if (notification === "failed") return badge("EMAIL FAILED", "error");
+    if (adjustedOffer?.status === "pending") return badge("ADJUSTED OFFER — SENT / AWAITING CLIENT", "waiting");
+    if (adjustedOffer?.status === "accepted") return badge("ADJUSTED OFFER — ACCEPTED", activeAccess ? "waiting" : "success");
+    if (adjustedOffer?.status === "declined") return badge("ADJUSTED OFFER — DECLINED", "terminal");
+    if (adjustedOffer?.status === "withdrawn") return badge("ADJUSTED OFFER — WITHDRAWN", "terminal");
+    if (adjustedOffer?.status === "expired") return badge("ADJUSTED OFFER — EXPIRED", "terminal");
     if (["declined", "cancelled", "archived"].includes(status)) return badge(status.toUpperCase(), "terminal");
     if (status === "booked" || stage === "tattoo_scheduled") return badge("BOOKED", "booked");
     if (payment === "paid") return badge("DEPOSIT PAID", "success");

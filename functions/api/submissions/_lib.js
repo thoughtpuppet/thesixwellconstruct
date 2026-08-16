@@ -841,6 +841,7 @@ function emptySubmissionProgress() {
     depositPaidAt: "",
     clientAccessStatus: "none",
     specialBookingPreparedAt: "",
+    adjustedOffer: null,
     clientActivity: {
       bookingLinkOpenCount: 0,
       firstBookingLinkOpenedAt: "",
@@ -903,6 +904,41 @@ async function loadSubmissionProgress(database, submissionRows = []) {
   for (const prepared of specialBookingPreparationRows) {
     const state = progress.get(prepared.submission_id);
     if (state) state.specialBookingPreparedAt = prepared.special_booking_prepared_at || "";
+  }
+
+  const adjustedOfferRows = (await database.prepare(
+    `SELECT o.* FROM tattoo_adjusted_offers o
+     JOIN (
+       SELECT submission_id,MAX(revision) revision
+       FROM tattoo_adjusted_offers
+       WHERE submission_id IN (${placeholders})
+       GROUP BY submission_id
+     ) latest ON latest.submission_id=o.submission_id AND latest.revision=o.revision`
+  ).bind(...ids).all()).results || [];
+  for (const offer of adjustedOfferRows) {
+    const state = progress.get(offer.submission_id);
+    if (!state) continue;
+    state.adjustedOffer = {
+      id: offer.id,
+      revision: Number(offer.revision || 0),
+      status: offer.status,
+      reasonCode: offer.reason_code,
+      reasonText: offer.reason_text || "",
+      pricingType: offer.pricing_type,
+      amountCents: Number(offer.amount_cents || 0),
+      currency: offer.currency || "USD",
+      clientNote: offer.client_note || "",
+      originalOffer: parseJsonField(offer.original_offer_snapshot_json, {}),
+      allowedBookingTypes: parseJsonField(offer.allowed_booking_types_json, []),
+      allowMultipleSessions: Boolean(offer.allow_multiple_sessions),
+      maxSessions: Number(offer.max_sessions || 1),
+      responseUrl: "",
+      expiresAt: offer.expires_at || "",
+      sentAt: offer.sent_at || "",
+      respondedAt: offer.responded_at || "",
+      responseSource: offer.response_source || "",
+      responseNote: offer.response_note || "",
+    };
   }
 
   const clientActivityRows = (await database.prepare(
@@ -1039,6 +1075,7 @@ function normalizeRow(row) {
     depositPaidAt: row.depositPaidAt || row.deposit_paid_at || "",
     clientAccessStatus: row.clientAccessStatus || row.client_access_status || "none",
     specialBookingPreparedAt: row.specialBookingPreparedAt || row.special_booking_prepared_at || "",
+    adjustedOffer: row.adjustedOffer || row.adjusted_offer || null,
     clientActivity: row.clientActivity || row.client_activity || emptySubmissionProgress().clientActivity,
     flashReservation,
     flashConflict,
