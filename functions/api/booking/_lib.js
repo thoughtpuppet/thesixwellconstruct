@@ -6903,103 +6903,6 @@ async function moveConfirmedAppointmentToPrivateWindow(
   };
 }
 
-async function movePendingManualAppointment(
-  request, env, db, appointmentRow, window, note, notifyClient,
-) {
-  const original = normalizeAppointment(appointmentRow);
-  if (!["pending_deposit", "deposit_pending"].includes(original.status) || original.holdState !== "active") {
-    return { error: "This unpaid appointment is no longer movable.", status: 409 };
-  }
-  if (new Date(original.holdExpiresAt).getTime() <= Date.now()) {
-    return { error: "The deposit deadline has passed. Release this hold and schedule a new appointment.", status: 409 };
-  }
-  const manualEvent = await db.prepare(
-    "SELECT id FROM appointment_events WHERE appointment_id=? AND event_type='manual_scheduled' AND actor='admin' LIMIT 1"
-  ).bind(original.id).first();
-  if (!manualEvent) return { error: "Only Studio-created unpaid appointments can be moved here.", status: 409 };
-  if (original.squarePaymentLinkId) {
-    try {
-      await invalidateSquarePaymentLink(env, original.squarePaymentLinkId);
-    } catch (error) {
-      return { error: "The existing Square checkout could not be invalidated.", status: 409, detail: error.message };
-    }
-  }
-  const now = new Date().toISOString();
-  const results = await db.batch([
-    db.prepare(
-      `UPDATE appointments SET availability_window_id=?,start_at=?,end_at=?,status='pending_deposit',
-       square_order_id=NULL,square_payment_link_id=NULL,square_checkout_url=NULL,updated_at=?
-       WHERE id=? AND status IN ('pending_deposit','deposit_pending') AND hold_state='active'
-         AND NOT EXISTS (
-           SELECT 1 FROM appointments overlap_appointment
-           LEFT JOIN availability_windows overlap_window ON overlap_window.id=overlap_appointment.availability_window_id
-           WHERE overlap_appointment.id<>appointments.id
-             AND overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
-             AND unixepoch(overlap_appointment.start_at)-COALESCE(overlap_window.buffer_before_minutes,0)*60
-               < unixepoch(?) + ?*60
-             AND unixepoch(overlap_appointment.end_at)+COALESCE(overlap_window.buffer_after_minutes,0)*60
-               > unixepoch(?) - ?*60
-         )`
-    ).bind(
-      window.id, window.start_at, window.end_at, now, original.id,
-      window.end_at, Number(window.buffer_after_minutes || 0),
-      window.start_at, Number(window.buffer_before_minutes || 0),
-    ),
-    db.prepare(
-      `UPDATE deposit_payments SET status='cancelled',updated_at=?
-       WHERE appointment_id=? AND status='pending'`
-    ).bind(now, original.id),
-    db.prepare(
-      `INSERT INTO appointment_events (id,appointment_id,event_type,actor,note,metadata_json,created_at)
-       SELECT ?,id,'manual_hold_moved','admin',?,?,? FROM appointments WHERE id=? AND updated_at=?`
-    ).bind(
-      crypto.randomUUID(), asString(note).slice(0, 2000) || null,
-      JSON.stringify({ fromStartAt: original.startAt, fromEndAt: original.endAt, toStartAt: window.start_at, toEndAt: window.end_at }),
-      now, original.id, now,
-    ),
-  ]);
-  if (Number(results?.[0]?.meta?.changes || 0) < 1) {
-    return { error: "The new appointment time became unavailable before the hold moved.", status: 409 };
-  }
-  if (String(original.availabilityWindowId || "").startsWith("manual:")) {
-    await cleanupManualAppointmentDraft(db, env, "", original.availabilityWindowId);
-  }
-  const bookingTypeRow = await db.prepare("SELECT * FROM booking_types WHERE id=? AND active=1").bind(original.bookingTypeId).first();
-  let movedRow = await selectAppointmentWithMeeting(db, original.id);
-  let paymentLink;
-  try {
-    paymentLink = await createSquarePaymentLink(
-      request, env, normalizeAppointment(movedRow), normalizeBookingType(bookingTypeRow),
-      { idempotencyKey: `manual-move:${original.id}:${window.start_at}` },
-    );
-  } catch (error) {
-    return { error: "The appointment moved, but its replacement Square link could not be created.", status: 503, detail: error.message };
-  }
-  if (!await savePendingPaymentLink(db, normalizeAppointment(movedRow), paymentLink)) {
-    await invalidateUnsavedPaymentLink(env, paymentLink);
-    return { error: "The appointment moved, but its replacement Square link could not be saved.", status: 409 };
-  }
-  movedRow = await selectAppointmentWithMeeting(db, original.id);
-  let delivery = { ok: false, skipped: true, reason: "save_only" };
-  if (notifyClient && movedRow?.client_email) {
-    const appointment = normalizeAppointment(movedRow);
-    const notificationNow = new Date().toISOString();
-    await db.prepare(
-      `INSERT INTO notification_deliveries (
-        id,channel,template_key,recipient,subject,related_type,related_id,idempotency_key,status,error,sent_at,created_at
-      ) VALUES (?,'email','manual_appointment_deposit_requested',?,NULL,'appointment',?,?,'pending',NULL,NULL,?)
-      ON CONFLICT(idempotency_key) DO NOTHING`
-    ).bind(
-      crypto.randomUUID(), appointment.clientEmail, appointment.id,
-      `manual_appointment_deposit_requested:${appointment.id}:${appointment.squarePaymentLinkId || appointment.startAt}`,
-      notificationNow,
-    ).run();
-    delivery = await notifyManualAppointmentDepositRequested(env, request, movedRow, { durable: true });
-  }
-  await mirrorAppointmentToCrm(db, normalizeAppointment(movedRow), { includePayment: true });
-  return { appointment: normalizeAppointment(movedRow), delivery, checkoutUrl: paymentLink.url, pendingDeposit: true };
-}
-
 export async function handleCreateReplacementCheckout(request, env) {
   const body = await readJsonBody(request);
   if (!body) return errorResponse("Expected JSON body.", 400);
@@ -7326,6 +7229,9 @@ export async function handleAdminRescheduleAppointment(request, env, appointment
     const db = requireBookingDb(env);
     const row = await selectAppointmentWithMeeting(db, appointmentId);
     if (!row) return errorResponse("Appointment not found.", 404);
+    if (row.status !== "confirmed") {
+      return errorResponse("Only confirmed appointments can be rescheduled.", 409);
+    }
     let privateWindow = null;
     if (customStartAt) {
       const bookingType = await db.prepare("SELECT * FROM booking_types WHERE id=? AND active=1").bind(row.booking_type_id).first();
@@ -7335,21 +7241,7 @@ export async function handleAdminRescheduleAppointment(request, env, appointment
       privateWindow = created.window;
     }
     let moved;
-    if (["pending_deposit", "deposit_pending"].includes(row.status)) {
-      let window = privateWindow;
-      if (!window) {
-        const availability = await ensureAvailable(db, availabilityWindowId, row.booking_type_id, appointmentId);
-        if (availability.error) return errorResponse(availability.error, 409);
-        window = availability.window;
-      }
-      if (row.hold_expires_at && new Date(row.hold_expires_at).getTime() > new Date(window.start_at).getTime()) {
-        if (privateWindow) await cleanupManualAppointmentDraft(db, env, "", privateWindow.id);
-        return errorResponse("The existing payment deadline is later than the new appointment start.", 409);
-      }
-      moved = await movePendingManualAppointment(
-        request, env, db, row, window, note, body.notifyClient !== false,
-      );
-    } else if (privateWindow) {
+    if (privateWindow) {
       moved = await moveConfirmedAppointmentToPrivateWindow(
         request, env, db, row, privateWindow, note, body.overridePolicy === true, body.notifyClient !== false,
       );
@@ -7370,13 +7262,12 @@ export async function handleAdminRescheduleAppointment(request, env, appointment
     if (moved.error) return errorResponse(moved.error, moved.status || 409);
     return json({
       ok: true,
-      mode: moved.pendingDeposit ? "pending_deposit_moved" : "moved",
+      mode: "moved",
       appointment: moved.appointment,
       hoursUntilStart: moved.hoursUntilStart,
       policyOverride: moved.overridePolicy,
       delivery: moved.delivery,
       adminDelivery: moved.adminDelivery,
-      checkoutUrl: moved.checkoutUrl || "",
       meetingNeedsAttention: moved.meetingNeedsAttention,
       meetingError: moved.meetingError,
     });

@@ -965,9 +965,10 @@ test("Studio submission progress reports current client notification delivery an
   assert.doesNotMatch(submissionsApiSource, /const paid = [^\n]*provider_payment_id/);
 });
 
-test("Studio exposes one manual appointment editor across booking scopes with explicit save and email actions", () => {
+test("Studio keeps scheduling controls separate from a confirmed-only reschedule flow", () => {
   const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
   const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
+  const booking = readFileSync(join(ROOT, "functions", "api", "booking", "_lib.js"), "utf8");
   assert.match(studio, /data-open-appointment-editor="create"/);
   assert.match(studio, /data-reschedule-appointment/);
   assert.match(studio, /Custom time override/);
@@ -975,6 +976,12 @@ test("Studio exposes one manual appointment editor across booking scopes with ex
   assert.match(studio, /Paid elsewhere/);
   assert.match(studio, /Square deposit link/);
   assert.match(studio, /Save \+ Email Client/);
+  assert.match(studio, /Reschedule &amp; Email Client/);
+  assert.match(studio, /Reschedule Without Email/);
+  assert.match(studio, /appointmentCanStudioReschedule\(appointment\)/);
+  assert.doesNotMatch(studio, /appointment\.isManual && appointmentIsPending\(appointment\)/);
+  assert.doesNotMatch(booking, /movePendingManualAppointment|manual_hold_moved|pending_deposit_moved/);
+  assert.match(booking, /Only confirmed appointments can be rescheduled/);
   assert.match(studio, /\/api\/admin\/crm\/people\?q=/);
   assert.match(studio, /api\("\/api\/admin\/booking\/appointments"/);
   assert.match(worker, /method === "POST"[\s\S]*?handleAdminCreateAppointment\(request, env\)/);
@@ -9717,16 +9724,32 @@ test("admin reschedule atomically enforces availability and increments calendar 
     now,
     now,
   );
+  insertPaymentFixture(database, {
+    id: "admin-reschedule-paid-deposit",
+    appointmentId: "admin-reschedule-contract",
+    checkoutId: "admin-reschedule-checkout",
+    orderId: "admin-reschedule-order",
+    providerPaymentId: "admin-reschedule-payment",
+    status: "paid",
+    amountCents: 5000,
+  });
 
   const response = await handleAdminRescheduleAppointment(adminJsonRequest(
     "/api/admin/booking/appointments/admin-reschedule-contract/reschedule",
-    { availabilityWindowId: "reschedule-target", note: "Contract move" },
+    { availabilityWindowId: "reschedule-target", note: "Contract move", notifyClient: false },
     adminToken,
   ), env, "admin-reschedule-contract");
   const payload = await response.json();
   assert.equal(response.status, 200, JSON.stringify(payload));
   assert.equal(payload.appointment.rescheduleCount, 1);
   assert.equal(payload.appointment.startAt, targetStart);
+  const payment = database.prepare(
+    "SELECT provider_order_id,provider_payment_id,amount_cents,status FROM deposit_payments WHERE appointment_id=?"
+  ).get("admin-reschedule-contract");
+  assert.equal(payment.provider_order_id, "admin-reschedule-order");
+  assert.equal(payment.provider_payment_id, "admin-reschedule-payment");
+  assert.equal(payment.amount_cents, 5000);
+  assert.equal(payment.status, "paid");
 });
 
 test("Studio can manually schedule a confirmed appointment without a deposit or client email", async () => {
@@ -9827,10 +9850,14 @@ test("manual custom-time scheduling bypasses public rules but still rejects appo
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM appointments WHERE client_name='Overlap Client'").get().count, 0);
 });
 
-test("Studio reschedules its unpaid manual Square hold with a replacement link and no client reschedule charge", async () => {
+test("Studio rescheduling rejects unpaid appointments without touching their time or Square checkout", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
-  const env = squareEnv(database, { SUBMISSIONS_ADMIN_TOKEN: adminToken });
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+  };
   const now = new Date().toISOString();
   const firstStart = new Date(Date.now() + 120 * 60 * 60 * 1000).toISOString();
   const secondStart = new Date(Date.now() + 144 * 60 * 60 * 1000).toISOString();
@@ -9843,56 +9870,36 @@ test("Studio reschedules its unpaid manual Square hold with a replacement link a
       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(id, "tattooing", "consult_in_person", startAt, new Date(new Date(startAt).getTime() + 45 * 60 * 1000).toISOString(), 1, 0, 0, 0, 1, "Manual Square test", now, now);
   }
-  let createCount = 0;
-  let invalidatedOldLink = false;
-  await withMockFetch(async (input, init = {}) => {
-    const target = String(input);
-    if (target.endsWith("/v2/online-checkout/payment-links") && init.method === "POST") {
-      createCount += 1;
-      return jsonFetchResponse({ payment_link: {
-        id: createCount === 1 ? "manual-square-old" : "manual-square-new",
-        order_id: createCount === 1 ? "manual-square-order-old" : "manual-square-order-new",
-        url: createCount === 1 ? "https://square.test/manual-old" : "https://square.test/manual-new",
-      } });
-    }
-    if (target.endsWith("/v2/online-checkout/payment-links/manual-square-old") && init.method === "DELETE") {
-      invalidatedOldLink = true;
-      return new Response(null, { status: 200 });
-    }
-    throw new Error(`Unexpected Square request: ${target}`);
-  }, async () => {
-    const createdResponse = await handleAdminCreateAppointment(adminJsonRequest(
-      "/api/admin/booking/appointments",
-      {
-        bookingTypeId: "consult_in_person",
-        availabilityWindowId: "manual-square-first",
-        clientName: "Manual Square Client",
-        paymentMode: "square_link",
-        depositCents: 5000,
-        paymentDueAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
-        notifyClient: false,
-      },
-      adminToken,
-    ), env);
-    const created = await createdResponse.json();
-    assert.equal(createdResponse.status, 201, JSON.stringify(created));
-    assert.equal(created.appointment.status, "deposit_pending");
-    assert.equal(created.checkoutUrl, "https://square.test/manual-old");
+  database.prepare(
+    `INSERT INTO appointments (
+      id, booking_type_id, availability_window_id, status, purpose,
+      client_name, client_email, start_at, end_at, deposit_cents, currency,
+      square_order_id, square_payment_link_id, square_checkout_url,
+      hold_expires_at, hold_state, reschedule_count, created_at, updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    "unpaid-studio-reschedule", "consult_in_person", "manual-square-first", "deposit_pending", "standalone_consultation",
+    "Unpaid Client", "unpaid@example.test", firstStart, new Date(new Date(firstStart).getTime() + 45 * 60 * 1000).toISOString(),
+    5000, "USD", "square-order-existing", "square-link-existing", "https://square.test/existing",
+    new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), "active", 0, now, now,
+  );
 
-    const movedResponse = await handleAdminRescheduleAppointment(adminJsonRequest(
-      `/api/admin/booking/appointments/${created.appointment.id}/reschedule`,
-      { availabilityWindowId: "manual-square-second", notifyClient: false, note: "Studio moved hold" },
-      adminToken,
-    ), env, created.appointment.id);
-    const moved = await movedResponse.json();
-    assert.equal(movedResponse.status, 200, JSON.stringify(moved));
-    assert.equal(moved.appointment.id, created.appointment.id);
-    assert.equal(moved.appointment.startAt, secondStart);
-    assert.equal(moved.appointment.rescheduleCount, 0);
-    assert.equal(moved.checkoutUrl, "https://square.test/manual-new");
-  });
-  assert.equal(createCount, 2);
-  assert.equal(invalidatedOldLink, true);
+  const response = await handleAdminRescheduleAppointment(adminJsonRequest(
+    "/api/admin/booking/appointments/unpaid-studio-reschedule/reschedule",
+    { availabilityWindowId: "manual-square-second", notifyClient: false },
+    adminToken,
+  ), env, "unpaid-studio-reschedule");
+  const payload = await response.json();
+  assert.equal(response.status, 409, JSON.stringify(payload));
+  assert.match(payload.error, /only confirmed appointments/i);
+  const unchanged = database.prepare(
+    "SELECT start_at,square_order_id,square_payment_link_id,square_checkout_url,reschedule_count FROM appointments WHERE id=?"
+  ).get("unpaid-studio-reschedule");
+  assert.equal(unchanged.start_at, firstStart);
+  assert.equal(unchanged.square_order_id, "square-order-existing");
+  assert.equal(unchanged.square_payment_link_id, "square-link-existing");
+  assert.equal(unchanged.square_checkout_url, "https://square.test/existing");
+  assert.equal(unchanged.reschedule_count, 0);
 });
 
 test("Zoom meetings send Eastern wall-clock time without applying the UTC offset twice", async () => {

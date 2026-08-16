@@ -66,7 +66,18 @@
   .layout { display:grid; grid-template-columns:minmax(320px,440px) minmax(0,1fr); min-height:0; }
   .list-pane { border-right:5px solid var(--ring-faint); min-height:0; overflow:auto; }
   .detail-pane { min-width:0; min-height:0; overflow:auto; padding:28px; }
-  .toolbar { display:flex; gap:10px; padding:16px; border-bottom:5px solid var(--ring-faint); position:sticky; top:0; background:rgba(14,14,14,0.96); z-index:2; }
+  .sidebar-control-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:49px; padding:0 10px 0 16px; border-bottom:5px solid var(--ring-faint); position:sticky; top:0; background:rgba(14,14,14,0.96); z-index:3; }
+  .sidebar-control-label { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; }
+  .sidebar-collapse-button,.sidebar-expand-button { border:0; background:transparent; color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; transition:color var(--t-fast), background var(--t-fast); }
+  .sidebar-collapse-button { display:inline-flex; align-items:center; gap:8px; min-height:34px; padding:0 8px; }
+  .sidebar-collapse-button:hover,.sidebar-expand-button:hover { color:var(--accent); background:rgba(252,184,103,0.045); }
+  .sidebar-expand-button { display:none; min-width:0; width:48px; padding:18px 0; border-right:5px solid var(--ring-faint); align-self:stretch; align-items:center; justify-content:flex-start; gap:10px; writing-mode:vertical-rl; }
+  .layout:not(.single) > .list-pane { grid-column:1; grid-row:1; }
+  .layout:not(.single) > .detail-pane { grid-column:2; grid-row:1; }
+  .layout.is-sidebar-collapsed:not(.single) { grid-template-columns:48px minmax(0,1fr); }
+  .layout.is-sidebar-collapsed:not(.single) > .list-pane { display:none !important; }
+  .layout.is-sidebar-collapsed:not(.single) > .sidebar-expand-button { display:flex; grid-column:1; grid-row:1; }
+  .toolbar { display:flex; gap:10px; padding:16px; border-bottom:5px solid var(--ring-faint); position:sticky; top:49px; background:rgba(14,14,14,0.96); z-index:2; }
   select,input,textarea { width:100%; background:var(--bg); color:var(--text); border:5px solid var(--ring-faint); padding:10px 12px; border-radius:0; transition:border-color var(--t-fast), background var(--t-fast); }
   select { -webkit-appearance:none; appearance:none; color-scheme:dark; accent-color:#FCB867; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FCB867' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
   option { background:var(--bg); color:var(--text); }
@@ -627,6 +638,12 @@
   }
   @media (max-width:900px) {
     .layout { grid-template-columns:1fr; }
+    .sidebar-control-bar { display:none; }
+    .toolbar { top:0; }
+    .layout.is-sidebar-collapsed:not(.single) { grid-template-columns:1fr; }
+    .layout.is-sidebar-collapsed:not(.single) > .sidebar-expand-button { display:none; }
+    .layout.is-sidebar-collapsed:not(.single) > .list-pane:not(.hidden):not([hidden]) { display:block !important; grid-column:1; }
+    .layout:not(.single) > .detail-pane { grid-column:1; grid-row:auto; }
     .list-pane { border-right:0; border-bottom:5px solid var(--ring-faint); max-height:42vh; }
     .grid,.actions,.availability-overview { grid-template-columns:1fr; }
     .availability-manager .schedule-grid,
@@ -690,7 +707,17 @@
   </nav>
   <nav class="subnav" id="subnav" aria-label="Section view"></nav>
   <main class="layout" id="layout">
+    <button class="sidebar-expand-button" id="sidebarExpandBtn" type="button" aria-controls="listPane" aria-expanded="false" title="Show sidebar">
+      <span>Show sidebar</span>
+    </button>
     <section class="list-pane" id="listPane">
+      <div class="sidebar-control-bar">
+        <span class="sidebar-control-label">Sidebar</span>
+        <button class="sidebar-collapse-button" id="sidebarCollapseBtn" type="button" aria-controls="listPane" aria-expanded="true" title="Collapse sidebar">
+          <span aria-hidden="true">&larr;</span>
+          <span>Collapse</span>
+        </button>
+      </div>
       <div class="toolbar" id="toolbar"></div>
       <div id="submissionList" class="empty" style="padding:16px;">Unlock to load submissions.</div>
     </section>
@@ -755,8 +782,11 @@
   const toolbarEl = document.getElementById("toolbar");
   const layoutEl = document.getElementById("layout");
   const listPane = document.getElementById("listPane");
+  const sidebarCollapseBtn = document.getElementById("sidebarCollapseBtn");
+  const sidebarExpandBtn = document.getElementById("sidebarExpandBtn");
   const subnavEl = document.getElementById("subnav");
   const bookingPreviewKey = "swc_booking_admin_preview";
+  const sidebarPreferenceKey = "swc_studio_sidebar_collapsed";
   const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
   const TAB_TYPES = {
     tattoo: ["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "tattoo_special", "consultation", "in_person_consultation", "build_session"],
@@ -827,6 +857,7 @@
     event: "var(--color-events,#005D25)",
   };
   const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
+  const CLIENT_RESCHEDULE_CUTOFF_HOURS = 48;
   const PRIVATE_BOOKING_TYPE_OPTIONS = [
     ["consult_in_person", "In-Person Consultation"],
     ["tattoo_quarter", "Quarter Day Session (2 hours)"],
@@ -904,6 +935,7 @@
   let textAssistDirty = false;
   let textAssistDraft = "";
   let textAssistSubmissionId = "";
+  let sidebarCollapsed = localStorage.getItem(sidebarPreferenceKey) === "1";
   const tattooSessionPlans = new Map();
   const sessionEstimateCopyFields = [
     ["sectionHeading", "Section heading", "input"],
@@ -2001,6 +2033,14 @@
 
   function emptyDetail() {
     return '<p class="empty">Select a submission to review details.</p>';
+  }
+
+  function setSidebarCollapsed(collapsed, persist = true) {
+    sidebarCollapsed = Boolean(collapsed);
+    layoutEl.classList.toggle("is-sidebar-collapsed", sidebarCollapsed);
+    sidebarCollapseBtn.setAttribute("aria-expanded", String(!sidebarCollapsed));
+    sidebarExpandBtn.setAttribute("aria-expanded", String(!sidebarCollapsed));
+    if (persist) localStorage.setItem(sidebarPreferenceKey, sidebarCollapsed ? "1" : "0");
   }
 
   function buildToolbar() {
@@ -4848,8 +4888,14 @@
     const defaultDue = formatDateTimeInput(new Date(Math.min(Date.now() + 48 * 60 * 60 * 1000, firstSlotStartMs)).toISOString());
     const isReschedule = state.mode === "reschedule";
     const contactName = appointment?.clientName || "";
+    const rescheduleCount = Number(appointment?.rescheduleCount ?? appointment?.reschedule_count ?? 0);
+    const hoursUntilStart = appointment?.startAt
+      ? (new Date(appointment.startAt).getTime() - Date.now()) / (60 * 60 * 1000)
+      : Number.POSITIVE_INFINITY;
+    const policyOverrideRequired = isReschedule
+      && (hoursUntilStart < CLIENT_RESCHEDULE_CUTOFF_HOURS || rescheduleCount >= 1);
     return `
-      <form class="appointment-editor" data-appointment-editor data-mode="${isReschedule ? "reschedule" : "create"}" data-appointment-id="${escapeHtml(appointment?.id || "")}">
+      <form class="appointment-editor" data-appointment-editor data-mode="${isReschedule ? "reschedule" : "create"}" data-policy-override="${policyOverrideRequired ? "1" : "0"}" data-appointment-id="${escapeHtml(appointment?.id || "")}">
         <div class="appointment-editor-head">
           <div><span class="pill">${isReschedule ? "Reschedule Appointment" : "Schedule Appointment"}</span><h3>${isReschedule ? escapeHtml(contactName || "Client") : "New Studio-scheduled appointment"}</h3></div>
           <button class="button" type="button" data-close-appointment-editor>Close</button>
@@ -4873,12 +4919,21 @@
         <section class="appointment-editor-section">
           <h4>Time</h4>
           <div class="appointment-editor-grid">
-            <div class="field"><label>Time source</label><select name="timeMode" data-appointment-time-mode><option value="slot">Available slot</option><option value="custom">Custom time override</option></select></div>
-            <div class="field" data-appointment-slot-field><label>Available slot</label><select name="availabilityWindowId" data-appointment-slot>${slots.length ? slots.map((slot) => `<option value="${escapeHtml(slot.id)}">${escapeHtml(formatDate(slot.startAt))}</option>`).join("") : '<option value="">No available slots</option>'}</select></div>
-            <div class="field" data-appointment-custom-field hidden><label>Custom start</label><input name="customStartAt" type="datetime-local"></div>
-            ${isReschedule ? `<div class="field"><label><input name="overridePolicy" type="checkbox" value="1"> Override client reschedule policy</label></div><div class="field wide" data-appointment-override-reason hidden><label>Override reason</label><textarea name="note" rows="3" maxlength="2000"></textarea></div>` : `<div class="field wide"><label>Internal scheduling note</label><textarea name="note" rows="3" maxlength="2000"></textarea></div>`}
+            ${isReschedule ? `
+              <input name="timeMode" type="hidden" value="slot">
+              <div class="field wide" data-appointment-slot-field><label>New appointment time</label><select name="availabilityWindowId" data-appointment-slot>${slots.length ? slots.map((slot) => `<option value="${escapeHtml(slot.id)}">${escapeHtml(formatDate(slot.startAt))}</option>`).join("") : '<option value="">No available times</option>'}</select></div>
+              <div class="field wide" data-appointment-custom-field hidden><label>Custom start time</label><input name="customStartAt" type="datetime-local"><button class="button" type="button" data-appointment-use-slot style="margin-top:8px;">Use an Available Time</button></div>
+              <div class="field wide" data-appointment-custom-action><button class="button" type="button" data-appointment-use-custom>Enter a Custom Time</button></div>
+              ${policyOverrideRequired ? `<div class="field wide"><div class="contact">This appointment is ${rescheduleCount >= 1 ? "using an additional reschedule" : "inside the 48-hour client cutoff"}. Studio authorization and a reason will be recorded automatically.</div></div>` : ""}
+              <div class="field wide" data-appointment-reason-field${policyOverrideRequired ? "" : " hidden"}><label data-appointment-reason-label>${policyOverrideRequired ? "Studio override reason" : "Custom-time reason"}</label><textarea name="note" rows="3" maxlength="2000"${policyOverrideRequired ? " required" : ""}></textarea></div>
+            ` : `
+              <div class="field"><label>Time source</label><select name="timeMode" data-appointment-time-mode><option value="slot">Available slot</option><option value="custom">Custom time override</option></select></div>
+              <div class="field" data-appointment-slot-field><label>Available slot</label><select name="availabilityWindowId" data-appointment-slot>${slots.length ? slots.map((slot) => `<option value="${escapeHtml(slot.id)}">${escapeHtml(formatDate(slot.startAt))}</option>`).join("") : '<option value="">No available slots</option>'}</select></div>
+              <div class="field" data-appointment-custom-field hidden><label>Custom start</label><input name="customStartAt" type="datetime-local"></div>
+              <div class="field wide"><label>Internal scheduling note</label><textarea name="note" rows="3" maxlength="2000"></textarea></div>
+            `}
           </div>
-          <p class="contact">Custom time bypasses public hours, notice, horizon, blackouts, and daily caps. Appointment overlap is always blocked.</p>
+          ${isReschedule ? "" : '<p class="contact">Custom time bypasses public hours, notice, horizon, blackouts, and daily caps. Appointment overlap is always blocked.</p>'}
         </section>
         ${isReschedule ? "" : `
           <section class="appointment-editor-section">
@@ -4893,8 +4948,9 @@
         `}
         <div class="appointment-editor-status" data-appointment-editor-status></div>
         <div class="booking-actions">
-          <button class="button" type="submit" data-notify-client="0">Save only</button>
-          <button class="button" type="submit" data-notify-client="1">Save + Email Client</button>
+          ${isReschedule
+            ? '<button class="button" type="submit" data-notify-client="1">Reschedule &amp; Email Client</button><button class="button" type="submit" data-notify-client="0">Reschedule Without Email</button>'
+            : '<button class="button" type="submit" data-notify-client="0">Save only</button><button class="button" type="submit" data-notify-client="1">Save + Email Client</button>'}
         </div>
       </form>`;
   }
@@ -4934,8 +4990,10 @@
     const timeMode = form.elements.timeMode?.value || "slot";
     const slotField = form.querySelector("[data-appointment-slot-field]");
     const customField = form.querySelector("[data-appointment-custom-field]");
+    const customAction = form.querySelector("[data-appointment-custom-action]");
     if (slotField) slotField.hidden = timeMode !== "slot";
     if (customField) customField.hidden = timeMode !== "custom";
+    if (customAction) customAction.hidden = timeMode === "custom";
     const paymentMode = form.elements.paymentMode?.value || "none";
     form.querySelector("[data-appointment-deposit-field]")?.toggleAttribute("hidden", paymentMode === "none");
     form.querySelector("[data-appointment-deadline-field]")?.toggleAttribute("hidden", paymentMode !== "square_link");
@@ -4945,8 +5003,14 @@
       deposit.value = priceInputValue(type?.depositCents || 0);
       deposit.dataset.bookingTypeId = typeId;
     }
-    const overrideReason = form.querySelector("[data-appointment-override-reason]");
-    if (overrideReason) overrideReason.hidden = !form.elements.overridePolicy?.checked;
+    const policyOverrideRequired = form.dataset.policyOverride === "1";
+    const reasonField = form.querySelector("[data-appointment-reason-field]");
+    const reasonLabel = form.querySelector("[data-appointment-reason-label]");
+    if (reasonField) reasonField.hidden = !policyOverrideRequired && timeMode !== "custom";
+    if (reasonLabel) reasonLabel.textContent = policyOverrideRequired ? "Studio override reason" : "Custom-time reason";
+    if (form.elements.note && form.dataset.mode === "reschedule") {
+      form.elements.note.required = policyOverrideRequired || timeMode === "custom";
+    }
   }
 
   function studioBookingAppointments() {
@@ -5035,7 +5099,7 @@
         <div class="booking-actions">
           ${isTattooAppointment ? '<button class="button" type="button" data-back-appointments>Back to Appointments</button>' : ""}
           <button class="button" type="button" data-open-appointment-editor="create">Schedule Appointment</button>
-          ${(appointmentIsConfirmed(appointment) || (appointment.isManual && appointmentIsPending(appointment))) ? `<button class="button" type="button" data-reschedule-appointment="${escapeHtml(appointment.id)}">Reschedule Appointment</button>` : ""}
+          ${appointmentCanStudioReschedule(appointment) ? `<button class="button" type="button" data-reschedule-appointment="${escapeHtml(appointment.id)}">Reschedule Appointment</button>` : ""}
           ${calendarHref ? `<a class="button" href="${escapeHtml(calendarHref)}" target="_blank" rel="noopener noreferrer">Add to Calendar</a>` : ""}
           ${calendarHref ? `<button class="button" type="button" data-copy-calendar="${escapeHtml(calendarHref)}">Copy Calendar Link</button>` : ""}
           ${checkoutHref ? `<a class="button" href="${escapeHtml(checkoutHref)}" target="_blank" rel="noopener noreferrer">Open Square Checkout</a>` : ""}
@@ -5453,6 +5517,11 @@
     return appointment?.status === "confirmed";
   }
 
+  function appointmentCanStudioReschedule(appointment) {
+    const startMs = new Date(appointment?.startAt || "").getTime();
+    return appointmentIsConfirmed(appointment) && Number.isFinite(startMs) && startMs > Date.now();
+  }
+
   function appointmentCalendarUrl(appointment) {
     if (!appointment?.id) return "";
     return absoluteUrl(`/api/booking/calendar?appointment=${encodeURIComponent(appointment.id)}`);
@@ -5540,7 +5609,7 @@ ${meetingLines}
         <div class="booking-actions" style="margin-top:10px;">
           ${calendarHref ? `<a class="button" href="${escapeHtml(calendarHref)}" target="_blank" rel="noopener noreferrer">Add to Calendar</a>` : ""}
           ${calendarHref ? `<button class="button" type="button" data-copy-calendar="${escapeHtml(calendarHref)}">Copy Calendar Link</button>` : ""}
-          ${(appointmentIsConfirmed(appointment) || (appointment.isManual && appointmentIsPending(appointment))) ? `<button class="button" type="button" data-reschedule-appointment="${escapeHtml(appointment.id)}">Reschedule Appointment</button>` : ""}
+          ${appointmentCanStudioReschedule(appointment) ? `<button class="button" type="button" data-reschedule-appointment="${escapeHtml(appointment.id)}">Reschedule Appointment</button>` : ""}
           ${appointmentIsPending(appointment) ? `<button class="button danger-button" type="button" data-release-pending="${escapeHtml(appointment.id)}">Release Pending Checkout</button>` : ""}
           ${appointmentIsConfirmed(appointment) ? `<button class="button danger-button" type="button" data-cancel-appointment="${escapeHtml(appointment.id)}">Cancel Appointment</button>` : ""}
           ${appointment.canPermanentlyDelete ? `<button class="button danger-button" type="button" data-delete-appointment="${escapeHtml(appointment.id)}">Permanently Delete Appointment</button>` : ""}
@@ -8419,7 +8488,7 @@ ${meetingLines}
       syncAppointmentEditorControls(form);
       return;
     }
-    if (event.target.matches("[data-appointment-time-mode], [data-appointment-payment-mode], [name='overridePolicy']")) {
+    if (event.target.matches("[data-appointment-time-mode], [data-appointment-payment-mode]")) {
       syncAppointmentEditorControls(event.target.closest("[data-appointment-editor]"));
       return;
     }
@@ -8466,6 +8535,26 @@ ${meetingLines}
       appointmentEditorPeople = [];
       renderAppointmentEditorSurface();
       setStatus("Appointment editor closed");
+      return;
+    }
+
+    const useCustomTime = event.target.closest("[data-appointment-use-custom]");
+    if (useCustomTime) {
+      const form = useCustomTime.closest("[data-appointment-editor]");
+      if (!form) return;
+      form.elements.timeMode.value = "custom";
+      syncAppointmentEditorControls(form);
+      form.elements.customStartAt?.focus();
+      return;
+    }
+
+    const useAvailableTime = event.target.closest("[data-appointment-use-slot]");
+    if (useAvailableTime) {
+      const form = useAvailableTime.closest("[data-appointment-editor]");
+      if (!form) return;
+      form.elements.timeMode.value = "slot";
+      syncAppointmentEditorControls(form);
+      form.elements.availabilityWindowId?.focus();
       return;
     }
 
@@ -10315,7 +10404,7 @@ ${meetingLines}
           payload = await api(`/api/admin/booking/appointments/${encodeURIComponent(appointmentId)}/reschedule`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ ...common, overridePolicy: appointmentForm.elements.overridePolicy?.checked === true }),
+            body: JSON.stringify({ ...common, overridePolicy: appointmentForm.dataset.policyOverride === "1" }),
           });
         } else {
           const paymentMode = String(values.paymentMode || "none");
@@ -10948,6 +11037,11 @@ ${meetingLines}
       if (submission) { activeId = id; activeAppointmentId = ""; renderDetail(submission); }
     }
   });
+  sidebarCollapseBtn.addEventListener("click", () => setSidebarCollapsed(true));
+  sidebarExpandBtn.addEventListener("click", () => {
+    setSidebarCollapsed(false);
+    sidebarCollapseBtn.focus();
+  });
   detailEl.addEventListener("change", (event) => {
     if (event.target.matches("[data-date-override-mode]")) {
       const section = event.target.closest("[data-date-override-category]");
@@ -11017,6 +11111,7 @@ ${meetingLines}
   });
 
   const analyticsHashState = window.StudioAnalytics?.hashState?.();
+  setSidebarCollapsed(sidebarCollapsed, false);
   if (analyticsHashState?.active) {
     activeTab = "analytics";
     subView = analyticsHashState.view;
