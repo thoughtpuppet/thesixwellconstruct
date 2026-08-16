@@ -278,6 +278,30 @@ function normalizeBookingType(row) {
   };
 }
 
+function adjustedOfferBookingType(row, adjustedOffer) {
+  if (!adjustedOffer) return row;
+  const durationMinutes = Number(adjustedOffer.durationMinutes || 0);
+  const depositCents = Number(adjustedOffer.depositCents || 0);
+  if (!Number.isSafeInteger(durationMinutes) || durationMinutes <= 0
+      || !Number.isSafeInteger(depositCents) || depositCents < 0) {
+    return row;
+  }
+  return {
+    ...row,
+    label: "Adjusted Tattoo Session",
+    description: `${formatDurationLabel(durationMinutes)} based on the original Tattoo Special terms.`,
+    duration_minutes: durationMinutes,
+    durationMinutes,
+    durationRangeLabel: formatDurationLabel(durationMinutes),
+    deposit_cents: depositCents,
+    depositCents,
+    depositLabel: formatMoney(depositCents, row.currency || "USD"),
+    session_fee_cents: 0,
+    sessionFeeCents: 0,
+    sessionFeeLabel: formatMoney(0, row.currency || "USD"),
+  };
+}
+
 function formatDurationLabel(minutes) {
   const total = Number(minutes || 0);
   if (!total) return "";
@@ -1338,7 +1362,8 @@ async function loadTokenContext(db, rawToken) {
         spt.refundable_deposit_cents AS special_project_deposit_cents,
         spt.healed_photo_method, spt.healed_photo_due_weeks,
         tao.id AS adjusted_offer_id,tao.pricing_type AS adjusted_offer_pricing_type,
-        tao.amount_cents AS adjusted_offer_amount_cents,tao.currency AS adjusted_offer_currency
+        tao.amount_cents AS adjusted_offer_amount_cents,tao.currency AS adjusted_offer_currency,
+        tao.original_offer_snapshot_json AS adjusted_offer_original_snapshot_json
        FROM booking_tokens bt
        JOIN submissions s ON s.id = bt.submission_id
        LEFT JOIN special_project_submission_terms spt ON spt.submission_id = s.id
@@ -1371,6 +1396,7 @@ async function loadTokenContext(db, rawToken) {
     return { invalid: "This project is not ready for tattoo scheduling yet." };
   }
 
+  const adjustedOfferSnapshot = parseJsonField(token.adjusted_offer_original_snapshot_json, {});
   return {
     token,
     purpose,
@@ -1381,6 +1407,8 @@ async function loadTokenContext(db, rawToken) {
       pricingType: token.adjusted_offer_pricing_type,
       amountCents: Number(token.adjusted_offer_amount_cents || 0),
       currency: token.adjusted_offer_currency || "USD",
+      durationMinutes: Number(adjustedOfferSnapshot.durationMinutes || 0),
+      depositCents: Number(adjustedOfferSnapshot.depositCents || 0),
     } : null,
     experimentalProject: token.special_project_profile === "experimental" ? {
       title: token.special_project_title || "Experimental Project",
@@ -1885,6 +1913,9 @@ export async function handleBookingContext(request, env) {
     if (context.invalid) return errorResponse(context.invalid, 403);
 
     let bookingTypes = await listBookingTypes(db, context.allowedBookingTypes);
+    if (context.adjustedOffer) {
+      bookingTypes = bookingTypes.map((type) => adjustedOfferBookingType(type, context.adjustedOffer));
+    }
     if (context.experimentalProject) {
       const depositCents = context.purpose === "consultation"
         ? 0
@@ -1897,7 +1928,15 @@ export async function handleBookingContext(request, env) {
         sessionFeeLabel: formatMoney(0, type.currency || "USD"),
       }));
     }
-    const windows = await listPublicWindows(db, bookingTypes);
+    let windows = await listPublicWindows(db, bookingTypes);
+    if (context.adjustedOffer?.durationMinutes > 0) {
+      windows = windows.flatMap((window) => {
+        const endAt = addMinutes(window.startAt, context.adjustedOffer.durationMinutes);
+        return new Date(endAt).getTime() <= new Date(window.endAt).getTime()
+          ? [{ ...window, endAt }]
+          : [];
+      });
+    }
     const isTattooSpecial = context.token.submission_type === "tattoo_special" && !context.adjustedOffer;
     const sessionPlan = context.purpose === "tattoo" && !isTattooSpecial
       ? await loadTattooSessionPlan(db, context.token.submission_id)
@@ -2075,10 +2114,10 @@ export async function handleSaveBookingSessionPlan(request, env) {
   }
 }
 
-async function ensureAvailable(db, windowId, bookingTypeId, excludeAppointmentId = "") {
+async function ensureAvailable(db, windowId, bookingTypeId, excludeAppointmentId = "", bookingTypeOverride = null) {
   let window;
   if (parseGeneratedWindowId(windowId)) {
-    const materialized = await materializeGeneratedWindow(db, windowId, bookingTypeId);
+    const materialized = await materializeGeneratedWindow(db, windowId, bookingTypeId, bookingTypeOverride);
     if (materialized.error) return materialized;
     window = materialized.window;
   } else {
@@ -2101,6 +2140,15 @@ async function ensureAvailable(db, windowId, bookingTypeId, excludeAppointmentId
     return { error: "Extended Day requires a dedicated 12-hour availability window." };
   }
 
+  const overrideDurationMinutes = Number(bookingTypeOverride?.duration_minutes || bookingTypeOverride?.durationMinutes || 0);
+  const appointmentEndAt = overrideDurationMinutes > 0
+    ? addMinutes(window.start_at, overrideDurationMinutes)
+    : window.end_at;
+  if (new Date(appointmentEndAt).getTime() > new Date(window.end_at).getTime()) {
+    return { error: "That appointment window is too short for the adjusted session." };
+  }
+  const effectiveWindow = appointmentEndAt === window.end_at ? window : { ...window, end_at: appointmentEndAt };
+
   const countRow = await db
     .prepare(
       `SELECT COUNT(*) AS count FROM appointments
@@ -2120,36 +2168,42 @@ async function ensureAvailable(db, windowId, bookingTypeId, excludeAppointmentId
     )
     .bind(new Date().toISOString())
     .all();
-  if (isBlockedByBlackout(window, blackoutResult.results || [], bookingTypeId)) {
+  if (isBlockedByBlackout(effectiveWindow, blackoutResult.results || [], bookingTypeId)) {
     return { error: "That appointment time is blocked out." };
   }
   const activeAppointments = (await loadActiveAppointments(
     db,
     new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
   )).filter((appointment) => appointment.id !== excludeAppointmentId);
-  if (!hasSlotCapacity(window, activeAppointments, bookingTypeId)) {
+  if (!hasSlotCapacity(effectiveWindow, activeAppointments, bookingTypeId)) {
     return { error: "That appointment time overlaps another booking." };
   }
-  return { window };
+  return { window, appointmentEndAt };
 }
 
-export async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
+export async function materializeGeneratedWindow(db, windowId, bookingTypeId, bookingTypeOverride = null) {
   const parsed = parseGeneratedWindowId(windowId);
   if (!parsed || parsed.bookingTypeId !== bookingTypeId || !Number.isFinite(parsed.startMs)) {
     return { error: "That appointment time is unavailable." };
   }
   if (parsed.sourceKind === "date") {
-    return materializeGeneratedDateOverrideWindow(db, windowId, parsed, bookingTypeId);
+    return materializeGeneratedDateOverrideWindow(db, windowId, parsed, bookingTypeId, bookingTypeOverride);
   }
   if (parsed.sourceKind === "period") {
-    return materializeGeneratedSchedulePeriodWindow(db, windowId, parsed, bookingTypeId);
+    return materializeGeneratedSchedulePeriodWindow(db, windowId, parsed, bookingTypeId, bookingTypeOverride);
   }
 
-  const bookingType = await db
+  const storedBookingType = await db
     .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
     .bind(bookingTypeId)
     .first();
-  if (!bookingType) return { error: "Unknown booking type." };
+  if (!storedBookingType) return { error: "Unknown booking type." };
+  const bookingType = bookingTypeOverride?.id === bookingTypeId
+    ? adjustedOfferBookingType(storedBookingType, {
+        durationMinutes: bookingTypeOverride.duration_minutes || bookingTypeOverride.durationMinutes,
+        depositCents: bookingTypeOverride.deposit_cents ?? bookingTypeOverride.depositCents,
+      })
+    : storedBookingType;
 
   const rule = await db
     .prepare("SELECT * FROM availability_rules WHERE id = ? AND active = 1")
@@ -2275,12 +2329,18 @@ export async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
   return { window };
 }
 
-async function materializeGeneratedDateOverrideWindow(db, windowId, parsed, bookingTypeId) {
-  const bookingType = await db
+async function materializeGeneratedDateOverrideWindow(db, windowId, parsed, bookingTypeId, bookingTypeOverride = null) {
+  const storedBookingType = await db
     .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
     .bind(bookingTypeId)
     .first();
-  if (!bookingType) return { error: "Unknown booking type." };
+  if (!storedBookingType) return { error: "Unknown booking type." };
+  const bookingType = bookingTypeOverride?.id === bookingTypeId
+    ? adjustedOfferBookingType(storedBookingType, {
+        durationMinutes: bookingTypeOverride.duration_minutes || bookingTypeOverride.durationMinutes,
+        depositCents: bookingTypeOverride.deposit_cents ?? bookingTypeOverride.depositCents,
+      })
+    : storedBookingType;
 
   const source = await db.prepare(
     `SELECT w.*, o.venture, o.category, o.local_date, o.mode,
@@ -2400,12 +2460,18 @@ async function materializeGeneratedDateOverrideWindow(db, windowId, parsed, book
   return { window };
 }
 
-async function materializeGeneratedSchedulePeriodWindow(db, windowId, parsed, bookingTypeId) {
-  const bookingType = await db
+async function materializeGeneratedSchedulePeriodWindow(db, windowId, parsed, bookingTypeId, bookingTypeOverride = null) {
+  const storedBookingType = await db
     .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
     .bind(bookingTypeId)
     .first();
-  if (!bookingType) return { error: "Unknown booking type." };
+  if (!storedBookingType) return { error: "Unknown booking type." };
+  const bookingType = bookingTypeOverride?.id === bookingTypeId
+    ? adjustedOfferBookingType(storedBookingType, {
+        durationMinutes: bookingTypeOverride.duration_minutes || bookingTypeOverride.durationMinutes,
+        depositCents: bookingTypeOverride.deposit_cents ?? bookingTypeOverride.depositCents,
+      })
+    : storedBookingType;
 
   const source = await db.prepare(
     `SELECT w.*, p.venture, p.category, p.label, p.start_date, p.end_date,
@@ -2555,7 +2621,7 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
         original_end_at, checkout_group_id, checkout_group_position,
         checkout_group_size, created_at, updated_at
       )
-       SELECT ?, ?, ?, ?, aw.id, 'pending_deposit', ?, ?, ?, ?, aw.start_at, aw.end_at,
+       SELECT ?, ?, ?, ?, aw.id, 'pending_deposit', ?, ?, ?, ?, aw.start_at, COALESCE(?, aw.end_at),
               ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       FROM availability_windows aw
       WHERE aw.id = ? AND aw.active = 1 AND aw.is_blackout = 0
@@ -2680,6 +2746,7 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
       values.clientName,
       values.clientEmail,
       values.clientPhone || null,
+      values.appointmentEndAt || null,
       values.depositCents,
       values.tipCents || 0,
       values.sessionFeeCents || 0,
@@ -2896,9 +2963,11 @@ async function createPendingAppointment(
     return { error: "This booking link does not include that session type." };
   }
 
+  const effectiveBookingType = adjustedOfferBookingType(bookingType, tokenContext.adjustedOffer);
+
   const effectiveDepositCents = tokenContext.experimentalProject
     ? (purpose === "prerequisite_consultation" ? 0 : tokenContext.experimentalProject.refundableDepositCents)
-    : Number(bookingType.deposit_cents || 0);
+    : Number(effectiveBookingType.deposit_cents || effectiveBookingType.depositCents || 0);
 
   if (tokenContext.token.submission_type === "tattoo_special" && !tokenContext.adjustedOffer && !tokenContext.pendingSpecialApproval) {
     const requestedSpecial = await db.prepare(
@@ -2973,7 +3042,7 @@ async function createPendingAppointment(
     await mirrorAppointmentToCrm(db, existingAppointment);
     return {
       appointment: existingAppointment,
-      bookingType: normalizeBookingType(bookingType),
+      bookingType: adjustedOfferBookingType(normalizeBookingType(bookingType), tokenContext.adjustedOffer),
       existing: true,
     };
   }
@@ -3001,7 +3070,13 @@ async function createPendingAppointment(
     };
   }
 
-  const availability = await ensureAvailable(db, windowId, bookingType.id);
+  const availability = await ensureAvailable(
+    db,
+    windowId,
+    bookingType.id,
+    "",
+    tokenContext.adjustedOffer ? effectiveBookingType : null,
+  );
   if (availability.error) return availability;
 
   const id = crypto.randomUUID();
@@ -3015,9 +3090,10 @@ async function createPendingAppointment(
     clientName: tokenContext.token.contact_name,
     clientEmail: tokenContext.token.contact_email,
     clientPhone: tokenContext.token.contact_phone || null,
+    appointmentEndAt: availability.appointmentEndAt,
     depositCents: effectiveDepositCents,
     tipCents: tokenContext.experimentalProject ? 0 : tipCents,
-    sessionFeeCents: tokenContext.experimentalProject ? 0 : (bookingType.session_fee_cents || 0),
+    sessionFeeCents: tokenContext.experimentalProject ? 0 : Number(effectiveBookingType.session_fee_cents || effectiveBookingType.sessionFeeCents || 0),
     extendedDayAcknowledgedAt: bookingType.id === EXTENDED_DAY_BOOKING_TYPE_ID ? now : null,
     currency: bookingType.currency || "USD",
     holdExpiresAt: tokenContext.pendingSpecialApproval
@@ -3042,9 +3118,7 @@ async function createPendingAppointment(
   const appointment = await selectAppointmentWithMeeting(db, id);
   const normalizedAppointment = normalizeAppointment(appointment);
   await mirrorAppointmentToCrm(db, normalizedAppointment);
-  const normalizedType = normalizeBookingType(bookingType);
-  normalizedType.depositCents = effectiveDepositCents;
-  normalizedType.depositLabel = formatMoney(effectiveDepositCents, normalizedType.currency || "USD");
+  const normalizedType = adjustedOfferBookingType(normalizeBookingType(bookingType), tokenContext.adjustedOffer);
   return { appointment: normalizedAppointment, bookingType: normalizedType };
 }
 

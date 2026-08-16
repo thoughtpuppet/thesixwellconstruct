@@ -6354,6 +6354,8 @@ ${meetingLines}
       <label>Adjusted Offer — ${escapeHtml(String(adjusted.status || "").toUpperCase())}</label>
       <div class="tattoo-special-offer__grid">
         ${detailField("Rate", adjustedPrice)}
+        ${detailField("Session length", `${Number(adjusted.originalOffer?.durationMinutes || payload.duration_minutes || 0)} minutes`)}
+        ${detailField("Deposit", money(Number(adjusted.originalOffer?.depositCents ?? payload.deposit_cents ?? 0), "USD"))}
         ${detailField("Reason", titleize(adjusted.reasonCode || ""))}
         ${detailField("Sent", formatDate(adjusted.sentAt))}
         ${detailField("Response deadline", formatDate(adjusted.expiresAt))}
@@ -6386,6 +6388,7 @@ ${meetingLines}
     ${(!adjusted || ["withdrawn", "expired"].includes(adjusted.status)) && review && ["new", "reviewing"].includes(submission.status) ? `<div class="assist-panel" id="adjustedOfferPanel" style="margin-top:16px;">
       <label>${adjusted ? "Replacement Adjusted Offer" : "Adjusted Offer"}</label>
       <p class="contact">Use when the project is approved to proceed but does not qualify for the Tattoo Special. Sending this supersedes the unreserved requested time.</p>
+      <p class="contact"><strong>Original appointment terms remain:</strong> ${escapeHtml(String(Number(payload.duration_minutes || 0)))} minutes with a ${escapeHtml(money(Number(payload.deposit_cents || 0), "USD"))} deposit. Only the project price entered below changes.</p>
       <div class="tattoo-special-offer__grid">
         <label>Reason<select id="adjustedReason"><option value="cover_up">Cover-up</option><option value="rework">Rework</option><option value="complexity">Complexity</option><option value="size">Size</option><option value="other">Other</option></select></label>
         <label>Other reason<input id="adjustedReasonText" maxlength="500" placeholder="Required only for Other"></label>
@@ -6395,7 +6398,7 @@ ${meetingLines}
         <label>Maximum sessions<input id="adjustedMaxSessions" type="number" min="2" max="24" step="1" value="2" disabled></label>
         <label style="grid-column:span 2;">Studio note to client<textarea id="adjustedClientNote" rows="3" maxlength="2000"></textarea></label>
       </div>
-      <label>Eligible regular tattoo session types</label>
+      <label>Eligible scheduling categories <span class="contact">The original session length and deposit remain fixed.</span></label>
       <div class="booking-type-checks">${PRIVATE_BOOKING_TYPE_OPTIONS.filter(([id]) => id.startsWith("tattoo_")).map(([id, label]) => `<label class="check"><input type="checkbox" data-adjusted-booking-type value="${escapeHtml(id)}" ${id === "tattoo_half" ? "checked" : ""}><span class="check-label">${escapeHtml(label)}</span></label>`).join("")}</div>
       <label class="check" style="margin-top:10px;"><input id="adjustedAllowMultiple" type="checkbox"><span class="check-label">Allow the client to choose multiple appointment dates</span></label>
       <div class="booking-actions"><button class="button" type="button" data-adjusted-offer-create="${escapeHtml(submission.id)}">Send Adjusted Offer</button></div>

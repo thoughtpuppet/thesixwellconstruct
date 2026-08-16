@@ -11772,6 +11772,8 @@ test("Adjusted Offers support private web responses and Studio verbal acceptance
     SUBMISSIONS_DB: new LocalD1(database),
     SUBMISSIONS_ADMIN_TOKEN: adminToken,
     PUBLIC_SITE_URL: "https://example.test",
+    SQUARE_ACCESS_TOKEN: "square-token",
+    SQUARE_LOCATION_ID: "square-location",
     EMAIL: { send: async (message) => { sent.push(message); return { messageId: crypto.randomUUID() }; } },
   };
   const sourceTerms = database.prepare(
@@ -11873,13 +11875,61 @@ test("Adjusted Offers support private web responses and Studio verbal acceptance
   assert.equal(acceptedToken.allow_multiple_sessions, 1);
   assert.equal(acceptedToken.max_sessions, 3);
   assert.ok(new Date(acceptedToken.expires_at).getTime() > new Date(specialClose).getTime(), "normal 30-day access must not inherit the Special closing date");
+  const bookingRawToken = bookingTokenFromUrl(accepted.token.path);
+  const adjustedWindowStart = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+  const normalHalfDayEnd = new Date(new Date(adjustedWindowStart).getTime() + 240 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+  database.prepare(
+    `INSERT INTO availability_windows (
+      id,venture,booking_type_id,start_at,end_at,capacity,
+      buffer_before_minutes,buffer_after_minutes,is_blackout,active,note,created_at,updated_at
+    ) VALUES (?,?,?,?,?,1,0,0,0,1,'Adjusted Offer contract',?,?)`
+  ).run("adjusted-offer-window", "tattooing", "tattoo_half", adjustedWindowStart, normalHalfDayEnd, now, now);
   const bookingContext = await handleBookingContext(new Request(`https://example.test/api/booking/context?token=${bookingTokenFromUrl(accepted.token.path)}`), env);
   assert.equal(bookingContext.status, 200, await bookingContext.clone().text());
   const bookingPayload = await bookingContext.json();
   assert.equal(bookingPayload.submission.special, null);
   assert.equal(bookingPayload.submission.adjustedOffer.amountCents, 17500);
+  assert.equal(bookingPayload.submission.adjustedOffer.durationMinutes, Number(sourceTerms.duration_minutes));
+  assert.equal(bookingPayload.submission.adjustedOffer.depositCents, Number(sourceTerms.deposit_cents));
+  assert.equal(bookingPayload.bookingTypes[0].label, "Adjusted Tattoo Session");
+  assert.equal(bookingPayload.bookingTypes[0].durationMinutes, Number(sourceTerms.duration_minutes));
+  assert.equal(bookingPayload.bookingTypes[0].depositCents, Number(sourceTerms.deposit_cents));
+  const adjustedWindow = bookingPayload.availabilityWindows.find((window) => window.id === "adjusted-offer-window");
+  assert.ok(adjustedWindow);
+  assert.equal(
+    new Date(adjustedWindow.endAt).getTime() - new Date(adjustedWindow.startAt).getTime(),
+    Number(sourceTerms.duration_minutes) * 60 * 1000,
+  );
   assert.equal(bookingPayload.multiSession.enabled, true);
   assert.equal(sent.some((message) => message.to === "verbal-adjusted@example.com" && /choose your tattoo appointment/i.test(message.subject)), true);
+
+  const acknowledgePlan = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+    token: bookingRawToken,
+    preference: "studio_plan",
+    acknowledged: true,
+  }), env);
+  assert.equal(acknowledgePlan.status, 200, await acknowledgePlan.clone().text());
+  let adjustedSquareBody = null;
+  const checkoutResponse = await withMockFetch(async (url, init) => {
+    assert.match(String(url), /\/v2\/online-checkout\/payment-links$/);
+    adjustedSquareBody = JSON.parse(init.body);
+    return jsonFetchResponse({ payment_link: { id: "adjusted-link", order_id: "adjusted-order", url: "https://square.test/adjusted" } });
+  }, () => handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
+    token: bookingRawToken,
+    bookingTypeId: "tattoo_half",
+    availabilityWindowId: "adjusted-offer-window",
+    tipCents: 0,
+  }), env));
+  assert.equal(checkoutResponse.status, 200, await checkoutResponse.clone().text());
+  const checkout = await checkoutResponse.json();
+  assert.equal(adjustedSquareBody.order.line_items[0].base_price_money.amount, Number(sourceTerms.deposit_cents));
+  const adjustedAppointment = database.prepare("SELECT start_at,end_at,deposit_cents FROM appointments WHERE id=?").get(checkout.appointmentId);
+  assert.equal(adjustedAppointment.deposit_cents, Number(sourceTerms.deposit_cents));
+  assert.equal(
+    new Date(adjustedAppointment.end_at).getTime() - new Date(adjustedAppointment.start_at).getTime(),
+    Number(sourceTerms.duration_minutes) * 60 * 1000,
+  );
 
   const declinedSubmissionId = "adjusted-declined-submission";
   addReviewSubmission(declinedSubmissionId, "declined-adjusted@example.com");
@@ -11979,6 +12029,8 @@ test("Adjusted Offer client and Studio surfaces preserve the private response co
   assert.match(styles, /background:\s*var\(--color-bg\)/);
   assert.doesNotMatch(styles, /gradient|background-image|grain/i);
   assert.match(studio, />Adjusted Offer<\/button>/);
+  assert.match(studio, /Original appointment terms remain:/);
+  assert.match(studio, /Only the project price entered below changes\./);
   assert.match(studio, />Mark Accepted by Client<\/button>/);
   assert.match(studio, /id="adjustedAcceptEmail" type="checkbox" checked/);
   assert.match(studio, />Mark Declined by Client<\/button>/);
