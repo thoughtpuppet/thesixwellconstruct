@@ -1630,7 +1630,7 @@ function sessionPlanResponseComplete(plan) {
 
 async function ensureSessionPlanResponse(db, tokenContext) {
   const plan = await loadTattooSessionPlan(db, tokenContext?.token?.submission_id);
-  if (tokenContext?.token?.submission_type === "tattoo_special" && !tokenContext?.adjustedOffer) {
+  if (tokenContext?.adjustedOffer || tokenContext?.token?.submission_type === "tattoo_special") {
     return { plan };
   }
   const responseComplete = tokenContext?.experimentalProject

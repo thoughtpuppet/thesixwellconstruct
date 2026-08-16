@@ -11895,6 +11895,7 @@ test("Adjusted Offers support private web responses and Studio verbal acceptance
   assert.equal(bookingPayload.bookingTypes[0].label, "Adjusted Tattoo Session");
   assert.equal(bookingPayload.bookingTypes[0].durationMinutes, Number(sourceTerms.duration_minutes));
   assert.equal(bookingPayload.bookingTypes[0].depositCents, Number(sourceTerms.deposit_cents));
+  assert.equal(bookingPayload.sessionPlan.budgetAcknowledged, false);
   const adjustedWindow = bookingPayload.availabilityWindows.find((window) => window.id === "adjusted-offer-window");
   assert.ok(adjustedWindow);
   assert.equal(
@@ -11904,12 +11905,6 @@ test("Adjusted Offers support private web responses and Studio verbal acceptance
   assert.equal(bookingPayload.multiSession.enabled, true);
   assert.equal(sent.some((message) => message.to === "verbal-adjusted@example.com" && /choose your tattoo appointment/i.test(message.subject)), true);
 
-  const acknowledgePlan = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
-    token: bookingRawToken,
-    preference: "studio_plan",
-    acknowledged: true,
-  }), env);
-  assert.equal(acknowledgePlan.status, 200, await acknowledgePlan.clone().text());
   let adjustedSquareBody = null;
   const checkoutResponse = await withMockFetch(async (url, init) => {
     assert.match(String(url), /\/v2\/online-checkout\/payment-links$/);
