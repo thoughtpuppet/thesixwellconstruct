@@ -979,6 +979,8 @@ test("Studio keeps scheduling controls separate from a confirmed-only reschedule
   assert.match(studio, /Reschedule &amp; Email Client/);
   assert.match(studio, /Reschedule Without Email/);
   assert.match(studio, /appointmentCanStudioReschedule\(appointment\)/);
+  assert.match(studio, /function appointmentCanStudioReschedule\(appointment\) \{\s*return appointmentIsConfirmed\(appointment\);\s*\}/);
+  assert.doesNotMatch(studio, /appointmentIsConfirmed\(appointment\).*startMs > Date\.now\(\)/);
   assert.doesNotMatch(studio, /appointment\.isManual && appointmentIsPending\(appointment\)/);
   assert.doesNotMatch(booking, /movePendingManualAppointment|manual_hold_moved|pending_deposit_moved/);
   assert.match(booking, /Only confirmed appointments can be rescheduled/);

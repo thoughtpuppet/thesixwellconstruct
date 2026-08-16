@@ -5518,8 +5518,7 @@
   }
 
   function appointmentCanStudioReschedule(appointment) {
-    const startMs = new Date(appointment?.startAt || "").getTime();
-    return appointmentIsConfirmed(appointment) && Number.isFinite(startMs) && startMs > Date.now();
+    return appointmentIsConfirmed(appointment);
   }
 
   function appointmentCalendarUrl(appointment) {
