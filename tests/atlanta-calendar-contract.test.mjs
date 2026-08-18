@@ -1063,6 +1063,9 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(studio,/never appear on the public calendar or feeds/);
   assert.match(studio,/data-run-source/);
   assert.match(studio,/Run This Source/);
+  assert.match(studio,/nextReview:true, excludeId:approvedId, reviewIndex:reviewIndex/);
+  assert.match(studio,/Moving to the next review/);
+  assert.doesNotMatch(studio,/state\.filter="published"/);
   assert.match(publicCalendar,/<details class="calendar-event-flyer">/);
   assert.match(publicCalendar,/exhibition:"Exhibitions \/ Art Openings"/);
   assert.match(publicCalendar,/gsu:"GSU Events"/);

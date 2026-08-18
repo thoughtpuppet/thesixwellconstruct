@@ -244,9 +244,28 @@
     try { var payload = await api("/api/admin/calendar/candidates/" + encodeURIComponent(id)); var index = state.candidates.findIndex(function (candidate) { return candidate.id === id; }); if (index >= 0) state.candidates[index] = payload.candidate; renderEditor(payload.candidate); }
     catch (error) { toast(error.message); }
   }
-  async function refreshCandidates(selectId) {
-    var payload = await api("/api/admin/calendar/candidates"); state.candidates = payload.candidates || []; renderStatusFilters(); renderCandidateList();
-    if (selectId) selectCandidate(selectId); else if (state.selectedId && state.candidates.some(function (candidate) { return candidate.id === state.selectedId; })) selectCandidate(state.selectedId); else renderEditor(null);
+  async function refreshCandidates(selectId, options) {
+    options = options || {};
+    var payload = await api("/api/admin/calendar/candidates");
+    state.candidates = payload.candidates || [];
+    if (options.nextReview) {
+      state.filter = "review";
+      var remainingReview = state.candidates.filter(function (candidate) {
+        return candidate.id !== options.excludeId && matchesStatus(candidate,"review");
+      });
+      var nextIndex = Math.min(Math.max(Number(options.reviewIndex) || 0, 0), Math.max(remainingReview.length - 1, 0));
+      var nextCandidate = remainingReview[nextIndex];
+      state.selectedId = nextCandidate ? nextCandidate.id : "";
+      renderStatusFilters();
+      renderCandidateList();
+      if (nextCandidate) await selectCandidate(nextCandidate.id); else renderEditor(null);
+      return;
+    }
+    renderStatusFilters();
+    renderCandidateList();
+    if (selectId) await selectCandidate(selectId);
+    else if (state.selectedId && state.candidates.some(function (candidate) { return candidate.id === state.selectedId; })) await selectCandidate(state.selectedId);
+    else { state.selectedId = ""; renderEditor(null); }
   }
   async function editorAction(action) {
     if (action === "review-change") { var revisions = editorRoot.querySelector(".revision-list"); if (revisions) revisions.scrollIntoView({ behavior:"smooth", block:"center" }); return; }
@@ -254,7 +273,7 @@
     try {
       if (!state.selectedId) { var created = await api("/api/admin/calendar/candidates", { method:"POST", body:JSON.stringify(body) }); state.selectedId = created.candidate.id; toast(created.duplicate ? "Candidate created and flagged as a duplicate." : "Candidate created."); await refreshCandidates(state.selectedId); return; }
       if (action === "save") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId), { method:"PATCH", body:JSON.stringify(body) }); toast("Candidate saved."); }
-      if (action === "approve") { var wasPublished = state.candidates.some(function (candidate) { return candidate.id === state.selectedId && candidate.status === "published"; }); await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId), { method:"PATCH", body:JSON.stringify(body) }); await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/approve", { method:"POST", body:"{}" }); state.filter="published"; toast(wasPublished ? "Approved changes updated the published event." : "Event moved to Published and added to the calendar."); }
+      if (action === "approve") { var approvedId = state.selectedId; var reviewQueue = state.candidates.filter(function (candidate) { return matchesStatus(candidate,"review"); }); var reviewIndex = Math.max(reviewQueue.findIndex(function (candidate) { return candidate.id === approvedId; }),0); var wasPublished = state.candidates.some(function (candidate) { return candidate.id === approvedId && candidate.status === "published"; }); await api("/api/admin/calendar/candidates/" + encodeURIComponent(approvedId), { method:"PATCH", body:JSON.stringify(body) }); await api("/api/admin/calendar/candidates/" + encodeURIComponent(approvedId) + "/approve", { method:"POST", body:"{}" }); toast(wasPublished ? "Approved changes updated the published event. Moving to the next review." : "Event published. Moving to the next review."); await refreshCandidates("", { nextReview:true, excludeId:approvedId, reviewIndex:reviewIndex }); return; }
       if (action === "reject") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/reject", { method:"POST", body:JSON.stringify({ reason:body.rejectionReason }) }); toast("Candidate rejected. It remains private."); }
       if (action === "duplicate") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/duplicate", { method:"POST", body:JSON.stringify({ duplicateOf:body.duplicateOf }) }); toast("Candidate marked as duplicate."); }
       if (action === "cancel") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/cancel", { method:"POST", body:"{}" }); toast("Cancellation recorded."); }
