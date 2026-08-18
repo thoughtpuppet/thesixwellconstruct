@@ -53,13 +53,18 @@ class MemoryBucket {
   async delete(key) { this.objects.delete(key); }
 }
 
-function database() {
+function databaseThrough(lastMigration = "") {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
   for (const name of readdirSync(join(ROOT, "migrations")).filter((item) => item.endsWith(".sql")).sort()) {
+    if (lastMigration && name > lastMigration) break;
     db.exec(readFileSync(join(ROOT, "migrations", name), "utf8"));
   }
   return db;
+}
+
+function database() {
+  return databaseThrough();
 }
 
 function env(db, extras = {}) {
@@ -80,21 +85,21 @@ async function admin(db, path, options = {}) {
 
 test("calendar migrations preserve seeded private candidates, verified official sources, and no public curated snapshots", () => {
   const db = database();
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 10);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE verification_state='verified'").get().count, 7);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 11);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE verification_state='verified'").get().count, 9);
   assert.deepEqual(
     { ...db.prepare("SELECT status,starts_at,verification_state FROM calendar_candidates WHERE id='cal_candidate_synergy'").get() },
     { status:"needs_verification", starts_at:null, verification_state:"needs_verification" },
   );
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE pending_revision_id<>''").get().count, 10);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE pending_revision_id<>''").get().count, 11);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE id LIKE 'cal_source_gsu_%'").get().count, 15);
   const scoutProfile = db.prepare("SELECT geographic_rules_json,negative_terms_json FROM calendar_scout_profiles WHERE id='atlanta-default'").get();
   assert.equal(JSON.parse(scoutProfile.geographic_rules_json).includeOnlineOnly, true);
   assert.equal(JSON.parse(scoutProfile.negative_terms_json).includes("online only"), false);
   assert.deepEqual(
-    { ...db.prepare("SELECT status,verification_state FROM calendar_candidates WHERE id='cal_candidate_gsu_neurogenomics_forum_2026'").get() },
-    { status:"needs_verification", verification_state:"needs_verification" },
+    { ...db.prepare("SELECT status,verification_state,access_status,access_notes,audiences_json FROM calendar_candidates WHERE id='cal_candidate_gsu_neurogenomics_forum_2026'").get() },
+    { status:"candidate", verification_state:"verified", access_status:"restricted", access_notes:"GSU access only: Faculty, Staff, Students, Graduate Students, Postdocs. Not open to the general public.", audiences_json:'["Faculty","Staff","Students","Graduate Students","Postdocs"]' },
   );
   assert.deepEqual(
     { ...db.prepare("SELECT title,source_url,status,date_kind,starts_at,ends_at,verification_state FROM calendar_candidates WHERE id='cal_candidate_you_are_not_alone_bugs'").get() },
@@ -108,14 +113,92 @@ test("calendar migrations preserve seeded private candidates, verified official 
     ],
   );
   assert.deepEqual(
+    { ...db.prepare("SELECT source_id,source_event_id,source_url,date_kind,starts_at,ends_at,status,verification_state FROM calendar_candidates WHERE id='cal_candidate_gulch_we_hold_truths'").get() },
+    {
+      source_id:"cal_source_out_of_hand_truths", source_event_id:"outofhand-we-hold-these-truths-2026",
+      source_url:"https://app.outofhandtheater.com/WeHoldTheseTruths", date_kind:"date_range",
+      starts_at:"2026-08-20", ends_at:"2026-09-29", status:"candidate", verification_state:"verified",
+    },
+  );
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 8);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_gulch_we_hold_truths' AND starts_at='2026-09-29T18:00:00-04:00'").get().count, 2);
+  assert.equal(db.prepare("SELECT COUNT(DISTINCT source_event_id) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 8);
+  assert.equal(db.prepare("SELECT enabled FROM calendar_sources WHERE id='cal_source_out_of_hand_truths'").get().enabled, 1);
+  assert.deepEqual(
     { ...db.prepare("SELECT name,route FROM construct_pathways WHERE id='path-events-03'").get() },
     { name:"Atlanta calendar", route:"/calendar/" },
   );
 });
 
+test("attendance migration corrects an existing published snapshot and advances its calendar sequence", () => {
+  const db = databaseThrough("0135_calendar_virtual_events.sql");
+  db.exec(`
+    INSERT INTO calendar_entries
+      (id,candidate_id,uid,sequence,status,source_url,ticket_url,title,organizer,factual_description,
+       date_kind,starts_at,ends_at,timezone,venue_name,venue_address,city,region,subjects_json,
+       formats_json,is_experimental,published_at,last_modified_at,last_verified_at)
+    SELECT
+      'cal_entry_existing_gsu',id,'cal_entry_existing_gsu@thesixwellconstruct.com',0,'published',
+      source_url,ticket_url,title,organizer,factual_description,date_kind,starts_at,ends_at,timezone,
+      venue_name,venue_address,city,region,subjects_json,formats_json,is_experimental,
+      '2026-08-18T17:29:37.407Z','2026-08-18T17:29:37.407Z',last_verified_at
+    FROM calendar_candidates
+    WHERE id='cal_candidate_gsu_neurogenomics_forum_2026';
+
+    UPDATE calendar_candidates
+    SET status='published',public_entry_id='cal_entry_existing_gsu'
+    WHERE id='cal_candidate_gsu_neurogenomics_forum_2026';
+  `);
+
+  for (const name of readdirSync(join(ROOT, "migrations")).filter((item) => item > "0135_calendar_virtual_events.sql" && item.endsWith(".sql")).sort()) {
+    db.exec(readFileSync(join(ROOT, "migrations", name), "utf8"));
+  }
+
+  assert.deepEqual(
+    { ...db.prepare("SELECT access_status,access_notes,audiences_json,sequence FROM calendar_entries WHERE id='cal_entry_existing_gsu'").get() },
+    {
+      access_status:"restricted",
+      access_notes:"GSU access only: Faculty, Staff, Students, Graduate Students, Postdocs. Not open to the general public.",
+      audiences_json:'["Faculty","Staff","Students","Graduate Students","Postdocs"]',
+      sequence:1,
+    },
+  );
+});
+
+test("multi-day timed exhibitions become on-view ranges instead of continuous daily events", async () => {
+  const db = databaseThrough("0139_calendar_public_access_backfill.sql");
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Imported Multi-day Exhibition", organizer:"Atlanta Gallery", factualDescription:"A seasonal gallery exhibition.",
+      sourceUrl:"https://gallery.example/exhibitions/imported-multiday", organizerUrl:"https://gallery.example/exhibitions/imported-multiday",
+      sourceAuthority:"organizer_event", dateKind:"timed", startsAt:"2026-03-27T12:00:00-04:00", endsAt:"2026-09-05T17:00:00-04:00",
+      venueName:"Atlanta Gallery", venueAddress:"10 Gallery Way, Atlanta, GA", subjects:["art"], formats:["exhibition"], verificationState:"verified",
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const candidate = (await created.json()).candidate;
+  assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 200);
+  assert.deepEqual(
+    { ...db.prepare("SELECT event_structure,date_kind,starts_at,ends_at,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id) },
+    { event_structure:"single", date_kind:"timed", starts_at:"2026-03-27T12:00:00-04:00", ends_at:"2026-09-05T17:00:00-04:00", sequence:0 },
+  );
+
+  db.exec(readFileSync(join(ROOT, "migrations", "0140_calendar_multiday_exhibitions.sql"), "utf8"));
+
+  assert.deepEqual(
+    { ...db.prepare("SELECT event_structure,date_kind,starts_at,ends_at,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id) },
+    { event_structure:"exhibition", date_kind:"date_range", starts_at:"2026-03-27", ends_at:"2026-09-05", sequence:1 },
+  );
+  assert.deepEqual(
+    { ...db.prepare("SELECT event_structure,date_kind,starts_at,ends_at FROM calendar_candidates WHERE id=?").get(candidate.id) },
+    { event_structure:"exhibition", date_kind:"date_range", starts_at:"2026-03-27", ends_at:"2026-09-05" },
+  );
+});
+
 test("0131 preserves calendar data and stages every new social connector disabled", async () => {
   const db = database();
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 10);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 11);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_scout_connectors WHERE id IN ('threads_api','instagram_api','threads_web','instagram_web','tiktok_web') AND enabled=0").get().count, 5);
   assert.equal(db.prepare("SELECT discovery_channel FROM calendar_candidates LIMIT 1").get().discovery_channel, "");
@@ -194,6 +277,7 @@ test("a reliable event source keeps an Instagram ticket post private instead of 
     body:{
       title:"Officially sourced Atlanta Talk", organizer:"Atlanta Arts Center", factualDescription:"A talk about contemporary art.",
       sourceUrl:"https://official.example/events/atlanta-talk", ticketUrl:instagramTicket, dateKind:"timed", startsAt:"2026-11-18T18:00:00-05:00",
+      sourceAuthority:"organizer_event", organizerUrl:"https://official.example/",
       endsAt:"2026-11-18T20:00:00-05:00", venueName:"Atlanta Arts Center", venueAddress:"10 Arts Way, Atlanta, GA",
       subjects:["art"], formats:["lecture-talk"], verificationState:"verified",
     },
@@ -207,6 +291,45 @@ test("a reliable event source keeps an Instagram ticket post private instead of 
   const publicEvent = (await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json()).events.find((event) => event.title === candidate.title);
   assert.equal(publicEvent.ticketUrl, "");
   assert.deepEqual(publicEvent.relatedLinks, []);
+});
+
+test("secondary leads remain private until Studio records the original event source", async () => {
+  const db = database();
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Inner Views", organizer:"One Contemporary Gallery", factualDescription:"A contemporary art exhibition.",
+      discoveryUrl:"https://www.artsatl.org/event/attend-inner-views-art-exhibition/2026-07-03/",
+      sourceUrl:"https://www.artsatl.org/event/attend-inner-views-art-exhibition/2026-07-03/",
+      sourceAuthority:"organizer_event", organizerUrl:"https://onecontemporarygallery.com/",
+      dateKind:"date_range", startsAt:"2026-07-03", endsAt:"2026-08-22", venueName:"One Contemporary Gallery",
+      venueAddress:"Atlanta, GA", subjects:["art"], formats:["exhibition"], verificationState:"verified",
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const unresolved = (await created.json()).candidate;
+  assert.equal(unresolved.verificationState, "needs_verification");
+  assert.equal((await admin(db, `/candidates/${unresolved.id}/approve`, { method:"POST", body:{} })).status, 409);
+
+  const saved = await admin(db, `/candidates/${unresolved.id}`, {
+    method:"PATCH",
+    body:{
+      sourceUrl:"https://onecontemporarygallery.com/exhibitions/inner-views",
+      organizerUrl:"https://onecontemporarygallery.com/",
+      venueUrl:"https://onecontemporarygallery.com/",
+      sourceAuthority:"organizer_event",
+      sourceResolutionNotes:"ArtsATL supplied the lead; facts were confirmed on the gallery's event page.",
+      verificationState:"verified",
+    },
+  });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  assert.equal((await admin(db, `/candidates/${unresolved.id}/approve`, { method:"POST", body:{} })).status, 200);
+  const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+  const publicEvent = publicPayload.events.find((event) => event.title === "Inner Views");
+  assert.equal(publicEvent.sourceUrl, "https://onecontemporarygallery.com/exhibitions/inner-views");
+  assert.equal(publicEvent.organizerUrl, "https://onecontemporarygallery.com/");
+  assert.equal(publicEvent.venueUrl, "https://onecontemporarygallery.com/");
+  assert.doesNotMatch(JSON.stringify(publicEvent), /artsatl|discoveryUrl|sourceResolutionNotes|sourceAuthority/i);
 });
 
 test("approval, filters, single-event ICS, subscription feeds, rejection, and cancellation preserve lifecycle isolation", async () => {
@@ -270,6 +393,19 @@ test("approved GSU events expose deterministic affiliation and public filtering"
   assert.deepEqual(gsu.events[0].affiliations, ["gsu"]);
   const nonGsu = await (await handleCalendarPublicApi(request("/api/calendar/events?affiliation=gsu&subject=film"), runtime)).json();
   assert.equal(nonGsu.events.length, 0);
+});
+
+test("unknown attendance eligibility blocks publication until Studio confirms access", async () => {
+  const db = database();
+  const saved = await admin(db, "/candidates/cal_candidate_sound_vision", {
+    method:"PATCH",
+    body:{ accessStatus:"unknown", accessNotes:"Attendance eligibility has not been confirmed.", audiences:[] },
+  });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  const approval = await admin(db, "/candidates/cal_candidate_sound_vision/approve", { method:"POST", body:{} });
+  assert.equal(approval.status, 409);
+  assert.match((await approval.json()).errors.join(" "), /Attendance eligibility must be confirmed/i);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_sound_vision'").get().count, 0);
 });
 
 test("unconfirmed dates cannot publish and an approved material change stays pending until reapproved", async () => {
@@ -348,6 +484,7 @@ test("all-day exhibitions and date ranges publish with date-valued iCalendar bou
     body:{
       title:"Ten Day Exhibition", organizer:"Atlanta Gallery", factualDescription:"A temporary exhibition.",
       sourceUrl:"https://example.test/ten-day-exhibition", dateKind:"date_range", startsAt:"2026-11-01", endsAt:"2026-11-10",
+      sourceAuthority:"organizer_event", organizerUrl:"https://example.test/",
       venueName:"Atlanta Gallery", venueAddress:"Atlanta, GA", subjects:["art"], formats:["exhibition"], verificationState:"verified",
     },
   });
@@ -369,6 +506,7 @@ test("one exhibition publishes its dated related schedule without publishing TBD
       title:"You Are Not Alone: BUGS! Verified", organizer:"Georgia State University Perimeter College Fine Arts Gallery",
       factualDescription:"A group exhibition about insects, ecosystems, and interdependence.",
       sourceUrl:"https://art.example.edu/exhibitions/bugs", dateKind:"date_range", startsAt:"2026-08-17", endsAt:"2026-10-07",
+      sourceAuthority:"organizer_event", organizerUrl:"https://art.example.edu/",
       timezone:"America/New_York", venueName:"Fine Arts Gallery (CF)", venueAddress:"3735 Memorial College Drive, Clarkston, GA 30021",
       city:"Clarkston", region:"GA", subjects:["art"], formats:["exhibition"], experimental:true, verificationState:"verified",
       occurrences:[
@@ -398,13 +536,25 @@ test("one exhibition publishes its dated related schedule without publishing TBD
   const parent = payload.events.find((event) => event.title === candidate.title && !event.isOccurrence);
   const children = payload.events.filter((event) => event.seriesId === parent.id && event.isOccurrence);
   assert.ok(parent);
+  assert.equal(parent.eventStructure, "exhibition");
   assert.equal(children.length, 2);
+  assert.equal(children.every((event) => event.parentEventStructure === "exhibition"), true);
   assert.deepEqual(children.map((event) => event.occurrenceType), ["opening_reception", "artist_talk"]);
   assert.equal(children.every((event) => event.parentTitle === candidate.title && event.parentUid === parent.uid), true);
   assert.deepEqual(children.map((event) => event.occurrenceLabel), ["Opening Reception", "Artist Talk"]);
   assert.deepEqual(parent.relatedOccurrences.map((event) => event.title), ["Opening Reception", "Artist Talk"]);
   assert.deepEqual(parent.relatedOccurrences.map((event) => event.occurrenceType), ["opening_reception", "artist_talk"]);
   assert.equal(payload.events.some((event) => /Exhibition Mixer/.test(event.title)), false);
+
+  for (const [after, before, childType] of [
+    ["2026-08-01", "2026-08-31", "opening_reception"],
+    ["2026-09-01", "2026-09-30", "artist_talk"],
+    ["2026-10-01", "2026-10-31", ""],
+  ]) {
+    const month = await (await handleCalendarPublicApi(request(`/api/calendar/events?after=${after}&before=${before}`), runtime)).json();
+    assert.equal(month.events.filter((event) => event.id === parent.id).length, 1);
+    assert.deepEqual(month.events.filter((event) => event.parentTitle === parent.title && event.isOccurrence).map((event) => event.occurrenceType), childType ? [childType] : []);
+  }
 
   const talks = await (await handleCalendarPublicApi(request("/api/calendar/events?format=lecture-talk"), runtime)).json();
   assert.deepEqual(talks.events.map((event) => event.occurrenceType), ["artist_talk"]);
@@ -423,6 +573,115 @@ test("one exhibition publishes its dated related schedule without publishing TBD
   const cancelledTalk = afterCancellation.events.find((event) => event.occurrenceId && event.occurrenceType === "artist_talk" && event.parentTitle === candidate.title);
   assert.equal(cancelledTalk.status, "cancelled");
   assert.equal(cancelledTalk.sequence, 1);
+});
+
+test("We Hold These Truths publishes eight official conversations as one series, including simultaneous events", async () => {
+  const db = database();
+  const runtime = env(db);
+  const candidate = (await (await admin(db, "/candidates/cal_candidate_gulch_we_hold_truths")).json()).candidate;
+  assert.equal(candidate.occurrences.length, 8);
+  assert.equal(candidate.occurrences.every((item) => item.sourceEventId && item.sourceUrl.startsWith("https://app.outofhandtheater.com/")), true);
+  const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
+  assert.equal(approved.status, 200, await approved.clone().text());
+
+  const payload = await (await handleCalendarPublicApi(request("/api/calendar/events"), runtime)).json();
+  const parent = payload.series.find((event) => event.title === "We Hold These Truths");
+  const conversations = payload.events.filter((event) => event.isOccurrence && event.parentTitle === "We Hold These Truths");
+  assert.ok(parent);
+  assert.equal(parent.isSeriesParent, true);
+  assert.equal(conversations.length, 8);
+  assert.equal(conversations.filter((event) => event.startsAt === "2026-09-29T18:00:00-04:00").length, 2);
+  assert.deepEqual(
+    conversations.map((event) => event.startsAt),
+    [
+      "2026-08-20T18:00:00-04:00", "2026-09-09T18:00:00-04:00",
+      "2026-09-12T12:00:00-04:00", "2026-09-13T15:00:00-04:00",
+      "2026-09-17T18:00:00-04:00", "2026-09-22T17:30:00-04:00",
+      "2026-09-29T18:00:00-04:00", "2026-09-29T18:00:00-04:00",
+    ],
+  );
+  assert.equal(conversations.every((event) => event.sourceUrl.startsWith("https://app.outofhandtheater.com/")), true);
+  assert.doesNotMatch(JSON.stringify(payload), /sourceEventId|source_event_id/);
+  const feed = await (await handleCalendarFeed(request("/calendars/atlanta.ics"), runtime)).text();
+  assert.equal((feed.match(/RELATED-TO;RELTYPE=PARENT:/g) || []).length, 8);
+  assert.equal((feed.match(/URL:https:\/\/app\.outofhandtheater\.com\//g) || []).length, 8);
+  assert.doesNotMatch(feed, /DTSTART;VALUE=DATE:20260820/);
+});
+
+test("Out of Hand adapter renders one complete private series and records bounded browser diagnostics", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_out_of_hand_truths'");
+  const facts = [
+    ["6988", "Aug 20, 2026", "6:00 PM - 8:00 PM", "Metro City Church", "999 Briarcliff Road NE", "Atlanta, GA 30306"],
+    ["7024", "Sep 9, 2026", "6:00 PM - 8:00 PM", "Latin American Association", "2750 Buford Highway NE", "Atlanta, GA 30324"],
+    ["7023", "Sep 12, 2026", "12:00 PM - 2:00 PM", "The King Center", "449 Auburn Avenue NE", "Atlanta, GA 30312"],
+    ["7029", "Sep 13, 2026", "3:00 PM - 5:00 PM", "Christ Our Shepherd Lutheran Church", "101 N Peachtree Parkway", "Peachtree City, GA 30269"],
+    ["7030", "Sep 17, 2026", "6:00 PM - 8:00 PM", "Oglethorpe Presbyterian Church", "3016 Lanier Drive NE", "Brookhaven, GA 30319"],
+    ["7022", "Sep 22, 2026", "5:30 PM - 7:30 PM", "Northwest Library", "2489 Perry Boulevard NW", "Atlanta, GA 30318"],
+    ["7031", "Sep 29, 2026", "6:00 PM - 8:30 PM", "Decatur Legacy Park", "500 S Columbia Drive", "Decatur, GA 30030"],
+    ["7032", "Sep 29, 2026", "6:00 PM - 8:00 PM", "The Carter Center", "453 John Lewis Freedom Parkway NE", "Atlanta, GA 30307"],
+  ];
+  const childPath = (id) => id === "7024" ? `/brookhavenevents/conversations/${id}` : `/whtt-template/conversations/${id}`;
+  const hub = `<main>${facts.map(([id]) => `<a href="${childPath(id)}">Conversation ${id}</a>`).join("")}</main>`;
+  const browserCalls = [];
+  const browser = {
+    async quickAction(action, { url }) {
+      browserCalls.push({ action, url });
+      if (url.endsWith("/WeHoldTheseTruths")) return new Response(JSON.stringify({ result:hub }), { status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":"15" } });
+      const id = url.match(/\/conversations\/(\d+)/)?.[1];
+      const fact = facts.find((item) => item[0] === id);
+      return new Response(`<h1>We Hold These Truths</h1><time>Thu, ${fact[1]}</time><p>${fact[2]} EDT</p><p>${fact[3]}</p><p>${fact[4]}</p><p>${fact[5]}</p>`, { status:200, headers:{ "x-browser-ms-used":"10" } });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<html><main id='app'></main></html>", { status:200 });
+  try {
+    const runtime = env(db, { BROWSER:browser });
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/sources/cal_source_out_of_hand_truths/run", { method:"POST", body:{}, admin:true }), runtime);
+    assert.equal(response.status, 200, await response.clone().text());
+    const result = await response.json();
+    const direct = JSON.parse(db.prepare("SELECT source_results_json FROM calendar_scout_runs WHERE id=?").get(result.runId).source_results_json)[0].sources[0];
+    assert.deepEqual({ hubDetected:direct.hubDetected, childLinksDiscovered:direct.childLinksDiscovered, childrenExtracted:direct.childrenExtracted, retrieval:direct.retrieval, completeness:direct.completeness }, { hubDetected:true, childLinksDiscovered:8, childrenExtracted:8, retrieval:"browser", completeness:"complete" });
+    assert.equal(direct.browserMs, 95);
+    assert.equal(browserCalls.length, 9);
+    assert.equal(Math.max(...facts.map(([id]) => browserCalls.filter((call) => call.url.includes(`/conversations/${id}`)).length)), 1);
+    assert.deepEqual({ ...db.prepare("SELECT event_structure,status,verification_state FROM calendar_candidates WHERE id='cal_candidate_gulch_we_hold_truths'").get() }, { event_structure:"series", status:"candidate", verification_state:"verified" });
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 8);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("an incomplete Out of Hand rerun is held without replacing a complete private occurrence set", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_out_of_hand_truths'");
+  const links = ["6988", "7024", "7023", "7029", "7030", "7022", "7031", "7032"];
+  const hub = `<main>${links.map((id) => `<a href="/whtt-template/conversations/${id}">Conversation ${id}</a>`).join("")}</main>`;
+  const browser = {
+    async quickAction(action, { url }) {
+      if (url.endsWith("/WeHoldTheseTruths")) return new Response(hub, { status:200 });
+      const id = url.match(/\/conversations\/(\d+)/)?.[1];
+      if (["7023", "7024", "7030"].includes(id)) return new Response("render unavailable", { status:422 });
+      return new Response(`<h1>We Hold These Truths</h1><time>Thu, Sep 29, 2026</time><p>6:00 PM - 8:00 PM EDT</p><p>Official Venue ${id}</p><p>999 Example Road NE</p><p>Atlanta, GA 30306</p>`, { status:200 });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<html><main id='app'></main></html>", { status:200 });
+  try {
+    const runtime = env(db, { BROWSER:browser });
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/sources/cal_source_out_of_hand_truths/run", { method:"POST", body:{}, admin:true }), runtime);
+    assert.equal(response.status, 200, await response.clone().text());
+    const candidate = db.prepare("SELECT status,verification_state,pending_revision_id FROM calendar_candidates WHERE id='cal_candidate_gulch_we_hold_truths'").get();
+    assert.deepEqual({ status:candidate.status, verificationState:candidate.verification_state }, { status:"needs_verification", verificationState:"needs_verification" });
+    assert.ok(candidate.pending_revision_id);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 8);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 0);
+    const run = db.prepare("SELECT source_results_json FROM calendar_scout_runs ORDER BY started_at DESC LIMIT 1").get();
+    assert.match(run.source_results_json, /"completeness":"needs_verification"/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("repeated feedback creates a suggestion that changes the profile only after explicit acceptance", async () => {
@@ -460,7 +719,10 @@ test("direct monitoring remains safe without an OpenAI key and scheduler due gat
   try {
     const run = await runCalendarScout(runtime, { runKind:"manual", includeWeb:true });
     assert.equal(run.broadDiscoveryEnabled, false);
-    assert.equal(run.status, "completed", JSON.stringify(db.prepare("SELECT source_results_json,error_message FROM calendar_scout_runs WHERE id=?").get(run.runId)));
+    assert.equal(run.status, "partial", JSON.stringify(db.prepare("SELECT source_results_json,error_message FROM calendar_scout_runs WHERE id=?").get(run.runId)));
+    const directLane = JSON.parse(db.prepare("SELECT source_results_json FROM calendar_scout_runs WHERE id=?").get(run.runId).source_results_json)[0];
+    assert.equal(directLane.sources.filter((item) => item.status === "failed").length, 1);
+    assert.match(directLane.sources.find((item) => item.status === "failed").error, /Browser rendering is unavailable/);
     assert.equal(sourceCalls, enabledSourceCount);
     const candidate = db.prepare(`SELECT c.status,c.factual_description,n.private_rationale,n.attendance_use,n.programming_ideas,n.potential_collaborators,n.internal_notes
       FROM calendar_candidates c JOIN calendar_candidate_notes n ON n.candidate_id=c.id
@@ -563,7 +825,14 @@ test("Wix event sources group confirmed sessions under a series and honor the St
     scheduling:{ config:{ scheduleTbd:false, startDate:"2026-08-20T17:00:00.000Z", endDate:"2026-08-20T18:00:00.000Z", timeZoneId:"America/New_York", endDateHidden:false } },
     mainImage:{ url:"https://static.wixstatic.com/media/radical-workshop.jpg" },
   };
-  const html = `<html><body><a href="https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-live-january-2026">${series.title}</a><a href="https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-august-20th-2026-08-20-13-00">${session.title}</a><script type="application/json" id="wix-warmup-data">${JSON.stringify({ appsWarmupData:{ app:{ widget:{ events:{ events:[series,session], hasMore:false } } } } })}</script></body></html>`;
+  const secondSession = {
+    ...session,
+    id:"c9f78b21-15d4-4d62-92da-36d438d146fb",
+    title:"Rooted in Memory Workshop Series II SEPTEMBER 17th",
+    slug:"rooted-in-memory-workshop-series-ii-september-17th",
+    scheduling:{ config:{ ...session.scheduling.config, startDate:"2026-09-17T17:00:00.000Z", endDate:"2026-09-17T18:00:00.000Z" } },
+  };
+  const html = `<html><body><a href="https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-live-january-2026">${series.title}</a><a href="https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-august-20th-2026-08-20-13-00">${session.title}</a><a href="https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-september-17th">${secondSession.title}</a><script type="application/json" id="wix-warmup-data">${JSON.stringify({ appsWarmupData:{ app:{ widget:{ events:{ events:[series,session,secondSession], hasMore:false } } } } })}</script></body></html>`;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(html, { status:200, headers:{ "content-type":"text/html" } });
   try {
@@ -621,7 +890,7 @@ test("Wix event sources group confirmed sessions under a series and honor the St
     assert.equal(publicEvent.virtual, true);
     assert.equal(publicEvent.venueName, "Virtual");
     assert.equal(publicEvent.venueAddress, "");
-    assert.equal(publicEvent.relatedOccurrences.length, 1);
+    assert.equal(publicEvent.relatedOccurrences.length, 2);
     assert.equal(publicEvent.isSeriesParent, true);
     assert.equal(publicSession.occurrenceLabel, "AUGUST 20th");
     assert.equal(publicSession.virtual, true);
@@ -638,6 +907,119 @@ test("Wix event sources group confirmed sessions under a series and honor the St
     const atlantaFeed = await (await handleCalendarFeed(request("/calendars/atlanta.ics"), env(db))).text();
     assert.doesNotMatch(atlantaFeed, /DTSTART;VALUE=DATE:20260106/);
     assert.match(atlantaFeed, /DTSTART:20260820T170000Z/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Eyedrum's Squarespace calendar groups weekly drawing listings into one private series with dated occurrences", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.exec("UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_eyedrum'");
+  const sourceUrl = "https://www.eyedrum.org/calendar-events-performances-art-music";
+  const flyerUrl = "https://images.squarespace-cdn.com/content/v1/eyedrum/high-contrast.png";
+  const article = ({ slug, day, start, end }) => `<article class="eventlist-event eventlist-event--upcoming eventlist-event--hasimg">
+    <a href="/calendar-events-performances-art-music/${slug}" class="eventlist-column-thumbnail"><img data-image="${flyerUrl}" alt="High Contrast Drawing Group"></a>
+    <h1 class="eventlist-title"><a href="/calendar-events-performances-art-music/${slug}" class="eventlist-title-link">High Contrast Drawing Group</a></h1>
+    <ul class="eventlist-meta event-meta">
+      <li class="eventlist-meta-item eventlist-meta-date"><time class="event-date" datetime="${day}">${day}</time></li>
+      <li class="eventlist-meta-item eventlist-meta-time"><time class="event-time-localized-start">7:00 PM</time><time class="event-time-localized-end">11:30 PM</time></li>
+      <li class="eventlist-meta-item eventlist-meta-address">eyedrum <a href="http://maps.google.com?q=515%20Ralph%20David%20Abernathy%20Boulevard%20Southwest%20Atlanta%2C%20GA%2C%2030312%20United%20States" class="eventlist-meta-address-maplink">(map)</a></li>
+      <li class="eventlist-meta-item eventlist-meta-export"><a href="https://www.google.com/calendar/event?action=TEMPLATE&amp;text=High%20Contrast%20Drawing%20Group&amp;dates=${start}/${end}" class="eventlist-meta-export-google">Google Calendar</a></li>
+    </ul>
+    <div class="eventlist-description"><p>Every week, this drawing night welcomes experienced artists and people picking up a pencil for the first time. Admission is five dollars or a potluck contribution.</p>
+      <a href="/calendar-events-performances-art-music/${slug}" class="eventlist-button">View Event</a>
+    </div>
+  </article>`;
+  const html = `<html><body>${article({
+    slug:"high-contrast-drawing-group-3-j57m2", day:"2026-08-18", start:"20260818T230000Z", end:"20260819T033000Z",
+  })}${article({
+    slug:"high-contrast-drawing-group-3-j57m2-wgjln", day:"2026-08-25", start:"20260825T230000Z", end:"20260826T033000Z",
+  })}<article class="eventlist-event eventlist-event--past"><h1><a class="eventlist-title-link">High Contrast Drawing Group</a></h1></article></body></html>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), sourceUrl);
+    return new Response(html, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_eyedrum" });
+    assert.equal(run.status, "completed");
+    assert.equal(run.candidates, 1);
+    assert.equal(run.warnings, 0);
+    const candidate = db.prepare(`SELECT id,source_event_id,source_url,organizer_url,venue_url,source_authority,title,event_structure,date_kind,
+      starts_at,ends_at,venue_name,venue_address,subjects_json,formats_json,status,verification_state
+      FROM calendar_candidates WHERE source_id='cal_source_eyedrum' AND title='High Contrast Drawing Group'`).get();
+    assert.deepEqual({
+      source_event_id:candidate.source_event_id, source_url:candidate.source_url, organizer_url:candidate.organizer_url,
+      venue_url:candidate.venue_url, source_authority:candidate.source_authority, title:candidate.title,
+      event_structure:candidate.event_structure, date_kind:candidate.date_kind, starts_at:candidate.starts_at,
+      ends_at:candidate.ends_at, venue_name:candidate.venue_name, venue_address:candidate.venue_address,
+      subjects:JSON.parse(candidate.subjects_json), formats:JSON.parse(candidate.formats_json), status:candidate.status,
+      verification_state:candidate.verification_state,
+    }, {
+      source_event_id:"eyedrum-series-high-contrast-drawing-group", source_url:sourceUrl, organizer_url:sourceUrl,
+      venue_url:sourceUrl, source_authority:"official_calendar", title:"High Contrast Drawing Group",
+      event_structure:"series", date_kind:"date_range", starts_at:"2026-08-18", ends_at:"2026-08-25",
+      venue_name:"eyedrum", venue_address:"515 Ralph David Abernathy Boulevard Southwest Atlanta, GA, 30312 United States",
+      subjects:["art"], formats:["workshop"], status:"candidate", verification_state:"verified",
+    });
+    assert.deepEqual(
+      db.prepare(`SELECT source_event_id,title,starts_at,ends_at,source_url,status,verification_state
+        FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at`).all(candidate.id).map((row) => ({ ...row })),
+      [
+        { source_event_id:"high-contrast-drawing-group-3-j57m2", title:"August 18 Session", starts_at:"2026-08-18T23:00:00Z", ends_at:"2026-08-19T03:30:00Z", source_url:`${sourceUrl}/high-contrast-drawing-group-3-j57m2`, status:"scheduled", verification_state:"verified" },
+        { source_event_id:"high-contrast-drawing-group-3-j57m2-wgjln", title:"August 25 Session", starts_at:"2026-08-25T23:00:00Z", ends_at:"2026-08-26T03:30:00Z", source_url:`${sourceUrl}/high-contrast-drawing-group-3-j57m2-wgjln`, status:"scheduled", verification_state:"verified" },
+      ],
+    );
+    const notes = db.prepare("SELECT private_rationale,attendance_use,programming_ideas FROM calendar_candidate_notes WHERE candidate_id=?").get(candidate.id);
+    assert.match(notes.private_rationale, /art/);
+    assert.match(notes.attendance_use, /programming research/i);
+    assert.match(notes.programming_ideas, /Study how Eyedrum/i);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+
+    const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
+    assert.equal(approved.status, 200, await approved.clone().text());
+    const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+    assert.equal(publicPayload.series.filter((event) => event.title === "High Contrast Drawing Group").length, 1);
+    assert.deepEqual(
+      publicPayload.events.filter((event) => event.parentTitle === "High Contrast Drawing Group").map((event) => [event.occurrenceLabel,event.startsAt]),
+      [
+        ["August 18 Session","2026-08-18T23:00:00Z"],
+        ["August 25 Session","2026-08-25T23:00:00Z"],
+      ],
+    );
+    assert.equal(publicPayload.events.some((event) => event.title === "High Contrast Drawing Group"), false);
+    const feed = await (await handleCalendarFeed(request("/calendars/atlanta.ics"), env(db))).text();
+    assert.equal((feed.match(/SUMMARY:High Contrast Drawing Group/g) || []).length, 2);
+    assert.doesNotMatch(feed, /DTSTART;VALUE=DATE:20260818/);
+    assert.match(feed, /DTSTART:20260818T230000Z/);
+    assert.match(feed, /DTSTART:20260825T230000Z/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("successful source retrieval with zero extracted proposals is recorded as a visible warning", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  const created = await admin(db, "/sources", {
+    method:"POST",
+    body:{ name:"Empty Official Source", url:"https://empty-official.example/events", sourceType:"official_html", enabled:true },
+  });
+  const source = (await created.json()).source;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<html><body><p>No event markup is available.</p></body></html>", { status:200, headers:{ "content-type":"text/html" } });
+  try {
+    const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:source.id });
+    assert.equal(run.status, "partial");
+    assert.equal(run.failures, 0);
+    assert.equal(run.warnings, 1);
+    assert.equal(run.outcomes[0].warnings, 1);
+    assert.equal(run.outcomes[0].sources[0].status, "warning");
+    assert.match(run.outcomes[0].sources[0].warning, /no event proposals were extracted/i);
+    const history = await admin(db, "/runs");
+    const saved = (await history.json()).runs.find((item) => item.id === run.runId);
+    assert.equal(saved.warningCount, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -699,7 +1081,7 @@ test("registered calendar feeds are parsed through the direct-source lane", asyn
   }
 });
 
-test("GSU Localist monitoring preserves parent identity, campus facts, audience gate, and repeated occurrences", async () => {
+test("GSU Localist monitoring publishes confirmed audience restrictions across API and iCalendar", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0");
   db.exec("UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_gsu_computer_science'");
@@ -710,12 +1092,12 @@ test("GSU Localist monitoring preserves parent identity, campus facts, audience 
       id:987654,
       title:"GSU Creative Robotics and AI Lecture",
       localist_url:"https://calendar.gsu.edu/event/creative-robotics-ai-lecture",
-      description_text:"A public lecture on creative robotics, artificial intelligence, and engineering.",
+      description_text:"A lecture on creative robotics, artificial intelligence, and engineering.",
       ticket_url:"",
       location_name:"25 Park Place",
       address:"25 Park Place NE, Atlanta, GA 30303",
       departments:[{ id:8669, name:"Computer Science" }],
-      filters:{ audience:[{ id:1, name:"Public" }], campus:[{ id:2, name:"Atlanta Campus" }], event_types:[{ id:3, name:"Lecture" }] },
+      filters:{ audience:[{ id:1, name:"Students" },{ id:2, name:"Faculty/Staff" },{ id:3, name:"Alumni" }], campus:[{ id:4, name:"Atlanta Campus" }], event_types:[{ id:5, name:"Lecture" }] },
       event_instances:[
         { event_instance:{ id:101, start:"2026-11-04T18:00:00-05:00", end:"2026-11-04T19:30:00-05:00", all_day:false } },
         { event_instance:{ id:102, start:"2026-11-11T18:00:00-05:00", end:"2026-11-11T19:30:00-05:00", all_day:false } },
@@ -725,14 +1107,29 @@ test("GSU Localist monitoring preserves parent identity, campus facts, audience 
   try {
     const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false });
     assert.equal(run.status, "completed");
-    const candidate = db.prepare("SELECT id,source_event_id,organizer,verification_state,subjects_json,formats_json FROM calendar_candidates WHERE source_event_id='987654'").get();
+    const candidate = db.prepare("SELECT id,source_event_id,organizer,verification_state,access_status,access_notes,audiences_json,subjects_json,formats_json FROM calendar_candidates WHERE source_event_id='987654'").get();
     assert.ok(candidate);
     assert.equal(candidate.organizer, "Computer Science");
     assert.equal(candidate.verification_state, "verified");
+    assert.equal(candidate.access_status, "restricted");
+    assert.equal(candidate.access_notes, "GSU access only: Students, Faculty/Staff, Alumni. Not open to the general public.");
+    assert.deepEqual(JSON.parse(candidate.audiences_json), ["Students","Faculty/Staff","Alumni"]);
     assert.deepEqual(JSON.parse(candidate.subjects_json).sort(), ["ai","engineering","technology"].sort());
     assert.deepEqual(JSON.parse(candidate.formats_json), ["lecture-talk"]);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id=?").get(candidate.id).count, 1);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+    const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
+    assert.equal(approved.status, 200, await approved.clone().text());
+    const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events?affiliation=gsu&q=alumni"), env(db))).json();
+    assert.equal(publicPayload.events.length, 2);
+    assert.equal(publicPayload.events.every((event) => event.accessStatus === "restricted"), true);
+    assert.equal(publicPayload.events.every((event) => event.accessNotes === "GSU access only: Students, Faculty/Staff, Alumni. Not open to the general public."), true);
+    assert.equal(publicPayload.events.every((event) => JSON.stringify(event.audiences) === '["Students","Faculty/Staff","Alumni"]'), true);
+    assert.doesNotMatch(JSON.stringify(publicPayload), /verificationNotes|privateRationale|programmingIdeas/);
+    const feed = await handleCalendarFeed(request("/calendars/atlanta.ics"), env(db));
+    const ics = await feed.text();
+    assert.match(ics, /Access: GSU access only: Students\\, Faculty\/Staff\\, Alumni\. Not open to the general public\./);
+    assert.match(ics, /X-SIXWELL-ACCESS:restricted/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -750,7 +1147,7 @@ test("OpenAI discovery uses web_search structured output, stores citations, and 
       openAiBody = JSON.parse(init.body);
       return Response.json({
         output:[{ type:"web_search_call", action:{ sources:[{ url:"https://official.example/atlanta-ai-panel", title:"Official event page" }] } }, { type:"message", content:[{ type:"output_text", text:JSON.stringify({ events:[{
-          sourceUrl:"https://official.example/atlanta-ai-panel", ticketUrl:"", sourceEventId:"atlanta-ai-panel-2026", title:"Atlanta AI + Art Panel", organizer:"Official Organizer",
+          sourceUrl:"https://official.example/atlanta-ai-panel", ticketUrl:"", discoveryUrl:"", organizerUrl:"https://official.example/", venueUrl:"", sourceAuthority:"organizer_event", sourceResolutionNotes:"Confirmed on the organizer's event page.", sourceEventId:"atlanta-ai-panel-2026", title:"Atlanta AI + Art Panel", organizer:"Official Organizer",
           factualDescription:"A panel on AI and contemporary art.", dateKind:"timed", startsAt:"2026-10-20T18:30:00-04:00", endsAt:"2026-10-20T20:00:00-04:00", timezone:"America/New_York",
           venueName:"Downtown Atlanta", venueAddress:"Atlanta, GA", city:"Atlanta", region:"GA", subjects:["art","ai"], formats:["panel"], experimental:false,
           verificationState:"verified", verificationNotes:"Confirmed on official page.", confidence:.91,
@@ -775,6 +1172,8 @@ test("OpenAI discovery uses web_search structured output, stores citations, and 
     assert.match(openAiBody.instructions, /untrusted data/i);
     assert.match(openAiBody.instructions, /verification badge.*never establishes trust/i);
     assert.match(openAiBody.instructions, /private Studio intelligence/i);
+    assert.match(openAiBody.instructions, /only as discovery leads/i);
+    assert.ok(openAiBody.text.format.schema.properties.events.items.properties.sourceAuthority);
     assert.match(openAiBody.instructions, /Keep this intelligence out of factualDescription/i);
     assert.equal(run.candidates, 1);
     assert.equal(db.prepare("SELECT status FROM calendar_candidates WHERE title='Atlanta AI + Art Panel'").get().status, "candidate");
@@ -795,7 +1194,67 @@ test("OpenAI discovery uses web_search structured output, stores citations, and 
   }
 });
 
-test("Threads native discovery trusts only an exact official handle and keeps post evidence private", async () => {
+test("a registered discovery source is searched through to the original organizer page", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  const sourceResponse = await admin(db, "/sources", {
+    method:"POST",
+    body:{ name:"Arts Lead", url:"https://lead.example/calendar", sourceType:"discovery", trustLevel:"discovery", enabled:true },
+  });
+  const source = (await sourceResponse.json()).source;
+  const originalFetch = globalThis.fetch;
+  let resolutionRequest;
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).includes("api.openai.com")) {
+      resolutionRequest = JSON.parse(init.body);
+      return Response.json({
+        output:[
+          { type:"web_search_call", action:{ sources:[{ url:"https://gallery.example/exhibitions/atlanta-light", title:"Gallery event page" }] } },
+          { type:"message", content:[{ type:"output_text", text:JSON.stringify({ events:[{
+            sourceUrl:"https://gallery.example/exhibitions/atlanta-light", ticketUrl:"", discoveryUrl:"https://lead.example/events/atlanta-light",
+            organizerUrl:"https://gallery.example/", venueUrl:"https://gallery.example/", sourceAuthority:"organizer_event",
+            sourceResolutionNotes:"The gallery event page confirms the title, dates, and venue.", sourceEventId:"gallery-atlanta-light", title:"Atlanta Light",
+            relatedLinks:[], flyerUrl:"", organizer:"Gallery Example", factualDescription:"A contemporary light-art exhibition.", eventStructure:"exhibition",
+            accessStatus:"public", accessNotes:"", audiences:["Public"], dateKind:"date_range", startsAt:"2026-10-01", endsAt:"2026-10-31", timezone:"America/New_York",
+            venueName:"Gallery Example", venueAddress:"10 Light Way, Atlanta, GA", city:"Atlanta", region:"GA", subjects:["art"], formats:["exhibition"], experimental:false,
+            verificationState:"verified", verificationNotes:"Confirmed on the gallery event page.", confidence:.94,
+            privateRationale:"The exhibition matches the art profile.", attendanceUse:"Attend and research.", programmingIdeas:"Study the light installation.", potentialCollaborators:"Gallery Example.",
+            socialEvidence:[], occurrences:[],
+          }] }) }] },
+        ],
+        usage:{ input_tokens:90, output_tokens:70 },
+      });
+    }
+    return new Response(`<script type="application/ld+json">${JSON.stringify({
+      "@context":"https://schema.org", "@type":"Event", "@id":"lead-atlanta-light", name:"Atlanta Light",
+      description:"A contemporary light-art exhibition.", startDate:"2026-10-01", endDate:"2026-10-31",
+      url:"https://lead.example/events/atlanta-light", organizer:{ name:"Gallery Example" },
+      location:{ name:"Gallery Example", address:{ streetAddress:"10 Light Way", addressLocality:"Atlanta", addressRegion:"GA" } },
+    })}</script>`, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const run = await runCalendarScout(env(db, { OPENAI_API_KEY:"test-key" }), { runKind:"manual", includeWeb:false, sourceId:source.id });
+    assert.equal(run.candidates, 1);
+    assert.match(resolutionRequest.input, /secondary discovery lead/i);
+    assert.match(resolutionRequest.instructions, /organizer-authorized ticket page/i);
+    const candidate = db.prepare("SELECT source_url,discovery_url,organizer_url,venue_url,source_authority,status,verification_state FROM calendar_candidates WHERE source_id=?").get(source.id);
+    assert.deepEqual({ ...candidate }, {
+      source_url:"https://gallery.example/exhibitions/atlanta-light",
+      discovery_url:"https://lead.example/events/atlanta-light",
+      organizer_url:"https://gallery.example/",
+      venue_url:"https://gallery.example/",
+      source_authority:"organizer_event",
+      status:"candidate",
+      verification_state:"verified",
+    });
+    const discoveryLink = db.prepare("SELECT link_role,include_public,url FROM calendar_candidate_links WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_id=?)").get(source.id);
+    assert.deepEqual({ ...discoveryLink }, { link_role:"discovery", include_public:0, url:"https://lead.example/events/atlanta-light" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Threads native discovery retains exact-handle evidence but still requires an original website source", async () => {
   const db = database();
   await admin(db, "/social-sources", { method:"POST", body:{ platform:"threads", handle:"atlarts", name:"ATL Arts", profileUrl:"https://www.threads.net/@atlarts", trustLevel:"official", enabled:true } });
   await admin(db, "/connectors/threads_api", { method:"PATCH", body:{ enabled:true, perRunLimit:6 } });
@@ -837,16 +1296,16 @@ test("Threads native discovery trusts only an exact official handle and keeps po
     assert.equal(run.candidates, 2);
     assert.equal(extractionBody.tools, undefined);
     const official = db.prepare("SELECT id,status,verification_state,discovery_channel FROM calendar_candidates WHERE title='Atlanta Creative AI Lab'").get();
-    assert.deepEqual({ status:official.status, verification_state:official.verification_state, discovery_channel:official.discovery_channel }, { status:"candidate", verification_state:"verified", discovery_channel:"threads_api" });
+    assert.deepEqual({ status:official.status, verification_state:official.verification_state, discovery_channel:official.discovery_channel }, { status:"needs_verification", verification_state:"needs_verification", discovery_channel:"threads_api" });
     assert.deepEqual(
       { ...db.prepare("SELECT evidence_role,corroboration_state,author_is_verified FROM calendar_candidate_social_evidence WHERE candidate_id=?").get(official.id) },
       { evidence_role:"official", corroboration_state:"not_required", author_is_verified:0 },
     );
     const untrusted = db.prepare("SELECT id,status,verification_state FROM calendar_candidates WHERE title='Uncorroborated Experimental Showcase'").get();
     assert.deepEqual({ status:untrusted.status, verification_state:untrusted.verification_state }, { status:"needs_verification", verification_state:"needs_verification" });
-    assert.equal((await admin(db, `/candidates/${official.id}/approve`, { method:"POST", body:{} })).status, 200);
+    assert.equal((await admin(db, `/candidates/${official.id}/approve`, { method:"POST", body:{} })).status, 409);
     const publicJson = JSON.stringify(await (await handleCalendarPublicApi(request("/api/calendar/events"), runtime)).json());
-    assert.match(publicJson, /Atlanta Creative AI Lab/);
+    assert.doesNotMatch(publicJson, /Atlanta Creative AI Lab/);
     assert.doesNotMatch(publicJson, /captionExcerpt|socialEvidence|Atlanta Creative AI Lab, November 22 at 6 PM/);
   } finally {
     globalThis.fetch = originalFetch;
@@ -886,8 +1345,8 @@ test("Instagram professional-account discovery can retain one private flyer only
     const run = await runCalendarScout(runtime, { runKind:"manual", channels:["instagram_api"] });
     assert.equal(run.candidates, 1);
     const candidate = db.prepare("SELECT id,status,verification_state,flyer_media_id,flyer_source_url,flyer_public_approved FROM calendar_candidates WHERE title='Experimental AI Art Lecture'").get();
-    assert.equal(candidate.status, "candidate");
-    assert.equal(candidate.verification_state, "verified");
+    assert.equal(candidate.status, "needs_verification");
+    assert.equal(candidate.verification_state, "needs_verification");
     assert.ok(candidate.flyer_media_id);
     assert.equal(candidate.flyer_source_url, "https://cdn.example/official-flyer.jpg");
     assert.equal(candidate.flyer_public_approved, 0);
@@ -932,7 +1391,7 @@ test("TikTok web discovery is domain-filtered, ignores thumbnails, and remains a
     if (!String(url).includes("api.openai.com")) throw new Error(`Unexpected fetch: ${url}`);
     body = JSON.parse(init.body);
     return Response.json({ output:[{ type:"web_search_call", action:{ sources:[{ url:"https://www.tiktok.com/@atltech/video/123", title:"ATL Tech video" }] } }, { type:"message", content:[{ type:"output_text", text:JSON.stringify({ events:[{
-      sourceUrl:"https://official.example/atlanta-creative-tech-conference", ticketUrl:"", sourceEventId:"creative-tech-2026", title:"Atlanta Creative Tech Conference", relatedLinks:[], flyerUrl:"https://cdn.example/tiktok-thumbnail.jpg",
+      sourceUrl:"https://official.example/atlanta-creative-tech-conference", ticketUrl:"", discoveryUrl:"https://www.tiktok.com/@atltech/video/123", organizerUrl:"https://official.example/", venueUrl:"", sourceAuthority:"organizer_event", sourceResolutionNotes:"Confirmed on the organizer event page.", sourceEventId:"creative-tech-2026", title:"Atlanta Creative Tech Conference", relatedLinks:[], flyerUrl:"https://cdn.example/tiktok-thumbnail.jpg",
       organizer:"ATL Tech", factualDescription:"A conference about creative technology and AI.", dateKind:"timed", startsAt:"2026-12-02T09:00:00-05:00", endsAt:"2026-12-02T17:00:00-05:00", timezone:"America/New_York",
       venueName:"Atlanta Conference Center", venueAddress:"100 Tech Way, Atlanta, GA", city:"Atlanta", region:"GA", subjects:["technology","ai"], formats:["conference"], experimental:false,
       verificationState:"verified", verificationNotes:"Corroborated by official page.", confidence:.88, socialEvidence:[{
@@ -980,7 +1439,7 @@ test("related links and one flyer remain private until their individual publicat
 
   assert.equal((await handleCalendarAdminApi(request("/api/admin/calendar/candidates/cal_candidate_sound_vision/approve", { method:"POST", admin:true, body:{} }), runtime)).status, 200);
   let publicEvent = (await (await handleCalendarPublicApi(request("/api/calendar/events"), runtime)).json()).events.find((event) => event.title === "SOUND + VISION");
-  assert.deepEqual(publicEvent.relatedLinks, [{ label:"Artist roster", url:"https://official.example/artists" }]);
+  assert.deepEqual(publicEvent.relatedLinks, [{ label:"Artist roster", url:"https://official.example/artists", role:"supporting" }]);
   assert.equal(publicEvent.flyer, null);
   assert.equal((await handleConstructApi(request("/api/construct/media/calendar-test-flyer"), runtime)).status, 404);
   let singleIcs = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEvent.id)}.ics`), runtime)).text();
@@ -1051,9 +1510,14 @@ test("Studio verification links and the public expandable flyer stay inline with
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
   const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
   const publicCss = readFileSync(join(ROOT,"css","atlanta-calendar.css"),"utf8");
-  assert.match(studio,/Open official source/);
+  assert.match(studio,/Open original source/);
+  assert.match(studio,/Discovery lead URL \(private\)/);
+  assert.match(studio,/Unresolved - cannot publish/);
+  assert.match(studio,/Lead source: the scout must search past each listing/);
   assert.match(studio,/target="_blank" rel="noopener noreferrer"/);
   assert.match(studio,/data-related-link/);
+  assert.match(studio,/Source event ID \(private\)/);
+  assert.match(studio,/sourceEventId:occurrenceValue\("source-id"\)/);
   assert.match(studio,/data-upload-flyer/);
   assert.match(studio,/Private social evidence/);
   assert.match(studio,/Open registered profile/);
@@ -1061,12 +1525,17 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(studio,/Best use/);
   assert.match(studio,/Programming model worth studying/);
   assert.match(studio,/never appear on the public calendar or feeds/);
+  assert.match(studio,/Attendance access/);
+  assert.match(studio,/Public access note/);
+  assert.match(studio,/Restricted access is published on the event card, API, and calendar feeds/);
   assert.match(studio,/data-run-source/);
   assert.match(studio,/Run This Source/);
   assert.match(studio,/nextReview:true, excludeId:approvedId, reviewIndex:reviewIndex/);
   assert.match(studio,/Moving to the next review/);
   assert.doesNotMatch(studio,/state\.filter="published"/);
   assert.match(publicCalendar,/<details class="calendar-event-flyer">/);
+  assert.match(publicCalendar,/event\.organizerUrl/);
+  assert.match(publicCalendar,/event\.venueUrl/);
   assert.match(publicCalendar,/exhibition:"Exhibitions \/ Art Openings"/);
   assert.match(publicCalendar,/gsu:"GSU Events"/);
   assert.match(publicCalendar,/MODE_LABELS = \{ virtual:"Virtual" \}/);
@@ -1074,6 +1543,12 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(readFileSync(join(ROOT,"calendar","index.html"),"utf8"),/id="modeFilters"/);
   assert.match(publicCalendar,/anthropology:"Anthropology"/);
   assert.match(publicCalendar,/Show flyer/);
+  assert.match(publicCalendar,/calendar-event-access/);
+  assert.match(publicCalendar,/Access \/ /);
+  assert.match(publicCalendar,/function isOnViewExhibition\(event\)/);
+  assert.match(publicCalendar,/if \(isOnViewExhibition\(event\)\) return false/);
+  assert.doesNotMatch(publicCalendar,/allEvents\.find\(function \(event\) \{ return !isPast\(event\)/);
   assert.doesNotMatch(publicCalendar,/href="\/calendar\/events\//);
   assert.match(publicCss,/@media \(max-width:390px\)/);
+  assert.match(publicCss,/\.calendar-event-access/);
 });

@@ -18,6 +18,9 @@
   var affiliationRoot = document.getElementById("affiliationFilters");
   var modeRoot = document.getElementById("modeFilters");
   var resultCount = document.getElementById("resultCount");
+  var onViewSection = document.getElementById("on-view");
+  var onViewTitle = document.getElementById("on-view-title");
+  var onViewRoot = document.getElementById("onViewEvents");
   var upcomingRoot = document.getElementById("upcomingEvents");
   var pastRoot = document.getElementById("pastEvents");
   var grid = document.getElementById("calendarGrid");
@@ -47,11 +50,17 @@
     return parts ? parts.year + "-" + parts.month + "-" + parts.day : "";
   }
 
+  function isOnViewExhibition(event) {
+    var formats = Array.isArray(event.formats) ? event.formats : [];
+    var spansMultipleDates = dateKey(event.startsAt) && dateKey(event.startsAt) !== dateKey(event.endsAt || event.startsAt);
+    return event.eventStructure === "exhibition" || (formats.includes("exhibition") && spansMultipleDates);
+  }
+
   function eventDate(event) {
     if (event.dateKind === "all_day") return new Intl.DateTimeFormat("en-US", { weekday:"short", month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(new Date(event.startsAt + "T12:00:00Z"));
-    if (event.dateKind === "date_range") {
-      var start = new Date(event.startsAt + "T12:00:00Z");
-      var end = new Date((event.endsAt || event.startsAt) + "T12:00:00Z");
+    if (event.dateKind === "date_range" || isOnViewExhibition(event)) {
+      var start = new Date(dateKey(event.startsAt) + "T12:00:00Z");
+      var end = new Date(dateKey(event.endsAt || event.startsAt) + "T12:00:00Z");
       return new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(start) + " - " + new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(end);
     }
     var date = validDate(event.startsAt);
@@ -86,7 +95,7 @@
     if (affiliations.length && !affiliations.some(function (value) { return (event.affiliations || []).includes(value); })) return false;
     if (modes.includes("virtual") && !event.virtual) return false;
     if (query) {
-      var haystack = [event.title, event.description, event.organizer, event.venueName, event.venueAddress].concat(event.subjects, event.formats).join(" ").toLowerCase();
+      var haystack = [event.title, event.description, event.organizer, event.venueName, event.venueAddress, event.accessNotes].concat(event.audiences || [], event.subjects, event.formats).join(" ").toLowerCase();
       if (!haystack.includes(query)) return false;
     }
     return true;
@@ -100,12 +109,16 @@
     var relatedLinks = Array.isArray(event.relatedLinks) ? event.relatedLinks : [];
     var relatedOccurrences = Array.isArray(event.relatedOccurrences) ? event.relatedOccurrences : [];
     var flyer = event.flyer && event.flyer.url ? event.flyer : null;
+    var accessNote = event.accessStatus === "restricted" ? (event.accessNotes || "Attendance is restricted. Check the official details for eligibility.") : "";
+    var organizerFact = event.organizer ? (event.organizerUrl ? '<a href="' + escapeHtml(event.organizerUrl) + '" target="_blank" rel="noopener noreferrer">Organizer / ' + escapeHtml(event.organizer) + '</a>' : '<span>Organizer / ' + escapeHtml(event.organizer) + '</span>') : '';
+    var venueFact = location ? (event.venueUrl ? '<a href="' + escapeHtml(event.venueUrl) + '" target="_blank" rel="noopener noreferrer">Venue / ' + escapeHtml(location) + '</a>' : '<span>Venue / ' + escapeHtml(location) + '</span>') : '';
     return '<article class="calendar-event-card' + (event.status === "cancelled" ? ' is-cancelled' : '') + '" id="' + eventAnchor(event) + '" data-subject="' + escapeHtml(primarySubject) + '">' +
       '<p class="calendar-event-meta">' + escapeHtml(event.status === "cancelled" ? "Cancelled / " + eventDate(event) : eventDate(event)) + '</p>' +
-      (event.isOccurrence ? '<p class="calendar-event-series">Part of / ' + escapeHtml(event.parentTitle) + ' / ' + escapeHtml(OCCURRENCE_LABELS[event.occurrenceType] || "Related Program") + '</p>' : '') +
+      (event.isOccurrence ? '<p class="calendar-event-series">Part of / ' + (event.parentEventStructure === "exhibition" ? '<a href="#' + eventAnchor({id:event.seriesId}) + '">' + escapeHtml(event.parentTitle) + '</a>' : escapeHtml(event.parentTitle)) + ' / ' + escapeHtml(OCCURRENCE_LABELS[event.occurrenceType] || "Related Program") + '</p>' : '') +
       '<h3>' + escapeHtml(event.title) + '</h3>' +
+      (accessNote ? '<p class="calendar-event-access"><strong>Access / </strong>' + escapeHtml(accessNote) + '</p>' : '') +
       (event.description ? '<p class="calendar-event-description">' + escapeHtml(event.description) + '</p>' : '') +
-      '<div class="calendar-event-facts">' + (event.organizer ? '<span>Organizer / ' + escapeHtml(event.organizer) + '</span>' : '') + (location ? '<span>Venue / ' + escapeHtml(location) + '</span>' : '') + '<span>' + escapeHtml(sourceLabel) + '</span></div>' +
+      '<div class="calendar-event-facts">' + organizerFact + venueFact + '<span>' + escapeHtml(sourceLabel) + '</span></div>' +
       '<div class="calendar-tags">' + labels.map(function (label) { return '<span class="calendar-tag">' + escapeHtml(label) + '</span>'; }).join("") + '</div>' +
       (relatedOccurrences.length ? '<div class="calendar-related-schedule"><span>Related schedule</span>' + relatedOccurrences.map(function (occurrence) { return '<a href="#' + eventAnchor(occurrence) + '"><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small></a>'; }).join("") + '</div>' : '') +
       (relatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + relatedLinks.map(function (link) { return '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(link.label) + '</a>'; }).join("") + '</div>' : '') +
@@ -115,17 +128,25 @@
   }
 
   function renderLists() {
-    var upcoming = filtered.filter(function (event) { return !isPast(event); });
-    var past = filtered.filter(isPast).reverse();
-    resultCount.textContent = filtered.length + (filtered.length === 1 ? " event" : " events") + " shown";
+    var onView = filtered.filter(isOnViewExhibition);
+    var dated = filtered.filter(function (event) { return !isOnViewExhibition(event); });
+    var upcoming = dated.filter(function (event) { return !isPast(event); });
+    var past = dated.filter(isPast).reverse();
+    var monthName = new Intl.DateTimeFormat("en-US", { month:"long", year:"numeric" }).format(activeMonth);
+    onViewTitle.textContent = "On View in " + monthName;
+    onViewSection.hidden = !onView.length;
+    onViewRoot.innerHTML = onView.map(eventCard).join("");
+    resultCount.textContent = filtered.length + (filtered.length === 1 ? " event" : " events") + " shown in " + monthName;
     upcomingRoot.innerHTML = upcoming.length ? upcoming.map(eventCard).join("") : '<p class="calendar-empty">No upcoming approved events match these filters.</p>';
     pastRoot.innerHTML = past.length ? past.map(eventCard).join("") : '<p class="calendar-empty">No past events match these filters.</p>';
   }
 
   function dayEvents(key) {
     return filtered.filter(function (event) {
+      if (isOnViewExhibition(event)) return false;
       var start = dateKey(event.startsAt);
       var end = dateKey(event.endsAt || event.startsAt);
+      if (event.dateKind === "date_range") return key === start;
       return key >= start && key <= end;
     });
   }
@@ -161,7 +182,14 @@
   }
 
   function applyFilters() {
-    filtered = allEvents.filter(matches);
+    var monthStart = activeMonth.getFullYear() + "-" + String(activeMonth.getMonth() + 1).padStart(2, "0") + "-01";
+    var monthEndDate = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 0);
+    var monthEnd = monthEndDate.getFullYear() + "-" + String(monthEndDate.getMonth() + 1).padStart(2, "0") + "-" + String(monthEndDate.getDate()).padStart(2, "0");
+    filtered = allEvents.filter(matches).filter(function (event) {
+      var start = dateKey(event.startsAt);
+      var end = dateKey(event.endsAt || event.startsAt);
+      return start && start <= monthEnd && end >= monthStart;
+    });
     renderLists();
     renderMonth();
   }
@@ -180,16 +208,14 @@
     Array.from(document.querySelectorAll(".filter-chip input")).forEach(function (input) { input.checked = false; });
     applyFilters();
   });
-  document.getElementById("previousMonth").addEventListener("click", function () { activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() - 1, 1); renderMonth(); });
-  document.getElementById("nextMonth").addEventListener("click", function () { activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 1); renderMonth(); });
+  document.getElementById("previousMonth").addEventListener("click", function () { activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() - 1, 1); applyFilters(); });
+  document.getElementById("nextMonth").addEventListener("click", function () { activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 1); applyFilters(); });
   grid.addEventListener("click", function (event) { var button = event.target.closest("button[data-date]"); if (button) renderAgenda(button.dataset.date); });
 
   fetch("/api/calendar/events")
     .then(function (response) { if (!response.ok) throw new Error("Calendar request failed."); return response.json(); })
     .then(function (payload) {
       allEvents = Array.isArray(payload.events) ? payload.events.filter(function (event) { return !event.isSeriesParent; }) : [];
-      var upcoming = allEvents.find(function (event) { return !isPast(event); });
-      if (upcoming) { var parts = dateKey(upcoming.startsAt).split("-"); activeMonth = new Date(Number(parts[0]), Number(parts[1]) - 1, 1); }
       applyFilters();
       requestAnimationFrame(function () { document.documentElement.classList.add("is-ready"); });
     })

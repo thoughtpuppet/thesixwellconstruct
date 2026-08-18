@@ -49,14 +49,17 @@
         label:row.querySelector("[data-link-label]").value.trim(),
         url:row.querySelector("[data-link-url]").value.trim(),
         provenanceUrl:row.querySelector("[data-link-provenance]").value.trim(),
+        role:row.querySelector("[data-link-role]").value,
         includePublic:row.querySelector("[data-link-public]").checked
       };
     }).filter(function (link) { return link.url; });
     var occurrences = Array.from(editorRoot.querySelectorAll("[data-occurrence]")).map(function (row, index) {
       function occurrenceValue(name) { var control=row.querySelector('[data-occurrence-'+name+']');return control?control.value.trim():""; }
       return {
-        id:row.dataset.occurrenceId||"", occurrenceType:occurrenceValue("type"), title:occurrenceValue("title"),
+        id:row.dataset.occurrenceId||"", sourceEventId:occurrenceValue("source-id"), occurrenceType:occurrenceValue("type"), title:occurrenceValue("title"),
         factualDescription:occurrenceValue("description"), dateKind:occurrenceValue("date-kind"),
+        accessStatus:occurrenceValue("access-status"), accessNotes:occurrenceValue("access-notes"),
+        audiences:occurrenceValue("audiences").split(",").map(function (item) { return item.trim(); }).filter(Boolean),
         startsAt:occurrenceValue("starts"), endsAt:occurrenceValue("ends"), timezone:occurrenceValue("timezone")||"America/New_York",
         venueName:occurrenceValue("venue"), venueAddress:occurrenceValue("address"), sourceUrl:occurrenceValue("source"),
         ticketUrl:occurrenceValue("ticket"), status:occurrenceValue("status"), verificationState:occurrenceValue("verification"),
@@ -65,7 +68,9 @@
     });
     return {
       sourceId:value("candidateSourceId"), sourceEventId:value("candidateSourceEventId"), sourceUrl:value("candidateSourceUrl"), ticketUrl:value("candidateTicketUrl"),
-      title:value("candidateTitle"), organizer:value("candidateOrganizer"), factualDescription:value("candidateDescription"), dateKind:value("candidateDateKind"),
+      discoveryUrl:value("candidateDiscoveryUrl"), organizerUrl:value("candidateOrganizerUrl"), venueUrl:value("candidateVenueUrl"), sourceAuthority:value("candidateSourceAuthority"), sourceResolutionNotes:value("candidateSourceResolutionNotes"),
+      title:value("candidateTitle"), organizer:value("candidateOrganizer"), factualDescription:value("candidateDescription"), eventStructure:value("candidateEventStructure"), dateKind:value("candidateDateKind"),
+      accessStatus:value("candidateAccessStatus"), accessNotes:value("candidateAccessNotes"), audiences:value("candidateAudiences").split(",").map(function (item) { return item.trim(); }).filter(Boolean),
       startsAt:value("candidateStartsAt"), endsAt:value("candidateEndsAt"), timezone:value("candidateTimezone") || "America/New_York", venueName:value("candidateVenueName"),
       venueAddress:value("candidateVenueAddress"), city:value("candidateCity") || "Atlanta", region:value("candidateRegion") || "GA", subjects:checked("subjects"), formats:checked("formats"),
       experimental:document.getElementById("candidateExperimental").checked, verificationState:value("candidateVerificationState"), verificationNotes:value("candidateVerificationNotes"),
@@ -74,7 +79,7 @@
       relatedLinks:relatedLinks, occurrences:occurrences, flyerMediaId:value("candidateFlyerMediaId"), flyerSourceUrl:value("candidateFlyerSourceUrl"), flyerProvenanceUrl:value("candidateFlyerProvenanceUrl"), flyerPublicApproved:Boolean(document.getElementById("candidateFlyerPublic") && document.getElementById("candidateFlyerPublic").checked), flyerAltText:value("candidateFlyerAltText")
     };
   }
-  function blankCandidate() { return { id:"", title:"", status:"needs_verification", verificationState:"needs_verification", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[], relatedLinks:[], occurrences:[], flyerPublicApproved:false }; }
+  function blankCandidate() { return { id:"", title:"", status:"needs_verification", verificationState:"needs_verification", sourceAuthority:"unresolved", accessStatus:"unknown", accessNotes:"Attendance eligibility has not been confirmed.", audiences:[], eventStructure:"single", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[], relatedLinks:[], occurrences:[], flyerPublicApproved:false }; }
 
   function occurrenceOptions(choices, selected) { return choices.map(function (choice) { return '<option value="'+escapeHtml(choice[0])+'"'+(choice[0]===selected?' selected':'')+'>'+escapeHtml(choice[1])+'</option>'; }).join(''); }
   function occurrenceRow(occurrence) {
@@ -84,6 +89,7 @@
       '<div class="field-grid">' +
       '<label class="field"><span>Program type</span><select data-occurrence-type>'+occurrenceOptions(OCCURRENCE_TYPES,occurrence.occurrenceType||"other")+'</select></label>' +
       '<label class="field"><span>Status</span><select data-occurrence-status>'+occurrenceOptions([["scheduled","Scheduled"],["tbd","Date TBD"],["cancelled","Cancelled"]],occurrence.status||"scheduled")+'</select></label>' +
+      '<label class="field is-wide"><span>Source event ID (private)</span><input data-occurrence-source-id value="'+escapeHtml(occurrence.sourceEventId||"")+'"></label>' +
       '<label class="field is-wide"><span>Public title</span><input data-occurrence-title value="'+escapeHtml(occurrence.title||"")+'"></label>' +
       '<label class="field"><span>Date type</span><select data-occurrence-date-kind>'+occurrenceOptions([["timed","Timed"],["all_day","All day"]],occurrence.dateKind||"timed")+'</select></label>' +
       '<label class="field"><span>Time zone</span><input data-occurrence-timezone value="'+escapeHtml(occurrence.timezone||"America/New_York")+'"></label>' +
@@ -92,6 +98,9 @@
       '<label class="field"><span>Venue override</span><input data-occurrence-venue value="'+escapeHtml(occurrence.venueName||"")+'"></label>' +
       '<label class="field"><span>Address override</span><input data-occurrence-address value="'+escapeHtml(occurrence.venueAddress||"")+'"></label>' +
       '<label class="field is-wide"><span>Factual description</span><textarea data-occurrence-description>'+escapeHtml(occurrence.factualDescription||"")+'</textarea></label>' +
+      '<label class="field"><span>Attendance access</span><select data-occurrence-access-status>'+occurrenceOptions([["public","Open to the public"],["restricted","Restricted audience"],["unknown","Needs access verification"]],occurrence.accessStatus||"unknown")+'</select></label>' +
+      '<label class="field"><span>Eligible audiences (comma-separated)</span><input data-occurrence-audiences value="'+escapeHtml((occurrence.audiences||[]).join(", "))+'"></label>' +
+      '<label class="field is-wide"><span>Public access note</span><textarea data-occurrence-access-notes>'+escapeHtml(occurrence.accessNotes||"")+'</textarea></label>' +
       '<label class="field is-wide"><span>Official occurrence URL</span><input type="url" data-occurrence-source value="'+escapeHtml(occurrence.sourceUrl||"")+'"></label>' +
       '<label class="field is-wide"><span>Ticket URL</span><input type="url" data-occurrence-ticket value="'+escapeHtml(occurrence.ticketUrl||"")+'"></label>' +
       '<label class="field"><span>Verification</span><select data-occurrence-verification>'+occurrenceOptions([["verified","Verified"],["unverified","Unverified"],["needs_verification","Needs verification"]],occurrence.verificationState||"needs_verification")+'</select></label>' +
@@ -110,6 +119,7 @@
       '<div class="field-grid">' +
       '<label class="field"><span>Label</span><input data-link-label value="' + escapeHtml(link.label || "") + '"></label>' +
       '<label class="field"><span>URL</span><input data-link-url type="url" value="' + escapeHtml(link.url || "") + '"></label>' +
+      '<label class="field"><span>Role</span><select data-link-role>' + occurrenceOptions([["organizer","Organizer"],["venue","Venue"],["ticket","Tickets"],["supporting","Supporting"],["discovery","Discovery lead"]],link.role||"supporting") + '</select></label>' +
       '<label class="field is-wide"><span>Provenance URL</span><input data-link-provenance type="url" value="' + escapeHtml(link.provenanceUrl || "") + '"></label>' +
       '</div><div class="related-link-actions"><label class="check-option"><input data-link-public type="checkbox"' + (link.includePublic ? ' checked' : '') + (instagramOnly ? ' disabled' : '') + '><span>' + (instagramOnly ? 'Private Instagram provenance' : 'Include publicly') + '</span></label>' +
       externalLink(link.url,"Open link") + externalLink(link.provenanceUrl,"Open provenance") + '<button type="button" data-remove-related-link>Remove</button></div></article>';
@@ -141,18 +151,22 @@
     }).join('') + '</div></div>';
   }
 
+  function accessReady(record) {
+    return record.accessStatus === "public" || (record.accessStatus === "restricted" && Boolean(record.accessNotes) && Array.isArray(record.audiences) && record.audiences.length > 0);
+  }
+
   function matchesStatus(candidate, status) {
     if (status === "review") return candidate.status === "candidate" || candidate.status === "needs_verification";
-    if (status === "ready") return candidate.status === "candidate" && candidate.verificationState === "verified" && !isInstagramUrl(candidate.sourceUrl);
+    if (status === "ready") return candidate.status === "candidate" && candidate.verificationState === "verified" && candidate.sourceAuthority !== "unresolved" && accessReady(candidate) && !isInstagramUrl(candidate.sourceUrl);
     return candidate.status === status;
   }
   function lifecycleLabel(candidate) {
-    if (candidate.status === "candidate" && candidate.verificationState === "verified" && !isInstagramUrl(candidate.sourceUrl)) return "ready to publish";
+    if (candidate.status === "candidate" && candidate.verificationState === "verified" && candidate.sourceAuthority !== "unresolved" && accessReady(candidate) && !isInstagramUrl(candidate.sourceUrl)) return "ready to publish";
     return candidate.status.replace(/_/g," ");
   }
   function recordLabel(candidate) {
     if (candidate.status === "published") return "Published event record";
-    if (candidate.status === "candidate" && candidate.verificationState === "verified" && !isInstagramUrl(candidate.sourceUrl)) return "Ready to publish";
+    if (candidate.status === "candidate" && candidate.verificationState === "verified" && candidate.sourceAuthority !== "unresolved" && accessReady(candidate) && !isInstagramUrl(candidate.sourceUrl)) return "Ready to publish";
     return "Candidate record";
   }
 
@@ -170,17 +184,25 @@
     var isNew = !candidate.id;
     var revisions = candidate.revisions || [];
     var instagramSource = isInstagramUrl(candidate.sourceUrl) || isInstagramUrl(candidate.ticketUrl);
-    var occurrencesReady = (candidate.occurrences||[]).every(function (occurrence) { return occurrence.status === "tbd" || (occurrence.verificationState === "verified" && occurrence.startsAt && !isInstagramUrl(occurrence.sourceUrl)); });
-    var canPublish = !isNew && candidate.verificationState === "verified" && !instagramSource && occurrencesReady && !["rejected","cancelled","duplicate"].includes(candidate.status) && (candidate.status !== "published" || candidate.pendingRevisionId);
+    var occurrencesReady = (candidate.occurrences||[]).every(function (occurrence) { return occurrence.status === "tbd" || (occurrence.verificationState === "verified" && accessReady(occurrence) && occurrence.startsAt && !isInstagramUrl(occurrence.sourceUrl)); });
+    var canPublish = !isNew && candidate.verificationState === "verified" && candidate.sourceAuthority !== "unresolved" && accessReady(candidate) && !instagramSource && occurrencesReady && !["rejected","cancelled","duplicate"].includes(candidate.status) && (candidate.status !== "published" || candidate.pendingRevisionId);
     var publishLabel = candidate.status === "published" ? "Approve + Update" : "Approve + Publish";
     editorRoot.innerHTML = '<div class="editor-head"><div><p class="eyebrow">' + (isNew ? 'Manual intake' : recordLabel(candidate)) + '</p><h2>' + escapeHtml(candidate.title || "New candidate") + '</h2></div><span class="status-badge">' + escapeHtml(lifecycleLabel(candidate)) + '</span></div>' +
       '<div class="editor-section"><h3>Public factual record</h3><div class="field-grid">' +
       '<label class="field"><span>Registry source</span><select id="candidateSourceId">' + sourceChoices(candidate.sourceId || "") + '</select></label>' +
-      field("candidateSourceEventId","Source event ID",candidate.sourceEventId) + linkedField("candidateSourceUrl","Official source URL",candidate.sourceUrl,"Open official source",{wide:true}) + linkedField("candidateTicketUrl","Ticket URL",candidate.ticketUrl,"Open ticket link",{wide:true}) +
+      field("candidateSourceEventId","Source event ID",candidate.sourceEventId) +
+      linkedField("candidateDiscoveryUrl","Discovery lead URL (private)",candidate.discoveryUrl,"Open discovery lead",{wide:true}) +
+      field("candidateSourceAuthority","Source authority",candidate.sourceAuthority||"unresolved",{type:"select",choices:[["unresolved","Unresolved - cannot publish"],["organizer_event","Organizer event page"],["venue_event","Venue event page"],["official_calendar","Official organization calendar"],["authorized_ticket_host","Authorized ticket host"]]}) +
+      linkedField("candidateSourceUrl","Original event source URL",candidate.sourceUrl,"Open original source",{wide:true}) + linkedField("candidateTicketUrl","Ticket URL",candidate.ticketUrl,"Open ticket link",{wide:true}) +
+      linkedField("candidateOrganizerUrl","Organizer website",candidate.organizerUrl,"Open organizer",{wide:true}) + linkedField("candidateVenueUrl","Venue website",candidate.venueUrl,"Open venue",{wide:true}) +
+      field("candidateSourceResolutionNotes","Source-resolution notes (private)",candidate.sourceResolutionNotes,{type:"textarea",wide:true}) +
+      (candidate.sourceAuthority === "unresolved" ? '<p class="source-reliability-warning">This is still a lead. Find an event-specific organizer or venue page, or an authorized ticket listing supported by the organizer or venue website, before publishing.</p>' : '') +
       (instagramSource ? '<p class="source-reliability-warning">Instagram is retained as private discovery evidence only. Search for an event-specific organizer, venue, or ticket-host page that confirms this event before publishing.</p>' : '') +
-      field("candidateTitle","Title",candidate.title,{wide:true}) + field("candidateOrganizer","Organizer",candidate.organizer) + field("candidateDateKind","Date type",candidate.dateKind,{type:"select",choices:[["timed","Timed"],["all_day","All day"],["date_range","Date range"]]}) +
+      field("candidateTitle","Title",candidate.title,{wide:true}) + field("candidateOrganizer","Organizer",candidate.organizer) + field("candidateEventStructure","Event structure",candidate.eventStructure||"single",{type:"select",choices:[["single","Single event"],["series","Series"],["exhibition","Exhibition / on view"]]}) + field("candidateDateKind","Date type",candidate.dateKind,{type:"select",choices:[["timed","Timed"],["all_day","All day"],["date_range","Date range"]]}) +
       field("candidateStartsAt","Starts (ISO or YYYY-MM-DD)",candidate.startsAt) + field("candidateEndsAt","Ends (ISO or YYYY-MM-DD)",candidate.endsAt) + field("candidateTimezone","Time zone",candidate.timezone) + field("candidateVenueName","Venue",candidate.venueName) +
       field("candidateVenueAddress","Venue address",candidate.venueAddress,{wide:true}) + field("candidateCity","City",candidate.city) + field("candidateRegion","State / region",candidate.region) + field("candidateDescription","Factual description",candidate.factualDescription,{type:"textarea",wide:true}) +
+      field("candidateAccessStatus","Attendance access",candidate.accessStatus||"unknown",{type:"select",choices:[["public","Open to the public"],["restricted","Restricted audience"],["unknown","Needs access verification"]]}) + field("candidateAudiences","Eligible audiences (comma-separated)",(candidate.audiences||[]).join(", ")) + field("candidateAccessNotes","Public access note",candidate.accessNotes,{type:"textarea",wide:true}) +
+      '<p class="section-guidance is-wide">Restricted access is published on the event card, API, and calendar feeds. Verification notes below remain private.</p>' +
       '</div><p class="field-label">Subjects</p>' + checkboxes("subjects",SUBJECTS,candidate.subjects) + '<p class="field-label">Formats</p>' + checkboxes("formats",FORMATS,candidate.formats) +
       '<label class="check-option"><input id="candidateExperimental" type="checkbox"' + (candidate.experimental ? ' checked' : '') + '><span>Experimental attribute</span></label></div>' +
       occurrenceSection(candidate) +
@@ -289,16 +311,23 @@
         field("sourceCadence-"+source.id,"Cadence hours",source.cadenceHours,{type:"number"}) +
         '<label class="field"><span>Enabled</span><select id="sourceEnabled-' + source.id + '"><option value="1"' + (source.enabled?' selected':'') + '>Enabled</option><option value="0"' + (!source.enabled?' selected':'') + '>Paused</option></select></label>' +
         '<label class="field"><span>Source type</span><select id="sourceType-' + source.id + '">' + [["official_html","Official HTML"],["calendar","Calendar"],["json","JSON"],["rss","RSS"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.sourceType===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
+        '<label class="field"><span>Adapter</span><select id="sourceAdapter-' + source.id + '">' + [["automatic","Automatic"],["wix","Wix"],["localist","Localist"],["out_of_hand","Out of Hand"],["json","JSON"],["icalendar","iCalendar"],["rss","RSS"]].map(function(option){return '<option value="'+option[0]+'"'+((source.adapterKey||"automatic")===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
+        '<label class="field"><span>Rendering</span><select id="sourceRenderMode-' + source.id + '"><option value="static"'+((source.renderMode||"static")==="static"?' selected':'')+'>Static / API first</option><option value="dynamic-fallback"'+(source.renderMode==="dynamic-fallback"?' selected':'')+'>Dynamic fallback</option></select></label>' +
+        field("sourceAdapterConfig-"+source.id,"Adapter configuration (JSON)",JSON.stringify(source.adapterConfig||{}),{wide:true}) +
         '<label class="field"><span>Trust</span><select id="sourceTrust-' + source.id + '">' + [["official","Official"],["trusted","Trusted"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.trustLevel===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
+        '<p class="section-guidance is-wide-mobile">' + (source.sourceType === "discovery" || source.trustLevel === "discovery" ? 'Lead source: the scout must search past each listing to an original organizer, venue, or authorized ticket page.' : 'Direct source: cite this organization only when its own event page confirms the facts.') + '</p>' +
         '<div class="source-actions"><button type="button" data-save-source>Save</button><button type="button" data-run-source>Run This Source</button></div>' +
         '<p class="source-meta is-wide-mobile">Last attempt: ' + escapeHtml(displayDate(source.lastAttemptAt)) + '<br>Last success: ' + escapeHtml(displayDate(source.lastSuccessAt)) + '<br>Acceptance: ' + (source.acceptanceRate === null ? 'No decisions yet' : Math.round(source.acceptanceRate*100)+'%') + (source.lastError ? '<br>Error: '+escapeHtml(source.lastError) : '') + '</p></article>';
     }).join("");
   }
 
   function sourcePayload(id) {
+    var adapterConfig={};
+    try { adapterConfig=JSON.parse(value("sourceAdapterConfig-"+id)||"{}"); } catch { throw new Error("Adapter configuration must be valid JSON."); }
     return {
       name:value("sourceName-"+id), url:value("sourceUrl-"+id), cadenceHours:Number(value("sourceCadence-"+id)),
       enabled:value("sourceEnabled-"+id)==="1", sourceType:value("sourceType-"+id), trustLevel:value("sourceTrust-"+id),
+      adapterKey:value("sourceAdapter-"+id), renderMode:value("sourceRenderMode-"+id), adapterConfig:adapterConfig,
     };
   }
 
@@ -346,7 +375,7 @@
   }
   async function loadRuns() {
     var payload = await api("/api/admin/calendar/runs"); state.runs = payload.runs || [];
-    document.getElementById("runList").innerHTML = state.runs.map(function (run) { return '<article class="run-card"><div><h3>' + escapeHtml(run.status) + '</h3><p class="run-meta">' + escapeHtml(displayDate(run.startedAt)) + '<br>' + escapeHtml(run.runKind) + ' / ' + escapeHtml(run.model || "direct sources only") + '<br>' + run.candidateCount + ' candidates / ' + run.duplicateCount + ' duplicates / ' + run.failureCount + ' failures</p></div><pre>' + escapeHtml(JSON.stringify({ sources:run.sourcesSearched, queries:run.queries, citations:run.citations, results:run.sourceResults, usage:run.openaiUsage, error:run.errorMessage }, null, 2)) + '</pre></article>'; }).join("") || '<p class="empty-state">No scout runs recorded.</p>';
+    document.getElementById("runList").innerHTML = state.runs.map(function (run) { return '<article class="run-card"><div><h3>' + escapeHtml(run.status) + '</h3><p class="run-meta">' + escapeHtml(displayDate(run.startedAt)) + '<br>' + escapeHtml(run.runKind) + ' / ' + escapeHtml(run.model || "direct sources only") + '<br>' + run.candidateCount + ' candidates / ' + run.duplicateCount + ' duplicates / ' + (run.warningCount||0) + ' warnings / ' + run.failureCount + ' failures</p></div><pre>' + escapeHtml(JSON.stringify({ sources:run.sourcesSearched, queries:run.queries, citations:run.citations, results:run.sourceResults, usage:run.openaiUsage, error:run.errorMessage }, null, 2)) + '</pre></article>'; }).join("") || '<p class="empty-state">No scout runs recorded.</p>';
   }
   async function connect() {
     token = tokenInput.value.trim(); if (!token) return;
@@ -362,7 +391,7 @@
   listRoot.addEventListener("click",function(event){var button=event.target.closest("[data-candidate-id]");if(button)selectCandidate(button.dataset.candidateId);});
   editorRoot.addEventListener("click",function(event){
     var actionButton=event.target.closest("button[data-action]");if(actionButton){editorAction(actionButton.dataset.action);return;}
-    if(event.target.closest("[data-add-occurrence]")){var occurrenceList=document.getElementById("candidateOccurrences");var occurrenceEmpty=occurrenceList.querySelector(".occurrences-empty");if(occurrenceEmpty)occurrenceEmpty.remove();occurrenceList.insertAdjacentHTML("beforeend",occurrenceRow({occurrenceType:"other",status:"scheduled",dateKind:"timed",timezone:value("candidateTimezone")||"America/New_York",verificationState:"needs_verification"}));return;}
+    if(event.target.closest("[data-add-occurrence]")){var occurrenceList=document.getElementById("candidateOccurrences");var occurrenceEmpty=occurrenceList.querySelector(".occurrences-empty");if(occurrenceEmpty)occurrenceEmpty.remove();occurrenceList.insertAdjacentHTML("beforeend",occurrenceRow({occurrenceType:"other",status:"scheduled",dateKind:"timed",timezone:value("candidateTimezone")||"America/New_York",accessStatus:value("candidateAccessStatus")||"unknown",accessNotes:value("candidateAccessNotes"),audiences:value("candidateAudiences").split(",").map(function(item){return item.trim();}).filter(Boolean),verificationState:"needs_verification"}));return;}
     var removeOccurrence=event.target.closest("[data-remove-occurrence]");if(removeOccurrence){removeOccurrence.closest("[data-occurrence]").remove();var occurrences=document.getElementById("candidateOccurrences");if(!occurrences.querySelector("[data-occurrence]"))occurrences.innerHTML='<p class="occurrences-empty">No related schedule items.</p>';return;}
     if(event.target.closest("[data-add-related-link]")){var list=document.getElementById("candidateRelatedLinks");var empty=list.querySelector(".related-links-empty");if(empty)empty.remove();list.insertAdjacentHTML("beforeend",relatedLinkRow({ provenanceUrl:value("candidateSourceUrl") }));return;}
     var removeLink=event.target.closest("[data-remove-related-link]");if(removeLink){removeLink.closest("[data-related-link]").remove();var related=document.getElementById("candidateRelatedLinks");if(!related.querySelector("[data-related-link]"))related.innerHTML='<p class="related-links-empty">No related links captured.</p>';return;}
@@ -382,16 +411,16 @@
       if(button.matches("[data-save-source]")){toast("Source saved.");await refreshSources();return;}
       toast("Running only this source.");
       var result=await api("/api/admin/calendar/sources/"+encodeURIComponent(id)+"/run",{method:"POST",body:"{}"});
-      toast("Source finished: "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+result.failures+" failures.");
+      toast("Source finished: "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+(result.warnings||0)+" warnings, "+result.failures+" failures.");
       await Promise.all([refreshCandidates(),refreshSources(),loadRuns()]);
     }catch(error){toast(error.message);}finally{button.disabled=false;}
   });
-  document.getElementById("addSource").addEventListener("click",async function(){var url=window.prompt("Official source URL");if(!url)return;var name=window.prompt("Source name")||new URL(url).hostname;try{var payload=await api("/api/admin/calendar/sources",{method:"POST",body:JSON.stringify({name:name,url:url})});state.sources.push(payload.source);renderSources();var card=document.querySelector('[data-source-id="'+payload.source.id+'"]');if(card)card.scrollIntoView({behavior:"smooth",block:"center"});toast("Source added. Use Run This Source when ready.");}catch(error){toast(error.message);}});
+  document.getElementById("addSource").addEventListener("click",async function(){var url=window.prompt("Scoutable source URL");if(!url)return;var name=window.prompt("Source name")||new URL(url).hostname;var kind=(window.prompt("Source kind: direct or discovery","discovery")||"discovery").trim().toLowerCase();var discovery=kind!=="direct";try{var payload=await api("/api/admin/calendar/sources",{method:"POST",body:JSON.stringify({name:name,url:url,sourceType:discovery?"discovery":"official_html",trustLevel:discovery?"discovery":"official"})});state.sources.push(payload.source);renderSources();var card=document.querySelector('[data-source-id="'+payload.source.id+'"]');if(card)card.scrollIntoView({behavior:"smooth",block:"center"});toast(discovery?"Lead source added. Its events must resolve to original sources.":"Direct source added. Use Run This Source when ready.");}catch(error){toast(error.message);}});
   document.getElementById("socialSourceList").addEventListener("click",async function(event){var button=event.target.closest("[data-save-social-source]");if(!button)return;var card=button.closest("[data-social-source-id]");var id=card.dataset.socialSourceId;try{var payload=await api("/api/admin/calendar/social-sources/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({name:value("socialName-"+id),platform:value("socialPlatform-"+id),handle:value("socialHandle-"+id),profileUrl:value("socialProfileUrl-"+id),trustLevel:value("socialTrust-"+id),enabled:value("socialEnabled-"+id)==="1",cadenceHours:Number(value("socialCadence-"+id))})});var index=state.socialSources.findIndex(function(item){return item.id===id;});if(index>=0)state.socialSources[index]=payload.socialSource;renderSocialSources();toast("Social account saved.");}catch(error){toast(error.message);}});
   document.getElementById("addSocialSource").addEventListener("click",async function(){var platform=(window.prompt("Platform: threads, instagram, or tiktok")||"").trim().toLowerCase();if(!platform)return;var handle=(window.prompt("Public handle without @")||"").trim();if(!handle)return;var profileUrl=window.prompt("Public profile URL");if(!profileUrl)return;var trust=(window.prompt("Trust: official, trusted, or discovery","trusted")||"trusted").trim().toLowerCase();try{var payload=await api("/api/admin/calendar/social-sources",{method:"POST",body:JSON.stringify({platform:platform,handle:handle,profileUrl:profileUrl,trustLevel:trust,enabled:false})});state.socialSources.push(payload.socialSource);renderSocialSources();toast("Social account added in a paused state.");}catch(error){toast(error.message);}});
-  document.getElementById("connectorList").addEventListener("click",async function(event){var card=event.target.closest("[data-connector-id]");if(!card)return;var id=card.dataset.connectorId;if(event.target.closest("[data-save-connector]")){try{var payload=await api("/api/admin/calendar/connectors/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({enabled:value("connectorEnabled-"+id)==="1",cadenceHours:Number(value("connectorCadence-"+id)),perRunLimit:Number(value("connectorLimit-"+id))})});var index=state.connectors.findIndex(function(item){return item.id===id;});if(index>=0)state.connectors[index]=payload.connector;renderConnectors();toast("Connector saved.");}catch(error){toast(error.message);}return;}if(event.target.closest("[data-run-connector]")){var button=event.target.closest("[data-run-connector]");button.disabled=true;toast(connectorLabel(id)+" started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:JSON.stringify({channels:[id]})});toast(connectorLabel(id)+": "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{button.disabled=false;}}});
+  document.getElementById("connectorList").addEventListener("click",async function(event){var card=event.target.closest("[data-connector-id]");if(!card)return;var id=card.dataset.connectorId;if(event.target.closest("[data-save-connector]")){try{var payload=await api("/api/admin/calendar/connectors/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({enabled:value("connectorEnabled-"+id)==="1",cadenceHours:Number(value("connectorCadence-"+id)),perRunLimit:Number(value("connectorLimit-"+id))})});var index=state.connectors.findIndex(function(item){return item.id===id;});if(index>=0)state.connectors[index]=payload.connector;renderConnectors();toast("Connector saved.");}catch(error){toast(error.message);}return;}if(event.target.closest("[data-run-connector]")){var button=event.target.closest("[data-run-connector]");button.disabled=true;toast(connectorLabel(id)+" started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:JSON.stringify({channels:[id]})});toast(connectorLabel(id)+": "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+(result.warnings||0)+" warnings, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{button.disabled=false;}}});
   document.getElementById("profileForm").addEventListener("submit",async function(event){event.preventDefault();try{var payload=await api("/api/admin/calendar/profile",{method:"PATCH",body:JSON.stringify({name:value("profileName"),model:value("profileModel"),weightedSubjects:JSON.parse(value("profileSubjects")),weightedFormats:JSON.parse(value("profileFormats")),positiveConcepts:parseComma(value("profilePositive")),negativeTerms:parseComma(value("profileNegative")),geographicRules:JSON.parse(value("profileGeography")),socialSettings:JSON.parse(value("profileSocialSettings")),dateHorizonDays:Number(value("profileHorizon")),relevanceThreshold:Number(value("profileThreshold")),duplicateSensitivity:Number(value("profileDuplicate")),perRunLimit:Number(value("profileLimit")),sourceCadenceHours:Number(value("profileSourceCadence")),webCadenceHours:Number(value("profileWebCadence"))})});state.profile=payload.profile;renderProfile();toast("Scout profile saved.");}catch(error){toast(error.message);}});
-  document.getElementById("runScout").addEventListener("click",async function(){this.disabled=true;toast("Enabled scout lanes started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:"{}"});toast("Scout finished: "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{this.disabled=false;}});
+  document.getElementById("runScout").addEventListener("click",async function(){this.disabled=true;toast("Enabled scout lanes started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:"{}"});toast("Scout finished: "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+(result.warnings||0)+" warnings, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{this.disabled=false;}});
   document.getElementById("refreshRuns").addEventListener("click",loadRuns);
   document.getElementById("suggestionList").addEventListener("click",async function(event){var button=event.target.closest("[data-suggestion-action]");if(!button)return;try{await api("/api/admin/calendar/suggestions/"+encodeURIComponent(button.dataset.id)+"/"+button.dataset.suggestionAction,{method:"POST",body:"{}"});await loadSuggestions();var profile=await api("/api/admin/calendar/profile");state.profile=profile.profile;renderProfile();toast("Suggestion "+button.dataset.suggestionAction+"ed.");}catch(error){toast(error.message);}});
   if (token) connect();

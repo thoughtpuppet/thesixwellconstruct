@@ -45,10 +45,10 @@
 
     <section class="studio-view" data-panel="sources" hidden>
       <header class="view-header"><div><p class="eyebrow">Approved inputs</p><h2>Source Registry</h2></div><button id="addSource" type="button">Add Source</button></header>
-      <p class="view-note">Official websites and calendars are checked directly. Acceptance rates and recurring failures make weak sources visible.</p>
+      <p class="view-note">Direct sources may confirm their own events. Discovery sources only supply leads; the Scout must resolve each lead to an original organizer, venue, official calendar, or authorized ticket page before publication. Acceptance rates and recurring failures make weak sources visible.</p>
       <div class="source-list" id="sourceList"></div>
       <header class="subview-header"><div><p class="eyebrow">Platform monitoring</p><h3>Social Accounts</h3></div><button id="addSocialSource" type="button">Add Social Account</button></header>
-      <p class="view-note">Only an exact registered handle marked Official receives official-source trust. Verification badges are informational.</p>
+      <p class="view-note">Exact registered handles preserve trustworthy discovery provenance, but social posts still require an original website or authorized ticket source. Verification badges are informational.</p>
       <div class="social-source-list" id="socialSourceList"></div>
     </section>
 
@@ -66,6 +66,6 @@
     </section>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/studio/calendar/calendar.js?v=20260818-source-run"></script>
+  <script src="/studio/calendar/calendar.js?v=20260818-source-authority"></script>
 </body>
 </html>
