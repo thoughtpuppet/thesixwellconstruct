@@ -2612,6 +2612,11 @@ async function publicMediaApi(request,env,mediaId){
           WHERE spm.media_id=m.id
             AND spc.publication_state='published' AND ce.visibility='public'
         )
+        OR EXISTS(
+          SELECT 1 FROM calendar_entries calendar_entry
+          WHERE calendar_entry.flyer_media_id=m.id
+            AND calendar_entry.status IN ('published','cancelled')
+        )
       )`).bind(mediaId).first();
   if(!row)return failure("Not found.",404);
   return servePublicMedia(row,request,env);

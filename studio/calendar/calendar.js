@@ -3,9 +3,9 @@
   var TOKEN_KEY = "swc_submissions_admin_token";
   var SUBJECTS = [["art","Art"],["film","Film"],["poetry-music","Poetry / Music"],["technology","Technology"],["ai","AI"],["creative-technology","Creative Technology"]];
   var FORMATS = [["exhibition","Exhibition"],["screening","Screening"],["performance","Performance"],["experimental-event","Experimental Event"],["lecture-talk","Lecture / Talk"],["panel","Panel"],["workshop","Workshop"],["conference","Conference"]];
-  var STATUSES = [["","All"],["candidate","Candidates"],["published","Published"],["needs_verification","Needs Verification"],["rejected","Rejected"],["cancelled","Cancelled"],["duplicate","Duplicates"]];
+  var STATUSES = [["review","Review Queue"],["ready","Ready to Publish"],["published","Published"],["needs_verification","Needs Verification"],["rejected","Rejected"],["cancelled","Cancelled"],["duplicate","Duplicates"]];
   var token = localStorage.getItem(TOKEN_KEY) || "";
-  var state = { candidates:[], sources:[], profile:null, suggestions:[], runs:[], filter:"", selectedId:"", draftNew:false, broadDiscoveryEnabled:false };
+  var state = { candidates:[], sources:[], profile:null, suggestions:[], runs:[], filter:"review", selectedId:"", draftNew:false, broadDiscoveryEnabled:false, activeCandidate:null, flyerPreviewUrl:"" };
   var tokenInput = document.getElementById("tokenInput");
   var authPanel = document.getElementById("authPanel");
   var app = document.getElementById("studioApp");
@@ -32,8 +32,24 @@
     var control = options.type === "textarea" ? '<textarea id="' + id + '">' + escapeHtml(value || "") + '</textarea>' : options.type === "select" ? '<select id="' + id + '">' + options.choices.map(function (choice) { return '<option value="' + escapeHtml(choice[0]) + '"' + (choice[0] === value ? ' selected' : '') + '>' + escapeHtml(choice[1]) + '</option>'; }).join("") + '</select>' : '<input id="' + id + '" type="' + (options.type || "text") + '" value="' + escapeHtml(value || "") + '"' + (options.step ? ' step="' + options.step + '"' : '') + '>';
     return '<label class="field' + (options.wide ? ' is-wide' : '') + '"><span>' + escapeHtml(label) + '</span>' + control + '</label>';
   }
+  function externalLink(url, label, className) {
+    return url ? '<a class="' + escapeHtml(className || "verify-link") + '" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(label) + '</a>' : '';
+  }
+  function linkedField(id, label, currentValue, linkLabel, options) {
+    options = options || {};
+    return '<div class="linked-field' + (options.wide ? ' is-wide' : '') + '">' + field(id,label,currentValue,{type:options.type||"url"}) + externalLink(currentValue,linkLabel) + '</div>';
+  }
   function sourceChoices(selected) { return [["","No registry source"]].concat(state.sources.map(function (source) { return [source.id, source.name]; })).map(function (choice) { return '<option value="' + escapeHtml(choice[0]) + '"' + (choice[0] === selected ? ' selected' : '') + '>' + escapeHtml(choice[1]) + '</option>'; }).join(""); }
   function candidatePayload() {
+    var relatedLinks = Array.from(editorRoot.querySelectorAll("[data-related-link]")).map(function (row) {
+      return {
+        id:row.dataset.linkId || "",
+        label:row.querySelector("[data-link-label]").value.trim(),
+        url:row.querySelector("[data-link-url]").value.trim(),
+        provenanceUrl:row.querySelector("[data-link-provenance]").value.trim(),
+        includePublic:row.querySelector("[data-link-public]").checked
+      };
+    }).filter(function (link) { return link.url; });
     return {
       sourceId:value("candidateSourceId"), sourceEventId:value("candidateSourceEventId"), sourceUrl:value("candidateSourceUrl"), ticketUrl:value("candidateTicketUrl"),
       title:value("candidateTitle"), organizer:value("candidateOrganizer"), factualDescription:value("candidateDescription"), dateKind:value("candidateDateKind"),
@@ -41,37 +57,131 @@
       venueAddress:value("candidateVenueAddress"), city:value("candidateCity") || "Atlanta", region:value("candidateRegion") || "GA", subjects:checked("subjects"), formats:checked("formats"),
       experimental:document.getElementById("candidateExperimental").checked, verificationState:value("candidateVerificationState"), verificationNotes:value("candidateVerificationNotes"),
       confidence:value("candidateConfidence") === "" ? null : Number(value("candidateConfidence")), privateRationale:value("candidatePrivateRationale"), attendanceUse:value("candidateAttendanceUse"),
-      programmingIdeas:value("candidateProgrammingIdeas"), potentialCollaborators:value("candidateCollaborators"), internalNotes:value("candidateInternalNotes"), rejectionReason:value("candidateRejectionReason"), duplicateOf:value("candidateDuplicateOf")
+      programmingIdeas:value("candidateProgrammingIdeas"), potentialCollaborators:value("candidateCollaborators"), internalNotes:value("candidateInternalNotes"), rejectionReason:value("candidateRejectionReason"), duplicateOf:value("candidateDuplicateOf"),
+      relatedLinks:relatedLinks, flyerMediaId:value("candidateFlyerMediaId"), flyerSourceUrl:value("candidateFlyerSourceUrl"), flyerProvenanceUrl:value("candidateFlyerProvenanceUrl"), flyerPublicApproved:Boolean(document.getElementById("candidateFlyerPublic") && document.getElementById("candidateFlyerPublic").checked), flyerAltText:value("candidateFlyerAltText")
     };
   }
-  function blankCandidate() { return { id:"", title:"", status:"needs_verification", verificationState:"needs_verification", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[] }; }
+  function blankCandidate() { return { id:"", title:"", status:"needs_verification", verificationState:"needs_verification", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[], relatedLinks:[], flyerPublicApproved:false }; }
+
+  function relatedLinkRow(link) {
+    link = link || {};
+    return '<article class="related-link-row" data-related-link data-link-id="' + escapeHtml(link.id || "") + '">' +
+      '<div class="field-grid">' +
+      '<label class="field"><span>Label</span><input data-link-label value="' + escapeHtml(link.label || "") + '"></label>' +
+      '<label class="field"><span>URL</span><input data-link-url type="url" value="' + escapeHtml(link.url || "") + '"></label>' +
+      '<label class="field is-wide"><span>Provenance URL</span><input data-link-provenance type="url" value="' + escapeHtml(link.provenanceUrl || "") + '"></label>' +
+      '</div><div class="related-link-actions"><label class="check-option"><input data-link-public type="checkbox"' + (link.includePublic ? ' checked' : '') + '><span>Include publicly</span></label>' +
+      externalLink(link.url,"Open link") + externalLink(link.provenanceUrl,"Open provenance") + '<button type="button" data-remove-related-link>Remove</button></div></article>';
+  }
+
+  function flyerSection(candidate, isNew) {
+    var flyer = candidate.flyer;
+    return '<div class="editor-section"><h3>Optional flyer</h3><p class="section-guidance">One useful flyer may be proposed or uploaded. It remains private unless you explicitly include it.</p>' +
+      '<input id="candidateFlyerMediaId" type="hidden" value="' + escapeHtml(candidate.flyerMediaId || "") + '">' +
+      '<input id="candidateFlyerSourceUrl" type="hidden" value="' + escapeHtml(candidate.flyerSourceUrl || "") + '">' +
+      '<input id="candidateFlyerProvenanceUrl" type="hidden" value="' + escapeHtml(candidate.flyerProvenanceUrl || "") + '">' +
+      (flyer ? '<div class="flyer-review"><div class="flyer-preview"><img data-flyer-preview alt=""></div><div class="flyer-controls">' +
+        field("candidateFlyerAltText","Public image description",flyer.altText || candidate.flyerAltText,{type:"textarea"}) +
+        '<label class="check-option"><input id="candidateFlyerPublic" type="checkbox"' + (candidate.flyerPublicApproved ? ' checked' : '') + '><span>Include flyer publicly</span></label>' +
+        (candidate.flyerSourceUrl ? externalLink(candidate.flyerSourceUrl,"Open original flyer") : '') +
+        (candidate.flyerProvenanceUrl ? externalLink(candidate.flyerProvenanceUrl,"Open flyer provenance") : '') +
+        '<div class="flyer-buttons"><button type="button" data-upload-flyer>Replace flyer</button><button type="button" data-remove-flyer>Remove flyer</button></div></div></div>' :
+        '<div class="flyer-empty"><p>No flyer attached.</p><input id="candidateFlyerAltText" type="hidden" value=""><input id="candidateFlyerPublic" type="checkbox" hidden><button type="button" data-upload-flyer' + (isNew ? ' disabled' : '') + '>Upload flyer</button>' + (isNew ? '<span>Save the candidate before uploading a flyer.</span>' : '') + '</div>') +
+      '<input id="candidateFlyerFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></div>';
+  }
+
+  function matchesStatus(candidate, status) {
+    if (status === "review") return candidate.status === "candidate" || candidate.status === "needs_verification";
+    if (status === "ready") return candidate.status === "candidate" && candidate.verificationState === "verified";
+    return candidate.status === status;
+  }
+  function lifecycleLabel(candidate) {
+    if (candidate.status === "candidate" && candidate.verificationState === "verified") return "ready to publish";
+    return candidate.status.replace(/_/g," ");
+  }
+  function recordLabel(candidate) {
+    if (candidate.status === "published") return "Published event record";
+    if (candidate.status === "candidate" && candidate.verificationState === "verified") return "Ready to publish";
+    return "Candidate record";
+  }
 
   function renderStatusFilters() {
-    document.getElementById("statusFilters").innerHTML = STATUSES.map(function (item) { var count = item[0] ? state.candidates.filter(function (candidate) { return candidate.status === item[0]; }).length : state.candidates.length; return '<button type="button" data-status="' + item[0] + '" class="' + (state.filter === item[0] ? 'is-active' : '') + '">' + escapeHtml(item[1]) + ' / ' + count + '</button>'; }).join("");
+    document.getElementById("statusFilters").innerHTML = STATUSES.map(function (item) { var count = state.candidates.filter(function (candidate) { return matchesStatus(candidate,item[0]); }).length; return '<button type="button" data-status="' + item[0] + '" class="' + (state.filter === item[0] ? 'is-active' : '') + '">' + escapeHtml(item[1]) + ' / ' + count + '</button>'; }).join("");
   }
   function renderCandidateList() {
-    var candidates = state.candidates.filter(function (candidate) { return !state.filter || candidate.status === state.filter; });
-    listRoot.innerHTML = candidates.length ? candidates.map(function (candidate) { return '<button class="candidate-card' + (candidate.id === state.selectedId ? ' is-active' : '') + '" type="button" data-candidate-id="' + escapeHtml(candidate.id) + '"><span class="status">' + escapeHtml(candidate.status.replace(/_/g," ")) + ' / ' + escapeHtml(candidate.verificationState.replace(/_/g," ")) + '</span><strong>' + escapeHtml(candidate.title) + '</strong><span>' + escapeHtml(displayDate(candidate.startsAt)) + '</span><span>' + escapeHtml(candidate.venueName || candidate.organizer || "Venue not confirmed") + '</span></button>'; }).join("") : '<p class="empty-state">No candidates in this view.</p>';
+    var candidates = state.candidates.filter(function (candidate) { return matchesStatus(candidate,state.filter); });
+    listRoot.innerHTML = candidates.length ? candidates.map(function (candidate) { return '<article class="candidate-card' + (candidate.id === state.selectedId ? ' is-active' : '') + '"><button class="candidate-card-select" type="button" data-candidate-id="' + escapeHtml(candidate.id) + '"><span class="status">' + escapeHtml(lifecycleLabel(candidate)) + '</span><strong>' + escapeHtml(candidate.title) + '</strong><span>' + escapeHtml(displayDate(candidate.startsAt)) + '</span><span>' + escapeHtml(candidate.venueName || candidate.organizer || "Venue not confirmed") + '</span></button>' + externalLink(candidate.sourceUrl,"Open source","candidate-source-link") + '</article>'; }).join("") : '<p class="empty-state">No event records in this view.</p>';
   }
   function renderEditor(candidate) {
+    if (state.flyerPreviewUrl) { URL.revokeObjectURL(state.flyerPreviewUrl); state.flyerPreviewUrl = ""; }
+    state.activeCandidate = candidate;
     if (!candidate) { editorRoot.innerHTML = '<p class="empty-state">Select a candidate or start a manual intake.</p>'; return; }
     var isNew = !candidate.id;
     var revisions = candidate.revisions || [];
-    editorRoot.innerHTML = '<div class="editor-head"><div><p class="eyebrow">' + (isNew ? 'Manual intake' : 'Candidate record') + '</p><h2>' + escapeHtml(candidate.title || "New candidate") + '</h2></div><span class="status-badge">' + escapeHtml(candidate.status.replace(/_/g," ")) + '</span></div>' +
+    var canPublish = !isNew && candidate.verificationState === "verified" && !["rejected","cancelled","duplicate"].includes(candidate.status) && (candidate.status !== "published" || candidate.pendingRevisionId);
+    var publishLabel = candidate.status === "published" ? "Approve + Update" : "Approve + Publish";
+    editorRoot.innerHTML = '<div class="editor-head"><div><p class="eyebrow">' + (isNew ? 'Manual intake' : recordLabel(candidate)) + '</p><h2>' + escapeHtml(candidate.title || "New candidate") + '</h2></div><span class="status-badge">' + escapeHtml(lifecycleLabel(candidate)) + '</span></div>' +
       '<div class="editor-section"><h3>Public factual record</h3><div class="field-grid">' +
       '<label class="field"><span>Registry source</span><select id="candidateSourceId">' + sourceChoices(candidate.sourceId || "") + '</select></label>' +
-      field("candidateSourceEventId","Source event ID",candidate.sourceEventId) + field("candidateSourceUrl","Official source URL",candidate.sourceUrl,{type:"url",wide:true}) + field("candidateTicketUrl","Ticket URL",candidate.ticketUrl,{type:"url",wide:true}) +
+      field("candidateSourceEventId","Source event ID",candidate.sourceEventId) + linkedField("candidateSourceUrl","Official source URL",candidate.sourceUrl,"Open official source",{wide:true}) + linkedField("candidateTicketUrl","Ticket URL",candidate.ticketUrl,"Open ticket link",{wide:true}) +
       field("candidateTitle","Title",candidate.title,{wide:true}) + field("candidateOrganizer","Organizer",candidate.organizer) + field("candidateDateKind","Date type",candidate.dateKind,{type:"select",choices:[["timed","Timed"],["all_day","All day"],["date_range","Date range"]]}) +
       field("candidateStartsAt","Starts (ISO or YYYY-MM-DD)",candidate.startsAt) + field("candidateEndsAt","Ends (ISO or YYYY-MM-DD)",candidate.endsAt) + field("candidateTimezone","Time zone",candidate.timezone) + field("candidateVenueName","Venue",candidate.venueName) +
       field("candidateVenueAddress","Venue address",candidate.venueAddress,{wide:true}) + field("candidateCity","City",candidate.city) + field("candidateRegion","State / region",candidate.region) + field("candidateDescription","Factual description",candidate.factualDescription,{type:"textarea",wide:true}) +
       '</div><p class="field-label">Subjects</p>' + checkboxes("subjects",SUBJECTS,candidate.subjects) + '<p class="field-label">Formats</p>' + checkboxes("formats",FORMATS,candidate.formats) +
       '<label class="check-option"><input id="candidateExperimental" type="checkbox"' + (candidate.experimental ? ' checked' : '') + '><span>Experimental attribute</span></label></div>' +
+      '<div class="editor-section"><div class="section-title-row"><h3>Related links</h3><button type="button" data-add-related-link>Add link</button></div><p class="section-guidance">Links remain private unless Include publicly is checked and the event is approved.</p><div class="related-link-list" id="candidateRelatedLinks">' + ((candidate.relatedLinks || []).map(relatedLinkRow).join("") || '<p class="related-links-empty">No related links captured.</p>') + '</div></div>' +
+      flyerSection(candidate,isNew) +
       '<div class="editor-section"><h3>Verification + provenance</h3><div class="field-grid">' +
       field("candidateVerificationState","Verification",candidate.verificationState,{type:"select",choices:[["verified","Verified"],["unverified","Unverified"],["needs_verification","Needs verification"]]}) + field("candidateConfidence","Confidence",candidate.confidence,{type:"number",step:"0.01"}) +
       field("candidateVerificationNotes","Verification notes",candidate.verificationNotes,{type:"textarea",wide:true}) + field("candidateRejectionReason","Rejection reason",candidate.rejectionReason) + field("candidateDuplicateOf","Duplicate of",candidate.duplicateOf) + '</div></div>' +
       '<div class="editor-section"><h3>Private review intelligence</h3><div class="field-grid">' + field("candidatePrivateRationale","Why it matches",candidate.privateRationale,{type:"textarea",wide:true}) + field("candidateAttendanceUse","Attendance / research use",candidate.attendanceUse,{type:"textarea"}) + field("candidateProgrammingIdeas","Programming ideas",candidate.programmingIdeas,{type:"textarea"}) + field("candidateCollaborators","Potential collaborators",candidate.potentialCollaborators,{type:"textarea"}) + field("candidateInternalNotes","Internal notes",candidate.internalNotes,{type:"textarea"}) + '</div></div>' +
       (!isNew ? '<div class="editor-section"><h3>Detected changes + revisions</h3><div class="revision-list">' + (revisions.length ? revisions.map(function (revision) { return '<article class="revision"><strong>Revision ' + revision.revisionNumber + ' / ' + escapeHtml(revision.revisionState) + '</strong><br>' + escapeHtml(revision.changeSummary || "Saved candidate snapshot") + '<br>' + escapeHtml(displayDate(revision.createdAt)) + '</article>'; }).join("") : '<p class="empty-state">No revisions recorded.</p>') + '</div></div>' : '') +
-      '<div class="editor-actions"><button type="button" data-action="save">' + (isNew ? 'Create candidate' : 'Save') + '</button>' + (!isNew ? (candidate.pendingRevisionId ? '<button type="button" data-action="review-change">Review Detected Change</button>' : '') + '<button type="button" data-action="approve">Approve + Publish</button><button type="button" data-action="reject">Reject</button><button type="button" data-action="duplicate">Mark Duplicate</button><button type="button" data-action="cancel">Mark Cancelled</button>' : '') + '</div>';
+      '<div class="editor-actions"><button type="button" data-action="save">' + (isNew ? 'Create candidate' : 'Save') + '</button>' + (!isNew ? (candidate.pendingRevisionId ? '<button type="button" data-action="review-change">Review Detected Change</button>' : '') + (canPublish ? '<button type="button" data-action="approve">' + publishLabel + '</button>' : '') + '<button type="button" data-action="reject">Reject</button><button type="button" data-action="duplicate">Mark Duplicate</button><button type="button" data-action="cancel">Mark Cancelled</button>' : '') + '</div>';
+    hydrateFlyerPreview(candidate);
+  }
+  async function hydrateFlyerPreview(candidate) {
+    var image = editorRoot.querySelector("[data-flyer-preview]");
+    if (!image || !candidate.flyer || !candidate.flyer.adminUrl) return;
+    try {
+      var response = await fetch(candidate.flyer.adminUrl, { headers:{ authorization:"Bearer " + token } });
+      if (!response.ok) throw new Error("Flyer preview unavailable.");
+      var blob = await response.blob();
+      if (state.flyerPreviewUrl) URL.revokeObjectURL(state.flyerPreviewUrl);
+      state.flyerPreviewUrl = URL.createObjectURL(blob);
+      image.src = state.flyerPreviewUrl;
+      image.alt = candidate.flyer.altText || candidate.title + " event flyer";
+    } catch (error) { toast(error.message); }
+  }
+  async function uploadFlyer(file) {
+    if (!state.selectedId || !file) return;
+    if (!["image/jpeg","image/png","image/webp","image/gif"].includes(file.type)) { toast("Use a JPEG, PNG, WebP, or GIF flyer."); return; }
+    if (file.size > 15 * 1024 * 1024) { toast("Flyers cannot exceed 15 MB."); return; }
+    var form = new FormData();
+    form.append("file",file);
+    form.append("privacy","internal");
+    form.append("consent_status","not-required");
+    form.append("public_presentation","hidden");
+    form.append("alt_text",value("candidateFlyerAltText") || ((state.activeCandidate && state.activeCandidate.title) ? state.activeCandidate.title + " event flyer" : "Event flyer"));
+    var response = await fetch("/api/admin/media", { method:"POST", headers:{ authorization:"Bearer " + token }, body:form });
+    var payload = await response.json().catch(function () { return {}; });
+    if (!response.ok) throw new Error(payload.error || "Flyer upload failed.");
+    document.getElementById("candidateFlyerMediaId").value = payload.record.id;
+    document.getElementById("candidateFlyerSourceUrl").value = "";
+    document.getElementById("candidateFlyerProvenanceUrl").value = "";
+    document.getElementById("candidateFlyerPublic").checked = false;
+    await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId), { method:"PATCH", body:JSON.stringify(candidatePayload()) });
+    toast("Flyer uploaded privately. Choose Include flyer publicly when it is ready.");
+    await refreshCandidates(state.selectedId);
+  }
+  async function removeFlyer() {
+    if (!state.selectedId) return;
+    document.getElementById("candidateFlyerMediaId").value = "";
+    document.getElementById("candidateFlyerSourceUrl").value = "";
+    document.getElementById("candidateFlyerProvenanceUrl").value = "";
+    document.getElementById("candidateFlyerPublic").checked = false;
+    await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId), { method:"PATCH", body:JSON.stringify(candidatePayload()) });
+    toast("Flyer removed from the candidate.");
+    await refreshCandidates(state.selectedId);
   }
   async function selectCandidate(id) {
     state.selectedId = id; state.draftNew = false; renderCandidateList();
@@ -88,7 +198,7 @@
     try {
       if (!state.selectedId) { var created = await api("/api/admin/calendar/candidates", { method:"POST", body:JSON.stringify(body) }); state.selectedId = created.candidate.id; toast(created.duplicate ? "Candidate created and flagged as a duplicate." : "Candidate created."); await refreshCandidates(state.selectedId); return; }
       if (action === "save") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId), { method:"PATCH", body:JSON.stringify(body) }); toast("Candidate saved."); }
-      if (action === "approve") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId), { method:"PATCH", body:JSON.stringify(body) }); await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/approve", { method:"POST", body:"{}" }); toast("Approved and published to the calendar."); }
+      if (action === "approve") { var wasPublished = state.candidates.some(function (candidate) { return candidate.id === state.selectedId && candidate.status === "published"; }); await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId), { method:"PATCH", body:JSON.stringify(body) }); await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/approve", { method:"POST", body:"{}" }); state.filter="published"; toast(wasPublished ? "Approved changes updated the published event." : "Event moved to Published and added to the calendar."); }
       if (action === "reject") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/reject", { method:"POST", body:JSON.stringify({ reason:body.rejectionReason }) }); toast("Candidate rejected. It remains private."); }
       if (action === "duplicate") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/duplicate", { method:"POST", body:JSON.stringify({ duplicateOf:body.duplicateOf }) }); toast("Candidate marked as duplicate."); }
       if (action === "cancel") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/cancel", { method:"POST", body:"{}" }); toast("Cancellation recorded."); }
@@ -97,7 +207,7 @@
   }
 
   function renderSources() {
-    document.getElementById("sourceList").innerHTML = state.sources.map(function (source) { return '<article class="source-card" data-source-id="' + escapeHtml(source.id) + '">' + field("sourceName-"+source.id,"Name",source.name) + field("sourceUrl-"+source.id,"URL",source.url,{type:"url"}) + field("sourceCadence-"+source.id,"Cadence hours",source.cadenceHours,{type:"number"}) + '<label class="field"><span>Enabled</span><select id="sourceEnabled-' + source.id + '"><option value="1"' + (source.enabled?' selected':'') + '>Enabled</option><option value="0"' + (!source.enabled?' selected':'') + '>Paused</option></select></label><label class="field"><span>Source type</span><select id="sourceType-' + source.id + '">' + [["official_html","Official HTML"],["calendar","Calendar"],["json","JSON"],["rss","RSS"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.sourceType===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label><label class="field"><span>Trust</span><select id="sourceTrust-' + source.id + '">' + [["official","Official"],["trusted","Trusted"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.trustLevel===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label><button type="button" data-save-source>Save</button><p class="source-meta is-wide-mobile">Last success: ' + escapeHtml(displayDate(source.lastSuccessAt)) + '<br>Acceptance: ' + (source.acceptanceRate === null ? 'No decisions yet' : Math.round(source.acceptanceRate*100)+'%') + (source.lastError ? '<br>Error: '+escapeHtml(source.lastError) : '') + '</p></article>'; }).join("");
+    document.getElementById("sourceList").innerHTML = state.sources.map(function (source) { return '<article class="source-card" data-source-id="' + escapeHtml(source.id) + '">' + field("sourceName-"+source.id,"Name",source.name) + '<div class="source-url-field">' + field("sourceUrl-"+source.id,"URL",source.url,{type:"url"}) + externalLink(source.url,"Open source") + '</div>' + field("sourceCadence-"+source.id,"Cadence hours",source.cadenceHours,{type:"number"}) + '<label class="field"><span>Enabled</span><select id="sourceEnabled-' + source.id + '"><option value="1"' + (source.enabled?' selected':'') + '>Enabled</option><option value="0"' + (!source.enabled?' selected':'') + '>Paused</option></select></label><label class="field"><span>Source type</span><select id="sourceType-' + source.id + '">' + [["official_html","Official HTML"],["calendar","Calendar"],["json","JSON"],["rss","RSS"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.sourceType===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label><label class="field"><span>Trust</span><select id="sourceTrust-' + source.id + '">' + [["official","Official"],["trusted","Trusted"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.trustLevel===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label><button type="button" data-save-source>Save</button><p class="source-meta is-wide-mobile">Last success: ' + escapeHtml(displayDate(source.lastSuccessAt)) + '<br>Acceptance: ' + (source.acceptanceRate === null ? 'No decisions yet' : Math.round(source.acceptanceRate*100)+'%') + (source.lastError ? '<br>Error: '+escapeHtml(source.lastError) : '') + '</p></article>'; }).join("");
   }
   function commaList(values) { return (values || []).join(", "); }
   function parseComma(value) { return value.split(",").map(function (item) { return item.trim(); }).filter(Boolean); }
@@ -127,7 +237,14 @@
   document.querySelector(".studio-tabs").addEventListener("click",function(event){var button=event.target.closest("button[data-view]");if(!button)return;document.querySelectorAll(".studio-tabs button").forEach(function(item){item.classList.toggle("is-active",item===button);});document.querySelectorAll("[data-panel]").forEach(function(panel){panel.hidden=panel.dataset.panel!==button.dataset.view;});});
   document.getElementById("statusFilters").addEventListener("click",function(event){var button=event.target.closest("button[data-status]");if(!button)return;state.filter=button.dataset.status;renderStatusFilters();renderCandidateList();});
   listRoot.addEventListener("click",function(event){var button=event.target.closest("[data-candidate-id]");if(button)selectCandidate(button.dataset.candidateId);});
-  editorRoot.addEventListener("click",function(event){var button=event.target.closest("button[data-action]");if(button)editorAction(button.dataset.action);});
+  editorRoot.addEventListener("click",function(event){
+    var actionButton=event.target.closest("button[data-action]");if(actionButton){editorAction(actionButton.dataset.action);return;}
+    if(event.target.closest("[data-add-related-link]")){var list=document.getElementById("candidateRelatedLinks");var empty=list.querySelector(".related-links-empty");if(empty)empty.remove();list.insertAdjacentHTML("beforeend",relatedLinkRow({ provenanceUrl:value("candidateSourceUrl") }));return;}
+    var removeLink=event.target.closest("[data-remove-related-link]");if(removeLink){removeLink.closest("[data-related-link]").remove();var related=document.getElementById("candidateRelatedLinks");if(!related.querySelector("[data-related-link]"))related.innerHTML='<p class="related-links-empty">No related links captured.</p>';return;}
+    if(event.target.closest("[data-upload-flyer]")){document.getElementById("candidateFlyerFile").click();return;}
+    if(event.target.closest("[data-remove-flyer]")){removeFlyer().catch(function(error){toast(error.message);});}
+  });
+  editorRoot.addEventListener("change",function(event){if(event.target.id==="candidateFlyerFile"&&event.target.files&&event.target.files[0])uploadFlyer(event.target.files[0]).catch(function(error){toast(error.message);});});
   document.getElementById("newCandidate").addEventListener("click",function(){state.selectedId="";state.draftNew=true;renderCandidateList();renderEditor(blankCandidate());});
   document.getElementById("sourceList").addEventListener("click",async function(event){var button=event.target.closest("[data-save-source]");if(!button)return;var card=button.closest("[data-source-id]");var id=card.dataset.sourceId;try{await api("/api/admin/calendar/sources/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({name:value("sourceName-"+id),url:value("sourceUrl-"+id),cadenceHours:Number(value("sourceCadence-"+id)),enabled:value("sourceEnabled-"+id)==="1",sourceType:value("sourceType-"+id),trustLevel:value("sourceTrust-"+id)})});toast("Source saved.");}catch(error){toast(error.message);}});
   document.getElementById("addSource").addEventListener("click",async function(){var url=window.prompt("Official source URL");if(!url)return;var name=window.prompt("Source name")||new URL(url).hostname;try{var payload=await api("/api/admin/calendar/sources",{method:"POST",body:JSON.stringify({name:name,url:url})});state.sources.push(payload.source);renderSources();toast("Source added.");}catch(error){toast(error.message);}});

@@ -12,6 +12,7 @@ import {
   runCalendarScout,
   runDueCalendarScout,
 } from "../functions/api/calendar/_lib.js";
+import { handleConstructApi } from "../functions/api/construct/_lib.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TOKEN = "calendar-contract-token";
@@ -31,6 +32,25 @@ class LocalD1 {
   constructor(database) { this.database = database; }
   prepare(sql) { return new D1Statement(this.database, sql); }
   async batch(statements) { return Promise.all(statements.map((statement) => statement.run())); }
+}
+
+class MemoryBucket {
+  constructor() { this.objects = new Map(); }
+  async put(key, value, options = {}) {
+    const bytes = value instanceof Uint8Array ? value : new Uint8Array(await new Response(value).arrayBuffer());
+    this.objects.set(key, { bytes, options });
+  }
+  async head(key) {
+    const object = this.objects.get(key);
+    if (!object) return null;
+    return {
+      size:object.bytes.byteLength,
+      httpEtag:`"${key}"`,
+      writeHttpMetadata(headers) { if (object.options.httpMetadata?.contentType) headers.set("content-type", object.options.httpMetadata.contentType); },
+    };
+  }
+  async get(key) { const object = this.objects.get(key); return object ? { body:object.bytes } : null; }
+  async delete(key) { this.objects.delete(key); }
 }
 
 function database() {
@@ -97,7 +117,18 @@ test("approval, filters, single-event ICS, subscription feeds, rejection, and ca
   const approve = await admin(db, "/candidates/cal_candidate_sound_vision/approve", { method:"POST", body:{} });
   assert.equal(approve.status, 200, await approve.clone().text());
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 1);
+  assert.deepEqual(
+    { ...db.prepare("SELECT status,public_entry_id FROM calendar_candidates WHERE id='cal_candidate_sound_vision'").get() },
+    { status:"published", public_entry_id:db.prepare("SELECT id FROM calendar_entries WHERE candidate_id='cal_candidate_sound_vision'").get().id },
+  );
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE id='cal_candidate_sound_vision'").get().count, 1);
   assert.equal(db.prepare("SELECT revision_state FROM calendar_candidate_revisions WHERE candidate_id='cal_candidate_sound_vision'").get().revision_state, "approved");
+
+  const repeatedApproval = await admin(db, "/candidates/cal_candidate_sound_vision/approve", { method:"POST", body:{} });
+  assert.equal(repeatedApproval.status, 200);
+  assert.equal((await repeatedApproval.json()).unchanged, true);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_sound_vision'").get().count, 1);
+  assert.equal(db.prepare("SELECT sequence FROM calendar_entries WHERE candidate_id='cal_candidate_sound_vision'").get().sequence, 0);
 
   const artPayload = await (await handleCalendarPublicApi(request("/api/calendar/events?subject=art&format=screening"), runtime)).json();
   const soundVision = artPayload.events.find((event) => event.title === "SOUND + VISION");
@@ -253,7 +284,7 @@ test("direct monitoring remains safe without an OpenAI key and scheduler due gat
   try {
     const run = await runCalendarScout(runtime, { runKind:"manual", includeWeb:true });
     assert.equal(run.broadDiscoveryEnabled, false);
-    assert.equal(run.status, "completed");
+    assert.equal(run.status, "completed", JSON.stringify(db.prepare("SELECT source_results_json,error_message FROM calendar_scout_runs WHERE id=?").get(run.runId)));
     assert.equal(sourceCalls, 4);
     const candidate = db.prepare("SELECT status,factual_description FROM calendar_candidates WHERE title='Creative Technology Lecture' LIMIT 1").get();
     assert.ok(candidate);
@@ -283,7 +314,7 @@ test("registered calendar feeds are parsed through the direct-source lane", asyn
   ].join("\r\n"), { status:200, headers:{ "content-type":"text/calendar" } });
   try {
     const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false });
-    assert.equal(run.status, "completed");
+    assert.equal(run.status, "completed", JSON.stringify(db.prepare("SELECT source_results_json,error_message FROM calendar_scout_runs WHERE id=?").get(run.runId)));
     const candidate = db.prepare("SELECT source_event_id,status FROM calendar_candidates WHERE title='Atlanta Sound Technology Workshop'").get();
     assert.deepEqual({ ...candidate }, { source_event_id:"ics-atlanta-1", status:"candidate" });
   } finally {
@@ -328,4 +359,111 @@ test("OpenAI discovery uses web_search structured output, stores citations, and 
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("related links and one flyer remain private until their individual publication choices are approved", async () => {
+  const db = database();
+  const bucket = new MemoryBucket();
+  await bucket.put("calendar/test-flyer.png", new Uint8Array([137,80,78,71]), { httpMetadata:{ contentType:"image/png" } });
+  db.prepare(`INSERT INTO media_assets
+    (id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('calendar-test-flyer','calendar/test-flyer.png','test-flyer.png','image/png',4,'Private flyer','internal','not-required','active','test',datetime('now'),datetime('now'),'hidden')`).run();
+  const runtime = env(db, { SUBMISSION_FILES:bucket });
+
+  const saved = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/cal_candidate_sound_vision", {
+    method:"PATCH", admin:true, body:{
+      relatedLinks:[
+        { label:"Artist roster", url:"https://official.example/artists", provenanceUrl:"https://www.atlantafilmsociety.org/upcoming-events/sound-vision", includePublic:true },
+        { label:"Internal research", url:"https://official.example/research", provenanceUrl:"https://www.atlantafilmsociety.org/upcoming-events/sound-vision", includePublic:false },
+      ],
+      flyerMediaId:"calendar-test-flyer", flyerPublicApproved:false, flyerAltText:"SOUND + VISION event flyer",
+    },
+  }), runtime);
+  assert.equal(saved.status, 200, await saved.clone().text());
+  const privateCandidate = (await saved.json()).candidate;
+  assert.equal(privateCandidate.relatedLinks.length, 2);
+  assert.equal(privateCandidate.flyer.adminUrl, "/api/admin/media/calendar-test-flyer/file");
+
+  assert.equal((await handleCalendarAdminApi(request("/api/admin/calendar/candidates/cal_candidate_sound_vision/approve", { method:"POST", admin:true, body:{} }), runtime)).status, 200);
+  let publicEvent = (await (await handleCalendarPublicApi(request("/api/calendar/events"), runtime)).json()).events.find((event) => event.title === "SOUND + VISION");
+  assert.deepEqual(publicEvent.relatedLinks, [{ label:"Artist roster", url:"https://official.example/artists" }]);
+  assert.equal(publicEvent.flyer, null);
+  assert.equal((await handleConstructApi(request("/api/construct/media/calendar-test-flyer"), runtime)).status, 404);
+  let singleIcs = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEvent.id)}.ics`), runtime)).text();
+  assert.doesNotMatch(singleIcs, /Artist roster|calendar-test-flyer|test-flyer\.png/);
+
+  assert.equal((await handleCalendarAdminApi(request("/api/admin/calendar/candidates/cal_candidate_sound_vision", { method:"PATCH", admin:true, body:{ flyerPublicApproved:true } }), runtime)).status, 200);
+  assert.equal((await handleCalendarAdminApi(request("/api/admin/calendar/candidates/cal_candidate_sound_vision/approve", { method:"POST", admin:true, body:{} }), runtime)).status, 200);
+  publicEvent = (await (await handleCalendarPublicApi(request("/api/calendar/events"), runtime)).json()).events.find((event) => event.title === "SOUND + VISION");
+  assert.equal(publicEvent.flyer.url, "/api/construct/media/calendar-test-flyer");
+  assert.equal(publicEvent.flyer.altText, "SOUND + VISION event flyer");
+  const servedFlyer = await handleConstructApi(request("/api/construct/media/calendar-test-flyer"), runtime);
+  assert.equal(servedFlyer.status, 200);
+  assert.equal(servedFlyer.headers.get("content-type"), "image/png");
+  assert.equal((await handleCalendarAdminApi(request("/api/admin/calendar/candidates/cal_candidate_sound_vision", { method:"PATCH", admin:true, body:{ flyerAltText:"Pending revised flyer description" } }), runtime)).status, 200);
+  publicEvent = (await (await handleCalendarPublicApi(request("/api/calendar/events"), runtime)).json()).events.find((event) => event.title === "SOUND + VISION");
+  assert.equal(publicEvent.flyer.altText, "SOUND + VISION event flyer");
+});
+
+test("invalid and oversized flyer selections fail safely without publishing media", async () => {
+  const db = database();
+  db.exec(`
+    INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('calendar-pdf','calendar/flyer.pdf','flyer.pdf','application/pdf',100,'internal','not-required','active','test',datetime('now'),datetime('now'),'hidden');
+    INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('calendar-huge','calendar/huge.png','huge.png','image/png',15728641,'internal','not-required','active','test',datetime('now'),datetime('now'),'hidden');
+  `);
+  for (const flyerMediaId of ["calendar-pdf","calendar-huge"]) {
+    const response = await admin(db, "/candidates/cal_candidate_sound_vision", { method:"PATCH", body:{ flyerMediaId } });
+    assert.equal(response.status, 400);
+  }
+  assert.equal(db.prepare("SELECT flyer_media_id FROM calendar_candidates WHERE id='cal_candidate_sound_vision'").get().flyer_media_id, null);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
+});
+
+test("official-source scouting captures at most one private R2 flyer and private related links", async () => {
+  const db = database();
+  const bucket = new MemoryBucket();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.prepare(`INSERT INTO calendar_sources(id,name,url,source_type,trust_level,enabled,cadence_hours,created_at,updated_at)
+    VALUES('cal_source_flyer_test','Flyer Source','https://official.example/events','official_html','official',1,24,datetime('now'),datetime('now'))`).run();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("event-flyer.jpg")) return new Response(new Uint8Array([255,216,255,217]), { status:200, headers:{ "content-type":"image/jpeg", "content-length":"4" } });
+    return new Response(`<script type="application/ld+json">${JSON.stringify({
+      "@context":"https://schema.org", "@type":"Event", "@id":"flyer-event", name:"Atlanta Experimental Flyer Event",
+      description:"An experimental art and technology lecture.", startDate:"2026-10-12T18:00:00-04:00", endDate:"2026-10-12T20:00:00-04:00",
+      url:"https://official.example/events/flyer-event", image:"https://cdn.example/event-flyer.jpg", sameAs:["https://official.example/artists"],
+      location:{ "@type":"Place", name:"Atlanta Arts Lab", address:{ streetAddress:"1 Art Way", addressLocality:"Atlanta", addressRegion:"GA" } },
+    })}</script>`, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const run = await runCalendarScout(env(db, { SUBMISSION_FILES:bucket }), { runKind:"manual", includeWeb:false });
+    assert.equal(run.status, "completed");
+    const candidate = db.prepare("SELECT flyer_media_id,flyer_public_approved FROM calendar_candidates WHERE title='Atlanta Experimental Flyer Event'").get();
+    assert.ok(candidate.flyer_media_id);
+    assert.equal(candidate.flyer_public_approved, 0);
+    const media = db.prepare("SELECT privacy,public_presentation,mime_type FROM media_assets WHERE id=?").get(candidate.flyer_media_id);
+    assert.deepEqual({ ...media }, { privacy:"internal", public_presentation:"hidden", mime_type:"image/jpeg" });
+    assert.equal(bucket.objects.size, 1);
+    assert.deepEqual({ ...db.prepare("SELECT include_public,url FROM calendar_candidate_links WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE title='Atlanta Experimental Flyer Event')").get() }, { include_public:0, url:"https://official.example/artists" });
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta Experimental Flyer Event'").get().count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Studio verification links and the public expandable flyer stay inline without detail-page routes", () => {
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
+  const publicCss = readFileSync(join(ROOT,"css","atlanta-calendar.css"),"utf8");
+  assert.match(studio,/Open official source/);
+  assert.match(studio,/target="_blank" rel="noopener noreferrer"/);
+  assert.match(studio,/data-related-link/);
+  assert.match(studio,/data-upload-flyer/);
+  assert.match(publicCalendar,/<details class="calendar-event-flyer">/);
+  assert.match(publicCalendar,/exhibition:"Exhibitions \/ Art Openings"/);
+  assert.match(publicCalendar,/Show flyer/);
+  assert.doesNotMatch(publicCalendar,/href="\/calendar\/events\//);
+  assert.match(publicCss,/@media \(max-width:390px\)/);
 });
