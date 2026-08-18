@@ -63,8 +63,17 @@
       var end = new Date(dateKey(event.endsAt || event.startsAt) + "T12:00:00Z");
       return new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(start) + " - " + new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(end);
     }
-    var date = validDate(event.startsAt);
-    return date ? new Intl.DateTimeFormat("en-US", { weekday:"short", month:"short", day:"numeric", year:"numeric", hour:"numeric", minute:"2-digit", timeZone:TIME_ZONE }).format(date) : "Date unavailable";
+    var startDate = validDate(event.startsAt);
+    if (!startDate) return "Date unavailable";
+    var endDate = validDate(event.endsAt);
+    var fullFormatter = new Intl.DateTimeFormat("en-US", { weekday:"short", month:"short", day:"numeric", year:"numeric", hour:"numeric", minute:"2-digit", timeZone:TIME_ZONE });
+    var startLabel = fullFormatter.format(startDate);
+    if (!endDate) return startLabel;
+    if (dateKey(event.startsAt) === dateKey(event.endsAt)) {
+      var timeFormatter = new Intl.DateTimeFormat("en-US", { hour:"numeric", minute:"2-digit", timeZone:TIME_ZONE });
+      return startLabel + " - " + timeFormatter.format(endDate);
+    }
+    return startLabel + " - " + fullFormatter.format(endDate);
   }
 
   function isPast(event) {

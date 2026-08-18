@@ -85,7 +85,7 @@ async function admin(db, path, options = {}) {
 
 test("calendar migrations preserve seeded private candidates, verified official sources, and no public curated snapshots", () => {
   const db = database();
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 11);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 12);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE verification_state='verified'").get().count, 9);
   assert.deepEqual(
     { ...db.prepare("SELECT status,starts_at,verification_state FROM calendar_candidates WHERE id='cal_candidate_synergy'").get() },
@@ -94,6 +94,18 @@ test("calendar migrations preserve seeded private candidates, verified official 
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE pending_revision_id<>''").get().count, 11);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE id LIKE 'cal_source_gsu_%'").get().count, 15);
+  assert.deepEqual(
+    { ...db.prepare("SELECT adapter_key,render_mode,source_type,trust_level FROM calendar_sources WHERE url='https://www.eventbrite.com/d/ga--atlanta/events/'").get() },
+    { adapter_key:"automatic", render_mode:"dynamic-fallback", source_type:"discovery", trust_level:"discovery" },
+  );
+  assert.deepEqual(
+    { ...db.prepare("SELECT source_id,status,starts_at,ends_at,venue_address,source_authority FROM calendar_candidates WHERE id='cal_candidate_posh_orca_open_house_2026'").get() },
+    { source_id:"cal_source_posh_atlanta", status:"needs_verification", starts_at:"2026-08-23T16:00:00-04:00", ends_at:"2026-08-23T19:00:00-04:00", venue_address:"6000 Lake Forrest Dr NW, Sandy Springs, GA 30328, USA", source_authority:"authorized_ticket_host" },
+  );
+  const poshSource = db.prepare("SELECT name,url,adapter_config_json FROM calendar_sources WHERE id='cal_source_posh_atlanta'").get();
+  assert.equal(poshSource.name, "Posh Atlanta");
+  assert.match(poshSource.url, /^https:\/\/posh\.vip\/explore\?location=/);
+  assert.deepEqual(JSON.parse(poshSource.adapter_config_json).city, "Atlanta");
   const scoutProfile = db.prepare("SELECT geographic_rules_json,negative_terms_json FROM calendar_scout_profiles WHERE id='atlanta-default'").get();
   assert.equal(JSON.parse(scoutProfile.geographic_rules_json).includeOnlineOnly, true);
   assert.equal(JSON.parse(scoutProfile.negative_terms_json).includes("online only"), false);
@@ -128,6 +140,24 @@ test("calendar migrations preserve seeded private candidates, verified official 
     { ...db.prepare("SELECT name,route FROM construct_pathways WHERE id='path-events-03'").get() },
     { name:"Atlanta calendar", route:"/calendar/" },
   );
+});
+
+test("ticket-platform migration upgrades the existing Eventbrite homepage source without duplicating it", () => {
+  const db = databaseThrough("0140_calendar_multiday_exhibitions.sql");
+  db.prepare(`INSERT INTO calendar_sources
+    (id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`
+  ).run("cal_source_live_eventbrite", "eventbrite", "https://www.eventbrite.com/", "official_html", "official", 1, 24, "automatic", "static", "{}");
+  db.exec(readFileSync(join(ROOT, "migrations", "0141_calendar_ticket_platform_sources.sql"), "utf8"));
+  assert.deepEqual(
+    { ...db.prepare("SELECT id,name,source_type,trust_level,enabled,render_mode,adapter_config_json FROM calendar_sources WHERE url='https://www.eventbrite.com/d/ga--atlanta/events/'").get() },
+    {
+      id:"cal_source_live_eventbrite", name:"Eventbrite Atlanta", source_type:"discovery", trust_level:"discovery",
+      enabled:1, render_mode:"dynamic-fallback", adapter_config_json:'{"platform":"eventbrite","maxChildren":20}',
+    },
+  );
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE url LIKE '%eventbrite.com%'").get().count, 1);
+  assert.equal(db.prepare("PRAGMA foreign_key_check").all().length, 0);
 });
 
 test("attendance migration corrects an existing published snapshot and advances its calendar sequence", () => {
@@ -198,7 +228,7 @@ test("multi-day timed exhibitions become on-view ranges instead of continuous da
 
 test("0131 preserves calendar data and stages every new social connector disabled", async () => {
   const db = database();
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 11);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 12);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_scout_connectors WHERE id IN ('threads_api','instagram_api','threads_web','instagram_web','tiktok_web') AND enabled=0").get().count, 5);
   assert.equal(db.prepare("SELECT discovery_channel FROM calendar_candidates LIMIT 1").get().discovery_channel, "");
@@ -653,6 +683,161 @@ test("Out of Hand adapter renders one complete private series and records bounde
   }
 });
 
+test("Eventbrite discovery uses bounded rendered detail extraction and keeps verified ticket events private", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_eventbrite_atlanta'");
+  const eventUrl = "https://www.eventbrite.com/e/experimental-art-and-creative-technology-exhibition-tickets-123456";
+  const browserCalls = [];
+  const browser = {
+    async quickAction(action, { url }) {
+      browserCalls.push({ action, url });
+      const detail = url === eventUrl;
+      return new Response(JSON.stringify({ result:{ events:[detail ? {
+        title:"Experimental Art and Creative Technology Exhibition",
+        description:"An experimental art exhibition using interactive creative technology.",
+        organizer:"Atlanta Creative Lab", organizerUrl:"https://atlantacreativelab.example/events/exhibition",
+        venueName:"Atlanta Arts Center", venueAddress:"100 Art Way, Atlanta, GA 30303", venueUrl:"",
+        city:"Atlanta", region:"GA", startsAt:"2026-10-10T18:00:00-04:00", endsAt:"2026-10-10T21:00:00-04:00",
+        eventUrl, ticketUrl:eventUrl, imageUrl:"", accessStatus:"public", accessNotes:"Ticket required.", audiences:["Public"],
+      } : {
+        title:"Experimental Art and Creative Technology Exhibition", startsAt:"2026-10-10T18:00:00-04:00",
+        endsAt:"2026-10-10T21:00:00-04:00", eventUrl, ticketUrl:eventUrl,
+      }] } }), { status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":detail ? "25" : "15" } });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("rate limited", { status:429 });
+  try {
+    const runtime = env(db, { BROWSER:browser });
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/sources/cal_source_eventbrite_atlanta/run", { method:"POST", body:{}, admin:true }), runtime);
+    assert.equal(response.status, 200, await response.clone().text());
+    const result = await response.json();
+    const direct = JSON.parse(db.prepare("SELECT source_results_json FROM calendar_scout_runs WHERE id=?").get(result.runId).source_results_json)[0].sources[0];
+    assert.deepEqual(
+      { adapter:direct.adapter, childLinksDiscovered:direct.childLinksDiscovered, childrenExtracted:direct.childrenExtracted, retrieval:direct.retrieval, browserMs:direct.browserMs, completeness:direct.completeness },
+      { adapter:"eventbrite", childLinksDiscovered:1, childrenExtracted:1, retrieval:"browser", browserMs:40, completeness:"complete" },
+    );
+    assert.deepEqual(browserCalls.map((call) => call.action), ["json", "json"]);
+    const candidate = db.prepare("SELECT status,verification_state,ends_at,source_authority,source_url,ticket_url FROM calendar_candidates WHERE source_event_id='eventbrite-123456'").get();
+    assert.deepEqual({ ...candidate }, {
+      status:"candidate", verification_state:"verified", ends_at:"2026-10-10T21:00:00-04:00",
+      source_authority:"authorized_ticket_host", source_url:eventUrl, ticket_url:eventUrl,
+    });
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id='eventbrite-123456')").get().count, 0);
+    const sources = await (await admin(db, "/sources")).json();
+    assert.equal(sources.sources.find((source) => source.id === "cal_source_eventbrite_atlanta").adapterKey, "eventbrite");
+    assert.equal(db.prepare("SELECT adapter_key FROM calendar_sources WHERE id='cal_source_eventbrite_atlanta'").get().adapter_key, "automatic");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Eventbrite discovers exact child pages from nested ItemList JSON-LD", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_eventbrite_atlanta'");
+  const sourceUrl = "https://www.eventbrite.com/d/ga--atlanta/events/";
+  const eventUrl = "https://www.eventbrite.com/e/creative-technology-panel-tickets-654321";
+  const hub = `<script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org", "@type":"ItemList", itemListElement:[{
+      "@type":"ListItem", position:1, item:{ "@type":"Event", name:"Creative Technology Panel", startDate:"2026-11-06", endDate:"2026-11-06", url:eventUrl },
+    }],
+  })}</script>`;
+  const detail = `<script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org", "@type":"Event", identifier:"654321", name:"Creative Technology Panel",
+    description:"An Atlanta panel about interactive art and creative technology.", startDate:"2026-11-06T18:00:00-05:00", endDate:"2026-11-06T20:00:00-05:00", url:eventUrl,
+    organizer:{ "@type":"Organization", name:"Atlanta Creative Lab", url:"https://atlantacreativelab.example/events/panel" },
+    location:{ "@type":"Place", name:"Atlanta Arts Center", address:{ "@type":"PostalAddress", streetAddress:"100 Art Way", addressLocality:"Atlanta", addressRegion:"GA" } },
+    offers:{ "@type":"Offer", url:eventUrl },
+  })}</script>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => new Response(url === sourceUrl ? hub : detail, { status:200, headers:{ "content-type":"text/html" } });
+  try {
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/sources/cal_source_eventbrite_atlanta/run", { method:"POST", body:{}, admin:true }), env(db));
+    assert.equal(response.status, 200, await response.clone().text());
+    const result = await response.json();
+    const direct = JSON.parse(db.prepare("SELECT source_results_json FROM calendar_scout_runs WHERE id=?").get(result.runId).source_results_json)[0].sources[0];
+    assert.deepEqual(
+      { childLinksDiscovered:direct.childLinksDiscovered, childrenExtracted:direct.childrenExtracted, retrieval:direct.retrieval, completeness:direct.completeness },
+      { childLinksDiscovered:1, childrenExtracted:1, retrieval:"static", completeness:"complete" },
+    );
+    assert.deepEqual(
+      { ...db.prepare("SELECT source_event_id,starts_at,ends_at,verification_state FROM calendar_candidates WHERE source_event_id='eventbrite-654321'").get() },
+      { source_event_id:"eventbrite-654321", starts_at:"2026-11-06T18:00:00-05:00", ends_at:"2026-11-06T20:00:00-05:00", verification_state:"verified" },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Posh Atlanta scouting spans organizers while holding unsupported ticket hosts for verification", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_posh_atlanta'");
+  const eventUrl = "https://posh.vip/e/open-house-art-auction";
+  const secondEventUrl = "https://posh.vip/e/atlanta-creative-technology-mixer";
+  const discoveryUrl = "https://posh.vip/explore?location=%7B%22type%22%3A%22preset%22%2C%22location%22%3A%22Atlanta%22%2C%22lat%22%3A33.749%2C%22long%22%3A-84.388%7D";
+  const browserCalls = [];
+  const browser = {
+    async quickAction(action, { url, prompt }) {
+      browserCalls.push({ action, url, prompt });
+      return new Response(JSON.stringify({ result:{ events:[{
+        title:"Open House & Art Showcase", startsAt:"2026-08-23T16:00:00-04:00", endsAt:"2026-08-23T19:00:00-04:00",
+        eventUrl, ticketUrl:eventUrl,
+      }, {
+        title:"Atlanta Creative Technology Exhibition Mixer", startsAt:"2026-09-12T18:00:00-04:00", endsAt:"2026-09-12T21:00:00-04:00",
+        eventUrl:secondEventUrl, ticketUrl:secondEventUrl,
+      }] } }), { status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":"12" } });
+    },
+  };
+  const detailHtml = `<script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org", "@type":"Event", name:"Open House & Art Showcase",
+    startDate:"2026-08-23T16:00:00-04:00", endDate:"2026-08-23T19:00:00-04:00", url:eventUrl,
+    description:"An open house with art, a silent auction, wine, hors d'oeuvres, and shuttle parking.",
+    organizer:{ "@type":"Organization", name:"ORCA", url:"https://posh.vip/g/orca" },
+    location:{ "@type":"Place", name:"Open House", address:{ "@type":"PostalAddress", streetAddress:"6000 Lake Forrest Dr NW", addressLocality:"Sandy Springs", addressRegion:"GA", postalCode:"30328" } },
+    offers:{ "@type":"Offer", url:eventUrl, price:0, priceCurrency:"USD" },
+  })}</script>`;
+  const secondDetailHtml = `<script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org", "@type":"Event", name:"Atlanta Creative Technology Exhibition Mixer",
+    startDate:"2026-09-12T18:00:00-04:00", endDate:"2026-09-12T21:00:00-04:00", url:secondEventUrl,
+    description:"An Atlanta experimental exhibition and mixer featuring interactive art and creative technology demonstrations.",
+    organizer:{ "@type":"Organization", name:"Atlanta Creative Guild", url:"https://atlantacreativeguild.example/events/technology-mixer" },
+    location:{ "@type":"Place", name:"Atlanta Creative Lab", address:{ "@type":"PostalAddress", streetAddress:"200 Art Way", addressLocality:"Atlanta", addressRegion:"GA", postalCode:"30303" } },
+    offers:{ "@type":"Offer", url:secondEventUrl },
+  })}</script>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => new Response(
+    url === eventUrl ? detailHtml : url === secondEventUrl ? secondDetailHtml : "<main>Atlanta events on Posh</main>",
+    { status:200, headers:{ "content-type":"text/html" } },
+  );
+  try {
+    const runtime = env(db, { BROWSER:browser });
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/sources/cal_source_posh_atlanta/run", { method:"POST", body:{}, admin:true }), runtime);
+    assert.equal(response.status, 200, await response.clone().text());
+    const result = await response.json();
+    const direct = JSON.parse(db.prepare("SELECT source_results_json FROM calendar_scout_runs WHERE id=?").get(result.runId).source_results_json)[0].sources[0];
+    assert.deepEqual(
+      { adapter:direct.adapter, childLinksDiscovered:direct.childLinksDiscovered, childrenExtracted:direct.childrenExtracted, leadsExtracted:direct.leadsExtracted, completeness:direct.completeness },
+      { adapter:"posh", childLinksDiscovered:2, childrenExtracted:2, leadsExtracted:0, completeness:"needs_verification" },
+    );
+    assert.equal(browserCalls.length, 1);
+    assert.deepEqual({ action:browserCalls[0].action, url:browserCalls[0].url }, { action:"json", url:discoveryUrl });
+    assert.match(browserCalls[0].prompt, /currently shown for Atlanta, GA/);
+    const candidate = db.prepare("SELECT verification_state,starts_at,ends_at,venue_address,source_url,discovery_url,source_authority FROM calendar_candidates WHERE id='cal_candidate_posh_orca_open_house_2026'").get();
+    assert.deepEqual({ ...candidate }, {
+      verification_state:"needs_verification", starts_at:"2026-08-23T16:00:00-04:00", ends_at:"2026-08-23T19:00:00-04:00",
+      venue_address:"6000 Lake Forrest Dr NW, Sandy Springs, GA 30328, USA", source_url:eventUrl, discovery_url:discoveryUrl, source_authority:"authorized_ticket_host",
+    });
+    assert.deepEqual(
+      { ...db.prepare("SELECT organizer,verification_state,ends_at,source_authority FROM calendar_candidates WHERE source_event_id='posh-atlanta-creative-technology-mixer'").get() },
+      { organizer:"Atlanta Creative Guild", verification_state:"verified", ends_at:"2026-09-12T21:00:00-04:00", source_authority:"authorized_ticket_host" },
+    );
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_posh_orca_open_house_2026'").get().count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id='posh-atlanta-creative-technology-mixer')").get().count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("an incomplete Out of Hand rerun is held without replacing a complete private occurrence set", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_out_of_hand_truths'");
@@ -703,6 +888,7 @@ test("repeated feedback creates a suggestion that changes the profile only after
 
 test("direct monitoring remains safe without an OpenAI key and scheduler due gating prevents repeated daily work", async () => {
   const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0 WHERE adapter_config_json LIKE '%\"platform\"%'");
   const runtime = env(db);
   const originalFetch = globalThis.fetch;
   const enabledSourceCount = db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE enabled=1").get().count;
@@ -1530,6 +1716,8 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(studio,/Restricted access is published on the event card, API, and calendar feeds/);
   assert.match(studio,/data-run-source/);
   assert.match(studio,/Run This Source/);
+  assert.match(studio,/Eventbrite discovery/);
+  assert.match(studio,/Posh discovery/);
   assert.match(studio,/nextReview:true, excludeId:approvedId, reviewIndex:reviewIndex/);
   assert.match(studio,/Moving to the next review/);
   assert.doesNotMatch(studio,/state\.filter="published"/);
@@ -1546,6 +1734,9 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(publicCalendar,/calendar-event-access/);
   assert.match(publicCalendar,/Access \/ /);
   assert.match(publicCalendar,/function isOnViewExhibition\(event\)/);
+  assert.match(publicCalendar,/var endDate = validDate\(event\.endsAt\)/);
+  assert.match(publicCalendar,/return startLabel \+ " - " \+ timeFormatter\.format\(endDate\)/);
+  assert.match(publicCalendar,/return startLabel \+ " - " \+ fullFormatter\.format\(endDate\)/);
   assert.match(publicCalendar,/if \(isOnViewExhibition\(event\)\) return false/);
   assert.doesNotMatch(publicCalendar,/allEvents\.find\(function \(event\) \{ return !isPast\(event\)/);
   assert.doesNotMatch(publicCalendar,/href="\/calendar\/events\//);

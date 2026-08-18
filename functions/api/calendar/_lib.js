@@ -8,7 +8,9 @@ const OCCURRENCE_STATUSES = new Set(["scheduled", "tbd", "cancelled"]);
 const ACCESS_STATUSES = new Set(["public", "restricted", "unknown"]);
 const SOURCE_AUTHORITIES = new Set(["organizer_event", "venue_event", "official_calendar", "authorized_ticket_host", "unresolved"]);
 const LINK_ROLES = new Set(["organizer", "venue", "ticket", "supporting", "discovery"]);
-const SOURCE_ADAPTERS = new Set(["automatic", "wix", "localist", "out_of_hand", "json", "icalendar", "rss"]);
+const PLATFORM_SOURCE_ADAPTERS = new Set(["eventbrite", "posh"]);
+const STORED_SOURCE_ADAPTERS = new Set(["automatic", "wix", "localist", "out_of_hand", "json", "icalendar", "rss"]);
+const SOURCE_ADAPTERS = new Set([...STORED_SOURCE_ADAPTERS, ...PLATFORM_SOURCE_ADAPTERS]);
 const SOURCE_RENDER_MODES = new Set(["static", "dynamic-fallback"]);
 const TIME_ZONE = "America/New_York";
 const PUBLIC_HOST = "thesixwellconstruct.com";
@@ -217,7 +219,9 @@ function sourceAuthorityErrors(proposal) {
   const discoveryUrl = asString(proposal.discoveryUrl);
   if (authority === "unresolved") errors.push("Resolve the discovery lead to an original organizer, venue, official calendar, or authorized ticket-host page before publication.");
   if (discoveryUrl && !validHttpUrl(discoveryUrl)) errors.push("Discovery URL must use http or https.");
-  if (discoveryUrl && sameSourceHost(discoveryUrl, proposal.sourceUrl)) errors.push("The public source cannot be the same secondary source that supplied the lead.");
+  if (discoveryUrl && sameSourceHost(discoveryUrl, proposal.sourceUrl) && authority !== "authorized_ticket_host") {
+    errors.push("The public source cannot be the same secondary source that supplied the lead.");
+  }
   if (proposal.organizerUrl && !validHttpUrl(proposal.organizerUrl)) errors.push("Organizer website URL must use http or https.");
   if (proposal.venueUrl && !validHttpUrl(proposal.venueUrl)) errors.push("Venue website URL must use http or https.");
   if (authority === "organizer_event" && (!proposal.organizerUrl || !sameSourceHost(proposal.sourceUrl, proposal.organizerUrl))) {
@@ -525,14 +529,15 @@ function normalizeSource(row) {
   if (!row) return null;
   const reviewed = Number(row.reviewed_count) || 0;
   const accepted = Number(row.accepted_count) || 0;
+  const adapterConfig = parseJson(row.adapter_config_json, {});
   return {
     id: row.id,
     name: row.name,
     url: row.url,
     sourceType: row.source_type,
-    adapterKey: SOURCE_ADAPTERS.has(row.adapter_key) ? row.adapter_key : "automatic",
+    adapterKey: sourceAdapterKey(row),
     renderMode: SOURCE_RENDER_MODES.has(row.render_mode) ? row.render_mode : "static",
-    adapterConfig: parseJson(row.adapter_config_json, {}),
+    adapterConfig,
     trustLevel: row.trust_level,
     enabled: row.enabled === 1,
     cadenceHours: Number(row.cadence_hours) || 24,
@@ -545,6 +550,16 @@ function normalizeSource(row) {
     acceptanceRate: reviewed ? accepted / reviewed : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function storedSourceAdapter(adapterKey, adapterConfig = {}) {
+  const config = { ...adapterConfig };
+  if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) config.platform = adapterKey;
+  else delete config.platform;
+  return {
+    adapterKey: PLATFORM_SOURCE_ADAPTERS.has(adapterKey) ? "automatic" : adapterKey,
+    adapterConfig: config,
   };
 }
 
@@ -1889,11 +1904,12 @@ async function handleSources(request, env, parts) {
     const adapterKey = SOURCE_ADAPTERS.has(asString(body.adapterKey)) ? asString(body.adapterKey) : "automatic";
     const renderMode = SOURCE_RENDER_MODES.has(asString(body.renderMode)) ? asString(body.renderMode) : "static";
     const adapterConfig = body.adapterConfig && typeof body.adapterConfig === "object" && !Array.isArray(body.adapterConfig) ? body.adapterConfig : {};
+    const storedAdapter = storedSourceAdapter(adapterKey, adapterConfig);
     const sourceId = `cal_source_${crypto.randomUUID()}`;
     await db.prepare(
       `INSERT INTO calendar_sources (id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-    ).bind(sourceId, asString(body.name), asString(body.url), asString(body.sourceType) || "official_html", asString(body.trustLevel) || "official", body.enabled === false ? 0 : 1, Number(body.cadenceHours) || 24, adapterKey, renderMode, JSON.stringify(adapterConfig), now, now).run();
+    ).bind(sourceId, asString(body.name), asString(body.url), asString(body.sourceType) || "official_html", asString(body.trustLevel) || "official", body.enabled === false ? 0 : 1, Number(body.cadenceHours) || 24, storedAdapter.adapterKey, renderMode, JSON.stringify(storedAdapter.adapterConfig), now, now).run();
     return json({ source: normalizeSource(await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(sourceId).first()) }, { status: 201 });
   }
   if (request.method === "PATCH" && id) {
@@ -1901,12 +1917,13 @@ async function handleSources(request, env, parts) {
     if (!current) return errorResponse("Source not found.", 404);
     const url = body.url === undefined ? current.url : asString(body.url);
     if (!validHttpUrl(url)) return errorResponse("Source URL must use http or https.");
-    const adapterKey = body.adapterKey === undefined ? current.adapter_key : asString(body.adapterKey);
+    const adapterKey = body.adapterKey === undefined ? sourceAdapterKey(current) : asString(body.adapterKey);
     const renderMode = body.renderMode === undefined ? current.render_mode : asString(body.renderMode);
     if (!SOURCE_ADAPTERS.has(adapterKey)) return errorResponse("Unknown source adapter.");
     if (!SOURCE_RENDER_MODES.has(renderMode)) return errorResponse("Unknown source render mode.");
     const adapterConfig = body.adapterConfig === undefined ? parseJson(current.adapter_config_json, {}) : body.adapterConfig;
     if (!adapterConfig || typeof adapterConfig !== "object" || Array.isArray(adapterConfig)) return errorResponse("Adapter configuration must be a JSON object.");
+    const storedAdapter = storedSourceAdapter(adapterKey, adapterConfig);
     await db.prepare(
       `UPDATE calendar_sources SET name=?,url=?,source_type=?,trust_level=?,enabled=?,cadence_hours=?,adapter_key=?,render_mode=?,adapter_config_json=?,updated_at=? WHERE id=?`
     ).bind(
@@ -1914,7 +1931,7 @@ async function handleSources(request, env, parts) {
       body.sourceType === undefined ? current.source_type : asString(body.sourceType),
       body.trustLevel === undefined ? current.trust_level : asString(body.trustLevel),
       body.enabled === undefined ? current.enabled : body.enabled ? 1 : 0,
-      body.cadenceHours === undefined ? current.cadence_hours : Math.max(1, Number(body.cadenceHours) || 24), adapterKey, renderMode, JSON.stringify(adapterConfig), now, id
+      body.cadenceHours === undefined ? current.cadence_hours : Math.max(1, Number(body.cadenceHours) || 24), storedAdapter.adapterKey, renderMode, JSON.stringify(storedAdapter.adapterConfig), now, id
     ).run();
     return json({ source: normalizeSource(await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(id).first()) });
   }
@@ -2272,6 +2289,16 @@ function jsonLdObjects(value) {
   const graph = Array.isArray(value["@graph"]) ? value["@graph"].flatMap(jsonLdObjects) : [];
   const type = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
   return type.includes("Event") ? [value, ...graph] : graph;
+}
+
+function nestedJsonLdEvents(value) {
+  if (Array.isArray(value)) return value.flatMap(nestedJsonLdEvents);
+  if (!value || typeof value !== "object") return [];
+  const type = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
+  const nested = Object.entries(value)
+    .filter(([key]) => key !== "@context" && key !== "@type")
+    .flatMap(([, child]) => nestedJsonLdEvents(child));
+  return type.includes("Event") ? [value, ...nested] : nested;
 }
 
 function firstStructuredImage(value) {
@@ -2827,8 +2854,13 @@ function extractRssEvents(text, source) {
 }
 
 function sourceAdapterKey(source) {
+  const configuredPlatform = asString(parseJson(source.adapter_config_json, {}).platform);
+  if (PLATFORM_SOURCE_ADAPTERS.has(configuredPlatform)) return configuredPlatform;
   if (source.adapter_key !== "automatic" && SOURCE_ADAPTERS.has(source.adapter_key)) return source.adapter_key;
-  if (sourceHost(source.url) === "eyedrum.org") return "eyedrum";
+  const host = sourceHost(source.url);
+  if (host === "eventbrite.com" || host.endsWith(".eventbrite.com")) return "eventbrite";
+  if (host === "posh.vip" || host.endsWith(".posh.vip")) return "posh";
+  if (host === "eyedrum.org") return "eyedrum";
   if (source.source_type === "calendar") return "icalendar";
   if (source.source_type === "json") return isGsuLocalistSource(source.url) ? "localist" : "json";
   if (source.source_type === "rss") return "rss";
@@ -3154,6 +3186,276 @@ async function mapConcurrent(values, limit, mapper) {
   }
   await Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker));
   return results;
+}
+
+function platformEventIdentity(adapterKey, value, baseUrl = "") {
+  try {
+    const url = new URL(sourceHtmlEntities(asString(value)), baseUrl || undefined);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const path = url.pathname.replace(/\/+$/, "");
+    if (adapterKey === "eventbrite" && (host === "eventbrite.com" || host.endsWith(".eventbrite.com"))) {
+      const id = path.match(/^\/e\/.+-tickets-(\d+)$/i)?.[1];
+      if (!id) return null;
+      return { id: `eventbrite-${id}`, url: `${url.origin}${path}` };
+    }
+    if (adapterKey === "posh" && (host === "posh.vip" || host.endsWith(".posh.vip"))) {
+      const slug = path.match(/^\/e\/([a-z0-9-]+)$/i)?.[1];
+      if (!slug) return null;
+      return { id: `posh-${slug.toLowerCase()}`, url: `${url.origin}${path}` };
+    }
+  } catch {
+    // Untrusted malformed platform URLs are ignored.
+  }
+  return null;
+}
+
+function platformEventLinks(html, source, adapterKey, maximum) {
+  const config = parseJson(source.adapter_config_json, {});
+  const values = [...(Array.isArray(config.eventUrls) ? config.eventUrls : [])];
+  const sourceIdentity = platformEventIdentity(adapterKey, source.url);
+  if (sourceIdentity) values.push(sourceIdentity.url);
+  const hrefPattern = /\bhref=["']([^"']+)["']/gi;
+  let hrefMatch;
+  while ((hrefMatch = hrefPattern.exec(html))) values.push(hrefMatch[1]);
+  const scriptPattern = /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let scriptMatch;
+  while ((scriptMatch = scriptPattern.exec(html))) {
+    try {
+      for (const item of nestedJsonLdEvents(JSON.parse(scriptMatch[1]))) values.push(item.url || item["@id"] || "");
+    } catch {
+      // Malformed third-party JSON-LD is ignored.
+    }
+  }
+  const seen = new Set();
+  const links = [];
+  for (const value of values) {
+    const identity = platformEventIdentity(adapterKey, value, source.url);
+    if (!identity || seen.has(identity.id)) continue;
+    seen.add(identity.id);
+    links.push(identity);
+    if (links.length >= maximum) break;
+  }
+  return links;
+}
+
+function platformOfficialLink(event, role, detailUrl) {
+  return asString((event.relatedLinks || []).find((item) => (
+    item.role === role && validHttpUrl(item.url) && !sameSourceHost(item.url, detailUrl)
+  ))?.url);
+}
+
+function ticketPlatformProposal(event, source, adapterKey, detail) {
+  const organizerUrl = platformOfficialLink(event, "organizer", detail.url);
+  const venueUrl = platformOfficialLink(event, "venue", detail.url);
+  const hasOfficialSupport = Boolean(organizerUrl || venueUrl);
+  const hasEndTime = validDate(event.endsAt);
+  const discoveryUrl = platformEventIdentity(adapterKey, source.url)?.id === detail.id ? "" : source.url;
+  const issues = [
+    ...(!hasEndTime ? ["The ticket listing does not provide a verified event end time."] : []),
+    ...(!hasOfficialSupport ? ["Confirm the organizer or venue on an official website before publication."] : []),
+  ];
+  return {
+    ...event,
+    sourceId: source.id,
+    sourceEventId: detail.id,
+    sourceUrl: detail.url,
+    ticketUrl: detail.url,
+    discoveryUrl,
+    organizerUrl,
+    venueUrl,
+    sourceAuthority: "authorized_ticket_host",
+    sourceResolutionNotes: hasOfficialSupport
+      ? `The exact ${adapterKey === "eventbrite" ? "Eventbrite" : "Posh"} ticket page is supported by an official organizer or venue link.`
+      : `The exact ${adapterKey === "eventbrite" ? "Eventbrite" : "Posh"} ticket page supplies event facts, but official organizer or venue support is still required.`,
+    relatedLinks: normalizeRelatedLinks([
+      ...(event.relatedLinks || []),
+      ...(discoveryUrl ? [{ label: `${source.name} discovery page`, url: discoveryUrl, provenanceUrl: discoveryUrl, role: "discovery", includePublic: false }] : []),
+    ], detail.url),
+    verificationState: issues.length ? "needs_verification" : event.verificationState,
+    verificationNotes: [event.verificationNotes, ...issues].filter(Boolean).join("\n"),
+    confidence: issues.length ? Math.min(Number(event.confidence) || 0.72, 0.72) : event.confidence,
+  };
+}
+
+function browserPlatformProposal(item, source, adapterKey) {
+  const detail = platformEventIdentity(adapterKey, item.eventUrl || item.ticketUrl, source.url);
+  const sourceUrl = detail?.url || source.url;
+  const organizerUrl = validHttpUrl(item.organizerUrl) && !sameSourceHost(item.organizerUrl, sourceUrl) ? asString(item.organizerUrl) : "";
+  const venueUrl = validHttpUrl(item.venueUrl) && !sameSourceHost(item.venueUrl, sourceUrl) ? asString(item.venueUrl) : "";
+  const startsAt = asString(item.startsAt);
+  const endsAt = asString(item.endsAt) || null;
+  const stableLead = normalizeText(`${item.title || "event"}-${startsAt || "undated"}`).replace(/\s+/g, "-").slice(0, 100);
+  const hasEndTime = validDate(endsAt);
+  const hasOfficialSupport = Boolean(organizerUrl || venueUrl);
+  const exactTicketPage = Boolean(detail);
+  const issues = [
+    ...(!exactTicketPage ? ["Resolve this platform listing to its exact event page."] : []),
+    ...(!hasEndTime ? ["The platform listing does not provide a verified event end time."] : []),
+    ...(exactTicketPage && !hasOfficialSupport ? ["Confirm the organizer or venue on an official website before publication."] : []),
+  ];
+  return {
+    sourceId: source.id,
+    sourceEventId: detail?.id || `${adapterKey}-lead-${stableLead}`,
+    sourceUrl,
+    ticketUrl: detail?.url || "",
+    discoveryUrl: exactTicketPage && detail.url === source.url ? "" : source.url,
+    organizerUrl,
+    venueUrl,
+    sourceAuthority: exactTicketPage ? "authorized_ticket_host" : "unresolved",
+    sourceResolutionNotes: exactTicketPage
+      ? "The exact ticket page was recovered from the platform listing; official organizer or venue support is still required."
+      : "The rendered platform index supplied a private lead without an exact event page.",
+    title: asString(item.title),
+    organizer: asString(item.organizer) || source.name,
+    factualDescription: cleanSourceText(item.description),
+    accessStatus: ["public", "restricted"].includes(asString(item.accessStatus)) ? asString(item.accessStatus) : "unknown",
+    accessNotes: asString(item.accessNotes),
+    audiences: audienceStrings(item.audiences),
+    dateKind: startsAt.length === 10 ? "all_day" : "timed",
+    startsAt,
+    endsAt,
+    timezone: TIME_ZONE,
+    venueName: asString(item.venueName),
+    venueAddress: asString(item.venueAddress),
+    city: asString(item.city) || "Atlanta",
+    region: asString(item.region) || "GA",
+    flyerUrl: validHttpUrl(item.imageUrl) ? asString(item.imageUrl) : "",
+    flyerProvenanceUrl: sourceUrl,
+    relatedLinks: [],
+    subjects: [],
+    formats: [],
+    experimental: false,
+    verificationState: issues.length ? "needs_verification" : "verified",
+    verificationNotes: [
+      `Event facts were extracted from the rendered ${adapterKey === "eventbrite" ? "Eventbrite" : "Posh"} page.`,
+      ...issues,
+    ].join("\n"),
+    confidence: issues.length ? 0.58 : 0.82,
+  };
+}
+
+async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode = "index") {
+  if (!env.BROWSER?.quickAction) throw new Error("Cloudflare Browser rendering is unavailable for this dynamic source.");
+  const config = parseJson(source.adapter_config_json, {});
+  const configuredCity = asString(config.city) || "Atlanta";
+  const configuredRegion = asString(config.region) || "GA";
+  const response = await env.BROWSER.quickAction("json", {
+    url,
+    prompt: mode === "detail"
+      ? "Extract the one event on this ticket page. Use ISO 8601 start and end timestamps exactly as shown. Return empty strings for missing facts. Never infer an end time, organizer website, venue website, or event URL."
+      : `Extract up to ${maximum} upcoming event cards currently shown for ${configuredCity}, ${configuredRegion}. Do not include featured or nearby events outside that location section. Use ISO 8601 dates or timestamps only when the page supplies them. Include an event URL only when the page exposes the exact ticket-page URL. Return empty strings for facts the page does not supply.`,
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        type: "object",
+        properties: {
+          events: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" }, description: { type: "string" }, organizer: { type: "string" },
+                organizerUrl: { type: "string" }, venueName: { type: "string" }, venueAddress: { type: "string" },
+                venueUrl: { type: "string" }, city: { type: "string" }, region: { type: "string" },
+                startsAt: { type: "string" }, endsAt: { type: "string" }, eventUrl: { type: "string" },
+                ticketUrl: { type: "string" }, imageUrl: { type: "string" }, accessStatus: { type: "string" },
+                accessNotes: { type: "string" }, audiences: { type: "array", items: { type: "string" } },
+              },
+              required: ["title", "startsAt"],
+            },
+          },
+        },
+        required: ["events"],
+      },
+    },
+    gotoOptions: { waitUntil: "networkidle2", timeout: 60_000 },
+    waitForTimeout: 1_000,
+    rejectResourceTypes: ["image", "media", "font"],
+  });
+  if (!response?.ok) throw new Error(`Browser event extraction returned HTTP ${response?.status || "unknown"}.`);
+  const payload = parseJson(await boundedResponseText(response), {});
+  let result = payload?.result ?? payload?.data?.result ?? payload;
+  if (typeof result === "string") result = parseJson(result, {});
+  return {
+    events: (Array.isArray(result?.events) ? result.events : []).slice(0, maximum),
+    browserMs: Number(response.headers.get("x-browser-ms-used") || 0) || 0,
+  };
+}
+
+async function ticketPlatformDetail(env, source, adapterKey, detail, staticText = "") {
+  let text = staticText;
+  if (!text) {
+    try {
+      const response = await fetchExternalSource(detail.url);
+      if (response.ok) text = await boundedResponseText(response);
+    } catch {
+      // Dynamic extraction below is the bounded fallback for blocked ticket pages.
+    }
+  }
+  const structured = text ? extractJsonLdEvents(text, source) : [];
+  const matching = structured.find((event) => platformEventIdentity(adapterKey, event.sourceUrl, detail.url)?.id === detail.id) || structured[0];
+  if (matching) return { proposal: ticketPlatformProposal(matching, source, adapterKey, detail), browserMs: 0, retrieval: "static" };
+  if (source.render_mode !== "dynamic-fallback") throw new Error("The ticket page did not expose structured event data.");
+  const rendered = await browserPlatformEvents(env, source, adapterKey, detail.url, 1, "detail");
+  const item = rendered.events[0];
+  if (!item?.title || !validDate(item.startsAt)) throw new Error("The rendered ticket page did not expose a valid title and start date.");
+  return {
+    proposal: browserPlatformProposal({ ...item, eventUrl: detail.url, ticketUrl: detail.url }, source, adapterKey),
+    browserMs: rendered.browserMs,
+    retrieval: "browser",
+  };
+}
+
+async function extractTicketPlatformEvents(env, staticText, source, adapterKey, initial = {}) {
+  const config = parseJson(source.adapter_config_json, {});
+  const maximum = Math.min(Math.max(Number(config.maxChildren) || 12, 1), 20);
+  let links = platformEventLinks(staticText, source, adapterKey, maximum);
+  let browserMs = Number(initial.browserMs) || 0;
+  let retrieval = asString(initial.retrieval) || "static";
+  let indexEvents = [];
+  const sourceIsEvent = Boolean(platformEventIdentity(adapterKey, source.url));
+  if (!sourceIsEvent && source.render_mode === "dynamic-fallback" && (!links.length || adapterKey === "posh")) {
+    const rendered = await browserPlatformEvents(env, source, adapterKey, source.url, maximum, "index");
+    browserMs += rendered.browserMs;
+    retrieval = "browser";
+    indexEvents = rendered.events;
+    const renderedLinks = rendered.events.map((item) => item.eventUrl || item.ticketUrl).filter(Boolean);
+    links = platformEventLinks("", { ...source, adapter_config_json: JSON.stringify({ eventUrls: [...links.map((item) => item.url), ...renderedLinks] }) }, adapterKey, maximum);
+  }
+  const failed = [];
+  const details = await mapConcurrent(links, 2, async (detail) => {
+    try {
+      const result = await ticketPlatformDetail(env, source, adapterKey, detail, detail.url === source.url ? staticText : "");
+      browserMs += result.browserMs;
+      if (result.retrieval === "browser") retrieval = "browser";
+      return result.proposal;
+    } catch (error) {
+      failed.push({ id: detail.id, url: detail.url, error: asString(error.message) });
+      return null;
+    }
+  });
+  const linkedIds = new Set(links.map((item) => item.id));
+  const leads = indexEvents
+    .filter((item) => !linkedIds.has(platformEventIdentity(adapterKey, item.eventUrl || item.ticketUrl, source.url)?.id || ""))
+    .map((item) => browserPlatformProposal(item, source, adapterKey))
+    .filter((proposal) => proposal.title && validDate(proposal.startsAt));
+  const proposals = [...details.filter(Boolean), ...leads].filter((proposal, index, events) => (
+    events.findIndex((candidate) => candidate.sourceEventId === proposal.sourceEventId) === index
+  ));
+  const needsVerification = failed.length > 0 || proposals.some((proposal) => proposal.verificationState !== "verified");
+  return {
+    proposals,
+    diagnostics: {
+      hubDetected: !sourceIsEvent,
+      childLinksDiscovered: links.length,
+      childrenExtracted: details.filter(Boolean).length,
+      leadsExtracted: leads.length,
+      missingChildren: failed,
+      retrieval,
+      browserMs,
+      completeness: needsVerification ? "needs_verification" : "complete",
+    },
+  };
 }
 
 function outOfHandSeriesResult(source, config, occurrences, links, failed, retrieval, browserMs) {
@@ -3482,14 +3784,19 @@ async function monitorSources(env, db, profile, sourceId = "") {
   for (const source of sources) {
     const now = isoNow();
     try {
-      const response = await fetchExternalSource(source.url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const text = await completeLocalistPayload(source, await boundedResponseText(response));
-      const fingerprint = await sha256(text);
       const adapterKey = sourceAdapterKey(source);
+      const response = await fetchExternalSource(source.url);
+      const platformFallback = PLATFORM_SOURCE_ADAPTERS.has(adapterKey) && source.render_mode === "dynamic-fallback";
+      if (!response.ok && !platformFallback) throw new Error(`HTTP ${response.status}`);
+      const text = response.ok ? await completeLocalistPayload(source, await boundedResponseText(response)) : "";
       let bundle;
       if (adapterKey === "out_of_hand") {
         bundle = await extractOutOfHandSeries(env, text, source);
+      } else if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) {
+        bundle = await extractTicketPlatformEvents(env, text, source, adapterKey, {
+          retrieval: response.ok ? "static" : "browser",
+          browserMs: 0,
+        });
       } else {
         let proposals = extractSourceEvents(text, source);
         let retrieval = adapterKey === "localist" ? "api" : "static";
@@ -3505,6 +3812,9 @@ async function monitorSources(env, db, profile, sourceId = "") {
         const childCount = proposals.reduce((sum, proposal) => sum + (proposal.occurrences || []).length, 0);
         bundle = { proposals, diagnostics: { hubDetected: hub, childLinksDiscovered: childCount, childrenExtracted: childCount, missingChildren: [], retrieval, browserMs, completeness: hub && childCount < 2 ? "needs_verification" : "complete" } };
       }
+      const fingerprint = await sha256(text || JSON.stringify(bundle.proposals.map((proposal) => ({
+        id: proposal.sourceEventId, title: proposal.title, startsAt: proposal.startsAt, endsAt: proposal.endsAt,
+      }))));
       const proposals = bundle.proposals.slice(0, profile.perRunLimit);
       const emptyWarning = proposals.length ? "" : "Source retrieved successfully, but no event proposals were extracted.";
       if (emptyWarning) warningCount += 1;
@@ -3520,7 +3830,8 @@ async function monitorSources(env, db, profile, sourceId = "") {
       };
       const skippedReasons = {};
       for (const proposal of proposals) {
-        const resolved = leadSource(source) ? await resolveDiscoveryProposal(env, profile, source, proposal) : { proposal, citations: [] };
+        const needsSourceResolution = leadSource(source) && sourceAuthorityErrors(proposal).length > 0;
+        const resolved = needsSourceResolution ? await resolveDiscoveryProposal(env, profile, source, proposal) : { proposal, citations: [] };
         const stored = await upsertScoutProposal(env, db, resolved.proposal, "source_monitor", [
           { url: proposal.sourceUrl || source.url, role: "discovery", retrievedAt: now },
           ...resolved.citations,
@@ -3661,6 +3972,13 @@ async function requestOpenAiEvents(env, profile, { query, domains = [], sourceDa
 
 async function resolveDiscoveryProposal(env, profile, source, proposal) {
   const discoveryUrl = proposal.sourceUrl || source.url;
+  const ticketFallback = proposal.sourceAuthority === "authorized_ticket_host"
+    ? applySourceAuthorityPolicy({
+      ...proposal,
+      discoveryUrl: proposal.discoveryUrl || source.url,
+      sourceResolutionNotes: proposal.sourceResolutionNotes || "The ticket page is exact, but official organizer or venue support is still required.",
+    })
+    : null;
   const unresolved = applySourceAuthorityPolicy({
     ...proposal,
     discoveryUrl,
@@ -3671,7 +3989,7 @@ async function resolveDiscoveryProposal(env, profile, source, proposal) {
       { label: `${source.name} discovery lead`, url: discoveryUrl, provenanceUrl: discoveryUrl, role: "discovery", includePublic: false },
     ],
   });
-  if (!env.OPENAI_API_KEY) return { proposal: unresolved, citations: [] };
+  if (!env.OPENAI_API_KEY) return { proposal: ticketFallback || unresolved, citations: [] };
   try {
     const query = `Resolve the original source for this Atlanta event lead: ${proposal.title}; organizer ${proposal.organizer || "unknown"}; venue ${proposal.venueName || "unknown"}; date ${proposal.startsAt || "unknown"}. Search the exact event, organizer, and venue. Return the event only when the title, date, and venue or organizer match.`;
     const result = await requestOpenAiEvents(env, profile, { query, limit: 3, authorityLead: discoveryUrl });
@@ -3701,8 +4019,8 @@ async function resolveDiscoveryProposal(env, profile, source, proposal) {
   } catch (error) {
     return {
       proposal: {
-        ...unresolved,
-        sourceResolutionNotes: `${unresolved.sourceResolutionNotes} Automated resolution failed: ${asString(error.message).slice(0, 240)}`,
+        ...(ticketFallback || unresolved),
+        sourceResolutionNotes: `${(ticketFallback || unresolved).sourceResolutionNotes} Automated resolution failed: ${asString(error.message).slice(0, 240)}`,
       },
       citations: [],
     };
