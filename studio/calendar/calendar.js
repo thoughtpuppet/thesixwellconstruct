@@ -1,8 +1,9 @@
 (function () {
   "use strict";
   var TOKEN_KEY = "swc_submissions_admin_token";
-  var SUBJECTS = [["art","Art"],["film","Film"],["poetry-music","Poetry / Music"],["technology","Technology"],["ai","AI"],["creative-technology","Creative Technology"]];
+  var SUBJECTS = [["art","Art"],["film","Film"],["poetry-music","Poetry / Music"],["technology","Technology"],["ai","AI"],["creative-technology","Creative Technology"],["anthropology","Anthropology"],["engineering","Engineering"],["philosophy","Philosophy"]];
   var FORMATS = [["exhibition","Exhibition"],["screening","Screening"],["performance","Performance"],["experimental-event","Experimental Event"],["lecture-talk","Lecture / Talk"],["panel","Panel"],["workshop","Workshop"],["conference","Conference"]];
+  var OCCURRENCE_TYPES = [["opening_reception","Opening Reception"],["artist_talk","Artist Talk"],["mixer","Mixer"],["screening","Screening"],["performance","Performance"],["workshop","Workshop"],["panel","Panel"],["lecture","Lecture"],["other","Related Program"]];
   var STATUSES = [["review","Review Queue"],["ready","Ready to Publish"],["published","Published"],["needs_verification","Needs Verification"],["rejected","Rejected"],["cancelled","Cancelled"],["duplicate","Duplicates"]];
   var token = localStorage.getItem(TOKEN_KEY) || "";
   var state = { candidates:[], sources:[], socialSources:[], connectors:[], profile:null, suggestions:[], runs:[], filter:"review", selectedId:"", draftNew:false, broadDiscoveryEnabled:false, activeCandidate:null, flyerPreviewUrl:"" };
@@ -51,6 +52,17 @@
         includePublic:row.querySelector("[data-link-public]").checked
       };
     }).filter(function (link) { return link.url; });
+    var occurrences = Array.from(editorRoot.querySelectorAll("[data-occurrence]")).map(function (row, index) {
+      function occurrenceValue(name) { var control=row.querySelector('[data-occurrence-'+name+']');return control?control.value.trim():""; }
+      return {
+        id:row.dataset.occurrenceId||"", occurrenceType:occurrenceValue("type"), title:occurrenceValue("title"),
+        factualDescription:occurrenceValue("description"), dateKind:occurrenceValue("date-kind"),
+        startsAt:occurrenceValue("starts"), endsAt:occurrenceValue("ends"), timezone:occurrenceValue("timezone")||"America/New_York",
+        venueName:occurrenceValue("venue"), venueAddress:occurrenceValue("address"), sourceUrl:occurrenceValue("source"),
+        ticketUrl:occurrenceValue("ticket"), status:occurrenceValue("status"), verificationState:occurrenceValue("verification"),
+        verificationNotes:occurrenceValue("notes"), sortOrder:index
+      };
+    });
     return {
       sourceId:value("candidateSourceId"), sourceEventId:value("candidateSourceEventId"), sourceUrl:value("candidateSourceUrl"), ticketUrl:value("candidateTicketUrl"),
       title:value("candidateTitle"), organizer:value("candidateOrganizer"), factualDescription:value("candidateDescription"), dateKind:value("candidateDateKind"),
@@ -59,10 +71,37 @@
       experimental:document.getElementById("candidateExperimental").checked, verificationState:value("candidateVerificationState"), verificationNotes:value("candidateVerificationNotes"),
       confidence:value("candidateConfidence") === "" ? null : Number(value("candidateConfidence")), privateRationale:value("candidatePrivateRationale"), attendanceUse:value("candidateAttendanceUse"),
       programmingIdeas:value("candidateProgrammingIdeas"), potentialCollaborators:value("candidateCollaborators"), internalNotes:value("candidateInternalNotes"), rejectionReason:value("candidateRejectionReason"), duplicateOf:value("candidateDuplicateOf"),
-      relatedLinks:relatedLinks, flyerMediaId:value("candidateFlyerMediaId"), flyerSourceUrl:value("candidateFlyerSourceUrl"), flyerProvenanceUrl:value("candidateFlyerProvenanceUrl"), flyerPublicApproved:Boolean(document.getElementById("candidateFlyerPublic") && document.getElementById("candidateFlyerPublic").checked), flyerAltText:value("candidateFlyerAltText")
+      relatedLinks:relatedLinks, occurrences:occurrences, flyerMediaId:value("candidateFlyerMediaId"), flyerSourceUrl:value("candidateFlyerSourceUrl"), flyerProvenanceUrl:value("candidateFlyerProvenanceUrl"), flyerPublicApproved:Boolean(document.getElementById("candidateFlyerPublic") && document.getElementById("candidateFlyerPublic").checked), flyerAltText:value("candidateFlyerAltText")
     };
   }
-  function blankCandidate() { return { id:"", title:"", status:"needs_verification", verificationState:"needs_verification", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[], relatedLinks:[], flyerPublicApproved:false }; }
+  function blankCandidate() { return { id:"", title:"", status:"needs_verification", verificationState:"needs_verification", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[], relatedLinks:[], occurrences:[], flyerPublicApproved:false }; }
+
+  function occurrenceOptions(choices, selected) { return choices.map(function (choice) { return '<option value="'+escapeHtml(choice[0])+'"'+(choice[0]===selected?' selected':'')+'>'+escapeHtml(choice[1])+'</option>'; }).join(''); }
+  function occurrenceRow(occurrence) {
+    occurrence=occurrence||{};
+    return '<article class="occurrence-row" data-occurrence data-occurrence-id="'+escapeHtml(occurrence.id||"")+'">' +
+      '<div class="occurrence-row-head"><strong>'+escapeHtml(occurrence.title||"Related program")+'</strong><button type="button" data-remove-occurrence>Remove</button></div>' +
+      '<div class="field-grid">' +
+      '<label class="field"><span>Program type</span><select data-occurrence-type>'+occurrenceOptions(OCCURRENCE_TYPES,occurrence.occurrenceType||"other")+'</select></label>' +
+      '<label class="field"><span>Status</span><select data-occurrence-status>'+occurrenceOptions([["scheduled","Scheduled"],["tbd","Date TBD"],["cancelled","Cancelled"]],occurrence.status||"scheduled")+'</select></label>' +
+      '<label class="field is-wide"><span>Public title</span><input data-occurrence-title value="'+escapeHtml(occurrence.title||"")+'"></label>' +
+      '<label class="field"><span>Date type</span><select data-occurrence-date-kind>'+occurrenceOptions([["timed","Timed"],["all_day","All day"]],occurrence.dateKind||"timed")+'</select></label>' +
+      '<label class="field"><span>Time zone</span><input data-occurrence-timezone value="'+escapeHtml(occurrence.timezone||"America/New_York")+'"></label>' +
+      '<label class="field"><span>Starts</span><input data-occurrence-starts value="'+escapeHtml(occurrence.startsAt||"")+'"></label>' +
+      '<label class="field"><span>Ends</span><input data-occurrence-ends value="'+escapeHtml(occurrence.endsAt||"")+'"></label>' +
+      '<label class="field"><span>Venue override</span><input data-occurrence-venue value="'+escapeHtml(occurrence.venueName||"")+'"></label>' +
+      '<label class="field"><span>Address override</span><input data-occurrence-address value="'+escapeHtml(occurrence.venueAddress||"")+'"></label>' +
+      '<label class="field is-wide"><span>Factual description</span><textarea data-occurrence-description>'+escapeHtml(occurrence.factualDescription||"")+'</textarea></label>' +
+      '<label class="field is-wide"><span>Official occurrence URL</span><input type="url" data-occurrence-source value="'+escapeHtml(occurrence.sourceUrl||"")+'"></label>' +
+      '<label class="field is-wide"><span>Ticket URL</span><input type="url" data-occurrence-ticket value="'+escapeHtml(occurrence.ticketUrl||"")+'"></label>' +
+      '<label class="field"><span>Verification</span><select data-occurrence-verification>'+occurrenceOptions([["verified","Verified"],["unverified","Unverified"],["needs_verification","Needs verification"]],occurrence.verificationState||"needs_verification")+'</select></label>' +
+      '<label class="field is-wide"><span>Verification notes</span><textarea data-occurrence-notes>'+escapeHtml(occurrence.verificationNotes||"")+'</textarea></label>' +
+      '</div></article>';
+  }
+
+  function occurrenceSection(candidate) {
+    return '<div class="editor-section"><div class="section-title-row"><div><h3>Related schedule</h3><p class="section-guidance">Keep the exhibition or primary event above. Add its opening, talks, screenings, workshops, and other dated programs here. Date-TBD items remain private until scheduled. Removing a program that was already published records it as cancelled in subscribed calendars.</p></div><button type="button" data-add-occurrence>Add occurrence</button></div><div class="occurrence-list" id="candidateOccurrences">'+((candidate.occurrences||[]).map(occurrenceRow).join("")||'<p class="occurrences-empty">No related schedule items.</p>')+'</div></div>';
+  }
 
   function relatedLinkRow(link) {
     link = link || {};
@@ -131,7 +170,8 @@
     var isNew = !candidate.id;
     var revisions = candidate.revisions || [];
     var instagramSource = isInstagramUrl(candidate.sourceUrl) || isInstagramUrl(candidate.ticketUrl);
-    var canPublish = !isNew && candidate.verificationState === "verified" && !instagramSource && !["rejected","cancelled","duplicate"].includes(candidate.status) && (candidate.status !== "published" || candidate.pendingRevisionId);
+    var occurrencesReady = (candidate.occurrences||[]).every(function (occurrence) { return occurrence.status === "tbd" || (occurrence.verificationState === "verified" && occurrence.startsAt && !isInstagramUrl(occurrence.sourceUrl)); });
+    var canPublish = !isNew && candidate.verificationState === "verified" && !instagramSource && occurrencesReady && !["rejected","cancelled","duplicate"].includes(candidate.status) && (candidate.status !== "published" || candidate.pendingRevisionId);
     var publishLabel = candidate.status === "published" ? "Approve + Update" : "Approve + Publish";
     editorRoot.innerHTML = '<div class="editor-head"><div><p class="eyebrow">' + (isNew ? 'Manual intake' : recordLabel(candidate)) + '</p><h2>' + escapeHtml(candidate.title || "New candidate") + '</h2></div><span class="status-badge">' + escapeHtml(lifecycleLabel(candidate)) + '</span></div>' +
       '<div class="editor-section"><h3>Public factual record</h3><div class="field-grid">' +
@@ -143,13 +183,14 @@
       field("candidateVenueAddress","Venue address",candidate.venueAddress,{wide:true}) + field("candidateCity","City",candidate.city) + field("candidateRegion","State / region",candidate.region) + field("candidateDescription","Factual description",candidate.factualDescription,{type:"textarea",wide:true}) +
       '</div><p class="field-label">Subjects</p>' + checkboxes("subjects",SUBJECTS,candidate.subjects) + '<p class="field-label">Formats</p>' + checkboxes("formats",FORMATS,candidate.formats) +
       '<label class="check-option"><input id="candidateExperimental" type="checkbox"' + (candidate.experimental ? ' checked' : '') + '><span>Experimental attribute</span></label></div>' +
+      occurrenceSection(candidate) +
       '<div class="editor-section"><div class="section-title-row"><h3>Related links</h3><button type="button" data-add-related-link>Add link</button></div><p class="section-guidance">Links remain private unless Include publicly is checked and the event is approved.</p><div class="related-link-list" id="candidateRelatedLinks">' + ((candidate.relatedLinks || []).map(relatedLinkRow).join("") || '<p class="related-links-empty">No related links captured.</p>') + '</div></div>' +
       flyerSection(candidate,isNew) +
       socialEvidenceSection(candidate) +
       '<div class="editor-section"><h3>Verification + provenance</h3><div class="field-grid">' +
       field("candidateVerificationState","Verification",candidate.verificationState,{type:"select",choices:[["verified","Verified"],["unverified","Unverified"],["needs_verification","Needs verification"]]}) + field("candidateConfidence","Confidence",candidate.confidence,{type:"number",step:"0.01"}) +
       field("candidateVerificationNotes","Verification notes",candidate.verificationNotes,{type:"textarea",wide:true}) + field("candidateRejectionReason","Rejection reason",candidate.rejectionReason) + field("candidateDuplicateOf","Duplicate of",candidate.duplicateOf) + '</div></div>' +
-      '<div class="editor-section"><h3>Private review intelligence</h3><div class="field-grid">' + field("candidatePrivateRationale","Why it matches",candidate.privateRationale,{type:"textarea",wide:true}) + field("candidateAttendanceUse","Attendance / research use",candidate.attendanceUse,{type:"textarea"}) + field("candidateProgrammingIdeas","Programming ideas",candidate.programmingIdeas,{type:"textarea"}) + field("candidateCollaborators","Potential collaborators",candidate.potentialCollaborators,{type:"textarea"}) + field("candidateInternalNotes","Internal notes",candidate.internalNotes,{type:"textarea"}) + '</div></div>' +
+      '<div class="editor-section"><h3>Private review intelligence</h3><p class="section-guidance">The Scout generates these private fields for every discovered event. They remain editable here and never appear on the public calendar or feeds.</p><div class="field-grid">' + field("candidatePrivateRationale","Why it fits",candidate.privateRationale,{type:"textarea",wide:true}) + field("candidateAttendanceUse","Best use",candidate.attendanceUse,{type:"textarea"}) + field("candidateProgrammingIdeas","Programming model worth studying",candidate.programmingIdeas,{type:"textarea"}) + field("candidateCollaborators","Potential collaborators",candidate.potentialCollaborators,{type:"textarea"}) + field("candidateInternalNotes","Internal notes",candidate.internalNotes,{type:"textarea"}) + '</div></div>' +
       (!isNew ? '<div class="editor-section"><h3>Detected changes + revisions</h3><div class="revision-list">' + (revisions.length ? revisions.map(function (revision) { return '<article class="revision"><strong>Revision ' + revision.revisionNumber + ' / ' + escapeHtml(revision.revisionState) + '</strong><br>' + escapeHtml(revision.changeSummary || "Saved candidate snapshot") + '<br>' + escapeHtml(displayDate(revision.createdAt)) + '</article>'; }).join("") : '<p class="empty-state">No revisions recorded.</p>') + '</div></div>' : '') +
       '<div class="editor-actions"><button type="button" data-action="save">' + (isNew ? 'Create candidate' : 'Save') + '</button>' + (!isNew ? (candidate.pendingRevisionId ? '<button type="button" data-action="review-change">Review Detected Change</button>' : '') + (canPublish ? '<button type="button" data-action="approve">' + publishLabel + '</button>' : '') + '<button type="button" data-action="reject">Reject</button><button type="button" data-action="duplicate">Mark Duplicate</button><button type="button" data-action="cancel">Mark Cancelled</button>' : '') + '</div>';
     hydrateFlyerPreview(candidate);
@@ -279,6 +320,8 @@
   listRoot.addEventListener("click",function(event){var button=event.target.closest("[data-candidate-id]");if(button)selectCandidate(button.dataset.candidateId);});
   editorRoot.addEventListener("click",function(event){
     var actionButton=event.target.closest("button[data-action]");if(actionButton){editorAction(actionButton.dataset.action);return;}
+    if(event.target.closest("[data-add-occurrence]")){var occurrenceList=document.getElementById("candidateOccurrences");var occurrenceEmpty=occurrenceList.querySelector(".occurrences-empty");if(occurrenceEmpty)occurrenceEmpty.remove();occurrenceList.insertAdjacentHTML("beforeend",occurrenceRow({occurrenceType:"other",status:"scheduled",dateKind:"timed",timezone:value("candidateTimezone")||"America/New_York",verificationState:"needs_verification"}));return;}
+    var removeOccurrence=event.target.closest("[data-remove-occurrence]");if(removeOccurrence){removeOccurrence.closest("[data-occurrence]").remove();var occurrences=document.getElementById("candidateOccurrences");if(!occurrences.querySelector("[data-occurrence]"))occurrences.innerHTML='<p class="occurrences-empty">No related schedule items.</p>';return;}
     if(event.target.closest("[data-add-related-link]")){var list=document.getElementById("candidateRelatedLinks");var empty=list.querySelector(".related-links-empty");if(empty)empty.remove();list.insertAdjacentHTML("beforeend",relatedLinkRow({ provenanceUrl:value("candidateSourceUrl") }));return;}
     var removeLink=event.target.closest("[data-remove-related-link]");if(removeLink){removeLink.closest("[data-related-link]").remove();var related=document.getElementById("candidateRelatedLinks");if(!related.querySelector("[data-related-link]"))related.innerHTML='<p class="related-links-empty">No related links captured.</p>';return;}
     if(event.target.closest("[data-upload-flyer]")){document.getElementById("candidateFlyerFile").click();return;}

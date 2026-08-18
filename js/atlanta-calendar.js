@@ -1,8 +1,10 @@
 (function () {
   "use strict";
 
-  var SUBJECT_LABELS = { art:"Art", film:"Film", "poetry-music":"Poetry / Music", technology:"Technology", ai:"AI", "creative-technology":"Creative Technology" };
+  var SUBJECT_LABELS = { art:"Art", film:"Film", "poetry-music":"Poetry / Music", technology:"Technology", ai:"AI", "creative-technology":"Creative Technology", anthropology:"Anthropology", engineering:"Engineering", philosophy:"Philosophy" };
   var FORMAT_LABELS = { exhibition:"Exhibitions / Art Openings", screening:"Screening", performance:"Performance", "experimental-event":"Experimental Event", "lecture-talk":"Lecture / Talk", panel:"Panel", workshop:"Workshop", conference:"Conference" };
+  var AFFILIATION_LABELS = { gsu:"GSU Events" };
+  var OCCURRENCE_LABELS = { opening_reception:"Opening Reception", artist_talk:"Artist Talk", mixer:"Mixer", screening:"Screening", performance:"Performance", workshop:"Workshop", panel:"Panel", lecture:"Lecture", other:"Related Program" };
   var TIME_ZONE = "America/New_York";
   var allEvents = [];
   var filtered = [];
@@ -12,6 +14,7 @@
   var search = document.getElementById("calendarSearch");
   var subjectRoot = document.getElementById("subjectFilters");
   var formatRoot = document.getElementById("formatFilters");
+  var affiliationRoot = document.getElementById("affiliationFilters");
   var resultCount = document.getElementById("resultCount");
   var upcomingRoot = document.getElementById("upcomingEvents");
   var pastRoot = document.getElementById("pastEvents");
@@ -74,8 +77,10 @@
     var query = search.value.trim().toLowerCase();
     var subjects = checkedValues(subjectRoot);
     var formats = checkedValues(formatRoot);
+    var affiliations = checkedValues(affiliationRoot);
     if (subjects.length && !subjects.some(function (value) { return event.subjects.includes(value); })) return false;
     if (formats.length && !formats.some(function (value) { return event.formats.includes(value); })) return false;
+    if (affiliations.length && !affiliations.some(function (value) { return (event.affiliations || []).includes(value); })) return false;
     if (query) {
       var haystack = [event.title, event.description, event.organizer, event.venueName, event.venueAddress].concat(event.subjects, event.formats).join(" ").toLowerCase();
       if (!haystack.includes(query)) return false;
@@ -85,17 +90,20 @@
 
   function eventCard(event) {
     var primarySubject = event.subjects[0] || "";
-    var labels = event.subjects.map(function (value) { return SUBJECT_LABELS[value] || value; }).concat(event.formats.map(function (value) { return FORMAT_LABELS[value] || value; }));
+    var labels = event.subjects.map(function (value) { return SUBJECT_LABELS[value] || value; }).concat(event.formats.map(function (value) { return FORMAT_LABELS[value] || value; }), (event.affiliations || []).map(function (value) { return AFFILIATION_LABELS[value] || value; }));
     var location = [event.venueName, event.venueAddress].filter(function (value, index, list) { return value && list.indexOf(value) === index; }).join(" / ");
-    var sourceLabel = event.origin === "sixwell" ? "Six.Well event" : "Selected Atlanta listing";
+    var sourceLabel = event.origin === "sixwell" ? "Six.Well event" : (event.affiliations || []).includes("gsu") ? "Georgia State University event" : "Selected Atlanta listing";
     var relatedLinks = Array.isArray(event.relatedLinks) ? event.relatedLinks : [];
+    var relatedOccurrences = Array.isArray(event.relatedOccurrences) ? event.relatedOccurrences : [];
     var flyer = event.flyer && event.flyer.url ? event.flyer : null;
     return '<article class="calendar-event-card' + (event.status === "cancelled" ? ' is-cancelled' : '') + '" id="' + eventAnchor(event) + '" data-subject="' + escapeHtml(primarySubject) + '">' +
       '<p class="calendar-event-meta">' + escapeHtml(event.status === "cancelled" ? "Cancelled / " + eventDate(event) : eventDate(event)) + '</p>' +
+      (event.isOccurrence ? '<p class="calendar-event-series">Part of / ' + escapeHtml(event.parentTitle) + ' / ' + escapeHtml(OCCURRENCE_LABELS[event.occurrenceType] || "Related Program") + '</p>' : '') +
       '<h3>' + escapeHtml(event.title) + '</h3>' +
       (event.description ? '<p class="calendar-event-description">' + escapeHtml(event.description) + '</p>' : '') +
       '<div class="calendar-event-facts">' + (event.organizer ? '<span>Organizer / ' + escapeHtml(event.organizer) + '</span>' : '') + (location ? '<span>Venue / ' + escapeHtml(location) + '</span>' : '') + '<span>' + escapeHtml(sourceLabel) + '</span></div>' +
       '<div class="calendar-tags">' + labels.map(function (label) { return '<span class="calendar-tag">' + escapeHtml(label) + '</span>'; }).join("") + '</div>' +
+      (relatedOccurrences.length ? '<div class="calendar-related-schedule"><span>Related schedule</span>' + relatedOccurrences.map(function (occurrence) { return '<a href="#' + eventAnchor(occurrence) + '"><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small></a>'; }).join("") + '</div>' : '') +
       (relatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + relatedLinks.map(function (link) { return '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(link.label) + '</a>'; }).join("") + '</div>' : '') +
       (flyer ? '<details class="calendar-event-flyer"><summary>Show flyer</summary><div><img src="' + escapeHtml(flyer.url) + '" alt="' + escapeHtml(flyer.altText || event.title + " event flyer") + '" loading="lazy" decoding="async"' + (flyer.width ? ' width="' + Number(flyer.width) + '"' : '') + (flyer.height ? ' height="' + Number(flyer.height) + '"' : '') + '></div></details>' : '') +
       '<div class="calendar-event-actions"><a href="' + escapeHtml(event.actionUrl || event.sourceUrl) + '">Official details</a><a class="is-secondary" href="/api/calendar/events/' + encodeURIComponent(event.id) + '.ics">Add this event</a></div>' +
@@ -156,9 +164,11 @@
 
   renderFilters(subjectRoot, SUBJECT_LABELS, "subject");
   renderFilters(formatRoot, FORMAT_LABELS, "format");
+  renderFilters(affiliationRoot, AFFILIATION_LABELS, "affiliation");
   search.addEventListener("input", applyFilters);
   subjectRoot.addEventListener("change", applyFilters);
   formatRoot.addEventListener("change", applyFilters);
+  affiliationRoot.addEventListener("change", applyFilters);
   document.getElementById("clearFilters").addEventListener("click", function () {
     search.value = "";
     Array.from(document.querySelectorAll(".filter-chip input")).forEach(function (input) { input.checked = false; });

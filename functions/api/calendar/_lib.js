@@ -1,4 +1,4 @@
-const SUBJECTS = new Set(["art", "film", "poetry-music", "technology", "ai", "creative-technology"]);
+const SUBJECTS = new Set(["art", "film", "poetry-music", "technology", "ai", "creative-technology", "anthropology", "engineering", "philosophy"]);
 const FORMATS = new Set(["exhibition", "screening", "performance", "experimental-event", "lecture-talk", "panel", "workshop", "conference"]);
 const CANDIDATE_STATUSES = new Set(["candidate", "published", "rejected", "cancelled", "duplicate", "needs_verification"]);
 const DATE_KINDS = new Set(["timed", "all_day", "date_range"]);
@@ -6,7 +6,7 @@ const OCCURRENCE_TYPES = new Set(["opening_reception", "artist_talk", "mixer", "
 const OCCURRENCE_STATUSES = new Set(["scheduled", "tbd", "cancelled"]);
 const TIME_ZONE = "America/New_York";
 const PUBLIC_HOST = "thesixwellconstruct.com";
-const MAX_SOURCE_BYTES = 250_000;
+const MAX_SOURCE_BYTES = 5 * 1024 * 1024;
 const MAX_FLYER_BYTES = 15 * 1024 * 1024;
 const FLYER_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const SOURCE_TIMEOUT_MS = 20_000;
@@ -14,6 +14,7 @@ const OPENAI_TIMEOUT_MS = 60_000;
 const SOCIAL_PLATFORMS = new Set(["threads", "instagram", "tiktok"]);
 const CONNECTOR_IDS = new Set(["direct", "general_web", "threads_api", "instagram_api", "threads_web", "instagram_web", "tiktok_web"]);
 const SOCIAL_DOMAINS = { threads: "threads.net", instagram: "instagram.com", tiktok: "tiktok.com" };
+const AFFILIATIONS = new Set(["gsu"]);
 const DEFAULT_SOCIAL_SETTINGS = {
   threads: { keywords: [], tags: [], cadenceHours: 24, perRunLimit: 6 },
   instagram: { keywords: [], tags: [], cadenceHours: 24, perRunLimit: 6 },
@@ -135,6 +136,18 @@ function validHttpUrl(value) {
   } catch {
     return false;
   }
+}
+
+function affiliationsForSource(value) {
+  if (!validHttpUrl(value)) return [];
+  const host = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+  return host === "gsu.edu" || host.endsWith(".gsu.edu") ? ["gsu"] : [];
+}
+
+function affiliationsForEvent(sourceUrl, ...facts) {
+  const affiliations = new Set(affiliationsForSource(sourceUrl));
+  if (/\bgeorgia state university\b|\bgsu\b/i.test(facts.map(asString).join(" "))) affiliations.add("gsu");
+  return [...affiliations];
 }
 
 function isInstagramUrl(value) {
@@ -1043,10 +1056,64 @@ async function saveCandidate(env, id, body, { appendChangeRevision = true } = {}
   return getCandidate(db, id);
 }
 
+async function syncEntryOccurrences(db, entryId, candidate, now) {
+  const existingRows = await db.prepare(
+    "SELECT * FROM calendar_entry_occurrences WHERE entry_id=?"
+  ).bind(entryId).all();
+  const existingByCandidate = new Map((existingRows.results || []).map((row) => [row.candidate_occurrence_id, row]));
+  const activeCandidateIds = [];
+  for (const occurrence of candidate.occurrences || []) {
+    if (occurrence.status === "tbd") continue;
+    activeCandidateIds.push(occurrence.id);
+    const existing = existingByCandidate.get(occurrence.id);
+    const id = existing?.id || `cal_entry_occurrence_${crypto.randomUUID()}`;
+    const status = occurrence.status === "cancelled" ? "cancelled" : "published";
+    const title = `${candidate.title} — ${occurrence.title || occurrenceTypeLabel(occurrence.occurrenceType)}`;
+    const sourceUrl = occurrence.sourceUrl || candidate.sourceUrl;
+    const ticketUrl = occurrence.ticketUrl || candidate.ticketUrl;
+    const venueName = occurrence.venueName || candidate.venueName;
+    const venueAddress = occurrence.venueAddress || candidate.venueAddress;
+    if (existing) {
+      await db.prepare(
+        `UPDATE calendar_entry_occurrences SET sequence=?,status=?,occurrence_type=?,title=?,
+         factual_description=?,date_kind=?,starts_at=?,ends_at=?,timezone=?,venue_name=?,venue_address=?,
+         source_url=?,ticket_url=?,last_modified_at=?,last_verified_at=? WHERE id=?`
+      ).bind(
+        Number(existing.sequence) + 1, status, occurrence.occurrenceType, title,
+        occurrence.factualDescription, occurrence.dateKind, occurrence.startsAt, occurrence.endsAt,
+        occurrence.timezone || candidate.timezone, venueName, venueAddress, sourceUrl, ticketUrl,
+        now, occurrence.verificationState === "verified" ? now : null, id,
+      ).run();
+    } else {
+      await db.prepare(
+        `INSERT INTO calendar_entry_occurrences
+          (id,entry_id,candidate_occurrence_id,uid,sequence,status,occurrence_type,title,
+           factual_description,date_kind,starts_at,ends_at,timezone,venue_name,venue_address,
+           source_url,ticket_url,published_at,last_modified_at,last_verified_at)
+         VALUES (?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).bind(
+        id, entryId, occurrence.id, `${id}@${PUBLIC_HOST}`, status, occurrence.occurrenceType, title,
+        occurrence.factualDescription, occurrence.dateKind, occurrence.startsAt, occurrence.endsAt,
+        occurrence.timezone || candidate.timezone, venueName, venueAddress, sourceUrl, ticketUrl,
+        now, now, occurrence.verificationState === "verified" ? now : null,
+      ).run();
+    }
+  }
+  for (const existing of existingRows.results || []) {
+    if (activeCandidateIds.includes(existing.candidate_occurrence_id) || existing.status === "cancelled") continue;
+    await db.prepare(
+      "UPDATE calendar_entry_occurrences SET status='cancelled',sequence=sequence+1,last_modified_at=? WHERE id=?"
+    ).bind(now, existing.id).run();
+  }
+}
+
 async function approveCandidate(db, id) {
   const candidate = await getCandidate(db, id);
   if (!candidate) return { error: "Candidate not found.", status: 404 };
   const errors = publicationErrors(candidate);
+  for (const occurrence of candidate.occurrences || []) {
+    errors.push(...occurrencePublicationErrors(occurrence, candidate));
+  }
   let flyer = null;
   if (candidate.flyerPublicApproved) {
     try { flyer = await validateCandidateFlyer(db, candidate); }
@@ -1103,6 +1170,7 @@ async function approveCandidate(db, id) {
          public_presentation='inline',updated_at=? WHERE id=?`
     ).bind(now, flyer.id).run();
   }
+  await syncEntryOccurrences(db, entryId, candidate, now);
   await db.prepare(
     "UPDATE calendar_candidate_revisions SET revision_state='superseded',reviewed_at=? WHERE candidate_id=? AND revision_state='approved'"
   ).bind(now, id).run();
@@ -1139,6 +1207,9 @@ async function cancelCandidate(db, id) {
   if (candidate.publicEntryId) {
     await db.prepare(
       "UPDATE calendar_entries SET status='cancelled',sequence=sequence+1,last_modified_at=? WHERE id=?"
+    ).bind(now, candidate.publicEntryId).run();
+    await db.prepare(
+      "UPDATE calendar_entry_occurrences SET status='cancelled',sequence=sequence+1,last_modified_at=? WHERE entry_id=? AND status<>'cancelled'"
     ).bind(now, candidate.publicEntryId).run();
   }
   return getCandidate(db, id);
@@ -1177,7 +1248,15 @@ function curatedPublicView(row, relatedLinks = []) {
   );
   return {
     id: `curated:${row.id}`,
+    seriesId: `curated:${row.id}`,
+    parentTitle: row.title,
+    occurrenceId: "",
+    occurrenceType: "primary",
+    isOccurrence: false,
+    parentUid: "",
+    relatedOccurrences: [],
     origin: "curated",
+    affiliations: affiliationsForEvent(row.source_url, row.organizer, row.venue_name, row.venue_address),
     title: row.title,
     description: row.factual_description || "",
     organizer: row.organizer || "",
@@ -1211,8 +1290,59 @@ function curatedPublicView(row, relatedLinks = []) {
   };
 }
 
+function formatsForOccurrence(parentFormats, occurrenceType) {
+  const formats = new Set(parentFormats || []);
+  if (occurrenceType === "opening_reception") formats.add("exhibition");
+  if (["artist_talk", "lecture"].includes(occurrenceType)) formats.add("lecture-talk");
+  if (occurrenceType === "panel") formats.add("panel");
+  if (occurrenceType === "workshop") formats.add("workshop");
+  if (occurrenceType === "screening") formats.add("screening");
+  if (occurrenceType === "performance") formats.add("performance");
+  return [...formats].filter((format) => FORMATS.has(format));
+}
+
+function curatedOccurrencePublicView(row, parent) {
+  const titlePrefix = `${parent.title} — `;
+  return {
+    id: `curated-occurrence:${row.id}`,
+    seriesId: parent.seriesId,
+    parentTitle: parent.title,
+    occurrenceId: row.id,
+    occurrenceType: row.occurrence_type,
+    occurrenceLabel: row.title.startsWith(titlePrefix) ? row.title.slice(titlePrefix.length) : row.title,
+    isOccurrence: true,
+    parentUid: parent.uid,
+    relatedOccurrences: [],
+    origin: "curated",
+    affiliations: parent.affiliations,
+    title: row.title,
+    description: row.factual_description || "",
+    organizer: parent.organizer,
+    dateKind: row.date_kind || "timed",
+    startsAt: row.starts_at,
+    endsAt: row.ends_at || null,
+    timezone: row.timezone || parent.timezone || TIME_ZONE,
+    venueName: row.venue_name || parent.venueName,
+    venueAddress: row.venue_address || parent.venueAddress,
+    city: parent.city,
+    region: parent.region,
+    subjects: parent.subjects,
+    formats: formatsForOccurrence(parent.formats, row.occurrence_type),
+    experimental: parent.experimental,
+    status: row.status,
+    sourceUrl: row.source_url || parent.sourceUrl,
+    ticketUrl: row.ticket_url || "",
+    actionUrl: row.ticket_url || row.source_url || parent.actionUrl,
+    relatedLinks: parent.relatedLinks,
+    flyer: null,
+    uid: row.uid,
+    sequence: Number(row.sequence) || 0,
+    lastModified: row.last_modified_at,
+  };
+}
+
 async function loadCuratedEvents(db) {
-  const [result, links] = await Promise.all([
+  const [result, links, occurrenceRows] = await Promise.all([
     db.prepare(
       `SELECT e.*,m.state flyer_state,m.privacy flyer_privacy,m.consent_status flyer_consent_status,
               m.public_presentation flyer_public_presentation,m.mime_type flyer_mime_type,
@@ -1221,6 +1351,7 @@ async function loadCuratedEvents(db) {
        ORDER BY e.starts_at ASC,e.title ASC`
     ).all(),
     db.prepare("SELECT entry_id,label,url,sort_order FROM calendar_entry_links ORDER BY entry_id,sort_order,id").all(),
+    db.prepare("SELECT * FROM calendar_entry_occurrences ORDER BY starts_at,title,id").all(),
   ]);
   const byEntry = new Map();
   for (const link of links.results || []) {
@@ -1228,7 +1359,25 @@ async function loadCuratedEvents(db) {
     list.push({ label: link.label, url: link.url });
     byEntry.set(link.entry_id, list);
   }
-  return (result.results || []).map((row) => curatedPublicView(row, byEntry.get(row.id) || []));
+  const parents = (result.results || []).map((row) => curatedPublicView(row, byEntry.get(row.id) || []));
+  const byEntryId = new Map(parents.map((parent) => [parent.id.replace(/^curated:/, ""), parent]));
+  const occurrences = [];
+  for (const row of occurrenceRows.results || []) {
+    const parent = byEntryId.get(row.entry_id);
+    if (!parent) continue;
+    const occurrence = curatedOccurrencePublicView(row, parent);
+    occurrences.push(occurrence);
+    parent.relatedOccurrences.push({
+      id: occurrence.id,
+      title: occurrence.occurrenceLabel || occurrence.title,
+      occurrenceType: occurrence.occurrenceType,
+      startsAt: occurrence.startsAt,
+      endsAt: occurrence.endsAt,
+      dateKind: occurrence.dateKind,
+      status: occurrence.status,
+    });
+  }
+  return [...parents, ...occurrences];
 }
 
 async function loadSixWellEvents(db) {
@@ -1252,6 +1401,7 @@ async function loadSixWellEvents(db) {
     return {
       id: `sixwell:${occurrenceId}`,
       origin: "sixwell",
+      affiliations: [],
       title: row.title,
       description: row.description || "",
       organizer: row.organizer || "The Six.Well Construct",
@@ -1287,6 +1437,7 @@ async function normalizedEvents(db) {
 function filteredEvents(events, searchParams) {
   const subjects = searchParams.getAll("subject").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
   const formats = searchParams.getAll("format").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+  const affiliations = searchParams.getAll("affiliation").flatMap((value) => value.split(",")).map((value) => value.trim()).filter((value) => AFFILIATIONS.has(value));
   const after = searchParams.get("after");
   const before = searchParams.get("before");
   const origin = searchParams.get("origin");
@@ -1294,6 +1445,7 @@ function filteredEvents(events, searchParams) {
   return events.filter((event) => {
     if (subjects.length && !subjects.some((subject) => event.subjects.includes(subject))) return false;
     if (formats.length && !formats.some((format) => event.formats.includes(format))) return false;
+    if (affiliations.length && !affiliations.some((affiliation) => (event.affiliations || []).includes(affiliation))) return false;
     if (origin && event.origin !== origin) return false;
     if (after && dateKey(event.endsAt || event.startsAt) < dateKey(after)) return false;
     if (before && dateKey(event.startsAt) > dateKey(before)) return false;
@@ -1332,6 +1484,7 @@ function eventIcsLines(event) {
     `STATUS:${event.status === "cancelled" ? "CANCELLED" : "CONFIRMED"}`,
     `SUMMARY:${escapeIcs(event.title)}`,
   ];
+  if (event.parentUid) lines.push(`RELATED-TO;RELTYPE=PARENT:${escapeIcs(event.parentUid)}`);
   if (event.dateKind === "all_day" || event.dateKind === "date_range") {
     lines.push(`DTSTART;VALUE=DATE:${icsDate(event.startsAt)}`);
     lines.push(`DTEND;VALUE=DATE:${icsDate(event.endsAt ? addUtcDay(event.endsAt) : addUtcDay(event.startsAt))}`);
@@ -1901,6 +2054,30 @@ function structuredEventProposal(item, source) {
   const address = location.address && typeof location.address === "object" ? location.address : {};
   const offers = Array.isArray(item.offers) ? item.offers[0] || {} : item.offers || {};
   const sourceUrl = asString(item.url) || source.url;
+  const subEvents = (Array.isArray(item.subEvent) ? item.subEvent : item.subEvent ? [item.subEvent] : [])
+    .map((subEvent, index) => normalizeOccurrenceProposal({
+      occurrenceType: /opening|reception/i.test(asString(subEvent.name)) ? "opening_reception"
+        : /artist talk/i.test(asString(subEvent.name)) ? "artist_talk"
+          : /screening/i.test(asString(subEvent.name)) ? "screening"
+            : /performance|concert/i.test(asString(subEvent.name)) ? "performance"
+              : /workshop/i.test(asString(subEvent.name)) ? "workshop"
+                : /panel/i.test(asString(subEvent.name)) ? "panel"
+                  : /lecture|talk/i.test(asString(subEvent.name)) ? "lecture" : "other",
+      title: asString(subEvent.name),
+      factualDescription: asString(subEvent.description).replace(/<[^>]*>/g, " ").replace(/\s+/g, " "),
+      dateKind: asString(subEvent.startDate).length === 10 ? "all_day" : "timed",
+      startsAt: asString(subEvent.startDate),
+      endsAt: asString(subEvent.endDate),
+      timezone: asString(subEvent.eventSchedule?.scheduleTimezone) || TIME_ZONE,
+      venueName: asString(subEvent.location?.name),
+      venueAddress: typeof subEvent.location?.address === "string" ? asString(subEvent.location.address) : "",
+      sourceUrl: asString(subEvent.url),
+      ticketUrl: asString(Array.isArray(subEvent.offers) ? subEvent.offers[0]?.url : subEvent.offers?.url),
+      status: "scheduled",
+      verificationState: "verified",
+      verificationNotes: "Structured related-program data retrieved from an enabled official source.",
+      sortOrder: index,
+    }, { timezone: asString(item.eventSchedule?.scheduleTimezone) || TIME_ZONE }, index));
   return {
     sourceId: source.id, sourceEventId: asString(item.identifier || item["@id"] || item.url),
     sourceUrl, ticketUrl: asString(offers.url), title: asString(item.name),
@@ -1913,6 +2090,7 @@ function structuredEventProposal(item, source) {
     city: asString(address.addressLocality) || "Atlanta", region: asString(address.addressRegion) || "GA",
     subjects: [], formats: [], experimental: false, verificationState: "verified",
     verificationNotes: "Structured event data retrieved from an enabled official source.", confidence: 0.86,
+    occurrences: subEvents,
   };
 }
 
@@ -1933,6 +2111,7 @@ function extractJsonLdEvents(html, source) {
 function extractJsonEvents(text, source) {
   try {
     const parsed = JSON.parse(text);
+    if (isGsuLocalistSource(source.url) && Array.isArray(parsed.events)) return extractGsuLocalistEvents(parsed, source);
     const schemaEvents = jsonLdObjects(parsed).map((item) => structuredEventProposal(item, source));
     const directItems = Array.isArray(parsed) ? parsed : Array.isArray(parsed.events) ? parsed.events : [];
     const directEvents = directItems.map((item) => ({
@@ -1955,6 +2134,130 @@ function extractJsonEvents(text, source) {
   } catch {
     return [];
   }
+}
+
+function isGsuLocalistSource(value) {
+  if (!validHttpUrl(value)) return false;
+  const url = new URL(value);
+  return url.hostname.toLowerCase() === "calendar.gsu.edu" && /^\/api\/2\/events(?:\/search)?\/?$/.test(url.pathname);
+}
+
+function cleanSourceText(value) {
+  return asString(value).replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/gi, " ").replace(/&amp;/gi, "&").replace(/\s+/g, " ");
+}
+
+function localistNames(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.flatMap(localistNames);
+  if (typeof value !== "object") return [asString(value)].filter(Boolean);
+  const direct = asString(value.name || value.title || value.label);
+  return direct ? [direct] : Object.values(value).flatMap(localistNames);
+}
+
+function localistInstance(value) {
+  const item = value?.event_instance || value || {};
+  return {
+    id: asString(item.id),
+    startsAt: asString(item.start || item.starts_at || item.start_date),
+    endsAt: asString(item.end || item.ends_at || item.end_date),
+    allDay: Boolean(item.all_day),
+  };
+}
+
+function dateOnly(value) {
+  return asString(value).slice(0, 10);
+}
+
+function consecutiveDays(instances) {
+  if (instances.length < 2) return false;
+  const days = [...new Set(instances.map((item) => dateOnly(item.startsAt)).filter(Boolean))].sort();
+  if (days.length < 2) return false;
+  return days.every((day, index) => index === 0 || Date.parse(`${day}T00:00:00Z`) - Date.parse(`${days[index - 1]}T00:00:00Z`) === 86_400_000);
+}
+
+function localistOccurrenceType(title, types) {
+  const text = normalizeText(`${title} ${types.join(" ")}`);
+  if (/opening|reception/.test(text)) return "opening_reception";
+  if (/artist talk/.test(text)) return "artist_talk";
+  if (/screening|film/.test(text)) return "screening";
+  if (/concert|performance|recital|theatre|theater/.test(text)) return "performance";
+  if (/workshop/.test(text)) return "workshop";
+  if (/panel/.test(text)) return "panel";
+  if (/lecture|talk|seminar|forum/.test(text)) return "lecture";
+  return "other";
+}
+
+function localistProposal(wrapper, source) {
+  const item = wrapper?.event || wrapper || {};
+  const instances = (Array.isArray(item.event_instances) ? item.event_instances : []).map(localistInstance)
+    .filter((instance) => validDate(instance.startsAt)).sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt));
+  if (!instances.length) return null;
+  const sourceUrl = asString(item.localist_url || item.url) || source.url;
+  const departments = localistNames(item.departments);
+  const filterNames = localistNames(item.filters);
+  const types = [...new Set([...filterNames, ...localistNames(item.event_types)])];
+  const audience = localistNames(item.filters?.audience || item.audience);
+  const publicAccess = !audience.length || audience.some((name) => /\bpublic\b/i.test(name));
+  const first = instances[0];
+  const last = instances.at(-1);
+  const rangeLike = /exhibit|gallery|conference|symposium/i.test(`${item.title} ${types.join(" ")}`) || consecutiveDays(instances);
+  const dateKind = rangeLike && instances.length > 1 ? "date_range" : first.allDay ? "all_day" : "timed";
+  const startsAt = dateKind === "date_range" ? dateOnly(first.startsAt) : first.startsAt;
+  const endsAt = dateKind === "date_range" ? dateOnly(last.endsAt || last.startsAt) : first.endsAt || null;
+  const venueName = asString(item.location_name || item.venue_name || item.room_number);
+  const address = asString(item.address || item.location?.address);
+  const locality = asString(item.city || item.location?.city) || (/Clarkston/i.test(`${venueName} ${address}`) ? "Clarkston" : "Atlanta");
+  const occurrenceType = localistOccurrenceType(item.title, types);
+  return {
+    sourceId: source.id,
+    sourceEventId: asString(item.id),
+    sourceUrl,
+    ticketUrl: asString(item.ticket_url),
+    relatedLinks: [],
+    flyerUrl: asString(item.photo_url || item.photo_url_medium || item.photo_url_original),
+    flyerProvenanceUrl: sourceUrl,
+    title: asString(item.title),
+    organizer: departments.join("; ") || "Georgia State University",
+    factualDescription: cleanSourceText(item.description_text || item.description),
+    dateKind,
+    startsAt,
+    endsAt,
+    timezone: TIME_ZONE,
+    venueName,
+    venueAddress: address,
+    city: locality,
+    region: asString(item.state) || "GA",
+    subjects: [],
+    formats: [],
+    experimental: false,
+    verificationState: publicAccess ? "verified" : "needs_verification",
+    verificationNotes: publicAccess
+      ? "Event facts and public audience access were retrieved from the official Georgia State University calendar."
+      : "Event facts were retrieved from the official Georgia State University calendar, but the listed audience does not include Public. Confirm access before publication.",
+    confidence: publicAccess ? 0.96 : 0.82,
+    occurrences: !rangeLike && instances.length > 1 ? instances.slice(1).map((instance, index) => ({
+      sourceEventId: instance.id,
+      occurrenceType,
+      title: asString(item.title),
+      factualDescription: cleanSourceText(item.description_text || item.description),
+      dateKind: instance.allDay ? "all_day" : "timed",
+      startsAt: instance.allDay ? dateOnly(instance.startsAt) : instance.startsAt,
+      endsAt: instance.allDay ? dateOnly(instance.endsAt) : instance.endsAt || null,
+      timezone: TIME_ZONE,
+      venueName,
+      venueAddress: address,
+      sourceUrl,
+      ticketUrl: asString(item.ticket_url),
+      status: "scheduled",
+      verificationState: publicAccess ? "verified" : "needs_verification",
+      verificationNotes: publicAccess ? "Occurrence retrieved from the official Georgia State University calendar." : "Confirm public access before publication.",
+      sortOrder: index,
+    })) : [],
+  };
+}
+
+function extractGsuLocalistEvents(parsed, source) {
+  return parsed.events.map((item) => localistProposal(item, source)).filter((event) => event?.title && event.startsAt);
 }
 
 function calendarDate(value) {
@@ -2032,6 +2335,26 @@ function extractSourceEvents(text, source) {
   return extractJsonLdEvents(text, source);
 }
 
+async function completeLocalistPayload(source, firstText) {
+  if (!isGsuLocalistSource(source.url)) return firstText;
+  let parsed;
+  try { parsed = JSON.parse(firstText); } catch { return firstText; }
+  const totalPages = Math.min(Math.max(Number(parsed.page?.total) || 1, 1), 10);
+  if (totalPages === 1) return firstText;
+  const events = Array.isArray(parsed.events) ? [...parsed.events] : [];
+  for (let page = 2; page <= totalPages; page += 1) {
+    const pageUrl = new URL(source.url);
+    pageUrl.searchParams.set("page", String(page));
+    const response = await fetchExternalSource(pageUrl.toString());
+    if (!response.ok) throw new Error(`Localist page ${page} returned HTTP ${response.status}`);
+    const pageText = await boundedResponseText(response);
+    let pagePayload;
+    try { pagePayload = JSON.parse(pageText); } catch { throw new Error(`Localist page ${page} returned invalid JSON.`); }
+    if (Array.isArray(pagePayload.events)) events.push(...pagePayload.events);
+  }
+  return JSON.stringify({ ...parsed, events });
+}
+
 function inferSubjectsAndFormats(event) {
   const text = normalizeText(`${event.title} ${event.factualDescription}`);
   const subjects = new Set(event.subjects || []);
@@ -2042,6 +2365,9 @@ function inferSubjectsAndFormats(event) {
   if (/technology|tech\b|robot|digital/.test(text)) subjects.add("technology");
   if (/artificial intelligence|\bai\b|machine learning/.test(text)) subjects.add("ai");
   if (/new media|creative technology|interactive|virtual reality|biofeedback/.test(text)) subjects.add("creative-technology");
+  if (/anthropolog|archaeolog|ethnograph|material culture/.test(text)) subjects.add("anthropology");
+  if (/engineering|fabrication|maker(?:space)?|robotics/.test(text)) subjects.add("engineering");
+  if (/philosoph|ethics|aesthetics|epistemolog|metaphysics/.test(text)) subjects.add("philosophy");
   if (/exhibition|gallery|opening reception/.test(text)) formats.add("exhibition");
   if (/screening|film program/.test(text)) formats.add("screening");
   if (/performance|concert|live music|open mic/.test(text)) formats.add("performance");
@@ -2056,24 +2382,80 @@ function inferSubjectsAndFormats(event) {
   return event;
 }
 
+function readableList(values) {
+  const items = values.filter(Boolean);
+  if (items.length < 2) return items[0] || "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
+}
+
+function generatedPrivateIntelligence(event, profile, discoveredBy) {
+  const subjectLabels = {
+    art: "art", film: "film", "poetry-music": "poetry and music", technology: "technology",
+    ai: "AI", "creative-technology": "creative technology", anthropology: "anthropology",
+    engineering: "engineering", philosophy: "philosophy",
+  };
+  const formatLabels = {
+    exhibition: "exhibition", screening: "screening", performance: "performance",
+    "experimental-event": "experimental event", "lecture-talk": "lecture or talk", panel: "panel",
+    workshop: "workshop", conference: "conference",
+  };
+  const subjects = event.subjects.map((value) => subjectLabels[value] || value);
+  const formats = event.formats.map((value) => formatLabels[value] || value);
+  const normalizedFacts = normalizeText(`${event.title} ${event.factualDescription}`);
+  const matchedConcepts = (profile.positiveConcepts || [])
+    .filter((concept) => normalizedFacts.includes(normalizeText(concept)))
+    .slice(0, 3);
+  const conceptClause = matchedConcepts.length ? `, especially ${readableList(matchedConcepts)}` : "";
+  const organizer = event.organizer || "the organizer";
+  const venue = event.venueName || "the venue";
+  const researchFormats = event.formats.some((value) => ["lecture-talk", "panel", "workshop", "conference"].includes(value));
+  const experientialFormats = event.formats.some((value) => ["exhibition", "screening", "performance", "experimental-event"].includes(value));
+  const uses = [];
+  if (experientialFormats) uses.push("Inspiration", "attend and network");
+  if (researchFormats) uses.push("attend and research", "network with speakers and organizers");
+  uses.push("future Six.Well programming research");
+  return {
+    privateRationale: `This ${readableList(formats) || "event"} connects ${readableList(subjects) || "the Scout Profile's creative subjects"}${conceptClause}, making it relevant to the current Six.Well creative ecosystem.`,
+    attendanceUse: `${[...new Set(uses)].join("; ")}.`,
+    programmingIdeas: `Study how ${organizer} structures ${readableList(formats) || "the program"} at ${venue}, including pacing, audience movement, participation, and how its creative disciplines interact.`,
+    potentialCollaborators: readableList([...new Set([event.organizer, event.venueName].map(asString).filter(Boolean))]) || "Review the official source for organizers, participating artists, speakers, and venue contacts.",
+    internalNotes: `Private Scout intelligence generated automatically from the event facts and Scout Profile via ${discoveredBy || "scout"}. Review and edit in Studio as needed.`,
+  };
+}
+
+function ensurePrivateIntelligence(event, profile, discoveredBy, current = null) {
+  const generated = generatedPrivateIntelligence(event, profile, discoveredBy);
+  const prefer = (field) => asString(current?.[field]) || asString(event[field]) || generated[field];
+  return {
+    ...event,
+    privateRationale: prefer("privateRationale"),
+    attendanceUse: prefer("attendanceUse"),
+    programmingIdeas: prefer("programmingIdeas"),
+    potentialCollaborators: prefer("potentialCollaborators"),
+    internalNotes: prefer("internalNotes"),
+  };
+}
+
 function geographicMatch(event) {
   const location = normalizeText(`${event.city} ${event.region} ${event.venueAddress} ${event.venueName}`);
   if (/online only|virtual only/.test(location)) return false;
-  return /atlanta|\bga\b|decatur|east point|college park|marietta|avondale|chamblee|doraville/.test(location);
+  return /atlanta|\bga\b|decatur|east point|college park|marietta|avondale|chamblee|doraville|clarkston|dunwoody|alpharetta|covington|newton/.test(location);
 }
 
 function withinHorizon(event, days) {
-  const start = Date.parse(event.startsAt || "");
+  const start = Date.parse(event.endsAt || event.startsAt || "");
   if (!Number.isFinite(start)) return false;
   const now = Date.now() - 86_400_000;
   return start >= now && start <= Date.now() + days * 86_400_000;
 }
 
 async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenance, profile) {
-  const proposal = inferSubjectsAndFormats(proposalFromBody(rawProposal));
+  let proposal = inferSubjectsAndFormats(proposalFromBody(rawProposal));
   if (!proposal.title || !proposal.startsAt || !validDate(proposal.startsAt) || !validHttpUrl(proposal.sourceUrl)) return { skipped: "invalid" };
   if (!geographicMatch(proposal) || !withinHorizon(proposal, profile.dateHorizonDays)) return { skipped: "geography-or-horizon" };
   if (!proposal.subjects.length || !proposal.formats.length) return { skipped: "unclassified" };
+  proposal = ensurePrivateIntelligence(proposal, profile, discoveredBy);
   let existing = null;
   if (proposal.sourceId && proposal.sourceEventId) {
     existing = await db.prepare("SELECT id FROM calendar_candidates WHERE source_id=? AND source_event_id=?")
@@ -2090,7 +2472,16 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   if (!existing) return createCandidate(env, proposal, discoveredBy, provenance);
   const current = await getCandidate(db, existing.id, false);
   if (["rejected", "duplicate"].includes(current.status)) return { candidate: current, existing: true };
+  proposal = ensurePrivateIntelligence(proposal, profile, discoveredBy, current);
   proposal.relatedLinks = proposal.relatedLinks.length ? proposal.relatedLinks : current.relatedLinks;
+  proposal.occurrences = proposal.occurrences.length
+    ? proposal.occurrences.map((occurrence) => ({
+      ...occurrence,
+      id: current.occurrences.find((item) => item.occurrenceType === occurrence.occurrenceType
+        && (sameEventStart(item.startsAt, occurrence.startsAt)
+          || (!item.startsAt && !occurrence.startsAt && normalizeText(item.title) === normalizeText(occurrence.title))))?.id || occurrence.id,
+    }))
+    : current.occurrences;
   proposal.flyerMediaId = current.flyerMediaId;
   proposal.flyerSourceUrl = current.flyerSourceUrl;
   proposal.flyerProvenanceUrl = current.flyerProvenanceUrl;
@@ -2100,10 +2491,16 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   const flyerChanged = Boolean(proposedFlyerUrl && proposedFlyerUrl !== current.flyerSourceUrl);
   const before = JSON.stringify(candidateSnapshot(current));
   const after = JSON.stringify(candidateSnapshot(proposal));
+  const privateIntelligenceChanged = ["privateRationale", "attendanceUse", "programmingIdeas", "potentialCollaborators", "internalNotes"]
+    .some((field) => asString(current[field]) !== asString(proposal[field]));
   if (before === after && !flyerChanged) {
     if (proposal.socialEvidence.length) await syncSocialEvidence(db, current.id, proposal.socialEvidence);
-    await db.prepare("UPDATE calendar_candidates SET last_verified_at=?,updated_at=? WHERE id=?")
-      .bind(isoNow(), isoNow(), current.id).run();
+    if (privateIntelligenceChanged) {
+      await saveCandidate(env, current.id, { ...proposal, status: current.status }, { appendChangeRevision: false });
+    } else {
+      await db.prepare("UPDATE calendar_candidates SET last_verified_at=?,updated_at=? WHERE id=?")
+        .bind(isoNow(), isoNow(), current.id).run();
+    }
     if (current.publicEntryId) await db.prepare("UPDATE calendar_entries SET last_verified_at=? WHERE id=?").bind(isoNow(), current.publicEntryId).run();
     return { candidate: await getCandidate(db, current.id, false), existing: true, reverified: true };
   }
@@ -2135,7 +2532,7 @@ async function monitorSources(env, db, profile) {
     try {
       const response = await fetchExternalSource(source.url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const text = await boundedResponseText(response);
+      const text = await completeLocalistPayload(source, await boundedResponseText(response));
       const fingerprint = await sha256(text);
       const proposals = extractSourceEvents(text, source).slice(0, profile.perRunLimit);
       const sourceOutcome = { sourceId: source.id, url: source.url, status: "ok", proposals: proposals.length, changed: fingerprint !== source.content_fingerprint };
@@ -2181,6 +2578,14 @@ function scoutSchema() {
     authorHandle: { type: "string" }, authorDisplayName: { type: "string" }, authorIsVerified: { type: "boolean" },
     postedAt: { type: "string" }, captionExcerpt: { type: "string" }, mediaType: { type: "string" }, mediaUrl: { type: "string" },
   };
+  const occurrenceProperties = {
+    sourceEventId: { type: "string" }, occurrenceType: { type: "string", enum: [...OCCURRENCE_TYPES] },
+    title: { type: "string" }, factualDescription: { type: "string" }, dateKind: { type: "string", enum: ["timed", "all_day"] },
+    startsAt: { type: "string" }, endsAt: { type: "string" }, timezone: { type: "string" }, venueName: { type: "string" },
+    venueAddress: { type: "string" }, sourceUrl: { type: "string" }, ticketUrl: { type: "string" },
+    status: { type: "string", enum: [...OCCURRENCE_STATUSES] },
+    verificationState: { type: "string", enum: ["verified", "needs_verification"] }, verificationNotes: { type: "string" },
+  };
   const eventProperties = {
     sourceUrl: { type: "string" }, ticketUrl: { type: "string" }, sourceEventId: { type: "string" }, title: { type: "string" },
     relatedLinks: { type: "array", items: { type: "object", properties: { label: { type: "string" }, url: { type: "string" } }, required: ["label", "url"], additionalProperties: false } },
@@ -2190,7 +2595,9 @@ function scoutSchema() {
     venueAddress: { type: "string" }, city: { type: "string" }, region: { type: "string" }, subjects: { type: "array", items: { type: "string", enum: [...SUBJECTS] } },
     formats: { type: "array", items: { type: "string", enum: [...FORMATS] } }, experimental: { type: "boolean" },
     verificationState: { type: "string", enum: ["verified", "needs_verification"] }, verificationNotes: { type: "string" }, confidence: { type: "number" },
+    privateRationale: { type: "string" }, attendanceUse: { type: "string" }, programmingIdeas: { type: "string" }, potentialCollaborators: { type: "string" },
     socialEvidence: { type: "array", items: { type: "object", properties: evidenceProperties, required: Object.keys(evidenceProperties), additionalProperties: false } },
+    occurrences: { type: "array", items: { type: "object", properties: occurrenceProperties, required: Object.keys(occurrenceProperties), additionalProperties: false } },
   };
   return { type: "object", properties: { events: { type: "array", items: { type: "object", properties: eventProperties, required: Object.keys(eventProperties), additionalProperties: false } } }, required: ["events"], additionalProperties: false };
 }
@@ -2210,6 +2617,7 @@ async function socialSourcesForPlatform(db, platform, bypassCadence = true) {
 async function requestOpenAiEvents(env, profile, { query, domains = [], sourceData = null, limit = 6, platform = "" }) {
   if (!env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
   const useWeb = !sourceData;
+  const profileContext = `Scout Profile: weighted subjects ${JSON.stringify(profile.weightedSubjects)}; weighted formats ${JSON.stringify(profile.weightedFormats)}; positive concepts ${profile.positiveConcepts.join(", ")}; negative terms ${profile.negativeTerms.join(", ")}.`;
   const body = {
     model: env.CALENDAR_SCOUT_MODEL || profile.model || "gpt-5.6-terra",
     instructions: [
@@ -2217,11 +2625,13 @@ async function requestOpenAiEvents(env, profile, { query, domains = [], sourceDa
       "Do not publish, contact anyone, or invent missing dates, locations, authors, or links. Return factual Atlanta-metro event proposals only and exclude online-only events.",
       "A social verification badge is informational and never establishes trust. Preserve the original post identity and a short factual caption excerpt as private evidence.",
       "Use explicit UTC offsets for timed dates and YYYY-MM-DD for all-day dates. Omit anything without a confirmable date.",
+      "Keep one exhibition or multi-program event as the parent proposal. Put its opening receptions, artist talks, mixers, screenings, performances, workshops, panels, and lectures in occurrences instead of returning duplicate top-level events. A date marked TBD may be retained only as an occurrence with status tbd and empty startsAt.",
+      "For every event, generate concise private Studio intelligence: privateRationale explains why it fits the supplied Scout Profile; attendanceUse states the best use for inspiration, attendance or networking, and future programming research; programmingIdeas identifies the concrete programming model worth studying; potentialCollaborators names only organizers, venues, artists, speakers, or groups supported by the source. Keep this intelligence out of factualDescription and all public-facing fields.",
       platform ? `This pass is limited to ${platform}. Every event must include its ${platform} post in socialEvidence.` : "For non-social sources return an empty socialEvidence array.",
     ].join(" "),
     input: sourceData
-      ? `${query}\nExtract at most ${limit} proposals from this bounded native API data:\n${JSON.stringify(sourceData).slice(0, 70_000)}`
-      : `${query}\nPositive concepts: ${profile.positiveConcepts.join(", ")}\nNegative terms: ${profile.negativeTerms.join(", ")}\nReturn at most ${limit} events. Related links must be factual and supported. flyerUrl must be empty for social web-search results.`,
+      ? `${query}\n${profileContext}\nExtract at most ${limit} proposals from this bounded native API data:\n${JSON.stringify(sourceData).slice(0, 70_000)}`
+      : `${query}\n${profileContext}\nReturn at most ${limit} events. Related links must be factual and supported. flyerUrl must be empty for social web-search results.`,
     text: { format: { type: "json_schema", name: "atlanta_event_candidates", strict: true, schema: scoutSchema() } },
   };
   if (useWeb) {
