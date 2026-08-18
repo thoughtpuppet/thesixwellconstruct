@@ -2200,13 +2200,96 @@ function wixEventProposal(item, source, detailLinks) {
   };
 }
 
+function wixSeriesStem(value) {
+  const match = normalizeText(value).match(/^(.+?\bseries(?:\s+(?:[ivxlcdm]+|\d+))?)(?:\s|$)/);
+  return match ? match[1] : "";
+}
+
+function wixSeriesOccurrenceTitle(value) {
+  const match = asString(value).match(/^.+?\bseries(?:\s+(?:[ivxlcdm]+|\d+))?\s*(.*)$/i);
+  return asString(match?.[1]).replace(/^[\s:()\-–—]+|[\s:()\-–—]+$/g, "") || asString(value);
+}
+
+function wixLocalDate(value, timezone) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: validTimeZone(timezone) ? timezone : TIME_ZONE,
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return parts.year && parts.month && parts.day ? `${parts.year}-${parts.month}-${parts.day}` : "";
+}
+
+function wixOccurrenceType(event) {
+  const text = normalizeText(`${event.title} ${event.factualDescription}`);
+  if (/opening|reception/.test(text)) return "opening_reception";
+  if (/artist talk/.test(text)) return "artist_talk";
+  if (/screening|film/.test(text)) return "screening";
+  if (/concert|performance/.test(text)) return "performance";
+  if (/workshop/.test(text)) return "workshop";
+  if (/panel/.test(text)) return "panel";
+  if (/lecture|talk/.test(text)) return "lecture";
+  return "other";
+}
+
+function groupWixSeriesEvents(events) {
+  const claimed = new Set();
+  const grouped = events.map((event) => ({ ...event }));
+  for (const parent of grouped) {
+    const stem = wixSeriesStem(parent.title);
+    const parentStart = Date.parse(parent.startsAt || "");
+    const parentEnd = Date.parse(parent.endsAt || "");
+    if (!stem || !Number.isFinite(parentStart) || !Number.isFinite(parentEnd) || parentEnd - parentStart < 28 * 86_400_000) continue;
+    const children = grouped.filter((candidate) => {
+      if (candidate === parent || claimed.has(candidate.sourceEventId) || wixSeriesStem(candidate.title) !== stem) return false;
+      const start = Date.parse(candidate.startsAt || "");
+      const end = Date.parse(candidate.endsAt || candidate.startsAt || "");
+      return Number.isFinite(start) && Number.isFinite(end)
+        && end - start < 7 * 86_400_000
+        && start >= parentStart && start <= parentEnd;
+    }).sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt));
+    if (!children.length) continue;
+    const classifiedSeries = [parent, ...children].map((event) => inferSubjectsAndFormats({
+      ...event,
+      subjects: [...(event.subjects || [])],
+      formats: [...(event.formats || [])],
+    }));
+    parent.subjects = [...new Set(classifiedSeries.flatMap((event) => event.subjects))];
+    parent.formats = [...new Set(classifiedSeries.flatMap((event) => event.formats))];
+    parent.experimental = classifiedSeries.some((event) => event.experimental);
+    parent.dateKind = "date_range";
+    parent.startsAt = wixLocalDate(parent.startsAt, parent.timezone);
+    parent.endsAt = wixLocalDate(parent.endsAt, parent.timezone);
+    parent.occurrences = children.map((child, index) => ({
+      sourceEventId: child.sourceEventId,
+      occurrenceType: wixOccurrenceType(child),
+      title: wixSeriesOccurrenceTitle(child.title),
+      factualDescription: child.factualDescription,
+      dateKind: child.dateKind,
+      startsAt: child.startsAt,
+      endsAt: child.endsAt,
+      timezone: child.timezone,
+      venueName: child.venueName,
+      venueAddress: child.venueAddress,
+      sourceUrl: child.sourceUrl,
+      ticketUrl: child.ticketUrl,
+      status: "scheduled",
+      verificationState: child.verificationState,
+      verificationNotes: "Confirmed session grouped under its official Wix series record.",
+      sortOrder: index,
+    }));
+    for (const child of children) claimed.add(child.sourceEventId);
+  }
+  return grouped.filter((event) => !claimed.has(event.sourceEventId));
+}
+
 function extractWixEvents(html, source) {
   const match = html.match(/<script\b[^>]*id=["']wix-warmup-data["'][^>]*>([\s\S]*?)<\/script>/i);
   if (!match) return [];
   try {
     const detailLinks = wixEventLinks(html, source);
     const seen = new Set();
-    return wixWarmupEvents(JSON.parse(match[1]))
+    const events = wixWarmupEvents(JSON.parse(match[1]))
       .map((item) => wixEventProposal(item, source, detailLinks))
       .filter((event) => {
         const identity = `${event.sourceEventId}|${event.startsAt}`;
@@ -2214,6 +2297,7 @@ function extractWixEvents(html, source) {
         seen.add(identity);
         return true;
       });
+    return groupWixSeriesEvents(events);
   } catch {
     return [];
   }

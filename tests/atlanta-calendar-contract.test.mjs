@@ -533,7 +533,7 @@ test("one registered source can be run immediately without invoking other source
   }
 });
 
-test("Wix event sources expose embedded events and honor the Studio online-only geography rule", async () => {
+test("Wix event sources group confirmed sessions under a series and honor the Studio online-only geography rule", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0");
   const createdResponse = await admin(db, "/sources", {
@@ -545,7 +545,16 @@ test("Wix event sources expose embedded events and honor the Studio online-only 
   db.exec(`UPDATE calendar_scout_profiles
     SET geographic_rules_json='{"metro":"Atlanta","state":"GA","includeOnlineOnly":false,"includeNonLocal":false}'
     WHERE id='atlanta-default'`);
-  const event = {
+  const series = {
+    id:"b66950fb-d85e-4dfb-9ff4-192eba91be4c",
+    title:"Rooted in Memory Workshop Series II (LIVE January 2026)",
+    description:"A discussion series bringing institutional archivists and community memory keepers into direct, reciprocal exchange.",
+    slug:"rooted-in-memory-workshop-series-ii-live-january-2026",
+    location:{ name:"Virtual", type:1, tbd:false },
+    scheduling:{ config:{ scheduleTbd:false, startDate:"2026-01-07T00:00:00.000Z", endDate:"2026-12-25T04:59:00.000Z", timeZoneId:"America/New_York", endDateHidden:false } },
+    mainImage:{ url:"https://static.wixstatic.com/media/radical-series.jpg" },
+  };
+  const session = {
     id:"7da0ea8a-b25c-491f-b15d-e550c3dcd2e5",
     title:"Rooted in Memory Workshop Series II AUGUST 20th",
     description:"A workshop for institutional archivists and community memory keepers building sustainable digital preservation practices.",
@@ -554,7 +563,7 @@ test("Wix event sources expose embedded events and honor the Studio online-only 
     scheduling:{ config:{ scheduleTbd:false, startDate:"2026-08-20T17:00:00.000Z", endDate:"2026-08-20T18:00:00.000Z", timeZoneId:"America/New_York", endDateHidden:false } },
     mainImage:{ url:"https://static.wixstatic.com/media/radical-workshop.jpg" },
   };
-  const html = `<html><body><a href="https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-august-20th-2026-08-20-13-00">${event.title}</a><script type="application/json" id="wix-warmup-data">${JSON.stringify({ appsWarmupData:{ app:{ widget:{ events:{ events:[event], hasMore:false } } } } })}</script></body></html>`;
+  const html = `<html><body><a href="https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-live-january-2026">${series.title}</a><a href="https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-august-20th-2026-08-20-13-00">${session.title}</a><script type="application/json" id="wix-warmup-data">${JSON.stringify({ appsWarmupData:{ app:{ widget:{ events:{ events:[series,session], hasMore:false } } } } })}</script></body></html>`;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(html, { status:200, headers:{ "content-type":"text/html" } });
   try {
@@ -575,28 +584,56 @@ test("Wix event sources expose embedded events and honor the Studio online-only 
     assert.equal(included.status, 200, await included.clone().text());
     const includedResult = await included.json();
     assert.equal(includedResult.candidates, 1);
-    const candidate = db.prepare("SELECT source_event_id,source_url,ticket_url,venue_name,subjects_json,formats_json,status FROM calendar_candidates WHERE source_id=?").get(source.id);
-    assert.equal(candidate.source_event_id, event.id);
-    assert.equal(candidate.source_url, "https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-august-20th-2026-08-20-13-00");
+    const candidate = db.prepare("SELECT id,source_event_id,source_url,ticket_url,title,date_kind,starts_at,ends_at,venue_name,subjects_json,formats_json,status FROM calendar_candidates WHERE source_id=?").get(source.id);
+    assert.equal(candidate.source_event_id, series.id);
+    assert.equal(candidate.source_url, "https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-live-january-2026");
     assert.equal(candidate.ticket_url, candidate.source_url);
+    assert.equal(candidate.title, series.title);
+    assert.equal(candidate.date_kind, "date_range");
+    assert.equal(candidate.starts_at, "2026-01-06");
+    assert.equal(candidate.ends_at, "2026-12-24");
     assert.equal(candidate.venue_name, "Virtual");
     assert.deepEqual(JSON.parse(candidate.subjects_json).sort(), ["anthropology","technology"].sort());
     assert.deepEqual(JSON.parse(candidate.formats_json), ["workshop"]);
     assert.equal(candidate.status, "candidate");
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_id=?)").get(source.id).count, 0);
-    const candidateId = db.prepare("SELECT id FROM calendar_candidates WHERE source_id=?").get(source.id).id;
-    const approved = await admin(db, `/candidates/${candidateId}/approve`, { method:"POST", body:{} });
+    assert.deepEqual(
+      { ...db.prepare("SELECT source_event_id,occurrence_type,title,starts_at,ends_at,venue_name,source_url,status FROM calendar_candidate_occurrences WHERE candidate_id=?").get(candidate.id) },
+      {
+        source_event_id:session.id,
+        occurrence_type:"workshop",
+        title:"AUGUST 20th",
+        starts_at:"2026-08-20T17:00:00.000Z",
+        ends_at:"2026-08-20T18:00:00.000Z",
+        venue_name:"Virtual",
+        source_url:"https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-august-20th-2026-08-20-13-00",
+        status:"scheduled",
+      },
+    );
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE source_event_id=?").get(session.id).count, 0);
+    const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
     assert.equal(approved.status, 200, await approved.clone().text());
     const virtualPayload = await (await handleCalendarPublicApi(request("/api/calendar/events?virtual=true"), env(db))).json();
-    const publicEvent = virtualPayload.events.find((item) => item.title === event.title);
+    const publicEvent = virtualPayload.events.find((item) => item.title === series.title && !item.isOccurrence);
+    const publicSession = virtualPayload.events.find((item) => item.isOccurrence && item.parentTitle === series.title);
     assert.ok(publicEvent);
+    assert.ok(publicSession);
     assert.equal(publicEvent.virtual, true);
     assert.equal(publicEvent.venueName, "Virtual");
     assert.equal(publicEvent.venueAddress, "");
+    assert.equal(publicEvent.relatedOccurrences.length, 1);
+    assert.equal(publicSession.occurrenceLabel, "AUGUST 20th");
+    assert.equal(publicSession.virtual, true);
     const physicalPayload = await (await handleCalendarPublicApi(request("/api/calendar/events?virtual=false"), env(db))).json();
     assert.equal(physicalPayload.events.some((item) => item.id === publicEvent.id), false);
-    const singleIcs = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEvent.id)}.ics`), env(db))).text();
-    assert.match(singleIcs, /LOCATION:Virtual/);
+    assert.equal(physicalPayload.events.some((item) => item.id === publicSession.id), false);
+    const parentIcs = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEvent.id)}.ics`), env(db))).text();
+    const sessionIcs = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicSession.id)}.ics`), env(db))).text();
+    assert.match(parentIcs, /DTSTART;VALUE=DATE:20260106/);
+    assert.match(parentIcs, /DTEND;VALUE=DATE:20261225/);
+    assert.match(parentIcs, /LOCATION:Virtual/);
+    assert.match(sessionIcs, /RELATED-TO;RELTYPE=PARENT:/);
+    assert.match(sessionIcs, /LOCATION:Virtual/);
   } finally {
     globalThis.fetch = originalFetch;
   }
