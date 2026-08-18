@@ -614,7 +614,7 @@ test("Wix event sources group confirmed sessions under a series and honor the St
     const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
     assert.equal(approved.status, 200, await approved.clone().text());
     const virtualPayload = await (await handleCalendarPublicApi(request("/api/calendar/events?virtual=true"), env(db))).json();
-    const publicEvent = virtualPayload.events.find((item) => item.title === series.title && !item.isOccurrence);
+    const publicEvent = virtualPayload.series.find((item) => item.title === series.title && !item.isOccurrence);
     const publicSession = virtualPayload.events.find((item) => item.isOccurrence && item.parentTitle === series.title);
     assert.ok(publicEvent);
     assert.ok(publicSession);
@@ -622,6 +622,7 @@ test("Wix event sources group confirmed sessions under a series and honor the St
     assert.equal(publicEvent.venueName, "Virtual");
     assert.equal(publicEvent.venueAddress, "");
     assert.equal(publicEvent.relatedOccurrences.length, 1);
+    assert.equal(publicEvent.isSeriesParent, true);
     assert.equal(publicSession.occurrenceLabel, "AUGUST 20th");
     assert.equal(publicSession.virtual, true);
     const physicalPayload = await (await handleCalendarPublicApi(request("/api/calendar/events?virtual=false"), env(db))).json();
@@ -629,11 +630,14 @@ test("Wix event sources group confirmed sessions under a series and honor the St
     assert.equal(physicalPayload.events.some((item) => item.id === publicSession.id), false);
     const parentIcs = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEvent.id)}.ics`), env(db))).text();
     const sessionIcs = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicSession.id)}.ics`), env(db))).text();
-    assert.match(parentIcs, /DTSTART;VALUE=DATE:20260106/);
-    assert.match(parentIcs, /DTEND;VALUE=DATE:20261225/);
+    assert.doesNotMatch(parentIcs, /DTSTART;VALUE=DATE:20260106/);
+    assert.match(parentIcs, /DTSTART:20260820T170000Z/);
     assert.match(parentIcs, /LOCATION:Virtual/);
     assert.match(sessionIcs, /RELATED-TO;RELTYPE=PARENT:/);
     assert.match(sessionIcs, /LOCATION:Virtual/);
+    const atlantaFeed = await (await handleCalendarFeed(request("/calendars/atlanta.ics"), env(db))).text();
+    assert.doesNotMatch(atlantaFeed, /DTSTART;VALUE=DATE:20260106/);
+    assert.match(atlantaFeed, /DTSTART:20260820T170000Z/);
   } finally {
     globalThis.fetch = originalFetch;
   }

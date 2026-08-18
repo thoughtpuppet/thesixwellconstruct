@@ -1254,6 +1254,7 @@ function curatedPublicView(row, relatedLinks = []) {
     occurrenceId: "",
     occurrenceType: "primary",
     isOccurrence: false,
+    isSeriesParent: false,
     parentUid: "",
     relatedOccurrences: [],
     origin: "curated",
@@ -1315,6 +1316,7 @@ function curatedOccurrencePublicView(row, parent) {
     occurrenceType: row.occurrence_type,
     occurrenceLabel: row.title.startsWith(titlePrefix) ? row.title.slice(titlePrefix.length) : row.title,
     isOccurrence: true,
+    isSeriesParent: false,
     parentUid: parent.uid,
     relatedOccurrences: [],
     origin: "curated",
@@ -1382,6 +1384,11 @@ async function loadCuratedEvents(db) {
       status: occurrence.status,
     });
   }
+  for (const parent of parents) {
+    parent.isSeriesParent = parent.dateKind === "date_range"
+      && parent.relatedOccurrences.length > 0
+      && /\bseries\b/i.test(parent.title);
+  }
   return [...parents, ...occurrences];
 }
 
@@ -1407,6 +1414,7 @@ async function loadSixWellEvents(db) {
     return {
       id: `sixwell:${occurrenceId}`,
       origin: "sixwell",
+      isSeriesParent: false,
       affiliations: [],
       title: row.title,
       description: row.description || "",
@@ -1545,11 +1553,19 @@ export async function handleCalendarPublicApi(request, env) {
       const id = decodeURIComponent(match[1]);
       const event = events.find((item) => item.id === id);
       if (!event) return errorResponse("Event not found.", 404);
-      return calendarResponse([event], event.title, `${id.replace(/[^a-z0-9_-]+/gi, "-")}.ics`);
+      const selected = event.isSeriesParent
+        ? events.filter((item) => item.isOccurrence && item.seriesId === event.seriesId)
+        : [event];
+      return calendarResponse(selected, event.title, `${id.replace(/[^a-z0-9_-]+/gi, "-")}.ics`);
     }
     if (url.pathname !== "/api/calendar/events") return errorResponse("Unknown calendar route.", 404);
     if (request.method !== "GET") return errorResponse("Method not allowed.", 405);
-    return json({ events: filteredEvents(events, url.searchParams), subjects: [...SUBJECTS], formats: [...FORMATS], modes: ["virtual"] });
+    const filtered = filteredEvents(events, url.searchParams);
+    return json({
+      events: filtered.filter((event) => !event.isSeriesParent),
+      series: filtered.filter((event) => event.isSeriesParent),
+      subjects: [...SUBJECTS], formats: [...FORMATS], modes: ["virtual"],
+    });
   } catch (error) {
     return errorResponse("Unable to load the Atlanta calendar.", 500, error.message);
   }
@@ -1569,7 +1585,7 @@ export async function handleCalendarFeed(request, env) {
       sixwell: { name: "Six.Well Events", test: (event) => event.origin === "sixwell" },
     };
     if (!definitions[feed]) return errorResponse("Calendar feed not found.", 404);
-    const events = (await normalizedEvents(requireDb(env))).filter(definitions[feed].test);
+    const events = (await normalizedEvents(requireDb(env))).filter((event) => !event.isSeriesParent && definitions[feed].test(event));
     return calendarResponse(events, definitions[feed].name, `${feed}.ics`);
   } catch (error) {
     return errorResponse("Unable to build the calendar feed.", 500, error.message);
@@ -2205,9 +2221,20 @@ function wixSeriesStem(value) {
   return match ? match[1] : "";
 }
 
-function wixSeriesOccurrenceTitle(value) {
-  const match = asString(value).match(/^.+?\bseries(?:\s+(?:[ivxlcdm]+|\d+))?\s*(.*)$/i);
-  return asString(match?.[1]).replace(/^[\s:()\-–—]+|[\s:()\-–—]+$/g, "") || asString(value);
+function wixSeriesOccurrenceTitle(event) {
+  const value = asString(event?.title);
+  const match = value.match(/^.+?\bseries(?:\s+(?:[ivxlcdm]+|\d+))?\s*(.*)$/i);
+  let title = asString(match?.[1]).replace(/^[\s:()\-–—]+|[\s:()\-–—]+$/g, "") || value;
+  if (/^live\s+[a-z]+\s+\d{4}$/i.test(title)) {
+    const date = new Date(event?.startsAt || "");
+    if (Number.isFinite(date.getTime())) {
+      title = `${new Intl.DateTimeFormat("en-US", {
+        timeZone: validTimeZone(event?.timezone) ? event.timezone : TIME_ZONE,
+        month: "long", day: "numeric",
+      }).format(date)} Session`;
+    }
+  }
+  return title.replace(/\s*\(([^)]+)$/u, " — $1");
 }
 
 function wixLocalDate(value, timezone) {
@@ -2225,8 +2252,8 @@ function wixOccurrenceType(event) {
   if (/opening|reception/.test(text)) return "opening_reception";
   if (/artist talk/.test(text)) return "artist_talk";
   if (/screening|film/.test(text)) return "screening";
-  if (/concert|performance/.test(text)) return "performance";
   if (/workshop/.test(text)) return "workshop";
+  if (/concert|performance/.test(text)) return "performance";
   if (/panel/.test(text)) return "panel";
   if (/lecture|talk/.test(text)) return "lecture";
   return "other";
@@ -2255,15 +2282,15 @@ function groupWixSeriesEvents(events) {
       formats: [...(event.formats || [])],
     }));
     parent.subjects = [...new Set(classifiedSeries.flatMap((event) => event.subjects))];
-    parent.formats = [...new Set(classifiedSeries.flatMap((event) => event.formats))];
-    parent.experimental = classifiedSeries.some((event) => event.experimental);
+    parent.formats = classifiedSeries[0].formats;
+    parent.experimental = classifiedSeries[0].experimental;
     parent.dateKind = "date_range";
     parent.startsAt = wixLocalDate(parent.startsAt, parent.timezone);
     parent.endsAt = wixLocalDate(parent.endsAt, parent.timezone);
     parent.occurrences = children.map((child, index) => ({
       sourceEventId: child.sourceEventId,
       occurrenceType: wixOccurrenceType(child),
-      title: wixSeriesOccurrenceTitle(child.title),
+      title: wixSeriesOccurrenceTitle(child),
       factualDescription: child.factualDescription,
       dateKind: child.dateKind,
       startsAt: child.startsAt,

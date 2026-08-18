@@ -187,7 +187,7 @@
   fetch("/api/calendar/events")
     .then(function (response) { if (!response.ok) throw new Error("Calendar request failed."); return response.json(); })
     .then(function (payload) {
-      allEvents = Array.isArray(payload.events) ? payload.events : [];
+      allEvents = Array.isArray(payload.events) ? payload.events.filter(function (event) { return !event.isSeriesParent; }) : [];
       var upcoming = allEvents.find(function (event) { return !isPast(event); });
       if (upcoming) { var parts = dateKey(upcoming.startsAt).split("-"); activeMonth = new Date(Number(parts[0]), Number(parts[1]) - 1, 1); }
       applyFilters();
