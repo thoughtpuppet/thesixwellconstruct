@@ -69,7 +69,8 @@
     "OUTREACH_CONSENT_SYNC_ENABLED": "false",
     "OUTREACH_PREFERENCES_ENABLED": "false",
     "OUTREACH_INDIVIDUAL_EMAIL_ENABLED": "false",
-    "OUTREACH_EMAIL_CAMPAIGNS_ENABLED": "false"
+    "OUTREACH_EMAIL_CAMPAIGNS_ENABLED": "false",
+    "CALENDAR_SCOUT_MODEL": "gpt-5.6-terra"
   },
   "compatibility_flags": [
     "nodejs_compat"

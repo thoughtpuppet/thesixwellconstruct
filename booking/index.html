@@ -107,6 +107,12 @@
     header { padding:18px 24px; min-height:60px; }
     main { padding:48px 24px 64px; }
     .booking-grid { grid-template-columns:1fr; gap:24px; }
+    .booking-grid.window-selection-collapsed { gap:12px; }
+    .booking-grid.window-selection-collapsed #appointmentSelection > .section:last-child { margin-bottom:0; }
+    .booking-grid.window-selection-collapsed .panel { display:flex; flex-direction:column; }
+    .booking-grid.window-selection-collapsed #totalDueRow { order:-3; }
+    .booking-grid.window-selection-collapsed #checkoutBtn { order:-2; margin-top:12px; }
+    .booking-grid.window-selection-collapsed #checkoutNote { order:-1; }
     .client-intake-grid { grid-template-columns:1fr; }
     .client-intake-field:first-child { grid-column:auto; }
     .pricing-lines > div { display:grid; grid-template-columns:1fr; gap:4px; }
@@ -197,6 +203,7 @@
           <div id="calendar" class="hidden"></div>
         </div>
         <div id="windowList" class="window-list"></div>
+        <button id="changeWindowBtn" class="change-window-button hidden" type="button" aria-controls="windowTools calendar windowList">Change date/time</button>
       </section>
       </div>
     </div>
@@ -257,6 +264,7 @@
   const appointmentSelection = document.getElementById("appointmentSelection");
   const extendedPricing = document.getElementById("extendedPricing");
   const windowListEl = document.getElementById("windowList");
+  const changeWindowBtn = document.getElementById("changeWindowBtn");
   const windowToolsEl = document.getElementById("windowTools");
   const monthSelectEl = document.getElementById("monthSelect");
   const prevMonthBtn = document.getElementById("prevMonthBtn");
@@ -291,6 +299,7 @@
   let selectedType = null;
   let selectedWindow = null;
   let selectedSessions = [];
+  let windowSelectionExpanded = false;
   let selectedMonthKey = "";
   let selectedDayKey = "";
   let selectedTipCents = 0;
@@ -577,6 +586,10 @@
     return context?.multiSession?.enabled === true;
   }
 
+  function windowSelectionIsCollapsed() {
+    return Boolean(selectedWindow) && !multiSessionEnabled() && !windowSelectionExpanded;
+  }
+
   function maximumSessions() {
     return multiSessionEnabled()
       ? Math.max(2, Math.min(24, Number(context?.multiSession?.maxSessions || 2)))
@@ -705,7 +718,7 @@
           <span class="booking-window-title">${escapeHtml(formatDate(windowItem.startAt))}</span>
           <span class="booking-window-meta">${meta}</span>
         </span>
-        ${selected && multiSessionEnabled() ? '<span class="booking-next-tag">Selected</span>' : options.next ? '<span class="booking-next-tag">Next Available</span>' : ""}
+        ${selected ? '<span class="booking-next-tag">Selected</span>' : options.next ? '<span class="booking-next-tag">Next Available</span>' : ""}
       </button>
     `;
   }
@@ -1261,20 +1274,26 @@
       selectedMonthKey = "";
       selectedDayKey = "";
       selectedWindow = null;
+      windowSelectionExpanded = false;
     }
     const monthIndex = monthKeys.indexOf(selectedMonthKey);
     const monthWindows = visibleWindows.filter((windowItem) => monthKey(windowItem.startAt) === selectedMonthKey);
     const dayWindows = monthWindows.filter((windowItem) => dayKey(windowItem.startAt) === selectedDayKey);
+    const windowSelectionCollapsed = windowSelectionIsCollapsed();
+    appEl.classList.toggle("window-selection-collapsed", windowSelectionCollapsed);
 
-    windowToolsEl.classList.toggle("hidden", !monthKeys.length);
+    windowToolsEl.classList.toggle("hidden", !monthKeys.length || windowSelectionCollapsed);
     monthSelectEl.innerHTML = `<option value="">Choose a month</option>${monthKeys.map((key) => `<option value="${escapeHtml(key)}">${escapeHtml(monthLabel(key))}</option>`).join("")}`;
     monthSelectEl.value = selectedMonthKey;
     prevMonthBtn.disabled = monthIndex <= 0;
     nextMonthBtn.disabled = monthIndex < 0 || monthIndex >= monthKeys.length - 1;
     monthCountEl.textContent = selectedMonthKey && monthWindows.length ? `${countOpenSlots(monthWindows)} open` : "";
     renderCalendar(selectedMonthKey, monthWindows);
+    if (windowSelectionCollapsed) calendarEl.classList.add("hidden");
 
-    if (!visibleWindows.length) {
+    if (windowSelectionCollapsed) {
+      windowListEl.innerHTML = renderWindowButton(selectedWindow);
+    } else if (!visibleWindows.length) {
       windowListEl.innerHTML = selectedType?.id === EXTENDED_DAY_BOOKING_TYPE_ID
         ? '<div class="status">No Extended Day dates are currently available. You may choose Quarter, Half, 3/4, or Full Day and split the project across appointments.</div>'
         : '<div class="status">No open booking windows are available yet. Reply to your approval email if you need help.</div>';
@@ -1285,6 +1304,7 @@
     } else {
       windowListEl.innerHTML = dayWindows.length ? dayWindows.map((windowItem) => renderWindowButton(windowItem)).join("") : '<div class="status">No open time slots remain for that day.</div>';
     }
+    changeWindowBtn.classList.toggle("hidden", !windowSelectionCollapsed);
 
     clientDetailsSection.classList.toggle("hidden", !context.requiresClientDetails);
     const chosenSessions = selectedAppointmentSessions();
@@ -1500,6 +1520,7 @@
     }
     selectedType = context.bookingTypes.find((type) => type.id === button.dataset.type) || null;
     if (selectedWindow?.bookingTypeId && selectedWindow.bookingTypeId !== selectedType?.id) selectedWindow = null;
+    windowSelectionExpanded = false;
     selectedMonthKey = selectedWindow ? monthKey(selectedWindow.startAt) : "";
     selectedDayKey = selectedWindow ? dayKey(selectedWindow.startAt) : "";
     render();
@@ -1571,10 +1592,18 @@
     } else {
       selectedWindow = windowItem;
       selectedSessions = [];
+      windowSelectionExpanded = false;
     }
     selectedMonthKey = selectedWindow ? monthKey(selectedWindow.startAt) : selectedMonthKey;
     selectedDayKey = selectedWindow ? dayKey(selectedWindow.startAt) : selectedDayKey;
     render();
+    if (!multiSessionEnabled()) requestAnimationFrame(() => windowListEl.scrollIntoView({ block: "start" }));
+  });
+
+  changeWindowBtn.addEventListener("click", () => {
+    windowSelectionExpanded = true;
+    render();
+    requestAnimationFrame(() => windowToolsEl.scrollIntoView({ block: "start" }));
   });
 
   document.querySelectorAll("[data-tip-cents]").forEach((button) => {

@@ -1,0 +1,139 @@
+(function () {
+  "use strict";
+  var TOKEN_KEY = "swc_submissions_admin_token";
+  var SUBJECTS = [["art","Art"],["film","Film"],["poetry-music","Poetry / Music"],["technology","Technology"],["ai","AI"],["creative-technology","Creative Technology"]];
+  var FORMATS = [["exhibition","Exhibition"],["screening","Screening"],["performance","Performance"],["experimental-event","Experimental Event"],["lecture-talk","Lecture / Talk"],["panel","Panel"],["workshop","Workshop"],["conference","Conference"]];
+  var STATUSES = [["","All"],["candidate","Candidates"],["published","Published"],["needs_verification","Needs Verification"],["rejected","Rejected"],["cancelled","Cancelled"],["duplicate","Duplicates"]];
+  var token = localStorage.getItem(TOKEN_KEY) || "";
+  var state = { candidates:[], sources:[], profile:null, suggestions:[], runs:[], filter:"", selectedId:"", draftNew:false, broadDiscoveryEnabled:false };
+  var tokenInput = document.getElementById("tokenInput");
+  var authPanel = document.getElementById("authPanel");
+  var app = document.getElementById("studioApp");
+  var listRoot = document.getElementById("candidateList");
+  var editorRoot = document.getElementById("candidateEditor");
+  var toastTimer;
+
+  tokenInput.value = token;
+
+  function escapeHtml(value) { return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]; }); }
+  function displayDate(value) { var date = value ? new Date(value.length === 10 ? value + "T12:00:00" : value) : null; return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", hour:value.length > 10 ? "numeric" : undefined, minute:value.length > 10 ? "2-digit" : undefined }).format(date) : "Date not confirmed"; }
+  function toast(message) { var root = document.getElementById("toast"); root.textContent = message; root.classList.add("is-visible"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { root.classList.remove("is-visible"); }, 3200); }
+  async function api(path, options) {
+    var response = await fetch(path, Object.assign({}, options || {}, { headers:Object.assign({ authorization:"Bearer " + token, "content-type":"application/json" }, options && options.headers || {}) }));
+    var payload = await response.json().catch(function () { return {}; });
+    if (!response.ok) { var error = new Error(payload.error || "Request failed."); error.details = payload.errors || []; throw error; }
+    return payload;
+  }
+  function value(id) { var field = document.getElementById(id); return field ? field.value.trim() : ""; }
+  function checked(name) { return Array.from(editorRoot.querySelectorAll('input[name="' + name + '"]:checked')).map(function (input) { return input.value; }); }
+  function checkboxes(name, choices, selected) { return '<div class="checkbox-grid">' + choices.map(function (choice) { return '<label class="check-option"><input type="checkbox" name="' + name + '" value="' + choice[0] + '"' + ((selected || []).includes(choice[0]) ? ' checked' : '') + '><span>' + escapeHtml(choice[1]) + '</span></label>'; }).join("") + '</div>'; }
+  function field(id, label, value, options) {
+    options = options || {};
+    var control = options.type === "textarea" ? '<textarea id="' + id + '">' + escapeHtml(value || "") + '</textarea>' : options.type === "select" ? '<select id="' + id + '">' + options.choices.map(function (choice) { return '<option value="' + escapeHtml(choice[0]) + '"' + (choice[0] === value ? ' selected' : '') + '>' + escapeHtml(choice[1]) + '</option>'; }).join("") + '</select>' : '<input id="' + id + '" type="' + (options.type || "text") + '" value="' + escapeHtml(value || "") + '"' + (options.step ? ' step="' + options.step + '"' : '') + '>';
+    return '<label class="field' + (options.wide ? ' is-wide' : '') + '"><span>' + escapeHtml(label) + '</span>' + control + '</label>';
+  }
+  function sourceChoices(selected) { return [["","No registry source"]].concat(state.sources.map(function (source) { return [source.id, source.name]; })).map(function (choice) { return '<option value="' + escapeHtml(choice[0]) + '"' + (choice[0] === selected ? ' selected' : '') + '>' + escapeHtml(choice[1]) + '</option>'; }).join(""); }
+  function candidatePayload() {
+    return {
+      sourceId:value("candidateSourceId"), sourceEventId:value("candidateSourceEventId"), sourceUrl:value("candidateSourceUrl"), ticketUrl:value("candidateTicketUrl"),
+      title:value("candidateTitle"), organizer:value("candidateOrganizer"), factualDescription:value("candidateDescription"), dateKind:value("candidateDateKind"),
+      startsAt:value("candidateStartsAt"), endsAt:value("candidateEndsAt"), timezone:value("candidateTimezone") || "America/New_York", venueName:value("candidateVenueName"),
+      venueAddress:value("candidateVenueAddress"), city:value("candidateCity") || "Atlanta", region:value("candidateRegion") || "GA", subjects:checked("subjects"), formats:checked("formats"),
+      experimental:document.getElementById("candidateExperimental").checked, verificationState:value("candidateVerificationState"), verificationNotes:value("candidateVerificationNotes"),
+      confidence:value("candidateConfidence") === "" ? null : Number(value("candidateConfidence")), privateRationale:value("candidatePrivateRationale"), attendanceUse:value("candidateAttendanceUse"),
+      programmingIdeas:value("candidateProgrammingIdeas"), potentialCollaborators:value("candidateCollaborators"), internalNotes:value("candidateInternalNotes"), rejectionReason:value("candidateRejectionReason"), duplicateOf:value("candidateDuplicateOf")
+    };
+  }
+  function blankCandidate() { return { id:"", title:"", status:"needs_verification", verificationState:"needs_verification", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[] }; }
+
+  function renderStatusFilters() {
+    document.getElementById("statusFilters").innerHTML = STATUSES.map(function (item) { var count = item[0] ? state.candidates.filter(function (candidate) { return candidate.status === item[0]; }).length : state.candidates.length; return '<button type="button" data-status="' + item[0] + '" class="' + (state.filter === item[0] ? 'is-active' : '') + '">' + escapeHtml(item[1]) + ' / ' + count + '</button>'; }).join("");
+  }
+  function renderCandidateList() {
+    var candidates = state.candidates.filter(function (candidate) { return !state.filter || candidate.status === state.filter; });
+    listRoot.innerHTML = candidates.length ? candidates.map(function (candidate) { return '<button class="candidate-card' + (candidate.id === state.selectedId ? ' is-active' : '') + '" type="button" data-candidate-id="' + escapeHtml(candidate.id) + '"><span class="status">' + escapeHtml(candidate.status.replace(/_/g," ")) + ' / ' + escapeHtml(candidate.verificationState.replace(/_/g," ")) + '</span><strong>' + escapeHtml(candidate.title) + '</strong><span>' + escapeHtml(displayDate(candidate.startsAt)) + '</span><span>' + escapeHtml(candidate.venueName || candidate.organizer || "Venue not confirmed") + '</span></button>'; }).join("") : '<p class="empty-state">No candidates in this view.</p>';
+  }
+  function renderEditor(candidate) {
+    if (!candidate) { editorRoot.innerHTML = '<p class="empty-state">Select a candidate or start a manual intake.</p>'; return; }
+    var isNew = !candidate.id;
+    var revisions = candidate.revisions || [];
+    editorRoot.innerHTML = '<div class="editor-head"><div><p class="eyebrow">' + (isNew ? 'Manual intake' : 'Candidate record') + '</p><h2>' + escapeHtml(candidate.title || "New candidate") + '</h2></div><span class="status-badge">' + escapeHtml(candidate.status.replace(/_/g," ")) + '</span></div>' +
+      '<div class="editor-section"><h3>Public factual record</h3><div class="field-grid">' +
+      '<label class="field"><span>Registry source</span><select id="candidateSourceId">' + sourceChoices(candidate.sourceId || "") + '</select></label>' +
+      field("candidateSourceEventId","Source event ID",candidate.sourceEventId) + field("candidateSourceUrl","Official source URL",candidate.sourceUrl,{type:"url",wide:true}) + field("candidateTicketUrl","Ticket URL",candidate.ticketUrl,{type:"url",wide:true}) +
+      field("candidateTitle","Title",candidate.title,{wide:true}) + field("candidateOrganizer","Organizer",candidate.organizer) + field("candidateDateKind","Date type",candidate.dateKind,{type:"select",choices:[["timed","Timed"],["all_day","All day"],["date_range","Date range"]]}) +
+      field("candidateStartsAt","Starts (ISO or YYYY-MM-DD)",candidate.startsAt) + field("candidateEndsAt","Ends (ISO or YYYY-MM-DD)",candidate.endsAt) + field("candidateTimezone","Time zone",candidate.timezone) + field("candidateVenueName","Venue",candidate.venueName) +
+      field("candidateVenueAddress","Venue address",candidate.venueAddress,{wide:true}) + field("candidateCity","City",candidate.city) + field("candidateRegion","State / region",candidate.region) + field("candidateDescription","Factual description",candidate.factualDescription,{type:"textarea",wide:true}) +
+      '</div><p class="field-label">Subjects</p>' + checkboxes("subjects",SUBJECTS,candidate.subjects) + '<p class="field-label">Formats</p>' + checkboxes("formats",FORMATS,candidate.formats) +
+      '<label class="check-option"><input id="candidateExperimental" type="checkbox"' + (candidate.experimental ? ' checked' : '') + '><span>Experimental attribute</span></label></div>' +
+      '<div class="editor-section"><h3>Verification + provenance</h3><div class="field-grid">' +
+      field("candidateVerificationState","Verification",candidate.verificationState,{type:"select",choices:[["verified","Verified"],["unverified","Unverified"],["needs_verification","Needs verification"]]}) + field("candidateConfidence","Confidence",candidate.confidence,{type:"number",step:"0.01"}) +
+      field("candidateVerificationNotes","Verification notes",candidate.verificationNotes,{type:"textarea",wide:true}) + field("candidateRejectionReason","Rejection reason",candidate.rejectionReason) + field("candidateDuplicateOf","Duplicate of",candidate.duplicateOf) + '</div></div>' +
+      '<div class="editor-section"><h3>Private review intelligence</h3><div class="field-grid">' + field("candidatePrivateRationale","Why it matches",candidate.privateRationale,{type:"textarea",wide:true}) + field("candidateAttendanceUse","Attendance / research use",candidate.attendanceUse,{type:"textarea"}) + field("candidateProgrammingIdeas","Programming ideas",candidate.programmingIdeas,{type:"textarea"}) + field("candidateCollaborators","Potential collaborators",candidate.potentialCollaborators,{type:"textarea"}) + field("candidateInternalNotes","Internal notes",candidate.internalNotes,{type:"textarea"}) + '</div></div>' +
+      (!isNew ? '<div class="editor-section"><h3>Detected changes + revisions</h3><div class="revision-list">' + (revisions.length ? revisions.map(function (revision) { return '<article class="revision"><strong>Revision ' + revision.revisionNumber + ' / ' + escapeHtml(revision.revisionState) + '</strong><br>' + escapeHtml(revision.changeSummary || "Saved candidate snapshot") + '<br>' + escapeHtml(displayDate(revision.createdAt)) + '</article>'; }).join("") : '<p class="empty-state">No revisions recorded.</p>') + '</div></div>' : '') +
+      '<div class="editor-actions"><button type="button" data-action="save">' + (isNew ? 'Create candidate' : 'Save') + '</button>' + (!isNew ? (candidate.pendingRevisionId ? '<button type="button" data-action="review-change">Review Detected Change</button>' : '') + '<button type="button" data-action="approve">Approve + Publish</button><button type="button" data-action="reject">Reject</button><button type="button" data-action="duplicate">Mark Duplicate</button><button type="button" data-action="cancel">Mark Cancelled</button>' : '') + '</div>';
+  }
+  async function selectCandidate(id) {
+    state.selectedId = id; state.draftNew = false; renderCandidateList();
+    try { var payload = await api("/api/admin/calendar/candidates/" + encodeURIComponent(id)); var index = state.candidates.findIndex(function (candidate) { return candidate.id === id; }); if (index >= 0) state.candidates[index] = payload.candidate; renderEditor(payload.candidate); }
+    catch (error) { toast(error.message); }
+  }
+  async function refreshCandidates(selectId) {
+    var payload = await api("/api/admin/calendar/candidates"); state.candidates = payload.candidates || []; renderStatusFilters(); renderCandidateList();
+    if (selectId) selectCandidate(selectId); else if (state.selectedId && state.candidates.some(function (candidate) { return candidate.id === state.selectedId; })) selectCandidate(state.selectedId); else renderEditor(null);
+  }
+  async function editorAction(action) {
+    if (action === "review-change") { var revisions = editorRoot.querySelector(".revision-list"); if (revisions) revisions.scrollIntoView({ behavior:"smooth", block:"center" }); return; }
+    var body = candidatePayload();
+    try {
+      if (!state.selectedId) { var created = await api("/api/admin/calendar/candidates", { method:"POST", body:JSON.stringify(body) }); state.selectedId = created.candidate.id; toast(created.duplicate ? "Candidate created and flagged as a duplicate." : "Candidate created."); await refreshCandidates(state.selectedId); return; }
+      if (action === "save") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId), { method:"PATCH", body:JSON.stringify(body) }); toast("Candidate saved."); }
+      if (action === "approve") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId), { method:"PATCH", body:JSON.stringify(body) }); await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/approve", { method:"POST", body:"{}" }); toast("Approved and published to the calendar."); }
+      if (action === "reject") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/reject", { method:"POST", body:JSON.stringify({ reason:body.rejectionReason }) }); toast("Candidate rejected. It remains private."); }
+      if (action === "duplicate") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/duplicate", { method:"POST", body:JSON.stringify({ duplicateOf:body.duplicateOf }) }); toast("Candidate marked as duplicate."); }
+      if (action === "cancel") { await api("/api/admin/calendar/candidates/" + encodeURIComponent(state.selectedId) + "/cancel", { method:"POST", body:"{}" }); toast("Cancellation recorded."); }
+      await refreshCandidates(state.selectedId);
+    } catch (error) { toast(error.details && error.details.length ? error.details.join(" ") : error.message); }
+  }
+
+  function renderSources() {
+    document.getElementById("sourceList").innerHTML = state.sources.map(function (source) { return '<article class="source-card" data-source-id="' + escapeHtml(source.id) + '">' + field("sourceName-"+source.id,"Name",source.name) + field("sourceUrl-"+source.id,"URL",source.url,{type:"url"}) + field("sourceCadence-"+source.id,"Cadence hours",source.cadenceHours,{type:"number"}) + '<label class="field"><span>Enabled</span><select id="sourceEnabled-' + source.id + '"><option value="1"' + (source.enabled?' selected':'') + '>Enabled</option><option value="0"' + (!source.enabled?' selected':'') + '>Paused</option></select></label><label class="field"><span>Source type</span><select id="sourceType-' + source.id + '">' + [["official_html","Official HTML"],["calendar","Calendar"],["json","JSON"],["rss","RSS"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.sourceType===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label><label class="field"><span>Trust</span><select id="sourceTrust-' + source.id + '">' + [["official","Official"],["trusted","Trusted"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.trustLevel===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label><button type="button" data-save-source>Save</button><p class="source-meta is-wide-mobile">Last success: ' + escapeHtml(displayDate(source.lastSuccessAt)) + '<br>Acceptance: ' + (source.acceptanceRate === null ? 'No decisions yet' : Math.round(source.acceptanceRate*100)+'%') + (source.lastError ? '<br>Error: '+escapeHtml(source.lastError) : '') + '</p></article>'; }).join("");
+  }
+  function commaList(values) { return (values || []).join(", "); }
+  function parseComma(value) { return value.split(",").map(function (item) { return item.trim(); }).filter(Boolean); }
+  function renderProfile() {
+    var profile = state.profile;
+    document.getElementById("discoveryState").textContent = state.broadDiscoveryEnabled ? "Broad discovery is enabled. Official-source monitoring and OpenAI web search can both run." : "Broad discovery is disabled because OPENAI_API_KEY is not configured. Official-source monitoring remains available.";
+    if (!profile) return;
+    document.getElementById("profileForm").innerHTML = field("profileName","Profile name",profile.name) + field("profileModel","Model",profile.model) + field("profileSubjects","Weighted subjects / JSON",JSON.stringify(profile.weightedSubjects,null,2),{type:"textarea"}) + field("profileFormats","Weighted formats / JSON",JSON.stringify(profile.weightedFormats,null,2),{type:"textarea"}) + field("profilePositive","Positive concepts",commaList(profile.positiveConcepts),{type:"textarea",wide:true}) + field("profileNegative","Negative terms",commaList(profile.negativeTerms),{type:"textarea",wide:true}) + field("profileGeography","Geographic rules / JSON",JSON.stringify(profile.geographicRules,null,2),{type:"textarea",wide:true}) + field("profileHorizon","Date horizon / days",profile.dateHorizonDays,{type:"number"}) + field("profileThreshold","Relevance threshold",profile.relevanceThreshold,{type:"number",step:"0.01"}) + field("profileDuplicate","Duplicate sensitivity",profile.duplicateSensitivity,{type:"number",step:"0.01"}) + field("profileLimit","Per-run limit",profile.perRunLimit,{type:"number"}) + field("profileSourceCadence","Source cadence / hours",profile.sourceCadenceHours,{type:"number"}) + field("profileWebCadence","Web cadence / hours",profile.webCadenceHours,{type:"number"}) + '<button type="submit">Save Scout Profile</button>';
+  }
+  async function loadSuggestions() {
+    var payload = await api("/api/admin/calendar/suggestions"); state.suggestions = payload.suggestions || [];
+    document.getElementById("suggestionList").innerHTML = state.suggestions.filter(function (item) { return item.status === "pending"; }).map(function (item) { return '<article class="suggestion-card"><strong>' + escapeHtml(item.rationale) + '</strong><p>' + escapeHtml(JSON.stringify(item.proposedPatch)) + '</p><div class="suggestion-actions"><button data-suggestion-action="accept" data-id="' + item.id + '">Accept</button><button data-suggestion-action="dismiss" data-id="' + item.id + '">Dismiss</button></div></article>'; }).join("") || '<p class="empty-state">No pending adjustments.</p>';
+  }
+  async function loadRuns() {
+    var payload = await api("/api/admin/calendar/runs"); state.runs = payload.runs || [];
+    document.getElementById("runList").innerHTML = state.runs.map(function (run) { return '<article class="run-card"><div><h3>' + escapeHtml(run.status) + '</h3><p class="run-meta">' + escapeHtml(displayDate(run.startedAt)) + '<br>' + escapeHtml(run.runKind) + ' / ' + escapeHtml(run.model || "direct sources only") + '<br>' + run.candidateCount + ' candidates / ' + run.duplicateCount + ' duplicates / ' + run.failureCount + ' failures</p></div><pre>' + escapeHtml(JSON.stringify({ sources:run.sourcesSearched, queries:run.queries, citations:run.citations, results:run.sourceResults, usage:run.openaiUsage, error:run.errorMessage }, null, 2)) + '</pre></article>'; }).join("") || '<p class="empty-state">No scout runs recorded.</p>';
+  }
+  async function connect() {
+    token = tokenInput.value.trim(); if (!token) return;
+    try {
+      var payload = await api("/api/admin/calendar"); localStorage.setItem(TOKEN_KEY, token); state.candidates=payload.candidates||[]; state.sources=payload.sources||[]; state.profile=payload.profile; state.broadDiscoveryEnabled=payload.broadDiscoveryEnabled;
+      authPanel.hidden=true; app.hidden=false; renderStatusFilters(); renderCandidateList(); renderSources(); renderProfile(); await Promise.all([loadSuggestions(),loadRuns()]);
+    } catch (error) { document.getElementById("authMessage").textContent=error.message; }
+  }
+
+  document.getElementById("connectButton").addEventListener("click",connect); tokenInput.addEventListener("keydown",function(event){if(event.key==="Enter")connect();});
+  document.querySelector(".studio-tabs").addEventListener("click",function(event){var button=event.target.closest("button[data-view]");if(!button)return;document.querySelectorAll(".studio-tabs button").forEach(function(item){item.classList.toggle("is-active",item===button);});document.querySelectorAll("[data-panel]").forEach(function(panel){panel.hidden=panel.dataset.panel!==button.dataset.view;});});
+  document.getElementById("statusFilters").addEventListener("click",function(event){var button=event.target.closest("button[data-status]");if(!button)return;state.filter=button.dataset.status;renderStatusFilters();renderCandidateList();});
+  listRoot.addEventListener("click",function(event){var button=event.target.closest("[data-candidate-id]");if(button)selectCandidate(button.dataset.candidateId);});
+  editorRoot.addEventListener("click",function(event){var button=event.target.closest("button[data-action]");if(button)editorAction(button.dataset.action);});
+  document.getElementById("newCandidate").addEventListener("click",function(){state.selectedId="";state.draftNew=true;renderCandidateList();renderEditor(blankCandidate());});
+  document.getElementById("sourceList").addEventListener("click",async function(event){var button=event.target.closest("[data-save-source]");if(!button)return;var card=button.closest("[data-source-id]");var id=card.dataset.sourceId;try{await api("/api/admin/calendar/sources/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({name:value("sourceName-"+id),url:value("sourceUrl-"+id),cadenceHours:Number(value("sourceCadence-"+id)),enabled:value("sourceEnabled-"+id)==="1",sourceType:value("sourceType-"+id),trustLevel:value("sourceTrust-"+id)})});toast("Source saved.");}catch(error){toast(error.message);}});
+  document.getElementById("addSource").addEventListener("click",async function(){var url=window.prompt("Official source URL");if(!url)return;var name=window.prompt("Source name")||new URL(url).hostname;try{var payload=await api("/api/admin/calendar/sources",{method:"POST",body:JSON.stringify({name:name,url:url})});state.sources.push(payload.source);renderSources();toast("Source added.");}catch(error){toast(error.message);}});
+  document.getElementById("profileForm").addEventListener("submit",async function(event){event.preventDefault();try{var payload=await api("/api/admin/calendar/profile",{method:"PATCH",body:JSON.stringify({name:value("profileName"),model:value("profileModel"),weightedSubjects:JSON.parse(value("profileSubjects")),weightedFormats:JSON.parse(value("profileFormats")),positiveConcepts:parseComma(value("profilePositive")),negativeTerms:parseComma(value("profileNegative")),geographicRules:JSON.parse(value("profileGeography")),dateHorizonDays:Number(value("profileHorizon")),relevanceThreshold:Number(value("profileThreshold")),duplicateSensitivity:Number(value("profileDuplicate")),perRunLimit:Number(value("profileLimit")),sourceCadenceHours:Number(value("profileSourceCadence")),webCadenceHours:Number(value("profileWebCadence"))})});state.profile=payload.profile;renderProfile();toast("Scout profile saved.");}catch(error){toast(error.message);}});
+  document.getElementById("runScout").addEventListener("click",async function(){this.disabled=true;toast("Scout run started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:"{}"});toast("Scout finished: "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns()]);}catch(error){toast(error.message);}finally{this.disabled=false;}});
+  document.getElementById("refreshRuns").addEventListener("click",loadRuns);
+  document.getElementById("suggestionList").addEventListener("click",async function(event){var button=event.target.closest("[data-suggestion-action]");if(!button)return;try{await api("/api/admin/calendar/suggestions/"+encodeURIComponent(button.dataset.id)+"/"+button.dataset.suggestionAction,{method:"POST",body:"{}"});await loadSuggestions();var profile=await api("/api/admin/calendar/profile");state.profile=profile.profile;renderProfile();toast("Suggestion "+button.dataset.suggestionAction+"ed.");}catch(error){toast(error.message);}});
+  if (token) connect();
+})();

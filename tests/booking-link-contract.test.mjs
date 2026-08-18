@@ -51,3 +51,22 @@ test("private booking wayfinding never renders the token as its breadcrumb", () 
   assert.match(bookingPage, /data-construct-breadcrumb-current="Private Booking"/);
   assert.match(wayfinding, /data-construct-breadcrumb-current/);
 });
+
+test("single-session booking collapses availability around the selected window", () => {
+  const bookingPage = readFileSync("booking/index.html", "utf8");
+  const calendarCss = readFileSync("css/booking-calendar.css", "utf8");
+
+  assert.match(bookingPage, /id="changeWindowBtn"[^>]*>Change date\/time<\/button>/);
+  assert.match(calendarCss, /\.change-window-button\{[^}]*border:5px solid var\(--ring-soft\)[^}]*color:var\(--calendar-text\)/);
+  assert.match(bookingPage, /return Boolean\(selectedWindow\) && !multiSessionEnabled\(\) && !windowSelectionExpanded/);
+  assert.match(bookingPage, /windowToolsEl\.classList\.toggle\("hidden", !monthKeys\.length \|\| windowSelectionCollapsed\)/);
+  assert.match(bookingPage, /if \(windowSelectionCollapsed\) calendarEl\.classList\.add\("hidden"\)/);
+  assert.match(bookingPage, /if \(windowSelectionCollapsed\) \{\s*windowListEl\.innerHTML = renderWindowButton\(selectedWindow\)/);
+  assert.match(bookingPage, /changeWindowBtn\.classList\.toggle\("hidden", !windowSelectionCollapsed\)/);
+  assert.match(bookingPage, /appEl\.classList\.toggle\("window-selection-collapsed", windowSelectionCollapsed\)/);
+  assert.match(bookingPage, /\.booking-grid\.window-selection-collapsed #totalDueRow \{ order:-3; \}/);
+  assert.match(bookingPage, /\.booking-grid\.window-selection-collapsed #checkoutBtn \{ order:-2; margin-top:12px; \}/);
+  assert.match(bookingPage, /if \(!multiSessionEnabled\(\)\) requestAnimationFrame\(\(\) => windowListEl\.scrollIntoView\(\{ block: "start" \}\)\)/);
+  assert.match(calendarCss, /\.window-list\{scroll-margin-top:120px;\}/);
+  assert.match(bookingPage, /changeWindowBtn\.addEventListener\("click", \(\) => \{\s*windowSelectionExpanded = true/);
+});

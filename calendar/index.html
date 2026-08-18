@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlanta Calendar - the six.well construct</title>
+<meta name="description" content="A selective calendar of Atlanta art, independent film, poetry, music, technology, AI, and experimental events alongside Six.Well-produced events.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
+<link rel="stylesheet" href="/css/atlanta-calendar.css">
+</head>
+<body class="venture-page atlanta-calendar-page" data-venture="events">
+  <main class="venture-shell entrance-fade">
+    <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="page-title">
+      <div>
+        <span class="venture-kicker">Atlanta / selected events</span>
+        <h1 class="venture-title hero-title" id="page-title">Atlanta Calendar.</h1>
+      </div>
+      <div class="hero-copy">
+        <p class="hero-descriptor">Art, independent film, poetry, music, technology, AI, lectures, conferences, and experimental rooms across Atlanta.</p>
+        <p class="hero-note">The calendar combines selected Atlanta listings with public Six.Well events. Dates and details link back to their official sources.</p>
+        <div class="hero-actions">
+          <a class="venture-link" href="#upcoming">upcoming</a>
+          <a class="venture-link" href="#month">month</a>
+          <a class="venture-link" href="#subscribe">subscribe</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section calendar-controls" aria-labelledby="filter-title">
+      <header class="section-head">
+        <div><span class="section-kicker">find a way in</span><h2 class="section-title" id="filter-title">Search + Filter</h2></div>
+        <p class="section-copy" id="resultCount" aria-live="polite">Loading approved events.</p>
+      </header>
+      <div class="calendar-search-row">
+        <label class="calendar-search"><span>Search</span><input id="calendarSearch" type="search" placeholder="Title, venue, organizer, or subject" autocomplete="off"></label>
+        <button class="calendar-button is-quiet" id="clearFilters" type="button">Clear filters</button>
+      </div>
+      <div class="filter-groups">
+        <fieldset><legend>Subjects</legend><div class="filter-options" id="subjectFilters"></div></fieldset>
+        <fieldset><legend>Formats</legend><div class="filter-options" id="formatFilters"></div></fieldset>
+      </div>
+    </section>
+
+    <section class="section" id="month" aria-labelledby="month-title">
+      <header class="section-head">
+        <div><span class="section-kicker">month view</span><h2 class="section-title" id="month-title">Calendar</h2></div>
+        <div class="month-controls"><button type="button" id="previousMonth" aria-label="Previous month">Previous</button><span id="monthLabel"></span><button type="button" id="nextMonth" aria-label="Next month">Next</button></div>
+      </header>
+      <div class="calendar-month" id="calendarMonth">
+        <div class="calendar-weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+        <div class="calendar-grid" id="calendarGrid" role="grid" aria-label="Events by date"></div>
+      </div>
+      <div class="calendar-day-agenda" id="dayAgenda" aria-live="polite"></div>
+    </section>
+
+    <section class="section" id="upcoming" aria-labelledby="upcoming-title">
+      <header class="section-head">
+        <div><span class="section-kicker">chronology</span><h2 class="section-title" id="upcoming-title">Upcoming</h2></div>
+        <p class="section-copy">Approved listings and public Six.Well occurrences share one chronological record.</p>
+      </header>
+      <div class="calendar-event-list" id="upcomingEvents" aria-live="polite"><p class="calendar-empty">Loading the calendar.</p></div>
+    </section>
+
+    <section class="section" id="subscribe" aria-labelledby="subscribe-title">
+      <header class="section-head">
+        <div><span class="section-kicker">live feeds</span><h2 class="section-title" id="subscribe-title">Subscribe</h2></div>
+        <p class="section-copy">Subscribe once. Your calendar application will periodically retrieve new dates, edits, and approved cancellations.</p>
+      </header>
+      <div class="feed-grid">
+        <a href="/calendars/atlanta.ics"><strong>All Atlanta Events</strong><span>Every approved listing and Six.Well occurrence</span></a>
+        <a href="/calendars/art.ics"><strong>Art</strong><span>Exhibitions, installations, and visual art</span></a>
+        <a href="/calendars/film.ics"><strong>Film</strong><span>Independent and experimental moving image</span></a>
+        <a href="/calendars/poetry-music.ics"><strong>Poetry + Music</strong><span>Readings, sound, showcases, and performance</span></a>
+        <a href="/calendars/tech-ai.ics"><strong>Tech + AI</strong><span>Technology, AI, and creative technology</span></a>
+        <a href="/calendars/talks-conferences.ics"><strong>Talks + Conferences</strong><span>Lectures, panels, and conferences</span></a>
+        <a href="/calendars/sixwell.ics"><strong>Six.Well Events</strong><span>Events produced by the construct</span></a>
+      </div>
+    </section>
+
+    <section class="section" id="past" aria-labelledby="past-title">
+      <header class="section-head">
+        <div><span class="section-kicker">record</span><h2 class="section-title" id="past-title">Past Events</h2></div>
+        <p class="section-copy">Earlier approved dates remain available as a quieter record.</p>
+      </header>
+      <div class="calendar-event-list is-past" id="pastEvents"></div>
+    </section>
+
+    <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">Six.Well events</a><a href="/home/">return to construct</a></div></footer>
+  </main>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-nav.js"></script>
+  <script src="/js/atlanta-calendar.js"></script>
+</body>
+</html>

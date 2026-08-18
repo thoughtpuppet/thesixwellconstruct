@@ -1,7 +1,7 @@
 /* Shared calendar / time-picker styles for consultation & build-in-person booking forms.
    Relies on the host page's :root tokens (--ring-soft, --ring-faint, --signal, --accent, --text, --text-mute, --text-dim, --text-ghost, --sans, --serif, --t-fast). */
 
-.slot-picker,.cal-wrap,.booking-window-option,.time-option,.cal-next-btn{--calendar-control-height:34px;--calendar-node-color:var(--venture-accent,var(--venture-color,var(--signal,var(--color-tattooing))));--calendar-text:var(--color-body);--calendar-hover-fill:rgba(252,184,103,0.045);}
+.slot-picker,.cal-wrap,.booking-window-option,.change-window-button,.time-option,.cal-next-btn{--calendar-control-height:34px;--calendar-node-color:var(--venture-accent,var(--venture-color,var(--signal,var(--color-tattooing))));--calendar-text:var(--color-body);--calendar-hover-fill:rgba(252,184,103,0.045);}
 
 /* ── SLOT PICKER ── */
 .slot-picker{margin-bottom:18px;}
@@ -79,6 +79,9 @@
 .booking-window-option:focus-visible{border-color:var(--accent);background:rgba(252,184,103,0.045);outline:2px solid var(--accent);outline-offset:2px;}
 .booking-window-option.active{border-color:var(--calendar-node-color);background:var(--calendar-hover-fill);}
 .booking-window-option.active .booking-window-title,.booking-window-option.active .booking-window-meta,.booking-window-option.active .booking-next-tag{color:var(--calendar-text);}
+.window-list{scroll-margin-top:120px;}
+.change-window-button{width:100%;min-height:44px;border:5px solid var(--ring-soft);background:transparent;color:var(--calendar-text);font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;transition:border-color var(--t-fast),color var(--t-fast),background var(--t-fast);}
+.change-window-button:hover,.change-window-button:focus-visible{border-color:var(--accent);color:var(--accent);background:var(--calendar-hover-fill);outline:0;}
 .booking-window-title{display:block;font-family:var(--sans);font-size:15px;font-weight:900;line-height:1.2;letter-spacing:0;text-transform:uppercase;color:var(--calendar-text);}
 .time-option-title,.time-option .choice-title{display:block;font-family:var(--sans);font-size:15px;font-weight:900;line-height:1.2;letter-spacing:0;text-transform:uppercase;color:inherit;}
 .booking-window-meta{display:block;margin-top:6px;font-family:var(--serif);font-size:12px;line-height:1.45;letter-spacing:0;text-transform:uppercase;color:var(--text-dim);}
@@ -101,7 +104,7 @@
 .rebook-banner-dismiss:hover{color:var(--accent);}
 
 @media (max-width: 768px) {
-  .slot-picker,.cal-wrap,.booking-window-option,.time-option,.cal-next-btn{--calendar-control-height:44px;}
+  .slot-picker,.cal-wrap,.booking-window-option,.change-window-button,.time-option,.cal-next-btn{--calendar-control-height:44px;}
   .cal-day,.cal-nav,.time-trigger,.time-add-btn,.cal-next-btn{min-height:44px;font-size:16px;}
   .time-option,.booking-window-option{min-height:44px;}
   .cal-month-nav{width:100%;}
@@ -111,6 +114,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cal-next-btn,.cal-nav,.cal-day,.time-trigger,.time-option,.time-add-btn,.rebook-banner-dismiss{transition:none;}
+  .cal-next-btn,.cal-nav,.cal-day,.time-trigger,.time-option,.time-add-btn,.booking-window-option,.change-window-button,.rebook-banner-dismiss{transition:none;}
   .time-trigger-arrow{transition:none;}
 }

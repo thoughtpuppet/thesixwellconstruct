@@ -110,6 +110,12 @@ import {
   reapStalePendingTickets,
 } from "./functions/api/events/_lib.js";
 import {
+  handleCalendarAdminApi,
+  handleCalendarFeed,
+  handleCalendarPublicApi,
+  runDueCalendarScout,
+} from "./functions/api/calendar/_lib.js";
+import {
   handleAdminEmailDesign,
   handleAdminEmailTemplates,
   handleAdminPreviewNotification,
@@ -1494,6 +1500,18 @@ export default {
       return handleAdminEventsApi(request, env);
     }
 
+    if (url.pathname === "/api/admin/calendar" || url.pathname.startsWith("/api/admin/calendar/")) {
+      return handleCalendarAdminApi(request, env);
+    }
+
+    if (url.pathname === "/api/calendar/events" || url.pathname.startsWith("/api/calendar/events/")) {
+      return handleCalendarPublicApi(request, env);
+    }
+
+    if (/^\/calendars\/[a-z-]+\.ics$/.test(url.pathname)) {
+      return handleCalendarFeed(request, env);
+    }
+
     if (url.pathname === "/api/events" || url.pathname.startsWith("/api/events/")) {
       return handleEventsApi(request, env);
     }
@@ -1784,5 +1802,6 @@ export default {
     ctx.waitUntil(reapStaleMediaUploads(env));
     ctx.waitUntil(processDueOutreach(env));
     ctx.waitUntil(rollupSiteAnalytics(env));
+    ctx.waitUntil(runDueCalendarScout(env, controller.scheduledTime));
   },
 };

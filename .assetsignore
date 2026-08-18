@@ -10,6 +10,7 @@ tools/
 tests/
 .playwright-cli/
 **/.playwright-cli/
+output/
 **/*.log
 .hidden-pages/
 .git

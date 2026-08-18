@@ -494,6 +494,9 @@ function normalizeAppointment(row) {
     originalEndAt: row.original_end_at || "",
     cancelledAt: row.cancelled_at || "",
     cancellationReason: row.cancellation_reason || "",
+    cancellationActor: row.cancellation_actor || "",
+    cancellationEventType: row.cancellation_event_type || "",
+    hasSeparateBookedRecord: Boolean(row.has_separate_booked_record),
     experimentalRefund: row.experimental_refund_id ? {
       id: row.experimental_refund_id,
       status: row.experimental_refund_status || "pending",
@@ -11427,6 +11430,20 @@ export async function handleAdminListAppointments(request, env) {
                 edr.updated_at AS experimental_refund_updated_at,
                 dp.status AS payment_status,
                 dp.amount_cents AS payment_amount_cents,
+                cancellation_event.actor AS cancellation_actor,
+                cancellation_event.event_type AS cancellation_event_type,
+                EXISTS (
+                  SELECT 1 FROM appointments booked_appointment
+                  WHERE booked_appointment.id <> a.id
+                    AND booked_appointment.status IN ('confirmed','completed','no_show')
+                    AND (
+                      (a.submission_id IS NOT NULL AND booked_appointment.submission_id = a.submission_id)
+                      OR (
+                        TRIM(COALESCE(a.client_email, '')) <> ''
+                        AND lower(TRIM(booked_appointment.client_email)) = lower(TRIM(a.client_email))
+                      )
+                    )
+                ) AS has_separate_booked_record,
                 EXISTS (
                   SELECT 1 FROM appointment_events manual_event
                   WHERE manual_event.appointment_id = a.id
@@ -11469,6 +11486,13 @@ export async function handleAdminListAppointments(request, env) {
            SELECT latest_payment.id FROM deposit_payments latest_payment
            WHERE latest_payment.appointment_id = a.id
            ORDER BY latest_payment.created_at DESC, latest_payment.id DESC
+           LIMIT 1
+         )
+         LEFT JOIN appointment_events cancellation_event ON cancellation_event.id = (
+           SELECT latest_cancellation_event.id FROM appointment_events latest_cancellation_event
+           WHERE latest_cancellation_event.appointment_id = a.id
+             AND latest_cancellation_event.event_type IN ('cancelled','hold_released','hold_expired','replaced')
+           ORDER BY latest_cancellation_event.created_at DESC, latest_cancellation_event.id DESC
            LIMIT 1
          )
          LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'

@@ -969,7 +969,16 @@ test("Studio keeps scheduling controls separate from a confirmed-only reschedule
   const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
   const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
   const booking = readFileSync(join(ROOT, "functions", "api", "booking", "_lib.js"), "utf8");
+  const appointmentDetailRenderer = studio.slice(
+    studio.indexOf("function renderStudioAppointmentDetail"),
+    studio.indexOf("function refreshStudioBookingViews"),
+  );
+  const populatedAppointmentDetail = appointmentDetailRenderer.slice(
+    appointmentDetailRenderer.indexOf("const related = appointmentRelatedSubmission(appointment)"),
+  );
   assert.match(studio, /data-open-appointment-editor="create"/);
+  assert.match(appointmentDetailRenderer, /if \(!appointment\)[\s\S]*data-open-appointment-editor="create"/);
+  assert.doesNotMatch(populatedAppointmentDetail, /data-open-appointment-editor="create"/);
   assert.match(studio, /data-reschedule-appointment/);
   assert.match(studio, /Custom time override/);
   assert.match(studio, /No deposit/);
@@ -2023,6 +2032,10 @@ test("Studio appointment payload distinguishes amount due from money actually pa
   database.prepare(
     "UPDATE appointments SET cancellation_reason='Checkout hold expired unpaid' WHERE id='special-expired-checkout'",
   ).run();
+  database.prepare(
+    `INSERT INTO appointment_events (id, appointment_id, event_type, actor, note, metadata_json, created_at)
+     VALUES ('special-expired-event','special-expired-checkout','hold_expired','reaper','Checkout hold expired unpaid','{}',?)`,
+  ).run(new Date().toISOString());
   insertPaymentFixture(database, {
     id: "special-expired-payment",
     appointmentId: "special-expired-checkout",
@@ -2032,6 +2045,7 @@ test("Studio appointment payload distinguishes amount due from money actually pa
   });
   insertAppointmentFixture(database, {
     id: "confirmed-paid-appointment",
+    submissionId: "special-payment-state-submission",
     bookingTypeId: "tattoo_quarter",
     status: "confirmed",
     purpose: "tattoo",
@@ -2060,6 +2074,9 @@ test("Studio appointment payload distinguishes amount due from money actually pa
   assert.equal(byId.get("special-expired-checkout").paymentStatus, "cancelled");
   assert.equal(byId.get("special-expired-checkout").paymentAmountCents, 5000);
   assert.equal(byId.get("special-expired-checkout").paidCents, 0);
+  assert.equal(byId.get("special-expired-checkout").cancellationActor, "reaper");
+  assert.equal(byId.get("special-expired-checkout").cancellationEventType, "hold_expired");
+  assert.equal(byId.get("special-expired-checkout").hasSeparateBookedRecord, true);
   assert.equal(byId.get("confirmed-paid-appointment").paymentStatus, "paid");
   assert.equal(byId.get("confirmed-paid-appointment").paidCents, 5000);
 });
@@ -10461,11 +10478,18 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /function dayStatsFromAppointments\(\)[\s\S]*?activeScopedAppointments\(\)/);
   assert.match(submissionsStudio, /function renderDayAppointments\(dayFilter\)[\s\S]*?const scoped = activeScopedAppointments\(\)/);
   assert.match(submissionsStudio, /function renderCancelledAppointmentHistory\(\)/);
-  assert.match(submissionsStudio, /Cancelled &amp; Expired History/);
-  assert.match(submissionsStudio, /Cancelled appointments and expired checkout attempts do not affect active calendar counts or booked hours\. Payment and audit history remain protected\./);
+  assert.match(submissionsStudio, /Booking Record History/);
+  assert.match(submissionsStudio, /Each entry describes one booking record, not the client&rsquo;s overall outcome\./);
   assert.match(submissionsStudio, /id="cancelledAppointmentHistory"/);
-  assert.match(submissionsStudio, /Protected history retained/);
+  assert.match(submissionsStudio, /Payment or audit history is retained\./);
   assert.match(submissionsStudio, /function appointmentIsExpiredCheckoutAttempt\(appointment\)/);
+  assert.match(submissionsStudio, /function cancelledAppointmentExplanation\(appointment\)/);
+  const cancelledHistoryRenderer = submissionsStudio.slice(
+    submissionsStudio.indexOf("function renderCancelledAppointmentHistory"),
+    submissionsStudio.indexOf("function priceInputValue"),
+  );
+  assert.doesNotMatch(cancelledHistoryRenderer, /appointmentStateLabel\(appointment\)/);
+  assert.match(cancelledHistoryRenderer, /cancelledAppointmentExplanation\(appointment\)/);
   assert.match(submissionsStudio, /function primaryAppointmentFor\(submissionId\)[\s\S]*?candidate\.status === "requested"[\s\S]*?candidate\.bookingTokenId === latest\.bookingTokenId/);
   assert.match(submissionsStudio, /Amount due: \$\{money\(totalDueCents, currency\)\}/);
   assert.match(submissionsStudio, /Amount paid: \$\{money\(paidCents, currency\)\}/);
@@ -10507,6 +10531,30 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   };
   runInNewContext(`${primaryHelpers[1]}\nresult = primaryAppointmentFor("special-submission");`, helperSandbox);
   assert.equal(helperSandbox.result.id, "requested-time");
+  const historySandbox = {
+    appointments: [
+      {
+        id: "expired-attempt",
+        submissionId: "william-submission",
+        clientEmail: "william@example.test",
+        status: "cancelled",
+        holdState: "expired",
+        cancellationReason: "Checkout hold expired unpaid",
+      },
+      {
+        id: "confirmed-appointment",
+        submissionId: "william-submission",
+        clientEmail: "william@example.test",
+        status: "confirmed",
+      },
+    ],
+    titleize: (value) => value,
+  };
+  runInNewContext(`${primaryHelpers[1]}\nresult = cancelledAppointmentExplanation(appointments[0]);`, historySandbox);
+  assert.equal(
+    historySandbox.result,
+    "Separate unpaid checkout attempt: this selected time was released. Another appointment is confirmed.",
+  );
   assert.match(submissionsStudio, /Additional Renderings/);
   assert.match(submissionsStudio, /data-create-rendering-request/);
   assert.match(submissionsStudio, /data-copy-rendering-link/);

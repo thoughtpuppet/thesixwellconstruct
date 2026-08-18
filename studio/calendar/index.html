@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlanta Calendar - Construct Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/studio/calendar/calendar.css">
+</head>
+<body>
+  <header class="studio-header">
+    <div><p class="eyebrow">Construct Studio / Events</p><h1>Atlanta Calendar</h1><p>Review what the scout finds. Nothing reaches the public calendar until you approve it.</p></div>
+    <nav><a href="/studio/submissions/#events">Six.Well Events</a><a href="/calendar/">Public Calendar</a></nav>
+  </header>
+
+  <section class="auth-panel" id="authPanel">
+    <label><span>Studio credential</span><input id="tokenInput" type="password" autocomplete="current-password"></label>
+    <button id="connectButton" type="button">Open Calendar Studio</button>
+    <p id="authMessage" role="status"></p>
+  </section>
+
+  <main id="studioApp" hidden>
+    <nav class="studio-tabs" aria-label="Calendar Studio sections">
+      <button class="is-active" type="button" data-view="review">Review</button>
+      <button type="button" data-view="sources">Sources</button>
+      <button type="button" data-view="profile">Scout Profile</button>
+      <button type="button" data-view="runs">Run History</button>
+    </nav>
+
+    <section class="studio-view" data-panel="review">
+      <div class="review-toolbar">
+        <div class="status-filters" id="statusFilters" aria-label="Candidate status filters"></div>
+        <button id="newCandidate" type="button">Manual Intake</button>
+      </div>
+      <div class="review-layout">
+        <aside class="candidate-list" id="candidateList" aria-live="polite"></aside>
+        <section class="candidate-editor" id="candidateEditor">
+          <p class="empty-state">Select a candidate or start a manual intake.</p>
+        </section>
+      </div>
+    </section>
+
+    <section class="studio-view" data-panel="sources" hidden>
+      <header class="view-header"><div><p class="eyebrow">Approved inputs</p><h2>Source Registry</h2></div><button id="addSource" type="button">Add Source</button></header>
+      <p class="view-note">Official sources are checked directly. Acceptance rates and recurring failures make weak sources visible.</p>
+      <div class="source-list" id="sourceList"></div>
+    </section>
+
+    <section class="studio-view" data-panel="profile" hidden>
+      <header class="view-header"><div><p class="eyebrow">Editable instructions</p><h2>Scout Profile</h2></div><button id="runScout" type="button">Run Scout Now</button></header>
+      <p class="system-state" id="discoveryState"></p>
+      <form class="profile-form" id="profileForm"></form>
+      <section class="suggestions-panel"><h3>Suggested adjustments</h3><p>Feedback can create suggestions. The profile changes only after you accept one.</p><div id="suggestionList"></div></section>
+    </section>
+
+    <section class="studio-view" data-panel="runs" hidden>
+      <header class="view-header"><div><p class="eyebrow">Scout audit trail</p><h2>Run History</h2></div><button id="refreshRuns" type="button">Refresh</button></header>
+      <div class="run-list" id="runList"></div>
+    </section>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/studio/calendar/calendar.js"></script>
+</body>
+</html>

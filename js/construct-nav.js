@@ -69,7 +69,7 @@
     ],
     events: [
       ['CULT[&SHIFT]', '/events/cultandshift/'], ['Signal & Symbol', '/events/signal-symbol/'],
-      ['calendar', '/events/calendar/'], ['rent the studio', '/booking/studio/'],
+      ['Atlanta calendar', '/calendar/'], ['rent the studio', '/booking/studio/'],
       ['archive', '/archive/events/'], ["solehman's new years", '/events/solehmans-new-year/'],
       ['SS&F live audience', '/events/ss-and-f-live-audience/'], ['open studios', '/events/open-studios/'],
     ],

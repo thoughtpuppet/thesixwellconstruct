@@ -254,6 +254,12 @@
   .appt-name { font-family:var(--sans); font-size:12px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; color:var(--text); }
   .appt-time { color:var(--accent); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; white-space:nowrap; }
   .appt-meta { color:var(--muted); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; }
+  .booking-history-card .appt-meta { line-height:1.6; overflow-wrap:anywhere; }
+  @media (max-width:760px) {
+    .booking-history-card .appt-item-top { align-items:flex-start; flex-direction:column; gap:4px; }
+    .booking-history-card .appt-time { white-space:normal; }
+    .booking-history-card .booking-history-label { box-sizing:border-box; overflow-wrap:anywhere; white-space:normal; width:100%; }
+  }
   .day-button.selected { outline:3px solid var(--text); outline-offset:-3px; }
   .schedule-section { border-top:5px solid var(--ring-faint); padding-top:18px; margin-top:18px; }
   .schedule-group-title { font-family:var(--sans); font-size:12px; text-transform:uppercase; letter-spacing:0.08em; margin:18px 0 4px; }
@@ -2114,7 +2120,7 @@
     } else if (activeTab === "about") {
       html = `<button class="subnav-btn ${subView === "appearances" ? "is-active" : ""}" type="button" data-subview="appearances">Exhibitions &amp; Appearances</button>`;
     } else if (activeTab === "events") {
-      html = `<button class="subnav-btn ${subView !== "event-archive" && !selectedEventSlug ? "is-active" : ""}" type="button" data-events-home>Current Events</button><button class="subnav-btn ${subView === "event-archive" ? "is-active" : ""}" type="button" data-subview="event-archive">Event Archive</button>`;
+      html = `<button class="subnav-btn ${subView !== "event-archive" && !selectedEventSlug ? "is-active" : ""}" type="button" data-events-home>Current Events</button><button class="subnav-btn ${subView === "event-archive" ? "is-active" : ""}" type="button" data-subview="event-archive">Event Archive</button><a class="subnav-btn" href="/studio/calendar/">Atlanta Calendar</a>`;
       if (selectedEventSlug) {
         const ev = events.find((e) => e.slug === selectedEventSlug);
         html += `<span class="subnav-crumb">/ ${escapeHtml(ev ? ev.title : selectedEventSlug)}</span>`;
@@ -5078,7 +5084,6 @@
         </p>
         <div class="booking-actions">
           ${isTattooAppointment ? '<button class="button" type="button" data-back-appointments>Back to Appointments</button>' : ""}
-          <button class="button" type="button" data-open-appointment-editor="create">Schedule Appointment</button>
           ${appointmentCanStudioReschedule(appointment) ? `<button class="button" type="button" data-reschedule-appointment="${escapeHtml(appointment.id)}">Reschedule Appointment</button>` : ""}
           ${calendarHref ? `<a class="button" href="${escapeHtml(calendarHref)}" target="_blank" rel="noopener noreferrer">Add to Calendar</a>` : ""}
           ${calendarHref ? `<button class="button" type="button" data-copy-calendar="${escapeHtml(calendarHref)}">Copy Calendar Link</button>` : ""}
@@ -5443,6 +5448,57 @@
     return appointment?.status === "cancelled"
       && appointment?.holdState === "expired"
       && String(appointment?.cancellationReason || "").trim().toLowerCase() === "checkout hold expired unpaid";
+  }
+
+  function appointmentSharesClient(left, right) {
+    if (left?.submissionId && left.submissionId === right?.submissionId) return true;
+    const leftEmail = String(left?.clientEmail || "").trim().toLowerCase();
+    const rightEmail = String(right?.clientEmail || "").trim().toLowerCase();
+    return Boolean(leftEmail && rightEmail && leftEmail === rightEmail);
+  }
+
+  function appointmentHasSeparateBookedRecord(appointment) {
+    return Boolean(appointment?.hasSeparateBookedRecord) || appointments.some((candidate) => candidate.id !== appointment?.id
+      && ["confirmed", "completed", "no_show"].includes(candidate.status)
+      && appointmentSharesClient(appointment, candidate));
+  }
+
+  function cancellationActorLabel(appointment) {
+    const actor = String(appointment?.cancellationActor || "").trim().toLowerCase();
+    if (actor === "admin") return "Studio";
+    if (actor === "client") return "client";
+    if (actor === "reaper") return "automatic checkout cleanup";
+    if (actor === "square_webhook") return "Square payment reconciliation";
+    if (actor === "system") return "system";
+    return actor ? titleize(actor) : "";
+  }
+
+  function sentenceWithPeriod(value) {
+    const text = String(value || "").trim();
+    return text && !/[.!?]$/.test(text) ? `${text}.` : text;
+  }
+
+  function cancelledAppointmentExplanation(appointment) {
+    if (appointmentIsExpiredCheckoutAttempt(appointment)) {
+      return appointmentHasSeparateBookedRecord(appointment)
+        ? "Separate unpaid checkout attempt: this selected time was released. Another appointment is confirmed."
+        : "Unpaid checkout attempt: this selected time was released without becoming a confirmed appointment.";
+    }
+    const reason = String(appointment?.cancellationReason || "").trim();
+    if (appointment?.approvalState === "declined") {
+      const defaultDecline = reason.toLowerCase() === "studio declined request";
+      return `Request declined by Studio.${reason && !defaultDecline ? ` Recorded reason: ${sentenceWithPeriod(reason)}` : ""}`;
+    }
+    const eventType = String(appointment?.cancellationEventType || "").trim().toLowerCase();
+    if (reason && (eventType === "hold_released" || eventType === "replaced" || /\b(released|replaced)\b/i.test(reason))) {
+      return sentenceWithPeriod(reason);
+    }
+    const actor = cancellationActorLabel(appointment);
+    const genericReason = reason.toLowerCase() === `cancelled by ${actor.toLowerCase()}`;
+    if (actor && reason && !genericReason) return `Cancelled by ${actor}. Recorded reason: ${sentenceWithPeriod(reason)}`;
+    if (actor) return `Cancelled by ${actor}.`;
+    if (reason) return `Cancelled. Recorded reason: ${sentenceWithPeriod(reason)}`;
+    return "Cancelled. No reason or actor was recorded.";
   }
 
   function appointmentStateLabel(appointment) {
@@ -7201,25 +7257,25 @@ ${meetingLines}
     ));
     if (countEl) countEl.textContent = `${cancelled.length} record${cancelled.length === 1 ? "" : "s"}`;
     if (!cancelled.length) {
-      panel.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">No cancelled appointments or expired checkouts.</p>';
+      panel.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">No closed booking records.</p>';
       return;
     }
     panel.innerHTML = cancelled.map((appointment) => {
       const related = appointmentRelatedSubmission(appointment);
-      const expiredCheckout = appointmentIsExpiredCheckoutAttempt(appointment);
-      const historyState = expiredCheckout
-        ? "Unpaid checkout expired; requested time remains unreserved"
-        : appointment.canPermanentlyDelete
-          ? "Eligible for permanent deletion"
-          : "Protected history retained";
+      const explanation = cancelledAppointmentExplanation(appointment);
+      const recordState = appointment.canPermanentlyDelete
+        ? "This historical record can be permanently deleted."
+        : "Payment or audit history is retained.";
       return `
-        <div class="appt-item">
+        <div class="appt-item booking-history-card">
           <div class="appt-item-top">
             <span class="appt-name">${escapeHtml(appointment.clientName || "Unnamed")}</span>
-            <span class="pill">${escapeHtml(appointmentStateLabel(appointment))}</span>
+            <span class="appt-time">${escapeHtml(formatDate(appointment.startAt))}</span>
           </div>
-          ${appointment.isTattooSpecial ? `<span class="pill">Tattoo Special &middot; ${escapeHtml(appointment.specialOfferTitle || "Tattoo Special")}</span>` : ""}
-          <span class="appt-meta">${escapeHtml(formatDate(appointment.startAt))} &middot; ${escapeHtml(appointmentTypeLabel(appointment))} &middot; ${escapeHtml(historyState)}</span>
+          ${appointment.isTattooSpecial ? `<span class="pill booking-history-label">Tattoo Special &middot; ${escapeHtml(appointment.specialOfferTitle || "Tattoo Special")}</span>` : ""}
+          <span class="appt-meta">${escapeHtml(appointmentTypeLabel(appointment))}</span>
+          <span class="appt-meta">${escapeHtml(explanation)}</span>
+          <span class="appt-meta">${escapeHtml(recordState)}</span>
           <div class="booking-actions" style="margin-top:6px;">
             <button class="button" type="button" data-manage-appointment="${escapeHtml(appointment.id)}">Manage Appointment</button>
             ${related ? `<button class="button" type="button" data-open-submission="${escapeHtml(related.id)}">Open Submission</button>` : ""}
@@ -7815,7 +7871,7 @@ ${meetingLines}
         <div class="detail-head">
           <span class="pill">Tattoo Booking / Appointments</span>
           <h2>Tattoo Appointments</h2>
-          <p class="contact">Active tattoo sessions, consultations, and in-person build sessions appear on the calendar. Cancelled appointments and expired checkout attempts remain available in history below.</p>
+          <p class="contact">Active tattoo sessions, consultations, and in-person build sessions appear on the calendar. Closed appointment records and released checkout attempts remain available below.</p>
           <div class="booking-actions"><button class="button" type="button" data-open-appointment-editor="create">Schedule Appointment</button></div>
         </div>
         ${appointmentEditorMarkup()}
@@ -7823,8 +7879,8 @@ ${meetingLines}
         <section class="review-card" style="margin-top:16px;">
           <div class="portfolio-head">
             <div>
-              <div class="review-card-header">Cancelled &amp; Expired History</div>
-              <p class="contact" style="margin:6px 0 0;">Cancelled appointments and expired checkout attempts do not affect active calendar counts or booked hours. Payment and audit history remain protected.</p>
+              <div class="review-card-header">Booking Record History</div>
+              <p class="contact" style="margin:6px 0 0;">Each entry describes one booking record, not the client&rsquo;s overall outcome. A confirmed appointment can exist alongside a separate released checkout attempt. These records do not affect active calendar counts or booked hours.</p>
             </div>
             <span class="pill" id="cancelledAppointmentHistoryCount">0 records</span>
           </div>

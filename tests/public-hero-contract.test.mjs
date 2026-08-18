@@ -63,6 +63,7 @@ const routes = [
   { route: "/booking/confirmed/studio/", file: "booking/confirmed/studio/index.html", variant: "supporting", descriptor: false },
   { route: "/booking/confirmed/virtual-consultation/", file: "booking/confirmed/virtual-consultation/index.html", variant: "supporting", descriptor: false },
   { route: "/construct-map/", file: "construct-map/index.html", variant: "supporting", descriptor: true },
+  { route: "/calendar/", file: "calendar/index.html", variant: "supporting", descriptor: true },
 
   { route: "/events/calendar/", file: "events/calendar/index.html", variant: "supporting", descriptor: true },
   { route: "/events/confirmed/", file: "events/confirmed/index.html", variant: "supporting", descriptor: true },
@@ -121,7 +122,7 @@ test("active public hero inventory is complete and assigns one valid variant", a
 
   const discovered = (
     await Promise.all(
-      ["about", "adventure", "archive", "art", "booking", "construct-map", "events", "merch", "preferences", "search", "tattoos"].map(walkHtml),
+      ["about", "adventure", "archive", "art", "booking", "calendar", "construct-map", "events", "merch", "preferences", "search", "tattoos"].map(walkHtml),
     )
   )
     .flat()
