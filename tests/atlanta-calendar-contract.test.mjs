@@ -89,6 +89,9 @@ test("calendar migrations preserve seeded private candidates, verified official 
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE pending_revision_id<>''").get().count, 10);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE id LIKE 'cal_source_gsu_%'").get().count, 15);
+  const scoutProfile = db.prepare("SELECT geographic_rules_json,negative_terms_json FROM calendar_scout_profiles WHERE id='atlanta-default'").get();
+  assert.equal(JSON.parse(scoutProfile.geographic_rules_json).includeOnlineOnly, true);
+  assert.equal(JSON.parse(scoutProfile.negative_terms_json).includes("online only"), false);
   assert.deepEqual(
     { ...db.prepare("SELECT status,verification_state FROM calendar_candidates WHERE id='cal_candidate_gsu_neurogenomics_forum_2026'").get() },
     { status:"needs_verification", verification_state:"needs_verification" },
@@ -530,6 +533,75 @@ test("one registered source can be run immediately without invoking other source
   }
 });
 
+test("Wix event sources expose embedded events and honor the Studio online-only geography rule", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  const createdResponse = await admin(db, "/sources", {
+    method:"POST",
+    body:{ name:"The Radical Archive Project", url:"https://www.theradicalarchive.com/events-1", sourceType:"official_html", enabled:true },
+  });
+  assert.equal(createdResponse.status, 201);
+  const source = (await createdResponse.json()).source;
+  db.exec(`UPDATE calendar_scout_profiles
+    SET geographic_rules_json='{"metro":"Atlanta","state":"GA","includeOnlineOnly":false,"includeNonLocal":false}'
+    WHERE id='atlanta-default'`);
+  const event = {
+    id:"7da0ea8a-b25c-491f-b15d-e550c3dcd2e5",
+    title:"Rooted in Memory Workshop Series II AUGUST 20th",
+    description:"A workshop for institutional archivists and community memory keepers building sustainable digital preservation practices.",
+    slug:"rooted-in-memory-workshop-series-ii-august-20th",
+    location:{ name:"Virtual", type:1, tbd:false },
+    scheduling:{ config:{ scheduleTbd:false, startDate:"2026-08-20T17:00:00.000Z", endDate:"2026-08-20T18:00:00.000Z", timeZoneId:"America/New_York", endDateHidden:false } },
+    mainImage:{ url:"https://static.wixstatic.com/media/radical-workshop.jpg" },
+  };
+  const html = `<html><body><a href="https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-august-20th-2026-08-20-13-00">${event.title}</a><script type="application/json" id="wix-warmup-data">${JSON.stringify({ appsWarmupData:{ app:{ widget:{ events:{ events:[event], hasMore:false } } } } })}</script></body></html>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(html, { status:200, headers:{ "content-type":"text/html" } });
+  try {
+    const excluded = await admin(db, `/sources/${encodeURIComponent(source.id)}/run`, { method:"POST", body:{} });
+    assert.equal(excluded.status, 200, await excluded.clone().text());
+    const excludedResult = await excluded.json();
+    assert.equal(excludedResult.candidates, 0);
+    const excludedRun = db.prepare("SELECT source_results_json FROM calendar_scout_runs WHERE id=?").get(excludedResult.runId);
+    const excludedSource = JSON.parse(excludedRun.source_results_json)[0].sources[0];
+    assert.equal(excludedSource.proposals, 1);
+    assert.equal(excludedSource.skipped, 1);
+    assert.deepEqual(excludedSource.skipReasons, { geography:1 });
+
+    db.exec(`UPDATE calendar_scout_profiles
+      SET geographic_rules_json='{"metro":"Atlanta","state":"GA","includeOnlineOnly":true,"includeNonLocal":false}'
+      WHERE id='atlanta-default'`);
+    const included = await admin(db, `/sources/${encodeURIComponent(source.id)}/run`, { method:"POST", body:{} });
+    assert.equal(included.status, 200, await included.clone().text());
+    const includedResult = await included.json();
+    assert.equal(includedResult.candidates, 1);
+    const candidate = db.prepare("SELECT source_event_id,source_url,ticket_url,venue_name,subjects_json,formats_json,status FROM calendar_candidates WHERE source_id=?").get(source.id);
+    assert.equal(candidate.source_event_id, event.id);
+    assert.equal(candidate.source_url, "https://www.theradicalarchive.com/event-details/rooted-in-memory-workshop-series-ii-august-20th-2026-08-20-13-00");
+    assert.equal(candidate.ticket_url, candidate.source_url);
+    assert.equal(candidate.venue_name, "Virtual");
+    assert.deepEqual(JSON.parse(candidate.subjects_json).sort(), ["anthropology","technology"].sort());
+    assert.deepEqual(JSON.parse(candidate.formats_json), ["workshop"]);
+    assert.equal(candidate.status, "candidate");
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_id=?)").get(source.id).count, 0);
+    const candidateId = db.prepare("SELECT id FROM calendar_candidates WHERE source_id=?").get(source.id).id;
+    const approved = await admin(db, `/candidates/${candidateId}/approve`, { method:"POST", body:{} });
+    assert.equal(approved.status, 200, await approved.clone().text());
+    const virtualPayload = await (await handleCalendarPublicApi(request("/api/calendar/events?virtual=true"), env(db))).json();
+    const publicEvent = virtualPayload.events.find((item) => item.title === event.title);
+    assert.ok(publicEvent);
+    assert.equal(publicEvent.virtual, true);
+    assert.equal(publicEvent.venueName, "Virtual");
+    assert.equal(publicEvent.venueAddress, "");
+    const physicalPayload = await (await handleCalendarPublicApi(request("/api/calendar/events?virtual=false"), env(db))).json();
+    assert.equal(physicalPayload.events.some((item) => item.id === publicEvent.id), false);
+    const singleIcs = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEvent.id)}.ics`), env(db))).text();
+    assert.match(singleIcs, /LOCATION:Virtual/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("direct monitoring accepts bounded large official pages and still rejects excessive responses", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0");
@@ -953,6 +1025,9 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(publicCalendar,/<details class="calendar-event-flyer">/);
   assert.match(publicCalendar,/exhibition:"Exhibitions \/ Art Openings"/);
   assert.match(publicCalendar,/gsu:"GSU Events"/);
+  assert.match(publicCalendar,/MODE_LABELS = \{ virtual:"Virtual" \}/);
+  assert.match(publicCalendar,/modes\.includes\("virtual"\)/);
+  assert.match(readFileSync(join(ROOT,"calendar","index.html"),"utf8"),/id="modeFilters"/);
   assert.match(publicCalendar,/anthropology:"Anthropology"/);
   assert.match(publicCalendar,/Show flyer/);
   assert.doesNotMatch(publicCalendar,/href="\/calendar\/events\//);

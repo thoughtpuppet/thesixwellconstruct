@@ -4,6 +4,7 @@
   var SUBJECT_LABELS = { art:"Art", film:"Film", "poetry-music":"Poetry / Music", technology:"Technology", ai:"AI", "creative-technology":"Creative Technology", anthropology:"Anthropology", engineering:"Engineering", philosophy:"Philosophy" };
   var FORMAT_LABELS = { exhibition:"Exhibitions / Art Openings", screening:"Screening", performance:"Performance", "experimental-event":"Experimental Event", "lecture-talk":"Lecture / Talk", panel:"Panel", workshop:"Workshop", conference:"Conference" };
   var AFFILIATION_LABELS = { gsu:"GSU Events" };
+  var MODE_LABELS = { virtual:"Virtual" };
   var OCCURRENCE_LABELS = { opening_reception:"Opening Reception", artist_talk:"Artist Talk", mixer:"Mixer", screening:"Screening", performance:"Performance", workshop:"Workshop", panel:"Panel", lecture:"Lecture", other:"Related Program" };
   var TIME_ZONE = "America/New_York";
   var allEvents = [];
@@ -15,6 +16,7 @@
   var subjectRoot = document.getElementById("subjectFilters");
   var formatRoot = document.getElementById("formatFilters");
   var affiliationRoot = document.getElementById("affiliationFilters");
+  var modeRoot = document.getElementById("modeFilters");
   var resultCount = document.getElementById("resultCount");
   var upcomingRoot = document.getElementById("upcomingEvents");
   var pastRoot = document.getElementById("pastEvents");
@@ -78,9 +80,11 @@
     var subjects = checkedValues(subjectRoot);
     var formats = checkedValues(formatRoot);
     var affiliations = checkedValues(affiliationRoot);
+    var modes = checkedValues(modeRoot);
     if (subjects.length && !subjects.some(function (value) { return event.subjects.includes(value); })) return false;
     if (formats.length && !formats.some(function (value) { return event.formats.includes(value); })) return false;
     if (affiliations.length && !affiliations.some(function (value) { return (event.affiliations || []).includes(value); })) return false;
+    if (modes.includes("virtual") && !event.virtual) return false;
     if (query) {
       var haystack = [event.title, event.description, event.organizer, event.venueName, event.venueAddress].concat(event.subjects, event.formats).join(" ").toLowerCase();
       if (!haystack.includes(query)) return false;
@@ -90,7 +94,7 @@
 
   function eventCard(event) {
     var primarySubject = event.subjects[0] || "";
-    var labels = event.subjects.map(function (value) { return SUBJECT_LABELS[value] || value; }).concat(event.formats.map(function (value) { return FORMAT_LABELS[value] || value; }), (event.affiliations || []).map(function (value) { return AFFILIATION_LABELS[value] || value; }));
+    var labels = event.subjects.map(function (value) { return SUBJECT_LABELS[value] || value; }).concat(event.formats.map(function (value) { return FORMAT_LABELS[value] || value; }), (event.affiliations || []).map(function (value) { return AFFILIATION_LABELS[value] || value; }), event.virtual ? [MODE_LABELS.virtual] : []);
     var location = [event.venueName, event.venueAddress].filter(function (value, index, list) { return value && list.indexOf(value) === index; }).join(" / ");
     var sourceLabel = event.origin === "sixwell" ? "Six.Well event" : (event.affiliations || []).includes("gsu") ? "Georgia State University event" : "Selected Atlanta listing";
     var relatedLinks = Array.isArray(event.relatedLinks) ? event.relatedLinks : [];
@@ -165,10 +169,12 @@
   renderFilters(subjectRoot, SUBJECT_LABELS, "subject");
   renderFilters(formatRoot, FORMAT_LABELS, "format");
   renderFilters(affiliationRoot, AFFILIATION_LABELS, "affiliation");
+  renderFilters(modeRoot, MODE_LABELS, "mode");
   search.addEventListener("input", applyFilters);
   subjectRoot.addEventListener("change", applyFilters);
   formatRoot.addEventListener("change", applyFilters);
   affiliationRoot.addEventListener("change", applyFilters);
+  modeRoot.addEventListener("change", applyFilters);
   document.getElementById("clearFilters").addEventListener("click", function () {
     search.value = "";
     Array.from(document.querySelectorAll(".filter-chip input")).forEach(function (input) { input.checked = false; });
