@@ -161,7 +161,7 @@ test("manual duplicate checks include curated candidates and Six.Well occurrence
   const db = database();
   const duplicateCurated = await admin(db, "/candidates", {
     method:"POST",
-    body:{ title:"SOUND + VISION", sourceUrl:"https://www.atlantafilmsociety.org/upcoming-events/sound-vision", startsAt:"2026-09-12T19:00:00-04:00", verificationState:"verified", subjects:["art"], formats:["screening"] },
+    body:{ title:"SOUND + VISION | Atlanta Film Society | Live Art and Music", sourceUrl:"https://www.atlantafilmsociety.org/upcoming-events/sound-vision", startsAt:"2026-09-12T23:00:00Z", verificationState:"verified", subjects:["art"], formats:["screening"] },
   });
   const curatedPayload = await duplicateCurated.json();
   assert.equal(curatedPayload.candidate.status, "duplicate");

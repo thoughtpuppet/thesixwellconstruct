@@ -260,6 +260,18 @@ function dateKey(value) {
   return asString(value).slice(0, 10);
 }
 
+function sameEventStart(left, right) {
+  const leftValue = asString(left);
+  const rightValue = asString(right);
+  if (!leftValue || !rightValue) return false;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(leftValue) || /^\d{4}-\d{2}-\d{2}$/.test(rightValue)) {
+    return leftValue === rightValue;
+  }
+  const leftTime = Date.parse(leftValue);
+  const rightTime = Date.parse(rightValue);
+  return Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime === rightTime;
+}
+
 async function findDuplicate(db, proposal, excludeId = "", sensitivity = 0.84) {
   if (proposal.sourceId && proposal.sourceEventId) {
     const exact = await db.prepare(
@@ -273,7 +285,9 @@ async function findDuplicate(db, proposal, excludeId = "", sensitivity = 0.84) {
        WHERE source_url=? AND id<>? ORDER BY updated_at DESC`
     ).bind(proposal.sourceUrl, excludeId).all();
     for (const row of exactUrl.results || []) {
-      if (normalizeText(row.title) === normalizeText(proposal.title) && dateKey(row.starts_at) === dateKey(proposal.startsAt)) {
+      const sameTitleAndDay = normalizeText(row.title) === normalizeText(proposal.title)
+        && dateKey(row.starts_at) === dateKey(proposal.startsAt);
+      if (sameEventStart(row.starts_at, proposal.startsAt) || sameTitleAndDay) {
         return { type: "source-url", id: row.id };
       }
     }
@@ -1182,7 +1196,11 @@ async function upsertScoutProposal(db, rawProposal, discoveredBy, provenance, pr
   }
   if (!existing && proposal.sourceUrl) {
     const rows = await db.prepare("SELECT id,title,starts_at FROM calendar_candidates WHERE source_url=?").bind(proposal.sourceUrl).all();
-    existing = (rows.results || []).find((row) => normalizeText(row.title) === normalizeText(proposal.title) && dateKey(row.starts_at) === dateKey(proposal.startsAt)) || null;
+    existing = (rows.results || []).find((row) => {
+      const sameTitleAndDay = normalizeText(row.title) === normalizeText(proposal.title)
+        && dateKey(row.starts_at) === dateKey(proposal.startsAt);
+      return sameEventStart(row.starts_at, proposal.startsAt) || sameTitleAndDay;
+    }) || null;
   }
   if (!existing) return createCandidate(db, proposal, discoveredBy, provenance);
   const current = await getCandidate(db, existing.id, false);
