@@ -481,6 +481,55 @@ test("direct monitoring remains safe without an OpenAI key and scheduler due gat
   }
 });
 
+test("one registered source can be run immediately without invoking other sources or discovery lanes", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.exec("UPDATE calendar_scout_connectors SET enabled=0,status='disabled' WHERE id='direct'");
+  const createdResponse = await admin(db, "/sources", {
+    method:"POST",
+    body:{ name:"One Source Only", url:"https://one-source.example/events", sourceType:"official_html", enabled:false },
+  });
+  assert.equal(createdResponse.status, 201);
+  const source = (await createdResponse.json()).source;
+  db.prepare(`INSERT INTO calendar_sources(id,name,url,source_type,trust_level,enabled,cadence_hours,created_at,updated_at)
+    VALUES('cal_source_must_not_run','Do Not Run','https://other-source.example/events','official_html','official',1,24,datetime('now'),datetime('now'))`).run();
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    return new Response(`<script type="application/ld+json">${JSON.stringify({
+      "@context":"https://schema.org", "@type":"Event", "@id":"one-source-event",
+      name:"Atlanta Experimental Engineering Lecture", description:"A lecture on creative technology, engineering, and art.",
+      startDate:"2026-11-26T18:00:00-05:00", endDate:"2026-11-26T20:00:00-05:00",
+      url:"https://one-source.example/events/experimental-engineering-lecture",
+      location:{ "@type":"Place", name:"Atlanta Engineering Lab", address:{ streetAddress:"1 Lab Way", addressLocality:"Atlanta", addressRegion:"GA" } },
+    })}</script>`, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const response = await admin(db, `/sources/${encodeURIComponent(source.id)}/run`, { method:"POST", body:{} });
+    assert.equal(response.status, 200, await response.clone().text());
+    const result = await response.json();
+    assert.equal(result.status, "completed");
+    assert.equal(result.candidates, 1);
+    assert.equal(result.failures, 0);
+    assert.deepEqual(calls, ["https://one-source.example/events"]);
+    assert.deepEqual(
+      { ...db.prepare("SELECT source_id,status FROM calendar_candidates WHERE title='Atlanta Experimental Engineering Lecture'").get() },
+      { source_id:source.id, status:"candidate" },
+    );
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta Experimental Engineering Lecture'").get().count, 0);
+    assert.ok(db.prepare("SELECT last_success_at FROM calendar_sources WHERE id=?").get(source.id).last_success_at);
+    assert.equal(db.prepare("SELECT last_attempt_at FROM calendar_sources WHERE id='cal_source_must_not_run'").get().last_attempt_at, null);
+    const run = db.prepare("SELECT sources_searched_json,source_results_json FROM calendar_scout_runs WHERE id=?").get(result.runId);
+    assert.ok(JSON.parse(run.sources_searched_json).includes(source.id));
+    assert.match(run.source_results_json, /one-source\.example/);
+    const missing = await admin(db, "/sources/missing-source/run", { method:"POST", body:{} });
+    assert.equal(missing.status, 404);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("direct monitoring accepts bounded large official pages and still rejects excessive responses", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0");
@@ -899,6 +948,8 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(studio,/Best use/);
   assert.match(studio,/Programming model worth studying/);
   assert.match(studio,/never appear on the public calendar or feeds/);
+  assert.match(studio,/data-run-source/);
+  assert.match(studio,/Run This Source/);
   assert.match(publicCalendar,/<details class="calendar-event-flyer">/);
   assert.match(publicCalendar,/exhibition:"Exhibitions \/ Art Openings"/);
   assert.match(publicCalendar,/gsu:"GSU Events"/);

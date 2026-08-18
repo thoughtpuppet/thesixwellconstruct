@@ -82,6 +82,7 @@ input:focus,textarea:focus,select:focus { border-color:var(--accent); outline:no
 .source-list,.social-source-list,.connector-list,.social-evidence-list,.run-list { display:grid; gap:12px; }
 .source-card,.social-source-card,.connector-card,.social-evidence-card,.run-card,.suggestion-card { border:5px solid var(--line); padding:16px; background:var(--surface); }
 .source-card { display:grid; grid-template-columns:1fr 1.5fr .7fr .55fr 1fr 1fr auto; gap:10px; align-items:end; }
+.source-actions { display:flex; flex-direction:column; gap:8px; }
 .social-source-card { display:grid; grid-template-columns:1fr .7fr .8fr 1.5fr .7fr .65fr .65fr auto; gap:10px; align-items:end; }
 .connector-panel { margin-top:16px; border:5px solid var(--line); padding:18px; background:var(--surface); }
 .connector-list { grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:14px; }
@@ -112,6 +113,7 @@ input:focus,textarea:focus,select:focus { border-color:var(--accent); outline:no
   .candidate-list { max-height:340px; }
   .source-card,.social-source-card,.connector-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .source-card .is-wide-mobile,.social-source-card .is-wide-mobile { grid-column:1/-1; }
+  .source-actions { align-self:stretch; }
   .flyer-review { grid-template-columns:minmax(0,1fr); }
 }
 @media (max-width:640px) {
@@ -127,6 +129,8 @@ input:focus,textarea:focus,select:focus { border-color:var(--accent); outline:no
 }
 @media (max-width:390px) {
   .source-card,.social-source-card,.checkbox-grid { grid-template-columns:minmax(0,1fr); }
+  .source-actions { flex-direction:column; }
+  .source-actions button { width:100%; }
   .studio-tabs button { flex:0 0 auto; }
   .related-link-actions,.flyer-buttons,.flyer-empty { align-items:stretch; flex-direction:column; }
   .related-link-actions>*,.flyer-buttons button,.flyer-empty button,.flyer-controls .verify-link { width:100%; }

@@ -1651,6 +1651,16 @@ async function handleSources(request, env, parts) {
     ).all();
     return json({ sources: (result.results || []).map(normalizeSource) });
   }
+  if (request.method === "POST" && id && parts[2] === "run") {
+    const source = await db.prepare("SELECT id FROM calendar_sources WHERE id=?").bind(id).first();
+    if (!source) return errorResponse("Source not found.", 404);
+    return json(await runCalendarScout(env, {
+      runKind: "manual",
+      includeWeb: false,
+      channels: ["direct"],
+      sourceId: id,
+    }));
+  }
   const body = await readBody(request);
   if (!body) return errorResponse("Invalid JSON body.");
   const now = isoNow();
@@ -2520,8 +2530,10 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   return { candidate: changedCandidate, existing: true, changed: before !== changedSnapshot };
 }
 
-async function monitorSources(env, db, profile) {
-  const result = await db.prepare("SELECT * FROM calendar_sources WHERE enabled=1 ORDER BY name").all();
+async function monitorSources(env, db, profile, sourceId = "") {
+  const result = sourceId
+    ? await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(sourceId).all()
+    : await db.prepare("SELECT * FROM calendar_sources WHERE enabled=1 ORDER BY name").all();
   const sources = result.results || [];
   const outcomes = [];
   let candidateCount = 0;
@@ -2923,7 +2935,7 @@ async function writeConnectorState(db, id, { status, success = false, error = ""
   ).bind(status, now, success ? 1 : 0, now, asString(error).slice(0, 500), now, id).run();
 }
 
-export async function runCalendarScout(env, { runKind = "scheduled", includeWeb = true, channels = null } = {}) {
+export async function runCalendarScout(env, { runKind = "scheduled", includeWeb = true, channels = null, sourceId = "" } = {}) {
   const db = requireDb(env);
   const profileRow = await db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first();
   if (!profileRow) throw new Error("Scout profile not found.");
@@ -2935,7 +2947,7 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
   ).bind(runId, runKind, env.CALENDAR_SCOUT_MODEL || profile.model, startedAt).run();
   const connectorRows = (await db.prepare("SELECT * FROM calendar_scout_connectors ORDER BY id").all()).results || [];
   const defaults = connectorRows.filter((row) => row.enabled === 1).map((row) => row.id);
-  const requested = channels === null
+  const requested = sourceId ? ["direct"] : channels === null
     ? defaults.filter((id) => includeWeb || id !== "general_web")
     : [...new Set((Array.isArray(channels) ? channels : []).map(asString).filter((id) => CONNECTOR_IDS.has(id)))];
   const outcomes = [];
@@ -2948,11 +2960,12 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
   let failureCount = 0;
   for (const id of requested) {
     const row = connectorRows.find((item) => item.id === id);
-    if (!row || row.enabled !== 1) {
+    const manualSourceRun = id === "direct" && Boolean(sourceId);
+    if (!row || (row.enabled !== 1 && !manualSourceRun)) {
       outcomes.push({ channel: id, status: "disabled", reason: "Connector is disabled in Studio." });
       continue;
     }
-    const connector = connectorAvailability(row, env);
+    const connector = manualSourceRun ? { ...connectorAvailability(row, env), status: "ready" } : connectorAvailability(row, env);
     if (connector.status !== "ready") {
       outcomes.push({ channel: id, status: connector.status, reason: connector.lastError });
       await writeConnectorState(db, id, { status: connector.status, error: connector.lastError });
@@ -2961,7 +2974,7 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
     try {
       let result;
       if (id === "direct") {
-        const direct = await monitorSources(env, db, profile);
+        const direct = await monitorSources(env, db, profile, sourceId);
         result = { candidates: direct.candidateCount, duplicates: direct.duplicateCount, failures: direct.failureCount, citations: [], usage: {}, queries: [], postsInspected: 0, details: direct.outcomes };
         searched.push(...direct.sourceIds);
       } else if (id === "general_web") result = await runOpenAiDiscovery(env, db, profile, connector.perRunLimit);
