@@ -1,11 +1,13 @@
 (function () {
   "use strict";
 
-  var SUBJECT_LABELS = { art:"Art", film:"Film", "poetry-music":"Poetry / Music", technology:"Technology", ai:"AI", "creative-technology":"Creative Technology", anthropology:"Anthropology", engineering:"Engineering", philosophy:"Philosophy" };
+  var SUBJECT_LABELS = { art:"Art", "art-making":"Art Making", film:"Film", "poetry-music":"Poetry / Music", technology:"Technology", ai:"AI", "creative-technology":"Creative Technology", anthropology:"Anthropology", engineering:"Engineering", philosophy:"Philosophy" };
   var FORMAT_LABELS = { exhibition:"Exhibitions / Art Openings", screening:"Screening", performance:"Performance", "experimental-event":"Experimental Event", "lecture-talk":"Lecture / Talk", panel:"Panel", workshop:"Workshop", conference:"Conference" };
   var AFFILIATION_LABELS = { gsu:"GSU Events" };
   var MODE_LABELS = { virtual:"Virtual" };
   var OCCURRENCE_LABELS = { opening_reception:"Opening Reception", artist_talk:"Artist Talk", mixer:"Mixer", screening:"Screening", performance:"Performance", workshop:"Workshop", panel:"Panel", lecture:"Lecture", other:"Related Program" };
+  var SCHEDULE_LABELS = { postponed:"Postponed", rescheduled:"Rescheduled", cancelled:"Cancelled", moved_online:"Moved Online" };
+  var TICKET_LABELS = { not_required:"No Ticket Required", not_yet_on_sale:"Tickets Not Yet On Sale", on_sale:"Tickets On Sale", sold_out:"Sold Out", registration_open:"Registration Open", registration_closed:"Registration Closed" };
   var TIME_ZONE = "America/New_York";
   var allEvents = [];
   var filtered = [];
@@ -119,20 +121,29 @@
     var relatedOccurrences = Array.isArray(event.relatedOccurrences) ? event.relatedOccurrences : [];
     var flyer = event.flyer && event.flyer.url ? event.flyer : null;
     var accessNote = event.accessStatus === "restricted" ? (event.accessNotes || "Attendance is restricted. Check the official details for eligibility.") : "";
+    var scheduleLabel = SCHEDULE_LABELS[event.scheduleStatus] || "";
+    var ticketLabel = TICKET_LABELS[event.ticketStatus] || "";
+    var ticketNote = [ticketLabel, event.ticketOnSaleAt ? "On sale " + eventDate({ startsAt:event.ticketOnSaleAt, dateKind:"timed" }) : "", event.ticketNotes || ""].filter(Boolean).join(" / ");
     var organizerFact = event.organizer ? (event.organizerUrl ? '<a href="' + escapeHtml(event.organizerUrl) + '" target="_blank" rel="noopener noreferrer">Organizer / ' + escapeHtml(event.organizer) + '</a>' : '<span>Organizer / ' + escapeHtml(event.organizer) + '</span>') : '';
     var venueFact = location ? (event.venueUrl ? '<a href="' + escapeHtml(event.venueUrl) + '" target="_blank" rel="noopener noreferrer">Venue / ' + escapeHtml(location) + '</a>' : '<span>Venue / ' + escapeHtml(location) + '</span>') : '';
+    var officialUrl = event.sourceUrl || "";
+    var ticketUrl = event.ticketUrl || "";
+    if (!officialUrl && event.actionUrl && event.actionUrl !== ticketUrl) officialUrl = event.actionUrl;
+    var officialAction = officialUrl && officialUrl !== ticketUrl ? '<a href="' + escapeHtml(officialUrl) + '">Official details</a>' : '';
+    var ticketAction = ticketUrl ? '<a href="' + escapeHtml(ticketUrl) + '">Tickets / Register</a>' : '';
     return '<article class="calendar-event-card' + (event.status === "cancelled" ? ' is-cancelled' : '') + '" id="' + eventAnchor(event) + '" data-subject="' + escapeHtml(primarySubject) + '">' +
-      '<p class="calendar-event-meta">' + escapeHtml(event.status === "cancelled" ? "Cancelled / " + eventDate(event) : eventDate(event)) + '</p>' +
+      '<p class="calendar-event-meta">' + escapeHtml(scheduleLabel ? scheduleLabel + " / " + eventDate(event) : event.status === "cancelled" ? "Cancelled / " + eventDate(event) : eventDate(event)) + '</p>' +
       (event.isOccurrence ? '<p class="calendar-event-series">Part of / ' + (event.parentEventStructure === "exhibition" ? '<a href="#' + eventAnchor({id:event.seriesId}) + '">' + escapeHtml(event.parentTitle) + '</a>' : escapeHtml(event.parentTitle)) + ' / ' + escapeHtml(OCCURRENCE_LABELS[event.occurrenceType] || "Related Program") + '</p>' : '') +
       '<h3>' + escapeHtml(event.title) + '</h3>' +
       (accessNote ? '<p class="calendar-event-access"><strong>Access / </strong>' + escapeHtml(accessNote) + '</p>' : '') +
+      (ticketNote ? '<p class="calendar-event-ticket"><strong>Tickets / </strong>' + escapeHtml(ticketNote) + '</p>' : '') +
       (event.description ? '<p class="calendar-event-description">' + escapeHtml(event.description) + '</p>' : '') +
       '<div class="calendar-event-facts">' + organizerFact + venueFact + '<span>' + escapeHtml(sourceLabel) + '</span></div>' +
       '<div class="calendar-tags">' + labels.map(function (label) { return '<span class="calendar-tag">' + escapeHtml(label) + '</span>'; }).join("") + '</div>' +
       (relatedOccurrences.length ? '<div class="calendar-related-schedule"><span>Related schedule</span>' + relatedOccurrences.map(function (occurrence) { return '<a href="#' + eventAnchor(occurrence) + '"><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small></a>'; }).join("") + '</div>' : '') +
       (relatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + relatedLinks.map(function (link) { return '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(link.label) + '</a>'; }).join("") + '</div>' : '') +
       (flyer ? '<details class="calendar-event-flyer"><summary>Show flyer</summary><div><img src="' + escapeHtml(flyer.url) + '" alt="' + escapeHtml(flyer.altText || event.title + " event flyer") + '" loading="lazy" decoding="async"' + (flyer.width ? ' width="' + Number(flyer.width) + '"' : '') + (flyer.height ? ' height="' + Number(flyer.height) + '"' : '') + '></div></details>' : '') +
-      '<div class="calendar-event-actions"><a href="' + escapeHtml(event.actionUrl || event.sourceUrl) + '">Official details</a><a class="is-secondary" href="/api/calendar/events/' + encodeURIComponent(event.id) + '.ics">Add this event</a></div>' +
+      '<div class="calendar-event-actions">' + officialAction + ticketAction + '<a class="is-secondary" href="/api/calendar/events/' + encodeURIComponent(event.id) + '.ics">Add this event</a></div>' +
       '</article>';
   }
 

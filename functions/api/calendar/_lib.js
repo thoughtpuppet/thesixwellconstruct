@@ -1,4 +1,4 @@
-const SUBJECTS = new Set(["art", "film", "poetry-music", "technology", "ai", "creative-technology", "anthropology", "engineering", "philosophy"]);
+const SUBJECTS = new Set(["art", "art-making", "film", "poetry-music", "technology", "ai", "creative-technology", "anthropology", "engineering", "philosophy"]);
 const FORMATS = new Set(["exhibition", "screening", "performance", "experimental-event", "lecture-talk", "panel", "workshop", "conference"]);
 const CANDIDATE_STATUSES = new Set(["candidate", "published", "rejected", "cancelled", "duplicate", "needs_verification"]);
 const DATE_KINDS = new Set(["timed", "all_day", "date_range"]);
@@ -6,11 +6,15 @@ const EVENT_STRUCTURES = new Set(["single", "series", "exhibition"]);
 const OCCURRENCE_TYPES = new Set(["opening_reception", "artist_talk", "mixer", "screening", "performance", "workshop", "panel", "lecture", "other"]);
 const OCCURRENCE_STATUSES = new Set(["scheduled", "tbd", "cancelled"]);
 const ACCESS_STATUSES = new Set(["public", "restricted", "unknown"]);
+const SCHEDULE_STATUSES = new Set(["scheduled", "postponed", "rescheduled", "cancelled", "moved_online"]);
+const TICKET_STATUSES = new Set(["unknown", "not_required", "not_yet_on_sale", "on_sale", "sold_out", "registration_open", "registration_closed"]);
+const SOURCE_CHECK_STATUSES = new Set(["never", "unchanged", "changes_detected", "source_unavailable", "needs_verification"]);
 const SOURCE_AUTHORITIES = new Set(["organizer_event", "venue_event", "official_calendar", "authorized_ticket_host", "unresolved"]);
 const LINK_ROLES = new Set(["organizer", "venue", "ticket", "supporting", "discovery"]);
 const PLATFORM_SOURCE_ADAPTERS = new Set(["eventbrite", "posh"]);
+const INTERNAL_SOURCE_ADAPTERS = new Set(["eyedrum", "high_art_making"]);
 const STORED_SOURCE_ADAPTERS = new Set(["automatic", "wix", "localist", "out_of_hand", "json", "icalendar", "rss"]);
-const SOURCE_ADAPTERS = new Set([...STORED_SOURCE_ADAPTERS, ...PLATFORM_SOURCE_ADAPTERS]);
+const SOURCE_ADAPTERS = new Set([...STORED_SOURCE_ADAPTERS, ...PLATFORM_SOURCE_ADAPTERS, ...INTERNAL_SOURCE_ADAPTERS]);
 const SOURCE_RENDER_MODES = new Set(["static", "dynamic-fallback"]);
 const TIME_ZONE = "America/New_York";
 const PUBLIC_HOST = "thesixwellconstruct.com";
@@ -87,6 +91,48 @@ function accessDetails(statusValue, notesValue, audienceValue, fallback = {}) {
     accessNotes = "Attendance eligibility has not been confirmed.";
   }
   return { accessStatus, accessNotes, audiences };
+}
+
+function scheduleStatus(value, fallback = "scheduled") {
+  const requested = asString(value);
+  return SCHEDULE_STATUSES.has(requested) ? requested : fallback;
+}
+
+function ticketDetails(statusValue, onSaleAtValue, notesValue, fallback = {}) {
+  const requested = asString(statusValue === undefined ? fallback.ticketStatus : statusValue);
+  const ticketStatus = TICKET_STATUSES.has(requested) ? requested : "unknown";
+  const ticketOnSaleAt = asString(onSaleAtValue === undefined ? fallback.ticketOnSaleAt : onSaleAtValue) || null;
+  return {
+    ticketStatus,
+    ticketOnSaleAt,
+    ticketNotes: asString(notesValue === undefined ? fallback.ticketNotes : notesValue),
+  };
+}
+
+function nextSourceCheckAt(cadenceHours, now = Date.now()) {
+  const hours = Math.min(Math.max(Number(cadenceHours) || 24, 1), 720);
+  return new Date(now + hours * 3_600_000).toISOString();
+}
+
+function structuredScheduleStatus(value) {
+  const normalized = asString(value).toLowerCase();
+  if (normalized.includes("cancel")) return "cancelled";
+  if (normalized.includes("postpon")) return "postponed";
+  if (normalized.includes("reschedul")) return "rescheduled";
+  if (normalized.includes("movedonline") || normalized.includes("moved_online")) return "moved_online";
+  return "scheduled";
+}
+
+function structuredTicketDetails(offer) {
+  const value = offer && typeof offer === "object" ? offer : {};
+  const availability = asString(value.availability).toLowerCase();
+  const validFrom = asString(value.validFrom);
+  let ticketStatus = "unknown";
+  if (/soldout|outofstock|discontinued/.test(availability)) ticketStatus = "sold_out";
+  else if (/instock|limitedavailability|onlineonly|instoreonly/.test(availability)) ticketStatus = "on_sale";
+  else if (/preorder|presale|backorder/.test(availability) || (validFrom && Date.parse(validFrom) > Date.now())) ticketStatus = "not_yet_on_sale";
+  else if (asString(value.url) && Number(value.price) === 0) ticketStatus = "registration_open";
+  return ticketDetails(ticketStatus, validFrom, asString(value.description || value.name));
 }
 
 function normalizeRelatedLinks(values, sourceUrl = "") {
@@ -329,6 +375,8 @@ function normalizeCandidate(row) {
     sourceEventId: row.source_event_id || "",
     sourceUrl: row.source_url || "",
     ticketUrl: row.ticket_url || "",
+    scheduleStatus: scheduleStatus(row.schedule_status),
+    ...ticketDetails(row.ticket_status, row.ticket_on_sale_at, row.ticket_notes),
     discoveryUrl: row.discovery_url || "",
     organizerUrl: row.organizer_url || "",
     venueUrl: row.venue_url || "",
@@ -368,6 +416,12 @@ function normalizeCandidate(row) {
     discoveryChannel: row.discovery_channel || "",
     firstSeenAt: row.first_seen_at || null,
     lastVerifiedAt: row.last_verified_at || null,
+    lastCheckedAt: row.last_checked_at || null,
+    lastCheckStatus: SOURCE_CHECK_STATUSES.has(row.last_check_status) ? row.last_check_status : "never",
+    lastCheckSummary: row.last_check_summary || "",
+    monitoringEnabled: row.monitoring_enabled === 1,
+    monitoringCadenceHours: Math.min(Math.max(Number(row.monitoring_cadence_hours) || 24, 1), 720),
+    nextCheckAt: row.next_check_at || null,
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
     privateRationale: row.private_rationale || "",
@@ -417,6 +471,11 @@ function normalizeOccurrence(row) {
     venueAddress: row.venue_address || row.venueAddress || "",
     sourceUrl: row.source_url || row.sourceUrl || "",
     ticketUrl: row.ticket_url || row.ticketUrl || "",
+    ...ticketDetails(
+      row.ticket_status ?? row.ticketStatus,
+      row.ticket_on_sale_at ?? row.ticketOnSaleAt,
+      row.ticket_notes ?? row.ticketNotes,
+    ),
     status: row.status || "scheduled",
     verificationState: row.verification_state || row.verificationState || "unverified",
     verificationNotes: row.verification_notes || row.verificationNotes || "",
@@ -453,6 +512,7 @@ function normalizeOccurrenceProposal(item, parent = {}, index = 0) {
     venueAddress: asString(value.venueAddress),
     sourceUrl,
     ticketUrl,
+    ...ticketDetails(value.ticketStatus, value.ticketOnSaleAt, value.ticketNotes, parent),
     status,
     verificationState: instagramSource ? "needs_verification" : verificationState,
     verificationNotes: instagramSource && !asString(value.verificationNotes).includes(reliabilityNote)
@@ -558,7 +618,7 @@ function storedSourceAdapter(adapterKey, adapterConfig = {}) {
   if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) config.platform = adapterKey;
   else delete config.platform;
   return {
-    adapterKey: PLATFORM_SOURCE_ADAPTERS.has(adapterKey) ? "automatic" : adapterKey,
+    adapterKey: PLATFORM_SOURCE_ADAPTERS.has(adapterKey) || INTERNAL_SOURCE_ADAPTERS.has(adapterKey) ? "automatic" : adapterKey,
     adapterConfig: config,
   };
 }
@@ -585,6 +645,10 @@ function candidateSnapshot(candidate) {
     experimental: candidate.experimental,
     sourceUrl: candidate.sourceUrl,
     ticketUrl: candidate.ticketUrl,
+    scheduleStatus: candidate.scheduleStatus,
+    ticketStatus: candidate.ticketStatus,
+    ticketOnSaleAt: candidate.ticketOnSaleAt,
+    ticketNotes: candidate.ticketNotes,
     discoveryUrl: candidate.discoveryUrl,
     organizerUrl: candidate.organizerUrl,
     venueUrl: candidate.venueUrl,
@@ -620,12 +684,40 @@ function candidateSnapshot(candidate) {
       venueAddress: occurrence.venueAddress,
       sourceUrl: occurrence.sourceUrl,
       ticketUrl: occurrence.ticketUrl,
+      ticketStatus: occurrence.ticketStatus,
+      ticketOnSaleAt: occurrence.ticketOnSaleAt,
+      ticketNotes: occurrence.ticketNotes,
       status: occurrence.status,
       verificationState: occurrence.verificationState,
       verificationNotes: occurrence.verificationNotes,
       sortOrder: occurrence.sortOrder,
     })),
   };
+}
+
+const CANDIDATE_CHANGE_LABELS = {
+  title: "Title", organizer: "Organizer", factualDescription: "Description", eventStructure: "Event structure",
+  accessStatus: "Attendance access", accessNotes: "Access note", audiences: "Audiences", dateKind: "Date type",
+  startsAt: "Start", endsAt: "End", timezone: "Time zone", venueName: "Venue", venueAddress: "Venue address",
+  city: "City", region: "Region", subjects: "Subjects", formats: "Formats", experimental: "Experimental attribute",
+  sourceUrl: "Source URL", ticketUrl: "Ticket URL", scheduleStatus: "Schedule status", ticketStatus: "Ticket status",
+  ticketOnSaleAt: "Tickets on sale", ticketNotes: "Ticket note", organizerUrl: "Organizer URL", venueUrl: "Venue URL",
+  sourceAuthority: "Source authority", sourceResolutionNotes: "Source-resolution note", relatedLinks: "Related links",
+  flyerMediaId: "Flyer", flyerPublicApproved: "Public flyer approval", occurrences: "Related schedule",
+};
+
+function candidateChangeSet(before, after) {
+  return Object.keys(CANDIDATE_CHANGE_LABELS).flatMap((field) => {
+    const left = before?.[field] ?? null;
+    const right = after?.[field] ?? null;
+    return JSON.stringify(left) === JSON.stringify(right) ? [] : [{ field, label: CANDIDATE_CHANGE_LABELS[field], before: left, after: right }];
+  });
+}
+
+function changeSummary(changeSet, fallback = "Source checked") {
+  if (!changeSet.length) return fallback;
+  const labels = changeSet.slice(0, 6).map((change) => change.label);
+  return `Changed: ${labels.join(", ")}${changeSet.length > labels.length ? ` +${changeSet.length - labels.length} more` : ""}`;
 }
 
 function presentCandidateFlyer(row) {
@@ -717,7 +809,7 @@ async function getCandidate(db, id, includeRevisions = true) {
   candidate.occurrences = (occurrences.results || []).map(normalizeOccurrence);
   if (!includeRevisions) return candidate;
   const revisions = await db.prepare(
-    `SELECT id,revision_number,revision_state,snapshot_json,provenance_json,
+    `SELECT id,revision_number,revision_state,snapshot_json,provenance_json,change_set_json,
             change_summary,created_by,created_at,reviewed_at
      FROM calendar_candidate_revisions WHERE candidate_id=?
      ORDER BY revision_number DESC`
@@ -728,6 +820,7 @@ async function getCandidate(db, id, includeRevisions = true) {
     revisionState: revision.revision_state,
     snapshot: parseJson(revision.snapshot_json, {}),
     provenance: parseJson(revision.provenance_json, []),
+    changes: parseJson(revision.change_set_json, []),
     changeSummary: revision.change_summary || "",
     createdBy: revision.created_by,
     createdAt: revision.created_at,
@@ -819,6 +912,8 @@ function proposalFromBody(body, current = {}) {
     sourceEventId: asString(value("sourceEventId")),
     sourceUrl: asString(value("sourceUrl")),
     ticketUrl: asString(value("ticketUrl")),
+    scheduleStatus: scheduleStatus(value("scheduleStatus", "scheduled")),
+    ...ticketDetails(value("ticketStatus", "unknown"), value("ticketOnSaleAt"), value("ticketNotes"), current),
     discoveryUrl: asString(value("discoveryUrl")),
     organizerUrl: asString(value("organizerUrl")),
     venueUrl: asString(value("venueUrl")),
@@ -856,6 +951,8 @@ function proposalFromBody(body, current = {}) {
     programmingIdeas: asString(value("programmingIdeas")),
     potentialCollaborators: asString(value("potentialCollaborators")),
     internalNotes: asString(value("internalNotes")),
+    monitoringEnabled: Boolean(value("monitoringEnabled", false)),
+    monitoringCadenceHours: Math.min(Math.max(Number(value("monitoringCadenceHours", 24)) || 24, 1), 720),
     discoveryChannel: asString(value("discoveryChannel")),
     socialEvidence: Array.isArray(value("socialEvidence", [])) ? value("socialEvidence", []) : [],
     occurrences: (Array.isArray(value("occurrences", [])) ? value("occurrences", []) : [])
@@ -899,6 +996,7 @@ function publicationErrors(proposal) {
   if (proposal.ticketUrl && !validHttpUrl(proposal.ticketUrl)) errors.push("Ticket URL must use http or https.");
   if (proposal.ticketUrl && isInstagramUrl(proposal.ticketUrl)) errors.push("Instagram cannot be used as the public ticket URL.");
   else if (proposal.ticketUrl && socialPlatformFromUrl(proposal.ticketUrl)) errors.push("A social post cannot be used as the public ticket URL.");
+  if (proposal.ticketOnSaleAt && !validDate(proposal.ticketOnSaleAt)) errors.push("Tickets-on-sale time must be a valid ISO date or date-time.");
   for (const link of proposal.relatedLinks || []) {
     if (!validHttpUrl(link.url)) errors.push(`Related link ${link.label || link.url} must use a public http or https URL.`);
     if (link.provenanceUrl && !validHttpUrl(link.provenanceUrl)) errors.push(`Related link provenance for ${link.label || link.url} is invalid.`);
@@ -933,6 +1031,7 @@ function occurrencePublicationErrors(occurrence, parent) {
   const sourceUrl = occurrence.sourceUrl || parent.sourceUrl;
   if (!validHttpUrl(sourceUrl) || socialPlatformFromUrl(sourceUrl)) errors.push(`${label} requires an event-specific official organizer, venue, or ticket-host URL.`);
   if (occurrence.ticketUrl && (!validHttpUrl(occurrence.ticketUrl) || socialPlatformFromUrl(occurrence.ticketUrl))) errors.push(`${label} has an invalid public ticket URL.`);
+  if (occurrence.ticketOnSaleAt && !validDate(occurrence.ticketOnSaleAt)) errors.push(`${label} has an invalid tickets-on-sale time.`);
   if (occurrence.accessStatus === "unknown") errors.push(`${label} attendance eligibility must be confirmed before publication.`);
   if (occurrence.accessStatus === "restricted" && (!occurrence.accessNotes || !occurrence.audiences.length)) {
     errors.push(`${label} requires a public access note and at least one eligible audience.`);
@@ -962,15 +1061,16 @@ async function syncCandidateOccurrences(db, candidateId, values, parent) {
     return db.prepare(
       `INSERT INTO calendar_candidate_occurrences
         (id,candidate_id,source_event_id,occurrence_type,title,factual_description,access_status,access_notes,audiences_json,date_kind,starts_at,ends_at,
-         timezone,venue_name,venue_address,source_url,ticket_url,status,verification_state,verification_notes,
+         timezone,venue_name,venue_address,source_url,ticket_url,ticket_status,ticket_on_sale_at,ticket_notes,status,verification_state,verification_notes,
          sort_order,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(id) DO UPDATE SET source_event_id=excluded.source_event_id,
           occurrence_type=excluded.occurrence_type,title=excluded.title,factual_description=excluded.factual_description,
           access_status=excluded.access_status,access_notes=excluded.access_notes,audiences_json=excluded.audiences_json,
           date_kind=excluded.date_kind,starts_at=excluded.starts_at,ends_at=excluded.ends_at,
          timezone=excluded.timezone,venue_name=excluded.venue_name,venue_address=excluded.venue_address,
-         source_url=excluded.source_url,ticket_url=excluded.ticket_url,status=excluded.status,
+         source_url=excluded.source_url,ticket_url=excluded.ticket_url,ticket_status=excluded.ticket_status,
+         ticket_on_sale_at=excluded.ticket_on_sale_at,ticket_notes=excluded.ticket_notes,status=excluded.status,
          verification_state=excluded.verification_state,verification_notes=excluded.verification_notes,
          sort_order=excluded.sort_order,updated_at=excluded.updated_at`
     ).bind(
@@ -978,7 +1078,8 @@ async function syncCandidateOccurrences(db, candidateId, values, parent) {
       occurrence.factualDescription, occurrence.accessStatus, occurrence.accessNotes, JSON.stringify(occurrence.audiences),
       occurrence.dateKind, occurrence.startsAt, occurrence.endsAt,
       occurrence.timezone, occurrence.venueName, occurrence.venueAddress, occurrence.sourceUrl,
-      occurrence.ticketUrl, occurrence.status, occurrence.verificationState, occurrence.verificationNotes,
+      occurrence.ticketUrl, occurrence.ticketStatus, occurrence.ticketOnSaleAt, occurrence.ticketNotes,
+      occurrence.status, occurrence.verificationState, occurrence.verificationNotes,
       Number.isFinite(occurrence.sortOrder) ? occurrence.sortOrder : index, now, now,
     );
   });
@@ -1131,7 +1232,7 @@ async function saveCandidateFlyer(db, candidateId, proposal) {
   return media;
 }
 
-async function appendRevision(db, candidateId, snapshot, provenance, changeSummary, createdBy = "studio") {
+async function appendRevision(db, candidateId, snapshot, provenance, changeSummaryText, createdBy = "studio", changes = []) {
   const latest = await db.prepare(
     "SELECT COALESCE(MAX(revision_number),0) number FROM calendar_candidate_revisions WHERE candidate_id=?"
   ).bind(candidateId).first();
@@ -1142,9 +1243,9 @@ async function appendRevision(db, candidateId, snapshot, provenance, changeSumma
   ).bind(isoNow(), candidateId).run();
   await db.prepare(
     `INSERT INTO calendar_candidate_revisions
-      (id,candidate_id,revision_number,revision_state,snapshot_json,provenance_json,change_summary,created_by,created_at)
-     VALUES (?,?,?,'pending',?,?,?,?,?)`
-  ).bind(id, candidateId, revisionNumber, JSON.stringify(snapshot), JSON.stringify(provenance || []), asString(changeSummary), createdBy, isoNow()).run();
+      (id,candidate_id,revision_number,revision_state,snapshot_json,provenance_json,change_summary,created_by,created_at,change_set_json)
+     VALUES (?,?,?,'pending',?,?,?,?,?,?)`
+  ).bind(id, candidateId, revisionNumber, JSON.stringify(snapshot), JSON.stringify(provenance || []), asString(changeSummaryText), createdBy, isoNow(), JSON.stringify(changes || [])).run();
   await db.prepare("UPDATE calendar_candidates SET pending_revision_id=?,updated_at=? WHERE id=?")
     .bind(id, isoNow(), candidateId).run();
   return id;
@@ -1165,19 +1266,22 @@ async function createCandidate(env, body, discoveredBy = "manual", provenance = 
   const status = duplicate ? "duplicate" : proposal.verificationState === "needs_verification" || !proposal.startsAt ? "needs_verification" : "candidate";
   await db.prepare(
     `INSERT INTO calendar_candidates
-      (id,source_id,source_event_id,source_url,ticket_url,discovery_url,organizer_url,venue_url,source_authority,source_resolution_notes,title,organizer,factual_description,event_structure,access_status,access_notes,audiences_json,date_kind,
+      (id,source_id,source_event_id,source_url,ticket_url,schedule_status,ticket_status,ticket_on_sale_at,ticket_notes,discovery_url,organizer_url,venue_url,source_authority,source_resolution_notes,title,organizer,factual_description,event_structure,access_status,access_notes,audiences_json,date_kind,
        starts_at,ends_at,timezone,venue_name,venue_address,city,region,subjects_json,formats_json,is_experimental,
-       status,verification_state,verification_notes,confidence,duplicate_of,discovered_by,discovery_channel,first_seen_at,last_verified_at,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       status,verification_state,verification_notes,confidence,duplicate_of,discovered_by,discovery_channel,first_seen_at,last_verified_at,created_at,updated_at,monitoring_enabled,monitoring_cadence_hours,next_check_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(
     id, proposal.sourceId || null, proposal.sourceEventId, proposal.sourceUrl, proposal.ticketUrl,
+    proposal.scheduleStatus, proposal.ticketStatus, proposal.ticketOnSaleAt, proposal.ticketNotes,
     proposal.discoveryUrl, proposal.organizerUrl, proposal.venueUrl, proposal.sourceAuthority, proposal.sourceResolutionNotes, proposal.title,
     proposal.organizer, proposal.factualDescription, proposal.eventStructure, proposal.accessStatus, proposal.accessNotes, JSON.stringify(proposal.audiences),
     proposal.dateKind, proposal.startsAt, proposal.endsAt,
     proposal.timezone, proposal.venueName, proposal.venueAddress, proposal.city, proposal.region,
     JSON.stringify(proposal.subjects), JSON.stringify(proposal.formats), proposal.experimental ? 1 : 0,
     status, proposal.verificationState, proposal.verificationNotes, proposal.confidence,
-    duplicate?.id || "", discoveredBy, proposal.discoveryChannel, now, proposal.verificationState === "verified" ? now : null, now, now
+    duplicate?.id || "", discoveredBy, proposal.discoveryChannel, now, proposal.verificationState === "verified" ? now : null, now, now,
+    proposal.monitoringEnabled ? 1 : 0, proposal.monitoringCadenceHours,
+    proposal.monitoringEnabled ? nextSourceCheckAt(proposal.monitoringCadenceHours) : null,
   ).run();
   await db.prepare(
     `INSERT INTO calendar_candidate_notes
@@ -1210,12 +1314,13 @@ async function saveCandidate(env, id, body, { appendChangeRevision = true } = {}
   const now = isoNow();
   await db.prepare(
       `UPDATE calendar_candidates SET
-       source_id=?,source_event_id=?,source_url=?,ticket_url=?,discovery_url=?,organizer_url=?,venue_url=?,source_authority=?,source_resolution_notes=?,title=?,organizer=?,factual_description=?,event_structure=?,access_status=?,access_notes=?,audiences_json=?,date_kind=?,
+       source_id=?,source_event_id=?,source_url=?,ticket_url=?,schedule_status=?,ticket_status=?,ticket_on_sale_at=?,ticket_notes=?,discovery_url=?,organizer_url=?,venue_url=?,source_authority=?,source_resolution_notes=?,title=?,organizer=?,factual_description=?,event_structure=?,access_status=?,access_notes=?,audiences_json=?,date_kind=?,
        starts_at=?,ends_at=?,timezone=?,venue_name=?,venue_address=?,city=?,region=?,subjects_json=?,formats_json=?,
-       is_experimental=?,status=?,verification_state=?,verification_notes=?,confidence=?,duplicate_of=?,discovery_channel=?,last_verified_at=?,updated_at=?
+       is_experimental=?,status=?,verification_state=?,verification_notes=?,confidence=?,duplicate_of=?,discovery_channel=?,last_verified_at=?,updated_at=?,monitoring_enabled=?,monitoring_cadence_hours=?,next_check_at=?
      WHERE id=?`
   ).bind(
     proposal.sourceId || null, proposal.sourceEventId, proposal.sourceUrl, proposal.ticketUrl,
+    proposal.scheduleStatus, proposal.ticketStatus, proposal.ticketOnSaleAt, proposal.ticketNotes,
     proposal.discoveryUrl, proposal.organizerUrl, proposal.venueUrl, proposal.sourceAuthority, proposal.sourceResolutionNotes, proposal.title,
     proposal.organizer, proposal.factualDescription, proposal.eventStructure, proposal.accessStatus, proposal.accessNotes, JSON.stringify(proposal.audiences),
     proposal.dateKind, proposal.startsAt, proposal.endsAt,
@@ -1223,7 +1328,12 @@ async function saveCandidate(env, id, body, { appendChangeRevision = true } = {}
     JSON.stringify(proposal.subjects), JSON.stringify(proposal.formats), proposal.experimental ? 1 : 0, status,
     proposal.verificationState, proposal.verificationNotes, proposal.confidence,
     body.duplicateOf !== undefined ? asString(body.duplicateOf) : current.duplicateOf, proposal.discoveryChannel,
-    proposal.verificationState === "verified" ? now : null, now, id
+    proposal.verificationState === "verified" ? now : null, now, proposal.monitoringEnabled ? 1 : 0,
+    proposal.monitoringCadenceHours, proposal.monitoringEnabled
+      ? (current.monitoringEnabled && current.monitoringCadenceHours === proposal.monitoringCadenceHours && current.nextCheckAt
+        ? current.nextCheckAt : nextSourceCheckAt(proposal.monitoringCadenceHours))
+      : null,
+    id
   ).run();
   await db.prepare(
     `INSERT INTO calendar_candidate_notes
@@ -1241,7 +1351,10 @@ async function saveCandidate(env, id, body, { appendChangeRevision = true } = {}
   const before = JSON.stringify(candidateSnapshot(current));
   const saved = await getCandidate(db, id, false);
   const after = JSON.stringify(candidateSnapshot(saved));
-  if (appendChangeRevision && before !== after) await appendRevision(db, id, candidateSnapshot(saved), [{ url: proposal.sourceUrl, savedAt: now }], "Studio edit");
+  if (appendChangeRevision && before !== after) {
+    const changes = candidateChangeSet(candidateSnapshot(current), candidateSnapshot(saved));
+    await appendRevision(db, id, candidateSnapshot(saved), [{ url: proposal.sourceUrl, savedAt: now }], changeSummary(changes, "Studio edit"), "studio", changes);
+  }
   return getCandidate(db, id);
 }
 
@@ -1267,12 +1380,13 @@ async function syncEntryOccurrences(db, entryId, candidate, now) {
       await db.prepare(
         `UPDATE calendar_entry_occurrences SET sequence=?,status=?,occurrence_type=?,title=?,
          factual_description=?,access_status=?,access_notes=?,audiences_json=?,date_kind=?,starts_at=?,ends_at=?,timezone=?,venue_name=?,venue_address=?,
-         source_url=?,ticket_url=?,last_modified_at=?,last_verified_at=? WHERE id=?`
+         source_url=?,ticket_url=?,ticket_status=?,ticket_on_sale_at=?,ticket_notes=?,last_modified_at=?,last_verified_at=? WHERE id=?`
       ).bind(
         Number(existing.sequence) + 1, status, occurrence.occurrenceType, title,
         occurrence.factualDescription, access.accessStatus, access.accessNotes, JSON.stringify(access.audiences),
         occurrence.dateKind, occurrence.startsAt, occurrence.endsAt,
         occurrence.timezone || candidate.timezone, venueName, venueAddress, sourceUrl, ticketUrl,
+        occurrence.ticketStatus, occurrence.ticketOnSaleAt, occurrence.ticketNotes,
         now, occurrence.verificationState === "verified" ? now : null, id,
       ).run();
     } else {
@@ -1280,13 +1394,14 @@ async function syncEntryOccurrences(db, entryId, candidate, now) {
         `INSERT INTO calendar_entry_occurrences
           (id,entry_id,candidate_occurrence_id,uid,sequence,status,occurrence_type,title,
            factual_description,access_status,access_notes,audiences_json,date_kind,starts_at,ends_at,timezone,venue_name,venue_address,
-           source_url,ticket_url,published_at,last_modified_at,last_verified_at)
-         VALUES (?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+           source_url,ticket_url,ticket_status,ticket_on_sale_at,ticket_notes,published_at,last_modified_at,last_verified_at)
+         VALUES (?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).bind(
         id, entryId, occurrence.id, `${id}@${PUBLIC_HOST}`, status, occurrence.occurrenceType, title,
         occurrence.factualDescription, access.accessStatus, access.accessNotes, JSON.stringify(access.audiences),
         occurrence.dateKind, occurrence.startsAt, occurrence.endsAt,
         occurrence.timezone || candidate.timezone, venueName, venueAddress, sourceUrl, ticketUrl,
+        occurrence.ticketStatus, occurrence.ticketOnSaleAt, occurrence.ticketNotes,
         now, now, occurrence.verificationState === "verified" ? now : null,
       ).run();
     }
@@ -1321,11 +1436,13 @@ async function approveCandidate(db, id) {
   const uid = existing ? null : `${entryId}@${PUBLIC_HOST}`;
   if (existing) {
     await db.prepare(
-      `UPDATE calendar_entries SET sequence=?,status='published',source_url=?,ticket_url=?,organizer_url=?,venue_url=?,source_authority=?,title=?,organizer=?,
+      `UPDATE calendar_entries SET sequence=?,status='published',source_url=?,ticket_url=?,schedule_status=?,ticket_status=?,ticket_on_sale_at=?,ticket_notes=?,organizer_url=?,venue_url=?,source_authority=?,title=?,organizer=?,
        factual_description=?,event_structure=?,access_status=?,access_notes=?,audiences_json=?,date_kind=?,starts_at=?,ends_at=?,timezone=?,venue_name=?,venue_address=?,city=?,region=?,
        subjects_json=?,formats_json=?,is_experimental=?,flyer_media_id=?,flyer_alt_text=?,last_modified_at=?,last_verified_at=? WHERE id=?`
     ).bind(
-      Number(existing.sequence) + 1, candidate.sourceUrl, candidate.ticketUrl, candidate.organizerUrl, candidate.venueUrl, candidate.sourceAuthority, candidate.title, candidate.organizer,
+      Number(existing.sequence) + 1, candidate.sourceUrl, candidate.ticketUrl, candidate.scheduleStatus,
+      candidate.ticketStatus, candidate.ticketOnSaleAt, candidate.ticketNotes,
+      candidate.organizerUrl, candidate.venueUrl, candidate.sourceAuthority, candidate.title, candidate.organizer,
       candidate.factualDescription, candidate.eventStructure, candidate.accessStatus, candidate.accessNotes, JSON.stringify(candidate.audiences),
       candidate.dateKind, candidate.startsAt, candidate.endsAt, candidate.timezone,
       candidate.venueName, candidate.venueAddress, candidate.city, candidate.region, JSON.stringify(candidate.subjects),
@@ -1336,12 +1453,14 @@ async function approveCandidate(db, id) {
   } else {
     await db.prepare(
       `INSERT INTO calendar_entries
-       (id,candidate_id,uid,sequence,status,source_url,ticket_url,organizer_url,venue_url,source_authority,title,organizer,factual_description,event_structure,date_kind,
+       (id,candidate_id,uid,sequence,status,source_url,ticket_url,schedule_status,ticket_status,ticket_on_sale_at,ticket_notes,organizer_url,venue_url,source_authority,title,organizer,factual_description,event_structure,date_kind,
          access_status,access_notes,audiences_json,starts_at,ends_at,timezone,venue_name,venue_address,city,region,subjects_json,formats_json,is_experimental,
          flyer_media_id,flyer_alt_text,published_at,last_modified_at,last_verified_at)
-        VALUES (?,?,?,0,'published',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        VALUES (?,?,?,0,'published',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(
-      entryId, id, uid, candidate.sourceUrl, candidate.ticketUrl, candidate.organizerUrl, candidate.venueUrl, candidate.sourceAuthority, candidate.title, candidate.organizer,
+      entryId, id, uid, candidate.sourceUrl, candidate.ticketUrl, candidate.scheduleStatus,
+      candidate.ticketStatus, candidate.ticketOnSaleAt, candidate.ticketNotes,
+      candidate.organizerUrl, candidate.venueUrl, candidate.sourceAuthority, candidate.title, candidate.organizer,
       candidate.factualDescription, candidate.eventStructure, candidate.dateKind, candidate.accessStatus, candidate.accessNotes, JSON.stringify(candidate.audiences),
       candidate.startsAt, candidate.endsAt, candidate.timezone,
       candidate.venueName, candidate.venueAddress, candidate.city, candidate.region, JSON.stringify(candidate.subjects),
@@ -1397,10 +1516,10 @@ async function cancelCandidate(db, id) {
   const candidate = await getCandidate(db, id, false);
   if (!candidate) return null;
   const now = isoNow();
-  await db.prepare("UPDATE calendar_candidates SET status='cancelled',updated_at=? WHERE id=?").bind(now, id).run();
+  await db.prepare("UPDATE calendar_candidates SET status='cancelled',schedule_status='cancelled',updated_at=? WHERE id=?").bind(now, id).run();
   if (candidate.publicEntryId) {
     await db.prepare(
-      "UPDATE calendar_entries SET status='cancelled',sequence=sequence+1,last_modified_at=? WHERE id=?"
+      "UPDATE calendar_entries SET status='cancelled',schedule_status='cancelled',sequence=sequence+1,last_modified_at=? WHERE id=?"
     ).bind(now, candidate.publicEntryId).run();
     await db.prepare(
       "UPDATE calendar_entry_occurrences SET status='cancelled',sequence=sequence+1,last_modified_at=? WHERE entry_id=? AND status<>'cancelled'"
@@ -1471,8 +1590,10 @@ function curatedPublicView(row, relatedLinks = []) {
     formats: uniqueStrings(row.formats_json, FORMATS),
     experimental: row.is_experimental === 1,
     status: row.status,
+    scheduleStatus: scheduleStatus(row.schedule_status),
     sourceUrl: row.source_url,
     ticketUrl: row.ticket_url || "",
+    ...ticketDetails(row.ticket_status, row.ticket_on_sale_at, row.ticket_notes),
     organizerUrl: row.organizer_url || "",
     venueUrl: row.venue_url || "",
     actionUrl: row.ticket_url || row.source_url,
@@ -1541,6 +1662,8 @@ function curatedOccurrencePublicView(row, parent) {
     status: row.status,
     sourceUrl: row.source_url || parent.sourceUrl,
     ticketUrl: row.ticket_url || "",
+    scheduleStatus: row.status === "cancelled" ? "cancelled" : "scheduled",
+    ...ticketDetails(row.ticket_status, row.ticket_on_sale_at, row.ticket_notes, parent),
     organizerUrl: parent.organizerUrl,
     venueUrl: parent.venueUrl,
     actionUrl: row.ticket_url || row.source_url || parent.actionUrl,
@@ -1638,8 +1761,12 @@ async function loadSixWellEvents(db) {
       formats: uniqueStrings(row.formats_json, FORMATS),
       experimental: uniqueStrings(row.formats_json, FORMATS).includes("experimental-event"),
       status: status === "cancelled" ? "cancelled" : "published",
+      scheduleStatus: status === "cancelled" ? "cancelled" : "scheduled",
       sourceUrl: row.source_url || `/events/${encodeURIComponent(row.slug)}/`,
       ticketUrl: "",
+      ticketStatus: "unknown",
+      ticketOnSaleAt: null,
+      ticketNotes: "",
       actionUrl: `/events/${encodeURIComponent(row.slug)}/${row.occurrence_id ? `?occurrence=${encodeURIComponent(row.occurrence_id)}` : ""}`,
       relatedLinks: [],
       flyer: null,
@@ -1705,7 +1832,7 @@ function eventIcsLines(event) {
     `DTSTAMP:${icsTimestamp(event.lastModified || new Date())}`,
     `LAST-MODIFIED:${icsTimestamp(event.lastModified || new Date())}`,
     `SEQUENCE:${Number(event.sequence) || 0}`,
-    `STATUS:${event.status === "cancelled" ? "CANCELLED" : "CONFIRMED"}`,
+    `STATUS:${event.status === "cancelled" || event.scheduleStatus === "cancelled" ? "CANCELLED" : ["postponed", "rescheduled"].includes(event.scheduleStatus) ? "TENTATIVE" : "CONFIRMED"}`,
     `SUMMARY:${escapeIcs(event.title)}`,
   ];
   if (event.parentUid) lines.push(`RELATED-TO;RELTYPE=PARENT:${escapeIcs(event.parentUid)}`);
@@ -1719,9 +1846,14 @@ function eventIcsLines(event) {
   const location = [event.venueName, event.venueAddress].filter((value, index, list) => value && list.indexOf(value) === index).join(", ");
   if (location) lines.push(`LOCATION:${escapeIcs(location)}`);
   const accessLine = event.accessStatus === "restricted" ? `Access: ${event.accessNotes}` : "";
-  const description = [event.description, accessLine].filter(Boolean).join("\n\n");
+  const scheduleLine = event.scheduleStatus && event.scheduleStatus !== "scheduled" ? `Schedule: ${event.scheduleStatus.replace(/_/g, " ")}` : "";
+  const ticketLine = event.ticketStatus && event.ticketStatus !== "unknown"
+    ? `Tickets: ${event.ticketStatus.replace(/_/g, " ")}${event.ticketOnSaleAt ? ` (${event.ticketOnSaleAt})` : ""}${event.ticketNotes ? `. ${event.ticketNotes}` : ""}` : "";
+  const description = [event.description, scheduleLine, ticketLine, accessLine].filter(Boolean).join("\n\n");
   if (description) lines.push(`DESCRIPTION:${escapeIcs(description)}`);
   lines.push(`X-SIXWELL-ACCESS:${escapeIcs(event.accessStatus || "public")}`);
+  lines.push(`X-SIXWELL-SCHEDULE-STATUS:${escapeIcs(event.scheduleStatus || "scheduled")}`);
+  lines.push(`X-SIXWELL-TICKET-STATUS:${escapeIcs(event.ticketStatus || "unknown")}`);
   if (event.actionUrl) lines.push(`URL:${escapeIcs(new URL(event.actionUrl, "https://thesixwellconstruct.com").toString())}`);
   lines.push("END:VEVENT");
   return lines;
@@ -1857,6 +1989,10 @@ async function handleCandidates(request, env, parts) {
   if (action === "approve") {
     const result = await approveCandidate(db, id);
     return result.error ? json({ error: result.error, errors: result.errors || [] }, { status: result.status }) : json(result);
+  }
+  if (action === "recheck") {
+    const result = await recheckCandidateSource(env, db, id);
+    return result.error ? json({ error: result.error }, { status: result.status }) : json(result);
   }
   if (action === "reject") {
     const candidate = await rejectCandidate(db, id, body);
@@ -2387,6 +2523,7 @@ function structuredEventProposal(item, source) {
       venueAddress: typeof subEvent.location?.address === "string" ? asString(subEvent.location.address) : "",
       sourceUrl: asString(subEvent.url),
       ticketUrl: asString(Array.isArray(subEvent.offers) ? subEvent.offers[0]?.url : subEvent.offers?.url),
+      ...structuredTicketDetails(Array.isArray(subEvent.offers) ? subEvent.offers[0] : subEvent.offers),
       status: "scheduled",
       verificationState: "verified",
       verificationNotes: "Structured related-program data retrieved from an enabled official source.",
@@ -2395,6 +2532,8 @@ function structuredEventProposal(item, source) {
   return {
     sourceId: source.id, sourceEventId: asString(item.identifier || item["@id"] || item.url),
     sourceUrl, ticketUrl: asString(offers.url),
+    scheduleStatus: structuredScheduleStatus(item.eventStatus),
+    ...structuredTicketDetails(offers),
     ...directSourceFields(source, sourceUrl, asString(item.organizer?.url), asString(location.url)),
     title: asString(item.name),
     relatedLinks: structuredRelatedLinks(item, sourceUrl),
@@ -2861,6 +3000,7 @@ function sourceAdapterKey(source) {
   if (host === "eventbrite.com" || host.endsWith(".eventbrite.com")) return "eventbrite";
   if (host === "posh.vip" || host.endsWith(".posh.vip")) return "posh";
   if (host === "eyedrum.org") return "eyedrum";
+  if (host === "high.org" && /\/event-category\/for-adults\/art-making\/?/i.test(new URL(source.url).pathname)) return "high_art_making";
   if (source.source_type === "calendar") return "icalendar";
   if (source.source_type === "json") return isGsuLocalistSource(source.url) ? "localist" : "json";
   if (source.source_type === "rss") return "rss";
@@ -3037,6 +3177,157 @@ function extractEyedrumEvents(html, source) {
     return true;
   });
   return groupEyedrumRecurringEvents(events, source);
+}
+
+function highDateParts(monthName, dayValue, yearValue) {
+  const month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+    .indexOf(asString(monthName).slice(0, 3).toLowerCase()) + 1;
+  const day = Number(dayValue);
+  const year = Number(yearValue);
+  if (!month || day < 1 || day > 31 || year < 2000) return "";
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function highArchiveRange(label) {
+  const text = sourceHtmlEntities(asString(label)).replace(/[|]/g, " ").replace(/\s+/g, " ");
+  const ranged = text.match(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})\s*(?:-|–|—|to)\s*(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?(\d{1,2}),?\s+(20\d{2})\b/i);
+  if (ranged) {
+    const startsAt = highDateParts(ranged[1], ranged[2], ranged[5]);
+    const endsAt = highDateParts(ranged[3] || ranged[1], ranged[4], ranged[5]);
+    return startsAt && endsAt ? { dateKind: "date_range", startsAt, endsAt } : null;
+  }
+  const dateMatch = text.match(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2}),?\s+(20\d{2})\b/i);
+  if (!dateMatch) return null;
+  const dayKey = highDateParts(dateMatch[1], dateMatch[2], dateMatch[3]);
+  const timeMatch = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i);
+  if (!timeMatch) return { dateKind: "all_day", startsAt: dayKey, endsAt: null };
+  const startMeridiem = timeMatch[3] || timeMatch[6];
+  const hour = (value, meridiem) => (Number(value) % 12) + (/p/i.test(meridiem) ? 12 : 0);
+  const offset = nyOffsetForDate(new Date(`${dayKey}T12:00:00Z`));
+  return {
+    dateKind: "timed",
+    startsAt: `${dayKey}T${String(hour(timeMatch[1], startMeridiem)).padStart(2, "0")}:${timeMatch[2] || "00"}:00${offset}`,
+    endsAt: `${dayKey}T${String(hour(timeMatch[4], timeMatch[6])).padStart(2, "0")}:${timeMatch[5] || "00"}:00${offset}`,
+  };
+}
+
+function highArtMakingOccurrenceTitle(event) {
+  const localDate = event.dateKind === "timed" ? wixLocalDate(event.startsAt, event.timezone) : dateKey(event.startsAt);
+  if (!localDate) return "Session";
+  return `${new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", day: "numeric" }).format(new Date(`${localDate}T12:00:00Z`))} Session`;
+}
+
+function highArtMakingProposal(block, source) {
+  const relativeSourceUrl = sourceClassHref(block, "at-text-images-cta-button");
+  const range = highArchiveRange(sourceElementText(block, "at-text-images-subheader"));
+  if (!relativeSourceUrl || !range?.startsAt) return null;
+  let sourceUrl;
+  try { sourceUrl = new URL(relativeSourceUrl, source.url).toString(); } catch { return null; }
+  if (!sameOriginUrl(sourceUrl, source.url)) return null;
+  const title = sourceElementText(block, "at-text-images-header");
+  const factualDescription = sourceElementText(block, "entry-summary");
+  const imageTag = block.match(/<img\b[^>]*(?:data-src|src)=["'][^"']+["'][^>]*>/i)?.[0] || "";
+  const flyerUrl = sourceHtmlEntities(imageTag.match(/\b(?:data-src|src)=["']([^"']+)["']/i)?.[1] || "");
+  const path = new URL(sourceUrl).pathname;
+  const explicitlyPublic = /\bfree admission\b|\bopen to (?:all|the public)\b|\bdrop-in\b|\bcome as you are\b/i.test(factualDescription);
+  return {
+    sourceId: source.id,
+    sourceEventId: path.split("/").filter(Boolean).at(-1) || path,
+    sourceUrl,
+    ticketUrl: "",
+    ...directSourceFields(source, sourceUrl, "https://high.org/", "https://high.org/visit/"),
+    relatedLinks: [],
+    flyerUrl: validHttpUrl(flyerUrl) ? flyerUrl : "",
+    flyerProvenanceUrl: sourceUrl,
+    title,
+    organizer: "High Museum of Art",
+    factualDescription,
+    accessStatus: explicitlyPublic ? "public" : "unknown",
+    accessNotes: explicitlyPublic ? "Open to the public; review the official event page for admission or registration details." : "Attendance and admission details must be confirmed on the official event page.",
+    audiences: explicitlyPublic ? ["Public"] : [],
+    ...range,
+    timezone: TIME_ZONE,
+    venueName: "High Museum of Art",
+    venueAddress: "1280 Peachtree Street NE, Atlanta, GA 30309",
+    city: "Atlanta",
+    region: "GA",
+    subjects: [],
+    formats: [],
+    experimental: false,
+    verificationState: "verified",
+    verificationNotes: "Event facts were retrieved from the High Museum of Art's official Art Making calendar.",
+    confidence: 0.94,
+  };
+}
+
+function groupHighArtMakingRecurringEvents(events, source) {
+  const groups = new Map();
+  for (const event of events) {
+    const key = normalizeText(event.title);
+    if (!key) continue;
+    const list = groups.get(key) || [];
+    list.push(event);
+    groups.set(key, list);
+  }
+  const output = [];
+  for (const [key, values] of groups) {
+    const ordered = values.sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt));
+    const recurringText = ordered.map((event) => event.factualDescription).join(" ");
+    const declaredRecurring = /\bmonthly\b|\beach month\b|\bevery month\b|\bweekly\b|\beach week\b|\bevery week\b|\bthird saturday\b|\brecurring\b/i.test(recurringText);
+    if (ordered.length < 2 || !declaredRecurring || ordered.some((event) => event.dateKind !== "timed")) {
+      output.push(...ordered);
+      continue;
+    }
+    const first = ordered[0];
+    const last = ordered.at(-1);
+    const occurrences = ordered.map((event, index) => normalizeOccurrenceProposal({
+      sourceEventId: event.sourceEventId,
+      occurrenceType: "workshop",
+      title: highArtMakingOccurrenceTitle(event),
+      factualDescription: event.factualDescription,
+      accessStatus: event.accessStatus,
+      accessNotes: event.accessNotes,
+      audiences: event.audiences,
+      dateKind: event.dateKind,
+      startsAt: event.startsAt,
+      endsAt: event.endsAt,
+      timezone: event.timezone,
+      venueName: event.venueName,
+      venueAddress: event.venueAddress,
+      sourceUrl: event.sourceUrl,
+      ticketUrl: event.ticketUrl,
+      status: "scheduled",
+      verificationState: "verified",
+      verificationNotes: "This occurrence was retrieved from its dated listing on the High Museum of Art's official calendar.",
+      sortOrder: index,
+    }, first, index));
+    output.push({
+      ...first,
+      sourceEventId: `high-art-making-series-${key.replace(/\s+/g, "-").slice(0, 150)}`,
+      sourceUrl: source.url,
+      ticketUrl: "",
+      flyerProvenanceUrl: source.url,
+      eventStructure: "series",
+      dateKind: "date_range",
+      startsAt: wixLocalDate(first.startsAt, first.timezone),
+      endsAt: wixLocalDate(last.endsAt || last.startsAt, last.timezone),
+      verificationNotes: `${occurrences.length} currently announced occurrences were grouped from the High Museum of Art's official Art Making calendar.`,
+      confidence: 0.98,
+      occurrences,
+    });
+  }
+  return output;
+}
+
+function extractHighArtMakingEvents(html, source) {
+  const blocks = asString(html).split(/<div\s+id=["']at-text-images-block_[^"']+["']/i).slice(1, 250);
+  const seen = new Set();
+  const events = blocks.map((block) => highArtMakingProposal(block, source)).filter((event) => {
+    if (!event?.title || !event.startsAt || !event.sourceEventId || seen.has(event.sourceEventId)) return false;
+    seen.add(event.sourceEventId);
+    return true;
+  });
+  return groupHighArtMakingRecurringEvents(events, source);
 }
 
 function sameOriginUrl(value, sourceUrl) {
@@ -3298,6 +3589,8 @@ function browserPlatformProposal(item, source, adapterKey) {
     sourceEventId: detail?.id || `${adapterKey}-lead-${stableLead}`,
     sourceUrl,
     ticketUrl: detail?.url || "",
+    scheduleStatus: scheduleStatus(item.scheduleStatus),
+    ...ticketDetails(item.ticketStatus, item.ticketOnSaleAt, item.ticketNotes),
     discoveryUrl: exactTicketPage && detail.url === source.url ? "" : source.url,
     organizerUrl,
     venueUrl,
@@ -3359,6 +3652,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
                 venueUrl: { type: "string" }, city: { type: "string" }, region: { type: "string" },
                 startsAt: { type: "string" }, endsAt: { type: "string" }, eventUrl: { type: "string" },
                 ticketUrl: { type: "string" }, imageUrl: { type: "string" }, accessStatus: { type: "string" },
+                scheduleStatus: { type: "string" }, ticketStatus: { type: "string" }, ticketOnSaleAt: { type: "string" }, ticketNotes: { type: "string" },
                 accessNotes: { type: "string" }, audiences: { type: "array", items: { type: "string" } },
               },
               required: ["title", "startsAt"],
@@ -3531,7 +3825,9 @@ async function extractOutOfHandSeries(env, staticText, source) {
 }
 
 function extractSourceEvents(text, source) {
-  if (sourceAdapterKey(source) === "eyedrum") return extractEyedrumEvents(text, source);
+  const adapterKey = sourceAdapterKey(source);
+  if (adapterKey === "eyedrum") return extractEyedrumEvents(text, source);
+  if (adapterKey === "high_art_making") return extractHighArtMakingEvents(text, source);
   if (source.source_type === "calendar") return extractIcsEvents(text, source);
   if (source.source_type === "json") return extractJsonEvents(text, source);
   if (source.source_type === "rss") return extractRssEvents(text, source);
@@ -3563,11 +3859,42 @@ async function completeLocalistPayload(source, firstText) {
   return JSON.stringify({ ...parsed, events });
 }
 
+async function completeHighArtMakingPayload(source, firstText) {
+  if (sourceAdapterKey(source) !== "high_art_making") return firstText;
+  const config = parseJson(source.adapter_config_json, {});
+  const maxPages = Math.min(Math.max(Number(config.maxPages) || 3, 1), 5);
+  const announcedPages = [...asString(firstText).matchAll(/\/event-category\/for-adults\/art-making\/page\/(\d+)\/?/gi)]
+    .map((match) => Number(match[1])).filter(Number.isFinite);
+  const totalPages = Math.min(maxPages, Math.max(1, ...announcedPages));
+  const pages = [firstText];
+  for (let page = 2; page <= totalPages; page += 1) {
+    const pageUrl = new URL(`page/${page}/`, source.url.endsWith("/") ? source.url : `${source.url}/`).toString();
+    if (!sameOriginUrl(pageUrl, source.url)) break;
+    const response = await fetchExternalSource(pageUrl);
+    if (response.status === 404) break;
+    if (!response.ok) throw new Error(`High Art Making page ${page} returned HTTP ${response.status}`);
+    pages.push(await boundedResponseText(response));
+  }
+  return pages.join("\n<!-- SIXWELL-SOURCE-PAGE -->\n");
+}
+
+async function completeSourcePayload(source, firstText) {
+  const localist = await completeLocalistPayload(source, firstText);
+  return completeHighArtMakingPayload(source, localist);
+}
+
 function inferSubjectsAndFormats(event) {
   const text = normalizeText(`${event.title} ${event.factualDescription}`);
   const subjects = new Set(event.subjects || []);
   const formats = new Set(event.formats || []);
-  if (/\bart\b|gallery|installation|visual|drawing|sketch/.test(text)) subjects.add("art");
+  const artMedium = /\bart\b|painting|watercolor|gouache|drawing|sketch|ceramics?|sculpture|printmaking|collage|bookbinding|quilting|pastels?|mixed media/.test(text);
+  const participatoryArt = /\bart making\b|\bsip (?:and )?paint\b|\bpaint and sip\b|\blive drawing\b|\blife drawing\b|\bfigure drawing\b|\bdrawing (?:group|night|session|class|workshop)\b|\bcritique(?:s| session| group| circle)?\b|\bopen studio\b|\bstudio workshop\b|\bhands on\b|\bmake art\b|\bcreate art\b|\bcreative practice\b|\bpublic art class\b|\bart class\b|\bguided studio projects?\b/.test(text)
+    || (artMedium && /\bclass\b|\bcourse\b|\bworkshop\b|\bbeginner\b|\bintroduction to\b|\bdemonstrations?\b|\bexercises?\b|\blearn\b/.test(text));
+  if (artMedium || /gallery|installation|visual/.test(text)) subjects.add("art");
+  if (participatoryArt) {
+    subjects.add("art");
+    subjects.add("art-making");
+  }
   if (/film|cinema|screening|moving image/.test(text)) subjects.add("film");
   if (/poetry|music|sound|open mic/.test(text)) subjects.add("poetry-music");
   if (/technology|tech\b|robot|digital/.test(text)) subjects.add("technology");
@@ -3582,7 +3909,7 @@ function inferSubjectsAndFormats(event) {
   if (/experimental|immersive|interdisciplinary/.test(text)) formats.add("experimental-event");
   if (/lecture|talk|keynote/.test(text)) formats.add("lecture-talk");
   if (/panel/.test(text)) formats.add("panel");
-  if (/workshop|drawing group|drawing night|figure drawing/.test(text)) formats.add("workshop");
+  if (/workshop|drawing group|drawing night|figure drawing/.test(text) || participatoryArt) formats.add("workshop");
   if (/conference|symposium/.test(text)) formats.add("conference");
   event.subjects = [...subjects].filter((value) => SUBJECTS.has(value));
   event.formats = [...formats].filter((value) => FORMATS.has(value));
@@ -3604,7 +3931,7 @@ function readableList(values) {
 
 function generatedPrivateIntelligence(event, profile, discoveredBy) {
   const subjectLabels = {
-    art: "art", film: "film", "poetry-music": "poetry and music", technology: "technology",
+    art: "art", "art-making": "participatory art making", film: "film", "poetry-music": "poetry and music", technology: "technology",
     ai: "AI", "creative-technology": "creative technology", anthropology: "anthropology",
     engineering: "engineering", philosophy: "philosophy",
   };
@@ -3672,15 +3999,40 @@ function withinHorizon(event, days) {
   return start >= now && start <= Date.now() + days * 86_400_000;
 }
 
-async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenance, profile) {
+function scoutRelevance(event, profile) {
+  const weightedSubjects = profile?.weightedSubjects || {};
+  const weightedFormats = profile?.weightedFormats || {};
+  const clamp = (value) => Math.max(0, Math.min(1, Number(value) || 0));
+  const subjectScore = Math.max(0, ...(event.subjects || []).map((value) => clamp(weightedSubjects[value])));
+  const formatScore = Math.max(0, ...(event.formats || []).map((value) => clamp(weightedFormats[value])));
+  const text = normalizeText(`${event.title} ${event.factualDescription} ${event.organizer} ${event.venueName}`);
+  const negativeTerms = (profile?.negativeTerms || []).map(normalizeText).filter(Boolean);
+  const negativeMatches = negativeTerms.filter((term) => text.includes(term));
+  const positiveTerms = (profile?.positiveConcepts || []).map(normalizeText).filter(Boolean);
+  const positiveMatches = positiveTerms.filter((term) => text.includes(term));
+  const conceptScore = positiveMatches.length ? 1 : 0;
+  return {
+    score: negativeMatches.length ? 0 : Number((subjectScore * 0.6 + formatScore * 0.3 + conceptScore * 0.1).toFixed(4)),
+    subjectScore,
+    formatScore,
+    positiveMatches,
+    negativeMatches,
+  };
+}
+
+async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenance, profile, { targetCandidateId = "" } = {}) {
   let proposal = inferSubjectsAndFormats(proposalFromBody(rawProposal));
   if (!proposal.title || !proposal.startsAt || !validDate(proposal.startsAt) || !validHttpUrl(proposal.sourceUrl)) return { skipped: "invalid" };
-  if (!geographicMatch(proposal, profile.geographicRules)) return { skipped: "geography" };
-  if (!withinHorizon(proposal, profile.dateHorizonDays)) return { skipped: "date-horizon" };
-  if (!proposal.subjects.length || !proposal.formats.length) return { skipped: "unclassified" };
+  if (!targetCandidateId && !geographicMatch(proposal, profile.geographicRules)) return { skipped: "geography" };
+  if (!targetCandidateId && !withinHorizon(proposal, profile.dateHorizonDays)) return { skipped: "date-horizon" };
+  if (!targetCandidateId && (!proposal.subjects.length || !proposal.formats.length)) return { skipped: "unclassified" };
+  const relevance = scoutRelevance(proposal, profile);
+  const threshold = Number.isFinite(Number(profile.relevanceThreshold)) ? Number(profile.relevanceThreshold) : 0.68;
+  if (!targetCandidateId && relevance.negativeMatches.length) return { skipped: "negative-term", relevance };
+  if (!targetCandidateId && relevance.score < threshold) return { skipped: "below-threshold", relevance };
   proposal = ensurePrivateIntelligence(proposal, profile, discoveredBy);
-  let existing = null;
-  if (proposal.sourceId && proposal.sourceEventId) {
+  let existing = targetCandidateId ? { id: targetCandidateId } : null;
+  if (!existing && proposal.sourceId && proposal.sourceEventId) {
     existing = await db.prepare("SELECT id FROM calendar_candidates WHERE source_id=? AND source_event_id=?")
       .bind(proposal.sourceId, proposal.sourceEventId).first();
   }
@@ -3705,6 +4057,14 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   if (!existing) return createCandidate(env, proposal, discoveredBy, provenance);
   const current = await getCandidate(db, existing.id, false);
   if (["rejected", "duplicate"].includes(current.status)) return { candidate: current, existing: true };
+  proposal.monitoringEnabled = current.monitoringEnabled;
+  proposal.monitoringCadenceHours = current.monitoringCadenceHours;
+  if (proposal.ticketStatus === "unknown" && current.ticketStatus !== "unknown") {
+    proposal.ticketStatus = current.ticketStatus;
+    proposal.ticketOnSaleAt = current.ticketOnSaleAt;
+    proposal.ticketNotes = current.ticketNotes;
+  }
+  if (rawProposal.scheduleStatus === undefined) proposal.scheduleStatus = current.scheduleStatus;
   proposal = ensurePrivateIntelligence(proposal, profile, discoveredBy, current);
   proposal.relatedLinks = proposal.relatedLinks.length ? proposal.relatedLinks : current.relatedLinks;
   proposal.occurrences = proposal.occurrences.length
@@ -3737,7 +4097,11 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
       `UPDATE calendar_candidates SET verification_state='needs_verification',verification_notes=?,
        status=CASE WHEN status='published' THEN status ELSE 'needs_verification' END,updated_at=? WHERE id=?`
     ).bind(proposal.verificationNotes, now, current.id).run();
-    await appendRevision(db, current.id, candidateSnapshot(proposal), provenance, "Incomplete series result held for verification", discoveredBy);
+    const changes = candidateChangeSet(candidateSnapshot(current), candidateSnapshot(proposal));
+    await appendRevision(db, current.id, candidateSnapshot(proposal), provenance, "Incomplete series result held for verification", discoveredBy, changes);
+    await db.prepare(
+      "UPDATE calendar_candidates SET last_checked_at=?,last_check_status='needs_verification',last_check_summary=?,next_check_at=? WHERE id=?"
+    ).bind(now, "The source returned an incomplete related schedule. Known occurrences were retained.", current.monitoringEnabled ? nextSourceCheckAt(current.monitoringCadenceHours) : null, current.id).run();
     return { candidate: await getCandidate(db, current.id, false), existing: true, heldForVerification: true };
   }
   const before = JSON.stringify(candidateSnapshot(current));
@@ -3752,6 +4116,10 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
       await db.prepare("UPDATE calendar_candidates SET last_verified_at=?,updated_at=? WHERE id=?")
         .bind(isoNow(), isoNow(), current.id).run();
     }
+    const checkedAt = isoNow();
+    await db.prepare(
+      "UPDATE calendar_candidates SET last_checked_at=?,last_check_status='unchanged',last_check_summary='No factual changes detected.',next_check_at=? WHERE id=?"
+    ).bind(checkedAt, current.monitoringEnabled ? nextSourceCheckAt(current.monitoringCadenceHours) : null, current.id).run();
     if (current.publicEntryId) await db.prepare("UPDATE calendar_entries SET last_verified_at=? WHERE id=?").bind(isoNow(), current.publicEntryId).run();
     return { candidate: await getCandidate(db, current.id, false), existing: true, reverified: true };
   }
@@ -3765,10 +4133,163 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   }
   const changedCandidate = await getCandidate(db, current.id, false);
   const changedSnapshot = JSON.stringify(candidateSnapshot(changedCandidate));
+  const changes = candidateChangeSet(candidateSnapshot(current), candidateSnapshot(changedCandidate));
   if (before !== changedSnapshot) {
-    await appendRevision(db, current.id, candidateSnapshot(changedCandidate), provenance, "Detected source change", discoveredBy);
+    await appendRevision(db, current.id, candidateSnapshot(changedCandidate), provenance, changeSummary(changes, "Detected source change"), discoveredBy, changes);
   }
-  return { candidate: changedCandidate, existing: true, changed: before !== changedSnapshot };
+  const checkedAt = isoNow();
+  const checkState = before !== changedSnapshot ? "changes_detected" : "unchanged";
+  const summary = before !== changedSnapshot ? changeSummary(changes) : "No factual changes detected.";
+  await db.prepare(
+    "UPDATE calendar_candidates SET last_checked_at=?,last_check_status=?,last_check_summary=?,next_check_at=? WHERE id=?"
+  ).bind(checkedAt, checkState, summary, current.monitoringEnabled ? nextSourceCheckAt(current.monitoringCadenceHours) : null, current.id).run();
+  return { candidate: await getCandidate(db, current.id, false), existing: true, changed: before !== changedSnapshot, changes };
+}
+
+function candidateCheckSource(candidate, registered = null) {
+  const registryUrlMatches = Boolean(registered && registered.url === candidate.sourceUrl);
+  const adapterConfig = parseJson(registered?.adapter_config_json, {});
+  return {
+    id: candidate.sourceId || registered?.id || "",
+    name: registered?.name || candidate.organizer || candidate.title,
+    url: candidate.sourceUrl,
+    source_type: registryUrlMatches ? registered.source_type : "official_html",
+    trust_level: registered?.trust_level || "official",
+    adapter_key: registered?.adapter_key || "automatic",
+    render_mode: registered?.render_mode || "dynamic-fallback",
+    adapter_config_json: JSON.stringify({
+      ...adapterConfig,
+      maxChildren: 1,
+      eventUrls: [candidate.sourceUrl],
+    }),
+  };
+}
+
+function matchingCandidateProposal(proposals, candidate) {
+  const values = Array.isArray(proposals) ? proposals : [];
+  return values.find((proposal) => proposal.sourceEventId && proposal.sourceEventId === candidate.sourceEventId)
+    || values.find((proposal) => proposal.sourceUrl === candidate.sourceUrl)
+    || values.find((proposal) => normalizeText(proposal.title) === normalizeText(candidate.title)
+      && (!proposal.startsAt || dateKey(proposal.startsAt) === dateKey(candidate.startsAt)))
+    || (values.length === 1 ? values[0] : null);
+}
+
+function mergeCandidateCheckProposal(candidate, extracted) {
+  const merged = { ...candidate, ...extracted };
+  const preserveWhenEmpty = [
+    "sourceId", "sourceEventId", "sourceUrl", "ticketUrl", "discoveryUrl", "organizerUrl", "venueUrl",
+    "sourceAuthority", "sourceResolutionNotes", "title", "organizer", "factualDescription", "eventStructure",
+    "accessStatus", "accessNotes", "dateKind", "startsAt", "endsAt", "timezone", "venueName", "venueAddress",
+    "city", "region", "ticketOnSaleAt", "ticketNotes",
+  ];
+  for (const field of preserveWhenEmpty) if (!asString(merged[field])) merged[field] = candidate[field];
+  for (const field of ["audiences", "subjects", "formats", "relatedLinks", "occurrences"]) {
+    if (!Array.isArray(merged[field]) || !merged[field].length) merged[field] = candidate[field];
+  }
+  merged.sourceId = candidate.sourceId || merged.sourceId;
+  merged.sourceEventId = candidate.sourceEventId || merged.sourceEventId;
+  merged.monitoringEnabled = candidate.monitoringEnabled;
+  merged.monitoringCadenceHours = candidate.monitoringCadenceHours;
+  if (!extracted.scheduleStatus) merged.scheduleStatus = candidate.scheduleStatus;
+  if (!extracted.ticketStatus || extracted.ticketStatus === "unknown") {
+    merged.ticketStatus = candidate.ticketStatus;
+    merged.ticketOnSaleAt = candidate.ticketOnSaleAt;
+    merged.ticketNotes = candidate.ticketNotes;
+  }
+  return merged;
+}
+
+async function extractCandidateCheckProposal(env, candidate, registered) {
+  const source = candidateCheckSource(candidate, registered);
+  const response = await fetchExternalSource(source.url);
+  if (!response.ok) {
+    const error = new Error(`Source returned HTTP ${response.status}.`);
+    error.checkStatus = "source_unavailable";
+    throw error;
+  }
+  const staticText = await completeSourcePayload(source, await boundedResponseText(response));
+  const adapterKey = sourceAdapterKey(source);
+  let bundle;
+  if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) {
+    bundle = await extractTicketPlatformEvents(env, staticText, source, adapterKey, { retrieval: "static", browserMs: 0 });
+  } else if (adapterKey === "out_of_hand" && registered?.url === candidate.sourceUrl) {
+    bundle = await extractOutOfHandSeries(env, staticText, source);
+  } else {
+    let proposals = extractSourceEvents(staticText, source).map(inferSubjectsAndFormats);
+    let retrieval = source.source_type === "json" ? "api" : "static";
+    let browserMs = 0;
+    if (!proposals.length && source.render_mode === "dynamic-fallback" && env.BROWSER?.quickAction) {
+      const rendered = await browserContent(env, source.url);
+      proposals = extractSourceEvents(rendered.text, source).map(inferSubjectsAndFormats);
+      retrieval = "browser";
+      browserMs = rendered.browserMs;
+    }
+    bundle = { proposals, diagnostics: { retrieval, browserMs, completeness: proposals.length ? "complete" : "needs_verification" } };
+  }
+  const proposal = matchingCandidateProposal(bundle.proposals, candidate);
+  if (!proposal) {
+    const error = new Error("The source was reachable, but the Scout could not recover this event's current facts.");
+    error.checkStatus = "needs_verification";
+    throw error;
+  }
+  return { proposal: mergeCandidateCheckProposal(candidate, proposal), diagnostics: bundle.diagnostics || {} };
+}
+
+async function recordCandidateCheckFailure(db, candidate, status, summary) {
+  const checkedAt = isoNow();
+  await db.prepare(
+    "UPDATE calendar_candidates SET last_checked_at=?,last_check_status=?,last_check_summary=?,next_check_at=?,updated_at=? WHERE id=?"
+  ).bind(
+    checkedAt, status, asString(summary).slice(0, 500),
+    candidate.monitoringEnabled ? nextSourceCheckAt(candidate.monitoringCadenceHours) : null,
+    checkedAt, candidate.id,
+  ).run();
+  return getCandidate(db, candidate.id);
+}
+
+async function recheckCandidateSource(env, db, id) {
+  const candidate = await getCandidate(db, id, false);
+  if (!candidate) return { error: "Candidate not found.", status: 404 };
+  if (!validHttpUrl(candidate.sourceUrl)) return { error: "An event-specific public source URL is required before rechecking.", status: 409 };
+  const registered = candidate.sourceId
+    ? await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(candidate.sourceId).first()
+    : null;
+  try {
+    const extracted = await extractCandidateCheckProposal(env, candidate, registered);
+    const profileRow = await db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first();
+    const result = await upsertScoutProposal(
+      env, db, extracted.proposal, "source_monitor",
+      [{ url: candidate.sourceUrl, role: "event_recheck", retrievedAt: isoNow(), diagnostics: extracted.diagnostics }],
+      normalizeProfile(profileRow), { targetCandidateId: candidate.id },
+    );
+    if (result.skipped) {
+      const saved = await recordCandidateCheckFailure(db, candidate, "needs_verification", `The source response could not be safely applied (${result.skipped}).`);
+      return { candidate: saved, checkStatus: "needs_verification", summary: saved.lastCheckSummary, changes: [] };
+    }
+    const saved = await getCandidate(db, candidate.id);
+    return { candidate: saved, checkStatus: saved.lastCheckStatus, summary: saved.lastCheckSummary, changes: result.changes || [] };
+  } catch (error) {
+    const checkStatus = SOURCE_CHECK_STATUSES.has(error.checkStatus) ? error.checkStatus : "source_unavailable";
+    const saved = await recordCandidateCheckFailure(db, candidate, checkStatus, error.message || "The source check failed.");
+    return { candidate: saved, checkStatus, summary: saved.lastCheckSummary, changes: [] };
+  }
+}
+
+async function monitorDueCandidates(env, db, scheduledTime) {
+  const now = new Date(Number(scheduledTime) || Date.now()).toISOString();
+  const rows = await db.prepare(
+    `SELECT id FROM calendar_candidates
+     WHERE monitoring_enabled=1 AND status IN ('candidate','published','needs_verification')
+       AND source_url<>'' AND (next_check_at IS NULL OR next_check_at<=?)
+       AND (ends_at IS NULL OR substr(ends_at,1,10)>=substr(?,1,10))
+     ORDER BY COALESCE(next_check_at,'') ASC,updated_at ASC LIMIT 4`
+  ).bind(now, now).all();
+  const outcomes = [];
+  for (const row of rows.results || []) {
+    const result = await recheckCandidateSource(env, db, row.id);
+    outcomes.push({ candidateId: row.id, status: result.checkStatus || "needs_verification", summary: result.summary || result.error || "" });
+  }
+  return { checked: outcomes.length, outcomes };
 }
 
 async function monitorSources(env, db, profile, sourceId = "") {
@@ -3788,7 +4309,7 @@ async function monitorSources(env, db, profile, sourceId = "") {
       const response = await fetchExternalSource(source.url);
       const platformFallback = PLATFORM_SOURCE_ADAPTERS.has(adapterKey) && source.render_mode === "dynamic-fallback";
       if (!response.ok && !platformFallback) throw new Error(`HTTP ${response.status}`);
-      const text = response.ok ? await completeLocalistPayload(source, await boundedResponseText(response)) : "";
+      const text = response.ok ? await completeSourcePayload(source, await boundedResponseText(response)) : "";
       let bundle;
       if (adapterKey === "out_of_hand") {
         bundle = await extractOutOfHandSeries(env, text, source);
@@ -3815,7 +4336,9 @@ async function monitorSources(env, db, profile, sourceId = "") {
       const fingerprint = await sha256(text || JSON.stringify(bundle.proposals.map((proposal) => ({
         id: proposal.sourceEventId, title: proposal.title, startsAt: proposal.startsAt, endsAt: proposal.endsAt,
       }))));
-      const proposals = bundle.proposals.slice(0, profile.perRunLimit);
+      const sourceConfig = parseJson(source.adapter_config_json, {});
+      const sourceLimit = Math.min(Math.max(Number(sourceConfig.perRunLimit) || profile.perRunLimit, 1), 100);
+      const proposals = bundle.proposals.slice(0, sourceLimit);
       const emptyWarning = proposals.length ? "" : "Source retrieved successfully, but no event proposals were extracted.";
       if (emptyWarning) warningCount += 1;
       const sourceOutcome = {
@@ -3884,6 +4407,7 @@ function scoutSchema() {
     title: { type: "string" }, factualDescription: { type: "string" }, dateKind: { type: "string", enum: ["timed", "all_day"] },
     startsAt: { type: "string" }, endsAt: { type: "string" }, timezone: { type: "string" }, venueName: { type: "string" },
     venueAddress: { type: "string" }, sourceUrl: { type: "string" }, ticketUrl: { type: "string" },
+    ticketStatus: { type: "string", enum: [...TICKET_STATUSES] }, ticketOnSaleAt: { type: "string" }, ticketNotes: { type: "string" },
     accessStatus: { type: "string", enum: [...ACCESS_STATUSES] }, accessNotes: { type: "string" },
     audiences: { type: "array", items: { type: "string" } },
     status: { type: "string", enum: [...OCCURRENCE_STATUSES] },
@@ -3891,6 +4415,7 @@ function scoutSchema() {
   };
   const eventProperties = {
     sourceUrl: { type: "string" }, ticketUrl: { type: "string" }, discoveryUrl: { type: "string" }, organizerUrl: { type: "string" }, venueUrl: { type: "string" },
+    scheduleStatus: { type: "string", enum: [...SCHEDULE_STATUSES] }, ticketStatus: { type: "string", enum: [...TICKET_STATUSES] }, ticketOnSaleAt: { type: "string" }, ticketNotes: { type: "string" },
     sourceAuthority: { type: "string", enum: [...SOURCE_AUTHORITIES] }, sourceResolutionNotes: { type: "string" }, sourceEventId: { type: "string" }, title: { type: "string" },
     relatedLinks: { type: "array", items: { type: "object", properties: { label: { type: "string" }, url: { type: "string" }, role: { type: "string", enum: [...LINK_ROLES] } }, required: ["label", "url", "role"], additionalProperties: false } },
     flyerUrl: { type: "string" },
@@ -3936,6 +4461,8 @@ async function requestOpenAiEvents(env, profile, { query, domains = [], sourceDa
       "Use explicit UTC offsets for timed dates and YYYY-MM-DD for all-day dates. Omit anything without a confirmable date.",
       "Capture attendance eligibility as a public fact. Set accessStatus to public only when the source explicitly says Public, open to all, or equivalent; restricted when attendance is limited to students, alumni, faculty, staff, members, registrants, or invitees; and unknown when the source does not establish eligibility. Copy the named eligible groups into audiences and write a concise factual accessNotes sentence for restricted events. Never assume a public webpage means a public event.",
       "Classify eventStructure as single, series, or exhibition. Keep one exhibition or multi-program series as the parent proposal. Put its opening receptions, artist talks, mixers, screenings, performances, workshops, panels, and lectures in occurrences instead of returning duplicate top-level events. A date marked TBD may be retained only as an occurrence with status tbd and empty startsAt. A series parent range is metadata, never a continuous public event.",
+      "Treat participatory public art programs as art-making: sip-and-paint programs, live or figure drawing, critique groups, open studios, hands-on workshops, and art classes open to the public. Classify these with the art-making subject and workshop format when supported by the source.",
+      "Capture scheduleStatus and ticket availability as factual fields. Use postponed, rescheduled, cancelled, or moved_online only when the source states it. Use ticketStatus to distinguish not yet on sale, on sale, sold out, registration open or closed, and no ticket required; otherwise return unknown.",
       "For every event, generate concise private Studio intelligence: privateRationale explains why it fits the supplied Scout Profile; attendanceUse states the best use for inspiration, attendance or networking, and future programming research; programmingIdeas identifies the concrete programming model worth studying; potentialCollaborators names only organizers, venues, artists, speakers, or groups supported by the source. Keep this intelligence out of factualDescription and all public-facing fields.",
       platform ? `This pass is limited to ${platform}. Every event must include its ${platform} post in socialEvidence.` : "For non-social sources return an empty socialEvidence array.",
     ].join(" "),
@@ -4377,10 +4904,12 @@ export async function runDueCalendarScout(env, scheduledTime = Date.now()) {
     const row = await db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first();
     if (!row || row.enabled !== 1) return { skipped: "disabled" };
     const now = Number(scheduledTime) || Date.now();
+    const monitoring = await monitorDueCandidates(env, db, now);
     const connectors = (await db.prepare("SELECT * FROM calendar_scout_connectors WHERE enabled=1").all()).results || [];
     const due = connectors.filter((connector) => !connector.last_attempt_at || now - Date.parse(connector.last_attempt_at) >= Number(connector.cadence_hours || 24) * 3_600_000).map((connector) => connector.id);
-    if (!due.length) return { skipped: "not-due" };
-    return runCalendarScout(env, { runKind: "scheduled", channels: due });
+    if (!due.length) return monitoring.checked ? { status: "completed", monitoring } : { skipped: "not-due" };
+    const result = await runCalendarScout(env, { runKind: "scheduled", channels: due });
+    return { ...result, monitoring };
   } catch (error) {
     console.error(JSON.stringify({ event: "calendar_scout_schedule_failed", error: asString(error.message) }));
     return { skipped: "unavailable", error: asString(error.message) };

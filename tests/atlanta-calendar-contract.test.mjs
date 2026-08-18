@@ -85,14 +85,14 @@ async function admin(db, path, options = {}) {
 
 test("calendar migrations preserve seeded private candidates, verified official sources, and no public curated snapshots", () => {
   const db = database();
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 12);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE verification_state='verified'").get().count, 9);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 13);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE verification_state='verified'").get().count, 10);
   assert.deepEqual(
     { ...db.prepare("SELECT status,starts_at,verification_state FROM calendar_candidates WHERE id='cal_candidate_synergy'").get() },
     { status:"needs_verification", starts_at:null, verification_state:"needs_verification" },
   );
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE pending_revision_id<>''").get().count, 11);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE pending_revision_id<>''").get().count, 12);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE id LIKE 'cal_source_gsu_%'").get().count, 15);
   assert.deepEqual(
     { ...db.prepare("SELECT adapter_key,render_mode,source_type,trust_level FROM calendar_sources WHERE url='https://www.eventbrite.com/d/ga--atlanta/events/'").get() },
@@ -136,6 +136,20 @@ test("calendar migrations preserve seeded private candidates, verified official 
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_gulch_we_hold_truths' AND starts_at='2026-09-29T18:00:00-04:00'").get().count, 2);
   assert.equal(db.prepare("SELECT COUNT(DISTINCT source_event_id) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 8);
   assert.equal(db.prepare("SELECT enabled FROM calendar_sources WHERE id='cal_source_out_of_hand_truths'").get().enabled, 1);
+  assert.deepEqual(
+    { ...db.prepare("SELECT source_id,event_structure,date_kind,starts_at,ends_at,subjects_json,formats_json,status,verification_state,monitoring_enabled FROM calendar_candidates WHERE id='cal_candidate_high_study_hall_2026'").get() },
+    { source_id:"cal_source_high_art_making", event_structure:"series", date_kind:"date_range", starts_at:"2026-08-23", ends_at:"2026-09-27", subjects_json:'["art","art-making"]', formats_json:'["workshop"]', status:"candidate", verification_state:"verified", monitoring_enabled:1 },
+  );
+  assert.deepEqual(
+    db.prepare("SELECT source_event_id,starts_at,ends_at,source_url FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_high_study_hall_2026' ORDER BY starts_at").all().map((row) => ({ ...row })),
+    [
+      { source_event_id:"study-hall-august", starts_at:"2026-08-23T13:00:00-04:00", ends_at:"2026-08-23T15:30:00-04:00", source_url:"https://high.org/event/study-hall-august/" },
+      { source_event_id:"study-hall-september", starts_at:"2026-09-27T13:00:00-04:00", ends_at:"2026-09-27T15:30:00-04:00", source_url:"https://high.org/event/study-hall-september/" },
+    ],
+  );
+  const artMakingProfile = db.prepare("SELECT weighted_subjects_json,positive_concepts_json FROM calendar_scout_profiles WHERE id='atlanta-default'").get();
+  assert.equal(JSON.parse(artMakingProfile.weighted_subjects_json)["art-making"], 1);
+  assert.equal(JSON.parse(artMakingProfile.positive_concepts_json).includes("figure drawing"), true);
   assert.deepEqual(
     { ...db.prepare("SELECT name,route FROM construct_pathways WHERE id='path-events-03'").get() },
     { name:"Atlanta calendar", route:"/calendar/" },
@@ -197,6 +211,7 @@ test("attendance migration corrects an existing published snapshot and advances 
 
 test("multi-day timed exhibitions become on-view ranges instead of continuous daily events", async () => {
   const db = databaseThrough("0139_calendar_public_access_backfill.sql");
+  db.exec(readFileSync(join(ROOT, "migrations", "0142_calendar_source_rechecks.sql"), "utf8"));
   const created = await admin(db, "/candidates", {
     method:"POST",
     body:{
@@ -226,15 +241,25 @@ test("multi-day timed exhibitions become on-view ranges instead of continuous da
   );
 });
 
-test("0131 preserves calendar data and stages every new social connector disabled", async () => {
+test("social scout preserves calendar data, stages connectors disabled, and lists configured accounts", async () => {
   const db = database();
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 12);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 13);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_scout_connectors WHERE id IN ('threads_api','instagram_api','threads_web','instagram_web','tiktok_web') AND enabled=0").get().count, 5);
   assert.equal(db.prepare("SELECT discovery_channel FROM calendar_candidates LIMIT 1").get().discovery_channel, "");
   const root = await admin(db, "");
   const payload = await root.json();
-  assert.deepEqual(payload.socialSources, []);
+  assert.deepEqual(payload.socialSources.map((source) => ({
+    platform:source.platform,
+    handle:source.handle,
+    profileUrl:source.profileUrl,
+    enabled:source.enabled,
+  })), [{
+    platform:"instagram",
+    handle:"culturexcanvasartshow",
+    profileUrl:"https://www.instagram.com/culturexcanvasartshow/",
+    enabled:true,
+  }]);
   assert.equal(payload.connectors.find((item) => item.id === "threads_api").status, "disabled");
   assert.equal(payload.connectors.find((item) => item.id === "general_web").status, "unavailable");
   assert.equal(payload.profile.socialSettings.tiktok.perRunLimit, 6);
@@ -1147,7 +1172,7 @@ test("Eyedrum's Squarespace calendar groups weekly drawing listings into one pri
       venue_url:sourceUrl, source_authority:"official_calendar", title:"High Contrast Drawing Group",
       event_structure:"series", date_kind:"date_range", starts_at:"2026-08-18", ends_at:"2026-08-25",
       venue_name:"eyedrum", venue_address:"515 Ralph David Abernathy Boulevard Southwest Atlanta, GA, 30312 United States",
-      subjects:["art"], formats:["workshop"], status:"candidate", verification_state:"verified",
+      subjects:["art","art-making"], formats:["workshop"], status:"candidate", verification_state:"verified",
     });
     assert.deepEqual(
       db.prepare(`SELECT source_event_id,title,starts_at,ends_at,source_url,status,verification_state
@@ -1180,6 +1205,76 @@ test("Eyedrum's Squarespace calendar groups weekly drawing listings into one pri
     assert.doesNotMatch(feed, /DTSTART;VALUE=DATE:20260818/);
     assert.match(feed, /DTSTART:20260818T230000Z/);
     assert.match(feed, /DTSTART:20260825T230000Z/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("High Art Making monitoring groups month-specific Study Hall pages and classifies participatory programs", async () => {
+  const db = database();
+  db.exec("DELETE FROM calendar_candidates WHERE id='cal_candidate_high_study_hall_2026'");
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.exec("UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_high_art_making'");
+  const sourceUrl = "https://high.org/event-category/for-adults/art-making/";
+  const block = ({ date, href }) => `<div id="at-text-images-block_${date.replace(/\W/g,"")}" class="at-text-images">
+    <h3 class="at-text-images-subheader">${date} | 1 - 3:30 p.m.</h3>
+    <h2 class="at-text-images-header">Study Hall: A Creative Connection Space for Working Artists</h2>
+    <div class="entry-summary">Study Hall is a monthly work session that invites Atlanta artists to create, experiment, and connect. It offers a low barrier space for self-directed creative practice and peer exchange.</div>
+    <a href="${href}" class="at-text-images-cta-button">View Details</a>
+  </div>`;
+  const html = `<html><body>${block({ date:"August 23, 2026", href:"https://high.org/event/study-hall-august/" })}${block({ date:"September 27, 2026", href:"https://high.org/event/study-hall-september/" })}</body></html>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), sourceUrl);
+    return new Response(html, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_high_art_making" });
+    assert.equal(run.status, "completed", JSON.stringify(run.outcomes));
+    assert.equal(run.candidates, 1);
+    const candidate = db.prepare("SELECT id,source_event_id,source_url,event_structure,date_kind,starts_at,ends_at,subjects_json,formats_json,status FROM calendar_candidates WHERE source_id='cal_source_high_art_making'").get();
+    assert.deepEqual({
+      source_event_id:candidate.source_event_id, source_url:candidate.source_url, event_structure:candidate.event_structure,
+      date_kind:candidate.date_kind, starts_at:candidate.starts_at, ends_at:candidate.ends_at,
+      subjects:JSON.parse(candidate.subjects_json), formats:JSON.parse(candidate.formats_json), status:candidate.status,
+    }, {
+      source_event_id:"high-art-making-series-study-hall-a-creative-connection-space-for-working-artists",
+      source_url:sourceUrl, event_structure:"series", date_kind:"date_range", starts_at:"2026-08-23", ends_at:"2026-09-27",
+      subjects:["art","art-making"], formats:["workshop"], status:"candidate",
+    });
+    assert.deepEqual(
+      db.prepare("SELECT source_event_id,starts_at,ends_at,source_url FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at").all(candidate.id).map((row) => ({ ...row })),
+      [
+        { source_event_id:"study-hall-august", starts_at:"2026-08-23T13:00:00-04:00", ends_at:"2026-08-23T15:30:00-04:00", source_url:"https://high.org/event/study-hall-august/" },
+        { source_event_id:"study-hall-september", starts_at:"2026-09-27T13:00:00-04:00", ends_at:"2026-09-27T15:30:00-04:00", source_url:"https://high.org/event/study-hall-september/" },
+      ],
+    );
+    const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+    assert.equal(publicPayload.subjects.includes("art-making"), true);
+    assert.equal(publicPayload.events.some((event) => event.title.includes("Study Hall")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Scout relevance threshold deterministically rejects weakly weighted direct-source proposals", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.exec(`UPDATE calendar_scout_profiles SET weighted_subjects_json='{"art":0.1}',weighted_formats_json='{"workshop":0.1}',positive_concepts_json='[]',negative_terms_json='[]',relevance_threshold=0.68 WHERE id='atlanta-default'`);
+  db.exec(`INSERT INTO calendar_sources(id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
+    VALUES('cal_source_threshold_test','Threshold Test','https://official.example/threshold','official_html','official',1,24,'automatic','static','{}',datetime('now'),datetime('now'))`);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(`<script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org", "@type":"Event", "@id":"weak-art-workshop", name:"Neighborhood Art Workshop",
+    description:"A basic art workshop.", startDate:"2026-10-14T18:00:00-04:00", endDate:"2026-10-14T20:00:00-04:00",
+    url:"https://official.example/threshold/event", location:{ name:"Atlanta Arts Center", address:{ addressLocality:"Atlanta", addressRegion:"GA" } },
+  })}</script>`, { status:200, headers:{ "content-type":"text/html" } });
+  try {
+    const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_threshold_test" });
+    assert.equal(run.status, "completed");
+    assert.equal(run.candidates, 0);
+    assert.equal(run.outcomes[0].sources[0].skipReasons["below-threshold"], 1);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE source_id='cal_source_threshold_test'").get().count, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1692,6 +1787,93 @@ test("official-source scouting captures at most one private R2 flyer and private
   }
 });
 
+test("per-event source rechecks hold published changes for approval and retain facts when the source fails", async () => {
+  const db = database();
+  const sourceUrl = "https://official.example/events/source-check";
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Source Check Exhibition", organizer:"Official Arts", factualDescription:"An exhibition with timed entry.",
+      sourceUrl, organizerUrl:"https://official.example/", sourceAuthority:"organizer_event",
+      dateKind:"timed", startsAt:"2026-11-12T18:00:00-05:00", endsAt:"2026-11-12T20:00:00-05:00",
+      venueName:"Official Arts", venueAddress:"12 Source Way, Atlanta, GA", city:"Atlanta", region:"GA",
+      subjects:["art"], formats:["exhibition"], verificationState:"verified", scheduleStatus:"scheduled",
+      ticketUrl:"https://official.example/tickets/source-check", ticketStatus:"not_yet_on_sale",
+      ticketOnSaleAt:"2026-10-01T10:00:00-04:00", monitoringEnabled:true, monitoringCadenceHours:12,
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const candidate = (await created.json()).candidate;
+  assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 200);
+  const publicBefore = db.prepare("SELECT starts_at,schedule_status,ticket_status,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(`<script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org", "@type":"Event", name:"Source Check Exhibition",
+    url:sourceUrl, description:"An exhibition with timed entry.", eventStatus:"https://schema.org/EventPostponed",
+    startDate:"2026-11-19T18:00:00-05:00", endDate:"2026-11-19T20:00:00-05:00",
+    organizer:{ name:"Official Arts", url:"https://official.example/" },
+    location:{ name:"Official Arts", url:"https://official.example/", address:{ streetAddress:"12 Source Way", addressLocality:"Atlanta", addressRegion:"GA" } },
+    offers:{ url:"https://official.example/tickets/source-check", availability:"https://schema.org/InStock", validFrom:"2026-10-01T10:00:00-04:00" },
+  })}</script>`, { status:200, headers:{ "content-type":"text/html" } });
+  try {
+    const checked = await admin(db, `/candidates/${candidate.id}/recheck`, { method:"POST", body:{} });
+    assert.equal(checked.status, 200, await checked.clone().text());
+    const payload = await checked.json();
+    assert.equal(payload.checkStatus, "changes_detected");
+    assert.equal(payload.candidate.status, "published");
+    assert.ok(payload.candidate.pendingRevisionId);
+    assert.equal(payload.candidate.scheduleStatus, "postponed");
+    assert.equal(payload.candidate.ticketStatus, "on_sale");
+    assert.equal(payload.candidate.startsAt, "2026-11-19T18:00:00-05:00");
+    assert.ok(payload.candidate.nextCheckAt);
+    assert.deepEqual(
+      { ...db.prepare("SELECT starts_at,schedule_status,ticket_status,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id) },
+      { ...publicBefore },
+    );
+    const revision = db.prepare("SELECT change_set_json FROM calendar_candidate_revisions WHERE id=?").get(payload.candidate.pendingRevisionId);
+    const changedFields = JSON.parse(revision.change_set_json).map((change) => change.field);
+    assert.ok(changedFields.includes("startsAt"));
+    assert.ok(changedFields.includes("scheduleStatus"));
+    assert.ok(changedFields.includes("ticketStatus"));
+
+    assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 200);
+    assert.deepEqual(
+      { ...db.prepare("SELECT starts_at,schedule_status,ticket_status,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id) },
+      { starts_at:"2026-11-19T18:00:00-05:00", schedule_status:"postponed", ticket_status:"on_sale", sequence:1 },
+    );
+    const publicEvent = (await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json()).events.find((event) => event.title === candidate.title);
+    assert.equal(publicEvent.scheduleStatus, "postponed");
+    assert.equal(publicEvent.ticketStatus, "on_sale");
+
+    globalThis.fetch = async () => new Response("temporarily unavailable", { status:503 });
+    const unavailable = await (await admin(db, `/candidates/${candidate.id}/recheck`, { method:"POST", body:{} })).json();
+    assert.equal(unavailable.checkStatus, "source_unavailable");
+    assert.equal(unavailable.candidate.startsAt, "2026-11-19T18:00:00-05:00");
+    assert.equal(unavailable.candidate.pendingRevisionId, "");
+    assert.equal(db.prepare("SELECT starts_at FROM calendar_entries WHERE candidate_id=?").get(candidate.id).starts_at, "2026-11-19T18:00:00-05:00");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Calendar Studio exposes source rechecks, update review, monitoring, and ticket state", () => {
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  const publicJs = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
+  assert.match(studio,/\["updates","Updates"\]/);
+  assert.match(studio,/candidate\.status === "published" && Boolean\(candidate\.pendingRevisionId\)/);
+  assert.match(studio,/data-action="recheck"/);
+  assert.match(studio,/\/recheck/);
+  assert.match(studio,/candidateMonitoringEnabled/);
+  assert.match(studio,/candidateTicketStatus/);
+  assert.match(studio,/revision-changes/);
+  assert.match(studioCss,/\.source-check-state/);
+  assert.match(studioCss,/border:5px solid/);
+  assert.match(publicJs,/calendar-event-ticket/);
+  assert.match(publicJs,/Tickets On Sale/);
+});
+
 test("Studio verification links and the public expandable flyer stay inline without detail-page routes", () => {
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
   const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
@@ -1718,7 +1900,7 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(studio,/Run This Source/);
   assert.match(studio,/Eventbrite discovery/);
   assert.match(studio,/Posh discovery/);
-  assert.match(studio,/nextReview:true, excludeId:approvedId, reviewIndex:reviewIndex/);
+  assert.match(studio,/nextQueue:queueName, excludeId:approvedId, reviewIndex:reviewIndex/);
   assert.match(studio,/Moving to the next review/);
   assert.doesNotMatch(studio,/state\.filter="published"/);
   assert.match(publicCalendar,/<details class="calendar-event-flyer">/);
@@ -1742,4 +1924,16 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.doesNotMatch(publicCalendar,/href="\/calendar\/events\//);
   assert.match(publicCss,/@media \(max-width:390px\)/);
   assert.match(publicCss,/\.calendar-event-access/);
+});
+
+test("Calendar Studio reuses a saved credential without showing the unlock controls", () => {
+  const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  assert.match(studioHtml,/<section class="auth-panel" id="authPanel" hidden>/);
+  assert.match(studio,/if \(token\) \{ authPanel\.hidden=true; connect\(\); \} else \{ authPanel\.hidden=false; \}/);
+  assert.match(studio,/tokenInput\.value=""; authPanel\.hidden=true; app\.hidden=false/);
+  assert.match(studio,/error\.status = response\.status/);
+  assert.match(studio,/localStorage\.removeItem\(TOKEN_KEY\)/);
+  assert.match(studio,/app\.hidden=true; authPanel\.hidden=false/);
+  assert.doesNotMatch(studio,/tokenInput\.value = token/);
 });
