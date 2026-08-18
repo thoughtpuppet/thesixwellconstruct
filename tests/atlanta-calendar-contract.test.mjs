@@ -94,6 +94,33 @@ test("0129 seeds six private candidates, verified official sources, and no publi
   );
 });
 
+test("0131 preserves calendar data and stages every new social connector disabled", async () => {
+  const db = database();
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 6);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_scout_connectors WHERE id IN ('threads_api','instagram_api','threads_web','instagram_web','tiktok_web') AND enabled=0").get().count, 5);
+  assert.equal(db.prepare("SELECT discovery_channel FROM calendar_candidates LIMIT 1").get().discovery_channel, "");
+  const root = await admin(db, "");
+  const payload = await root.json();
+  assert.deepEqual(payload.socialSources, []);
+  assert.equal(payload.connectors.find((item) => item.id === "threads_api").status, "disabled");
+  assert.equal(payload.connectors.find((item) => item.id === "general_web").status, "unavailable");
+  assert.equal(payload.profile.socialSettings.tiktok.perRunLimit, 6);
+});
+
+test("social source registry validates platform URLs and exact-handle trust remains explicit", async () => {
+  const db = database();
+  const invalid = await admin(db, "/social-sources", { method:"POST", body:{ platform:"threads", handle:"atlarts", profileUrl:"https://instagram.com/atlarts" } });
+  assert.equal(invalid.status, 400);
+  const created = await admin(db, "/social-sources", { method:"POST", body:{ platform:"threads", handle:"@atlarts", name:"ATL Arts", profileUrl:"https://www.threads.net/@atlarts", trustLevel:"official", enabled:false } });
+  assert.equal(created.status, 201, await created.clone().text());
+  const source = (await created.json()).socialSource;
+  assert.equal(source.handle, "atlarts");
+  assert.equal(source.trustLevel, "official");
+  assert.equal(source.enabled, false);
+  assert.equal((await admin(db, `/social-sources/${source.id}`, { method:"PATCH", body:{ enabled:true, cadenceHours:12 } })).status, 200);
+});
+
 test("admin authentication protects candidates and public APIs never expose private review fields", async () => {
   const db = database();
   assert.equal((await handleCalendarAdminApi(request("/api/admin/calendar/candidates"), env(db))).status, 401);
@@ -109,6 +136,58 @@ test("admin authentication protects candidates and public APIs never expose priv
 
   const unsafeSource = await admin(db, "/sources", { method:"POST", body:{ name:"Unsafe", url:"http://127.0.0.1/internal" } });
   assert.equal(unsafeSource.status, 400);
+});
+
+test("Instagram remains private discovery provenance and cannot become a public event or ticket link", async () => {
+  const db = database();
+  const instagramUrl = "https://www.instagram.com/p/example-atlanta-event/";
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Instagram-discovered Atlanta Exhibition", organizer:"Atlanta Gallery", factualDescription:"An Atlanta exhibition opening.",
+      sourceUrl:instagramUrl, ticketUrl:"https://instagram.com/p/example-ticket/", dateKind:"timed", startsAt:"2026-11-14T19:00:00-05:00",
+      endsAt:"2026-11-14T21:00:00-05:00", venueName:"Atlanta Gallery", venueAddress:"1 Art Way, Atlanta, GA",
+      subjects:["art"], formats:["exhibition"], verificationState:"verified",
+      relatedLinks:[{ label:"Instagram post", url:instagramUrl, provenanceUrl:instagramUrl, includePublic:true }],
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const candidate = (await created.json()).candidate;
+  assert.equal(candidate.status, "needs_verification");
+  assert.equal(candidate.verificationState, "needs_verification");
+  assert.equal(candidate.ticketUrl, "");
+  assert.match(candidate.verificationNotes, /private discovery provenance/i);
+  assert.equal(candidate.relatedLinks.every((link) => link.includePublic === false), true);
+  assert.equal(candidate.relatedLinks.some((link) => link.url === instagramUrl), true);
+
+  const approval = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
+  assert.equal(approval.status, 409);
+  const approvalPayload = await approval.json();
+  assert.match(approvalPayload.errors.join(" "), /Instagram.*publication requires/i);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+});
+
+test("a reliable event source keeps an Instagram ticket post private instead of publishing it", async () => {
+  const db = database();
+  const instagramTicket = "https://www.instagram.com/p/example-ticket/";
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Officially sourced Atlanta Talk", organizer:"Atlanta Arts Center", factualDescription:"A talk about contemporary art.",
+      sourceUrl:"https://official.example/events/atlanta-talk", ticketUrl:instagramTicket, dateKind:"timed", startsAt:"2026-11-18T18:00:00-05:00",
+      endsAt:"2026-11-18T20:00:00-05:00", venueName:"Atlanta Arts Center", venueAddress:"10 Arts Way, Atlanta, GA",
+      subjects:["art"], formats:["lecture-talk"], verificationState:"verified",
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const candidate = (await created.json()).candidate;
+  assert.equal(candidate.verificationState, "verified");
+  assert.equal(candidate.ticketUrl, "");
+  assert.deepEqual(candidate.relatedLinks.map((link) => ({ url:link.url, includePublic:link.includePublic })), [{ url:instagramTicket, includePublic:false }]);
+  assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 200);
+  const publicEvent = (await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json()).events.find((event) => event.title === candidate.title);
+  assert.equal(publicEvent.ticketUrl, "");
+  assert.deepEqual(publicEvent.relatedLinks, []);
 });
 
 test("approval, filters, single-event ICS, subscription feeds, rejection, and cancellation preserve lifecycle isolation", async () => {
@@ -347,15 +426,178 @@ test("OpenAI discovery uses web_search structured output, stores citations, and 
     const run = await runCalendarScout(runtime, { runKind:"manual", includeWeb:true });
     assert.equal(openAiCalls, 1);
     assert.equal(openAiBody.model, "gpt-5.6-terra");
-    assert.deepEqual(openAiBody.tools, [{ type:"web_search" }]);
+    assert.equal(openAiBody.tools[0].type, "web_search");
+    assert.equal(openAiBody.tools[0].user_location.city, "Atlanta");
+    assert.equal(openAiBody.tool_choice, "required");
     assert.equal(openAiBody.text.format.type, "json_schema");
     assert.match(openAiBody.instructions, /untrusted data/i);
+    assert.match(openAiBody.instructions, /verification badge.*never establishes trust/i);
     assert.equal(run.candidates, 1);
     assert.equal(db.prepare("SELECT status FROM calendar_candidates WHERE title='Atlanta AI + Art Panel'").get().status, "candidate");
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta AI + Art Panel'").get().count, 0);
     const history = db.prepare("SELECT citations_json,openai_usage_json FROM calendar_scout_runs WHERE id=?").get(run.runId);
     assert.match(history.citations_json, /official\.example/);
     assert.match(history.openai_usage_json, /input_tokens/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Threads native discovery trusts only an exact official handle and keeps post evidence private", async () => {
+  const db = database();
+  await admin(db, "/social-sources", { method:"POST", body:{ platform:"threads", handle:"atlarts", name:"ATL Arts", profileUrl:"https://www.threads.net/@atlarts", trustLevel:"official", enabled:true } });
+  await admin(db, "/connectors/threads_api", { method:"PATCH", body:{ enabled:true, perRunLimit:6 } });
+  const runtime = env(db, { OPENAI_API_KEY:"test-key", THREADS_ACCESS_TOKEN:"threads-token" });
+  const originalFetch = globalThis.fetch;
+  let extractionBody;
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.includes("graph.threads.net/profile_lookup")) return Response.json({ id:"threads-user-atlarts", username:"atlarts", name:"ATL Arts", is_verified:false });
+    if (target.includes("graph.threads.net/profile_posts")) return Response.json({ data:[{
+      id:"thread-official-1", permalink:"https://www.threads.net/@atlarts/post/official-1", username:"atlarts", text:"Atlanta Creative AI Lab, November 22 at 6 PM, ATL Arts Lab.", timestamp:"2026-08-17T12:00:00Z", media_type:"TEXT_POST", is_verified:false,
+    }] });
+    if (target.includes("graph.threads.net/keyword_search")) return Response.json({ data:[{
+      id:"thread-stranger-1", permalink:"https://www.threads.net/@verifiedstranger/post/stranger-1", username:"verifiedstranger", text:"Atlanta experimental showcase November 24.", timestamp:"2026-08-17T13:00:00Z", media_type:"TEXT_POST", is_verified:true,
+    }] });
+    if (target.includes("api.openai.com")) {
+      extractionBody = JSON.parse(init.body);
+      const event = (overrides) => ({
+        sourceUrl:"https://www.threads.net/@atlarts/post/official-1", ticketUrl:"", sourceEventId:"", title:"Atlanta Creative AI Lab", relatedLinks:[], flyerUrl:"", organizer:"ATL Arts",
+        factualDescription:"A creative technology workshop about AI and experimental art.", dateKind:"timed", startsAt:"2026-11-22T18:00:00-05:00", endsAt:"2026-11-22T20:00:00-05:00", timezone:"America/New_York",
+        venueName:"ATL Arts Lab", venueAddress:"1 Arts Way, Atlanta, GA", city:"Atlanta", region:"GA", subjects:["ai","creative-technology"], formats:["workshop"], experimental:true,
+        verificationState:"verified", verificationNotes:"Complete official post.", confidence:.9, socialEvidence:[{
+          platform:"threads", postId:"thread-official-1", postUrl:"https://www.threads.net/@atlarts/post/official-1", authorHandle:"atlarts", authorDisplayName:"ATL Arts", authorIsVerified:false,
+          postedAt:"2026-08-17T12:00:00Z", captionExcerpt:"Atlanta Creative AI Lab, November 22 at 6 PM.", mediaType:"TEXT_POST", mediaUrl:"",
+        }], ...overrides,
+      });
+      return Response.json({ output:[{ type:"message", content:[{ type:"output_text", text:JSON.stringify({ events:[
+        event({}),
+        event({ sourceUrl:"https://www.threads.net/@verifiedstranger/post/stranger-1", sourceEventId:"thread-stranger-1", title:"Uncorroborated Experimental Showcase", startsAt:"2026-11-24T18:00:00-05:00", verificationNotes:"Badge seen.", socialEvidence:[{
+          platform:"threads", postId:"thread-stranger-1", postUrl:"https://www.threads.net/@verifiedstranger/post/stranger-1", authorHandle:"verifiedstranger", authorDisplayName:"Verified Stranger", authorIsVerified:true,
+          postedAt:"2026-08-17T13:00:00Z", captionExcerpt:"Atlanta experimental showcase November 24.", mediaType:"TEXT_POST", mediaUrl:"",
+        }] }),
+      ] }) }] }], usage:{ input_tokens:120, output_tokens:90 } });
+    }
+    throw new Error(`Unexpected fetch: ${target}`);
+  };
+  try {
+    const run = await runCalendarScout(runtime, { runKind:"manual", channels:["threads_api"] });
+    assert.equal(run.candidates, 2);
+    assert.equal(extractionBody.tools, undefined);
+    const official = db.prepare("SELECT id,status,verification_state,discovery_channel FROM calendar_candidates WHERE title='Atlanta Creative AI Lab'").get();
+    assert.deepEqual({ status:official.status, verification_state:official.verification_state, discovery_channel:official.discovery_channel }, { status:"candidate", verification_state:"verified", discovery_channel:"threads_api" });
+    assert.deepEqual(
+      { ...db.prepare("SELECT evidence_role,corroboration_state,author_is_verified FROM calendar_candidate_social_evidence WHERE candidate_id=?").get(official.id) },
+      { evidence_role:"official", corroboration_state:"not_required", author_is_verified:0 },
+    );
+    const untrusted = db.prepare("SELECT id,status,verification_state FROM calendar_candidates WHERE title='Uncorroborated Experimental Showcase'").get();
+    assert.deepEqual({ status:untrusted.status, verification_state:untrusted.verification_state }, { status:"needs_verification", verification_state:"needs_verification" });
+    assert.equal((await admin(db, `/candidates/${official.id}/approve`, { method:"POST", body:{} })).status, 200);
+    const publicJson = JSON.stringify(await (await handleCalendarPublicApi(request("/api/calendar/events"), runtime)).json());
+    assert.match(publicJson, /Atlanta Creative AI Lab/);
+    assert.doesNotMatch(publicJson, /captionExcerpt|socialEvidence|Atlanta Creative AI Lab, November 22 at 6 PM/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Instagram professional-account discovery can retain one private flyer only from registered official API media", async () => {
+  const db = database();
+  await admin(db, "/social-sources", { method:"POST", body:{ platform:"instagram", handle:"atlartslab", name:"ATL Arts Lab", profileUrl:"https://www.instagram.com/atlartslab/", trustLevel:"official", enabled:true } });
+  await admin(db, "/connectors/instagram_api", { method:"PATCH", body:{ enabled:true, perRunLimit:6 } });
+  const bucket = new MemoryBucket();
+  const runtime = env(db, { OPENAI_API_KEY:"test-key", INSTAGRAM_GRAPH_ACCESS_TOKEN:"instagram-token", INSTAGRAM_USER_ID:"ig-user", SUBMISSION_FILES:bucket });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.includes("graph.facebook.com") && target.includes("ig_hashtag_search")) return Response.json({ data:[] });
+    if (target.includes("graph.facebook.com") && target.includes("ig-user")) {
+      assert.equal(init.headers.authorization, "Bearer instagram-token");
+      return Response.json({ business_discovery:{ username:"atlartslab", media:{ data:[{
+        id:"ig-official-1", username:"atlartslab", permalink:"https://www.instagram.com/p/official-event-1/", caption:"Experimental AI Art Lecture, November 29 at ATL Arts Lab.", media_type:"IMAGE", media_url:"https://cdn.example/official-flyer.jpg", timestamp:"2026-08-17T15:00:00Z",
+      }] } } });
+    }
+    if (target.includes("api.openai.com")) return Response.json({ output:[{ type:"message", content:[{ type:"output_text", text:JSON.stringify({ events:[{
+      sourceUrl:"https://www.instagram.com/p/official-event-1/", ticketUrl:"", sourceEventId:"", title:"Experimental AI Art Lecture", relatedLinks:[], flyerUrl:"https://untrusted.example/model-image.jpg",
+      organizer:"ATL Arts Lab", factualDescription:"A lecture about experimental art and AI.", dateKind:"timed", startsAt:"2026-11-29T18:00:00-05:00", endsAt:"2026-11-29T20:00:00-05:00", timezone:"America/New_York",
+      venueName:"ATL Arts Lab", venueAddress:"5 Arts Way, Atlanta, GA", city:"Atlanta", region:"GA", subjects:["art","ai"], formats:["lecture-talk"], experimental:true,
+      verificationState:"verified", verificationNotes:"Complete official professional-account post.", confidence:.92, socialEvidence:[{
+        platform:"instagram", postId:"ig-official-1", postUrl:"https://www.instagram.com/p/official-event-1/", authorHandle:"atlartslab", authorDisplayName:"ATL Arts Lab", authorIsVerified:true,
+        postedAt:"2026-08-17T15:00:00Z", captionExcerpt:"Model excerpt", mediaType:"IMAGE", mediaUrl:"https://untrusted.example/model-image.jpg",
+      }],
+    }] }) }] }], usage:{} });
+    if (target === "https://www.instagram.com/p/official-event-1/") return new Response('<html><img src="https://cdn.example/official-flyer.jpg"></html>', { status:200, headers:{ "content-type":"text/html" } });
+    if (target === "https://cdn.example/official-flyer.jpg") return new Response(new Uint8Array([255,216,255,217]), { status:200, headers:{ "content-type":"image/jpeg" } });
+    throw new Error(`Unexpected fetch: ${target}`);
+  };
+  try {
+    const run = await runCalendarScout(runtime, { runKind:"manual", channels:["instagram_api"] });
+    assert.equal(run.candidates, 1);
+    const candidate = db.prepare("SELECT id,status,verification_state,flyer_media_id,flyer_source_url,flyer_public_approved FROM calendar_candidates WHERE title='Experimental AI Art Lecture'").get();
+    assert.equal(candidate.status, "candidate");
+    assert.equal(candidate.verification_state, "verified");
+    assert.ok(candidate.flyer_media_id);
+    assert.equal(candidate.flyer_source_url, "https://cdn.example/official-flyer.jpg");
+    assert.equal(candidate.flyer_public_approved, 0);
+    assert.deepEqual({ ...db.prepare("SELECT privacy,public_presentation FROM media_assets WHERE id=?").get(candidate.flyer_media_id) }, { privacy:"internal", public_presentation:"hidden" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Threads rate limits use bounded retries and surface an isolated connector state", async () => {
+  const db = database();
+  await admin(db, "/connectors/threads_api", { method:"PATCH", body:{ enabled:true } });
+  const runtime = env(db, { OPENAI_API_KEY:"test-key", THREADS_ACCESS_TOKEN:"threads-token" });
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /graph\.threads\.net\/keyword_search/);
+    calls += 1;
+    return Response.json({ error:{ message:"Rate limit reached" } }, { status:429 });
+  };
+  try {
+    const run = await runCalendarScout(runtime, { runKind:"manual", channels:["threads_api"] });
+    assert.equal(run.status, "failed");
+    assert.equal(run.failures, 1);
+    assert.equal(calls, 12);
+    assert.equal(run.outcomes[0].retries, 2);
+    const connector = db.prepare("SELECT status,last_error FROM calendar_scout_connectors WHERE id='threads_api'").get();
+    assert.equal(connector.status, "rate_limited");
+    assert.match(connector.last_error, /rate limit/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("TikTok web discovery is domain-filtered, ignores thumbnails, and remains approval-gated", async () => {
+  const db = database();
+  await admin(db, "/connectors/tiktok_web", { method:"PATCH", body:{ enabled:true, perRunLimit:6 } });
+  const runtime = env(db, { OPENAI_API_KEY:"test-key" });
+  const originalFetch = globalThis.fetch;
+  let body;
+  globalThis.fetch = async (url, init = {}) => {
+    if (!String(url).includes("api.openai.com")) throw new Error(`Unexpected fetch: ${url}`);
+    body = JSON.parse(init.body);
+    return Response.json({ output:[{ type:"web_search_call", action:{ sources:[{ url:"https://www.tiktok.com/@atltech/video/123", title:"ATL Tech video" }] } }, { type:"message", content:[{ type:"output_text", text:JSON.stringify({ events:[{
+      sourceUrl:"https://official.example/atlanta-creative-tech-conference", ticketUrl:"", sourceEventId:"creative-tech-2026", title:"Atlanta Creative Tech Conference", relatedLinks:[], flyerUrl:"https://cdn.example/tiktok-thumbnail.jpg",
+      organizer:"ATL Tech", factualDescription:"A conference about creative technology and AI.", dateKind:"timed", startsAt:"2026-12-02T09:00:00-05:00", endsAt:"2026-12-02T17:00:00-05:00", timezone:"America/New_York",
+      venueName:"Atlanta Conference Center", venueAddress:"100 Tech Way, Atlanta, GA", city:"Atlanta", region:"GA", subjects:["technology","ai"], formats:["conference"], experimental:false,
+      verificationState:"verified", verificationNotes:"Corroborated by official page.", confidence:.88, socialEvidence:[{
+        platform:"tiktok", postId:"123", postUrl:"https://www.tiktok.com/@atltech/video/123", authorHandle:"atltech", authorDisplayName:"ATL Tech", authorIsVerified:true,
+        postedAt:"2026-08-17T14:00:00Z", captionExcerpt:"Creative Tech Conference in Atlanta.", mediaType:"video", mediaUrl:"https://cdn.example/tiktok-thumbnail.jpg",
+      }],
+    }] }) }] }], usage:{ input_tokens:80, output_tokens:60 } });
+  };
+  try {
+    const run = await runCalendarScout(runtime, { runKind:"manual", channels:["tiktok_web"] });
+    assert.equal(run.candidates, 1);
+    assert.deepEqual(body.tools[0].filters.allowed_domains, ["tiktok.com"]);
+    assert.equal(body.tool_choice, "required");
+    const candidate = db.prepare("SELECT id,status,flyer_media_id FROM calendar_candidates WHERE title='Atlanta Creative Tech Conference'").get();
+    assert.equal(candidate.status, "candidate");
+    assert.equal(candidate.flyer_media_id, null);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -461,6 +703,8 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(studio,/target="_blank" rel="noopener noreferrer"/);
   assert.match(studio,/data-related-link/);
   assert.match(studio,/data-upload-flyer/);
+  assert.match(studio,/Private social evidence/);
+  assert.match(studio,/Open registered profile/);
   assert.match(publicCalendar,/<details class="calendar-event-flyer">/);
   assert.match(publicCalendar,/exhibition:"Exhibitions \/ Art Openings"/);
   assert.match(publicCalendar,/Show flyer/);

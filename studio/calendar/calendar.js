@@ -5,7 +5,7 @@
   var FORMATS = [["exhibition","Exhibition"],["screening","Screening"],["performance","Performance"],["experimental-event","Experimental Event"],["lecture-talk","Lecture / Talk"],["panel","Panel"],["workshop","Workshop"],["conference","Conference"]];
   var STATUSES = [["review","Review Queue"],["ready","Ready to Publish"],["published","Published"],["needs_verification","Needs Verification"],["rejected","Rejected"],["cancelled","Cancelled"],["duplicate","Duplicates"]];
   var token = localStorage.getItem(TOKEN_KEY) || "";
-  var state = { candidates:[], sources:[], profile:null, suggestions:[], runs:[], filter:"review", selectedId:"", draftNew:false, broadDiscoveryEnabled:false, activeCandidate:null, flyerPreviewUrl:"" };
+  var state = { candidates:[], sources:[], socialSources:[], connectors:[], profile:null, suggestions:[], runs:[], filter:"review", selectedId:"", draftNew:false, broadDiscoveryEnabled:false, activeCandidate:null, flyerPreviewUrl:"" };
   var tokenInput = document.getElementById("tokenInput");
   var authPanel = document.getElementById("authPanel");
   var app = document.getElementById("studioApp");
@@ -16,6 +16,7 @@
   tokenInput.value = token;
 
   function escapeHtml(value) { return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]; }); }
+  function isInstagramUrl(value) { try { var host = new URL(value).hostname.toLowerCase(); return host === "instagram.com" || host.endsWith(".instagram.com") || host === "instagr.am" || host.endsWith(".instagr.am"); } catch (error) { return false; } }
   function displayDate(value) { var date = value ? new Date(value.length === 10 ? value + "T12:00:00" : value) : null; return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", hour:value.length > 10 ? "numeric" : undefined, minute:value.length > 10 ? "2-digit" : undefined }).format(date) : "Date not confirmed"; }
   function toast(message) { var root = document.getElementById("toast"); root.textContent = message; root.classList.add("is-visible"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { root.classList.remove("is-visible"); }, 3200); }
   async function api(path, options) {
@@ -65,12 +66,13 @@
 
   function relatedLinkRow(link) {
     link = link || {};
+    var instagramOnly = isInstagramUrl(link.url);
     return '<article class="related-link-row" data-related-link data-link-id="' + escapeHtml(link.id || "") + '">' +
       '<div class="field-grid">' +
       '<label class="field"><span>Label</span><input data-link-label value="' + escapeHtml(link.label || "") + '"></label>' +
       '<label class="field"><span>URL</span><input data-link-url type="url" value="' + escapeHtml(link.url || "") + '"></label>' +
       '<label class="field is-wide"><span>Provenance URL</span><input data-link-provenance type="url" value="' + escapeHtml(link.provenanceUrl || "") + '"></label>' +
-      '</div><div class="related-link-actions"><label class="check-option"><input data-link-public type="checkbox"' + (link.includePublic ? ' checked' : '') + '><span>Include publicly</span></label>' +
+      '</div><div class="related-link-actions"><label class="check-option"><input data-link-public type="checkbox"' + (link.includePublic ? ' checked' : '') + (instagramOnly ? ' disabled' : '') + '><span>' + (instagramOnly ? 'Private Instagram provenance' : 'Include publicly') + '</span></label>' +
       externalLink(link.url,"Open link") + externalLink(link.provenanceUrl,"Open provenance") + '<button type="button" data-remove-related-link>Remove</button></div></article>';
   }
 
@@ -90,18 +92,28 @@
       '<input id="candidateFlyerFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></div>';
   }
 
+  function socialEvidenceSection(candidate) {
+    var evidence = candidate.socialEvidence || [];
+    if (!evidence.length) return '';
+    return '<div class="editor-section"><h3>Private social evidence</h3><p class="section-guidance">Post excerpts, identity, trust, and corroboration stay inside Studio.</p><div class="social-evidence-list">' + evidence.map(function (item) {
+      return '<article class="social-evidence-card"><div class="social-evidence-head"><strong>' + escapeHtml(item.platform + ' / @' + (item.authorHandle || 'unknown')) + '</strong><span>' + escapeHtml(item.evidenceRole + ' / ' + item.corroborationState) + '</span></div>' +
+        '<p>' + escapeHtml(item.captionExcerpt || 'No caption excerpt captured.') + '</p><p class="source-meta">Posted: ' + escapeHtml(displayDate(item.postedAt)) + (item.authorIsVerified ? '<br>Platform verification badge observed — trust unchanged.' : '') + '</p><div class="social-evidence-links">' +
+        externalLink(item.postUrl,'Open post') + externalLink(item.sourceProfileUrl,'Open registered profile') + '</div></article>';
+    }).join('') + '</div></div>';
+  }
+
   function matchesStatus(candidate, status) {
     if (status === "review") return candidate.status === "candidate" || candidate.status === "needs_verification";
-    if (status === "ready") return candidate.status === "candidate" && candidate.verificationState === "verified";
+    if (status === "ready") return candidate.status === "candidate" && candidate.verificationState === "verified" && !isInstagramUrl(candidate.sourceUrl);
     return candidate.status === status;
   }
   function lifecycleLabel(candidate) {
-    if (candidate.status === "candidate" && candidate.verificationState === "verified") return "ready to publish";
+    if (candidate.status === "candidate" && candidate.verificationState === "verified" && !isInstagramUrl(candidate.sourceUrl)) return "ready to publish";
     return candidate.status.replace(/_/g," ");
   }
   function recordLabel(candidate) {
     if (candidate.status === "published") return "Published event record";
-    if (candidate.status === "candidate" && candidate.verificationState === "verified") return "Ready to publish";
+    if (candidate.status === "candidate" && candidate.verificationState === "verified" && !isInstagramUrl(candidate.sourceUrl)) return "Ready to publish";
     return "Candidate record";
   }
 
@@ -118,12 +130,14 @@
     if (!candidate) { editorRoot.innerHTML = '<p class="empty-state">Select a candidate or start a manual intake.</p>'; return; }
     var isNew = !candidate.id;
     var revisions = candidate.revisions || [];
-    var canPublish = !isNew && candidate.verificationState === "verified" && !["rejected","cancelled","duplicate"].includes(candidate.status) && (candidate.status !== "published" || candidate.pendingRevisionId);
+    var instagramSource = isInstagramUrl(candidate.sourceUrl) || isInstagramUrl(candidate.ticketUrl);
+    var canPublish = !isNew && candidate.verificationState === "verified" && !instagramSource && !["rejected","cancelled","duplicate"].includes(candidate.status) && (candidate.status !== "published" || candidate.pendingRevisionId);
     var publishLabel = candidate.status === "published" ? "Approve + Update" : "Approve + Publish";
     editorRoot.innerHTML = '<div class="editor-head"><div><p class="eyebrow">' + (isNew ? 'Manual intake' : recordLabel(candidate)) + '</p><h2>' + escapeHtml(candidate.title || "New candidate") + '</h2></div><span class="status-badge">' + escapeHtml(lifecycleLabel(candidate)) + '</span></div>' +
       '<div class="editor-section"><h3>Public factual record</h3><div class="field-grid">' +
       '<label class="field"><span>Registry source</span><select id="candidateSourceId">' + sourceChoices(candidate.sourceId || "") + '</select></label>' +
       field("candidateSourceEventId","Source event ID",candidate.sourceEventId) + linkedField("candidateSourceUrl","Official source URL",candidate.sourceUrl,"Open official source",{wide:true}) + linkedField("candidateTicketUrl","Ticket URL",candidate.ticketUrl,"Open ticket link",{wide:true}) +
+      (instagramSource ? '<p class="source-reliability-warning">Instagram is retained as private discovery evidence only. Search for an event-specific organizer, venue, or ticket-host page that confirms this event before publishing.</p>' : '') +
       field("candidateTitle","Title",candidate.title,{wide:true}) + field("candidateOrganizer","Organizer",candidate.organizer) + field("candidateDateKind","Date type",candidate.dateKind,{type:"select",choices:[["timed","Timed"],["all_day","All day"],["date_range","Date range"]]}) +
       field("candidateStartsAt","Starts (ISO or YYYY-MM-DD)",candidate.startsAt) + field("candidateEndsAt","Ends (ISO or YYYY-MM-DD)",candidate.endsAt) + field("candidateTimezone","Time zone",candidate.timezone) + field("candidateVenueName","Venue",candidate.venueName) +
       field("candidateVenueAddress","Venue address",candidate.venueAddress,{wide:true}) + field("candidateCity","City",candidate.city) + field("candidateRegion","State / region",candidate.region) + field("candidateDescription","Factual description",candidate.factualDescription,{type:"textarea",wide:true}) +
@@ -131,6 +145,7 @@
       '<label class="check-option"><input id="candidateExperimental" type="checkbox"' + (candidate.experimental ? ' checked' : '') + '><span>Experimental attribute</span></label></div>' +
       '<div class="editor-section"><div class="section-title-row"><h3>Related links</h3><button type="button" data-add-related-link>Add link</button></div><p class="section-guidance">Links remain private unless Include publicly is checked and the event is approved.</p><div class="related-link-list" id="candidateRelatedLinks">' + ((candidate.relatedLinks || []).map(relatedLinkRow).join("") || '<p class="related-links-empty">No related links captured.</p>') + '</div></div>' +
       flyerSection(candidate,isNew) +
+      socialEvidenceSection(candidate) +
       '<div class="editor-section"><h3>Verification + provenance</h3><div class="field-grid">' +
       field("candidateVerificationState","Verification",candidate.verificationState,{type:"select",choices:[["verified","Verified"],["unverified","Unverified"],["needs_verification","Needs verification"]]}) + field("candidateConfidence","Confidence",candidate.confidence,{type:"number",step:"0.01"}) +
       field("candidateVerificationNotes","Verification notes",candidate.verificationNotes,{type:"textarea",wide:true}) + field("candidateRejectionReason","Rejection reason",candidate.rejectionReason) + field("candidateDuplicateOf","Duplicate of",candidate.duplicateOf) + '</div></div>' +
@@ -209,13 +224,38 @@
   function renderSources() {
     document.getElementById("sourceList").innerHTML = state.sources.map(function (source) { return '<article class="source-card" data-source-id="' + escapeHtml(source.id) + '">' + field("sourceName-"+source.id,"Name",source.name) + '<div class="source-url-field">' + field("sourceUrl-"+source.id,"URL",source.url,{type:"url"}) + externalLink(source.url,"Open source") + '</div>' + field("sourceCadence-"+source.id,"Cadence hours",source.cadenceHours,{type:"number"}) + '<label class="field"><span>Enabled</span><select id="sourceEnabled-' + source.id + '"><option value="1"' + (source.enabled?' selected':'') + '>Enabled</option><option value="0"' + (!source.enabled?' selected':'') + '>Paused</option></select></label><label class="field"><span>Source type</span><select id="sourceType-' + source.id + '">' + [["official_html","Official HTML"],["calendar","Calendar"],["json","JSON"],["rss","RSS"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.sourceType===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label><label class="field"><span>Trust</span><select id="sourceTrust-' + source.id + '">' + [["official","Official"],["trusted","Trusted"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.trustLevel===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label><button type="button" data-save-source>Save</button><p class="source-meta is-wide-mobile">Last success: ' + escapeHtml(displayDate(source.lastSuccessAt)) + '<br>Acceptance: ' + (source.acceptanceRate === null ? 'No decisions yet' : Math.round(source.acceptanceRate*100)+'%') + (source.lastError ? '<br>Error: '+escapeHtml(source.lastError) : '') + '</p></article>'; }).join("");
   }
+  function renderSocialSources() {
+    document.getElementById("socialSourceList").innerHTML = state.socialSources.length ? state.socialSources.map(function (source) {
+      var id=source.id;
+      return '<article class="social-source-card" data-social-source-id="' + escapeHtml(id) + '">' +
+        field("socialName-"+id,"Name",source.name) +
+        '<label class="field"><span>Platform</span><select id="socialPlatform-' + id + '">' + [["threads","Threads"],["instagram","Instagram"],["tiktok","TikTok"]].map(function(option){return '<option value="'+option[0]+'"'+(source.platform===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
+        field("socialHandle-"+id,"Handle",source.handle) +
+        '<div class="source-url-field is-wide-mobile">' + field("socialProfileUrl-"+id,"Profile URL",source.profileUrl,{type:"url"}) + externalLink(source.profileUrl,"Open profile") + '</div>' +
+        '<label class="field"><span>Trust</span><select id="socialTrust-' + id + '">' + [["official","Official"],["trusted","Trusted"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.trustLevel===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
+        '<label class="field"><span>Enabled</span><select id="socialEnabled-' + id + '"><option value="1"'+(source.enabled?' selected':'')+'>Enabled</option><option value="0"'+(!source.enabled?' selected':'')+'>Paused</option></select></label>' +
+        field("socialCadence-"+id,"Cadence hours",source.cadenceHours,{type:"number"}) + '<button type="button" data-save-social-source>Save</button>' +
+        '<p class="source-meta is-wide-mobile">Last success: ' + escapeHtml(displayDate(source.lastSuccessAt)) + '<br>Acceptance: ' + (source.acceptanceRate===null?'No decisions yet':Math.round(source.acceptanceRate*100)+'%') + (source.lastError?'<br>Error: '+escapeHtml(source.lastError):'') + '</p></article>';
+    }).join('') : '<p class="empty-state">No social accounts registered. New accounts remain paused until you enable them.</p>';
+  }
+  function connectorLabel(id) { return ({direct:"Official sources",general_web:"General web search",threads_api:"Threads API",instagram_api:"Instagram API",threads_web:"Threads web search",instagram_web:"Instagram web search",tiktok_web:"TikTok web search"})[id] || id; }
+  function renderConnectors() {
+    document.getElementById("connectorList").innerHTML = state.connectors.map(function (connector) {
+      var id=connector.id;
+      return '<article class="connector-card" data-connector-id="' + escapeHtml(id) + '"><div class="connector-title"><strong>' + escapeHtml(connectorLabel(id)) + '</strong><span class="connector-status is-' + escapeHtml(connector.status) + '">' + escapeHtml(connector.status.replace(/_/g,' ')) + '</span></div>' +
+        '<label class="field"><span>Enabled</span><select id="connectorEnabled-' + id + '"><option value="1"'+(connector.enabled?' selected':'')+'>Enabled</option><option value="0"'+(!connector.enabled?' selected':'')+'>Disabled</option></select></label>' +
+        field("connectorCadence-"+id,"Cadence hours",connector.cadenceHours,{type:"number"}) + field("connectorLimit-"+id,"Per-run limit",connector.perRunLimit,{type:"number"}) +
+        '<div class="connector-actions"><button type="button" data-save-connector>Save</button><button type="button" data-run-connector>Run Now</button></div>' +
+        '<p class="source-meta">Last success: ' + escapeHtml(displayDate(connector.lastSuccessAt)) + (connector.lastError?'<br>'+escapeHtml(connector.lastError):'') + '</p></article>';
+    }).join('');
+  }
   function commaList(values) { return (values || []).join(", "); }
   function parseComma(value) { return value.split(",").map(function (item) { return item.trim(); }).filter(Boolean); }
   function renderProfile() {
     var profile = state.profile;
     document.getElementById("discoveryState").textContent = state.broadDiscoveryEnabled ? "Broad discovery is enabled. Official-source monitoring and OpenAI web search can both run." : "Broad discovery is disabled because OPENAI_API_KEY is not configured. Official-source monitoring remains available.";
     if (!profile) return;
-    document.getElementById("profileForm").innerHTML = field("profileName","Profile name",profile.name) + field("profileModel","Model",profile.model) + field("profileSubjects","Weighted subjects / JSON",JSON.stringify(profile.weightedSubjects,null,2),{type:"textarea"}) + field("profileFormats","Weighted formats / JSON",JSON.stringify(profile.weightedFormats,null,2),{type:"textarea"}) + field("profilePositive","Positive concepts",commaList(profile.positiveConcepts),{type:"textarea",wide:true}) + field("profileNegative","Negative terms",commaList(profile.negativeTerms),{type:"textarea",wide:true}) + field("profileGeography","Geographic rules / JSON",JSON.stringify(profile.geographicRules,null,2),{type:"textarea",wide:true}) + field("profileHorizon","Date horizon / days",profile.dateHorizonDays,{type:"number"}) + field("profileThreshold","Relevance threshold",profile.relevanceThreshold,{type:"number",step:"0.01"}) + field("profileDuplicate","Duplicate sensitivity",profile.duplicateSensitivity,{type:"number",step:"0.01"}) + field("profileLimit","Per-run limit",profile.perRunLimit,{type:"number"}) + field("profileSourceCadence","Source cadence / hours",profile.sourceCadenceHours,{type:"number"}) + field("profileWebCadence","Web cadence / hours",profile.webCadenceHours,{type:"number"}) + '<button type="submit">Save Scout Profile</button>';
+    document.getElementById("profileForm").innerHTML = field("profileName","Profile name",profile.name) + field("profileModel","Model",profile.model) + field("profileSubjects","Weighted subjects / JSON",JSON.stringify(profile.weightedSubjects,null,2),{type:"textarea"}) + field("profileFormats","Weighted formats / JSON",JSON.stringify(profile.weightedFormats,null,2),{type:"textarea"}) + field("profilePositive","Positive concepts",commaList(profile.positiveConcepts),{type:"textarea",wide:true}) + field("profileNegative","Negative terms",commaList(profile.negativeTerms),{type:"textarea",wide:true}) + field("profileGeography","Geographic rules / JSON",JSON.stringify(profile.geographicRules,null,2),{type:"textarea",wide:true}) + field("profileSocialSettings","Platform keywords, tags, cadence, and limits / JSON",JSON.stringify(profile.socialSettings,null,2),{type:"textarea",wide:true}) + field("profileHorizon","Date horizon / days",profile.dateHorizonDays,{type:"number"}) + field("profileThreshold","Relevance threshold",profile.relevanceThreshold,{type:"number",step:"0.01"}) + field("profileDuplicate","Duplicate sensitivity",profile.duplicateSensitivity,{type:"number",step:"0.01"}) + field("profileLimit","Per-run limit",profile.perRunLimit,{type:"number"}) + field("profileSourceCadence","Source cadence / hours",profile.sourceCadenceHours,{type:"number"}) + field("profileWebCadence","Web cadence / hours",profile.webCadenceHours,{type:"number"}) + '<button type="submit">Save Scout Profile</button>';
   }
   async function loadSuggestions() {
     var payload = await api("/api/admin/calendar/suggestions"); state.suggestions = payload.suggestions || [];
@@ -228,8 +268,8 @@
   async function connect() {
     token = tokenInput.value.trim(); if (!token) return;
     try {
-      var payload = await api("/api/admin/calendar"); localStorage.setItem(TOKEN_KEY, token); state.candidates=payload.candidates||[]; state.sources=payload.sources||[]; state.profile=payload.profile; state.broadDiscoveryEnabled=payload.broadDiscoveryEnabled;
-      authPanel.hidden=true; app.hidden=false; renderStatusFilters(); renderCandidateList(); renderSources(); renderProfile(); await Promise.all([loadSuggestions(),loadRuns()]);
+      var payload = await api("/api/admin/calendar"); localStorage.setItem(TOKEN_KEY, token); state.candidates=payload.candidates||[]; state.sources=payload.sources||[]; state.socialSources=payload.socialSources||[]; state.connectors=payload.connectors||[]; state.profile=payload.profile; state.broadDiscoveryEnabled=payload.broadDiscoveryEnabled;
+      authPanel.hidden=true; app.hidden=false; renderStatusFilters(); renderCandidateList(); renderSources(); renderSocialSources(); renderConnectors(); renderProfile(); await Promise.all([loadSuggestions(),loadRuns()]);
     } catch (error) { document.getElementById("authMessage").textContent=error.message; }
   }
 
@@ -248,8 +288,11 @@
   document.getElementById("newCandidate").addEventListener("click",function(){state.selectedId="";state.draftNew=true;renderCandidateList();renderEditor(blankCandidate());});
   document.getElementById("sourceList").addEventListener("click",async function(event){var button=event.target.closest("[data-save-source]");if(!button)return;var card=button.closest("[data-source-id]");var id=card.dataset.sourceId;try{await api("/api/admin/calendar/sources/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({name:value("sourceName-"+id),url:value("sourceUrl-"+id),cadenceHours:Number(value("sourceCadence-"+id)),enabled:value("sourceEnabled-"+id)==="1",sourceType:value("sourceType-"+id),trustLevel:value("sourceTrust-"+id)})});toast("Source saved.");}catch(error){toast(error.message);}});
   document.getElementById("addSource").addEventListener("click",async function(){var url=window.prompt("Official source URL");if(!url)return;var name=window.prompt("Source name")||new URL(url).hostname;try{var payload=await api("/api/admin/calendar/sources",{method:"POST",body:JSON.stringify({name:name,url:url})});state.sources.push(payload.source);renderSources();toast("Source added.");}catch(error){toast(error.message);}});
-  document.getElementById("profileForm").addEventListener("submit",async function(event){event.preventDefault();try{var payload=await api("/api/admin/calendar/profile",{method:"PATCH",body:JSON.stringify({name:value("profileName"),model:value("profileModel"),weightedSubjects:JSON.parse(value("profileSubjects")),weightedFormats:JSON.parse(value("profileFormats")),positiveConcepts:parseComma(value("profilePositive")),negativeTerms:parseComma(value("profileNegative")),geographicRules:JSON.parse(value("profileGeography")),dateHorizonDays:Number(value("profileHorizon")),relevanceThreshold:Number(value("profileThreshold")),duplicateSensitivity:Number(value("profileDuplicate")),perRunLimit:Number(value("profileLimit")),sourceCadenceHours:Number(value("profileSourceCadence")),webCadenceHours:Number(value("profileWebCadence"))})});state.profile=payload.profile;renderProfile();toast("Scout profile saved.");}catch(error){toast(error.message);}});
-  document.getElementById("runScout").addEventListener("click",async function(){this.disabled=true;toast("Scout run started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:"{}"});toast("Scout finished: "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns()]);}catch(error){toast(error.message);}finally{this.disabled=false;}});
+  document.getElementById("socialSourceList").addEventListener("click",async function(event){var button=event.target.closest("[data-save-social-source]");if(!button)return;var card=button.closest("[data-social-source-id]");var id=card.dataset.socialSourceId;try{var payload=await api("/api/admin/calendar/social-sources/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({name:value("socialName-"+id),platform:value("socialPlatform-"+id),handle:value("socialHandle-"+id),profileUrl:value("socialProfileUrl-"+id),trustLevel:value("socialTrust-"+id),enabled:value("socialEnabled-"+id)==="1",cadenceHours:Number(value("socialCadence-"+id))})});var index=state.socialSources.findIndex(function(item){return item.id===id;});if(index>=0)state.socialSources[index]=payload.socialSource;renderSocialSources();toast("Social account saved.");}catch(error){toast(error.message);}});
+  document.getElementById("addSocialSource").addEventListener("click",async function(){var platform=(window.prompt("Platform: threads, instagram, or tiktok")||"").trim().toLowerCase();if(!platform)return;var handle=(window.prompt("Public handle without @")||"").trim();if(!handle)return;var profileUrl=window.prompt("Public profile URL");if(!profileUrl)return;var trust=(window.prompt("Trust: official, trusted, or discovery","trusted")||"trusted").trim().toLowerCase();try{var payload=await api("/api/admin/calendar/social-sources",{method:"POST",body:JSON.stringify({platform:platform,handle:handle,profileUrl:profileUrl,trustLevel:trust,enabled:false})});state.socialSources.push(payload.socialSource);renderSocialSources();toast("Social account added in a paused state.");}catch(error){toast(error.message);}});
+  document.getElementById("connectorList").addEventListener("click",async function(event){var card=event.target.closest("[data-connector-id]");if(!card)return;var id=card.dataset.connectorId;if(event.target.closest("[data-save-connector]")){try{var payload=await api("/api/admin/calendar/connectors/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({enabled:value("connectorEnabled-"+id)==="1",cadenceHours:Number(value("connectorCadence-"+id)),perRunLimit:Number(value("connectorLimit-"+id))})});var index=state.connectors.findIndex(function(item){return item.id===id;});if(index>=0)state.connectors[index]=payload.connector;renderConnectors();toast("Connector saved.");}catch(error){toast(error.message);}return;}if(event.target.closest("[data-run-connector]")){var button=event.target.closest("[data-run-connector]");button.disabled=true;toast(connectorLabel(id)+" started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:JSON.stringify({channels:[id]})});toast(connectorLabel(id)+": "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{button.disabled=false;}}});
+  document.getElementById("profileForm").addEventListener("submit",async function(event){event.preventDefault();try{var payload=await api("/api/admin/calendar/profile",{method:"PATCH",body:JSON.stringify({name:value("profileName"),model:value("profileModel"),weightedSubjects:JSON.parse(value("profileSubjects")),weightedFormats:JSON.parse(value("profileFormats")),positiveConcepts:parseComma(value("profilePositive")),negativeTerms:parseComma(value("profileNegative")),geographicRules:JSON.parse(value("profileGeography")),socialSettings:JSON.parse(value("profileSocialSettings")),dateHorizonDays:Number(value("profileHorizon")),relevanceThreshold:Number(value("profileThreshold")),duplicateSensitivity:Number(value("profileDuplicate")),perRunLimit:Number(value("profileLimit")),sourceCadenceHours:Number(value("profileSourceCadence")),webCadenceHours:Number(value("profileWebCadence"))})});state.profile=payload.profile;renderProfile();toast("Scout profile saved.");}catch(error){toast(error.message);}});
+  document.getElementById("runScout").addEventListener("click",async function(){this.disabled=true;toast("Enabled scout lanes started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:"{}"});toast("Scout finished: "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{this.disabled=false;}});
   document.getElementById("refreshRuns").addEventListener("click",loadRuns);
   document.getElementById("suggestionList").addEventListener("click",async function(event){var button=event.target.closest("[data-suggestion-action]");if(!button)return;try{await api("/api/admin/calendar/suggestions/"+encodeURIComponent(button.dataset.id)+"/"+button.dataset.suggestionAction,{method:"POST",body:"{}"});await loadSuggestions();var profile=await api("/api/admin/calendar/profile");state.profile=profile.profile;renderProfile();toast("Suggestion "+button.dataset.suggestionAction+"ed.");}catch(error){toast(error.message);}});
   if (token) connect();

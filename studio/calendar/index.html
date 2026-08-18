@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
-<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260817-references">
+<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260818-social-scout">
 </head>
 <body>
   <header class="studio-header">
@@ -45,13 +45,17 @@
 
     <section class="studio-view" data-panel="sources" hidden>
       <header class="view-header"><div><p class="eyebrow">Approved inputs</p><h2>Source Registry</h2></div><button id="addSource" type="button">Add Source</button></header>
-      <p class="view-note">Official sources are checked directly. Acceptance rates and recurring failures make weak sources visible.</p>
+      <p class="view-note">Official websites and calendars are checked directly. Acceptance rates and recurring failures make weak sources visible.</p>
       <div class="source-list" id="sourceList"></div>
+      <header class="subview-header"><div><p class="eyebrow">Platform monitoring</p><h3>Social Accounts</h3></div><button id="addSocialSource" type="button">Add Social Account</button></header>
+      <p class="view-note">Only an exact registered handle marked Official receives official-source trust. Verification badges are informational.</p>
+      <div class="social-source-list" id="socialSourceList"></div>
     </section>
 
     <section class="studio-view" data-panel="profile" hidden>
-      <header class="view-header"><div><p class="eyebrow">Editable instructions</p><h2>Scout Profile</h2></div><button id="runScout" type="button">Run Scout Now</button></header>
+      <header class="view-header"><div><p class="eyebrow">Editable instructions</p><h2>Scout Profile</h2></div><button id="runScout" type="button">Run Enabled Scouts</button></header>
       <p class="system-state" id="discoveryState"></p>
+      <section class="connector-panel"><p class="eyebrow">Isolated discovery lanes</p><h3>Connectors</h3><div class="connector-list" id="connectorList"></div></section>
       <form class="profile-form" id="profileForm"></form>
       <section class="suggestions-panel"><h3>Suggested adjustments</h3><p>Feedback can create suggestions. The profile changes only after you accept one.</p><div id="suggestionList"></div></section>
     </section>
@@ -62,6 +66,6 @@
     </section>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/studio/calendar/calendar.js?v=20260817-references"></script>
+  <script src="/studio/calendar/calendar.js?v=20260818-social-scout"></script>
 </body>
 </html>
