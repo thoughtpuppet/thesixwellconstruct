@@ -9,7 +9,7 @@ button,a { -webkit-tap-highlight-color:transparent; }
 .studio-header p:not(.eyebrow) { max-width:720px; margin:12px 0 0; color:var(--dim); line-height:1.55; }
 .eyebrow { margin:0 0 10px; color:var(--accent); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
 .studio-header nav { display:flex; flex-wrap:wrap; gap:10px; }
-.studio-header a,.studio-tabs button,.review-toolbar>button,.view-header>button,.subview-header>button,.auth-panel button,.editor-actions button,.source-card button,.social-source-card button,.connector-card button,.profile-form button,.suggestion-actions button,.verify-link,.candidate-source-link,.section-title-row button,.related-link-actions button,.flyer-buttons button,.flyer-empty button,.occurrence-row-head button { min-height:44px; display:inline-flex; align-items:center; justify-content:center; border:5px solid var(--line); border-radius:0; padding:0 14px; background:transparent; color:var(--text); font-size:9px; font-weight:900; letter-spacing:.12em; text-decoration:none; text-transform:uppercase; cursor:pointer; }
+.studio-header a,.studio-tabs button,.review-toolbar>button,.link-intake button,.view-header>button,.subview-header>button,.auth-panel button,.editor-actions button,.source-card button,.social-source-card button,.connector-card button,.profile-form button,.suggestion-actions button,.verify-link,.candidate-source-link,.section-title-row button,.related-link-actions button,.flyer-buttons button,.flyer-empty button,.occurrence-row-head button { min-height:44px; display:inline-flex; align-items:center; justify-content:center; border:5px solid var(--line); border-radius:0; padding:0 14px; background:transparent; color:var(--text); font-size:9px; font-weight:900; letter-spacing:.12em; text-decoration:none; text-transform:uppercase; cursor:pointer; }
 .studio-header a:hover,.studio-header a:focus-visible,button:hover,button:focus-visible { border-color:var(--accent); outline:none; }
 .auth-panel { max-width:760px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; margin:70px auto; padding:0 20px; }
 .auth-panel label,.field { display:grid; gap:7px; min-width:0; }
@@ -23,6 +23,14 @@ input:focus,textarea:focus,select:focus { border-color:var(--accent); outline:no
 .studio-tabs { position:sticky; top:0; z-index:10; display:flex; gap:8px; overflow:auto; border-bottom:5px solid var(--line); padding:14px 0; background:#0e0e0e; }
 .studio-tabs button.is-active { border-color:var(--accent); background:rgba(252,184,103,.09); }
 .studio-view { padding-top:24px; }
+.link-intake { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; margin-bottom:20px; border:5px solid var(--line); padding:14px; background:var(--surface); }
+.link-intake label { display:grid; gap:7px; min-width:0; }
+.link-intake label span { color:var(--accent); font-size:9px; font-weight:900; letter-spacing:.13em; text-transform:uppercase; }
+.link-intake button { align-self:end; border-color:var(--accent); }
+.link-intake button:disabled { cursor:wait; opacity:.58; }
+.link-intake p { grid-column:1/-1; margin:0; color:var(--dim); font-size:11px; line-height:1.5; }
+.link-intake p.is-error { color:var(--danger); }
+.link-intake p.is-success { color:var(--ok); }
 .review-toolbar,.view-header,.subview-header { display:flex; justify-content:space-between; gap:16px; align-items:center; margin-bottom:20px; }
 .subview-header { margin-top:32px; border-top:5px solid var(--line); padding-top:22px; }
 .subview-header h3,.connector-panel h3 { margin:0; font-size:24px; letter-spacing:-.03em; }
@@ -132,6 +140,8 @@ input:focus,textarea:focus,select:focus { border-color:var(--accent); outline:no
 }
 @media (max-width:640px) {
   .studio-header,.review-toolbar,.view-header,.subview-header { align-items:stretch; flex-direction:column; }
+  .link-intake { grid-template-columns:minmax(0,1fr); }
+  .link-intake button { width:100%; }
   .studio-header nav { display:grid; grid-template-columns:1fr 1fr; }
   .auth-panel,.field-grid,.profile-form,.run-card,.connector-list,.connector-card { grid-template-columns:minmax(0,1fr); }
   .field.is-wide,.profile-form .is-wide { grid-column:auto; }

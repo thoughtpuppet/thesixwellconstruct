@@ -328,6 +328,35 @@
     else if (state.selectedId && state.candidates.some(function (candidate) { return candidate.id === state.selectedId; })) await selectCandidate(state.selectedId);
     else { state.selectedId = ""; renderEditor(null); }
   }
+  async function scoutPastedLink(event) {
+    event.preventDefault();
+    var input = document.getElementById("eventLinkInput");
+    var button = document.getElementById("scoutLinkButton");
+    var status = document.getElementById("linkIntakeStatus");
+    var pastedUrl = input.value.trim();
+    if (!pastedUrl || !input.reportValidity()) return;
+    button.disabled = true;
+    button.textContent = "Scouting…";
+    status.className = "";
+    status.textContent = "Reading the event page and extracting a private candidate…";
+    try {
+      var payload = await api("/api/admin/calendar/candidates/from-url", { method:"POST", body:JSON.stringify({ url:pastedUrl }) });
+      var message = payload.existing ? "Existing private candidate refreshed from the pasted link." : "Private candidate created from the pasted link.";
+      input.value = "";
+      status.className = "is-success";
+      status.textContent = message + " Review every extracted field before publishing.";
+      toast(message);
+      state.filter = "review";
+      await refreshCandidates(payload.candidate.id);
+    } catch (error) {
+      status.className = "is-error";
+      status.textContent = error.message;
+      toast(error.message);
+    } finally {
+      button.disabled = false;
+      button.textContent = "Scout Link";
+    }
+  }
   async function editorAction(action) {
     if (action === "review-change") { var revisions = editorRoot.querySelector(".revision-list"); if (revisions) revisions.scrollIntoView({ behavior:"smooth", block:"center" }); return; }
     if (action === "recheck") {
@@ -357,7 +386,7 @@
         field("sourceCadence-"+source.id,"Cadence hours",source.cadenceHours,{type:"number"}) +
         '<label class="field"><span>Enabled</span><select id="sourceEnabled-' + source.id + '"><option value="1"' + (source.enabled?' selected':'') + '>Enabled</option><option value="0"' + (!source.enabled?' selected':'') + '>Paused</option></select></label>' +
         '<label class="field"><span>Source type</span><select id="sourceType-' + source.id + '">' + [["official_html","Official HTML"],["calendar","Calendar"],["json","JSON"],["rss","RSS"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.sourceType===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
-        '<label class="field"><span>Adapter</span><select id="sourceAdapter-' + source.id + '">' + [["automatic","Automatic"],["high_art_making","High Art Making"],["eyedrum","Eyedrum"],["rampant","Rampant Gallery"],["eventbrite","Eventbrite discovery"],["posh","Posh discovery"],["wix","Wix"],["localist","Localist"],["out_of_hand","Out of Hand"],["json","JSON"],["icalendar","iCalendar"],["rss","RSS"]].map(function(option){return '<option value="'+option[0]+'"'+((source.adapterKey||"automatic")===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
+        '<label class="field"><span>Adapter</span><select id="sourceAdapter-' + source.id + '">' + [["automatic","Automatic"],["squarespace","Squarespace Events"],["high_art_making","High Art Making"],["eyedrum","Eyedrum"],["rampant","Rampant Gallery"],["eventbrite","Eventbrite discovery"],["posh","Posh discovery"],["wix","Wix"],["localist","Localist"],["out_of_hand","Out of Hand"],["json","JSON"],["icalendar","iCalendar"],["rss","RSS"]].map(function(option){return '<option value="'+option[0]+'"'+((source.adapterKey||"automatic")===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
         '<label class="field"><span>Rendering</span><select id="sourceRenderMode-' + source.id + '"><option value="static"'+((source.renderMode||"static")==="static"?' selected':'')+'>Static / API first</option><option value="dynamic-fallback"'+(source.renderMode==="dynamic-fallback"?' selected':'')+'>Dynamic fallback</option></select></label>' +
         field("sourceAdapterConfig-"+source.id,"Adapter configuration (JSON)",JSON.stringify(source.adapterConfig||{}),{wide:true}) +
         '<label class="field"><span>Trust</span><select id="sourceTrust-' + source.id + '">' + [["official","Official"],["trusted","Trusted"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.trustLevel===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
@@ -453,6 +482,7 @@
   });
   editorRoot.addEventListener("change",function(event){if(event.target.id==="candidateFlyerFile"&&event.target.files&&event.target.files[0])uploadFlyer(event.target.files[0]).catch(function(error){toast(error.message);});});
   document.getElementById("newCandidate").addEventListener("click",function(){state.selectedId="";state.draftNew=true;renderCandidateList();renderEditor(blankCandidate());});
+  document.getElementById("linkIntakeForm").addEventListener("submit",scoutPastedLink);
   document.getElementById("sourceList").addEventListener("click",async function(event){
     var button=event.target.closest("[data-save-source],[data-run-source]");
     if(!button)return;

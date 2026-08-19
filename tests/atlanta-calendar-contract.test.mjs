@@ -1260,6 +1260,84 @@ test("Eyedrum's Squarespace calendar groups weekly drawing listings into one pri
   }
 });
 
+test("Gallery FC's Squarespace calendar captures one exhibition with its related celebration and panel", async () => {
+  const db = databaseThrough("0146_calendar_rampant_gallery_source.sql");
+  db.exec(`INSERT INTO calendar_sources
+    (id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
+    VALUES('cal_source_gallery_fc','Gallery FC','https://www.galleryfc.com/','official_html','official',1,24,'automatic','static','{}',datetime('now'),datetime('now'));
+    INSERT INTO calendar_sources
+      (id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
+    VALUES('cal_source_gallery_fc_duplicate','Gallery FC','https://www.galleryfc.com/calendar','official_html','official',1,24,'automatic','static','{}',datetime('now'),datetime('now'));`);
+  db.exec(readFileSync(join(ROOT,"migrations","0147_calendar_gallery_fc_squarespace.sql"),"utf8"));
+  const configuredSource = db.prepare("SELECT url,enabled,adapter_key,render_mode,adapter_config_json FROM calendar_sources WHERE id='cal_source_gallery_fc'").get();
+  assert.deepEqual(
+    { url:configuredSource.url, enabled:configuredSource.enabled, adapterKey:configuredSource.adapter_key, renderMode:configuredSource.render_mode, adapterConfig:JSON.parse(configuredSource.adapter_config_json) },
+    { url:"https://www.galleryfc.com/calendar", enabled:1, adapterKey:"automatic", renderMode:"static", adapterConfig:{ internalAdapter:"squarespace", groupOverlappingExhibitions:true } },
+  );
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE id='cal_source_gallery_fc_duplicate'").get().count, 0);
+  db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_gallery_fc'");
+  const sourceUrl = "https://www.galleryfc.com/calendar";
+  const article = ({ slug, title, start, end, description }) => `<article class="eventlist-event eventlist-event--upcoming eventlist-event--hasimg">
+    <h1 class="eventlist-title"><a href="/calendar/${slug}" class="eventlist-title-link">${title}</a></h1>
+    <ul class="eventlist-meta event-meta">
+      <li class="eventlist-meta-item eventlist-meta-address">The CTR South Lobby <a href="https://maps.google.com?q=190%20Marietta%20St%20NW%20Atlanta%2C%20GA%2030303" class="eventlist-meta-address-maplink">(map)</a></li>
+      <li class="eventlist-meta-item eventlist-meta-export"><a href="https://www.google.com/calendar/event?action=TEMPLATE&amp;text=${encodeURIComponent(title)}&amp;dates=${start}/${end}" class="eventlist-meta-export-google">Google Calendar</a></li>
+    </ul>
+    <div class="eventlist-description"><p>${description}</p><a href="/calendar/${slug}" class="eventlist-button">View Event</a></div>
+  </article>`;
+  const html = `<html><body>${article({
+    slug:"home-team-exhibit", title:"Home Team Exhibition", start:"20260811T160000Z", end:"20261009T210000Z",
+    description:"An Atlanta art exhibition honoring the artists who painted the city bright.",
+  })}${article({
+    slug:"the-home-team-celebration", title:'The “Home Team” Celebration', start:"20260820T220000Z", end:"20260821T020000Z",
+    description:"A public celebration for the artists and the exhibition.",
+  })}${article({
+    slug:"home-team-panel", title:'“Home Team” panel discussion moderated by Living Walls', start:"20260917T220000Z", end:"20260918T000000Z",
+    description:"A panel with participating artists about public art in Atlanta.",
+  })}<article class="eventlist-event eventlist-event--past"><h1><a class="eventlist-title-link">Past Event</a></h1></article></body></html>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), sourceUrl);
+    return new Response(html, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_gallery_fc" });
+    assert.equal(run.status, "completed", JSON.stringify(run.outcomes));
+    assert.equal(run.candidates, 1);
+    assert.equal(run.warnings, 0);
+    assert.equal(run.outcomes[0].sources[0].adapter, "squarespace");
+    assert.equal(run.outcomes[0].sources[0].proposals, 1);
+    const candidate = db.prepare(`SELECT id,source_event_id,source_url,organizer_url,venue_url,source_authority,title,event_structure,date_kind,
+      starts_at,ends_at,venue_name,venue_address,subjects_json,formats_json,status,verification_state
+      FROM calendar_candidates WHERE source_id='cal_source_gallery_fc'`).get();
+    assert.deepEqual({
+      sourceEventId:candidate.source_event_id, sourceUrl:candidate.source_url, organizerUrl:candidate.organizer_url,
+      venueUrl:candidate.venue_url, sourceAuthority:candidate.source_authority, title:candidate.title,
+      eventStructure:candidate.event_structure, dateKind:candidate.date_kind, startsAt:candidate.starts_at,
+      endsAt:candidate.ends_at, venueName:candidate.venue_name, venueAddress:candidate.venue_address,
+      subjects:JSON.parse(candidate.subjects_json), formats:JSON.parse(candidate.formats_json), status:candidate.status,
+      verificationState:candidate.verification_state,
+    }, {
+      sourceEventId:"home-team-exhibit", sourceUrl:`${sourceUrl}/home-team-exhibit`, organizerUrl:sourceUrl,
+      venueUrl:sourceUrl, sourceAuthority:"official_calendar", title:"Home Team Exhibition",
+      eventStructure:"exhibition", dateKind:"date_range", startsAt:"2026-08-11", endsAt:"2026-10-09",
+      venueName:"The CTR South Lobby", venueAddress:"190 Marietta St NW Atlanta, GA 30303",
+      subjects:["art"], formats:["exhibition"], status:"candidate", verificationState:"verified",
+    });
+    assert.deepEqual(
+      db.prepare(`SELECT source_event_id,occurrence_type,title,starts_at,ends_at,source_url,status,verification_state
+        FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at`).all(candidate.id).map((row) => ({ ...row })),
+      [
+        { source_event_id:"the-home-team-celebration", occurrence_type:"mixer", title:'The “Home Team” Celebration', starts_at:"2026-08-20T22:00:00Z", ends_at:"2026-08-21T02:00:00Z", source_url:`${sourceUrl}/the-home-team-celebration`, status:"scheduled", verification_state:"verified" },
+        { source_event_id:"home-team-panel", occurrence_type:"panel", title:'“Home Team” panel discussion moderated by Living Walls', starts_at:"2026-09-17T22:00:00Z", ends_at:"2026-09-18T00:00:00Z", source_url:`${sourceUrl}/home-team-panel`, status:"scheduled", verification_state:"verified" },
+      ],
+    );
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("High Art Making monitoring groups month-specific Study Hall pages and classifies participatory programs", async () => {
   const db = database();
   db.exec("DELETE FROM calendar_candidates WHERE id='cal_candidate_high_study_hall_2026'");
@@ -2071,4 +2149,98 @@ test("Calendar Studio reuses a saved credential without showing the unlock contr
   assert.match(studio,/localStorage\.removeItem\(TOKEN_KEY\)/);
   assert.match(studio,/app\.hidden=true; authPanel\.hidden=false/);
   assert.doesNotMatch(studio,/tokenInput\.value = token/);
+});
+
+test("a pasted event link creates or refreshes one private candidate from structured facts", async () => {
+  const db = database();
+  const eventUrl = "https://paste-intake.example/events/one-night-exhibition";
+  const ticketUrl = "https://tickets.example/one-night-exhibition";
+  const sourceHtml = `<script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org", "@type":"Event", name:"Paste Intake One Night Exhibition",
+    description:"An Atlanta art exhibition and experimental installation.",
+    startDate:"2026-10-10T18:00:00-04:00", endDate:"2026-10-10T21:00:00-04:00", url:eventUrl,
+    organizer:{ "@type":"Organization", name:"Paste Intake Arts", url:"https://paste-intake.example/" },
+    location:{ "@type":"Place", name:"Paste Intake Gallery", address:{ "@type":"PostalAddress", streetAddress:"100 Art Way", addressLocality:"Atlanta", addressRegion:"GA", postalCode:"30303" } },
+    offers:{ "@type":"Offer", url:ticketUrl }, image:"https://paste-intake.example/flyer.jpg",
+  })}</script>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), eventUrl);
+    return new Response(sourceHtml, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const first = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db));
+    assert.equal(first.status, 201, await first.clone().text());
+    const firstPayload = await first.json();
+    assert.equal(firstPayload.extraction.retrieval, "static");
+    const candidate = db.prepare("SELECT id,title,status,verification_state,starts_at,ends_at,source_url,discovery_url,organizer_url,ticket_url,source_authority,discovered_by,discovery_channel FROM calendar_candidates WHERE title='Paste Intake One Night Exhibition'").get();
+    assert.deepEqual({ ...candidate }, {
+      id:firstPayload.candidate.id, title:"Paste Intake One Night Exhibition", status:"needs_verification", verification_state:"needs_verification",
+      starts_at:"2026-10-10T18:00:00-04:00", ends_at:"2026-10-10T21:00:00-04:00", source_url:eventUrl, discovery_url:eventUrl,
+      organizer_url:"https://paste-intake.example/", ticket_url:ticketUrl, source_authority:"unresolved", discovered_by:"manual", discovery_channel:"pasted_link",
+    });
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+
+    const second = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db));
+    assert.equal(second.status, 200, await second.clone().text());
+    const secondPayload = await second.json();
+    assert.equal(secondPayload.existing, true);
+    assert.equal(secondPayload.candidate.id, candidate.id);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE source_url=?").get(eventUrl).count, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a dynamic pasted link uses bounded Browser extraction and still remains private", async () => {
+  const db = database();
+  const eventUrl = "https://dynamic-paste.example/event";
+  const browserCalls = [];
+  const browser = {
+    async quickAction(action, options) {
+      browserCalls.push({ action, options });
+      return new Response(JSON.stringify({ result:{ events:[{
+        title:"Dynamic Paste Creative Technology Mixer", description:"An interactive art and creative technology mixer.",
+        organizer:"Dynamic Paste Lab", organizerUrl:"https://dynamic-paste.example/", venueName:"Dynamic Paste Gallery",
+        venueAddress:"200 Art Way, Atlanta, GA 30303", venueUrl:"", city:"Atlanta", region:"GA",
+        startsAt:"2026-11-12T18:30:00-05:00", endsAt:"2026-11-12T21:00:00-05:00", eventUrl,
+        ticketUrl:"https://tickets.dynamic-paste.example/event", imageUrl:"", accessStatus:"public", accessNotes:"Open to the public.", audiences:["Public"],
+        eventStructure:"single", dateKind:"timed", timezone:"America/New_York", subjects:["creative-technology"], formats:["experimental-event"], experimental:true,
+      }] } }), { status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":"19" } });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), eventUrl);
+    return new Response("<main>Dynamic event page</main>", { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db, { BROWSER:browser }));
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.deepEqual(payload.extraction, { retrieval:"browser", browserMs:19, adapter:"pasted" });
+    assert.equal(browserCalls.length, 1);
+    assert.equal(browserCalls[0].action, "json");
+    assert.match(browserCalls[0].options.prompt, /one primary event/);
+    assert.deepEqual(
+      { ...db.prepare("SELECT status,verification_state,ends_at,source_authority,discovered_by FROM calendar_candidates WHERE id=?").get(payload.candidate.id) },
+      { status:"needs_verification", verification_state:"needs_verification", ends_at:"2026-11-12T21:00:00-05:00", source_authority:"unresolved", discovered_by:"manual" },
+    );
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payload.candidate.id).count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Calendar Studio exposes one paste-and-scout link intake", () => {
+  const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studioHtml,/id="linkIntakeForm"/);
+  assert.match(studioHtml,/id="eventLinkInput" type="url"/);
+  assert.match(studioHtml,/>Scout Link<\/button>/);
+  assert.match(studio,/\/api\/admin\/calendar\/candidates\/from-url/);
+  assert.match(studio,/Private candidate created from the pasted link/);
+  assert.match(studioCss,/\.link-intake \{ display:grid;/);
+  assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.link-intake \{ grid-template-columns:minmax\(0,1fr\); \}/);
 });

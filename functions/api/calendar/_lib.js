@@ -12,7 +12,7 @@ const SOURCE_CHECK_STATUSES = new Set(["never", "unchanged", "changes_detected",
 const SOURCE_AUTHORITIES = new Set(["organizer_event", "venue_event", "official_calendar", "authorized_ticket_host", "unresolved"]);
 const LINK_ROLES = new Set(["organizer", "venue", "ticket", "supporting", "discovery"]);
 const PLATFORM_SOURCE_ADAPTERS = new Set(["eventbrite", "posh"]);
-const INTERNAL_SOURCE_ADAPTERS = new Set(["eyedrum", "high_art_making", "rampant"]);
+const INTERNAL_SOURCE_ADAPTERS = new Set(["eyedrum", "high_art_making", "rampant", "squarespace"]);
 const STORED_SOURCE_ADAPTERS = new Set(["automatic", "wix", "localist", "out_of_hand", "json", "icalendar", "rss"]);
 const SOURCE_ADAPTERS = new Set([...STORED_SOURCE_ADAPTERS, ...PLATFORM_SOURCE_ADAPTERS, ...INTERNAL_SOURCE_ADAPTERS]);
 const SOURCE_RENDER_MODES = new Set(["static", "dynamic-fallback"]);
@@ -618,8 +618,16 @@ function normalizeSource(row) {
 
 function storedSourceAdapter(adapterKey, adapterConfig = {}) {
   const config = { ...adapterConfig };
-  if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) config.platform = adapterKey;
-  else delete config.platform;
+  if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) {
+    config.platform = adapterKey;
+    delete config.internalAdapter;
+  } else if (INTERNAL_SOURCE_ADAPTERS.has(adapterKey)) {
+    config.internalAdapter = adapterKey;
+    delete config.platform;
+  } else {
+    delete config.platform;
+    delete config.internalAdapter;
+  }
   return {
     adapterKey: PLATFORM_SOURCE_ADAPTERS.has(adapterKey) || INTERNAL_SOURCE_ADAPTERS.has(adapterKey) ? "automatic" : adapterKey,
     adapterConfig: config,
@@ -1963,6 +1971,19 @@ async function handleCandidates(request, env, parts) {
   const method = request.method;
   const id = parts[1] ? decodeURIComponent(parts[1]) : "";
   const action = parts[2] || "";
+  if (id === "from-url" && !action) {
+    if (method !== "POST") return errorResponse("Method not allowed.", 405);
+    const body = await readBody(request);
+    if (!body) return errorResponse("Invalid JSON body.");
+    const pastedUrl = asString(body.url);
+    if (!validHttpUrl(pastedUrl)) return errorResponse("Paste a valid public http or https event URL.");
+    try {
+      const result = await createCandidateFromUrl(env, db, pastedUrl);
+      return json(result, { status: result.existing ? 200 : 201 });
+    } catch (error) {
+      return errorResponse(error.message || "The Scout could not extract an event from that link.", error.httpStatus || 422);
+    }
+  }
   if (!id) {
     if (method === "GET") return json({ candidates: await listCandidates(db, new URL(request.url).searchParams.get("status") || "") });
     if (method === "POST") {
@@ -2999,8 +3020,11 @@ function extractRssEvents(text, source) {
 }
 
 function sourceAdapterKey(source) {
-  const configuredPlatform = asString(parseJson(source.adapter_config_json, {}).platform);
+  const adapterConfig = parseJson(source.adapter_config_json, {});
+  const configuredPlatform = asString(adapterConfig.platform);
+  const configuredInternal = asString(adapterConfig.internalAdapter);
   if (PLATFORM_SOURCE_ADAPTERS.has(configuredPlatform)) return configuredPlatform;
+  if (INTERNAL_SOURCE_ADAPTERS.has(configuredInternal)) return configuredInternal;
   if (source.adapter_key !== "automatic" && SOURCE_ADAPTERS.has(source.adapter_key)) return source.adapter_key;
   const host = sourceHost(source.url);
   if (host === "eventbrite.com" || host.endsWith(".eventbrite.com")) return "eventbrite";
@@ -3071,7 +3095,7 @@ function eyedrumOccurrenceTitle(event) {
   return `${new Intl.DateTimeFormat("en-US", { timeZone:"UTC", month:"long", day:"numeric" }).format(new Date(`${localDate}T12:00:00Z`))} Session`;
 }
 
-function eyedrumEventProposal(block, source) {
+function squarespaceEventProposal(block, source) {
   const relativeSourceUrl = sourceClassHref(block, "eventlist-title-link");
   const range = eyedrumCalendarRange(block);
   if (!relativeSourceUrl || !range?.startsAt) return null;
@@ -3096,7 +3120,7 @@ function eyedrumEventProposal(block, source) {
     flyerUrl,
     flyerProvenanceUrl: source.url,
     title,
-    organizer: source.name || "Eyedrum",
+    organizer: source.name,
     factualDescription,
     accessStatus: "public",
     accessNotes: "",
@@ -3112,9 +3136,96 @@ function eyedrumEventProposal(block, source) {
     formats: [],
     experimental: false,
     verificationState: "verified",
-    verificationNotes: "Event facts were retrieved from Eyedrum's official Squarespace calendar listing.",
+    verificationNotes: `Event facts were retrieved from ${source.name}'s official Squarespace calendar listing.`,
     confidence: 0.94,
   };
+}
+
+function squarespaceEventProposals(html, source) {
+  const blocks = html.match(/<article\b(?=[^>]*class=["'][^"']*\beventlist-event--upcoming\b[^"']*["'])[^>]*>[\s\S]*?<\/article>/gi) || [];
+  const seen = new Set();
+  return blocks.slice(0, 200).map((block) => squarespaceEventProposal(block, source)).filter((event) => {
+    if (!event?.title || !event.startsAt || !event.sourceEventId || seen.has(event.sourceEventId)) return false;
+    seen.add(event.sourceEventId);
+    return true;
+  });
+}
+
+function squarespaceTitleTokens(value) {
+  const ignored = new Set(["the", "and", "with", "from", "during", "exhibit", "exhibition", "exhibitions", "celebration", "panel", "discussion", "moderated", "companion", "view", "event"]);
+  return new Set(normalizeText(value).split(/\s+/).filter((token) => token.length > 2 && !ignored.has(token)));
+}
+
+function squarespaceRelatedToExhibition(parent, child) {
+  const parentStart = Date.parse(parent.startsAt || "");
+  const parentEnd = Date.parse(parent.endsAt || parent.startsAt || "");
+  const childStart = Date.parse(child.startsAt || "");
+  if (!Number.isFinite(parentStart) || !Number.isFinite(parentEnd) || !Number.isFinite(childStart)) return false;
+  if (parentEnd - parentStart < 7 * 86_400_000 || childStart < parentStart || childStart > parentEnd) return false;
+  const parentTokens = squarespaceTitleTokens(parent.title);
+  const childTokens = squarespaceTitleTokens(child.title);
+  const shared = [...parentTokens].filter((token) => childTokens.has(token));
+  return shared.length >= 2 || (shared.length === 1 && parentTokens.size <= 3 && /celebration|panel|talk|reception|screening|performance|workshop/i.test(child.title));
+}
+
+function squarespaceOccurrenceType(event) {
+  if (/celebration/i.test(`${event.title} ${event.factualDescription}`)) return "mixer";
+  return wixOccurrenceType(event);
+}
+
+function groupSquarespaceExhibitions(events, source) {
+  const claimed = new Set();
+  const output = [];
+  const ordered = [...events].sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt));
+  for (const parent of ordered) {
+    if (claimed.has(parent.sourceEventId)) continue;
+    const parentStart = Date.parse(parent.startsAt || "");
+    const parentEnd = Date.parse(parent.endsAt || parent.startsAt || "");
+    const exhibition = Number.isFinite(parentStart) && Number.isFinite(parentEnd)
+      && parentEnd - parentStart >= 7 * 86_400_000
+      && /exhibition|on view/i.test(`${parent.title} ${parent.factualDescription}`);
+    if (!exhibition) {
+      output.push(parent);
+      continue;
+    }
+    const children = ordered.filter((child) => child !== parent && !claimed.has(child.sourceEventId) && squarespaceRelatedToExhibition(parent, child));
+    if (!children.length) {
+      output.push(parent);
+      continue;
+    }
+    children.forEach((child) => claimed.add(child.sourceEventId));
+    output.push({
+      ...parent,
+      eventStructure: "exhibition",
+      dateKind: "date_range",
+      startsAt: wixLocalDate(parent.startsAt, parent.timezone),
+      endsAt: wixLocalDate(parent.endsAt, parent.timezone),
+      verificationNotes: `${children.length} related program${children.length === 1 ? "" : "s"} were grouped under this exhibition from ${source.name}'s official Squarespace calendar.`,
+      confidence: 0.97,
+      occurrences: children.map((child, index) => normalizeOccurrenceProposal({
+        sourceEventId: child.sourceEventId,
+        occurrenceType: squarespaceOccurrenceType(child),
+        title: child.title,
+        factualDescription: child.factualDescription,
+        accessStatus: child.accessStatus,
+        accessNotes: child.accessNotes,
+        audiences: child.audiences,
+        dateKind: child.dateKind,
+        startsAt: child.startsAt,
+        endsAt: child.endsAt,
+        timezone: child.timezone,
+        venueName: child.venueName,
+        venueAddress: child.venueAddress,
+        sourceUrl: child.sourceUrl,
+        ticketUrl: child.ticketUrl,
+        status: "scheduled",
+        verificationState: "verified",
+        verificationNotes: `This related program was retrieved from ${source.name}'s official Squarespace calendar.`,
+        sortOrder: index,
+      }, parent, index)),
+    });
+  }
+  return output.filter((event) => !claimed.has(event.sourceEventId));
 }
 
 function groupEyedrumRecurringEvents(events, source) {
@@ -3176,14 +3287,14 @@ function groupEyedrumRecurringEvents(events, source) {
 }
 
 function extractEyedrumEvents(html, source) {
-  const blocks = html.match(/<article\b(?=[^>]*class=["'][^"']*\beventlist-event--upcoming\b[^"']*["'])[^>]*>[\s\S]*?<\/article>/gi) || [];
-  const seen = new Set();
-  const events = blocks.slice(0, 200).map((block) => eyedrumEventProposal(block, source)).filter((event) => {
-    if (!event?.title || !event.startsAt || !event.sourceEventId || seen.has(event.sourceEventId)) return false;
-    seen.add(event.sourceEventId);
-    return true;
-  });
-  return groupEyedrumRecurringEvents(events, source);
+  return groupEyedrumRecurringEvents(squarespaceEventProposals(html, source), source);
+}
+
+function extractSquarespaceEvents(html, source) {
+  const events = squarespaceEventProposals(html, source);
+  return parseJson(source.adapter_config_json, {}).groupOverlappingExhibitions
+    ? groupSquarespaceExhibitions(events, source)
+    : events;
 }
 
 function highDateParts(monthName, dayValue, yearValue) {
@@ -3752,6 +3863,63 @@ function browserPlatformProposal(item, source, adapterKey) {
   };
 }
 
+function browserPastedLinkProposal(item, source) {
+  const sourceUrl = source.url;
+  const startsAt = asString(item.startsAt);
+  const endsAt = asString(item.endsAt) || null;
+  const organizerUrl = validHttpUrl(item.organizerUrl) ? asString(item.organizerUrl) : "";
+  const venueUrl = validHttpUrl(item.venueUrl) ? asString(item.venueUrl) : "";
+  const ticketUrl = validHttpUrl(item.ticketUrl) && !socialPlatformFromUrl(item.ticketUrl) ? asString(item.ticketUrl) : "";
+  const issues = [
+    "Confirm whether the pasted page is an original organizer, venue, official-calendar, or authorized ticket source before publication.",
+    ...(!validDate(endsAt) ? ["The pasted page did not provide a verified event end time."] : []),
+  ];
+  const relatedLinks = normalizeRelatedLinks([
+    ...(organizerUrl ? [{ label: "Organizer website", url: organizerUrl, provenanceUrl: sourceUrl, role: "organizer", includePublic: false }] : []),
+    ...(venueUrl ? [{ label: "Venue website", url: venueUrl, provenanceUrl: sourceUrl, role: "venue", includePublic: false }] : []),
+    ...(ticketUrl && ticketUrl !== sourceUrl ? [{ label: "Tickets or registration", url: ticketUrl, provenanceUrl: sourceUrl, role: "ticket", includePublic: false }] : []),
+  ], sourceUrl);
+  const stableLead = normalizeText(`${item.title || "event"}-${startsAt || "undated"}`).replace(/\s+/g, "-").slice(0, 100);
+  return {
+    sourceId: "",
+    sourceEventId: `pasted-${stableLead}`,
+    sourceUrl,
+    ticketUrl,
+    scheduleStatus: scheduleStatus(item.scheduleStatus),
+    ...ticketDetails(item.ticketStatus, item.ticketOnSaleAt, item.ticketNotes),
+    discoveryUrl: sourceUrl,
+    organizerUrl,
+    venueUrl,
+    sourceAuthority: "unresolved",
+    sourceResolutionNotes: "The Scout extracted facts from a pasted event link. Source authority still requires Studio review.",
+    title: asString(item.title),
+    organizer: asString(item.organizer) || source.name,
+    factualDescription: cleanSourceText(item.description),
+    eventStructure: EVENT_STRUCTURES.has(asString(item.eventStructure)) ? asString(item.eventStructure) : "single",
+    accessStatus: ["public", "restricted"].includes(asString(item.accessStatus)) ? asString(item.accessStatus) : "unknown",
+    accessNotes: asString(item.accessNotes),
+    audiences: audienceStrings(item.audiences),
+    dateKind: DATE_KINDS.has(asString(item.dateKind)) ? asString(item.dateKind) : startsAt.length === 10 ? "all_day" : "timed",
+    startsAt,
+    endsAt,
+    timezone: validTimeZone(item.timezone) ? asString(item.timezone) : TIME_ZONE,
+    venueName: asString(item.venueName),
+    venueAddress: asString(item.venueAddress),
+    city: asString(item.city) || "Atlanta",
+    region: asString(item.region) || "GA",
+    flyerUrl: validHttpUrl(item.imageUrl) ? asString(item.imageUrl) : "",
+    flyerProvenanceUrl: sourceUrl,
+    relatedLinks,
+    subjects: uniqueStrings(item.subjects, SUBJECTS),
+    formats: uniqueStrings(item.formats, FORMATS),
+    experimental: Boolean(item.experimental),
+    verificationState: "needs_verification",
+    verificationNotes: ["Event facts were extracted from the rendered pasted page.", ...issues].join("\n"),
+    confidence: 0.62,
+    discoveryChannel: "pasted_link",
+  };
+}
+
 async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode = "index") {
   if (!env.BROWSER?.quickAction) throw new Error("Cloudflare Browser rendering is unavailable for this dynamic source.");
   const config = parseJson(source.adapter_config_json, {});
@@ -3760,7 +3928,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
   const response = await env.BROWSER.quickAction("json", {
     url,
     prompt: mode === "detail"
-      ? "Extract the one event on this ticket page. Use ISO 8601 start and end timestamps exactly as shown. Return empty strings for missing facts. Never infer an end time, organizer website, venue website, or event URL."
+      ? "Extract the one primary event on this event or ticket page. Use ISO 8601 start and end timestamps exactly as shown. Return empty strings for missing facts. Never infer an end time, organizer website, venue website, or event URL."
       : `Extract up to ${maximum} upcoming event cards currently shown for ${configuredCity}, ${configuredRegion}. Do not include featured or nearby events outside that location section. Use ISO 8601 dates or timestamps only when the page supplies them. Include an event URL only when the page exposes the exact ticket-page URL. Return empty strings for facts the page does not supply.`,
     response_format: {
       type: "json_schema",
@@ -3779,6 +3947,9 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
                 ticketUrl: { type: "string" }, imageUrl: { type: "string" }, accessStatus: { type: "string" },
                 scheduleStatus: { type: "string" }, ticketStatus: { type: "string" }, ticketOnSaleAt: { type: "string" }, ticketNotes: { type: "string" },
                 accessNotes: { type: "string" }, audiences: { type: "array", items: { type: "string" } },
+                eventStructure: { type: "string" }, dateKind: { type: "string" }, timezone: { type: "string" },
+                subjects: { type: "array", items: { type: "string" } }, formats: { type: "array", items: { type: "string" } },
+                experimental: { type: "boolean" },
               },
               required: ["title", "startsAt"],
             },
@@ -3823,6 +3994,116 @@ async function ticketPlatformDetail(env, source, adapterKey, detail, staticText 
     browserMs: rendered.browserMs,
     retrieval: "browser",
   };
+}
+
+function pastedLinkSource(pastedUrl) {
+  const host = sourceHost(pastedUrl);
+  const platform = host === "eventbrite.com" || host.endsWith(".eventbrite.com")
+    ? "eventbrite"
+    : host === "posh.vip" || host.endsWith(".posh.vip") ? "posh" : "";
+  return {
+    id: "",
+    name: host || "Pasted event link",
+    url: pastedUrl,
+    source_type: "discovery",
+    trust_level: "discovery",
+    adapter_key: "automatic",
+    render_mode: "dynamic-fallback",
+    adapter_config_json: JSON.stringify({ ...(platform ? { platform } : {}), maxChildren: 1, eventUrls: [pastedUrl] }),
+  };
+}
+
+function holdPastedLinkForReview(proposal, pastedUrl) {
+  const organizerUrl = asString(proposal.organizerUrl)
+    || asString((proposal.relatedLinks || []).find((link) => link.role === "organizer")?.url);
+  const venueUrl = asString(proposal.venueUrl)
+    || asString((proposal.relatedLinks || []).find((link) => link.role === "venue")?.url);
+  const notes = [
+    asString(proposal.verificationNotes),
+    "Confirm whether the pasted page is an original organizer, venue, official-calendar, or authorized ticket source before publication.",
+    ...(!validDate(proposal.endsAt) ? ["The pasted page did not provide a verified event end time."] : []),
+  ].filter(Boolean);
+  return {
+    ...proposal,
+    sourceId: "",
+    sourceUrl: pastedUrl,
+    discoveryUrl: pastedUrl,
+    organizerUrl: validHttpUrl(organizerUrl) ? organizerUrl : "",
+    venueUrl: validHttpUrl(venueUrl) ? venueUrl : "",
+    sourceAuthority: "unresolved",
+    sourceResolutionNotes: "The Scout extracted facts from a pasted event link. Source authority still requires Studio review.",
+    flyerProvenanceUrl: proposal.flyerUrl ? pastedUrl : "",
+    verificationState: "needs_verification",
+    verificationNotes: [...new Set(notes)].join("\n"),
+    discoveryChannel: "pasted_link",
+  };
+}
+
+async function extractPastedLinkProposal(env, pastedUrl) {
+  const source = pastedLinkSource(pastedUrl);
+  const adapterKey = sourceAdapterKey(source);
+  let staticText = "";
+  let sourceFailure = "";
+  try {
+    const response = await fetchExternalSource(pastedUrl);
+    if (response.ok) staticText = await boundedResponseText(response);
+    else sourceFailure = `The pasted page returned HTTP ${response.status}.`;
+  } catch (error) {
+    sourceFailure = error.message;
+  }
+
+  if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) {
+    const detail = platformEventIdentity(adapterKey, pastedUrl, pastedUrl);
+    if (!detail) {
+      const error = new Error("Paste an exact Eventbrite or Posh event page, not a platform index or profile.");
+      error.httpStatus = 422;
+      throw error;
+    }
+    const extracted = await ticketPlatformDetail(env, source, adapterKey, detail, staticText);
+    return { proposal: { ...extracted.proposal, discoveryChannel: "pasted_link" }, diagnostics: { retrieval: extracted.retrieval, browserMs: extracted.browserMs, adapter: adapterKey } };
+  }
+
+  if (staticText) {
+    const proposals = extractSourceEvents(staticText, source).map(inferSubjectsAndFormats);
+    const exact = proposals.find((proposal) => proposal.sourceUrl === pastedUrl) || (proposals.length === 1 ? proposals[0] : null);
+    if (exact?.title && validDate(exact.startsAt)) {
+      return { proposal: holdPastedLinkForReview(exact, pastedUrl), diagnostics: { retrieval: "static", browserMs: 0, adapter: sourceAdapterKey(source) } };
+    }
+  }
+
+  if (!env.BROWSER?.quickAction) {
+    const error = new Error(sourceFailure || "The page did not expose structured event data and dynamic extraction is unavailable.");
+    error.httpStatus = 422;
+    throw error;
+  }
+  const rendered = await browserPlatformEvents(env, source, "pasted", pastedUrl, 1, "detail");
+  const item = rendered.events[0];
+  if (!item?.title || !validDate(item.startsAt)) {
+    const error = new Error(sourceFailure || "The Scout could not recover a confirmed event title and start date from that link.");
+    error.httpStatus = 422;
+    throw error;
+  }
+  return { proposal: browserPastedLinkProposal(item, source), diagnostics: { retrieval: "browser", browserMs: rendered.browserMs, adapter: "pasted" } };
+}
+
+async function createCandidateFromUrl(env, db, pastedUrl) {
+  const extracted = await extractPastedLinkProposal(env, pastedUrl);
+  const profileRow = await db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first();
+  const result = await upsertScoutProposal(
+    env,
+    db,
+    extracted.proposal,
+    "manual",
+    [{ url: pastedUrl, role: "pasted_link", retrievedAt: isoNow(), diagnostics: extracted.diagnostics }],
+    normalizeProfile(profileRow),
+    { bypassEligibility: true },
+  );
+  if (result.skipped) {
+    const error = new Error(`The Scout could not safely create a candidate from that link (${result.skipped}).`);
+    error.httpStatus = 422;
+    throw error;
+  }
+  return { ...result, extraction: extracted.diagnostics };
 }
 
 async function extractTicketPlatformEvents(env, staticText, source, adapterKey, initial = {}) {
@@ -3952,6 +4233,7 @@ async function extractOutOfHandSeries(env, staticText, source) {
 function extractSourceEvents(text, source) {
   const adapterKey = sourceAdapterKey(source);
   if (adapterKey === "eyedrum") return extractEyedrumEvents(text, source);
+  if (adapterKey === "squarespace") return extractSquarespaceEvents(text, source);
   if (adapterKey === "high_art_making") return extractHighArtMakingEvents(text, source);
   if (adapterKey === "rampant") return extractRampantEvents(text, source);
   if (source.source_type === "calendar") return extractIcsEvents(text, source);
@@ -4146,16 +4428,16 @@ function scoutRelevance(event, profile) {
   };
 }
 
-async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenance, profile, { targetCandidateId = "" } = {}) {
+async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenance, profile, { targetCandidateId = "", bypassEligibility = false } = {}) {
   let proposal = inferSubjectsAndFormats(proposalFromBody(rawProposal));
   if (!proposal.title || !proposal.startsAt || !validDate(proposal.startsAt) || !validHttpUrl(proposal.sourceUrl)) return { skipped: "invalid" };
-  if (!targetCandidateId && !geographicMatch(proposal, profile.geographicRules)) return { skipped: "geography" };
-  if (!targetCandidateId && !withinHorizon(proposal, profile.dateHorizonDays)) return { skipped: "date-horizon" };
-  if (!targetCandidateId && (!proposal.subjects.length || !proposal.formats.length)) return { skipped: "unclassified" };
+  if (!targetCandidateId && !bypassEligibility && !geographicMatch(proposal, profile.geographicRules)) return { skipped: "geography" };
+  if (!targetCandidateId && !bypassEligibility && !withinHorizon(proposal, profile.dateHorizonDays)) return { skipped: "date-horizon" };
+  if (!targetCandidateId && !bypassEligibility && (!proposal.subjects.length || !proposal.formats.length)) return { skipped: "unclassified" };
   const relevance = scoutRelevance(proposal, profile);
   const threshold = Number.isFinite(Number(profile.relevanceThreshold)) ? Number(profile.relevanceThreshold) : 0.68;
-  if (!targetCandidateId && relevance.negativeMatches.length) return { skipped: "negative-term", relevance };
-  if (!targetCandidateId && relevance.score < threshold) return { skipped: "below-threshold", relevance };
+  if (!targetCandidateId && !bypassEligibility && relevance.negativeMatches.length) return { skipped: "negative-term", relevance };
+  if (!targetCandidateId && !bypassEligibility && relevance.score < threshold) return { skipped: "below-threshold", relevance };
   proposal = ensurePrivateIntelligence(proposal, profile, discoveredBy);
   let existing = targetCandidateId ? { id: targetCandidateId } : null;
   if (!existing && proposal.sourceId && proposal.sourceEventId) {

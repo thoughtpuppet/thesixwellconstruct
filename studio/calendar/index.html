@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
-<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260818-art-making">
+<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260819-link-intake">
 </head>
 <body>
   <header class="studio-header">
@@ -31,6 +31,11 @@
     </nav>
 
     <section class="studio-view" data-panel="review">
+      <form class="link-intake" id="linkIntakeForm">
+        <label><span>Event link</span><input id="eventLinkInput" type="url" inputmode="url" autocomplete="url" placeholder="https://…" required></label>
+        <button id="scoutLinkButton" type="submit">Scout Link</button>
+        <p id="linkIntakeStatus" role="status" aria-live="polite">Paste one event page. Scout will create or refresh a private candidate for review.</p>
+      </form>
       <div class="review-toolbar">
         <div class="status-filters" id="statusFilters" aria-label="Candidate status filters"></div>
         <button id="newCandidate" type="button">Manual Intake</button>
@@ -66,6 +71,6 @@
     </section>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/studio/calendar/calendar.js?v=20260818-art-making"></script>
+  <script src="/studio/calendar/calendar.js?v=20260819-link-intake"></script>
 </body>
 </html>
