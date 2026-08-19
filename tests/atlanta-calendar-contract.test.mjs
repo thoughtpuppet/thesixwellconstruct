@@ -2176,8 +2176,8 @@ test("a pasted event link creates or refreshes one private candidate from struct
     const candidate = db.prepare("SELECT id,title,status,verification_state,starts_at,ends_at,source_url,discovery_url,organizer_url,ticket_url,source_authority,discovered_by,discovery_channel FROM calendar_candidates WHERE title='Paste Intake One Night Exhibition'").get();
     assert.deepEqual({ ...candidate }, {
       id:firstPayload.candidate.id, title:"Paste Intake One Night Exhibition", status:"needs_verification", verification_state:"needs_verification",
-      starts_at:"2026-10-10T18:00:00-04:00", ends_at:"2026-10-10T21:00:00-04:00", source_url:eventUrl, discovery_url:eventUrl,
-      organizer_url:"https://paste-intake.example/", ticket_url:ticketUrl, source_authority:"unresolved", discovered_by:"manual", discovery_channel:"pasted_link",
+      starts_at:"2026-10-10T18:00:00-04:00", ends_at:"2026-10-10T21:00:00-04:00", source_url:eventUrl, discovery_url:"",
+      organizer_url:"https://paste-intake.example/", ticket_url:ticketUrl, source_authority:"organizer_event", discovered_by:"manual", discovery_channel:"pasted_link",
     });
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
 
@@ -2201,7 +2201,7 @@ test("a dynamic pasted link uses bounded Browser extraction and still remains pr
       browserCalls.push({ action, options });
       return new Response(JSON.stringify({ result:{ events:[{
         title:"Dynamic Paste Creative Technology Mixer", description:"An interactive art and creative technology mixer.",
-        organizer:"Dynamic Paste Lab", organizerUrl:"https://dynamic-paste.example/", venueName:"Dynamic Paste Gallery",
+        organizer:"Dynamic Paste Lab", organizerUrl:"", venueName:"Dynamic Paste Gallery",
         venueAddress:"200 Art Way, Atlanta, GA 30303", venueUrl:"", city:"Atlanta", region:"GA",
         startsAt:"2026-11-12T18:30:00-05:00", endsAt:"2026-11-12T21:00:00-05:00", eventUrl,
         ticketUrl:"https://tickets.dynamic-paste.example/event", imageUrl:"", accessStatus:"public", accessNotes:"Open to the public.", audiences:["Public"],
@@ -2223,10 +2223,22 @@ test("a dynamic pasted link uses bounded Browser extraction and still remains pr
     assert.equal(browserCalls[0].action, "json");
     assert.match(browserCalls[0].options.prompt, /one primary event/);
     assert.deepEqual(
-      { ...db.prepare("SELECT status,verification_state,ends_at,source_authority,discovered_by FROM calendar_candidates WHERE id=?").get(payload.candidate.id) },
-      { status:"needs_verification", verification_state:"needs_verification", ends_at:"2026-11-12T21:00:00-05:00", source_authority:"unresolved", discovered_by:"manual" },
+      { ...db.prepare("SELECT status,verification_state,ends_at,discovery_url,source_authority,discovered_by FROM calendar_candidates WHERE id=?").get(payload.candidate.id) },
+      { status:"needs_verification", verification_state:"needs_verification", ends_at:"2026-11-12T21:00:00-05:00", discovery_url:eventUrl, source_authority:"unresolved", discovered_by:"manual" },
     );
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payload.candidate.id).count, 0);
+
+    const resolved = await admin(db, `/candidates/${payload.candidate.id}`, {
+      method:"PATCH",
+      body:{ sourceAuthority:"organizer_event", verificationState:"verified" },
+    });
+    assert.equal(resolved.status, 200, await resolved.clone().text());
+    const resolvedCandidate = (await resolved.json()).candidate;
+    assert.equal(resolvedCandidate.discoveryUrl, "");
+    assert.equal(resolvedCandidate.organizerUrl, "");
+    assert.equal(resolvedCandidate.sourceAuthority, "organizer_event");
+    const approved = await admin(db, `/candidates/${payload.candidate.id}/approve`, { method:"POST", body:{} });
+    assert.equal(approved.status, 200, await approved.clone().text());
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -259,22 +259,34 @@ function leadSource(source) {
   return source?.source_type === "discovery" || source?.trust_level === "discovery";
 }
 
+function pastedAuthoritySelection(proposal, authority) {
+  return proposal.discoveryChannel === "pasted_link"
+    && ["organizer_event", "venue_event", "official_calendar"].includes(authority);
+}
+
+function pastedAuthorityConfirmation(proposal, authority, discoveryUrl = asString(proposal.discoveryUrl)) {
+  return pastedAuthoritySelection(proposal, authority)
+    && Boolean(discoveryUrl && sameSourceHost(discoveryUrl, proposal.sourceUrl));
+}
+
 function sourceAuthorityErrors(proposal, { allowVerifiedInstagramSource = false } = {}) {
   const errors = [];
   const authority = SOURCE_AUTHORITIES.has(proposal.sourceAuthority) ? proposal.sourceAuthority : "unresolved";
   const discoveryUrl = asString(proposal.discoveryUrl);
   const verifiedInstagram = allowVerifiedInstagramSource && proposal.verificationState === "verified" && isInstagramUrl(proposal.sourceUrl);
+  const pastedSelection = pastedAuthoritySelection(proposal, authority);
+  const pastedConfirmation = pastedAuthorityConfirmation(proposal, authority, discoveryUrl);
   if (authority === "unresolved" && !verifiedInstagram) errors.push("Resolve the discovery lead to an original organizer, venue, official calendar, or authorized ticket-host page before publication.");
   if (discoveryUrl && !validHttpUrl(discoveryUrl)) errors.push("Discovery URL must use http or https.");
-  if (discoveryUrl && sameSourceHost(discoveryUrl, proposal.sourceUrl) && authority !== "authorized_ticket_host" && !verifiedInstagram) {
+  if (discoveryUrl && sameSourceHost(discoveryUrl, proposal.sourceUrl) && authority !== "authorized_ticket_host" && !verifiedInstagram && !pastedConfirmation) {
     errors.push("The public source cannot be the same secondary source that supplied the lead.");
   }
   if (proposal.organizerUrl && !validHttpUrl(proposal.organizerUrl)) errors.push("Organizer website URL must use http or https.");
   if (proposal.venueUrl && !validHttpUrl(proposal.venueUrl)) errors.push("Venue website URL must use http or https.");
-  if (authority === "organizer_event" && (!proposal.organizerUrl || !sameSourceHost(proposal.sourceUrl, proposal.organizerUrl))) {
+  if (authority === "organizer_event" && ((!proposal.organizerUrl && !pastedSelection) || (proposal.organizerUrl && !sameSourceHost(proposal.sourceUrl, proposal.organizerUrl)))) {
     errors.push("An organizer event source must be supported by the organizer's official website.");
   }
-  if (authority === "venue_event" && (!proposal.venueUrl || !sameSourceHost(proposal.sourceUrl, proposal.venueUrl))) {
+  if (authority === "venue_event" && ((!proposal.venueUrl && !pastedSelection) || (proposal.venueUrl && !sameSourceHost(proposal.sourceUrl, proposal.venueUrl)))) {
     errors.push("A venue event source must be supported by the venue's official website.");
   }
   if (authority === "official_calendar" && !proposal.organizerUrl && !proposal.venueUrl) {
@@ -289,7 +301,8 @@ function sourceAuthorityErrors(proposal, { allowVerifiedInstagramSource = false 
 
 function applySourceAuthorityPolicy(proposal, options = {}) {
   const authority = SOURCE_AUTHORITIES.has(asString(proposal.sourceAuthority)) ? asString(proposal.sourceAuthority) : "unresolved";
-  const discoveryUrl = asString(proposal.discoveryUrl);
+  const rawDiscoveryUrl = asString(proposal.discoveryUrl);
+  const discoveryUrl = pastedAuthorityConfirmation(proposal, authority, rawDiscoveryUrl) ? "" : rawDiscoveryUrl;
   const resolutionErrors = sourceAuthorityErrors({ ...proposal, sourceAuthority: authority, discoveryUrl }, options);
   const note = resolutionErrors[0] || "";
   return {
@@ -3870,8 +3883,11 @@ function browserPastedLinkProposal(item, source) {
   const organizerUrl = validHttpUrl(item.organizerUrl) ? asString(item.organizerUrl) : "";
   const venueUrl = validHttpUrl(item.venueUrl) ? asString(item.venueUrl) : "";
   const ticketUrl = validHttpUrl(item.ticketUrl) && !socialPlatformFromUrl(item.ticketUrl) ? asString(item.ticketUrl) : "";
+  const sourceAuthority = pastedLinkAuthority(sourceUrl, organizerUrl, venueUrl);
   const issues = [
-    "Confirm whether the pasted page is an original organizer, venue, official-calendar, or authorized ticket source before publication.",
+    sourceAuthority === "unresolved"
+      ? "Confirm whether the pasted page is an original organizer, venue, official-calendar, or authorized ticket source before publication."
+      : "Review the extracted source classification before publication.",
     ...(!validDate(endsAt) ? ["The pasted page did not provide a verified event end time."] : []),
   ];
   const relatedLinks = normalizeRelatedLinks([
@@ -3887,11 +3903,13 @@ function browserPastedLinkProposal(item, source) {
     ticketUrl,
     scheduleStatus: scheduleStatus(item.scheduleStatus),
     ...ticketDetails(item.ticketStatus, item.ticketOnSaleAt, item.ticketNotes),
-    discoveryUrl: sourceUrl,
+    discoveryUrl: sourceAuthority === "unresolved" ? sourceUrl : "",
     organizerUrl,
     venueUrl,
-    sourceAuthority: "unresolved",
-    sourceResolutionNotes: "The Scout extracted facts from a pasted event link. Source authority still requires Studio review.",
+    sourceAuthority,
+    sourceResolutionNotes: sourceAuthority === "unresolved"
+      ? "The Scout extracted facts from a pasted event link. Source authority still requires Studio review."
+      : "The pasted event page and its official organization link share the same website. Studio review is still required.",
     title: asString(item.title),
     organizer: asString(item.organizer) || source.name,
     factualDescription: cleanSourceText(item.description),
@@ -4013,25 +4031,37 @@ function pastedLinkSource(pastedUrl) {
   };
 }
 
+function pastedLinkAuthority(sourceUrl, organizerUrl, venueUrl) {
+  if (socialPlatformFromUrl(sourceUrl)) return "unresolved";
+  if (organizerUrl && sameSourceHost(sourceUrl, organizerUrl)) return "organizer_event";
+  if (venueUrl && sameSourceHost(sourceUrl, venueUrl)) return "venue_event";
+  return "unresolved";
+}
+
 function holdPastedLinkForReview(proposal, pastedUrl) {
   const organizerUrl = asString(proposal.organizerUrl)
     || asString((proposal.relatedLinks || []).find((link) => link.role === "organizer")?.url);
   const venueUrl = asString(proposal.venueUrl)
     || asString((proposal.relatedLinks || []).find((link) => link.role === "venue")?.url);
+  const sourceAuthority = pastedLinkAuthority(pastedUrl, organizerUrl, venueUrl);
   const notes = [
     asString(proposal.verificationNotes),
-    "Confirm whether the pasted page is an original organizer, venue, official-calendar, or authorized ticket source before publication.",
+    sourceAuthority === "unresolved"
+      ? "Confirm whether the pasted page is an original organizer, venue, official-calendar, or authorized ticket source before publication."
+      : "Review the extracted source classification before publication.",
     ...(!validDate(proposal.endsAt) ? ["The pasted page did not provide a verified event end time."] : []),
   ].filter(Boolean);
   return {
     ...proposal,
     sourceId: "",
     sourceUrl: pastedUrl,
-    discoveryUrl: pastedUrl,
+    discoveryUrl: sourceAuthority === "unresolved" ? pastedUrl : "",
     organizerUrl: validHttpUrl(organizerUrl) ? organizerUrl : "",
     venueUrl: validHttpUrl(venueUrl) ? venueUrl : "",
-    sourceAuthority: "unresolved",
-    sourceResolutionNotes: "The Scout extracted facts from a pasted event link. Source authority still requires Studio review.",
+    sourceAuthority,
+    sourceResolutionNotes: sourceAuthority === "unresolved"
+      ? "The Scout extracted facts from a pasted event link. Source authority still requires Studio review."
+      : "The pasted event page and its official organization link share the same website. Studio review is still required.",
     flyerProvenanceUrl: proposal.flyerUrl ? pastedUrl : "",
     verificationState: "needs_verification",
     verificationNotes: [...new Set(notes)].join("\n"),
