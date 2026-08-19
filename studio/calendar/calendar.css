@@ -1,5 +1,6 @@
 :root { --accent:#FCB867; --accent-dim:rgba(252,184,103,.45); --surface:#111; --surface-2:#171717; --line:#38332c; --text:#f6eee4; --dim:#a89d91; --danger:#c84b43; --ok:#5e9d6c; }
 * { box-sizing:border-box; }
+[hidden] { display:none !important; }
 html,body { min-width:0; margin:0; background:#0e0e0e; color:var(--text); font-family:Inter,Arial,sans-serif; }
 button,input,textarea,select { font:inherit; }
 button,a { -webkit-tap-highlight-color:transparent; }

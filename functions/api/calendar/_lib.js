@@ -12,7 +12,7 @@ const SOURCE_CHECK_STATUSES = new Set(["never", "unchanged", "changes_detected",
 const SOURCE_AUTHORITIES = new Set(["organizer_event", "venue_event", "official_calendar", "authorized_ticket_host", "unresolved"]);
 const LINK_ROLES = new Set(["organizer", "venue", "ticket", "supporting", "discovery"]);
 const PLATFORM_SOURCE_ADAPTERS = new Set(["eventbrite", "posh"]);
-const INTERNAL_SOURCE_ADAPTERS = new Set(["eyedrum", "high_art_making"]);
+const INTERNAL_SOURCE_ADAPTERS = new Set(["eyedrum", "high_art_making", "rampant"]);
 const STORED_SOURCE_ADAPTERS = new Set(["automatic", "wix", "localist", "out_of_hand", "json", "icalendar", "rss"]);
 const SOURCE_ADAPTERS = new Set([...STORED_SOURCE_ADAPTERS, ...PLATFORM_SOURCE_ADAPTERS, ...INTERNAL_SOURCE_ADAPTERS]);
 const SOURCE_RENDER_MODES = new Set(["static", "dynamic-fallback"]);
@@ -259,13 +259,14 @@ function leadSource(source) {
   return source?.source_type === "discovery" || source?.trust_level === "discovery";
 }
 
-function sourceAuthorityErrors(proposal) {
+function sourceAuthorityErrors(proposal, { allowVerifiedInstagramSource = false } = {}) {
   const errors = [];
   const authority = SOURCE_AUTHORITIES.has(proposal.sourceAuthority) ? proposal.sourceAuthority : "unresolved";
   const discoveryUrl = asString(proposal.discoveryUrl);
-  if (authority === "unresolved") errors.push("Resolve the discovery lead to an original organizer, venue, official calendar, or authorized ticket-host page before publication.");
+  const verifiedInstagram = allowVerifiedInstagramSource && proposal.verificationState === "verified" && isInstagramUrl(proposal.sourceUrl);
+  if (authority === "unresolved" && !verifiedInstagram) errors.push("Resolve the discovery lead to an original organizer, venue, official calendar, or authorized ticket-host page before publication.");
   if (discoveryUrl && !validHttpUrl(discoveryUrl)) errors.push("Discovery URL must use http or https.");
-  if (discoveryUrl && sameSourceHost(discoveryUrl, proposal.sourceUrl) && authority !== "authorized_ticket_host") {
+  if (discoveryUrl && sameSourceHost(discoveryUrl, proposal.sourceUrl) && authority !== "authorized_ticket_host" && !verifiedInstagram) {
     errors.push("The public source cannot be the same secondary source that supplied the lead.");
   }
   if (proposal.organizerUrl && !validHttpUrl(proposal.organizerUrl)) errors.push("Organizer website URL must use http or https.");
@@ -286,10 +287,10 @@ function sourceAuthorityErrors(proposal) {
   return errors;
 }
 
-function applySourceAuthorityPolicy(proposal) {
+function applySourceAuthorityPolicy(proposal, options = {}) {
   const authority = SOURCE_AUTHORITIES.has(asString(proposal.sourceAuthority)) ? asString(proposal.sourceAuthority) : "unresolved";
   const discoveryUrl = asString(proposal.discoveryUrl);
-  const resolutionErrors = sourceAuthorityErrors({ ...proposal, sourceAuthority: authority, discoveryUrl });
+  const resolutionErrors = sourceAuthorityErrors({ ...proposal, sourceAuthority: authority, discoveryUrl }, options);
   const note = resolutionErrors[0] || "";
   return {
     ...proposal,
@@ -305,7 +306,7 @@ function applySourceAuthorityPolicy(proposal) {
   };
 }
 
-function applySourceReliabilityPolicy(proposal, current = {}) {
+function applySourceReliabilityPolicy(proposal, current = {}, { allowVerifiedInstagramSource = false } = {}) {
   const sourcePlatform = socialPlatformFromUrl(proposal.sourceUrl);
   const officialSocialEvidence = [...(proposal.socialEvidence || []), ...(current.socialEvidence || [])]
     .some((item) => item.platform === sourcePlatform && item.evidenceRole === "official");
@@ -326,10 +327,11 @@ function applySourceReliabilityPolicy(proposal, current = {}) {
     })),
   ], proposal.sourceUrl);
   const hasInstagramSource = isInstagramUrl(proposal.sourceUrl);
+  const verifiedInstagram = allowVerifiedInstagramSource && hasInstagramSource && proposal.verificationState === "verified";
   const notes = hasInstagramSource
     ? "Instagram is private discovery provenance only. Confirm this event on an event-specific organizer, venue, or ticket-host page before publication."
     : `${sourcePlatform || "Social"} discovery requires an exact registered official handle or an event-specific organizer, venue, or ticket-host page before publication.`;
-  const requiresCorroboration = Boolean(sourcePlatform && !officialSocialEvidence);
+  const requiresCorroboration = Boolean(sourcePlatform && !officialSocialEvidence && !verifiedInstagram);
   return applySourceAuthorityPolicy({
     ...proposal,
     discoveryUrl: hasInstagramSource ? proposal.sourceUrl : proposal.discoveryUrl,
@@ -340,7 +342,7 @@ function applySourceReliabilityPolicy(proposal, current = {}) {
     verificationNotes: requiresCorroboration && !proposal.verificationNotes.includes(notes)
       ? [proposal.verificationNotes, notes].filter(Boolean).join("\n")
       : proposal.verificationNotes,
-  });
+  }, { allowVerifiedInstagramSource });
 }
 
 function validDate(value) {
@@ -485,7 +487,7 @@ function normalizeOccurrence(row) {
   };
 }
 
-function normalizeOccurrenceProposal(item, parent = {}, index = 0) {
+function normalizeOccurrenceProposal(item, parent = {}, index = 0, { allowVerifiedInstagramSource = false } = {}) {
   const value = item && typeof item === "object" ? item : {};
   const occurrenceType = OCCURRENCE_TYPES.has(asString(value.occurrenceType)) ? asString(value.occurrenceType) : "other";
   const status = OCCURRENCE_STATUSES.has(asString(value.status)) ? asString(value.status) : "scheduled";
@@ -495,6 +497,7 @@ function normalizeOccurrenceProposal(item, parent = {}, index = 0) {
   const instagramSource = isInstagramUrl(sourceUrl);
   const verificationState = ["verified", "unverified", "needs_verification"].includes(asString(value.verificationState))
     ? asString(value.verificationState) : "unverified";
+  const verifiedInstagram = allowVerifiedInstagramSource && instagramSource && verificationState === "verified";
   const reliabilityNote = "Instagram is private discovery provenance only. Confirm this occurrence on an event-specific official organizer, venue, or ticket-host page before publication.";
   const access = accessDetails(value.accessStatus, value.accessNotes, value.audiences, parent);
   return {
@@ -514,8 +517,8 @@ function normalizeOccurrenceProposal(item, parent = {}, index = 0) {
     ticketUrl,
     ...ticketDetails(value.ticketStatus, value.ticketOnSaleAt, value.ticketNotes, parent),
     status,
-    verificationState: instagramSource ? "needs_verification" : verificationState,
-    verificationNotes: instagramSource && !asString(value.verificationNotes).includes(reliabilityNote)
+    verificationState: instagramSource && !verifiedInstagram ? "needs_verification" : verificationState,
+    verificationNotes: instagramSource && !verifiedInstagram && !asString(value.verificationNotes).includes(reliabilityNote)
       ? [asString(value.verificationNotes), reliabilityNote].filter(Boolean).join("\n")
       : asString(value.verificationNotes),
     sortOrder: Number.isFinite(Number(value.sortOrder)) ? Number(value.sortOrder) : index,
@@ -898,7 +901,7 @@ async function findDuplicate(db, proposal, excludeId = "", sensitivity = 0.84) {
   return null;
 }
 
-function proposalFromBody(body, current = {}) {
+function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = false } = {}) {
   const value = (camel, fallback = "") => body[camel] !== undefined ? body[camel] : current[camel] ?? fallback;
   const subjects = uniqueStrings(value("subjects", []), SUBJECTS);
   const formats = uniqueStrings(value("formats", []), FORMATS);
@@ -959,8 +962,8 @@ function proposalFromBody(body, current = {}) {
       .map((item, index) => normalizeOccurrenceProposal(item, {
         timezone: asString(value("timezone", TIME_ZONE)) || TIME_ZONE,
         ...access,
-      }, index)),
-  }, current);
+      }, index, { allowVerifiedInstagramSource })),
+  }, current, { allowVerifiedInstagramSource });
 }
 
 function publicationErrors(proposal) {
@@ -988,11 +991,12 @@ function publicationErrors(proposal) {
   if (!proposal.venueName || (!virtual && !proposal.venueAddress && !seriesUsesOccurrenceVenues)) errors.push(virtual ? "A confirmed virtual venue label is required." : "A confirmed venue name and address are required.");
   if (!geographicMatch(proposal)) errors.push("The event must be located in the Atlanta metro area.");
   if (!proposal.sourceUrl || !validHttpUrl(proposal.sourceUrl)) errors.push("A valid official source URL is required.");
-  errors.push(...sourceAuthorityErrors(proposal));
   const sourcePlatform = socialPlatformFromUrl(proposal.sourceUrl);
   const officialSocialEvidence = (proposal.socialEvidence || []).some((item) => item.platform === sourcePlatform && item.evidenceRole === "official");
-  if (isInstagramUrl(proposal.sourceUrl) && !officialSocialEvidence) errors.push("Instagram can be retained as private discovery provenance, but publication requires an event-specific official organizer, venue, or ticket-host URL.");
-  else if (sourcePlatform && !officialSocialEvidence) errors.push(`${sourcePlatform} publication requires an exact registered official handle or a corroborating official event URL.`);
+  const verifiedInstagram = isInstagramUrl(proposal.sourceUrl) && proposal.verificationState === "verified";
+  errors.push(...sourceAuthorityErrors(proposal, { allowVerifiedInstagramSource: verifiedInstagram }));
+  if (isInstagramUrl(proposal.sourceUrl) && !officialSocialEvidence && !verifiedInstagram) errors.push("Instagram may be used as the public source only after its event facts are manually verified in Studio.");
+  else if (sourcePlatform && !officialSocialEvidence && !verifiedInstagram) errors.push(`${sourcePlatform} publication requires an exact registered official handle or a corroborating official event URL.`);
   if (proposal.ticketUrl && !validHttpUrl(proposal.ticketUrl)) errors.push("Ticket URL must use http or https.");
   if (proposal.ticketUrl && isInstagramUrl(proposal.ticketUrl)) errors.push("Instagram cannot be used as the public ticket URL.");
   else if (proposal.ticketUrl && socialPlatformFromUrl(proposal.ticketUrl)) errors.push("A social post cannot be used as the public ticket URL.");
@@ -1029,7 +1033,8 @@ function occurrencePublicationErrors(occurrence, parent) {
   const virtual = onlineOnlyEvent({ venueName, venueAddress });
   if (!venueName || (!virtual && !venueAddress)) errors.push(virtual ? `${label} requires a confirmed virtual venue label.` : `${label} requires a confirmed venue name and address.`);
   const sourceUrl = occurrence.sourceUrl || parent.sourceUrl;
-  if (!validHttpUrl(sourceUrl) || socialPlatformFromUrl(sourceUrl)) errors.push(`${label} requires an event-specific official organizer, venue, or ticket-host URL.`);
+  const verifiedInstagram = isInstagramUrl(sourceUrl) && occurrence.verificationState === "verified";
+  if (!validHttpUrl(sourceUrl) || (socialPlatformFromUrl(sourceUrl) && !verifiedInstagram)) errors.push(`${label} requires an event-specific official organizer, venue, ticket-host, or manually verified Instagram URL.`);
   if (occurrence.ticketUrl && (!validHttpUrl(occurrence.ticketUrl) || socialPlatformFromUrl(occurrence.ticketUrl))) errors.push(`${label} has an invalid public ticket URL.`);
   if (occurrence.ticketOnSaleAt && !validDate(occurrence.ticketOnSaleAt)) errors.push(`${label} has an invalid tickets-on-sale time.`);
   if (occurrence.accessStatus === "unknown") errors.push(`${label} attendance eligibility must be confirmed before publication.`);
@@ -1305,11 +1310,12 @@ async function createCandidate(env, body, discoveredBy = "manual", provenance = 
   return { candidate: await getCandidate(db, id), duplicate };
 }
 
-async function saveCandidate(env, id, body, { appendChangeRevision = true } = {}) {
+async function saveCandidate(env, id, body, { appendChangeRevision = true, allowVerifiedInstagramSource = false } = {}) {
   const db = requireDb(env);
   const current = await getCandidate(db, id, false);
   if (!current) return null;
-  const proposal = proposalFromBody(body, current);
+  const preserveVerifiedInstagram = current.verificationState === "verified" && isInstagramUrl(current.sourceUrl);
+  const proposal = proposalFromBody(body, current, { allowVerifiedInstagramSource: allowVerifiedInstagramSource || preserveVerifiedInstagram });
   const status = body.status !== undefined && CANDIDATE_STATUSES.has(asString(body.status)) ? asString(body.status) : current.status;
   const now = isoNow();
   await db.prepare(
@@ -1976,7 +1982,7 @@ async function handleCandidates(request, env, parts) {
       const body = await readBody(request);
       if (!body) return errorResponse("Invalid JSON body.");
       try {
-        const candidate = await saveCandidate(env, id, body);
+        const candidate = await saveCandidate(env, id, body, { allowVerifiedInstagramSource: true });
         return candidate ? json({ candidate }) : errorResponse("Candidate not found.", 404);
       } catch (error) {
         return errorResponse(error.message);
@@ -3000,6 +3006,7 @@ function sourceAdapterKey(source) {
   if (host === "eventbrite.com" || host.endsWith(".eventbrite.com")) return "eventbrite";
   if (host === "posh.vip" || host.endsWith(".posh.vip")) return "posh";
   if (host === "eyedrum.org") return "eyedrum";
+  if (host === "rampantgallery.com" || host.endsWith(".rampantgallery.com")) return "rampant";
   if (host === "high.org" && /\/event-category\/for-adults\/art-making\/?/i.test(new URL(source.url).pathname)) return "high_art_making";
   if (source.source_type === "calendar") return "icalendar";
   if (source.source_type === "json") return isGsuLocalistSource(source.url) ? "localist" : "json";
@@ -3328,6 +3335,124 @@ function extractHighArtMakingEvents(html, source) {
     return true;
   });
   return groupHighArtMakingRecurringEvents(events, source);
+}
+
+function rampantDateRange(label) {
+  const text = sourceHtmlEntities(asString(label)).replace(/\s+/g, " ");
+  const month = "(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
+  const match = text.match(new RegExp(`\\b${month}\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(20\\d{2}))?\\s*(?:-|â€“|â€”|–|—|through|to)\\s*(?:${month}\\s+)?(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(20\\d{2}))?\\b`, "i"));
+  if (!match) return null;
+  const endYear = match[6] || match[3];
+  const startYear = match[3] || endYear;
+  if (!startYear || !endYear) return null;
+  const startsAt = highDateParts(match[1], match[2], startYear);
+  const endsAt = highDateParts(match[4] || match[1], match[5], endYear);
+  return startsAt && endsAt ? { dateKind:"date_range", startsAt, endsAt } : null;
+}
+
+function rampantOpeningRange(text, fallbackYear) {
+  const normalized = sourceHtmlEntities(asString(text)).replace(/\s+/g, " ");
+  const dateMatch = normalized.match(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(20\d{2}))?\b/i);
+  const timeMatch = normalized.match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?\s*(?:-|â€“|â€”|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i);
+  if (!dateMatch || !timeMatch) return null;
+  const dayKey = highDateParts(dateMatch[1], dateMatch[2], dateMatch[3] || fallbackYear);
+  if (!dayKey) return null;
+  const startMeridiem = timeMatch[3] || timeMatch[6];
+  const hour = (value, meridiem) => (Number(value) % 12) + (/p/i.test(meridiem) ? 12 : 0);
+  const offset = nyOffsetForDate(new Date(`${dayKey}T12:00:00Z`));
+  return {
+    dateKind: "timed",
+    startsAt: `${dayKey}T${String(hour(timeMatch[1], startMeridiem)).padStart(2, "0")}:${timeMatch[2] || "00"}:00${offset}`,
+    endsAt: `${dayKey}T${String(hour(timeMatch[4], timeMatch[6])).padStart(2, "0")}:${timeMatch[5] || "00"}:00${offset}`,
+  };
+}
+
+function extractRampantEvents(html, source) {
+  const sourceText = asString(html);
+  const previousShowsAt = sourceText.search(/<h[1-6]\b[^>]*>\s*Previous Shows\s*<\/h[1-6]>/i);
+  const currentPage = previousShowsAt >= 0 ? sourceText.slice(0, previousShowsAt) : sourceText;
+  const headings = [...currentPage.matchAll(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi)].map((match) => ({
+    index: match.index || 0,
+    end: (match.index || 0) + match[0].length,
+    level: Number(match[1]),
+    text: sourceHtmlEntities(cleanSourceText(match[2])),
+  }));
+  const dateHeading = headings.find((heading) => rampantDateRange(heading.text));
+  if (!dateHeading) return [];
+  const range = rampantDateRange(dateHeading.text);
+  const titleHeading = headings.filter((heading) => heading.index < dateHeading.index && heading.level <= 3 && !/^rampant gallery$/i.test(heading.text)).at(-1);
+  if (!titleHeading?.text || !range?.startsAt) return [];
+  const section = currentPage.slice(titleHeading.index);
+  const paragraphs = [...section.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((match) => sourceHtmlEntities(cleanSourceText(match[1])))
+    .filter(Boolean);
+  const openingText = paragraphs.find((value) => /\bopening reception\b/i.test(value)) || "";
+  const descriptionParts = paragraphs.filter((value) => value !== openingText || !/^\s*[^.]+will be on display/i.test(value));
+  const factualDescription = descriptionParts.join("\n\n").slice(0, 5000);
+  const imageTag = section.match(/<img\b[^>]*(?:data-src|src)=["'][^"']+["'][^>]*>/i)?.[0] || "";
+  const flyerUrl = sourceHtmlEntities(imageTag.match(/\b(?:data-src|src)=["']([^"']+)["']/i)?.[1] || "");
+  const year = range.startsAt.slice(0, 4);
+  const openingRange = rampantOpeningRange(openingText, year);
+  const identity = normalizeText(titleHeading.text).replace(/\s+/g, "-").slice(0, 140);
+  const sourceEventId = `rampant-${identity}-${range.startsAt}`;
+  const sourceUrl = source.url;
+  const access = {
+    accessStatus: "public",
+    accessNotes: "Public exhibition at Rampant Gallery; review the official gallery page for current hours and reception details.",
+    audiences: ["Public"],
+  };
+  const base = {
+    sourceId: source.id,
+    sourceUrl,
+    ticketUrl: "",
+    ...directSourceFields(source, sourceUrl, sourceUrl, sourceUrl),
+    sourceAuthority: "venue_event",
+    sourceResolutionNotes: "Event facts were retrieved from Rampant Gallery's official current-exhibition page.",
+    organizer: "Rampant Gallery",
+    factualDescription,
+    ...access,
+    timezone: TIME_ZONE,
+    venueName: "Rampant Gallery",
+    venueAddress: "1200 Foster Street NW, Studio 119, Atlanta, GA 30318",
+    city: "Atlanta",
+    region: "GA",
+  };
+  return [{
+    ...base,
+    sourceEventId,
+    title: titleHeading.text,
+    eventStructure: "exhibition",
+    ...range,
+    subjects: ["art"],
+    formats: ["exhibition"],
+    experimental: false,
+    relatedLinks: [],
+    flyerUrl: validHttpUrl(flyerUrl) ? flyerUrl : "",
+    flyerProvenanceUrl: sourceUrl,
+    flyerAltText: `${titleHeading.text} exhibition flyer`,
+    verificationState: "verified",
+    verificationNotes: "Title, exhibition dates, venue, description, flyer, and any announced opening-reception time were retrieved from Rampant Gallery's official website.",
+    confidence: 0.97,
+    occurrences: openingRange ? [{
+      sourceEventId: `${sourceEventId}-opening`,
+      occurrenceType: "opening_reception",
+      title: "Opening Reception",
+      factualDescription: openingText,
+      ...access,
+      ...openingRange,
+      timezone: TIME_ZONE,
+      venueName: base.venueName,
+      venueAddress: base.venueAddress,
+      sourceUrl,
+      ticketUrl: "",
+      ticketStatus: "unknown",
+      ticketNotes: "",
+      status: "scheduled",
+      verificationState: "verified",
+      verificationNotes: "Opening-reception date and time were retrieved from Rampant Gallery's official current-exhibition page.",
+      sortOrder: 0,
+    }] : [],
+  }];
 }
 
 function sameOriginUrl(value, sourceUrl) {
@@ -3828,6 +3953,7 @@ function extractSourceEvents(text, source) {
   const adapterKey = sourceAdapterKey(source);
   if (adapterKey === "eyedrum") return extractEyedrumEvents(text, source);
   if (adapterKey === "high_art_making") return extractHighArtMakingEvents(text, source);
+  if (adapterKey === "rampant") return extractRampantEvents(text, source);
   if (source.source_type === "calendar") return extractIcsEvents(text, source);
   if (source.source_type === "json") return extractJsonEvents(text, source);
   if (source.source_type === "rss") return extractRssEvents(text, source);

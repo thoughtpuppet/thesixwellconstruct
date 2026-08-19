@@ -17,6 +17,7 @@
 
   function escapeHtml(value) { return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]; }); }
   function isInstagramUrl(value) { try { var host = new URL(value).hostname.toLowerCase(); return host === "instagram.com" || host.endsWith(".instagram.com") || host === "instagr.am" || host.endsWith(".instagr.am"); } catch (error) { return false; } }
+  function isSocialUrl(value) { try { var host = new URL(value).hostname.toLowerCase().replace(/^www\./,""); return ["instagram.com","instagr.am","threads.net","tiktok.com"].some(function(domain){return host===domain||host.endsWith("."+domain);}); } catch (error) { return false; } }
   function displayDate(value) { var date = value ? new Date(value.length === 10 ? value + "T12:00:00" : value) : null; return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", hour:value.length > 10 ? "numeric" : undefined, minute:value.length > 10 ? "2-digit" : undefined }).format(date) : "Date not confirmed"; }
   function toast(message) { var root = document.getElementById("toast"); root.textContent = message; root.classList.add("is-visible"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { root.classList.remove("is-visible"); }, 3200); }
   async function api(path, options) {
@@ -176,21 +177,29 @@
     return record.accessStatus === "public" || (record.accessStatus === "restricted" && Boolean(record.accessNotes) && Array.isArray(record.audiences) && record.audiences.length > 0);
   }
 
+  function verifiedInstagramSource(record) {
+    return record.verificationState === "verified" && isInstagramUrl(record.sourceUrl);
+  }
+
+  function sourceReady(record) {
+    return verifiedInstagramSource(record) || (record.sourceAuthority !== "unresolved" && !isSocialUrl(record.sourceUrl));
+  }
+
   function matchesStatus(candidate, status) {
     if (status === "review") return candidate.status === "candidate" || candidate.status === "needs_verification";
     if (status === "updates") return candidate.status === "published" && Boolean(candidate.pendingRevisionId);
-    if (status === "ready") return candidate.status === "candidate" && candidate.verificationState === "verified" && candidate.sourceAuthority !== "unresolved" && accessReady(candidate) && !isInstagramUrl(candidate.sourceUrl);
+    if (status === "ready") return ["candidate","needs_verification"].includes(candidate.status) && candidate.verificationState === "verified" && sourceReady(candidate) && accessReady(candidate);
     return candidate.status === status;
   }
   function lifecycleLabel(candidate) {
     if (candidate.status === "published" && candidate.pendingRevisionId) return "update awaiting review";
-    if (candidate.status === "candidate" && candidate.verificationState === "verified" && candidate.sourceAuthority !== "unresolved" && accessReady(candidate) && !isInstagramUrl(candidate.sourceUrl)) return "ready to publish";
+    if (["candidate","needs_verification"].includes(candidate.status) && candidate.verificationState === "verified" && sourceReady(candidate) && accessReady(candidate)) return "ready to publish";
     return candidate.status.replace(/_/g," ");
   }
   function recordLabel(candidate) {
     if (candidate.status === "published" && candidate.pendingRevisionId) return "Published event update";
     if (candidate.status === "published") return "Published event record";
-    if (candidate.status === "candidate" && candidate.verificationState === "verified" && candidate.sourceAuthority !== "unresolved" && accessReady(candidate) && !isInstagramUrl(candidate.sourceUrl)) return "Ready to publish";
+    if (["candidate","needs_verification"].includes(candidate.status) && candidate.verificationState === "verified" && sourceReady(candidate) && accessReady(candidate)) return "Ready to publish";
     return "Candidate record";
   }
 
@@ -207,23 +216,26 @@
     if (!candidate) { editorRoot.innerHTML = '<p class="empty-state">Select a candidate or start a manual intake.</p>'; return; }
     var isNew = !candidate.id;
     var revisions = candidate.revisions || [];
-    var instagramSource = isInstagramUrl(candidate.sourceUrl) || isInstagramUrl(candidate.ticketUrl);
-    var occurrencesReady = (candidate.occurrences||[]).every(function (occurrence) { return occurrence.status === "tbd" || (occurrence.verificationState === "verified" && accessReady(occurrence) && occurrence.startsAt && !isInstagramUrl(occurrence.sourceUrl)); });
-    var canPublish = !isNew && candidate.verificationState === "verified" && candidate.sourceAuthority !== "unresolved" && accessReady(candidate) && !instagramSource && occurrencesReady && !["rejected","cancelled","duplicate"].includes(candidate.status) && (candidate.status !== "published" || candidate.pendingRevisionId);
+    var instagramSource = isInstagramUrl(candidate.sourceUrl);
+    var instagramTicket = isInstagramUrl(candidate.ticketUrl);
+    var verifiedInstagram = verifiedInstagramSource(candidate);
+    var occurrencesReady = (candidate.occurrences||[]).every(function (occurrence) { var occurrenceSource=occurrence.sourceUrl||candidate.sourceUrl;var occurrenceSourceReady=!isSocialUrl(occurrenceSource)||(isInstagramUrl(occurrenceSource)&&occurrence.verificationState==="verified");return occurrence.status === "tbd" || (occurrence.verificationState === "verified" && accessReady(occurrence) && occurrence.startsAt && occurrenceSourceReady); });
+    var canPublish = !isNew && candidate.verificationState === "verified" && sourceReady(candidate) && accessReady(candidate) && !instagramTicket && occurrencesReady && !["rejected","cancelled","duplicate"].includes(candidate.status) && (candidate.status !== "published" || candidate.pendingRevisionId);
     var publishLabel = candidate.status === "published" ? "Approve + Update" : "Approve + Publish";
     editorRoot.innerHTML = '<div class="editor-head"><div><p class="eyebrow">' + (isNew ? 'Manual intake' : recordLabel(candidate)) + '</p><h2>' + escapeHtml(candidate.title || "New candidate") + '</h2></div><span class="status-badge">' + escapeHtml(lifecycleLabel(candidate)) + '</span></div>' +
       '<div class="editor-section"><h3>Public factual record</h3><div class="field-grid">' +
       '<label class="field"><span>Registry source</span><select id="candidateSourceId">' + sourceChoices(candidate.sourceId || "") + '</select></label>' +
       field("candidateSourceEventId","Source event ID",candidate.sourceEventId) +
       linkedField("candidateDiscoveryUrl","Discovery lead URL (private)",candidate.discoveryUrl,"Open discovery lead",{wide:true}) +
-      field("candidateSourceAuthority","Source authority",candidate.sourceAuthority||"unresolved",{type:"select",choices:[["unresolved","Unresolved - cannot publish"],["organizer_event","Organizer event page"],["venue_event","Venue event page"],["official_calendar","Official organization calendar"],["authorized_ticket_host","Authorized ticket host"]]}) +
+      field("candidateSourceAuthority","Source authority",candidate.sourceAuthority||"unresolved",{type:"select",choices:[["unresolved",instagramSource?"Instagram source - verify manually":"Unresolved - cannot publish"],["organizer_event","Organizer event page"],["venue_event","Venue event page"],["official_calendar","Official organization calendar"],["authorized_ticket_host","Authorized ticket host"]]}) +
       linkedField("candidateSourceUrl","Original event source URL",candidate.sourceUrl,"Open original source",{wide:true}) + linkedField("candidateTicketUrl","Ticket URL",candidate.ticketUrl,"Open ticket link",{wide:true}) +
       field("candidateScheduleStatus","Schedule status",candidate.scheduleStatus||"scheduled",{type:"select",choices:[["scheduled","Scheduled"],["postponed","Postponed"],["rescheduled","Rescheduled"],["cancelled","Cancelled"],["moved_online","Moved online"]]}) + field("candidateTicketStatus","Ticket status",candidate.ticketStatus||"unknown",{type:"select",choices:TICKET_STATUSES}) +
       field("candidateTicketOnSaleAt","Tickets on sale (ISO, optional)",candidate.ticketOnSaleAt) + field("candidateTicketNotes","Public ticket note",candidate.ticketNotes,{type:"textarea"}) +
       linkedField("candidateOrganizerUrl","Organizer website",candidate.organizerUrl,"Open organizer",{wide:true}) + linkedField("candidateVenueUrl","Venue website",candidate.venueUrl,"Open venue",{wide:true}) +
       field("candidateSourceResolutionNotes","Source-resolution notes (private)",candidate.sourceResolutionNotes,{type:"textarea",wide:true}) +
-      (candidate.sourceAuthority === "unresolved" ? '<p class="source-reliability-warning">This is still a lead. Find an event-specific organizer or venue page, or an authorized ticket listing supported by the organizer or venue website, before publishing.</p>' : '') +
-      (instagramSource ? '<p class="source-reliability-warning">Instagram is retained as private discovery evidence only. Search for an event-specific organizer, venue, or ticket-host page that confirms this event before publishing.</p>' : '') +
+      (candidate.sourceAuthority === "unresolved" && !instagramSource ? '<p class="source-reliability-warning">This is still a lead. Find an event-specific organizer or venue page, or an authorized ticket listing supported by the organizer or venue website, before publishing.</p>' : '') +
+      (instagramSource ? '<p class="source-reliability-warning">' + (verifiedInstagram ? 'Human-verified Instagram source. It may publish as Official details; keep tickets or registration on a separate non-social URL.' : 'Instagram may be the public source when no other event page exists. Correct the factual fields, set Verification to Verified, save, then approve the event.') + '</p>' : '') +
+      (instagramTicket ? '<p class="source-reliability-warning">Instagram cannot be used as the ticket or registration URL.</p>' : '') +
       field("candidateTitle","Title",candidate.title,{wide:true}) + field("candidateOrganizer","Organizer",candidate.organizer) + field("candidateEventStructure","Event structure",candidate.eventStructure||"single",{type:"select",choices:[["single","Single event"],["series","Series"],["exhibition","Exhibition / on view"]]}) + field("candidateDateKind","Date type",candidate.dateKind,{type:"select",choices:[["timed","Timed"],["all_day","All day"],["date_range","Date range"]]}) +
       field("candidateStartsAt","Starts (ISO or YYYY-MM-DD)",candidate.startsAt) + field("candidateEndsAt","Ends (ISO or YYYY-MM-DD)",candidate.endsAt) + field("candidateTimezone","Time zone",candidate.timezone) + field("candidateVenueName","Venue",candidate.venueName) +
       field("candidateVenueAddress","Venue address",candidate.venueAddress,{wide:true}) + field("candidateCity","City",candidate.city) + field("candidateRegion","State / region",candidate.region) + field("candidateDescription","Factual description",candidate.factualDescription,{type:"textarea",wide:true}) +
@@ -345,7 +357,7 @@
         field("sourceCadence-"+source.id,"Cadence hours",source.cadenceHours,{type:"number"}) +
         '<label class="field"><span>Enabled</span><select id="sourceEnabled-' + source.id + '"><option value="1"' + (source.enabled?' selected':'') + '>Enabled</option><option value="0"' + (!source.enabled?' selected':'') + '>Paused</option></select></label>' +
         '<label class="field"><span>Source type</span><select id="sourceType-' + source.id + '">' + [["official_html","Official HTML"],["calendar","Calendar"],["json","JSON"],["rss","RSS"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.sourceType===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
-        '<label class="field"><span>Adapter</span><select id="sourceAdapter-' + source.id + '">' + [["automatic","Automatic"],["high_art_making","High Art Making"],["eyedrum","Eyedrum"],["eventbrite","Eventbrite discovery"],["posh","Posh discovery"],["wix","Wix"],["localist","Localist"],["out_of_hand","Out of Hand"],["json","JSON"],["icalendar","iCalendar"],["rss","RSS"]].map(function(option){return '<option value="'+option[0]+'"'+((source.adapterKey||"automatic")===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
+        '<label class="field"><span>Adapter</span><select id="sourceAdapter-' + source.id + '">' + [["automatic","Automatic"],["high_art_making","High Art Making"],["eyedrum","Eyedrum"],["rampant","Rampant Gallery"],["eventbrite","Eventbrite discovery"],["posh","Posh discovery"],["wix","Wix"],["localist","Localist"],["out_of_hand","Out of Hand"],["json","JSON"],["icalendar","iCalendar"],["rss","RSS"]].map(function(option){return '<option value="'+option[0]+'"'+((source.adapterKey||"automatic")===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
         '<label class="field"><span>Rendering</span><select id="sourceRenderMode-' + source.id + '"><option value="static"'+((source.renderMode||"static")==="static"?' selected':'')+'>Static / API first</option><option value="dynamic-fallback"'+(source.renderMode==="dynamic-fallback"?' selected':'')+'>Dynamic fallback</option></select></label>' +
         field("sourceAdapterConfig-"+source.id,"Adapter configuration (JSON)",JSON.stringify(source.adapterConfig||{}),{wide:true}) +
         '<label class="field"><span>Trust</span><select id="sourceTrust-' + source.id + '">' + [["official","Official"],["trusted","Trusted"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.trustLevel===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
@@ -464,5 +476,4 @@
   document.getElementById("runScout").addEventListener("click",async function(){this.disabled=true;toast("Enabled scout lanes started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:"{}"});toast("Scout finished: "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+(result.warnings||0)+" warnings, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{this.disabled=false;}});
   document.getElementById("refreshRuns").addEventListener("click",loadRuns);
   document.getElementById("suggestionList").addEventListener("click",async function(event){var button=event.target.closest("[data-suggestion-action]");if(!button)return;try{await api("/api/admin/calendar/suggestions/"+encodeURIComponent(button.dataset.id)+"/"+button.dataset.suggestionAction,{method:"POST",body:"{}"});await loadSuggestions();var profile=await api("/api/admin/calendar/profile");state.profile=profile.profile;renderProfile();toast("Suggestion "+button.dataset.suggestionAction+"ed.");}catch(error){toast(error.message);}});
-  if (token) connect();
 })();

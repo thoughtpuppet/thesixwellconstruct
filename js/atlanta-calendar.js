@@ -12,6 +12,7 @@
   var allEvents = [];
   var filtered = [];
   var activeMonth = new Date();
+  var descriptionSyncFrame = 0;
   activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth(), 1);
 
   var search = document.getElementById("calendarSearch");
@@ -89,6 +90,27 @@
 
   function eventAnchor(event) { return "event-" + String(event.id || "").replace(/[^a-z0-9_-]+/gi, "-"); }
 
+  function syncDescriptionToggles() {
+    Array.from(document.querySelectorAll(".calendar-event-description")).forEach(function (description) {
+      var control = document.querySelector('[data-description-toggle][aria-controls="' + description.id + '"]');
+      if (!control) return;
+      if (control.getAttribute("aria-expanded") === "true") {
+        control.hidden = false;
+        return;
+      }
+      description.classList.add("is-collapsed");
+      control.hidden = !(description.scrollHeight > description.clientHeight + 1);
+    });
+  }
+
+  function scheduleDescriptionSync() {
+    if (descriptionSyncFrame) cancelAnimationFrame(descriptionSyncFrame);
+    descriptionSyncFrame = requestAnimationFrame(function () {
+      descriptionSyncFrame = 0;
+      syncDescriptionToggles();
+    });
+  }
+
   function renderFilters(root, labels, name) {
     root.innerHTML = Object.keys(labels).map(function (value) {
       return '<label class="filter-chip"><input type="checkbox" name="' + name + '" value="' + escapeHtml(value) + '"><span>' + escapeHtml(labels[value]) + '</span></label>';
@@ -131,19 +153,22 @@
     if (!officialUrl && event.actionUrl && event.actionUrl !== ticketUrl) officialUrl = event.actionUrl;
     var officialAction = officialUrl && officialUrl !== ticketUrl ? '<a href="' + escapeHtml(officialUrl) + '">Official details</a>' : '';
     var ticketAction = ticketUrl ? '<a href="' + escapeHtml(ticketUrl) + '">Tickets / Register</a>' : '';
+    var descriptionId = eventAnchor(event) + "-description";
+    var description = event.description ? '<p class="calendar-event-description is-collapsed" id="' + descriptionId + '">' + escapeHtml(event.description) + '</p>' +
+      '<button class="calendar-description-toggle" type="button" data-description-toggle aria-controls="' + descriptionId + '" aria-expanded="false" hidden>See more</button>' : '';
     return '<article class="calendar-event-card' + (event.status === "cancelled" ? ' is-cancelled' : '') + '" id="' + eventAnchor(event) + '" data-subject="' + escapeHtml(primarySubject) + '">' +
       '<p class="calendar-event-meta">' + escapeHtml(scheduleLabel ? scheduleLabel + " / " + eventDate(event) : event.status === "cancelled" ? "Cancelled / " + eventDate(event) : eventDate(event)) + '</p>' +
       (event.isOccurrence ? '<p class="calendar-event-series">Part of / ' + (event.parentEventStructure === "exhibition" ? '<a href="#' + eventAnchor({id:event.seriesId}) + '">' + escapeHtml(event.parentTitle) + '</a>' : escapeHtml(event.parentTitle)) + ' / ' + escapeHtml(OCCURRENCE_LABELS[event.occurrenceType] || "Related Program") + '</p>' : '') +
       '<h3>' + escapeHtml(event.title) + '</h3>' +
       (accessNote ? '<p class="calendar-event-access"><strong>Access / </strong>' + escapeHtml(accessNote) + '</p>' : '') +
       (ticketNote ? '<p class="calendar-event-ticket"><strong>Tickets / </strong>' + escapeHtml(ticketNote) + '</p>' : '') +
-      (event.description ? '<p class="calendar-event-description">' + escapeHtml(event.description) + '</p>' : '') +
+      description +
       '<div class="calendar-event-facts">' + organizerFact + venueFact + '<span>' + escapeHtml(sourceLabel) + '</span></div>' +
       '<div class="calendar-tags">' + labels.map(function (label) { return '<span class="calendar-tag">' + escapeHtml(label) + '</span>'; }).join("") + '</div>' +
       (relatedOccurrences.length ? '<div class="calendar-related-schedule"><span>Related schedule</span>' + relatedOccurrences.map(function (occurrence) { return '<a href="#' + eventAnchor(occurrence) + '"><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small></a>'; }).join("") + '</div>' : '') +
       (relatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + relatedLinks.map(function (link) { return '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(link.label) + '</a>'; }).join("") + '</div>' : '') +
       (flyer ? '<details class="calendar-event-flyer"><summary>Show flyer</summary><div><img src="' + escapeHtml(flyer.url) + '" alt="' + escapeHtml(flyer.altText || event.title + " event flyer") + '" loading="lazy" decoding="async"' + (flyer.width ? ' width="' + Number(flyer.width) + '"' : '') + (flyer.height ? ' height="' + Number(flyer.height) + '"' : '') + '></div></details>' : '') +
-      '<div class="calendar-event-actions">' + officialAction + ticketAction + '<a class="is-secondary" href="/api/calendar/events/' + encodeURIComponent(event.id) + '.ics">Add this event</a></div>' +
+      '<div class="calendar-event-actions">' + officialAction + ticketAction + '<a class="is-secondary" href="/api/calendar/events/' + encodeURIComponent(event.id) + '.ics">Add this event to your calendar</a></div>' +
       '</article>';
   }
 
@@ -159,6 +184,7 @@
     resultCount.textContent = filtered.length + (filtered.length === 1 ? " event" : " events") + " shown in " + monthName;
     upcomingRoot.innerHTML = upcoming.length ? upcoming.map(eventCard).join("") : '<p class="calendar-empty">No upcoming approved events match these filters.</p>';
     pastRoot.innerHTML = past.length ? past.map(eventCard).join("") : '<p class="calendar-empty">No past events match these filters.</p>';
+    scheduleDescriptionSync();
   }
 
   function dayEvents(key) {
@@ -231,6 +257,18 @@
   document.getElementById("previousMonth").addEventListener("click", function () { activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() - 1, 1); applyFilters(); });
   document.getElementById("nextMonth").addEventListener("click", function () { activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 1); applyFilters(); });
   grid.addEventListener("click", function (event) { var button = event.target.closest("button[data-date]"); if (button) renderAgenda(button.dataset.date); });
+  document.addEventListener("click", function (event) {
+    var control = event.target.closest("[data-description-toggle]");
+    if (!control) return;
+    var description = document.getElementById(control.getAttribute("aria-controls"));
+    if (!description) return;
+    var shouldExpand = control.getAttribute("aria-expanded") !== "true";
+    control.setAttribute("aria-expanded", shouldExpand ? "true" : "false");
+    control.textContent = shouldExpand ? "See less" : "See more";
+    description.classList.toggle("is-collapsed", !shouldExpand);
+  });
+  window.addEventListener("resize", scheduleDescriptionSync);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleDescriptionSync);
 
   fetch("/api/calendar/events")
     .then(function (response) { if (!response.ok) throw new Error("Calendar request failed."); return response.json(); })

@@ -81,6 +81,11 @@ button.calendar-day { cursor:pointer; }
 .calendar-event-ticket { margin:12px 0 0; border-left:5px solid var(--subject-cue); padding:10px 12px; color:var(--text); font:800 10px/1.55 var(--font-display); letter-spacing:.08em; text-transform:uppercase; }
 .calendar-event-ticket strong { color:var(--calendar-accent); }
 .calendar-event-description { margin:16px 0 0; color:var(--text-muted); line-height:1.65; }
+.calendar-event-description.is-collapsed { max-height:5lh; overflow:hidden; }
+.calendar-description-toggle { align-self:flex-start; min-height:38px; margin-top:8px; border:5px solid var(--ring-faint); border-radius:0; padding:0 10px; background:transparent; color:var(--text); font:900 8px/1 var(--font-display); letter-spacing:.12em; text-transform:uppercase; cursor:pointer; }
+.calendar-description-toggle[hidden] { display:none; }
+.calendar-description-toggle:hover,
+.calendar-description-toggle:focus-visible { border-color:var(--calendar-accent); background:var(--calendar-accent-wash); outline:none; }
 .calendar-event-facts { display:grid; gap:7px; margin:18px 0 0; color:var(--text-dim); font:700 10px/1.5 var(--font-display); letter-spacing:.08em; text-transform:uppercase; }
 .calendar-event-facts a { color:inherit; text-decoration-color:var(--ring-faint); text-decoration-thickness:2px; text-underline-offset:3px; }
 .calendar-event-facts a:hover,.calendar-event-facts a:focus-visible { color:var(--calendar-accent); outline:none; }

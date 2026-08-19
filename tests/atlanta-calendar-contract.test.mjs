@@ -151,6 +151,10 @@ test("calendar migrations preserve seeded private candidates, verified official 
   assert.equal(JSON.parse(artMakingProfile.weighted_subjects_json)["art-making"], 1);
   assert.equal(JSON.parse(artMakingProfile.positive_concepts_json).includes("figure drawing"), true);
   assert.deepEqual(
+    { ...db.prepare("SELECT name,url,source_type,trust_level,enabled,adapter_key,render_mode FROM calendar_sources WHERE id='cal_source_rampant_gallery'").get() },
+    { name:"Rampant Gallery", url:"https://rampantgallery.com/", source_type:"official_html", trust_level:"official", enabled:1, adapter_key:"automatic", render_mode:"static" },
+  );
+  assert.deepEqual(
     { ...db.prepare("SELECT name,route FROM construct_pathways WHERE id='path-events-03'").get() },
     { name:"Atlanta calendar", route:"/calendar/" },
   );
@@ -320,8 +324,54 @@ test("Instagram remains private discovery provenance and cannot become a public 
   const approval = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
   assert.equal(approval.status, 409);
   const approvalPayload = await approval.json();
-  assert.match(approvalPayload.errors.join(" "), /Instagram.*publication requires/i);
+  assert.match(approvalPayload.errors.join(" "), /Instagram.*manually verified/i);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+});
+
+test("a human-verified Instagram-only source can publish while social ticket links remain blocked", async () => {
+  const db = database();
+  const instagramUrl = "https://www.instagram.com/p/human-verified-atlanta-event/";
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Instagram-only Atlanta Artist Talk", organizer:"Atlanta Artist Collective",
+      factualDescription:"An artist talk announced by its organizer on Instagram.",
+      sourceUrl:instagramUrl, ticketUrl:"https://www.instagram.com/p/not-a-ticket-page/",
+      dateKind:"timed", startsAt:"2026-11-21T18:00:00-05:00", endsAt:"2026-11-21T20:00:00-05:00",
+      venueName:"Atlanta Artist Collective", venueAddress:"25 Art Way, Atlanta, GA",
+      subjects:["art"], formats:["lecture-talk"], verificationState:"verified",
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const candidate = (await created.json()).candidate;
+  assert.equal(candidate.verificationState, "needs_verification");
+  assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 409);
+
+  const saved = await admin(db, `/candidates/${candidate.id}`, {
+    method:"PATCH",
+    body:{
+      verificationState:"verified",
+      verificationNotes:"The title, date, time, venue, organizer, and attendance details were manually checked against the Instagram announcement.",
+      sourceResolutionNotes:"No separate organizer or venue event page is available; the Instagram announcement is the public source.",
+    },
+  });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  const verified = (await saved.json()).candidate;
+  assert.equal(verified.sourceUrl, instagramUrl);
+  assert.equal(verified.sourceAuthority, "unresolved");
+  assert.equal(verified.verificationState, "verified");
+  assert.equal(verified.ticketUrl, "");
+
+  const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
+  assert.equal(approved.status, 200, await approved.clone().text());
+  const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+  const publicEvent = publicPayload.events.find((event) => event.title === "Instagram-only Atlanta Artist Talk");
+  assert.equal(publicEvent.sourceUrl, instagramUrl);
+  assert.equal(publicEvent.ticketUrl, "");
+  assert.doesNotMatch(JSON.stringify(publicEvent), /verificationNotes|sourceResolutionNotes|socialEvidence|discoveryUrl/);
+
+  const single = await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEvent.id)}.ics`), env(db));
+  assert.match(await single.text(), /URL:https:\/\/www\.instagram\.com\/p\/human-verified-atlanta-event\//);
 });
 
 test("a reliable event source keeps an Instagram ticket post private instead of publishing it", async () => {
@@ -1257,6 +1307,67 @@ test("High Art Making monitoring groups month-specific Study Hall pages and clas
   }
 });
 
+test("Rampant Gallery monitoring extracts the current exhibition, opening occurrence, and flyer from its official homepage", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.exec("UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_rampant_gallery'");
+  const sourceUrl = "https://rampantgallery.com/";
+  const flyerUrl = "https://rampantgallery.com/wp-content/uploads/2024/02/POORTREAT-flyer-2.jpg";
+  const html = `<html><body>
+    <h2>RAMPANT GALLERY</h2>
+    <h2>POORTREAT</h2>
+    <h4>July 18 – August 29, 2026</h4>
+    <figure><img src="${flyerUrl}" alt=""></figure>
+    <p>Coming to Rampant Gallery 7/18 – <strong>POORTREAT</strong>, a solo exhibition by <strong>David Rojas</strong>.</p>
+    <p>David Rojas builds collage and silkscreen compositions that fragment and recompose found imagery.</p>
+    <p><strong>POORTREAT</strong> critically revisits the Baroque portrait through contemporary visual saturation, appropriation, and unstable identity.</p>
+    <p><strong>POORTREAT</strong> will be on display at Rampant Gallery 7/18 – 8/29. Please join us for the opening reception on July 18th from 5-9 PM.</p>
+    <h3>Previous Shows</h3>
+    <h3><a href="https://rampantgallery.com/2026/07/08/imperfectionist/">Imperfectionist</a></h3>
+  </body></html>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => String(url) === flyerUrl
+    ? new Response(new Uint8Array([255,216,255,217]), { status:200, headers:{ "content-type":"image/jpeg" } })
+    : new Response(html, { status:200, headers:{ "content-type":"text/html" } });
+  try {
+    const runtime = env(db, { SUBMISSION_FILES:new MemoryBucket() });
+    const run = await runCalendarScout(runtime, { runKind:"manual", includeWeb:false, sourceId:"cal_source_rampant_gallery" });
+    assert.equal(run.status, "completed", JSON.stringify(run.outcomes));
+    assert.equal(run.candidates, 1);
+    const candidate = db.prepare(`SELECT id,source_event_id,source_url,organizer_url,venue_url,source_authority,title,event_structure,date_kind,
+      starts_at,ends_at,venue_name,venue_address,subjects_json,formats_json,status,verification_state,flyer_media_id,flyer_source_url
+      FROM calendar_candidates WHERE source_id='cal_source_rampant_gallery'`).get();
+    assert.deepEqual({
+      sourceEventId:candidate.source_event_id, sourceUrl:candidate.source_url, organizerUrl:candidate.organizer_url,
+      venueUrl:candidate.venue_url, sourceAuthority:candidate.source_authority, title:candidate.title,
+      eventStructure:candidate.event_structure, dateKind:candidate.date_kind, startsAt:candidate.starts_at,
+      endsAt:candidate.ends_at, venueName:candidate.venue_name, venueAddress:candidate.venue_address,
+      subjects:JSON.parse(candidate.subjects_json), formats:JSON.parse(candidate.formats_json), status:candidate.status,
+      verificationState:candidate.verification_state, flyerSourceUrl:candidate.flyer_source_url,
+    }, {
+      sourceEventId:"rampant-poortreat-2026-07-18", sourceUrl, organizerUrl:sourceUrl, venueUrl:sourceUrl,
+      sourceAuthority:"venue_event", title:"POORTREAT", eventStructure:"exhibition", dateKind:"date_range",
+      startsAt:"2026-07-18", endsAt:"2026-08-29", venueName:"Rampant Gallery",
+      venueAddress:"1200 Foster Street NW, Studio 119, Atlanta, GA 30318", subjects:["art"], formats:["exhibition"],
+      status:"candidate", verificationState:"verified", flyerSourceUrl:flyerUrl,
+    });
+    assert.ok(candidate.flyer_media_id);
+    assert.deepEqual(
+      db.prepare(`SELECT occurrence_type,title,starts_at,ends_at,source_url,status,verification_state
+        FROM calendar_candidate_occurrences WHERE candidate_id=?`).all(candidate.id).map((row) => ({ ...row })),
+      [{ occurrence_type:"opening_reception", title:"Opening Reception", starts_at:"2026-07-18T17:00:00-04:00", ends_at:"2026-07-18T21:00:00-04:00", source_url:sourceUrl, status:"scheduled", verification_state:"verified" }],
+    );
+    const notes = db.prepare("SELECT private_rationale,attendance_use,programming_ideas FROM calendar_candidate_notes WHERE candidate_id=?").get(candidate.id);
+    assert.match(notes.private_rationale, /art|exhibition/i);
+    assert.match(notes.attendance_use, /programming research/i);
+    assert.match(notes.programming_ideas, /Study how Rampant Gallery/i);
+    assert.equal(db.prepare("SELECT privacy,public_presentation FROM media_assets WHERE id=?").get(candidate.flyer_media_id).privacy, "internal");
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Scout relevance threshold deterministically rejects weakly weighted direct-source proposals", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0");
@@ -1879,6 +1990,9 @@ test("Studio verification links and the public expandable flyer stay inline with
   const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
   const publicCss = readFileSync(join(ROOT,"css","atlanta-calendar.css"),"utf8");
   assert.match(studio,/Open original source/);
+  assert.match(studio,/function verifiedInstagramSource\(record\)/);
+  assert.match(studio,/Instagram may be the public source when no other event page exists/);
+  assert.match(studio,/candidate\.verificationState === "verified" && sourceReady\(candidate\)/);
   assert.match(studio,/Discovery lead URL \(private\)/);
   assert.match(studio,/Unresolved - cannot publish/);
   assert.match(studio,/Lead source: the scout must search past each listing/);
@@ -1926,10 +2040,31 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(publicCss,/\.calendar-event-access/);
 });
 
+test("public calendar card descriptions clamp to five lines and expand only through an accessible toggle", () => {
+  const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
+  const publicCss = readFileSync(join(ROOT,"css","atlanta-calendar.css"),"utf8");
+  assert.match(publicCalendar,/class="calendar-event-description is-collapsed"/);
+  assert.match(publicCalendar,/data-description-toggle aria-controls=/);
+  assert.match(publicCalendar,/aria-expanded="false" hidden>See more<\/button>/);
+  assert.match(publicCalendar,/description\.scrollHeight > description\.clientHeight \+ 1/);
+  assert.match(publicCalendar,/control\.textContent = shouldExpand \? "See less" : "See more"/);
+  assert.match(publicCalendar,/description\.classList\.toggle\("is-collapsed", !shouldExpand\)/);
+  assert.match(publicCss,/\.calendar-event-description\.is-collapsed \{ max-height:5lh; overflow:hidden; \}/);
+  assert.match(publicCss,/\.calendar-description-toggle\[hidden\] \{ display:none; \}/);
+});
+
+test("public event cards use the complete add-to-calendar action label", () => {
+  const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
+  assert.match(publicCalendar,/>Add this event to your calendar<\/a>/);
+  assert.doesNotMatch(publicCalendar,/>Add this event<\/a>/);
+});
+
 test("Calendar Studio reuses a saved credential without showing the unlock controls", () => {
   const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
   assert.match(studioHtml,/<section class="auth-panel" id="authPanel" hidden>/);
+  assert.match(studioCss,/\[hidden\] \{ display:none !important; \}/);
   assert.match(studio,/if \(token\) \{ authPanel\.hidden=true; connect\(\); \} else \{ authPanel\.hidden=false; \}/);
   assert.match(studio,/tokenInput\.value=""; authPanel\.hidden=true; app\.hidden=false/);
   assert.match(studio,/error\.status = response\.status/);
