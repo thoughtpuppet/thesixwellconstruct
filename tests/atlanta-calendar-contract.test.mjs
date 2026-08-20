@@ -2792,3 +2792,15 @@ test("Calendar Studio renders a private scrollable Strong Picks dashboard linked
   assert.match(studioCss,/\.strong-picks-scroll \{[^}]*max-height:520px;[^}]*overflow-y:auto;/);
   assert.match(studioCss,/\.strong-pick-card \{[^}]*border:5px solid var\(--line\);/);
 });
+
+test("Calendar Studio can skip an event without mutating it and advance within the active queue", () => {
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studio,/data-action="skip">Skip</);
+  assert.match(studio,/function skipCandidate\(\)/);
+  assert.match(studio,/matchesStatus\(candidate,state\.filter\)/);
+  assert.match(studio,/queue\[\(currentIndex \+ 1\) % queue\.length\]/);
+  assert.match(studio,/Skipped\. No changes were saved\./);
+  assert.match(studio,/if \(action === "skip"\) \{ skipCandidate\(\); return; \}/);
+  assert.match(studioCss,/\.editor-actions button\[data-action="skip"\] \{ border-color:var\(--accent\); \}/);
+});

@@ -90,6 +90,7 @@ input:focus,textarea:focus,select:focus { border-color:var(--accent); outline:no
 .check-option input { width:18px; min-height:18px; margin:0; padding:0; accent-color:var(--accent); }
 .editor-actions { position:sticky; bottom:0; display:flex; flex-wrap:wrap; gap:8px; margin:24px -20px -20px; border-top:5px solid var(--line); padding:14px 20px; background:var(--surface); }
 .editor-actions button[data-action="approve"] { border-color:var(--ok); }
+.editor-actions button[data-action="skip"] { border-color:var(--accent); }
 .editor-actions button[data-action="recheck"],.source-monitoring button[data-action="recheck"] { border-color:var(--accent); }
 .editor-actions button[data-action="reject"],.editor-actions button[data-action="cancel"] { border-color:var(--danger); }
 .revision-list { display:grid; gap:8px; }
