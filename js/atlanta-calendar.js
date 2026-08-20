@@ -130,7 +130,9 @@
     if (affiliations.length && !affiliations.some(function (value) { return (event.affiliations || []).includes(value); })) return false;
     if (modes.includes("virtual") && !event.virtual) return false;
     if (query) {
-      var haystack = [event.title, event.description, event.organizer, event.venueName, event.venueAddress, event.accessNotes].concat(event.audiences || [], event.subjects, event.formats).join(" ").toLowerCase();
+      var relatedSearch = (event.relatedLinks || []).reduce(function (values, link) { return values.concat([link.label, link.url, link.role]); }, []);
+      var occurrenceSearch = (event.relatedOccurrences || []).reduce(function (values, occurrence) { return values.concat([occurrence.title, occurrence.occurrenceLabel, occurrence.startsAt]); }, []);
+      var haystack = [event.title, event.description, event.organizer, event.venueName, event.venueAddress, event.accessNotes, event.ticketNotes].concat(event.audiences || [], event.subjects, event.formats, relatedSearch, occurrenceSearch).join(" ").toLowerCase();
       if (!haystack.includes(query)) return false;
     }
     return true;

@@ -1635,7 +1635,7 @@ async function appendRevision(db, candidateId, snapshot, provenance, changeSumma
   return id;
 }
 
-async function createCandidate(env, body, discoveredBy = "manual", provenance = []) {
+async function createCandidate(env, body, discoveredBy = "manual", provenance = [], { restoreSuppression = false } = {}) {
   const db = requireDb(env);
   const proposal = proposalFromBody(body);
   if (!proposal.title && proposal.sourceUrl) {
@@ -1687,7 +1687,8 @@ async function createCandidate(env, body, discoveredBy = "manual", provenance = 
   if (Array.isArray(body.media)) await syncCandidateMedia(db, id, body.media);
   const created = await getCandidate(db, id, false);
   await appendRevision(db, id, candidateSnapshot(created), provenance, "Initial candidate", discoveredBy);
-  return { candidate: await getCandidate(db, id), duplicate };
+  const restoredSuppressionCount = restoreSuppression ? await clearEventSuppressions(db, proposal) : 0;
+  return { candidate: await getCandidate(db, id), duplicate, restoredSuppressionCount };
 }
 
 async function saveCandidate(env, id, body, { appendChangeRevision = true, allowVerifiedInstagramSource = false } = {}) {
@@ -1927,6 +1928,109 @@ async function rejectCandidate(db, id, body) {
   ).bind(now, id).run();
   if (reason) await maybeCreateFeedbackSuggestion(db, reason);
   return getCandidate(db, id);
+}
+
+function quotedSqlIdentifier(value) {
+  return `"${asString(value).replace(/"/g, '""')}"`;
+}
+
+async function deleteOrphanedScoutMedia(db, mediaId) {
+  const tables = await db.prepare(
+    "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+  ).all();
+  const guards = [];
+  for (const table of tables.results || []) {
+    const tableName = asString(table.name);
+    if (!tableName || tableName === "media_assets") continue;
+    const foreignKeys = await db.prepare(`PRAGMA foreign_key_list(${quotedSqlIdentifier(tableName)})`).all();
+    for (const foreignKey of foreignKeys.results || []) {
+      if (foreignKey.table !== "media_assets" || !foreignKey.from) continue;
+      guards.push(
+        `NOT EXISTS (SELECT 1 FROM ${quotedSqlIdentifier(tableName)} WHERE ${quotedSqlIdentifier(foreignKey.from)}=media_assets.id)`
+      );
+    }
+  }
+  return db.prepare(
+    `DELETE FROM media_assets WHERE id=? AND created_by='calendar-scout'${guards.length ? ` AND ${guards.join(" AND ")}` : ""}`
+  ).bind(mediaId).run();
+}
+
+async function cleanupDeletedCandidateMedia(env, db, mediaRows) {
+  const cleanupWarnings = [];
+  for (const media of mediaRows) {
+    try {
+      const removed = await deleteOrphanedScoutMedia(db, media.id);
+      if (!Number(removed?.meta?.changes)) continue;
+      if (!media.storage_key) continue;
+      if (!env.SUBMISSION_FILES) {
+        cleanupWarnings.push(`Media ${media.id} was removed from the catalogue, but file storage is unavailable.`);
+        continue;
+      }
+      try {
+        await env.SUBMISSION_FILES.delete(media.storage_key);
+      } catch (error) {
+        cleanupWarnings.push(`Media ${media.id} was removed from the catalogue, but its stored file could not be deleted: ${asString(error.message)}`);
+      }
+    } catch (error) {
+      cleanupWarnings.push(`Media ${media.id} was retained because orphan cleanup could not be confirmed: ${asString(error.message)}`);
+    }
+  }
+  return cleanupWarnings;
+}
+
+async function deleteCandidate(env, id, body) {
+  const db = requireDb(env);
+  const candidate = await getCandidate(db, id, false);
+  if (!candidate) return { error: "Candidate not found.", status: 404 };
+  if (typeof body.preventRediscovery !== "boolean") {
+    return { error: "Choose whether the Scout should be prevented from re-adding this event.", status: 400 };
+  }
+  if (asString(body.confirmationTitle) !== asString(candidate.title)) {
+    return { error: "Type the event title exactly to confirm permanent deletion.", status: 409 };
+  }
+  const publicEntry = await db.prepare(
+    "SELECT id FROM calendar_entries WHERE candidate_id=? LIMIT 1"
+  ).bind(id).first();
+  const media = await db.prepare(
+    `SELECT DISTINCT m.id,m.storage_key
+     FROM media_assets m
+     WHERE m.created_by='calendar-scout' AND (
+       m.id=(SELECT flyer_media_id FROM calendar_candidates WHERE id=?)
+       OR m.id IN (SELECT media_id FROM calendar_candidate_media WHERE candidate_id=?)
+       OR m.id IN (SELECT e.flyer_media_id FROM calendar_entries e WHERE e.candidate_id=?)
+       OR m.id IN (
+         SELECT em.media_id FROM calendar_entry_media em
+         JOIN calendar_entries e ON e.id=em.entry_id WHERE e.candidate_id=?
+       )
+     )`
+  ).bind(id,id,id,id).all();
+  const statements = [];
+  let suppressionCreated = false;
+  if (body.preventRediscovery) {
+    const keys = await eventIdentityKeys(candidate);
+    const suppressionId = `cal_suppression_${crypto.randomUUID()}`;
+    const now = isoNow();
+    statements.push(db.prepare(
+      `INSERT INTO calendar_event_suppressions(id,title,event_date,created_at,created_by)
+       VALUES (?,?,?,?, 'studio')`
+    ).bind(suppressionId,candidate.title,dateKey(candidate.startsAt),now));
+    statements.push(...keys.map((key) => db.prepare(
+      `INSERT INTO calendar_event_suppression_keys(suppression_id,identity_hash,identity_kind,created_at)
+       VALUES (?,?,?,?)`
+    ).bind(suppressionId,key.hash,key.kind,now)));
+    suppressionCreated = true;
+  }
+  if (publicEntry) statements.push(db.prepare("DELETE FROM calendar_entries WHERE id=?").bind(publicEntry.id));
+  statements.push(db.prepare("DELETE FROM calendar_candidates WHERE id=?").bind(id));
+  await db.batch(statements);
+  const cleanupWarnings = await cleanupDeletedCandidateMedia(env, db, media.results || []);
+  return {
+    ok: true,
+    candidateId: id,
+    removedPublicEntry: Boolean(publicEntry),
+    suppressionCreated,
+    cleanupWarnings,
+  };
 }
 
 async function cancelCandidate(db, id) {
@@ -2961,7 +3065,27 @@ async function listCandidates(db, status) {
      ORDER BY CASE c.status WHEN 'needs_verification' THEN 0 WHEN 'candidate' THEN 1 ELSE 2 END,
               (c.starts_at IS NULL),c.starts_at,c.updated_at DESC`
   ).bind(...params).all();
-  return (result.results || []).map(normalizeCandidate);
+  const candidates = (result.results || []).map(normalizeCandidate);
+  if (!candidates.length) return candidates;
+  const links = await db.prepare(
+    `SELECT id,candidate_id,label,url,provenance_url,link_role,include_public,sort_order
+     FROM calendar_candidate_links
+     ORDER BY candidate_id,sort_order,id`
+  ).all();
+  const linksByCandidate = new Map();
+  for (const row of links.results || []) {
+    if (!linksByCandidate.has(row.candidate_id)) linksByCandidate.set(row.candidate_id, []);
+    linksByCandidate.get(row.candidate_id).push({
+      id: row.id,
+      label: row.label || "",
+      url: row.url || "",
+      provenanceUrl: row.provenance_url || "",
+      role: LINK_ROLES.has(row.link_role) ? row.link_role : "supporting",
+      includePublic: Boolean(row.include_public),
+      sortOrder: Number(row.sort_order) || 0,
+    });
+  }
+  return candidates.map((candidate) => ({ ...candidate, relatedLinks: linksByCandidate.get(candidate.id) || [] }));
 }
 
 async function handleCandidates(request, env, parts) {
@@ -2987,7 +3111,7 @@ async function handleCandidates(request, env, parts) {
     if (method === "POST") {
       const body = await readBody(request);
       if (!body) return errorResponse("Invalid JSON body.");
-      try { return json(await createCandidate(env, body, "manual", [{ url: body.sourceUrl || "", enteredAt: isoNow() }]), { status: 201 }); }
+      try { return json(await createCandidate(env, body, "manual", [{ url: body.sourceUrl || "", enteredAt: isoNow() }], { restoreSuppression: true }), { status: 201 }); }
       catch (error) { return errorResponse(error.message); }
     }
     return errorResponse("Method not allowed.", 405);
@@ -3006,6 +3130,12 @@ async function handleCandidates(request, env, parts) {
       } catch (error) {
         return errorResponse(error.message);
       }
+    }
+    if (method === "DELETE") {
+      const body = await readBody(request);
+      if (!body) return errorResponse("Invalid JSON body.");
+      const result = await deleteCandidate(env, id, body);
+      return result.error ? errorResponse(result.error, result.status) : json(result);
     }
     return errorResponse("Method not allowed.", 405);
   }
@@ -3341,7 +3471,7 @@ async function handleRuns(request, env) {
       id: row.id, runKind: row.run_kind, status: row.status, model: row.model, startedAt: row.started_at,
       completedAt: row.completed_at || null, sourcesSearched: parseJson(row.sources_searched_json, []), queries: parseJson(row.queries_json, []),
       citations: parseJson(row.citations_json, []), candidateCount: Number(row.candidate_count), duplicateCount: Number(row.duplicate_count),
-      failureCount: Number(row.failure_count), warningCount, sourceResults,
+      failureCount: Number(row.failure_count), suppressedCount: Number(row.suppressed_count) || 0, warningCount, sourceResults,
       strongPickCount: Number(row.strong_pick_count) || 0,
       materialUpdateCount: Number(row.material_update_count) || 0,
       openaiUsage: parseJson(row.openai_usage_json, {}), errorMessage: row.error_message || "",
@@ -3393,6 +3523,7 @@ async function handleStrongPicks(request, env) {
   let updateCount = 0;
   let unchangedCount = 0;
   let failureCount = 0;
+  let suppressedCount = 0;
   for (const rawEvent of events) {
     try {
       const proposal = { ...rawEvent, discoveryChannel: "scheduled_chat" };
@@ -3416,7 +3547,8 @@ async function handleStrongPicks(request, env) {
         created.push(pick);
         if (pick.kind === "new") candidateCount += 1;
         else updateCount += 1;
-      } else if (stored.duplicate || stored.candidate?.status === "duplicate") duplicateCount += 1;
+      } else if (stored.skipped === "suppressed") suppressedCount += 1;
+      else if (stored.duplicate || stored.candidate?.status === "duplicate") duplicateCount += 1;
       else if (stored.existing) unchangedCount += 1;
       outcomes.push({
         title: asString(rawEvent.title), candidateId: stored.candidate?.id || "", status: pick ? pick.kind : stored.skipped || (stored.existing ? "unchanged" : "duplicate"),
@@ -3431,13 +3563,13 @@ async function handleStrongPicks(request, env) {
   const sourceUrls = [...new Set(events.flatMap((event) => [event.sourceUrl, event.discoveryUrl, event.announcementUrl, event.ticketUrl]).filter(validHttpUrl))];
   await db.prepare(
     `UPDATE calendar_scout_runs SET status=?,completed_at=?,sources_searched_json=?,queries_json=?,citations_json=?,
-     candidate_count=?,duplicate_count=?,failure_count=?,source_results_json=?,strong_pick_count=?,material_update_count=?,error_message=? WHERE id=?`
+     candidate_count=?,duplicate_count=?,failure_count=?,source_results_json=?,strong_pick_count=?,material_update_count=?,suppressed_count=?,error_message=? WHERE id=?`
   ).bind(
     status, completedAt, JSON.stringify(sourceUrls), JSON.stringify(["Scheduled Atlanta Creative Scout structured handoff"]), JSON.stringify([]),
-    candidateCount, duplicateCount, failureCount, JSON.stringify(outcomes), created.length, updateCount,
+    candidateCount, duplicateCount, failureCount, JSON.stringify(outcomes), created.length, updateCount, suppressedCount,
     outcomes.filter((item) => item.error).map((item) => `${item.title}: ${item.error}`).join(" | "), runId,
   ).run();
-  return json({ runId, status, strongPicks: created, candidates: candidateCount, updates: updateCount, unchanged: unchangedCount, duplicates: duplicateCount, failures: failureCount });
+  return json({ runId, status, strongPicks: created, candidates: candidateCount, updates: updateCount, unchanged: unchangedCount, duplicates: duplicateCount, suppressed: suppressedCount, failures: failureCount });
 }
 
 async function handleSuggestions(request, env, parts) {
@@ -3468,6 +3600,62 @@ async function handleSuggestions(request, env, parts) {
 async function sha256(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function suppressionUrl(value) {
+  if (!validHttpUrl(value)) return "";
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(?:utm_|fbclid$|gclid$|igsh$|igsi$|_t$|src$|os$)/i.test(key)) url.searchParams.delete(key);
+    }
+    url.searchParams.sort();
+    url.hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+async function eventIdentityKeys(value) {
+  const parts = [];
+  const sourceId = asString(value.sourceId || value.source_id);
+  const sourceEventId = asString(value.sourceEventId || value.source_event_id);
+  const title = normalizeText(value.title);
+  const eventDate = dateKey(value.startsAt || value.starts_at);
+  const sourceUrl = suppressionUrl(value.sourceUrl || value.source_url);
+  const organizer = normalizeText(value.organizer);
+  const venue = normalizeText(value.venueName || value.venue_name);
+  if (sourceId && sourceEventId) parts.push({ kind: "source_event", value: `${sourceId}|${sourceEventId}` });
+  if (sourceUrl && title) parts.push({ kind: "source_url", value: `${sourceUrl}|${title}|${eventDate}` });
+  if (title) parts.push({ kind: "semantic", value: `${title}|${eventDate}|${organizer}|${venue}` });
+  const keys = [];
+  for (const part of parts) keys.push({ kind: part.kind, hash: await sha256(`${part.kind}:${part.value}`) });
+  return [...new Map(keys.map((key) => [key.hash,key])).values()];
+}
+
+async function matchingEventSuppressions(db, value) {
+  const keys = await eventIdentityKeys(value);
+  if (!keys.length) return [];
+  try {
+    const rows = await db.prepare(
+      `SELECT DISTINCT suppression_id FROM calendar_event_suppression_keys
+       WHERE identity_hash IN (${keys.map(() => "?").join(",")})`
+    ).bind(...keys.map((key) => key.hash)).all();
+    return (rows.results || []).map((row) => row.suppression_id);
+  } catch (error) {
+    if (/no such table:\s*calendar_event_suppression_keys/i.test(asString(error?.message))) return [];
+    throw error;
+  }
+}
+
+async function clearEventSuppressions(db, value) {
+  const ids = await matchingEventSuppressions(db, value);
+  if (!ids.length) return 0;
+  await db.batch(ids.map((id) => db.prepare("DELETE FROM calendar_event_suppressions WHERE id=?").bind(id)));
+  return ids.length;
 }
 
 async function boundedResponseText(response) {
@@ -5819,6 +6007,10 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
       return sameEventStart(row.starts_at, proposal.startsAt) || sameTitleAndDay;
     }) || null;
   }
+  if (!existing) {
+    const suppressions = await matchingEventSuppressions(db, proposal);
+    if (suppressions.length) return { skipped: "suppressed", suppressionId: suppressions[0] };
+  }
   const hasArtistLinks=proposal.relatedLinks.some((link)=>link.role==="artist");
   if (proposal.eventStructure==="exhibition" && !hasArtistLinks && env.OPENAI_API_KEY) {
     try {
@@ -6170,7 +6362,11 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "") {
       outcomes.push({ sourceId: source.id, url: source.url, status: "failed", error: asString(error.message) });
     }
   }
-  return { outcomes, candidateCount, duplicateCount, failureCount, warningCount, strongPickCount, materialUpdateCount, sourceIds: sources.map((source) => source.id) };
+  return {
+    outcomes, candidateCount, duplicateCount,
+    suppressedCount: outcomes.reduce((sum, outcome) => sum + Number(outcome.skipReasons?.suppressed || 0), 0),
+    failureCount, warningCount, strongPickCount, materialUpdateCount, sourceIds: sources.map((source) => source.id),
+  };
 }
 
 function outputText(response) {
@@ -6552,6 +6748,7 @@ async function resolveDiscoveryProposal(env, db, profile, source, proposal) {
 async function storeOpenAiEvents(env, db, profile, events, { provenance = [], platform = "", channel = "general_web", allowNativeFlyer = false, nativePosts = [], limit = 20, runId = "" } = {}) {
   let candidates = 0;
   let duplicates = 0;
+  let suppressed = 0;
   let failures = 0;
   let strongPicks = 0;
   let materialUpdates = 0;
@@ -6574,9 +6771,10 @@ async function storeOpenAiEvents(env, db, profile, events, { provenance = [], pl
       }
       if (stored.candidate && !stored.existing) candidates += 1;
       if (stored.duplicate) duplicates += 1;
+      if (stored.skipped === "suppressed") suppressed += 1;
     } catch { failures += 1; }
   }
-  return { candidates, duplicates, failures, strongPicks, materialUpdates };
+  return { candidates, duplicates, suppressed, failures, strongPicks, materialUpdates };
 }
 
 async function runOpenAiDiscovery(env, db, profile, limit = profile.perRunLimit, runId = "") {
@@ -6848,6 +7046,7 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
   const searched = [];
   let candidateCount = 0;
   let duplicateCount = 0;
+  let suppressedCount = 0;
   let failureCount = 0;
   let warningCount = 0;
   let strongPickCount = 0;
@@ -6869,13 +7068,14 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
       let result;
       if (id === "direct") {
         const direct = await monitorSources(env, db, profile, sourceId, runId);
-        result = { candidates: direct.candidateCount, duplicates: direct.duplicateCount, failures: direct.failureCount, warnings: direct.warningCount, strongPicks: direct.strongPickCount, materialUpdates: direct.materialUpdateCount, citations: [], usage: {}, queries: [], postsInspected: 0, details: direct.outcomes };
+        result = { candidates: direct.candidateCount, duplicates: direct.duplicateCount, suppressed: direct.suppressedCount, failures: direct.failureCount, warnings: direct.warningCount, strongPicks: direct.strongPickCount, materialUpdates: direct.materialUpdateCount, citations: [], usage: {}, queries: [], postsInspected: 0, details: direct.outcomes };
         searched.push(...direct.sourceIds);
       } else if (id === "general_web") result = await runOpenAiDiscovery(env, db, profile, connector.perRunLimit, runId);
       else if (id.endsWith("_web")) result = await runSocialWebDiscovery(env, db, profile, connector, runId);
       else result = await runNativeSocialDiscovery(env, db, profile, connector, runKind === "manual", runId);
       candidateCount += result.candidates;
       duplicateCount += result.duplicates;
+      suppressedCount += Number(result.suppressed) || 0;
       failureCount += result.failures;
       warningCount += Number(result.warnings) || 0;
       strongPickCount += Number(result.strongPicks) || 0;
@@ -6884,7 +7084,7 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
       citations.push(...(result.citations || []));
       if (result.usage && Object.keys(result.usage).length) usage.push({ channel: id, ...result.usage });
       searched.push(id);
-      outcomes.push({ channel: id, status: result.failures || result.warnings ? "partial" : "ok", candidates: result.candidates, duplicates: result.duplicates, strongPicks: Number(result.strongPicks) || 0, materialUpdates: Number(result.materialUpdates) || 0, failures: result.failures, warnings: Number(result.warnings) || 0, retries: result.retries || 0, postsInspected: result.postsInspected || 0, ...(result.details ? { sources: result.details } : {}) });
+      outcomes.push({ channel: id, status: result.failures || result.warnings ? "partial" : "ok", candidates: result.candidates, duplicates: result.duplicates, suppressed: Number(result.suppressed) || 0, strongPicks: Number(result.strongPicks) || 0, materialUpdates: Number(result.materialUpdates) || 0, failures: result.failures, warnings: Number(result.warnings) || 0, retries: result.retries || 0, postsInspected: result.postsInspected || 0, ...(result.details ? { sources: result.details } : {}) });
       await writeConnectorState(db, id, { status: "ready", success: true });
     } catch (error) {
       failureCount += 1;
@@ -6906,10 +7106,10 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
   try {
     await db.prepare(
       `UPDATE calendar_scout_runs SET status=?,completed_at=?,sources_searched_json=?,queries_json=?,citations_json=?,
-       candidate_count=?,duplicate_count=?,failure_count=?,source_results_json=?,openai_usage_json=?,strong_pick_count=?,material_update_count=?,error_message=? WHERE id=?`
-    ).bind(...runValues, strongPickCount, materialUpdateCount, runError, runId).run();
+       candidate_count=?,duplicate_count=?,failure_count=?,source_results_json=?,openai_usage_json=?,strong_pick_count=?,material_update_count=?,suppressed_count=?,error_message=? WHERE id=?`
+    ).bind(...runValues, strongPickCount, materialUpdateCount, suppressedCount, runError, runId).run();
   } catch (error) {
-    if (!/no such column:\s*strong_pick_count/i.test(asString(error?.message))) throw error;
+    if (!/no such column:\s*(?:strong_pick_count|suppressed_count)/i.test(asString(error?.message))) throw error;
     await db.prepare(
       `UPDATE calendar_scout_runs SET status=?,completed_at=?,sources_searched_json=?,queries_json=?,citations_json=?,
        candidate_count=?,duplicate_count=?,failure_count=?,source_results_json=?,openai_usage_json=?,error_message=? WHERE id=?`
@@ -6917,7 +7117,7 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
   }
   await db.prepare("UPDATE calendar_scout_profiles SET last_source_run_at=?,last_web_run_at=?,updated_at=? WHERE id='atlanta-default'")
     .bind(requested.includes("direct") ? now : profile.lastSourceRunAt, requested.some((id) => id.endsWith("_web")) ? now : profile.lastWebRunAt, now).run();
-  return { runId, status, broadDiscoveryEnabled: Boolean(env.OPENAI_API_KEY), candidates: candidateCount, duplicates: duplicateCount, strongPicks: strongPickCount, materialUpdates: materialUpdateCount, failures: failureCount, warnings: warningCount, outcomes };
+  return { runId, status, broadDiscoveryEnabled: Boolean(env.OPENAI_API_KEY), candidates: candidateCount, duplicates: duplicateCount, suppressed: suppressedCount, strongPicks: strongPickCount, materialUpdates: materialUpdateCount, failures: failureCount, warnings: warningCount, outcomes };
 }
 
 export async function runDueCalendarScout(env, scheduledTime = Date.now()) {

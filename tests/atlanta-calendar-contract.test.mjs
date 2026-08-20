@@ -92,6 +92,9 @@ test("calendar migrations preserve seeded private candidates, verified official 
     { status:"needs_verification", starts_at:null, verification_state:"needs_verification" },
   );
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_event_suppressions").get().count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_event_suppression_keys").get().count, 0);
+  assert.equal(db.prepare("SELECT suppressed_count FROM calendar_scout_runs LIMIT 1").get()?.suppressed_count || 0, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE pending_revision_id<>''").get().count, 18);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE id LIKE 'cal_source_gsu_%'").get().count, 15);
   assert.deepEqual(
@@ -2333,6 +2336,126 @@ test("candidate research preserves field changes when equivalent official citati
   }
 });
 
+test("permanent deletion removes private records, suppresses exact Scout rediscovery, and manual intake restores the event", async () => {
+  const db = database();
+  const sourceId = "cal_source_atlanta_film_society";
+  const beforeResponse = await admin(db, "/candidates/cal_candidate_lost_shadows");
+  const original = (await beforeResponse.json()).candidate;
+
+  const missingChoice = await admin(db, `/candidates/${original.id}`, {
+    method:"DELETE", body:{ confirmationTitle:original.title },
+  });
+  assert.equal(missingChoice.status, 400);
+  const mismatch = await admin(db, `/candidates/${original.id}`, {
+    method:"DELETE", body:{ confirmationTitle:original.title.toLowerCase(), preventRediscovery:true },
+  });
+  assert.equal(mismatch.status, 409);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE id=?").get(original.id).count, 1);
+
+  const removed = await admin(db, `/candidates/${original.id}`, {
+    method:"DELETE", body:{ confirmationTitle:original.title, preventRediscovery:true },
+  });
+  assert.equal(removed.status, 200, await removed.clone().text());
+  assert.deepEqual({ ...(await removed.json()), cleanupWarnings:[] }, {
+    ok:true, candidateId:original.id, removedPublicEntry:false, suppressionCreated:true, cleanupWarnings:[],
+  });
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE id=?").get(original.id).count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_notes WHERE candidate_id=?").get(original.id).count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_revisions WHERE candidate_id=?").get(original.id).count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE id=?").get(sourceId).count, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_event_suppressions").get().count, 1);
+  assert.ok(db.prepare("SELECT COUNT(*) count FROM calendar_event_suppression_keys").get().count >= 2);
+
+  const scoutToken = "calendar-delete-scout-token";
+  const similar = {
+    ...original,
+    id:"",
+    title:"LOCALS ONLY: Another Georgia Film Program",
+    sourceEventId:"another-georgia-film-program-2026",
+    startsAt:"2026-10-29T19:00:00-04:00",
+    endsAt:"2026-10-29T22:00:00-04:00",
+  };
+  const handoff = await handleCalendarAdminApi(
+    request("/api/admin/calendar/strong-picks", {
+      method:"POST", token:scoutToken, body:{ events:[original,similar] },
+    }),
+    env(db,{ CALENDAR_SCOUT_INGEST_TOKEN:scoutToken }),
+  );
+  assert.equal(handoff.status, 200, await handoff.clone().text());
+  const scoutResult = await handoff.json();
+  assert.equal(scoutResult.suppressed, 1);
+  assert.equal(scoutResult.candidates, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE id=?").get(original.id).count, 0);
+  assert.equal(db.prepare("SELECT suppressed_count FROM calendar_scout_runs WHERE id=?").get(scoutResult.runId).suppressed_count, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE title=?").get(similar.title).count, 1);
+
+  const restored = await admin(db, "/candidates", { method:"POST", body:original });
+  assert.equal(restored.status, 201, await restored.clone().text());
+  const restoredPayload = await restored.json();
+  assert.equal(restoredPayload.restoredSuppressionCount, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_event_suppressions").get().count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_event_suppression_keys").get().count, 0);
+});
+
+test("permanent published deletion clears feeds and only removes orphaned Scout media", async () => {
+  const db = database();
+  class PartiallyFailingBucket extends MemoryBucket {
+    async delete(key) {
+      if (key === "construct/media-delete-fail/flyer.jpg") throw new Error("simulated R2 failure");
+      return super.delete(key);
+    }
+  }
+  const bucket = new PartiallyFailingBucket();
+  const mediaRows = [
+    ["media-delete-good","construct/media-delete-good/flyer.jpg"],
+    ["media-delete-fail","construct/media-delete-fail/flyer.jpg"],
+    ["media-delete-shared","construct/media-delete-shared/flyer.jpg"],
+  ];
+  for (const [mediaId,storageKey] of mediaRows) {
+    db.prepare(`INSERT INTO media_assets
+      (id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
+      VALUES (?,?,?,'image/jpeg',4,?,'internal','not-required','active','calendar-scout',datetime('now'),datetime('now'),'hidden')`
+    ).run(mediaId,storageKey,"flyer.jpg",`${mediaId} flyer`);
+    await bucket.put(storageKey,new Uint8Array([255,216,255,217]));
+    db.prepare(`INSERT INTO calendar_candidate_media
+      (id,candidate_id,media_id,media_role,alt_text,include_public,sort_order,created_at,updated_at)
+      VALUES (?,?,?,'gallery',?,1,0,datetime('now'),datetime('now'))`
+    ).run(`candidate-${mediaId}`,"cal_candidate_sound_vision",mediaId,`${mediaId} flyer`);
+  }
+  db.prepare(`INSERT INTO calendar_candidate_media
+    (id,candidate_id,media_id,media_role,alt_text,include_public,sort_order,created_at,updated_at)
+    VALUES ('candidate-shared-reference','cal_candidate_lost_shadows','media-delete-shared','gallery','Shared flyer',0,0,datetime('now'),datetime('now'))`
+  ).run();
+  const runtime = env(db,{ SUBMISSION_FILES:bucket });
+  const approved = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/cal_candidate_sound_vision/approve", { method:"POST", admin:true, body:{} }), runtime);
+  assert.equal(approved.status, 200, await approved.clone().text());
+  const publicEntryId = (await approved.json()).entryId;
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entry_media WHERE entry_id=?").get(publicEntryId).count, 3);
+
+  const deleted = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/cal_candidate_sound_vision", {
+    method:"DELETE", admin:true, body:{ confirmationTitle:"SOUND + VISION", preventRediscovery:false },
+  }), runtime);
+  assert.equal(deleted.status, 200, await deleted.clone().text());
+  const result = await deleted.json();
+  assert.equal(result.removedPublicEntry, true);
+  assert.equal(result.suppressionCreated, false);
+  assert.equal(result.cleanupWarnings.length, 1);
+  assert.match(result.cleanupWarnings[0],/simulated R2 failure/);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE id='cal_candidate_sound_vision'").get().count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE id=?").get(publicEntryId).count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entry_media WHERE entry_id=?").get(publicEntryId).count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM media_assets WHERE id IN ('media-delete-good','media-delete-fail')").get().count, 0);
+  assert.equal(bucket.objects.has("construct/media-delete-good/flyer.jpg"), false);
+  assert.equal(bucket.objects.has("construct/media-delete-fail/flyer.jpg"), true);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM media_assets WHERE id='media-delete-shared'").get().count, 1);
+  assert.equal(bucket.objects.has("construct/media-delete-shared/flyer.jpg"), true);
+
+  const events = await (await handleCalendarPublicApi(request("/api/calendar/events"), runtime)).json();
+  assert.equal(events.events.some((event) => event.id === publicEntryId || event.title === "SOUND + VISION"), false);
+  assert.equal((await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEntryId)}.ics`), runtime)).status, 404);
+  assert.doesNotMatch(await (await handleCalendarFeed(request("/calendars/atlanta.ics"), runtime)).text(),/SOUND \+ VISION/);
+});
+
 test("candidate research repairs a confirmed venue address when the first response omits record changes", async () => {
   const db = database();
   const candidateId = "cal_candidate_sound_vision";
@@ -2888,6 +3011,38 @@ test("public exhibition cards separate approved artist identity links from other
   assert.match(studio,/isInstagramProfileUrl/);
 });
 
+test("public and Studio calendars search the event information available to each audience", async () => {
+  const db = database();
+  const publicHtml = readFileSync(join(ROOT,"calendar","index.html"),"utf8");
+  const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
+  const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+
+  assert.match(publicHtml,/id="calendarSearch"[^>]*placeholder="Event, artist, venue, organizer, or subject"/);
+  assert.match(publicCalendar,/var relatedSearch = \(event\.relatedLinks \|\| \[\]\)/);
+  assert.match(publicCalendar,/link\.label, link\.url, link\.role/);
+  assert.match(publicCalendar,/var occurrenceSearch = \(event\.relatedOccurrences \|\| \[\]\)/);
+
+  assert.match(studioHtml,/id="candidateSearch"/);
+  assert.match(studioHtml,/id="clearCandidateSearch"/);
+  assert.match(studioHtml,/id="candidateSearchStatus" role="status" aria-live="polite"/);
+  assert.match(studio,/function candidateSearchText\(candidate\)/);
+  assert.match(studio,/candidate\.privateRationale/);
+  assert.match(studio,/candidate\.programmingIdeas/);
+  assert.match(studio,/candidate\.relatedLinks \|\| \[\]/);
+  assert.match(studio,/searching \|\| matchesStatus\(candidate,state\.filter\)/);
+  assert.match(studioCss,/\.candidate-search-row \{[^}]*border:5px solid var\(--line\);/);
+  assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.candidate-search-row \{ grid-template-columns:minmax\(0,1fr\); \}/);
+
+  const response = await admin(db, "");
+  assert.equal(response.status, 200, await response.clone().text());
+  const payload = await response.json();
+  const linkedCandidate = payload.candidates.find((candidate) => candidate.id === "cal_candidate_posh_orca_open_house_2026");
+  assert.ok(linkedCandidate);
+  assert.ok(linkedCandidate.relatedLinks.some((link) => link.label === "ORCA organizer profile on Posh" && link.role === "organizer"));
+});
+
 test("Calendar Studio reuses a saved credential without showing the unlock controls", () => {
   const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
@@ -3185,4 +3340,37 @@ test("Calendar Studio can skip an event without mutating it and advance within t
   assert.match(studio,/Skipped\. No changes were saved\./);
   assert.match(studio,/if \(action === "skip"\) \{ skipCandidate\(\); return; \}/);
   assert.match(studioCss,/\.editor-actions button\[data-action="skip"\] \{ border-color:var\(--accent\); \}/);
+});
+
+test("Calendar Studio candidate sections are independently collapsible and closed by default", () => {
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studio,/function collapseEditorSections\(\)/);
+  assert.match(studio,/editorRoot\.querySelectorAll\("\.editor-section"\)/);
+  assert.match(studio,/document\.createElement\("details"\)/);
+  assert.match(studio,/document\.createElement\("summary"\)/);
+  assert.match(studio,/collapseEditorSections\(\);\s*scheduleGuidance\(\);/);
+  assert.doesNotMatch(studio,/details\.open\s*=\s*true/);
+  assert.match(studio,/revisionSection\.open=true/);
+  assert.match(studioCss,/\.editor-section>summary \{[^}]*border:5px solid var\(--line\);/);
+  assert.match(studioCss,/\.editor-section\[open\]>summary::after \{ content:"Close";/);
+  assert.match(studioCss,/\.editor-section>summary:focus-visible \{ outline:5px solid var\(--accent\);/);
+});
+
+test("Calendar Studio requires exact-title confirmation before permanently deleting and advancing", () => {
+  const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studioHtml,/id="deleteCandidateDialog"/);
+  assert.match(studioHtml,/id="deleteCandidateConfirmation"/);
+  assert.match(studioHtml,/id="deleteCandidateSuppression" type="checkbox" checked/);
+  assert.match(studioHtml,/>Delete permanently<\/button>/);
+  assert.match(studio,/data-action="delete">Delete</);
+  assert.match(studio,/confirmation\.value\.trim\(\)!==deleteContext\.title/);
+  assert.match(studio,/method:"DELETE"/);
+  assert.match(studio,/preventRediscovery:document\.getElementById\("deleteCandidateSuppression"\)\.checked/);
+  assert.match(studio,/nextQueue:context\.queue,excludeId:context\.id,reviewIndex:context\.reviewIndex/);
+  assert.match(studioCss,/\.delete-dialog \{[^}]*border:5px solid var\(--danger\);/);
+  assert.match(studioCss,/\.delete-dialog-actions #confirmCandidateDelete \{[^}]*border-color:var\(--danger\);/);
+  assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.delete-dialog-actions \{ align-items:stretch; flex-direction:column; \}/);
 });

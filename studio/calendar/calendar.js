@@ -7,12 +7,15 @@
   var TICKET_STATUSES = [["unknown","Unknown"],["not_required","No ticket required"],["not_yet_on_sale","Not yet on sale"],["on_sale","On sale"],["sold_out","Sold out"],["registration_open","Registration open"],["registration_closed","Registration closed"]];
   var STATUSES = [["review","Review Queue"],["updates","Updates"],["ready","Ready to Publish"],["published","Published"],["needs_verification","Needs Verification"],["rejected","Rejected"],["cancelled","Cancelled"],["duplicate","Duplicates"]];
   var token = localStorage.getItem(TOKEN_KEY) || "";
-  var state = { candidates:[], sources:[], socialSources:[], connectors:[], knownOrganizations:[], strongPicks:[], profile:null, suggestions:[], runs:[], filter:"review", selectedId:"", draftNew:false, broadDiscoveryEnabled:false, activeCandidate:null, research:null, mediaPreviewUrls:[] };
+  var state = { candidates:[], sources:[], socialSources:[], connectors:[], knownOrganizations:[], strongPicks:[], profile:null, suggestions:[], runs:[], filter:"review", candidateQuery:"", selectedId:"", draftNew:false, broadDiscoveryEnabled:false, activeCandidate:null, research:null, mediaPreviewUrls:[] };
   var tokenInput = document.getElementById("tokenInput");
   var authPanel = document.getElementById("authPanel");
   var app = document.getElementById("studioApp");
   var listRoot = document.getElementById("candidateList");
   var editorRoot = document.getElementById("candidateEditor");
+  var deleteDialog = document.getElementById("deleteCandidateDialog");
+  var deleteForm = document.getElementById("deleteCandidateForm");
+  var deleteContext = null;
   var toastTimer;
 
   function escapeHtml(value) { return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]; }); }
@@ -245,6 +248,18 @@
     if (status === "ready") return ["candidate","needs_verification"].includes(candidate.status) && candidate.verificationState === "verified" && sourceReady(candidate) && accessReady(candidate);
     return candidate.status === status;
   }
+  function candidateSearchText(candidate) {
+    var relatedLinks = (candidate.relatedLinks || []).reduce(function (values, link) { return values.concat([link.label,link.url,link.provenanceUrl,link.role]); }, []);
+    return [candidate.title,candidate.organizer,candidate.factualDescription,candidate.venueName,candidate.venueAddress,candidate.city,candidate.region,candidate.startsAt,candidate.endsAt,displayDate(candidate.startsAt),candidate.sourceUrl,candidate.ticketUrl,candidate.discoveryUrl,candidate.organizerUrl,candidate.venueUrl,candidate.sourceResolutionNotes,candidate.verificationNotes,candidate.accessNotes,candidate.privateRationale,candidate.attendanceUse,candidate.programmingIdeas,candidate.potentialCollaborators,candidate.internalNotes,candidate.status,candidate.verificationState].concat(candidate.subjects || [],candidate.formats || [],candidate.audiences || [],relatedLinks).join(" ").toLowerCase();
+  }
+  function matchesCandidateSearch(candidate) {
+    var query = state.candidateQuery.trim().toLowerCase();
+    return !query || candidateSearchText(candidate).includes(query);
+  }
+  function currentFilterLabel() {
+    var item = STATUSES.find(function (status) { return status[0] === state.filter; });
+    return item ? item[1] : "selected view";
+  }
   function lifecycleLabel(candidate) {
     if (candidate.status === "published" && candidate.pendingRevisionId) return "update awaiting review";
     if (["candidate","needs_verification"].includes(candidate.status) && candidate.verificationState === "verified" && sourceReady(candidate) && accessReady(candidate)) return "ready to publish";
@@ -261,17 +276,37 @@
     document.getElementById("statusFilters").innerHTML = STATUSES.map(function (item) { var count = state.candidates.filter(function (candidate) { return matchesStatus(candidate,item[0]); }).length; return '<button type="button" data-status="' + item[0] + '" class="' + (state.filter === item[0] ? 'is-active' : '') + '">' + escapeHtml(item[1]) + ' / ' + count + '</button>'; }).join("");
   }
   function renderCandidateList() {
-    var candidates = state.candidates.filter(function (candidate) { return matchesStatus(candidate,state.filter); });
-    listRoot.innerHTML = candidates.length ? candidates.map(function (candidate) { return '<article class="candidate-card' + (candidate.id === state.selectedId ? ' is-active' : '') + '"><button class="candidate-card-select" type="button" data-candidate-id="' + escapeHtml(candidate.id) + '"><span class="status">' + escapeHtml(lifecycleLabel(candidate)) + '</span><strong>' + escapeHtml(candidate.title) + '</strong><span>' + escapeHtml(displayDate(candidate.startsAt)) + '</span><span>' + escapeHtml(candidate.venueName || candidate.organizer || "Venue not confirmed") + '</span>' + (candidate.lastCheckStatus && candidate.lastCheckStatus !== "never" ? '<span>Source check / ' + escapeHtml(candidate.lastCheckStatus.replace(/_/g," ")) + '</span>' : '') + '</button>' + externalLink(candidate.sourceUrl,"Open source","candidate-source-link") + '</article>'; }).join("") : '<p class="empty-state">No event records in this view.</p>';
+    var searching = Boolean(state.candidateQuery.trim());
+    var candidates = state.candidates.filter(function (candidate) { return (searching || matchesStatus(candidate,state.filter)) && matchesCandidateSearch(candidate); });
+    var statusRoot = document.getElementById("candidateSearchStatus");
+    var clearButton = document.getElementById("clearCandidateSearch");
+    if (statusRoot) statusRoot.textContent = searching ? candidates.length + " matching record" + (candidates.length === 1 ? "" : "s") + " across all statuses. Clear search to return to " + currentFilterLabel() + "." : "Showing " + currentFilterLabel() + ".";
+    if (clearButton) clearButton.disabled = !searching;
+    listRoot.innerHTML = candidates.length ? candidates.map(function (candidate) { return '<article class="candidate-card' + (candidate.id === state.selectedId ? ' is-active' : '') + '"><button class="candidate-card-select" type="button" data-candidate-id="' + escapeHtml(candidate.id) + '"><span class="status">' + escapeHtml(lifecycleLabel(candidate)) + '</span><strong>' + escapeHtml(candidate.title) + '</strong><span>' + escapeHtml(displayDate(candidate.startsAt)) + '</span><span>' + escapeHtml(candidate.venueName || candidate.organizer || "Venue not confirmed") + '</span>' + (candidate.lastCheckStatus && candidate.lastCheckStatus !== "never" ? '<span>Source check / ' + escapeHtml(candidate.lastCheckStatus.replace(/_/g," ")) + '</span>' : '') + '</button>' + externalLink(candidate.sourceUrl,"Open source","candidate-source-link") + '</article>'; }).join("") : '<p class="empty-state">' + (searching ? "No event records match this search." : "No event records in this view.") + '</p>';
   }
   function skipCandidate() {
-    var queue = state.candidates.filter(function (candidate) { return matchesStatus(candidate,state.filter); });
+    var searching = Boolean(state.candidateQuery.trim());
+    var queue = state.candidates.filter(function (candidate) { return (searching || matchesStatus(candidate,state.filter)) && matchesCandidateSearch(candidate); });
     if (!queue.length) { toast("There are no events in this view."); return; }
     var currentIndex = queue.findIndex(function (candidate) { return candidate.id === state.selectedId; });
     var nextCandidate = currentIndex < 0 ? queue[0] : queue[(currentIndex + 1) % queue.length];
     if (!nextCandidate || nextCandidate.id === state.selectedId) { toast("There are no other events in this view."); return; }
     toast("Skipped. No changes were saved.");
     selectCandidate(nextCandidate.id);
+  }
+  function collapseEditorSections() {
+    Array.from(editorRoot.querySelectorAll(".editor-section")).forEach(function (section) {
+      var heading = section.querySelector(":scope > h3, :scope > .section-title-row h3");
+      if (!heading) return;
+      var details = document.createElement("details");
+      Array.from(section.attributes).forEach(function (attribute) { details.setAttribute(attribute.name,attribute.value); });
+      var summary = document.createElement("summary");
+      summary.textContent = heading.textContent.trim();
+      heading.hidden = true;
+      while (section.firstChild) details.appendChild(section.firstChild);
+      details.insertBefore(summary,details.firstChild);
+      section.replaceWith(details);
+    });
   }
   function renderEditor(candidate) {
     state.mediaPreviewUrls.forEach(function(url){URL.revokeObjectURL(url);});state.mediaPreviewUrls=[];state.research=null;
@@ -318,7 +353,8 @@
       field("candidateVerificationNotes","Verification notes",candidate.verificationNotes,{type:"textarea",wide:true}) + field("candidateRejectionReason","Rejection reason",candidate.rejectionReason) + field("candidateDuplicateOf","Duplicate of",candidate.duplicateOf) + '</div></div>' +
       '<div class="editor-section"><h3>Private review intelligence</h3><p class="section-guidance">The Scout generates these private fields for every discovered event. They remain editable here and never appear on the public calendar or feeds.</p><div class="field-grid">' + field("candidatePrivateRationale","Why it fits",candidate.privateRationale,{type:"textarea",wide:true}) + field("candidateAttendanceUse","Best use",candidate.attendanceUse,{type:"textarea"}) + field("candidateProgrammingIdeas","Programming model worth studying",candidate.programmingIdeas,{type:"textarea"}) + field("candidateCollaborators","Potential collaborators",candidate.potentialCollaborators,{type:"textarea"}) + field("candidateInternalNotes","Internal notes",candidate.internalNotes,{type:"textarea"}) + '</div></div>' +
       (!isNew ? '<div class="editor-section"><h3>Detected changes + revisions</h3><div class="revision-list">' + (revisions.length ? revisions.map(revisionMarkup).join("") : '<p class="empty-state">No revisions recorded.</p>') + '</div></div>' : '') +
-      '<div class="editor-actions"><button type="button" data-action="save">' + (isNew ? 'Create candidate' : 'Save') + '</button>' + (!isNew ? '<button type="button" data-action="skip">Skip</button><button type="button" data-action="recheck"' + (!candidate.sourceUrl ? ' disabled' : '') + '>Recheck Source</button>' + (candidate.pendingRevisionId ? '<button type="button" data-action="review-change">Review Detected Change</button>' : '') + (canPublish ? '<button type="button" data-action="approve">' + publishLabel + '</button>' : '') + '<button type="button" data-action="reject">Reject</button><button type="button" data-action="duplicate">Mark Duplicate</button><button type="button" data-action="cancel">Mark Cancelled</button>' : '') + '</div>';
+      '<div class="editor-actions"><button type="button" data-action="save">' + (isNew ? 'Create candidate' : 'Save') + '</button>' + (!isNew ? '<button type="button" data-action="skip">Skip</button><button type="button" data-action="recheck"' + (!candidate.sourceUrl ? ' disabled' : '') + '>Recheck Source</button>' + (candidate.pendingRevisionId ? '<button type="button" data-action="review-change">Review Detected Change</button>' : '') + (canPublish ? '<button type="button" data-action="approve">' + publishLabel + '</button>' : '') + '<button type="button" data-action="reject">Reject</button><button type="button" data-action="duplicate">Mark Duplicate</button><button type="button" data-action="cancel">Mark Cancelled</button><button type="button" data-action="delete">Delete</button>' : '') + '</div>';
+    collapseEditorSections();
     scheduleGuidance();
     hydrateMediaPreviews();
     if(!isNew)loadCandidateResearch(candidate.id).catch(function(error){var root=document.getElementById("candidateResearch");if(root)root.innerHTML='<p class="source-reliability-warning">'+escapeHtml(error.message)+'</p>';});
@@ -382,9 +418,47 @@
       button.textContent = "Scout Link";
     }
   }
+  function openDeleteDialog(trigger) {
+    var candidate=state.activeCandidate;
+    if(!candidate||!state.selectedId)return;
+    var queue=state.filter;
+    var queueItems=state.candidates.filter(function(item){return matchesStatus(item,queue);});
+    deleteContext={id:state.selectedId,title:candidate.title,wasPublished:candidate.status==="published"||Boolean(candidate.publicEntryId),queue:queue,reviewIndex:Math.max(queueItems.findIndex(function(item){return item.id===state.selectedId;}),0),trigger:trigger||null};
+    document.getElementById("deleteCandidateRecordTitle").textContent=candidate.title;
+    document.getElementById("deleteCandidateConsequence").textContent=deleteContext.wasPublished
+      ? "This immediately removes the event from the public calendar and calendar feeds. Its candidate, revisions, Scout conversation, related schedule, links, and private intelligence will also be permanently deleted."
+      : "Its candidate, revisions, Scout conversation, related schedule, links, and private intelligence will be permanently deleted.";
+    var confirmation=document.getElementById("deleteCandidateConfirmation");
+    confirmation.value="";
+    document.getElementById("deleteCandidateSuppression").checked=true;
+    document.getElementById("confirmCandidateDelete").disabled=true;
+    deleteDialog.showModal();
+    confirmation.focus();
+  }
+  function closeDeleteDialog(){if(deleteDialog.open)deleteDialog.close();}
+  async function submitCandidateDelete(event){
+    event.preventDefault();
+    if(!deleteContext)return;
+    var confirmation=document.getElementById("deleteCandidateConfirmation");
+    if(confirmation.value.trim()!==deleteContext.title)return;
+    var button=document.getElementById("confirmCandidateDelete");
+    button.disabled=true;
+    try{
+      var context=deleteContext;
+      var result=await api("/api/admin/calendar/candidates/"+encodeURIComponent(context.id),{method:"DELETE",body:JSON.stringify({confirmationTitle:confirmation.value.trim(),preventRediscovery:document.getElementById("deleteCandidateSuppression").checked})});
+      closeDeleteDialog();
+      var message=result.removedPublicEntry?"Entry permanently deleted from Studio, the public calendar, and calendar feeds.":"Candidate permanently deleted from Studio.";
+      if(result.suppressionCreated)message+=" The Scout will not re-add this exact event.";
+      if(result.cleanupWarnings&&result.cleanupWarnings.length)message+=" "+result.cleanupWarnings.join(" ");
+      toast(message);
+      await refreshCandidates("",{nextQueue:context.queue,excludeId:context.id,reviewIndex:context.reviewIndex});
+      await loadStrongPicks();
+    }catch(error){toast(error.message);button.disabled=false;}
+  }
   async function editorAction(action) {
+    if (action === "delete") { openDeleteDialog(editorRoot.querySelector('button[data-action="delete"]')); return; }
     if (action === "skip") { skipCandidate(); return; }
-    if (action === "review-change") { var revisions = editorRoot.querySelector(".revision-list"); if (revisions) revisions.scrollIntoView({ behavior:"smooth", block:"center" }); return; }
+    if (action === "review-change") { var revisions = editorRoot.querySelector(".revision-list"); if (revisions) { var revisionSection=revisions.closest("details.editor-section");if(revisionSection)revisionSection.open=true;revisions.scrollIntoView({ behavior:"smooth", block:"center" }); } return; }
     if (action === "recheck") {
       if (!state.selectedId) return;
       var recheckButtons=Array.from(editorRoot.querySelectorAll('button[data-action="recheck"]'));recheckButtons.forEach(function(button){button.disabled=true;});toast("Checking the event source for changes.");
@@ -491,7 +565,7 @@
   }
   async function loadRuns() {
     var payload = await api("/api/admin/calendar/runs"); state.runs = payload.runs || [];
-    document.getElementById("runList").innerHTML = state.runs.map(function (run) { return '<article class="run-card"><div><h3>' + escapeHtml(run.status) + '</h3><p class="run-meta">' + escapeHtml(displayDate(run.startedAt)) + '<br>' + escapeHtml(run.runKind) + ' / ' + escapeHtml(run.model || "direct sources only") + '<br>' + (run.strongPickCount||0) + ' strong picks / ' + (run.materialUpdateCount||0) + ' material updates<br>' + run.candidateCount + ' candidates / ' + run.duplicateCount + ' duplicates / ' + (run.warningCount||0) + ' warnings / ' + run.failureCount + ' failures</p></div><pre>' + escapeHtml(JSON.stringify({ sources:run.sourcesSearched, queries:run.queries, citations:run.citations, results:run.sourceResults, usage:run.openaiUsage, error:run.errorMessage }, null, 2)) + '</pre></article>'; }).join("") || '<p class="empty-state">No scout runs recorded.</p>';
+    document.getElementById("runList").innerHTML = state.runs.map(function (run) { return '<article class="run-card"><div><h3>' + escapeHtml(run.status) + '</h3><p class="run-meta">' + escapeHtml(displayDate(run.startedAt)) + '<br>' + escapeHtml(run.runKind) + ' / ' + escapeHtml(run.model || "direct sources only") + '<br>' + (run.strongPickCount||0) + ' strong picks / ' + (run.materialUpdateCount||0) + ' material updates<br>' + run.candidateCount + ' candidates / ' + run.duplicateCount + ' duplicates / ' + (run.suppressedCount||0) + ' suppressed / ' + (run.warningCount||0) + ' warnings / ' + run.failureCount + ' failures</p></div><pre>' + escapeHtml(JSON.stringify({ sources:run.sourcesSearched, queries:run.queries, citations:run.citations, results:run.sourceResults, usage:run.openaiUsage, error:run.errorMessage }, null, 2)) + '</pre></article>'; }).join("") || '<p class="empty-state">No scout runs recorded.</p>';
   }
   async function connect() {
     var submittedToken = tokenInput.value.trim();
@@ -508,11 +582,18 @@
   }
 
   document.getElementById("connectButton").addEventListener("click",connect); tokenInput.addEventListener("keydown",function(event){if(event.key==="Enter")connect();});
+  document.getElementById("deleteCandidateConfirmation").addEventListener("input",function(){document.getElementById("confirmCandidateDelete").disabled=!deleteContext||this.value.trim()!==deleteContext.title;});
+  document.getElementById("cancelCandidateDelete").addEventListener("click",closeDeleteDialog);
+  deleteForm.addEventListener("submit",submitCandidateDelete);
+  deleteDialog.addEventListener("click",function(event){if(event.target===deleteDialog)closeDeleteDialog();});
+  deleteDialog.addEventListener("close",function(){var trigger=deleteContext&&deleteContext.trigger;deleteContext=null;if(trigger&&document.contains(trigger))trigger.focus();});
   if (token) { authPanel.hidden=true; connect(); } else { authPanel.hidden=false; }
   document.querySelector(".studio-tabs").addEventListener("click",function(event){var button=event.target.closest("button[data-view]");if(!button)return;document.querySelectorAll(".studio-tabs button").forEach(function(item){item.classList.toggle("is-active",item===button);});document.querySelectorAll("[data-panel]").forEach(function(panel){panel.hidden=panel.dataset.panel!==button.dataset.view;});});
   document.getElementById("statusFilters").addEventListener("click",function(event){var button=event.target.closest("button[data-status]");if(!button)return;state.filter=button.dataset.status;renderStatusFilters();renderCandidateList();});
+  document.getElementById("candidateSearch").addEventListener("input",function(event){state.candidateQuery=event.target.value;renderCandidateList();});
+  document.getElementById("clearCandidateSearch").addEventListener("click",function(){state.candidateQuery="";var input=document.getElementById("candidateSearch");input.value="";renderCandidateList();input.focus();});
   document.getElementById("refreshStrongPicks").addEventListener("click",function(){loadStrongPicks().catch(function(error){toast(error.message);});});
-  document.getElementById("strongPicksList").addEventListener("click",async function(event){var button=event.target.closest("[data-review-strong-pick]");if(!button)return;var candidateId=button.dataset.reviewStrongPick;if(!state.candidates.some(function(candidate){return candidate.id===candidateId;}))await refreshCandidates();state.filter="review";renderStatusFilters();renderCandidateList();await selectCandidate(candidateId);document.getElementById("candidateEditor").scrollIntoView({behavior:"smooth",block:"start"});});
+  document.getElementById("strongPicksList").addEventListener("click",async function(event){var button=event.target.closest("[data-review-strong-pick]");if(!button)return;var candidateId=button.dataset.reviewStrongPick;if(!state.candidates.some(function(candidate){return candidate.id===candidateId;}))await refreshCandidates();state.filter="review";state.candidateQuery="";document.getElementById("candidateSearch").value="";renderStatusFilters();renderCandidateList();await selectCandidate(candidateId);document.getElementById("candidateEditor").scrollIntoView({behavior:"smooth",block:"start"});});
   listRoot.addEventListener("click",function(event){var button=event.target.closest("[data-candidate-id]");if(button)selectCandidate(button.dataset.candidateId);});
   editorRoot.addEventListener("click",function(event){
     var actionButton=event.target.closest("button[data-action]");if(actionButton){editorAction(actionButton.dataset.action);return;}
@@ -546,18 +627,18 @@
       if(button.matches("[data-save-source]")){toast("Source saved.");await refreshSources();return;}
       toast("Running only this source.");
       var result=await api("/api/admin/calendar/sources/"+encodeURIComponent(id)+"/run",{method:"POST",body:"{}"});
-      toast("Source finished: "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+(result.warnings||0)+" warnings, "+result.failures+" failures.");
+      toast("Source finished: "+result.candidates+" candidates, "+result.duplicates+" duplicates, "+(result.suppressed||0)+" suppressed, "+(result.warnings||0)+" warnings, "+result.failures+" failures.");
       await Promise.all([refreshCandidates(),refreshSources(),loadRuns(),loadStrongPicks()]);
     }catch(error){toast(error.message);}finally{button.disabled=false;}
   });
   document.getElementById("addSource").addEventListener("click",async function(){var url=window.prompt("Scoutable source URL");if(!url)return;var name=window.prompt("Source name")||new URL(url).hostname;var kind=(window.prompt("Source kind: direct or discovery","discovery")||"discovery").trim().toLowerCase();var discovery=kind!=="direct";try{var payload=await api("/api/admin/calendar/sources",{method:"POST",body:JSON.stringify({name:name,url:url,sourceType:discovery?"discovery":"official_html",trustLevel:discovery?"discovery":"official"})});state.sources.push(payload.source);renderSources();var card=document.querySelector('[data-source-id="'+payload.source.id+'"]');if(card)card.scrollIntoView({behavior:"smooth",block:"center"});toast(discovery?"Lead source added. Its events must resolve to original sources.":"Direct source added. Use Run This Source when ready.");}catch(error){toast(error.message);}});
   document.getElementById("socialSourceList").addEventListener("click",async function(event){var button=event.target.closest("[data-save-social-source]");if(!button)return;var card=button.closest("[data-social-source-id]");var id=card.dataset.socialSourceId;try{var payload=await api("/api/admin/calendar/social-sources/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({name:value("socialName-"+id),platform:value("socialPlatform-"+id),handle:value("socialHandle-"+id),profileUrl:value("socialProfileUrl-"+id),trustLevel:value("socialTrust-"+id),enabled:value("socialEnabled-"+id)==="1",cadenceHours:Number(value("socialCadence-"+id))})});var index=state.socialSources.findIndex(function(item){return item.id===id;});if(index>=0)state.socialSources[index]=payload.socialSource;renderSocialSources();toast("Social account saved.");}catch(error){toast(error.message);}});
   document.getElementById("addSocialSource").addEventListener("click",async function(){var platform=(window.prompt("Platform: threads, instagram, or tiktok")||"").trim().toLowerCase();if(!platform)return;var handle=(window.prompt("Public handle without @")||"").trim();if(!handle)return;var profileUrl=window.prompt("Public profile URL");if(!profileUrl)return;var trust=(window.prompt("Trust: official, trusted, or discovery","trusted")||"trusted").trim().toLowerCase();try{var payload=await api("/api/admin/calendar/social-sources",{method:"POST",body:JSON.stringify({platform:platform,handle:handle,profileUrl:profileUrl,trustLevel:trust,enabled:false})});state.socialSources.push(payload.socialSource);renderSocialSources();toast("Social account added in a paused state.");}catch(error){toast(error.message);}});
-  document.getElementById("connectorList").addEventListener("click",async function(event){var card=event.target.closest("[data-connector-id]");if(!card)return;var id=card.dataset.connectorId;if(event.target.closest("[data-save-connector]")){try{var payload=await api("/api/admin/calendar/connectors/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({enabled:value("connectorEnabled-"+id)==="1",cadenceHours:Number(value("connectorCadence-"+id)),perRunLimit:Number(value("connectorLimit-"+id))})});var index=state.connectors.findIndex(function(item){return item.id===id;});if(index>=0)state.connectors[index]=payload.connector;renderConnectors();toast("Connector saved.");}catch(error){toast(error.message);}return;}if(event.target.closest("[data-run-connector]")){var button=event.target.closest("[data-run-connector]");button.disabled=true;toast(connectorLabel(id)+" started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:JSON.stringify({channels:[id]})});toast(connectorLabel(id)+": "+(result.strongPicks||0)+" strong picks, "+result.candidates+" candidates, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns(),loadStrongPicks()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{button.disabled=false;}}});
+  document.getElementById("connectorList").addEventListener("click",async function(event){var card=event.target.closest("[data-connector-id]");if(!card)return;var id=card.dataset.connectorId;if(event.target.closest("[data-save-connector]")){try{var payload=await api("/api/admin/calendar/connectors/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({enabled:value("connectorEnabled-"+id)==="1",cadenceHours:Number(value("connectorCadence-"+id)),perRunLimit:Number(value("connectorLimit-"+id))})});var index=state.connectors.findIndex(function(item){return item.id===id;});if(index>=0)state.connectors[index]=payload.connector;renderConnectors();toast("Connector saved.");}catch(error){toast(error.message);}return;}if(event.target.closest("[data-run-connector]")){var button=event.target.closest("[data-run-connector]");button.disabled=true;toast(connectorLabel(id)+" started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:JSON.stringify({channels:[id]})});toast(connectorLabel(id)+": "+(result.strongPicks||0)+" strong picks, "+result.candidates+" candidates, "+(result.suppressed||0)+" suppressed, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns(),loadStrongPicks()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{button.disabled=false;}}});
   document.getElementById("profileForm").addEventListener("submit",async function(event){event.preventDefault();try{var payload=await api("/api/admin/calendar/profile",{method:"PATCH",body:JSON.stringify({scoutBrief:value("profileScoutBrief"),sourceResolutionRules:value("profileSourceResolutionRules"),sourceResolutionPasses:Number(value("profileSourceResolutionPasses")),name:value("profileName"),model:value("profileModel"),weightedSubjects:JSON.parse(value("profileSubjects")),weightedFormats:JSON.parse(value("profileFormats")),positiveConcepts:parseComma(value("profilePositive")),negativeTerms:parseComma(value("profileNegative")),geographicRules:JSON.parse(value("profileGeography")),socialSettings:JSON.parse(value("profileSocialSettings")),dateHorizonDays:Number(value("profileHorizon")),relevanceThreshold:Number(value("profileThreshold")),duplicateSensitivity:Number(value("profileDuplicate")),perRunLimit:Number(value("profileLimit")),sourceCadenceHours:Number(value("profileSourceCadence")),webCadenceHours:Number(value("profileWebCadence"))})});state.profile=payload.profile;renderProfile();toast("Scout profile saved.");}catch(error){toast(error.message);}});
   document.getElementById("knownOrganizationList").addEventListener("click",async function(event){var card=event.target.closest("[data-known-organization-id]");if(!card)return;var id=card.dataset.knownOrganizationId;if(event.target.closest("[data-save-known-organization]")){try{var payload=await api("/api/admin/calendar/known-organizations/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({name:value("knownName-"+id),organizationType:value("knownType-"+id),aliases:parseComma(value("knownAliases-"+id)),officialDomains:parseComma(value("knownOfficialDomains-"+id)),eventPaths:parseComma(value("knownEventPaths-"+id)),trustedTicketDomains:parseComma(value("knownTicketDomains-"+id)),discoveryOnlyDomains:parseComma(value("knownDiscoveryDomains-"+id)),notes:value("knownNotes-"+id),enabled:value("knownEnabled-"+id)==="1"})});var index=state.knownOrganizations.findIndex(function(item){return item.id===id;});if(index>=0)state.knownOrganizations[index]=payload.organization;renderKnownOrganizations();toast("Known organization saved.");}catch(error){toast(error.message);}return;}if(event.target.closest("[data-delete-known-organization]")){if(!window.confirm("Remove this known organization from Scout source memory?"))return;try{await api("/api/admin/calendar/known-organizations/"+encodeURIComponent(id),{method:"DELETE"});state.knownOrganizations=state.knownOrganizations.filter(function(item){return item.id!==id;});renderKnownOrganizations();toast("Known organization removed.");}catch(error){toast(error.message);}}});
   document.getElementById("addKnownOrganization").addEventListener("click",async function(){var name=(window.prompt("Organizer or venue name")||"").trim();if(!name)return;var domain=(window.prompt("Official domain, for example gallery.org")||"").trim();if(!domain)return;try{var payload=await api("/api/admin/calendar/known-organizations",{method:"POST",body:JSON.stringify({name:name,organizationType:"both",officialDomains:[domain],enabled:true})});state.knownOrganizations.push(payload.organization);state.knownOrganizations.sort(function(a,b){return a.name.localeCompare(b.name);});renderKnownOrganizations();var card=document.querySelector('[data-known-organization-id="'+payload.organization.id+'"]');if(card)card.scrollIntoView({behavior:"smooth",block:"center"});toast("Known organization added. Add aliases, event paths, and ticket domains when useful.");}catch(error){toast(error.message);}});
-  document.getElementById("runScout").addEventListener("click",async function(){this.disabled=true;toast("Enabled scout lanes started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:"{}"});toast("Scout finished: "+(result.strongPicks||0)+" strong picks, "+(result.materialUpdates||0)+" material updates, "+result.candidates+" candidates, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns(),loadStrongPicks()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{this.disabled=false;}});
+  document.getElementById("runScout").addEventListener("click",async function(){this.disabled=true;toast("Enabled scout lanes started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:"{}"});toast("Scout finished: "+(result.strongPicks||0)+" strong picks, "+(result.materialUpdates||0)+" material updates, "+result.candidates+" candidates, "+(result.suppressed||0)+" suppressed, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns(),loadStrongPicks()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{this.disabled=false;}});
   document.getElementById("refreshRuns").addEventListener("click",loadRuns);
   document.getElementById("suggestionList").addEventListener("click",async function(event){var button=event.target.closest("[data-suggestion-action]");if(!button)return;try{await api("/api/admin/calendar/suggestions/"+encodeURIComponent(button.dataset.id)+"/"+button.dataset.suggestionAction,{method:"POST",body:"{}"});await loadSuggestions();var profile=await api("/api/admin/calendar/profile");state.profile=profile.profile;renderProfile();toast("Suggestion "+button.dataset.suggestionAction+"ed.");}catch(error){toast(error.message);}});
 })();
