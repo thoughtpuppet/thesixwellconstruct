@@ -57,7 +57,7 @@ db.exec(`
 `);
 
 const migrations = readdirSync(join(root, "migrations"))
-  .filter((name) => /^01(29|3[0-9]|4[0-9]|5[0-1])_/.test(name))
+  .filter((name) => /^01(29|3[0-9]|4[0-9]|5[0-2])_/.test(name))
   .sort();
 
 for (const name of migrations) {

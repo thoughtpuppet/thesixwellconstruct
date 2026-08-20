@@ -106,9 +106,19 @@ test("calendar migrations preserve seeded private candidates, verified official 
   assert.equal(poshSource.name, "Posh Atlanta");
   assert.match(poshSource.url, /^https:\/\/posh\.vip\/explore\?location=/);
   assert.deepEqual(JSON.parse(poshSource.adapter_config_json).city, "Atlanta");
-  const scoutProfile = db.prepare("SELECT geographic_rules_json,negative_terms_json FROM calendar_scout_profiles WHERE id='atlanta-default'").get();
+  const scoutProfile = db.prepare("SELECT geographic_rules_json,negative_terms_json,source_resolution_rules FROM calendar_scout_profiles WHERE id='atlanta-default'").get();
   assert.equal(JSON.parse(scoutProfile.geographic_rules_json).includeOnlineOnly, true);
   assert.equal(JSON.parse(scoutProfile.negative_terms_json).includes("online only"), false);
+  assert.match(scoutProfile.source_resolution_rules,/standalone website is not required/i);
+  assert.doesNotMatch(scoutProfile.source_resolution_rules,/official organizer or venue website supports it/i);
+  assert.deepEqual(
+    { ...db.prepare("SELECT organizer_url,source_resolution_notes FROM calendar_candidates WHERE id='cal_candidate_posh_orca_open_house_2026'").get() },
+    { organizer_url:"https://posh.vip/g/orca",source_resolution_notes:"The exact Posh ticket page supplies event facts and links to ORCA's organizer profile on Posh; Studio review still controls verification and publication." },
+  );
+  assert.deepEqual(
+    { ...db.prepare("SELECT label,link_role FROM calendar_candidate_links WHERE id='cal_link_posh_orca_group'").get() },
+    { label:"ORCA organizer profile on Posh",link_role:"organizer" },
+  );
   assert.deepEqual(
     { ...db.prepare("SELECT status,verification_state,access_status,access_notes,audiences_json FROM calendar_candidates WHERE id='cal_candidate_gsu_neurogenomics_forum_2026'").get() },
     { status:"candidate", verification_state:"verified", access_status:"restricted", access_notes:"GSU access only: Faculty, Staff, Students, Graduate Students, Postdocs. Not open to the general public.", audiences_json:'["Faculty","Staff","Students","Graduate Students","Postdocs"]' },
@@ -435,6 +445,48 @@ test("secondary leads remain private until Studio records the original event sou
   assert.equal(publicEvent.organizerUrl, "https://onecontemporarygallery.com/");
   assert.equal(publicEvent.venueUrl, "https://onecontemporarygallery.com/");
   assert.doesNotMatch(JSON.stringify(publicEvent), /artsatl|discoveryUrl|sourceResolutionNotes|sourceAuthority/i);
+});
+
+test("a documented Studio review can verify an exact ticket listing without requiring organizer or venue websites", async () => {
+  const db = database();
+  const ticketUrl = "https://posh.vip/e/no-website-art-collective-showcase";
+  const created = await admin(db,"/candidates",{
+    method:"POST",
+    body:{
+      title:"No Website Art Collective Showcase",organizer:"No Website Art Collective",
+      factualDescription:"An Atlanta art showcase listed by its organizing collective.",
+      sourceUrl:ticketUrl,ticketUrl,sourceAuthority:"authorized_ticket_host",
+      sourceResolutionNotes:"The exact Posh listing identifies the collective and venue; Studio identity review is still pending.",
+      dateKind:"timed",startsAt:"2026-11-28T18:00:00-05:00",endsAt:"2026-11-28T21:00:00-05:00",
+      venueName:"Community Art Room",venueAddress:"50 Art Street, Atlanta, GA 30303",city:"Atlanta",region:"GA",
+      accessStatus:"public",accessNotes:"Tickets are available from the event listing.",audiences:["Public"],
+      subjects:["art"],formats:["exhibition"],verificationState:"needs_verification",
+    },
+  });
+  assert.equal(created.status,201,await created.clone().text());
+  const candidate=(await created.json()).candidate;
+  assert.equal(candidate.organizerUrl,"");
+  assert.equal(candidate.venueUrl,"");
+  assert.equal((await admin(db,`/candidates/${candidate.id}/approve`,{method:"POST",body:{}})).status,409);
+
+  const reviewed=await admin(db,`/candidates/${candidate.id}`,{
+    method:"PATCH",
+    body:{
+      verificationState:"verified",
+      verificationNotes:"Studio confirmed the organizer and venue identity from the exact listing and event flyer.",
+      sourceResolutionNotes:"No standalone organizer or venue website exists. Studio confirmed the named organizer and venue from the exact Posh listing and flyer.",
+    },
+  });
+  assert.equal(reviewed.status,200,await reviewed.clone().text());
+  const verified=(await reviewed.json()).candidate;
+  assert.equal(verified.verificationState,"verified");
+  assert.equal(verified.organizerUrl,"");
+  assert.equal(verified.venueUrl,"");
+  const approved=await admin(db,`/candidates/${candidate.id}/approve`,{method:"POST",body:{}});
+  assert.equal(approved.status,200,await approved.clone().text());
+  const publicEvent=(await (await handleCalendarPublicApi(request("/api/calendar/events"),env(db))).json()).events.find((event)=>event.title===candidate.title);
+  assert.equal(publicEvent.sourceUrl,ticketUrl);
+  assert.equal(publicEvent.ticketUrl,ticketUrl);
 });
 
 test("approval, filters, single-event ICS, subscription feeds, rejection, and cancellation preserve lifecycle isolation", async () => {
@@ -844,7 +896,7 @@ test("Eventbrite discovers exact child pages from nested ItemList JSON-LD", asyn
   }
 });
 
-test("Posh Atlanta scouting spans organizers while holding unsupported ticket hosts for verification", async () => {
+test("Posh Atlanta scouting spans organizers and accepts event-host identity profiles without requiring standalone websites", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_posh_atlanta'");
   const eventUrl = "https://posh.vip/e/open-house-art-auction";
@@ -854,6 +906,13 @@ test("Posh Atlanta scouting spans organizers while holding unsupported ticket ho
   const browser = {
     async quickAction(action, { url, prompt }) {
       browserCalls.push({ action, url, prompt });
+      if (url === secondEventUrl) return new Response(JSON.stringify({ result:{ events:[{
+        title:"Atlanta Creative Technology Exhibition Mixer", description:"An experimental exhibition and creative technology mixer.",
+        startsAt:"2026-09-12T18:00:00-04:00", endsAt:"2026-09-12T21:00:00-04:00",
+        eventUrl:secondEventUrl, ticketUrl:secondEventUrl, organizer:"Atlanta Creative Guild",
+        organizerUrl:"https://posh.vip/g/atlanta-creative-guild", venueName:"Atlanta Creative Lab",
+        venueAddress:"200 Art Way, Atlanta, GA 30303", city:"Atlanta", region:"GA",
+      }] } }), { status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":"8" } });
       return new Response(JSON.stringify({ result:{ events:[{
         title:"Open House & Art Showcase", startsAt:"2026-08-23T16:00:00-04:00", endsAt:"2026-08-23T19:00:00-04:00",
         eventUrl, ticketUrl:eventUrl,
@@ -866,19 +925,12 @@ test("Posh Atlanta scouting spans organizers while holding unsupported ticket ho
   const detailHtml = `<script type="application/ld+json">${JSON.stringify({
     "@context":"https://schema.org", "@type":"Event", name:"Open House & Art Showcase",
     startDate:"2026-08-23T16:00:00-04:00", endDate:"2026-08-23T19:00:00-04:00", url:eventUrl,
-    description:"An open house with art, a silent auction, wine, hors d'oeuvres, and shuttle parking.",
+    description:"An art exhibition and open house with a silent auction, wine, hors d'oeuvres, and shuttle parking.",
     organizer:{ "@type":"Organization", name:"ORCA", url:"https://posh.vip/g/orca" },
     location:{ "@type":"Place", name:"Open House", address:{ "@type":"PostalAddress", streetAddress:"6000 Lake Forrest Dr NW", addressLocality:"Sandy Springs", addressRegion:"GA", postalCode:"30328" } },
     offers:{ "@type":"Offer", url:eventUrl, price:0, priceCurrency:"USD" },
   })}</script>`;
-  const secondDetailHtml = `<script type="application/ld+json">${JSON.stringify({
-    "@context":"https://schema.org", "@type":"Event", name:"Atlanta Creative Technology Exhibition Mixer",
-    startDate:"2026-09-12T18:00:00-04:00", endDate:"2026-09-12T21:00:00-04:00", url:secondEventUrl,
-    description:"An Atlanta experimental exhibition and mixer featuring interactive art and creative technology demonstrations.",
-    organizer:{ "@type":"Organization", name:"Atlanta Creative Guild", url:"https://atlantacreativeguild.example/events/technology-mixer" },
-    location:{ "@type":"Place", name:"Atlanta Creative Lab", address:{ "@type":"PostalAddress", streetAddress:"200 Art Way", addressLocality:"Atlanta", addressRegion:"GA", postalCode:"30303" } },
-    offers:{ "@type":"Offer", url:secondEventUrl },
-  })}</script>`;
+  const secondDetailHtml = "<main>Rendered Posh event shell</main>";
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => new Response(
     url === eventUrl ? detailHtml : url === secondEventUrl ? secondDetailHtml : "<main>Atlanta events on Posh</main>",
@@ -892,19 +944,21 @@ test("Posh Atlanta scouting spans organizers while holding unsupported ticket ho
     const direct = JSON.parse(db.prepare("SELECT source_results_json FROM calendar_scout_runs WHERE id=?").get(result.runId).source_results_json)[0].sources[0];
     assert.deepEqual(
       { adapter:direct.adapter, childLinksDiscovered:direct.childLinksDiscovered, childrenExtracted:direct.childrenExtracted, leadsExtracted:direct.leadsExtracted, completeness:direct.completeness },
-      { adapter:"posh", childLinksDiscovered:2, childrenExtracted:2, leadsExtracted:0, completeness:"needs_verification" },
+      { adapter:"posh", childLinksDiscovered:2, childrenExtracted:2, leadsExtracted:0, completeness:"complete" },
     );
-    assert.equal(browserCalls.length, 1);
+    assert.equal(browserCalls.length, 2);
     assert.deepEqual({ action:browserCalls[0].action, url:browserCalls[0].url }, { action:"json", url:discoveryUrl });
+    assert.deepEqual({ action:browserCalls[1].action, url:browserCalls[1].url }, { action:"json", url:secondEventUrl });
     assert.match(browserCalls[0].prompt, /currently shown for Atlanta, GA/);
-    const candidate = db.prepare("SELECT verification_state,starts_at,ends_at,venue_address,source_url,discovery_url,source_authority FROM calendar_candidates WHERE id='cal_candidate_posh_orca_open_house_2026'").get();
+    const candidate = db.prepare("SELECT verification_state,starts_at,ends_at,venue_address,source_url,discovery_url,organizer_url,source_authority FROM calendar_candidates WHERE id='cal_candidate_posh_orca_open_house_2026'").get();
     assert.deepEqual({ ...candidate }, {
-      verification_state:"needs_verification", starts_at:"2026-08-23T16:00:00-04:00", ends_at:"2026-08-23T19:00:00-04:00",
-      venue_address:"6000 Lake Forrest Dr NW, Sandy Springs, GA 30328, USA", source_url:eventUrl, discovery_url:discoveryUrl, source_authority:"authorized_ticket_host",
+      verification_state:"verified", starts_at:"2026-08-23T16:00:00-04:00", ends_at:"2026-08-23T19:00:00-04:00",
+      venue_address:"6000 Lake Forrest Dr NW, Sandy Springs, GA, 30328", source_url:eventUrl, discovery_url:discoveryUrl,
+      organizer_url:"https://posh.vip/g/orca", source_authority:"authorized_ticket_host",
     });
     assert.deepEqual(
-      { ...db.prepare("SELECT organizer,verification_state,ends_at,source_authority FROM calendar_candidates WHERE source_event_id='posh-atlanta-creative-technology-mixer'").get() },
-      { organizer:"Atlanta Creative Guild", verification_state:"verified", ends_at:"2026-09-12T21:00:00-04:00", source_authority:"authorized_ticket_host" },
+      { ...db.prepare("SELECT organizer,organizer_url,verification_state,ends_at,source_authority FROM calendar_candidates WHERE source_event_id='posh-atlanta-creative-technology-mixer'").get() },
+      { organizer:"Atlanta Creative Guild", organizer_url:"https://posh.vip/g/atlanta-creative-guild", verification_state:"verified", ends_at:"2026-09-12T21:00:00-04:00", source_authority:"authorized_ticket_host" },
     );
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_posh_orca_open_house_2026'").get().count, 0);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id='posh-atlanta-creative-technology-mixer')").get().count, 0);
@@ -1825,7 +1879,7 @@ test("editable Scout guidance and known organizations drive bounded source resol
   }
 });
 
-test("Threads native discovery retains exact-handle evidence but still requires an original website source", async () => {
+test("Threads native discovery retains exact-handle evidence while unresolved event identity stays private", async () => {
   const db = database();
   await admin(db, "/social-sources", { method:"POST", body:{ platform:"threads", handle:"atlarts", name:"ATL Arts", profileUrl:"https://www.threads.net/@atlarts", trustLevel:"official", enabled:true } });
   await admin(db, "/connectors/threads_api", { method:"PATCH", body:{ enabled:true, perRunLimit:6 } });
@@ -2307,8 +2361,11 @@ test("approved research media captures privately without a record cap and snapsh
   const mediaTwo = "https://cdn.example/sound-vision-two.jpg";
   const runtime = env(db, { OPENAI_API_KEY:"test-key", SUBMISSION_FILES:bucket });
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (url) => {
-    if (String(url) === "https://api.openai.com/v1/responses") return Response.json({
+  let researchRequestBody;
+  globalThis.fetch = async (url,init={}) => {
+    if (String(url) === "https://api.openai.com/v1/responses") {
+      researchRequestBody=JSON.parse(init.body);
+      return Response.json({
       id:"resp_candidate_media",
       output:[
         { type:"web_search_call", action:{ sources:[{ url:sourceUrl, title:"Official event page" }] } },
@@ -2318,6 +2375,7 @@ test("approved research media captures privately without a record cap and snapsh
         }) }] },
       ], usage:{ input_tokens:100, output_tokens:90 },
     });
+    }
     if (String(url) === sourceUrl) return new Response(`<img src="${mediaOne}"><img src="${mediaTwo}">`, { status:200, headers:{ "content-type":"text/html" } });
     if ([mediaOne,mediaTwo].includes(String(url))) return new Response(new Uint8Array([255,216,255,217]), { status:200, headers:{ "content-type":"image/jpeg", "content-length":"4" } });
     throw new Error(`Unexpected URL ${url}`);
@@ -2325,6 +2383,10 @@ test("approved research media captures privately without a record cap and snapsh
   try {
     const researched = await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/messages`, { method:"POST", admin:true, body:{ message:"Find the official event images." } }), runtime);
     assert.equal(researched.status, 201, await researched.clone().text());
+    assert.deepEqual(
+      JSON.parse(researchRequestBody.input).retrievedMediaCandidates.map((item)=>({mediaUrl:item.mediaUrl,provenanceUrl:item.provenanceUrl})),
+      [{mediaUrl:mediaOne,provenanceUrl:sourceUrl},{mediaUrl:mediaTwo,provenanceUrl:sourceUrl}],
+    );
     const proposal = (await researched.json()).research.proposals[0];
     const applied = await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/proposals/${proposal.id}/apply`, { method:"POST", admin:true, body:{ changeIds:["media-1","media-2"] } }), runtime);
     assert.equal(applied.status, 200, await applied.clone().text());
@@ -2346,6 +2408,63 @@ test("approved research media captures privately without a record cap and snapsh
     assert.doesNotMatch(JSON.stringify(event), /provenanceUrl|cdn\.example/);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("candidate research recovers a Posh flyer from rendered page markup when static text omits the asset URL", async () => {
+  const db=database();
+  const bucket=new MemoryBucket();
+  const candidateId="cal_candidate_posh_orca_open_house_2026";
+  const sourceUrl="https://posh.vip/e/open-house-art-auction";
+  const mediaUrl="https://cdn.posh.vip/event-images/open-house-art-auction.jpg?width=1600&signature=test";
+  const browserCalls=[];
+  const browser={
+    async quickAction(action,options){
+      browserCalls.push({action,url:options.url});
+      assert.equal(action,"content");
+      return new Response(`<html><body><main><img src="${mediaUrl.replace(/&/g,"&amp;")}" alt="Open House and Art Showcase flyer"></main></body></html>`,{status:200,headers:{"content-type":"text/html","x-browser-ms-used":"18"}});
+    },
+  };
+  const runtime=env(db,{OPENAI_API_KEY:"test-key",SUBMISSION_FILES:bucket,BROWSER:browser});
+  const originalFetch=globalThis.fetch;
+  let researchRequestBody;
+  globalThis.fetch=async (url,init={})=>{
+    if(String(url)===sourceUrl)return new Response("<html><body><main>Rendered event shell without image assets</main></body></html>",{status:200,headers:{"content-type":"text/html"}});
+    if(String(url)==="https://api.openai.com/v1/responses"){
+      researchRequestBody=JSON.parse(init.body);
+      return Response.json({
+        id:"resp_posh_rendered_flyer",
+        output:[
+          {type:"web_search_call",action:{sources:[{url:sourceUrl,title:"Posh event page"}]}},
+          {type:"message",content:[{type:"output_text",text:JSON.stringify({
+            reply:"I recovered the flyer asset from the rendered Posh event page.",findings:[],eventMemories:[],sourceRuleSuggestions:[],
+            changes:[{id:"posh-rendered-flyer",path:"media:add",label:"Add private flyer",valueJson:JSON.stringify({mediaUrl,provenanceUrl:sourceUrl,role:"primary",altText:"Open House and Art Showcase flyer",caption:"Event flyer from the Posh listing"}),rationale:"The fully rendered event page contains this flyer image.",confidence:.97,citations:[sourceUrl]}],
+          })}]},
+        ],usage:{input_tokens:110,output_tokens:70},
+      });
+    }
+    if(String(url)===mediaUrl)return new Response(new Uint8Array([255,216,255,217]),{status:200,headers:{"content-type":"image/jpeg","content-length":"4"}});
+    throw new Error(`Unexpected URL ${url}`);
+  };
+  try{
+    const researched=await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/messages`,{method:"POST",admin:true,body:{message:"Find the flyer shown on the Posh event page."}}),runtime);
+    assert.equal(researched.status,201,await researched.clone().text());
+    assert.deepEqual(JSON.parse(researchRequestBody.input).retrievedMediaCandidates.map((item)=>({mediaUrl:item.mediaUrl,provenanceUrl:item.provenanceUrl,evidence:item.evidence})),[
+      {mediaUrl,provenanceUrl:sourceUrl,evidence:"rendered image element"},
+    ]);
+    const proposal=(await researched.json()).research.proposals[0];
+    const applied=await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/proposals/${proposal.id}/apply`,{method:"POST",admin:true,body:{changeIds:["posh-rendered-flyer"]}}),runtime);
+    assert.equal(applied.status,200,await applied.clone().text());
+    const candidate=(await applied.json()).candidate;
+    assert.equal(candidate.media.length,1);
+    assert.equal(candidate.media[0].includePublic,false);
+    assert.equal(candidate.media[0].sourceUrl,mediaUrl);
+    assert.equal(candidate.media[0].provenanceUrl,sourceUrl);
+    assert.equal(bucket.objects.size,1);
+    assert.equal(browserCalls.length,2);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidateId).count,0);
+  }finally{
+    globalThis.fetch=originalFetch;
   }
 });
 
