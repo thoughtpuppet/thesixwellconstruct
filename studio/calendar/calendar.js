@@ -17,6 +17,7 @@
 
   function escapeHtml(value) { return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]; }); }
   function isInstagramUrl(value) { try { var host = new URL(value).hostname.toLowerCase(); return host === "instagram.com" || host.endsWith(".instagram.com") || host === "instagr.am" || host.endsWith(".instagr.am"); } catch (error) { return false; } }
+  function isInstagramProfileUrl(value) { try { if(!isInstagramUrl(value))return false;var parts=new URL(value).pathname.split("/").filter(Boolean);return parts.length===1&&!['p','reel','reels','stories','explore','accounts','direct','tv'].includes(parts[0].toLowerCase()); } catch(error){return false;} }
   function isSocialUrl(value) { try { var host = new URL(value).hostname.toLowerCase().replace(/^www\./,""); return ["instagram.com","instagr.am","threads.net","tiktok.com"].some(function(domain){return host===domain||host.endsWith("."+domain);}); } catch (error) { return false; } }
   function displayDate(value) { var date = value ? new Date(value.length === 10 ? value + "T12:00:00" : value) : null; return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", hour:value.length > 10 ? "numeric" : undefined, minute:value.length > 10 ? "2-digit" : undefined }).format(date) : "Date not confirmed"; }
   function toast(message) { var root = document.getElementById("toast"); root.textContent = message; root.classList.add("is-visible"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { root.classList.remove("is-visible"); }, 3200); }
@@ -156,14 +157,14 @@
 
   function relatedLinkRow(link) {
     link = link || {};
-    var instagramOnly = isInstagramUrl(link.url);
+    var instagramOnly = isInstagramUrl(link.url) && !(link.role === "artist" && isInstagramProfileUrl(link.url));
     return '<article class="related-link-row" data-related-link data-link-id="' + escapeHtml(link.id || "") + '">' +
       '<div class="field-grid">' +
       '<label class="field"><span>Label</span><input data-link-label value="' + escapeHtml(link.label || "") + '"></label>' +
       '<label class="field"><span>URL</span><input data-link-url type="url" value="' + escapeHtml(link.url || "") + '"></label>' +
-      '<label class="field"><span>Role</span><select data-link-role>' + occurrenceOptions([["organizer","Organizer"],["venue","Venue"],["ticket","Tickets"],["supporting","Supporting"],["discovery","Discovery lead"]],link.role||"supporting") + '</select></label>' +
+      '<label class="field"><span>Role</span><select data-link-role>' + occurrenceOptions([["organizer","Organizer"],["venue","Venue"],["ticket","Tickets"],["artist","Artist"],["supporting","Supporting"],["discovery","Discovery lead"]],link.role||"supporting") + '</select></label>' +
       '<label class="field is-wide"><span>Provenance URL</span><input data-link-provenance type="url" value="' + escapeHtml(link.provenanceUrl || "") + '"></label>' +
-      '</div><div class="related-link-actions"><label class="check-option"><input data-link-public type="checkbox"' + (link.includePublic ? ' checked' : '') + (instagramOnly ? ' disabled' : '') + '><span>' + (instagramOnly ? 'Private Instagram provenance' : 'Include publicly') + '</span></label>' +
+      '</div><div class="related-link-actions"><label class="check-option"><input data-link-public type="checkbox"' + (link.includePublic ? ' checked' : '') + (instagramOnly ? ' disabled' : '') + '><span>' + (instagramOnly ? 'Private Instagram post provenance' : link.role === "artist" ? 'Include artist link publicly' : 'Include publicly') + '</span></label>' +
       externalLink(link.url,"Open link") + externalLink(link.provenanceUrl,"Open provenance") + '<button type="button" data-remove-related-link>Remove</button></div></article>';
   }
 

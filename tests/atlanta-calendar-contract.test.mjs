@@ -1730,7 +1730,8 @@ test("a registered discovery source is searched through to the original organize
   let resolutionRequest;
   globalThis.fetch = async (url, init = {}) => {
     if (String(url).includes("api.openai.com")) {
-      resolutionRequest = JSON.parse(init.body);
+      const openAiRequest = JSON.parse(init.body);
+      if (openAiRequest.text?.format?.name !== "atlanta_exhibition_artists") resolutionRequest = openAiRequest;
       return Response.json({
         output:[
           { type:"web_search_call", action:{ sources:[{ url:"https://gallery.example/exhibitions/atlanta-light", title:"Gallery event page" }] } },
@@ -1823,7 +1824,27 @@ test("editable Scout guidance and known organizations drive bounded source resol
   globalThis.fetch = async (url, init = {}) => {
     if (String(url).includes("api.openai.com")) {
       openAiCalls += 1;
-      requests.push(JSON.parse(init.body));
+      const requestBody = JSON.parse(init.body);
+      requests.push(requestBody);
+      if (requestBody.text?.format?.name === "atlanta_exhibition_artists") {
+        const eventUrl = "https://gallery.example/exhibitions/atlanta-light";
+        const websiteUrl = "https://artist.example/";
+        const instagramUrl = "https://www.instagram.com/atlanta.light.artist/";
+        return Response.json({
+          output:[
+            { type:"web_search_call", action:{ sources:[
+              { url:eventUrl,title:"Official exhibition" },
+              { url:websiteUrl,title:"Artist website" },
+              { url:instagramUrl,title:"Artist Instagram" },
+            ] } },
+            { type:"message", content:[{ type:"output_text", text:JSON.stringify({ artists:[{
+              artistName:"Avery Light",websiteUrl,instagramUrl,confidence:.96,citations:[eventUrl,websiteUrl,instagramUrl],
+            },{
+              artistName:"Noor Search",websiteUrl:"",instagramUrl:"",confidence:.91,citations:[eventUrl],
+            }] }) }] },
+          ], usage:{input_tokens:70,output_tokens:50},
+        });
+      }
       const sourceUrl = openAiCalls === 1
         ? "https://gallery.example/"
         : openAiCalls === 2
@@ -1854,7 +1875,7 @@ test("editable Scout guidance and known organizations drive bounded source resol
   try {
     const run = await runCalendarScout(env(db, { OPENAI_API_KEY:"test-key" }), { runKind:"manual", includeWeb:false, sourceId:source.id });
     assert.equal(run.candidates, 1, JSON.stringify(run.outcomes));
-    assert.equal(openAiCalls, 3);
+    assert.equal(openAiCalls, 4);
     assert.match(requests[0].input, /independent Atlanta exhibitions/);
     assert.match(requests[0].instructions, /exact aliases/);
     assert.match(requests[0].instructions, /Gallery Example/);
@@ -1872,6 +1893,20 @@ test("editable Scout guidance and known organizations drive bounded source resol
     assert.equal(detail.sourceResolutionAttempts[0].searchQueries.length, 3);
     assert.equal(detail.sourceResolutionAttempts[0].selectedUrl, "https://gallery.example/exhibitions/atlanta-light");
     assert.equal(detail.sourceResolutionAttempts[0].attemptedUrls.includes("https://gallery.example/"), true);
+    assert.deepEqual(detail.relatedLinks.filter((link) => link.role === "artist").map((link) => ({label:link.label,url:link.url,includePublic:link.includePublic})), [
+      {label:"Avery Light — Website",url:"https://artist.example/",includePublic:true},
+      {label:"Avery Light — Instagram",url:"https://www.instagram.com/atlanta.light.artist/",includePublic:true},
+      {label:"Search for Noor Search",url:"https://www.google.com/search?q=Noor+Search+artist",includePublic:true},
+    ]);
+    assert.match(requests[3].instructions,/official Instagram profile/i);
+    const approved = await admin(db, `/candidates/${candidate.id}/approve`, {method:"POST",body:{}});
+    assert.equal(approved.status,200,await approved.clone().text());
+    const publicEvent = (await (await handleCalendarPublicApi(request("/api/calendar/events"),env(db))).json()).events.find((event) => event.title === "Atlanta Light");
+    assert.deepEqual(publicEvent.relatedLinks.filter((link) => link.role === "artist").map((link) => link.url), [
+      "https://artist.example/",
+      "https://www.instagram.com/atlanta.light.artist/",
+      "https://www.google.com/search?q=Noor+Search+artist",
+    ]);
     const rootPayload = await (await admin(db, "")).json();
     assert.equal(rootPayload.knownOrganizations.some((item) => item.id === organization.id), true);
   } finally {
@@ -2841,6 +2876,16 @@ test("public event cards use the complete add-to-calendar action label", () => {
   const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
   assert.match(publicCalendar,/>Add this event to your calendar<\/a>/);
   assert.doesNotMatch(publicCalendar,/>Add this event<\/a>/);
+});
+
+test("public exhibition cards separate approved artist identity links from other related links", () => {
+  const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  assert.match(publicCalendar,/link\.role === "artist"/);
+  assert.match(publicCalendar,/calendar-artist-links"><span>Artists<\/span>/);
+  assert.match(studio,/\["artist","Artist"\]/);
+  assert.match(studio,/Include artist link publicly/);
+  assert.match(studio,/isInstagramProfileUrl/);
 });
 
 test("Calendar Studio reuses a saved credential without showing the unlock controls", () => {
