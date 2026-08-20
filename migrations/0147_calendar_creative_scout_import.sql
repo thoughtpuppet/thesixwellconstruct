@@ -140,7 +140,7 @@ INSERT OR IGNORE INTO calendar_candidate_notes
   (candidate_id,private_rationale,attendance_use,programming_ideas,potential_collaborators,internal_notes,updated_at)
 SELECT c.id,n.private_rationale,n.attendance_use,n.programming_ideas,n.potential_collaborators,n.internal_notes,datetime('now')
 FROM approved_notes n
-JOIN calendar_candidates c ON c.source_url=n.source_url;
+JOIN calendar_candidates c ON rtrim(c.source_url,'/')=rtrim(n.source_url,'/');
 
 -- Sai approved these verified Scout records for the public Studio Calendar.
 -- The public rows deliberately copy factual fields only; no private rationale,
@@ -160,13 +160,13 @@ FROM calendar_candidates
 WHERE (id IN (
   'cal_candidate_sound_vision','cal_candidate_lost_shadows','cal_candidate_voices_power',
   'cal_candidate_eyedrum_anniversary','cal_candidate_eyedrum_winter',
-  'cal_candidate_words_on_wylie','cal_candidate_goat_grrl','cal_candidate_goat_leaflet_riso',
-  'cal_candidate_goat_site_2026','cal_candidate_goat_pleiades','cal_candidate_measure_without',
+  'cal_candidate_words_on_wylie','cal_candidate_gulch_grrl_live','cal_candidate_leaflet_riso',
+  'cal_candidate_site_2026','cal_candidate_chamber_cartel_pleiades','cal_candidate_gulch_measure_without',
   'cal_candidate_eyedrum_bryan_day','cal_candidate_eyedrum_wheelchair_sports','cal_candidate_eyedrum_akchamel'
-) OR source_url IN (
+) OR rtrim(source_url,'/') IN (
   'https://cabbagetown.com/wow','https://www.thegoatfarm.info/events/cut-corners-presents-grrl',
   'https://www.thegoatfarm.info/events/leaflet-women-in-riso','https://www.thegoatfarm.info/events/site-2026',
-  'https://www.thegoatfarm.info/events/chamber-cartel-pleiades','https://www.sandlerhudson.com/',
+  'https://www.thegoatfarm.info/events/chamber-cartel-pleiades','https://www.sandlerhudson.com',
   'https://www.eyedrum.org/calendar-events-performances-art-music/bryan-day-shrimp-ring-klimchak-alexandria-smith',
   'https://www.eyedrum.org/calendar-events-performances-art-music/gaelynn-lea-wheelchair-sports-camp',
   'https://www.eyedrum.org/calendar-events-performances-art-music/akchamel-w-franks'
@@ -179,13 +179,13 @@ SET status='published',
 WHERE (id IN (
   'cal_candidate_sound_vision','cal_candidate_lost_shadows','cal_candidate_voices_power',
   'cal_candidate_eyedrum_anniversary','cal_candidate_eyedrum_winter',
-  'cal_candidate_words_on_wylie','cal_candidate_goat_grrl','cal_candidate_goat_leaflet_riso',
-  'cal_candidate_goat_site_2026','cal_candidate_goat_pleiades','cal_candidate_measure_without',
+  'cal_candidate_words_on_wylie','cal_candidate_gulch_grrl_live','cal_candidate_leaflet_riso',
+  'cal_candidate_site_2026','cal_candidate_chamber_cartel_pleiades','cal_candidate_gulch_measure_without',
   'cal_candidate_eyedrum_bryan_day','cal_candidate_eyedrum_wheelchair_sports','cal_candidate_eyedrum_akchamel'
-) OR source_url IN (
+) OR rtrim(source_url,'/') IN (
   'https://cabbagetown.com/wow','https://www.thegoatfarm.info/events/cut-corners-presents-grrl',
   'https://www.thegoatfarm.info/events/leaflet-women-in-riso','https://www.thegoatfarm.info/events/site-2026',
-  'https://www.thegoatfarm.info/events/chamber-cartel-pleiades','https://www.sandlerhudson.com/',
+  'https://www.thegoatfarm.info/events/chamber-cartel-pleiades','https://www.sandlerhudson.com',
   'https://www.eyedrum.org/calendar-events-performances-art-music/bryan-day-shrimp-ring-klimchak-alexandria-smith',
   'https://www.eyedrum.org/calendar-events-performances-art-music/gaelynn-lea-wheelchair-sports-camp',
   'https://www.eyedrum.org/calendar-events-performances-art-music/akchamel-w-franks'
