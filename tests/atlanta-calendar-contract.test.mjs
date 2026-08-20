@@ -2340,7 +2340,7 @@ test("candidate research repairs a confirmed venue address when the first respon
     const proposal = result.research.proposals[0];
     assert.equal(requestBodies.length,2);
     assert.equal(requestBodies[1].tools,undefined);
-    assert.match(requestBodies[1].instructions,/confirmed sourced facts but omitted its record changes/i);
+    assert.match(requestBodies[1].instructions,/audit a structured Atlanta Calendar research response/i);
     assert.equal(proposal.changes.length,1);
     assert.equal(proposal.changes[0].path,"venueAddress");
     assert.equal(proposal.changes[0].before,"");
@@ -2349,6 +2349,129 @@ test("candidate research repairs a confirmed venue address when the first respon
     assert.equal(db.prepare("SELECT venue_address FROM calendar_candidates WHERE id=?").get(candidateId).venue_address,"");
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("candidate research turns a discovered exhibition schedule into one coordinated private proposal", async () => {
+  const db = database();
+  const openingUrl = "https://www.tickettailor.com/events/thebakeryatlanta/2334626";
+  const closingUrl = "https://www.tickettailor.com/events/thebakeryatlanta/2347823";
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Debanhi Romero: Offspring of Her's — Exhibition Opening",
+      organizer:"The Bakery Atlanta",
+      factualDescription:"An exhibition opening.",
+      sourceUrl:"https://www.thebakeryatlanta.com/",
+      organizerUrl:"https://www.thebakeryatlanta.com/",
+      sourceAuthority:"unresolved",
+      sourceResolutionNotes:"Organizer and event schedule need confirmation.",
+      eventStructure:"single",
+      dateKind:"timed",
+      startsAt:"2026-08-23T18:00:00-04:00",
+      endsAt:"2026-08-23T21:00:00-04:00",
+      timezone:"America/New_York",
+      venueName:"The Supermarket",
+      venueAddress:"638 North Highland Avenue NE, Atlanta, GA 30306",
+      city:"Atlanta",
+      region:"GA",
+      subjects:["art"],
+      formats:["exhibition"],
+      verificationState:"needs_verification",
+    },
+  });
+  assert.equal(created.status,201,await created.clone().text());
+  const candidateId=(await created.json()).candidate.id;
+  const runtime=env(db,{OPENAI_API_KEY:"test-key"});
+  const originalFetch=globalThis.fetch;
+  const requestBodies=[];
+  const occurrences=[
+    {
+      sourceEventId:"2334626",occurrenceType:"opening_reception",title:"Opening Reception",
+      factualDescription:"Opening reception for Debanhi Romero's Offspring of Her's.",
+      dateKind:"timed",startsAt:"2026-08-23T18:00:00-04:00",endsAt:"2026-08-23T21:00:00-04:00",timezone:"America/New_York",
+      venueName:"The Supermarket",venueAddress:"638 North Highland Avenue NE, Atlanta, GA 30306",
+      sourceUrl:openingUrl,ticketUrl:openingUrl,status:"scheduled",verificationState:"verified",sortOrder:0,
+    },
+    {
+      sourceEventId:"2347823",occurrenceType:"artist_talk",title:"Closing Reception + Artist Talk",
+      factualDescription:"Closing reception with an artist talk for Debanhi Romero's Offspring of Her's.",
+      dateKind:"timed",startsAt:"2026-08-30T18:00:00-04:00",endsAt:"2026-08-30T21:00:00-04:00",timezone:"America/New_York",
+      venueName:"The Supermarket",venueAddress:"638 North Highland Avenue NE, Atlanta, GA 30306",
+      sourceUrl:closingUrl,ticketUrl:closingUrl,status:"scheduled",verificationState:"verified",sortOrder:1,
+    },
+  ];
+  const auditedChanges=[
+    ["parent-title","title","Debanhi Romero: Offspring of Her's"],
+    ["parent-structure","eventStructure","exhibition"],
+    ["parent-date-kind","dateKind","date_range"],
+    ["parent-start","startsAt","2026-08-20"],
+    ["parent-end","endsAt","2026-08-30"],
+    ["parent-description","factualDescription","Debanhi Romero's Offspring of Her's is on view August 20–30, 2026, with an opening reception and a closing reception with artist talk."],
+    ["parent-source","sourceUrl",openingUrl],
+    ["parent-ticket","ticketUrl",openingUrl],
+    ["parent-authority","sourceAuthority","authorized_ticket_host"],
+    ["parent-resolution","sourceResolutionNotes","The Bakery Atlanta's authorized Ticket Tailor listings confirm the exhibition and related programs."],
+    ["parent-verification","verificationState","verified"],
+    ["related-programs","occurrences",occurrences],
+  ].map(([id,path,value])=>({
+    id,path,label:path,valueJson:JSON.stringify(value),
+    rationale:"The organizer-authorized listings support this coordinated exhibition schedule.",confidence:.98,
+    citations:path==="occurrences"?[openingUrl,closingUrl]:[openingUrl],
+  }));
+  globalThis.fetch=async (url,init={})=>{
+    assert.equal(String(url),"https://api.openai.com/v1/responses");
+    const body=JSON.parse(init.body);
+    requestBodies.push(body);
+    if (requestBodies.length===1) return Response.json({
+      id:"resp_exhibition_schedule_findings",
+      output:[
+        {type:"web_search_call",action:{sources:[{url:openingUrl,title:"Opening and exhibition"},{url:closingUrl,title:"Closing reception and artist talk"}]}},
+        {type:"message",content:[{type:"output_text",text:JSON.stringify({
+          reply:"The event is a parent exhibition on view August 20–30. Its related schedule includes the August 23 opening reception and the August 30 closing reception with artist talk.",
+          findings:[
+            {text:"The exhibition is on view August 20–30, 2026.",status:"confirmed",citations:[]},
+            {text:"The opening reception is August 23 from 6–9 PM, and the closing reception with artist talk is August 30 from 6–9 PM.",status:"confirmed",citations:[]},
+          ],
+          changes:[],eventMemories:[],sourceRuleSuggestions:[],
+        })}]},
+      ],
+      usage:{input_tokens:150,output_tokens:90,total_tokens:240},
+    });
+    return Response.json({
+      id:"resp_exhibition_schedule_audit",
+      output:[{type:"message",content:[{type:"output_text",text:JSON.stringify({changes:auditedChanges})}]}],
+      usage:{input_tokens:120,output_tokens:160,total_tokens:280},
+    });
+  };
+  try {
+    const response=await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/messages`,{
+      method:"POST",admin:true,body:{message:"Verify the full event schedule and propose every supported update."},
+    }),runtime);
+    assert.equal(response.status,201,await response.clone().text());
+    const result=await response.json();
+    const proposal=result.research.proposals[0];
+    assert.equal(requestBodies.length,2);
+    assert.match(requestBodies[0].instructions,/one coordinated structure update/i);
+    assert.match(requestBodies[1].instructions,/one complete occurrences array/i);
+    assert.deepEqual(new Set(requestBodies[1].input ? JSON.parse(requestBodies[1].input).allowedCitationUrls : []),new Set([openingUrl,closingUrl,"https://www.thebakeryatlanta.com/"]));
+    assert.deepEqual(proposal.changes.map((change)=>change.path),auditedChanges.map((change)=>change.path));
+    assert.equal(proposal.changes.find((change)=>change.path==="occurrences").value.length,2);
+
+    const applied=await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/proposals/${proposal.id}/apply`,{
+      method:"POST",admin:true,body:{changeIds:proposal.changes.map((change)=>change.id)},
+    }),runtime);
+    assert.equal(applied.status,200,await applied.clone().text());
+    const candidate=(await applied.json()).candidate;
+    assert.equal(candidate.title,"Debanhi Romero: Offspring of Her's");
+    assert.deepEqual({eventStructure:candidate.eventStructure,dateKind:candidate.dateKind,startsAt:candidate.startsAt,endsAt:candidate.endsAt},{eventStructure:"exhibition",dateKind:"date_range",startsAt:"2026-08-20",endsAt:"2026-08-30"});
+    assert.deepEqual(candidate.occurrences.map((item)=>({type:item.occurrenceType,title:item.title,startsAt:item.startsAt})),[
+      {type:"opening_reception",title:"Opening Reception",startsAt:"2026-08-23T18:00:00-04:00"},
+      {type:"artist_talk",title:"Closing Reception + Artist Talk",startsAt:"2026-08-30T18:00:00-04:00"},
+    ]);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidateId).count,0);
+  } finally {
+    globalThis.fetch=originalFetch;
   }
 });
 

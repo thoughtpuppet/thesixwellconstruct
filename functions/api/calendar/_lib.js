@@ -2513,6 +2513,26 @@ async function loadCandidateResearch(db, candidate, createThread = true) {
   };
 }
 
+function researchChangeMergeKey(change) {
+  if (change.path !== "media:add") return change.path;
+  const mediaUrl = change.value && typeof change.value === "object" ? change.value.mediaUrl || change.value.url : "";
+  return `media:add:${researchCitationKey(mediaUrl) || asString(mediaUrl)}`;
+}
+
+function mergeResearchChanges(existing, audited) {
+  const merged = [];
+  const indexes = new Map();
+  for (const change of [...existing, ...audited]) {
+    const key = researchChangeMergeKey(change);
+    if (indexes.has(key)) merged[indexes.get(key)] = change;
+    else {
+      indexes.set(key, merged.length);
+      merged.push(change);
+    }
+  }
+  return merged.slice(0,40);
+}
+
 function absoluteMediaUrl(value, pageUrl) {
   const raw = sourceHtmlEntities(asString(value)).replace(/\\\//g, "/");
   if (!raw || /^(?:data|blob|javascript):/i.test(raw)) return "";
@@ -2676,6 +2696,7 @@ async function requestCandidateResearch(env, db, candidate, thread, instruction)
       "Prefer the exact organizer or venue event page, official calendar item, or authorized ticket page. Cite every public factual change. Say unknown when evidence is insufficient and expose disagreements as conflicts.",
       "Compare every confirmed fact with the current candidate snapshot. When the evidence supplies a missing, corrected, or more precise record value, you must include the corresponding field-level change; a confirmed finding by itself is not a proposed correction. Do not propose a change when the stored value already matches.",
       "Use explicit UTC offsets for timed dates. Confirm public eligibility instead of assuming a public webpage means a public event. Keep exhibition ranges distinct from dated openings, talks, performances, screenings, panels, and workshops.",
+      "When evidence establishes a parent exhibition or series plus dated related programs, propose one coordinated structure update: correct the parent title, eventStructure, dateKind, startsAt, endsAt, factualDescription, and strongest exact source fields as needed, and propose one occurrences value containing every already-saved occurrence plus every confirmed opening reception, closing reception, artist talk, screening, performance, panel, workshop, lecture, mixer, or other dated program. Preserve existing occurrence IDs and confirmed facts. Give each occurrence its own exact sourceUrl or ticketUrl when available. Gallery or venue hours describe when the parent is viewable; do not turn routine hours into separate occurrences unless the source presents them as distinct public programs.",
       "A proposed image must include mediaUrl and provenanceUrl in valueJson. Use retrievedMediaCandidates when available; each one was extracted from the static or fully rendered provenance page. Suggest at most 20 images and never suggest an image merely because it appears in search results. If the event page visibly has a flyer but no asset URL can be recovered, describe that extraction limitation without claiming that no flyer exists.",
       "Return valueJson as valid JSON for every proposed value, including JSON strings for scalar text. Event memories are durable instructions explicitly stated by the user for this event. Source-rule suggestions are only reusable extraction guidance, never changes to the global Scout Profile.",
     ].join(" "),
@@ -2713,15 +2734,19 @@ async function requestCandidateResearch(env, db, candidate, thread, instruction)
   })).filter((item)=>item.text);
   let changes=parsed.changes.slice(0,40).map((item)=>normalizeResearchChange(item,candidate,allowed)).filter(Boolean);
   let usage=payload.usage||{};
-  if (!changes.length && findings.some((item)=>item.status==="confirmed" && item.citations.length)) {
+  const factualFindings=findings.some((item)=>item.status==="confirmed" || item.status==="conflict");
+  const structuralEvidence=[parsed.reply,...findings.map((item)=>item.text)].join(" ");
+  const relatedProgramStructure=/\b(?:exhibition|series|on view|opening(?: reception)?|closing(?: reception)?|artist talk|screening|performance|panel|workshop|lecture|mixer|related program)\b/i.test(structuralEvidence);
+  if (factualFindings && (!changes.length || relatedProgramStructure)) {
     const repairBody={
       model,
       instructions:[
-        "You repair a structured Atlanta Calendar research response that confirmed sourced facts but omitted its record changes.",
-        "Compare the confirmed findings and reply with the current candidate snapshot. Return a field-level change for every missing, corrected, or more precise value supported by the cited evidence. Return no change when the stored value already matches.",
+        "You audit a structured Atlanta Calendar research response for factual changes that were omitted, rejected by citation normalization, or left incomplete.",
+        "Compare the findings, reply, original proposed changes, accepted proposed changes, and current candidate snapshot. Return the complete supported field-level change set. Include every missing, corrected, or more precise value; retain valid original changes; return no change for a field whose stored value already matches.",
+        "When the evidence describes a parent exhibition or series and any dated related program, return the coordinated parent changes and one complete occurrences array. That array must preserve every saved occurrence and add every confirmed opening reception, closing reception, artist talk, screening, performance, panel, workshop, lecture, mixer, or other dated program. Preserve existing occurrence IDs and confirmed facts. Do not create occurrences from routine gallery or venue hours.",
         "Use only the supplied citation URLs, preserve their exact spelling, and return valueJson as valid JSON. Never publish, approve, or alter the candidate.",
       ].join(" "),
-      input:JSON.stringify({instruction,candidate,reply:parsed.reply,findings,originalChanges:parsed.changes,allowedCitationUrls:[...allowed.values()]}).slice(0,90_000),
+      input:JSON.stringify({instruction,candidate,reply:parsed.reply,findings,originalChanges:parsed.changes,acceptedChanges:changes,allowedCitationUrls:[...allowed.values()]}).slice(0,90_000),
       text:{format:{type:"json_schema",name:"calendar_candidate_research_change_repair",strict:true,schema:researchRepairSchema()}},
     };
     const repairResponse=await fetch("https://api.openai.com/v1/responses",{
@@ -2732,7 +2757,8 @@ async function requestCandidateResearch(env, db, candidate, thread, instruction)
     if (repairResponse.ok) {
       const repairParsed=parseJson(outputText(repairPayload),null);
       if (repairParsed && Array.isArray(repairParsed.changes)) {
-        changes=repairParsed.changes.slice(0,40).map((item)=>normalizeResearchChange(item,candidate,allowed)).filter(Boolean);
+        const audited=repairParsed.changes.slice(0,40).map((item)=>normalizeResearchChange(item,candidate,allowed)).filter(Boolean);
+        changes=mergeResearchChanges(changes,audited);
       }
       usage={
         ...usage,
