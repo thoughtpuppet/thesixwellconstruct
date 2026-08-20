@@ -2203,6 +2203,47 @@ test("candidate research stores citations and memories, then applies only select
   }
 });
 
+test("candidate research preserves field changes when equivalent official citation URLs differ", async () => {
+  const db = database();
+  const candidateId = "cal_candidate_sound_vision";
+  const officialUrl = "https://www.atlantafilmsociety.org/upcoming-events/sound-vision/?utm_source=scout";
+  const modelCitation = "https://atlantafilmsociety.org/upcoming-events/sound-vision#venue";
+  const runtime = env(db, { OPENAI_API_KEY:"test-key" });
+  const originalFetch = globalThis.fetch;
+  let requestBody;
+  globalThis.fetch = async (url, init = {}) => {
+    assert.equal(String(url),"https://api.openai.com/v1/responses");
+    requestBody = JSON.parse(init.body);
+    return Response.json({
+      id:"resp_candidate_canonical_citation",
+      output:[
+        { type:"web_search_call", action:{ sources:[{ url:officialUrl,title:"Official event page" }] } },
+        { type:"message", content:[{ type:"output_text", text:JSON.stringify({
+          reply:"The official page provides a more precise address.",
+          findings:[{ text:"The venue address includes Suite A200.",status:"confirmed",citations:[modelCitation] }],
+          changes:[{ id:"venue-address-change",path:"venueAddress",label:"Venue address",valueJson:JSON.stringify("1401 Peachtree Street NE, Ste. A200, Atlanta, GA 30309"),rationale:"The official venue page supplies the suite.",confidence:.97,citations:[modelCitation] }],
+          eventMemories:[],sourceRuleSuggestions:[],
+        }) }] },
+      ],usage:{input_tokens:90,output_tokens:70},
+    });
+  };
+  try {
+    const response = await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/messages`, {
+      method:"POST",admin:true,body:{message:"Verify and correct the venue address."},
+    }),runtime);
+    assert.equal(response.status,201,await response.clone().text());
+    const result = await response.json();
+    const proposal = result.research.proposals[0];
+    assert.equal(proposal.changes.length,1);
+    assert.equal(proposal.changes[0].path,"venueAddress");
+    assert.deepEqual(proposal.changes[0].citations,[officialUrl]);
+    assert.deepEqual(proposal.findings[0].citations,[officialUrl]);
+    assert.match(requestBody.instructions,/confirmed finding by itself is not a proposed correction/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("approved research media captures privately without a record cap and snapshots only selected gallery items", async () => {
   const db = database();
   const bucket = new MemoryBucket();
