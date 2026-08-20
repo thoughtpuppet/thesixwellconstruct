@@ -9,7 +9,7 @@ button,a { -webkit-tap-highlight-color:transparent; }
 .studio-header p:not(.eyebrow) { max-width:720px; margin:12px 0 0; color:var(--dim); line-height:1.55; }
 .eyebrow { margin:0 0 10px; color:var(--accent); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
 .studio-header nav { display:flex; flex-wrap:wrap; gap:10px; }
-.studio-header a,.studio-tabs button,.review-toolbar>button,.link-intake button,.view-header>button,.subview-header>button,.auth-panel button,.editor-actions button,.source-card button,.social-source-card button,.connector-card button,.profile-form button,.suggestion-actions button,.verify-link,.candidate-source-link,.section-title-row button,.related-link-actions button,.flyer-buttons button,.flyer-empty button,.occurrence-row-head button { min-height:44px; display:inline-flex; align-items:center; justify-content:center; border:5px solid var(--line); border-radius:0; padding:0 14px; background:transparent; color:var(--text); font-size:9px; font-weight:900; letter-spacing:.12em; text-decoration:none; text-transform:uppercase; cursor:pointer; }
+.studio-header a,.studio-tabs button,.review-toolbar>button,.link-intake button,.view-header>button,.subview-header>button,.auth-panel button,.editor-actions button,.source-card button,.social-source-card button,.connector-card button,.known-organization-card button,.profile-form button,.suggestion-actions button,.verify-link,.candidate-source-link,.section-title-row button,.related-link-actions button,.flyer-buttons button,.flyer-empty button,.occurrence-row-head button { min-height:44px; display:inline-flex; align-items:center; justify-content:center; border:5px solid var(--line); border-radius:0; padding:0 14px; background:transparent; color:var(--text); font-size:9px; font-weight:900; letter-spacing:.12em; text-decoration:none; text-transform:uppercase; cursor:pointer; }
 .studio-header a:hover,.studio-header a:focus-visible,button:hover,button:focus-visible { border-color:var(--accent); outline:none; }
 .auth-panel { max-width:760px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; margin:70px auto; padding:0 20px; }
 .auth-panel label,.field { display:grid; gap:7px; min-width:0; }
@@ -101,8 +101,8 @@ input:focus,textarea:focus,select:focus { border-color:var(--accent); outline:no
 .flyer-controls .verify-link { justify-self:start; }
 .flyer-buttons,.flyer-empty { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 .empty-state,.view-note,.system-state,.suggestions-panel>p { margin:0; border:5px solid var(--line); padding:18px; color:var(--dim); line-height:1.55; }
-.source-list,.social-source-list,.connector-list,.social-evidence-list,.run-list { display:grid; gap:12px; }
-.source-card,.social-source-card,.connector-card,.social-evidence-card,.run-card,.suggestion-card { border:5px solid var(--line); padding:16px; background:var(--surface); }
+.source-list,.social-source-list,.connector-list,.known-organization-list,.social-evidence-list,.resolution-attempt-list,.run-list { display:grid; gap:12px; }
+.source-card,.social-source-card,.connector-card,.known-organization-card,.social-evidence-card,.resolution-attempt-card,.run-card,.suggestion-card { border:5px solid var(--line); padding:16px; background:var(--surface); }
 .source-card { display:grid; grid-template-columns:1fr 1.5fr .7fr .55fr 1fr 1fr auto; gap:10px; align-items:end; }
 .source-actions { display:flex; flex-direction:column; gap:8px; }
 .social-source-card { display:grid; grid-template-columns:1fr .7fr .8fr 1.5fr .7fr .65fr .65fr auto; gap:10px; align-items:end; }
@@ -121,6 +121,18 @@ input:focus,textarea:focus,select:focus { border-color:var(--accent); outline:no
 .profile-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:16px; border:5px solid var(--line); padding:18px; background:var(--surface); }
 .profile-form .is-wide { grid-column:1/-1; }
 .profile-form button { justify-self:start; border-color:var(--accent); }
+.profile-section-title { grid-column:1/-1; margin:8px 0 0; border-top:5px solid var(--line); padding-top:16px; color:var(--accent); font-size:11px; letter-spacing:.14em; text-transform:uppercase; }
+.profile-section-title:first-child { margin-top:0; border-top:0; padding-top:0; }
+.known-organizations-panel { margin-top:16px; }
+.known-organization-card { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-items:end; }
+.known-organization-card .is-wide { grid-column:1/-1; }
+.known-organization-actions { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:8px; }
+.known-organization-actions [data-delete-known-organization] { border-color:var(--danger); }
+.resolution-attempt-list { margin-top:14px; }
+.resolution-attempt-card { display:grid; gap:10px; }
+.resolution-attempt-card.is-resolved { border-color:var(--ok); }
+.resolution-attempt-card.is-failed { border-color:var(--danger); }
+.resolution-attempt-card pre { max-width:100%; overflow:auto; margin:0; color:var(--dim); white-space:pre-wrap; overflow-wrap:anywhere; }
 .suggestions-panel { margin-top:16px; border:5px solid var(--line); padding:18px; }
 #suggestionList { display:grid; gap:10px; margin-top:12px; }
 .suggestion-actions { display:flex; gap:8px; margin-top:12px; }
@@ -143,8 +155,9 @@ input:focus,textarea:focus,select:focus { border-color:var(--accent); outline:no
   .link-intake { grid-template-columns:minmax(0,1fr); }
   .link-intake button { width:100%; }
   .studio-header nav { display:grid; grid-template-columns:1fr 1fr; }
-  .auth-panel,.field-grid,.profile-form,.run-card,.connector-list,.connector-card { grid-template-columns:minmax(0,1fr); }
+  .auth-panel,.field-grid,.profile-form,.run-card,.connector-list,.connector-card,.known-organization-card { grid-template-columns:minmax(0,1fr); }
   .field.is-wide,.profile-form .is-wide { grid-column:auto; }
+  .profile-section-title,.known-organization-card .is-wide,.known-organization-actions { grid-column:auto; }
   .linked-field.is-wide { grid-column:auto; }
   .checkbox-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .candidate-editor { padding:15px; }

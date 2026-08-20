@@ -56,7 +56,7 @@ class MemoryBucket {
 function databaseThrough(lastMigration = "") {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
-  for (const name of readdirSync(join(ROOT, "migrations")).filter((item) => item.endsWith(".sql")).sort()) {
+  for (const name of readdirSync(join(ROOT, "migrations")).filter((item) => item.endsWith(".sql") && item !== "0147_calendar_creative_scout_import.sql").sort()) {
     if (lastMigration && name > lastMigration) break;
     db.exec(readFileSync(join(ROOT, "migrations", name), "utf8"));
   }
@@ -1724,13 +1724,114 @@ test("a registered discovery source is searched through to the original organize
   }
 });
 
+test("editable Scout guidance and known organizations drive bounded source resolution with a private audit", async () => {
+  const db = database();
+  const profilePatch = await admin(db, "/profile", {
+    method:"PATCH",
+    body:{
+      scoutBrief:"Prioritize independent Atlanta exhibitions and related public programs.",
+      sourceResolutionRules:"Use exact aliases and prove an event-specific path on a known official domain.",
+      sourceResolutionPasses:3,
+    },
+  });
+  assert.equal(profilePatch.status, 200, await profilePatch.clone().text());
+  const savedProfile = (await profilePatch.json()).profile;
+  assert.equal(savedProfile.sourceResolutionPasses, 3);
+  assert.match(savedProfile.scoutBrief, /independent Atlanta exhibitions/);
+
+  const organizationResponse = await admin(db, "/known-organizations", {
+    method:"POST",
+    body:{
+      name:"Gallery Example",
+      organizationType:"both",
+      aliases:["GEX"],
+      officialDomains:["https://www.gallery.example/about"],
+      eventPaths:["/exhibitions"],
+      trustedTicketDomains:["tickets.example"],
+      discoveryOnlyDomains:["lead.example"],
+      notes:"Recurring exhibition venue.",
+    },
+  });
+  assert.equal(organizationResponse.status, 201, await organizationResponse.clone().text());
+  const organization = (await organizationResponse.json()).organization;
+  assert.deepEqual(organization.officialDomains, ["gallery.example"]);
+  assert.deepEqual(organization.eventPaths, ["/exhibitions"]);
+
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  const sourceResponse = await admin(db, "/sources", {
+    method:"POST",
+    body:{ name:"Arts Lead", url:"https://lead.example/calendar", sourceType:"discovery", trustLevel:"discovery", enabled:true },
+  });
+  const source = (await sourceResponse.json()).source;
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  let openAiCalls = 0;
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).includes("api.openai.com")) {
+      openAiCalls += 1;
+      requests.push(JSON.parse(init.body));
+      const sourceUrl = openAiCalls === 1
+        ? "https://gallery.example/"
+        : openAiCalls === 2
+          ? "https://lead.example/events/atlanta-light"
+          : "https://gallery.example/exhibitions/atlanta-light";
+      const authority = openAiCalls === 2 ? "unresolved" : "organizer_event";
+      return Response.json({
+        output:[
+          { type:"web_search_call", action:{ sources:[{ url:sourceUrl, title:"Considered page" }] } },
+          { type:"message", content:[{ type:"output_text", text:JSON.stringify({ events:[{
+            sourceUrl, ticketUrl:"", discoveryUrl:"https://lead.example/events/atlanta-light", organizerUrl:"https://gallery.example/", venueUrl:"https://gallery.example/", sourceAuthority:authority,
+            sourceResolutionNotes:"Candidate source.", sourceEventId:"gallery-atlanta-light", title:"Atlanta Light", relatedLinks:[], flyerUrl:"", organizer:"Gallery Example",
+            factualDescription:"A contemporary light-art exhibition.", eventStructure:"exhibition", accessStatus:"public", accessNotes:"", audiences:["Public"], dateKind:"date_range",
+            startsAt:"2026-10-01", endsAt:"2026-10-31", timezone:"America/New_York", venueName:"Gallery Example", venueAddress:"10 Light Way, Atlanta, GA", city:"Atlanta", region:"GA",
+            subjects:["art"], formats:["exhibition"], experimental:false, verificationState:authority === "unresolved" ? "needs_verification" : "verified", verificationNotes:"Checked.", confidence:.94,
+            privateRationale:"The exhibition matches the profile.", attendanceUse:"Attend and research.", programmingIdeas:"Study the installation.", potentialCollaborators:"Gallery Example.", socialEvidence:[], occurrences:[],
+          }] }) }] },
+        ],
+        usage:{ input_tokens:90, output_tokens:70 },
+      });
+    }
+    return new Response(`<script type="application/ld+json">${JSON.stringify({
+      "@context":"https://schema.org", "@type":"Event", "@id":"lead-atlanta-light", name:"Atlanta Light", description:"A contemporary light-art exhibition.",
+      startDate:"2026-10-01", endDate:"2026-10-31", url:"https://lead.example/events/atlanta-light", organizer:{ name:"Gallery Example" },
+      location:{ name:"Gallery Example", address:{ streetAddress:"10 Light Way", addressLocality:"Atlanta", addressRegion:"GA" } },
+    })}</script>`, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const run = await runCalendarScout(env(db, { OPENAI_API_KEY:"test-key" }), { runKind:"manual", includeWeb:false, sourceId:source.id });
+    assert.equal(run.candidates, 1, JSON.stringify(run.outcomes));
+    assert.equal(openAiCalls, 3);
+    assert.match(requests[0].input, /independent Atlanta exhibitions/);
+    assert.match(requests[0].instructions, /exact aliases/);
+    assert.match(requests[0].instructions, /Gallery Example/);
+    assert.deepEqual(requests[2].tools[0].filters.allowed_domains.sort(), ["gallery.example","tickets.example"]);
+    const candidate = db.prepare("SELECT id,source_url,discovery_url,source_authority FROM calendar_candidates WHERE source_id=?").get(source.id);
+    assert.deepEqual({ source_url:candidate.source_url, discovery_url:candidate.discovery_url, source_authority:candidate.source_authority }, {
+      source_url:"https://gallery.example/exhibitions/atlanta-light",
+      discovery_url:"https://lead.example/events/atlanta-light",
+      source_authority:"organizer_event",
+    });
+    const detailResponse = await admin(db, `/candidates/${candidate.id}`);
+    const detail = (await detailResponse.json()).candidate;
+    assert.equal(detail.sourceResolutionAttempts.length, 1);
+    assert.equal(detail.sourceResolutionAttempts[0].status, "resolved");
+    assert.equal(detail.sourceResolutionAttempts[0].searchQueries.length, 3);
+    assert.equal(detail.sourceResolutionAttempts[0].selectedUrl, "https://gallery.example/exhibitions/atlanta-light");
+    assert.equal(detail.sourceResolutionAttempts[0].attemptedUrls.includes("https://gallery.example/"), true);
+    const rootPayload = await (await admin(db, "")).json();
+    assert.equal(rootPayload.knownOrganizations.some((item) => item.id === organization.id), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Threads native discovery retains exact-handle evidence but still requires an original website source", async () => {
   const db = database();
   await admin(db, "/social-sources", { method:"POST", body:{ platform:"threads", handle:"atlarts", name:"ATL Arts", profileUrl:"https://www.threads.net/@atlarts", trustLevel:"official", enabled:true } });
   await admin(db, "/connectors/threads_api", { method:"PATCH", body:{ enabled:true, perRunLimit:6 } });
   const runtime = env(db, { OPENAI_API_KEY:"test-key", THREADS_ACCESS_TOKEN:"threads-token" });
   const originalFetch = globalThis.fetch;
-  let extractionBody;
+  const openAiBodies = [];
   globalThis.fetch = async (url, init = {}) => {
     const target = String(url);
     if (target.includes("graph.threads.net/profile_lookup")) return Response.json({ id:"threads-user-atlarts", username:"atlarts", name:"ATL Arts", is_verified:false });
@@ -1741,7 +1842,7 @@ test("Threads native discovery retains exact-handle evidence but still requires 
       id:"thread-stranger-1", permalink:"https://www.threads.net/@verifiedstranger/post/stranger-1", username:"verifiedstranger", text:"Atlanta experimental showcase November 24.", timestamp:"2026-08-17T13:00:00Z", media_type:"TEXT_POST", is_verified:true,
     }] });
     if (target.includes("api.openai.com")) {
-      extractionBody = JSON.parse(init.body);
+      openAiBodies.push(JSON.parse(init.body));
       const event = (overrides) => ({
         sourceUrl:"https://www.threads.net/@atlarts/post/official-1", ticketUrl:"", sourceEventId:"", title:"Atlanta Creative AI Lab", relatedLinks:[], flyerUrl:"", organizer:"ATL Arts",
         factualDescription:"A creative technology workshop about AI and experimental art.", dateKind:"timed", startsAt:"2026-11-22T18:00:00-05:00", endsAt:"2026-11-22T20:00:00-05:00", timezone:"America/New_York",
@@ -1764,7 +1865,9 @@ test("Threads native discovery retains exact-handle evidence but still requires 
   try {
     const run = await runCalendarScout(runtime, { runKind:"manual", channels:["threads_api"] });
     assert.equal(run.candidates, 2);
-    assert.equal(extractionBody.tools, undefined);
+    const extractionBody = openAiBodies.find((body) => body.tools === undefined);
+    assert.ok(extractionBody);
+    assert.equal(openAiBodies.some((body) => Array.isArray(body.tools) && /secondary discovery lead/i.test(body.input)), true);
     const official = db.prepare("SELECT id,status,verification_state,discovery_channel FROM calendar_candidates WHERE title='Atlanta Creative AI Lab'").get();
     assert.deepEqual({ status:official.status, verification_state:official.verification_state, discovery_channel:official.discovery_channel }, { status:"needs_verification", verification_state:"needs_verification", discovery_channel:"threads_api" });
     assert.deepEqual(
@@ -2046,6 +2149,58 @@ test("per-event source rechecks hold published changes for approval and retain f
   }
 });
 
+test("compact offsets and string addresses from an official event page recheck cleanly", async () => {
+  const db = database();
+  const sourceUrl = "https://www.galleryandersonsmith.com/exhibitions-/hey-mom-im-not-a-loser-a-solo-exhibition-by-brill-adium";
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Hey mom, I'm not a loser- A Solo Exhibition by Brill Adium — gallery anderson smith",
+      organizer:"galleryandersonsmith.com",
+      factualDescription:"Atlanta artist Brill Adium presents a solo exhibition.",
+      sourceUrl, organizerUrl:"https://www.galleryandersonsmith.com/", sourceAuthority:"organizer_event",
+      dateKind:"timed", startsAt:"2026-08-08T19:00:00-0400", endsAt:"2026-08-22T20:00:00-0400",
+      venueName:"GALLERY ANDERSON SMITH", venueAddress:"", city:"Atlanta", region:"GA",
+      subjects:["art"], formats:["exhibition"], verificationState:"verified",
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const candidate = (await created.json()).candidate;
+  assert.equal(candidate.startsAt, "2026-08-08T19:00:00-04:00");
+  assert.equal(candidate.endsAt, "2026-08-22T20:00:00-04:00");
+  const blocked = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
+  assert.equal(blocked.status, 409);
+  const blockedPayload = await blocked.json();
+  assert.deepEqual(blockedPayload.errors, ["A confirmed venue address is required."]);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), sourceUrl);
+    return new Response(`<script type="application/ld+json">${JSON.stringify({
+      "@context":"https://schema.org", "@type":"Event",
+      name:"Hey mom, I'm not a loser- A Solo Exhibition by Brill Adium — gallery anderson smith",
+      description:"Atlanta artist Brill Adium presents a solo exhibition.", url:sourceUrl,
+      startDate:"2026-08-08T19:00:00-0400", endDate:"2026-08-22T20:00:00-0400",
+      organizer:{ name:"Gallery Anderson Smith", url:"https://www.galleryandersonsmith.com/" },
+      location:{ name:"GALLERY ANDERSON SMITH", address:"1401 Peachtree Street Northeast, Atlanta, GA, 30309, United States" },
+    })}</script>`, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const checked = await admin(db, `/candidates/${candidate.id}/recheck`, { method:"POST", body:{} });
+    assert.equal(checked.status, 200, await checked.clone().text());
+    const payload = await checked.json();
+    assert.equal(payload.checkStatus, "changes_detected");
+    assert.equal(payload.candidate.eventStructure, "exhibition");
+    assert.equal(payload.candidate.dateKind, "date_range");
+    assert.equal(payload.candidate.startsAt, "2026-08-08");
+    assert.equal(payload.candidate.endsAt, "2026-08-22");
+    assert.equal(payload.candidate.venueAddress, "1401 Peachtree Street Northeast, Atlanta, GA, 30309, United States");
+    assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 200);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Calendar Studio exposes source rechecks, update review, monitoring, and ticket state", () => {
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
   const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
@@ -2061,6 +2216,24 @@ test("Calendar Studio exposes source rechecks, update review, monitoring, and ti
   assert.match(studioCss,/border:5px solid/);
   assert.match(publicJs,/calendar-event-ticket/);
   assert.match(publicJs,/Tickets On Sale/);
+});
+
+test("Calendar Studio exposes editable guidance, known organization memory, and resolution audits", () => {
+  const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studioHtml,/Known Organizations/);
+  assert.match(studioHtml,/id="knownOrganizationList"/);
+  assert.match(studio,/Scout Brief/);
+  assert.match(studio,/Source Resolution Rules/);
+  assert.match(studio,/Maximum resolution passes/);
+  assert.match(studio,/officialDomains:parseComma/);
+  assert.match(studio,/trustedTicketDomains:parseComma/);
+  assert.match(studio,/discoveryOnlyDomains:parseComma/);
+  assert.match(studio,/Source-resolution audit/);
+  assert.match(studio,/attemptedUrls/);
+  assert.match(studioCss,/\.known-organization-card/);
+  assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.known-organization-card/);
 });
 
 test("Studio verification links and the public expandable flyer stay inline without detail-page routes", () => {
@@ -2239,6 +2412,82 @@ test("a dynamic pasted link uses bounded Browser extraction and still remains pr
     assert.equal(resolvedCandidate.sourceAuthority, "organizer_event");
     const approved = await admin(db, `/candidates/${payload.candidate.id}/approve`, { method:"POST", body:{} });
     assert.equal(approved.status, 200, await approved.clone().text());
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("pasting an Instagram post refreshes its caption, flyer evidence, and related schedule", async () => {
+  const db = database();
+  const eventUrl = "https://www.instagram.com/p/DcNB0J4DGJ2/";
+  const flyerUrl = "https://scontent-atl3-2.cdninstagram.com/event-flyer.jpg";
+  let browserCall = 0;
+  const browser = {
+    async quickAction(action, options) {
+      browserCall += 1;
+      assert.equal(action, "json");
+      assert.match(options.prompt, /caption and the text or accessibility description of every event flyer/);
+      assert.match(options.prompt, /Keep separately named schedule blocks/);
+      assert.deepEqual(options.rejectResourceTypes, ["media", "font"]);
+      const item = browserCall === 1 ? {
+        title:"Artist Talk and Closing Reception", description:"", organizer:"", organizerUrl:"", venueName:"Gallery Anderson Smith",
+        venueAddress:"", venueUrl:"", city:"Atlanta", region:"GA", startsAt:"2026-08-22T17:00:00", endsAt:"", eventUrl,
+        ticketUrl:"", imageUrl:"", imageAlt:"", accessStatus:"unknown", accessNotes:"", audiences:[], eventStructure:"single",
+        dateKind:"timed", timezone:"America/New_York", subjects:["art"], formats:["lecture-talk"], experimental:false, occurrences:[],
+      } : {
+        title:"Artist Talk and Closing Reception",
+        description:"Brill Adium presents an artist talk followed by the exhibition's closing reception.",
+        caption:"Artist Talk 5-7PM. Closing Reception 7-10PM. August 22nd. Kids are welcome.",
+        organizer:"Brill Adium and Gallery Anderson Smith", organizerUrl:"", venueName:"Gallery Anderson Smith",
+        venueAddress:"1401 Peachtree St NE, Atlanta, GA", venueUrl:"", city:"Atlanta", region:"GA",
+        startsAt:"2026-08-22T17:00:00", endsAt:"2026-08-22T22:00:00", eventUrl, ticketUrl:"",
+        imageUrl:flyerUrl, imageAlt:"ARTIST TALK Brill Adium August 22nd 1401 Peachtree St NE 5-7PM",
+        accessStatus:"unknown", accessNotes:"Children are welcome.", audiences:["Children and families"],
+        eventStructure:"series", dateKind:"timed", timezone:"America/New_York", subjects:["art"], formats:["lecture-talk"], experimental:false,
+        authorHandle:"brilladium", authorDisplayName:"Brill Adium", authorIsVerified:true,
+        postedAt:"2026-08-18T12:00:00-04:00", mediaType:"image",
+        occurrences:[
+          { title:"Artist Talk", occurrenceType:"artist_talk", factualDescription:"Artist talk with Brill Adium.", startsAt:"2026-08-22T17:00:00", endsAt:"2026-08-22T19:00:00", timezone:"America/New_York", venueName:"Gallery Anderson Smith", venueAddress:"1401 Peachtree St NE, Atlanta, GA", accessStatus:"unknown", accessNotes:"Children are welcome.", audiences:["Children and families"] },
+          { title:"Closing Reception", occurrenceType:"", factualDescription:"Closing reception for the exhibition.", startsAt:"2026-08-22T19:00:00", endsAt:"2026-08-22T22:00:00", timezone:"America/New_York", venueName:"Gallery Anderson Smith", venueAddress:"1401 Peachtree St NE, Atlanta, GA", accessStatus:"unknown", accessNotes:"Children are welcome.", audiences:["Children and families"] },
+        ],
+      };
+      return new Response(JSON.stringify({ result:{ events:[item] } }), { status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":"21" } });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), eventUrl);
+    return new Response("<main>Instagram post</main>", { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const first = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db, { BROWSER:browser }));
+    assert.equal(first.status, 201, await first.clone().text());
+    const firstPayload = await first.json();
+    assert.equal(firstPayload.candidate.startsAt, "2026-08-22T17:00:00-04:00");
+    assert.equal(firstPayload.candidate.endsAt, null);
+
+    const refreshed = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db, { BROWSER:browser }));
+    assert.equal(refreshed.status, 200, await refreshed.clone().text());
+    const payload = await refreshed.json();
+    assert.equal(payload.existing, true);
+    assert.equal(payload.candidate.id, firstPayload.candidate.id);
+    assert.equal(payload.candidate.organizer, "Brill Adium and Gallery Anderson Smith");
+    assert.equal(payload.candidate.factualDescription, "Brill Adium presents an artist talk followed by the exhibition's closing reception.");
+    assert.equal(payload.candidate.eventStructure, "series");
+    assert.equal(payload.candidate.startsAt, "2026-08-22T17:00:00-04:00");
+    assert.equal(payload.candidate.endsAt, "2026-08-22T22:00:00-04:00");
+    assert.equal(payload.candidate.venueAddress, "1401 Peachtree St NE, Atlanta, GA");
+    assert.equal(payload.candidate.accessNotes, "Children are welcome.");
+    assert.deepEqual(payload.candidate.occurrences.map((item) => ({ title:item.title, type:item.occurrenceType, startsAt:item.startsAt, endsAt:item.endsAt })), [
+      { title:"Artist Talk", type:"artist_talk", startsAt:"2026-08-22T17:00:00-04:00", endsAt:"2026-08-22T19:00:00-04:00" },
+      { title:"Closing Reception", type:"other", startsAt:"2026-08-22T19:00:00-04:00", endsAt:"2026-08-22T22:00:00-04:00" },
+    ]);
+    const evidence = db.prepare("SELECT platform,post_id,author_handle,author_display_name,author_is_verified,caption_excerpt,media_url FROM calendar_candidate_social_evidence WHERE candidate_id=?").get(payload.candidate.id);
+    assert.deepEqual({ ...evidence }, {
+      platform:"instagram", post_id:"DcNB0J4DGJ2", author_handle:"brilladium", author_display_name:"Brill Adium", author_is_verified:1,
+      caption_excerpt:"Artist Talk 5-7PM. Closing Reception 7-10PM. August 22nd. Kids are welcome.", media_url:flyerUrl,
+    });
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payload.candidate.id).count, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -52,6 +52,20 @@ function asString(value) {
   return value === null || value === undefined ? "" : String(value).trim();
 }
 
+function canonicalCalendarDate(value, timezone = TIME_ZONE) {
+  const text = asString(value);
+  if (!text) return text;
+  const compactOffset = text.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)([+-])(\d{2})(\d{2})$/);
+  if (compactOffset) return `${compactOffset[1]}${compactOffset[2]}${compactOffset[3]}:${compactOffset[4]}`;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(text) || timezone !== TIME_ZONE) return text;
+  const withSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text) ? `${text}:00` : text;
+  return `${withSeconds}${nyOffsetForDate(new Date(`${text.slice(0, 10)}T12:00:00Z`))}`;
+}
+
+function hasExplicitUtcOffset(value) {
+  return /T.+(?:Z|[+-]\d{2}:?\d{2})$/.test(asString(value));
+}
+
 function parseJson(value, fallback) {
   try {
     const parsed = JSON.parse(value || "");
@@ -249,6 +263,33 @@ function sourceHost(value) {
   return new URL(value).hostname.toLowerCase().replace(/^www\./, "");
 }
 
+function normalizeDomain(value) {
+  const input = asString(value).trim().toLowerCase();
+  if (!input) return "";
+  const candidate = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+  try {
+    const url = new URL(candidate);
+    return url.hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function normalizeDomainList(values) {
+  const input = Array.isArray(values) ? values : parseJson(values, []);
+  return [...new Set(input.map(normalizeDomain).filter(Boolean))].slice(0, 100);
+}
+
+function normalizePathList(values) {
+  const input = Array.isArray(values) ? values : parseJson(values, []);
+  return [...new Set(input.map((value) => {
+    const text = asString(value).trim();
+    if (!text) return "";
+    if (validHttpUrl(text)) return new URL(text).pathname || "/";
+    return text.startsWith("/") ? text : `/${text}`;
+  }).filter(Boolean))].slice(0, 100);
+}
+
 function sameSourceHost(left, right) {
   const a = sourceHost(left);
   const b = sourceHost(right);
@@ -409,8 +450,8 @@ function normalizeCandidate(row) {
     ...access,
     eventStructure: EVENT_STRUCTURES.has(row.event_structure) ? row.event_structure : "single",
     dateKind: row.date_kind || "timed",
-    startsAt: row.starts_at || null,
-    endsAt: row.ends_at || null,
+    startsAt: canonicalCalendarDate(row.starts_at, row.timezone || TIME_ZONE) || null,
+    endsAt: canonicalCalendarDate(row.ends_at, row.timezone || TIME_ZONE) || null,
     timezone: row.timezone || TIME_ZONE,
     venueName: row.venue_name || "",
     venueAddress: row.venue_address || "",
@@ -479,8 +520,8 @@ function normalizeOccurrence(row) {
     factualDescription: row.factual_description || row.factualDescription || "",
     ...access,
     dateKind: row.date_kind || row.dateKind || "timed",
-    startsAt: row.starts_at || row.startsAt || null,
-    endsAt: row.ends_at || row.endsAt || null,
+    startsAt: canonicalCalendarDate(row.starts_at || row.startsAt, row.timezone || TIME_ZONE) || null,
+    endsAt: canonicalCalendarDate(row.ends_at || row.endsAt, row.timezone || TIME_ZONE) || null,
     timezone: row.timezone || TIME_ZONE,
     venueName: row.venue_name || row.venueName || "",
     venueAddress: row.venue_address || row.venueAddress || "",
@@ -521,8 +562,8 @@ function normalizeOccurrenceProposal(item, parent = {}, index = 0, { allowVerifi
     factualDescription: asString(value.factualDescription),
     ...access,
     dateKind,
-    startsAt: asString(value.startsAt) || null,
-    endsAt: asString(value.endsAt) || null,
+    startsAt: canonicalCalendarDate(value.startsAt, asString(value.timezone) || parent.timezone || TIME_ZONE) || null,
+    endsAt: canonicalCalendarDate(value.endsAt, asString(value.timezone) || parent.timezone || TIME_ZONE) || null,
     timezone: asString(value.timezone) || parent.timezone || TIME_ZONE,
     venueName: asString(value.venueName),
     venueAddress: asString(value.venueAddress),
@@ -627,6 +668,36 @@ function normalizeSource(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function normalizeKnownOrganization(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    organizationType: ["organizer", "venue", "both"].includes(row.organization_type) ? row.organization_type : "both",
+    aliases: parseJson(row.aliases_json, []),
+    officialDomains: normalizeDomainList(row.official_domains_json),
+    eventPaths: normalizePathList(row.event_paths_json),
+    trustedTicketDomains: normalizeDomainList(row.trusted_ticket_domains_json),
+    discoveryOnlyDomains: normalizeDomainList(row.discovery_only_domains_json),
+    notes: row.notes || "",
+    enabled: row.enabled === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function listKnownOrganizations(db, enabledOnly = false) {
+  const where = enabledOnly ? "WHERE enabled=1" : "";
+  let result;
+  try {
+    result = await db.prepare(`SELECT * FROM calendar_known_organizations ${where} ORDER BY name,id`).all();
+  } catch (error) {
+    if (/no such table:\s*calendar_known_organizations/i.test(asString(error?.message))) return [];
+    throw error;
+  }
+  return (result.results || []).map(normalizeKnownOrganization);
 }
 
 function storedSourceAdapter(adapterKey, adapterConfig = {}) {
@@ -772,6 +843,31 @@ async function loadCandidateOccurrences(db, id) {
   }
 }
 
+async function loadCandidateResolutionAttempts(db, id) {
+  let result;
+  try {
+    result = await db.prepare(
+      `SELECT * FROM calendar_source_resolution_attempts
+       WHERE candidate_id=? ORDER BY created_at DESC,id DESC`
+    ).bind(id).all();
+  } catch (error) {
+    if (/no such table:\s*calendar_source_resolution_attempts/i.test(asString(error?.message))) return [];
+    throw error;
+  }
+  return (result.results || []).map((row) => ({
+    id: row.id,
+    runId: row.run_id || "",
+    leadUrl: row.lead_url,
+    eventTitle: row.event_title || "",
+    searchQueries: parseJson(row.search_queries_json, []),
+    attemptedUrls: parseJson(row.attempted_urls_json, []),
+    selectedUrl: row.selected_url || "",
+    status: row.resolution_status,
+    notes: row.resolution_notes || "",
+    createdAt: row.created_at,
+  }));
+}
+
 async function getCandidate(db, id, includeRevisions = true) {
   const row = await db.prepare(
     `SELECT c.*,n.private_rationale,n.attendance_use,n.programming_ideas,
@@ -782,7 +878,7 @@ async function getCandidate(db, id, includeRevisions = true) {
   ).bind(id).first();
   const candidate = normalizeCandidate(row);
   if (!candidate) return null;
-  const [links, flyer, evidence, occurrences] = await Promise.all([
+  const [links, flyer, evidence, occurrences, resolutionAttempts] = await Promise.all([
     db.prepare(
       `SELECT id,label,url,provenance_url,link_role,include_public,sort_order
        FROM calendar_candidate_links WHERE candidate_id=? ORDER BY sort_order,id`
@@ -797,6 +893,7 @@ async function getCandidate(db, id, includeRevisions = true) {
        WHERE e.candidate_id=? ORDER BY e.created_at,e.id`
     ).bind(id).all(),
     loadCandidateOccurrences(db, id),
+    loadCandidateResolutionAttempts(db, id),
   ]);
   candidate.relatedLinks = (links.results || []).map((link) => ({
     id: link.id,
@@ -831,6 +928,7 @@ async function getCandidate(db, id, includeRevisions = true) {
     provenance: parseJson(item.provenance_json, []),
   }));
   candidate.occurrences = (occurrences.results || []).map(normalizeOccurrence);
+  candidate.sourceResolutionAttempts = resolutionAttempts;
   if (!includeRevisions) return candidate;
   const revisions = await db.prepare(
     `SELECT id,revision_number,revision_state,snapshot_json,provenance_json,change_set_json,
@@ -956,8 +1054,8 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
     eventStructure,
     ...access,
     dateKind,
-    startsAt: asString(value("startsAt")) || null,
-    endsAt: asString(value("endsAt")) || null,
+    startsAt: canonicalCalendarDate(value("startsAt"), asString(value("timezone", TIME_ZONE)) || TIME_ZONE) || null,
+    endsAt: canonicalCalendarDate(value("endsAt"), asString(value("timezone", TIME_ZONE)) || TIME_ZONE) || null,
     timezone: asString(value("timezone", TIME_ZONE)) || TIME_ZONE,
     venueName: asString(value("venueName")),
     venueAddress: asString(value("venueAddress")),
@@ -1003,13 +1101,14 @@ function publicationErrors(proposal) {
   if (!proposal.organizer) errors.push("An organizer is required.");
   if (!proposal.factualDescription) errors.push("A factual description is required.");
   if (!proposal.startsAt || !validDate(proposal.startsAt)) errors.push("A confirmed valid start date is required.");
-  if (proposal.dateKind === "timed" && proposal.startsAt && !/T.+(?:Z|[+-]\d{2}:\d{2})$/.test(proposal.startsAt)) errors.push("Timed events require an explicit UTC offset.");
+  if (proposal.dateKind === "timed" && proposal.startsAt && !hasExplicitUtcOffset(proposal.startsAt)) errors.push("Timed events require an explicit UTC offset.");
   if (["all_day", "date_range"].includes(proposal.dateKind) && proposal.startsAt && !/^\d{4}-\d{2}-\d{2}$/.test(proposal.startsAt)) errors.push("All-day events and date ranges require YYYY-MM-DD dates.");
   if (proposal.dateKind === "date_range" && !proposal.endsAt) errors.push("A date range requires an end date.");
   if (proposal.endsAt && !validDate(proposal.endsAt)) errors.push("End date is invalid.");
   if (proposal.endsAt && validDate(proposal.startsAt) && Date.parse(proposal.endsAt) < Date.parse(proposal.startsAt)) errors.push("End date cannot be before the start date.");
   if (!validTimeZone(proposal.timezone)) errors.push("A valid IANA time zone is required.");
-  if (!proposal.venueName || (!virtual && !proposal.venueAddress && !seriesUsesOccurrenceVenues)) errors.push(virtual ? "A confirmed virtual venue label is required." : "A confirmed venue name and address are required.");
+  if (!proposal.venueName) errors.push(virtual ? "A confirmed virtual venue label is required." : "A confirmed venue name is required.");
+  else if (!virtual && !proposal.venueAddress && !seriesUsesOccurrenceVenues) errors.push("A confirmed venue address is required.");
   if (!geographicMatch(proposal)) errors.push("The event must be located in the Atlanta metro area.");
   if (!proposal.sourceUrl || !validHttpUrl(proposal.sourceUrl)) errors.push("A valid official source URL is required.");
   const sourcePlatform = socialPlatformFromUrl(proposal.sourceUrl);
@@ -1044,7 +1143,7 @@ function occurrencePublicationErrors(occurrence, parent) {
   const label = occurrence.title || occurrenceTypeLabel(occurrence.occurrenceType);
   const errors = [];
   if (!occurrence.startsAt || !validDate(occurrence.startsAt)) errors.push(`${label} requires a confirmed valid start date.`);
-  if (occurrence.dateKind === "timed" && occurrence.startsAt && !/T.+(?:Z|[+-]\d{2}:\d{2})$/.test(occurrence.startsAt)) errors.push(`${label} requires an explicit UTC offset.`);
+  if (occurrence.dateKind === "timed" && occurrence.startsAt && !hasExplicitUtcOffset(occurrence.startsAt)) errors.push(`${label} requires an explicit UTC offset.`);
   if (occurrence.dateKind === "all_day" && occurrence.startsAt && !/^\d{4}-\d{2}-\d{2}$/.test(occurrence.startsAt)) errors.push(`${label} requires a YYYY-MM-DD date.`);
   if (occurrence.endsAt && !validDate(occurrence.endsAt)) errors.push(`${label} has an invalid end date.`);
   if (occurrence.endsAt && validDate(occurrence.startsAt) && Date.parse(occurrence.endsAt) < Date.parse(occurrence.startsAt)) errors.push(`${label} cannot end before it starts.`);
@@ -1052,7 +1151,8 @@ function occurrencePublicationErrors(occurrence, parent) {
   const venueName = occurrence.venueName || parent.venueName;
   const venueAddress = occurrence.venueAddress || parent.venueAddress;
   const virtual = onlineOnlyEvent({ venueName, venueAddress });
-  if (!venueName || (!virtual && !venueAddress)) errors.push(virtual ? `${label} requires a confirmed virtual venue label.` : `${label} requires a confirmed venue name and address.`);
+  if (!venueName) errors.push(virtual ? `${label} requires a confirmed virtual venue label.` : `${label} requires a confirmed venue name.`);
+  else if (!virtual && !venueAddress) errors.push(`${label} requires a confirmed venue address.`);
   const sourceUrl = occurrence.sourceUrl || parent.sourceUrl;
   const verifiedInstagram = isInstagramUrl(sourceUrl) && occurrence.verificationState === "verified";
   if (!validHttpUrl(sourceUrl) || (socialPlatformFromUrl(sourceUrl) && !verifiedInstagram)) errors.push(`${label} requires an event-specific official organizer, venue, ticket-host, or manually verified Instagram URL.`);
@@ -2231,6 +2331,9 @@ function normalizeProfile(row) {
     webCadenceHours: Number(row.web_cadence_hours), lastSourceRunAt: row.last_source_run_at || null,
     lastWebRunAt: row.last_web_run_at || null, updatedAt: row.updated_at,
     socialSettings: normalizeSocialSettings(row.social_settings_json),
+    scoutBrief: row.scout_brief || "",
+    sourceResolutionRules: row.source_resolution_rules || "",
+    sourceResolutionPasses: Math.max(1, Math.min(4, Number(row.source_resolution_passes) || 3)),
   };
 }
 
@@ -2247,7 +2350,8 @@ async function handleProfile(request, env) {
   await db.prepare(
     `UPDATE calendar_scout_profiles SET name=?,enabled=?,model=?,weighted_subjects_json=?,weighted_formats_json=?,
       positive_concepts_json=?,negative_terms_json=?,geographic_rules_json=?,date_horizon_days=?,relevance_threshold=?,
-      duplicate_sensitivity=?,per_run_limit=?,source_cadence_hours=?,web_cadence_hours=?,social_settings_json=?,updated_at=? WHERE id='atlanta-default'`
+      duplicate_sensitivity=?,per_run_limit=?,source_cadence_hours=?,web_cadence_hours=?,social_settings_json=?,
+      scout_brief=?,source_resolution_rules=?,source_resolution_passes=?,updated_at=? WHERE id='atlanta-default'`
   ).bind(
     asString(body.name ?? current.name), body.enabled === undefined ? current.enabled ? 1 : 0 : body.enabled ? 1 : 0,
     asString(body.model ?? current.model) || "gpt-5.6-terra",
@@ -2260,9 +2364,79 @@ async function handleProfile(request, env) {
     Math.max(1, Math.min(100, Number(body.perRunLimit ?? current.perRunLimit) || 20)),
     Math.max(1, Number(body.sourceCadenceHours ?? current.sourceCadenceHours) || 24),
     Math.max(1, Number(body.webCadenceHours ?? current.webCadenceHours) || 24),
-    JSON.stringify(normalizeSocialSettings(body.socialSettings ?? current.socialSettings)), isoNow()
+    JSON.stringify(normalizeSocialSettings(body.socialSettings ?? current.socialSettings)),
+    asString(body.scoutBrief ?? current.scoutBrief).slice(0, 6000),
+    asString(body.sourceResolutionRules ?? current.sourceResolutionRules).slice(0, 6000),
+    Math.max(1, Math.min(4, Number(body.sourceResolutionPasses ?? current.sourceResolutionPasses) || 3)),
+    isoNow()
   ).run();
   return json({ profile: normalizeProfile(await db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first()), broadDiscoveryEnabled: Boolean(env.OPENAI_API_KEY) });
+}
+
+function knownOrganizationValues(body, current = {}) {
+  const organizationType = ["organizer", "venue", "both"].includes(asString(body.organizationType))
+    ? asString(body.organizationType)
+    : current.organizationType || "both";
+  return {
+    name: asString(body.name ?? current.name).trim().slice(0, 200),
+    organizationType,
+    aliases: [...new Set((Array.isArray(body.aliases) ? body.aliases : current.aliases || []).map((value) => asString(value).trim()).filter(Boolean))].slice(0, 100),
+    officialDomains: normalizeDomainList(body.officialDomains ?? current.officialDomains),
+    eventPaths: normalizePathList(body.eventPaths ?? current.eventPaths),
+    trustedTicketDomains: normalizeDomainList(body.trustedTicketDomains ?? current.trustedTicketDomains),
+    discoveryOnlyDomains: normalizeDomainList(body.discoveryOnlyDomains ?? current.discoveryOnlyDomains),
+    notes: asString(body.notes ?? current.notes).slice(0, 4000),
+    enabled: body.enabled === undefined ? current.enabled !== false : Boolean(body.enabled),
+  };
+}
+
+async function handleKnownOrganizations(request, env, parts) {
+  const db = requireDb(env);
+  const id = parts[1] ? decodeURIComponent(parts[1]) : "";
+  if (request.method === "GET" && !id) return json({ knownOrganizations: await listKnownOrganizations(db) });
+  if (request.method === "POST" && !id) {
+    const body = await readBody(request);
+    if (!body) return errorResponse("Invalid JSON body.");
+    const value = knownOrganizationValues(body);
+    if (!value.name) return errorResponse("Organization name is required.");
+    if (!value.officialDomains.length) return errorResponse("Add at least one official domain so the Scout can prove the source chain.");
+    const now = isoNow();
+    const organizationId = `cal_org_${crypto.randomUUID()}`;
+    await db.prepare(
+      `INSERT INTO calendar_known_organizations
+       (id,name,organization_type,aliases_json,official_domains_json,event_paths_json,trusted_ticket_domains_json,
+        discovery_only_domains_json,notes,enabled,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(
+      organizationId, value.name, value.organizationType, JSON.stringify(value.aliases), JSON.stringify(value.officialDomains),
+      JSON.stringify(value.eventPaths), JSON.stringify(value.trustedTicketDomains), JSON.stringify(value.discoveryOnlyDomains),
+      value.notes, value.enabled ? 1 : 0, now, now,
+    ).run();
+    return json({ organization: normalizeKnownOrganization(await db.prepare("SELECT * FROM calendar_known_organizations WHERE id=?").bind(organizationId).first()) }, { status:201 });
+  }
+  const row = id ? await db.prepare("SELECT * FROM calendar_known_organizations WHERE id=?").bind(id).first() : null;
+  if (!row) return errorResponse("Known organization not found.", 404);
+  if (request.method === "PATCH") {
+    const body = await readBody(request);
+    if (!body) return errorResponse("Invalid JSON body.");
+    const value = knownOrganizationValues(body, normalizeKnownOrganization(row));
+    if (!value.name) return errorResponse("Organization name is required.");
+    if (!value.officialDomains.length) return errorResponse("Add at least one official domain so the Scout can prove the source chain.");
+    await db.prepare(
+      `UPDATE calendar_known_organizations SET name=?,organization_type=?,aliases_json=?,official_domains_json=?,
+       event_paths_json=?,trusted_ticket_domains_json=?,discovery_only_domains_json=?,notes=?,enabled=?,updated_at=? WHERE id=?`
+    ).bind(
+      value.name, value.organizationType, JSON.stringify(value.aliases), JSON.stringify(value.officialDomains),
+      JSON.stringify(value.eventPaths), JSON.stringify(value.trustedTicketDomains), JSON.stringify(value.discoveryOnlyDomains),
+      value.notes, value.enabled ? 1 : 0, isoNow(), id,
+    ).run();
+    return json({ organization: normalizeKnownOrganization(await db.prepare("SELECT * FROM calendar_known_organizations WHERE id=?").bind(id).first()) });
+  }
+  if (request.method === "DELETE") {
+    await db.prepare("DELETE FROM calendar_known_organizations WHERE id=?").bind(id).run();
+    return json({ ok: true });
+  }
+  return errorResponse("Method not allowed.", 405);
 }
 
 async function handleRuns(request, env) {
@@ -2537,6 +2711,13 @@ function audienceAccess(audiences, { assumePublic = false } = {}) {
   return accessDetails(assumePublic ? "public" : "unknown", "", assumePublic ? ["Public"] : []);
 }
 
+function structuredAddress(value) {
+  if (typeof value === "string") return cleanSourceText(value);
+  if (!value || typeof value !== "object") return "";
+  return [value.streetAddress || value.address, value.addressLocality || value.city, value.addressRegion || value.subdivision, value.postalCode || value.zipCode, value.addressCountry]
+    .map((part) => typeof part === "object" ? asString(part.name) : asString(part)).filter(Boolean).join(", ");
+}
+
 function structuredEventProposal(item, source) {
   const location = item.location && typeof item.location === "object" ? item.location : {};
   const address = location.address && typeof location.address === "object" ? location.address : {};
@@ -2560,7 +2741,7 @@ function structuredEventProposal(item, source) {
       endsAt: asString(subEvent.endDate),
       timezone: asString(subEvent.eventSchedule?.scheduleTimezone) || TIME_ZONE,
       venueName: asString(subEvent.location?.name),
-      venueAddress: typeof subEvent.location?.address === "string" ? asString(subEvent.location.address) : "",
+      venueAddress: structuredAddress(subEvent.location?.address),
       sourceUrl: asString(subEvent.url),
       ticketUrl: asString(Array.isArray(subEvent.offers) ? subEvent.offers[0]?.url : subEvent.offers?.url),
       ...structuredTicketDetails(Array.isArray(subEvent.offers) ? subEvent.offers[0] : subEvent.offers),
@@ -2582,7 +2763,7 @@ function structuredEventProposal(item, source) {
     ...access,
     dateKind: asString(item.startDate).length === 10 ? "all_day" : "timed", startsAt: asString(item.startDate) || null,
     endsAt: asString(item.endDate) || null, timezone: asString(item.eventSchedule?.scheduleTimezone) || TIME_ZONE, venueName: asString(location.name),
-    venueAddress: [address.streetAddress, address.addressLocality, address.addressRegion, address.postalCode].map(asString).filter(Boolean).join(", "),
+    venueAddress: structuredAddress(location.address),
     city: asString(address.addressLocality) || "Atlanta", region: asString(address.addressRegion) || "GA",
     subjects: [], formats: [], experimental: false, verificationState: "verified",
     verificationNotes: "Structured event data retrieved from an enabled official source.", confidence: 0.86,
@@ -3876,10 +4057,70 @@ function browserPlatformProposal(item, source, adapterKey) {
   };
 }
 
+function pastedTimedDate(value, timezone = TIME_ZONE) {
+  return canonicalCalendarDate(value, timezone);
+}
+
+function pastedOccurrenceType(item) {
+  const requested = asString(item?.occurrenceType);
+  if (OCCURRENCE_TYPES.has(requested)) return requested;
+  const title = asString(item?.title);
+  if (/artist talk/i.test(title)) return "artist_talk";
+  if (/opening reception/i.test(title)) return "opening_reception";
+  if (/screening/i.test(title)) return "screening";
+  if (/performance|concert/i.test(title)) return "performance";
+  if (/workshop/i.test(title)) return "workshop";
+  if (/panel/i.test(title)) return "panel";
+  if (/lecture|talk/i.test(title)) return "lecture";
+  return "other";
+}
+
+function pastedSocialPostId(sourceUrl, platform) {
+  if (!validHttpUrl(sourceUrl)) return "";
+  const path = new URL(sourceUrl).pathname;
+  if (platform === "instagram") return path.match(/\/(?:p|reel)\/([^/]+)/i)?.[1] || "";
+  return path.split("/").filter(Boolean).at(-1) || "";
+}
+
 function browserPastedLinkProposal(item, source) {
   const sourceUrl = source.url;
-  const startsAt = asString(item.startsAt);
-  const endsAt = asString(item.endsAt) || null;
+  const socialPlatform = socialPlatformFromUrl(sourceUrl);
+  const timezone = validTimeZone(item.timezone) ? asString(item.timezone) : TIME_ZONE;
+  const occurrenceAccessStatus = ["public", "restricted"].includes(asString(item.accessStatus)) ? asString(item.accessStatus) : "unknown";
+  const occurrenceAccessNotes = asString(item.accessNotes);
+  const occurrenceAudiences = audienceStrings(item.audiences);
+  const occurrenceItems = Array.isArray(item.occurrences) ? item.occurrences : [];
+  const stableEventKey = normalizeText(asString(item.title) || "event").replace(/\s+/g, "-").slice(0, 70);
+  const occurrences = occurrenceItems.map((occurrence, index) => {
+    const occurrenceTimezone = validTimeZone(occurrence.timezone) ? asString(occurrence.timezone) : timezone;
+    return {
+      sourceEventId: `pasted-${stableEventKey}-${index + 1}`,
+      occurrenceType: pastedOccurrenceType(occurrence),
+      title: asString(occurrence.title),
+      factualDescription: cleanSourceText(occurrence.factualDescription),
+      accessStatus: ["public", "restricted"].includes(asString(occurrence.accessStatus)) ? asString(occurrence.accessStatus) : occurrenceAccessStatus,
+      accessNotes: asString(occurrence.accessNotes) || occurrenceAccessNotes,
+      audiences: audienceStrings(occurrence.audiences).length ? audienceStrings(occurrence.audiences) : occurrenceAudiences,
+      dateKind: "timed",
+      startsAt: pastedTimedDate(occurrence.startsAt, occurrenceTimezone),
+      endsAt: pastedTimedDate(occurrence.endsAt, occurrenceTimezone) || null,
+      timezone: occurrenceTimezone,
+      venueName: asString(occurrence.venueName) || asString(item.venueName),
+      venueAddress: asString(occurrence.venueAddress) || asString(item.venueAddress),
+      sourceUrl,
+      ticketUrl: "",
+      status: "scheduled",
+      verificationState: "needs_verification",
+      verificationNotes: socialPlatform
+        ? "Schedule facts were extracted from the social post caption and flyer and require Studio verification."
+        : "Schedule facts were extracted from the rendered pasted page and require Studio verification.",
+      sortOrder: index,
+    };
+  }).filter((occurrence) => occurrence.title && validDate(occurrence.startsAt));
+  const occurrenceStarts = occurrences.map((occurrence) => occurrence.startsAt).filter(validDate).sort((left, right) => Date.parse(left) - Date.parse(right));
+  const occurrenceEnds = occurrences.map((occurrence) => occurrence.endsAt).filter(validDate).sort((left, right) => Date.parse(left) - Date.parse(right));
+  const startsAt = occurrenceStarts[0] || pastedTimedDate(item.startsAt, timezone);
+  const endsAt = occurrenceEnds.at(-1) || pastedTimedDate(item.endsAt, timezone) || null;
   const organizerUrl = validHttpUrl(item.organizerUrl) ? asString(item.organizerUrl) : "";
   const venueUrl = validHttpUrl(item.venueUrl) ? asString(item.venueUrl) : "";
   const ticketUrl = validHttpUrl(item.ticketUrl) && !socialPlatformFromUrl(item.ticketUrl) ? asString(item.ticketUrl) : "";
@@ -3896,6 +4137,22 @@ function browserPastedLinkProposal(item, source) {
     ...(ticketUrl && ticketUrl !== sourceUrl ? [{ label: "Tickets or registration", url: ticketUrl, provenanceUrl: sourceUrl, role: "ticket", includePublic: false }] : []),
   ], sourceUrl);
   const stableLead = normalizeText(`${item.title || "event"}-${startsAt || "undated"}`).replace(/\s+/g, "-").slice(0, 100);
+  const imageUrl = validHttpUrl(item.imageUrl) ? asString(item.imageUrl) : "";
+  const socialEvidence = socialPlatform ? [{
+    platform: socialPlatform,
+    postId: pastedSocialPostId(sourceUrl, socialPlatform),
+    postUrl: sourceUrl,
+    authorHandle: asString(item.authorHandle),
+    authorDisplayName: asString(item.authorDisplayName) || asString(item.organizer),
+    authorIsVerified: Boolean(item.authorIsVerified),
+    postedAt: validDate(item.postedAt) ? asString(item.postedAt) : "",
+    captionExcerpt: asString(item.caption).slice(0, 1500),
+    mediaType: asString(item.mediaType) || (imageUrl ? "image" : ""),
+    mediaUrl: imageUrl,
+    evidenceRole: "discovery",
+    corroborated: false,
+    provenance: [{ channel: "pasted_link", postUrl: sourceUrl, retrievedAt: isoNow() }],
+  }] : [];
   return {
     sourceId: "",
     sourceEventId: `pasted-${stableLead}`,
@@ -3911,30 +4168,33 @@ function browserPastedLinkProposal(item, source) {
       ? "The Scout extracted facts from a pasted event link. Source authority still requires Studio review."
       : "The pasted event page and its official organization link share the same website. Studio review is still required.",
     title: asString(item.title),
-    organizer: asString(item.organizer) || source.name,
-    factualDescription: cleanSourceText(item.description),
-    eventStructure: EVENT_STRUCTURES.has(asString(item.eventStructure)) ? asString(item.eventStructure) : "single",
-    accessStatus: ["public", "restricted"].includes(asString(item.accessStatus)) ? asString(item.accessStatus) : "unknown",
-    accessNotes: asString(item.accessNotes),
-    audiences: audienceStrings(item.audiences),
+    organizer: asString(item.organizer) || asString(item.authorDisplayName) || asString(item.authorHandle) || source.name,
+    factualDescription: cleanSourceText(item.description || item.caption),
+    eventStructure: occurrences.length > 1 ? "series" : EVENT_STRUCTURES.has(asString(item.eventStructure)) ? asString(item.eventStructure) : "single",
+    accessStatus: occurrenceAccessStatus,
+    accessNotes: occurrenceAccessNotes,
+    audiences: occurrenceAudiences,
     dateKind: DATE_KINDS.has(asString(item.dateKind)) ? asString(item.dateKind) : startsAt.length === 10 ? "all_day" : "timed",
     startsAt,
     endsAt,
-    timezone: validTimeZone(item.timezone) ? asString(item.timezone) : TIME_ZONE,
+    timezone,
     venueName: asString(item.venueName),
     venueAddress: asString(item.venueAddress),
     city: asString(item.city) || "Atlanta",
     region: asString(item.region) || "GA",
-    flyerUrl: validHttpUrl(item.imageUrl) ? asString(item.imageUrl) : "",
+    flyerUrl: imageUrl,
     flyerProvenanceUrl: sourceUrl,
+    flyerAltText: asString(item.imageAlt) || `${asString(item.title)} event flyer`,
     relatedLinks,
     subjects: uniqueStrings(item.subjects, SUBJECTS),
     formats: uniqueStrings(item.formats, FORMATS),
     experimental: Boolean(item.experimental),
     verificationState: "needs_verification",
-    verificationNotes: ["Event facts were extracted from the rendered pasted page.", ...issues].join("\n"),
+    verificationNotes: [socialPlatform ? "Event facts were extracted from the social post caption and flyer." : "Event facts were extracted from the rendered pasted page.", ...issues].join("\n"),
     confidence: 0.62,
     discoveryChannel: "pasted_link",
+    socialEvidence,
+    occurrences,
   };
 }
 
@@ -3943,9 +4203,12 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
   const config = parseJson(source.adapter_config_json, {});
   const configuredCity = asString(config.city) || "Atlanta";
   const configuredRegion = asString(config.region) || "GA";
+  const socialDetail = mode === "social-detail";
   const response = await env.BROWSER.quickAction("json", {
     url,
-    prompt: mode === "detail"
+    prompt: socialDetail
+      ? `Extract the one primary event announced by this social post. Read the visible caption and the text or accessibility description of every event flyer in the post. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. Use the post or flyer publication date to supply the event year only when the visible month and day make that year unambiguous. Return explicit UTC offsets for every timed value. Keep separately named schedule blocks such as an artist talk and a closing reception in occurrences with their own start and end times; do not merge them into one incomplete time block. Preserve factual caption details such as accessibility, audience, admission, and whether children are welcome. Return the first event-flyer image URL and its accessibility text when the page exposes them. Return empty strings for genuinely missing facts.`
+      : mode === "detail"
       ? "Extract the one primary event on this event or ticket page. Use ISO 8601 start and end timestamps exactly as shown. Return empty strings for missing facts. Never infer an end time, organizer website, venue website, or event URL."
       : `Extract up to ${maximum} upcoming event cards currently shown for ${configuredCity}, ${configuredRegion}. Do not include featured or nearby events outside that location section. Use ISO 8601 dates or timestamps only when the page supplies them. Include an event URL only when the page exposes the exact ticket-page URL. Return empty strings for facts the page does not supply.`,
     response_format: {
@@ -3958,16 +4221,31 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
             items: {
               type: "object",
               properties: {
-                title: { type: "string" }, description: { type: "string" }, organizer: { type: "string" },
+                title: { type: "string" }, description: { type: "string" }, caption: { type: "string" }, organizer: { type: "string" },
                 organizerUrl: { type: "string" }, venueName: { type: "string" }, venueAddress: { type: "string" },
                 venueUrl: { type: "string" }, city: { type: "string" }, region: { type: "string" },
                 startsAt: { type: "string" }, endsAt: { type: "string" }, eventUrl: { type: "string" },
-                ticketUrl: { type: "string" }, imageUrl: { type: "string" }, accessStatus: { type: "string" },
+                ticketUrl: { type: "string" }, imageUrl: { type: "string" }, imageAlt: { type: "string" }, accessStatus: { type: "string" },
                 scheduleStatus: { type: "string" }, ticketStatus: { type: "string" }, ticketOnSaleAt: { type: "string" }, ticketNotes: { type: "string" },
                 accessNotes: { type: "string" }, audiences: { type: "array", items: { type: "string" } },
                 eventStructure: { type: "string" }, dateKind: { type: "string" }, timezone: { type: "string" },
                 subjects: { type: "array", items: { type: "string" } }, formats: { type: "array", items: { type: "string" } },
                 experimental: { type: "boolean" },
+                authorHandle: { type: "string" }, authorDisplayName: { type: "string" }, authorIsVerified: { type: "boolean" },
+                postedAt: { type: "string" }, mediaType: { type: "string" },
+                occurrences: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: { type: "string" }, occurrenceType: { type: "string" }, factualDescription: { type: "string" },
+                      startsAt: { type: "string" }, endsAt: { type: "string" }, timezone: { type: "string" },
+                      venueName: { type: "string" }, venueAddress: { type: "string" }, accessStatus: { type: "string" },
+                      accessNotes: { type: "string" }, audiences: { type: "array", items: { type: "string" } },
+                    },
+                    required: ["title", "startsAt"],
+                  },
+                },
               },
               required: ["title", "startsAt"],
             },
@@ -3978,7 +4256,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
     },
     gotoOptions: { waitUntil: "networkidle2", timeout: 60_000 },
     waitForTimeout: 1_000,
-    rejectResourceTypes: ["image", "media", "font"],
+    rejectResourceTypes: socialDetail ? ["media", "font"] : ["image", "media", "font"],
   });
   if (!response?.ok) throw new Error(`Browser event extraction returned HTTP ${response?.status || "unknown"}.`);
   const payload = parseJson(await boundedResponseText(response), {});
@@ -4106,7 +4384,14 @@ async function extractPastedLinkProposal(env, pastedUrl) {
     error.httpStatus = 422;
     throw error;
   }
-  const rendered = await browserPlatformEvents(env, source, "pasted", pastedUrl, 1, "detail");
+  const rendered = await browserPlatformEvents(
+    env,
+    source,
+    "pasted",
+    pastedUrl,
+    1,
+    socialPlatformFromUrl(pastedUrl) ? "social-detail" : "detail",
+  );
   const item = rendered.events[0];
   if (!item?.title || !validDate(item.startsAt)) {
     const error = new Error(sourceFailure || "The Scout could not recover a confirmed event title and start date from that link.");
@@ -4119,13 +4404,18 @@ async function extractPastedLinkProposal(env, pastedUrl) {
 async function createCandidateFromUrl(env, db, pastedUrl) {
   const extracted = await extractPastedLinkProposal(env, pastedUrl);
   const profileRow = await db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first();
+  const profile = normalizeProfile(profileRow);
+  const needsSourceResolution = sourceAuthorityErrors(extracted.proposal).length > 0;
+  const resolved = needsSourceResolution
+    ? await resolveDiscoveryProposal(env, db, profile, { name: "Pasted link", url: pastedUrl, source_type: "discovery", trust_level: "discovery" }, extracted.proposal)
+    : { proposal: extracted.proposal, citations: [], audit: null };
   const result = await upsertScoutProposal(
     env,
     db,
-    extracted.proposal,
+    resolved.proposal,
     "manual",
-    [{ url: pastedUrl, role: "pasted_link", retrievedAt: isoNow(), diagnostics: extracted.diagnostics }],
-    normalizeProfile(profileRow),
+    [{ url: pastedUrl, role: "pasted_link", retrievedAt: isoNow(), diagnostics: extracted.diagnostics }, ...resolved.citations],
+    profile,
     { bypassEligibility: true },
   );
   if (result.skipped) {
@@ -4133,6 +4423,7 @@ async function createCandidateFromUrl(env, db, pastedUrl) {
     error.httpStatus = 422;
     throw error;
   }
+  await recordSourceResolutionAttempt(db, resolved.audit, result.candidate?.id || "");
   return { ...result, extraction: extracted.diagnostics };
 }
 
@@ -4352,6 +4643,16 @@ function inferSubjectsAndFormats(event) {
   event.subjects = [...subjects].filter((value) => SUBJECTS.has(value));
   event.formats = [...formats].filter((value) => FORMATS.has(value));
   event.experimental = event.experimental || formats.has("experimental-event");
+  const multiDayExhibition = event.dateKind === "timed"
+    && formats.has("exhibition")
+    && event.startsAt
+    && event.endsAt
+    && dateKey(event.startsAt) !== dateKey(event.endsAt);
+  if (multiDayExhibition) {
+    event.dateKind = "date_range";
+    event.startsAt = dateKey(event.startsAt);
+    event.endsAt = dateKey(event.endsAt);
+  }
   if (!EVENT_STRUCTURES.has(event.eventStructure) || event.eventStructure === "single") {
     if (event.dateKind === "date_range" && formats.has("exhibition")) event.eventStructure = "exhibition";
     else if ((event.occurrences || []).length >= 2) event.eventStructure = "series";
@@ -4730,7 +5031,7 @@ async function monitorDueCandidates(env, db, scheduledTime) {
   return { checked: outcomes.length, outcomes };
 }
 
-async function monitorSources(env, db, profile, sourceId = "") {
+async function monitorSources(env, db, profile, sourceId = "", runId = "") {
   const result = sourceId
     ? await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(sourceId).all()
     : await db.prepare("SELECT * FROM calendar_sources WHERE enabled=1 ORDER BY name").all();
@@ -4792,11 +5093,12 @@ async function monitorSources(env, db, profile, sourceId = "") {
       const skippedReasons = {};
       for (const proposal of proposals) {
         const needsSourceResolution = leadSource(source) && sourceAuthorityErrors(proposal).length > 0;
-        const resolved = needsSourceResolution ? await resolveDiscoveryProposal(env, profile, source, proposal) : { proposal, citations: [] };
+        const resolved = needsSourceResolution ? await resolveDiscoveryProposal(env, db, profile, source, proposal) : { proposal, citations: [], audit: null };
         const stored = await upsertScoutProposal(env, db, resolved.proposal, "source_monitor", [
           { url: proposal.sourceUrl || source.url, role: "discovery", retrievedAt: now },
           ...resolved.citations,
         ], profile);
+        await recordSourceResolutionAttempt(db, resolved.audit, stored.candidate?.id || "", runId);
         if (stored.candidate && !stored.existing) candidateCount += 1;
         if (stored.duplicate) duplicateCount += 1;
         if (stored.skipped) skippedReasons[stored.skipped] = (skippedReasons[stored.skipped] || 0) + 1;
@@ -4883,10 +5185,16 @@ async function socialSourcesForPlatform(db, platform, bypassCadence = true) {
   return (result.results || []).filter((source) => !source.last_attempt_at || now - Date.parse(source.last_attempt_at) >= Number(source.cadence_hours || 24) * 3_600_000);
 }
 
-async function requestOpenAiEvents(env, profile, { query, domains = [], sourceData = null, limit = 6, platform = "", authorityLead = "" }) {
+async function requestOpenAiEvents(env, profile, { query, domains = [], sourceData = null, limit = 6, platform = "", authorityLead = "", resolutionContext = null }) {
   if (!env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured.");
   const useWeb = !sourceData;
-  const profileContext = `Scout Profile: weighted subjects ${JSON.stringify(profile.weightedSubjects)}; weighted formats ${JSON.stringify(profile.weightedFormats)}; positive concepts ${profile.positiveConcepts.join(", ")}; negative terms ${profile.negativeTerms.join(", ")}.`;
+  const profileContext = `Scout Profile: ${profile.scoutBrief || "Find relevant Atlanta-metro creative events."} Weighted subjects ${JSON.stringify(profile.weightedSubjects)}; weighted formats ${JSON.stringify(profile.weightedFormats)}; positive concepts ${profile.positiveConcepts.join(", ")}; negative terms ${profile.negativeTerms.join(", ")}.`;
+  const sourceGuidance = profile.sourceResolutionRules
+    ? `Calendar source-resolution rules: ${profile.sourceResolutionRules}`
+    : "Resolve secondary leads to an event-specific original source and leave the result unresolved when that cannot be proven.";
+  const organizationGuidance = resolutionContext
+    ? `Known organization evidence for this lead: ${JSON.stringify(resolutionContext).slice(0, 12_000)}. Domains marked discovery-only can never be returned as sourceUrl.`
+    : "";
   const body = {
     model: env.CALENDAR_SCOUT_MODEL || profile.model || "gpt-5.6-terra",
     instructions: [
@@ -4895,6 +5203,8 @@ async function requestOpenAiEvents(env, profile, { query, domains = [], sourceDa
       "Treat magazines, newspapers, newsletters, aggregators, search results, and social posts only as discovery leads. Search past each lead to the event-specific page published by the organizer or venue, or to an organizer-authorized ticket page. Put the lead in discoveryUrl; never use it as sourceUrl.",
       "sourceUrl must identify the original event-specific organizer page, venue page, official organization calendar item, or authorized ticket listing. Set sourceAuthority accordingly. organizerUrl and venueUrl are official organization websites, not social profiles. If an authorized ticket listing is the best available event page, also return at least one official organizerUrl or venueUrl. If this chain cannot be established, set sourceAuthority to unresolved and verificationState to needs_verification.",
       "When sources disagree, prefer the original organizer or venue event page, then an authorized ticket host. Explain the evidence chain or unresolved conflict concisely in sourceResolutionNotes.",
+      sourceGuidance,
+      organizationGuidance,
       "A social verification badge is informational and never establishes trust. Preserve the original post identity and a short factual caption excerpt as private evidence.",
       "Use explicit UTC offsets for timed dates and YYYY-MM-DD for all-day dates. Omit anything without a confirmable date.",
       "Capture attendance eligibility as a public fact. Set accessStatus to public only when the source explicitly says Public, open to all, or equivalent; restricted when attendance is limited to students, alumni, faculty, staff, members, registrants, or invitees; and unknown when the source does not establish eligibility. Copy the named eligible groups into audiences and write a concise factual accessNotes sentence for restricted events. Never assume a public webpage means a public event.",
@@ -4935,7 +5245,103 @@ async function requestOpenAiEvents(env, profile, { query, domains = [], sourceDa
   return { events: Array.isArray(parsed.events) ? parsed.events.slice(0, limit) : [], citations, usage: payload.usage || {} };
 }
 
-async function resolveDiscoveryProposal(env, profile, source, proposal) {
+function domainMatches(host, domain) {
+  return Boolean(host && domain && (host === domain || host.endsWith(`.${domain}`)));
+}
+
+function domainListed(url, domains) {
+  const host = sourceHost(url);
+  return (domains || []).some((domain) => domainMatches(host, domain));
+}
+
+function eventSpecificUrl(value, eventPaths = []) {
+  if (!validHttpUrl(value)) return false;
+  const url = new URL(value);
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  if (path === "/" && !url.search) return false;
+  if (!eventPaths.length) return path !== "/" || Boolean(url.search);
+  return eventPaths.some((prefix) => path === prefix.replace(/\/+$/, "") || path.startsWith(`${prefix.replace(/\/+$/, "")}/`));
+}
+
+async function sourceResolutionContext(db, proposal) {
+  const [organizations, sourceRows] = await Promise.all([
+    listKnownOrganizations(db, true),
+    db.prepare("SELECT name,url,source_type,trust_level FROM calendar_sources WHERE enabled=1 ORDER BY name").all(),
+  ]);
+  const eventText = normalizeText([proposal.title, proposal.organizer, proposal.venueName].join(" "));
+  const matchingOrganizations = organizations.filter((organization) => (
+    [organization.name, ...organization.aliases]
+      .map(normalizeText)
+      .filter((value) => value.length >= 3)
+      .some((value) => eventText.includes(value) || value.includes(eventText))
+  ));
+  const officialDomains = new Set();
+  const trustedTicketDomains = new Set();
+  const discoveryOnlyDomains = new Set();
+  const eventPaths = new Set();
+  for (const organization of matchingOrganizations) {
+    organization.officialDomains.forEach((value) => officialDomains.add(value));
+    organization.trustedTicketDomains.forEach((value) => trustedTicketDomains.add(value));
+    organization.discoveryOnlyDomains.forEach((value) => discoveryOnlyDomains.add(value));
+    organization.eventPaths.forEach((value) => eventPaths.add(value));
+  }
+  for (const source of sourceRows.results || []) {
+    const domain = normalizeDomain(source.url);
+    if (!domain) continue;
+    const sourceName = normalizeText(source.name);
+    const matchesEvent = sourceName.length >= 3 && eventText.includes(sourceName);
+    if (leadSource(source)) discoveryOnlyDomains.add(domain);
+    else if (matchesEvent) officialDomains.add(domain);
+  }
+  return {
+    organizations: matchingOrganizations.map((organization) => ({
+      id: organization.id,
+      name: organization.name,
+      organizationType: organization.organizationType,
+      aliases: organization.aliases,
+    })),
+    officialDomains: [...officialDomains],
+    eventPaths: [...eventPaths],
+    trustedTicketDomains: [...trustedTicketDomains],
+    discoveryOnlyDomains: [...discoveryOnlyDomains],
+  };
+}
+
+function resolutionCandidateScore(item, proposal, context) {
+  if (item.sourceAuthority === "unresolved" || !eventSpecificUrl(item.sourceUrl, domainListed(item.sourceUrl, context.officialDomains) ? context.eventPaths : [])) return -1;
+  if (sameSourceHost(proposal.discoveryUrl || proposal.sourceUrl, item.sourceUrl)) return -1;
+  if (domainListed(item.sourceUrl, context.discoveryOnlyDomains)) return -1;
+  if (sourceAuthorityErrors(item).length) return -1;
+  const officialAuthority = ["organizer_event", "venue_event", "official_calendar"].includes(item.sourceAuthority);
+  if (context.organizations.length && officialAuthority && !domainListed(item.sourceUrl, context.officialDomains)) return -1;
+  if (context.organizations.length && item.sourceAuthority === "authorized_ticket_host" && context.trustedTicketDomains.length && !domainListed(item.sourceUrl, context.trustedTicketDomains)) return -1;
+  const titleScore = similarity(item.title, proposal.title);
+  if (titleScore < 0.45) return -1;
+  const dateScore = !proposal.startsAt || !item.startsAt ? 0.1 : dateKey(item.startsAt) === dateKey(proposal.startsAt) ? 0.2 : -1;
+  if (dateScore < 0) return -1;
+  const identityScore = Math.max(similarity(item.organizer, proposal.organizer), similarity(item.venueName, proposal.venueName));
+  const knownDomainScore = domainListed(item.sourceUrl, [...context.officialDomains, ...context.trustedTicketDomains]) ? 0.1 : 0;
+  return titleScore * 0.55 + dateScore + identityScore * 0.15 + knownDomainScore;
+}
+
+async function recordSourceResolutionAttempt(db, audit, candidateId = "", runId = "") {
+  if (!audit) return;
+  try {
+    await db.prepare(
+      `INSERT INTO calendar_source_resolution_attempts
+       (id,candidate_id,run_id,lead_url,event_title,search_queries_json,attempted_urls_json,selected_url,resolution_status,resolution_notes,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(
+      `cal_resolution_${crypto.randomUUID()}`, candidateId || null, runId || null, audit.leadUrl,
+      audit.eventTitle || "", JSON.stringify(audit.searchQueries || []), JSON.stringify(audit.attemptedUrls || []),
+      audit.selectedUrl || "", audit.status || "unresolved", audit.notes || "", isoNow(),
+    ).run();
+  } catch (error) {
+    if (!/no such table:\s*calendar_source_resolution_attempts/i.test(asString(error?.message))) throw error;
+  }
+}
+
+async function resolveDiscoveryProposal(env, db, profile, source, proposal) {
   const discoveryUrl = proposal.sourceUrl || source.url;
   const ticketFallback = proposal.sourceAuthority === "authorized_ticket_host"
     ? applySourceAuthorityPolicy({
@@ -4954,19 +5360,48 @@ async function resolveDiscoveryProposal(env, profile, source, proposal) {
       { label: `${source.name} discovery lead`, url: discoveryUrl, provenanceUrl: discoveryUrl, role: "discovery", includePublic: false },
     ],
   });
-  if (!env.OPENAI_API_KEY) return { proposal: ticketFallback || unresolved, citations: [] };
+  const audit = { leadUrl: discoveryUrl, eventTitle: proposal.title, searchQueries: [], attemptedUrls: [], selectedUrl: "", status: "unresolved", notes: "" };
+  if (!env.OPENAI_API_KEY) {
+    audit.notes = "Source resolution was not attempted because OPENAI_API_KEY is not configured.";
+    return { proposal: ticketFallback || unresolved, citations: [], audit };
+  }
   try {
-    const query = `Resolve the original source for this Atlanta event lead: ${proposal.title}; organizer ${proposal.organizer || "unknown"}; venue ${proposal.venueName || "unknown"}; date ${proposal.startsAt || "unknown"}. Search the exact event, organizer, and venue. Return the event only when the title, date, and venue or organizer match.`;
-    const result = await requestOpenAiEvents(env, profile, { query, limit: 3, authorityLead: discoveryUrl });
-    const matches = result.events.map((item) => proposalFromBody(item)).filter((item) => (
-      item.sourceAuthority !== "unresolved"
-      && validHttpUrl(item.sourceUrl)
-      && !sameSourceHost(discoveryUrl, item.sourceUrl)
-      && similarity(item.title, proposal.title) >= 0.5
-      && (!proposal.startsAt || !item.startsAt || dateKey(item.startsAt) === dateKey(proposal.startsAt))
-    ));
-    if (!matches.length) return { proposal: unresolved, citations: result.citations };
-    const match = matches[0];
+    const context = await sourceResolutionContext(db, { ...proposal, discoveryUrl });
+    const date = proposal.startsAt || "unknown date";
+    const queryOptions = [
+      `Resolve the original event source for the exact Atlanta event ${proposal.title}; date ${date}; organizer ${proposal.organizer || "unknown"}; venue ${proposal.venueName || "unknown"}.`,
+      `Find the event-specific organizer or venue page for ${proposal.title} at ${proposal.venueName || "the named venue"} on ${date}. Check names, aliases, date, and location.`,
+      `Search the known official or authorized domains for the event ${proposal.title}; date ${date}; organizer ${proposal.organizer || "unknown"}. Do not return a homepage.`,
+      `Final verification pass for ${proposal.title} on ${date}: locate an event-specific original page and return unresolved if the source chain cannot be proven.`,
+    ];
+    const citations = [];
+    const candidates = [];
+    const maxPasses = Math.max(1, Math.min(4, Number(profile.sourceResolutionPasses) || 3));
+    for (let index = 0; index < maxPasses; index += 1) {
+      const query = `${queryOptions[index]} ${profile.sourceResolutionRules || ""}`.trim();
+      audit.searchQueries.push(query);
+      const domains = index >= 2 ? [...new Set([...context.officialDomains, ...context.trustedTicketDomains])] : [];
+      const result = await requestOpenAiEvents(env, profile, { query, domains, limit: 4, authorityLead: discoveryUrl, resolutionContext: context });
+      citations.push(...result.citations);
+      audit.attemptedUrls.push(...result.citations.map((item) => item.url), ...result.events.map((item) => asString(item.sourceUrl)).filter(Boolean));
+      candidates.push(...result.events.map((item) => proposalFromBody(item)));
+      const ranked = candidates.map((item) => ({ item, score: resolutionCandidateScore(item, { ...proposal, discoveryUrl }, context) }))
+        .filter((entry) => entry.score >= 0.6)
+        .sort((left, right) => right.score - left.score);
+      if (ranked.length) break;
+    }
+    audit.attemptedUrls = [...new Set(audit.attemptedUrls.filter(validHttpUrl))];
+    const ranked = candidates.map((item) => ({ item, score: resolutionCandidateScore(item, { ...proposal, discoveryUrl }, context) }))
+      .filter((entry) => entry.score >= 0.6)
+      .sort((left, right) => right.score - left.score);
+    if (!ranked.length) {
+      audit.notes = `No event-specific original source passed the configured authority, identity, and date checks after ${audit.searchQueries.length} search pass${audit.searchQueries.length === 1 ? "" : "es"}.`;
+      return { proposal: { ...unresolved, sourceResolutionNotes: audit.notes }, citations: [...new Map(citations.map((item) => [item.url, item])).values()], audit };
+    }
+    const match = ranked[0].item;
+    audit.selectedUrl = match.sourceUrl;
+    audit.status = "resolved";
+    audit.notes = `Resolved to an event-specific ${match.sourceAuthority.replaceAll("_", " ")} source after ${audit.searchQueries.length} search pass${audit.searchQueries.length === 1 ? "" : "es"}.`;
     return {
       proposal: applySourceAuthorityPolicy({
         ...proposal,
@@ -4979,15 +5414,19 @@ async function resolveDiscoveryProposal(env, profile, source, proposal) {
           { label: `${source.name} discovery lead`, url: discoveryUrl, provenanceUrl: discoveryUrl, role: "discovery", includePublic: false },
         ], match.sourceUrl),
       }),
-      citations: result.citations,
+      citations: [...new Map(citations.map((item) => [item.url, item])).values()],
+      audit,
     };
   } catch (error) {
+    audit.status = "failed";
+    audit.notes = `Automated resolution failed: ${asString(error.message).slice(0, 240)}`;
     return {
       proposal: {
         ...(ticketFallback || unresolved),
         sourceResolutionNotes: `${(ticketFallback || unresolved).sourceResolutionNotes} Automated resolution failed: ${asString(error.message).slice(0, 240)}`,
       },
       citations: [],
+      audit,
     };
   }
 }
@@ -4998,9 +5437,16 @@ async function storeOpenAiEvents(env, db, profile, events, { provenance = [], pl
   let failures = 0;
   for (const rawEvent of events.slice(0, limit)) {
     try {
-      const event = platform ? await prepareSocialProposal(db, rawEvent, platform, channel, allowNativeFlyer, nativePosts) : { ...rawEvent, discoveryChannel: channel };
+      let event = platform ? await prepareSocialProposal(db, rawEvent, platform, channel, allowNativeFlyer, nativePosts) : { ...rawEvent, discoveryChannel: channel };
       if (platform && !event.socialEvidence.length) { failures += 1; continue; }
-      const stored = await upsertScoutProposal(env, db, event, "openai_web_search", provenance, profile);
+      const leadUrl = event.discoveryUrl || event.socialEvidence?.[0]?.postUrl || (event.sourceAuthority === "unresolved" ? event.sourceUrl : "");
+      const needsSourceResolution = Boolean(leadUrl && sourceAuthorityErrors(proposalFromBody(event)).length);
+      const resolved = needsSourceResolution
+        ? await resolveDiscoveryProposal(env, db, profile, { name: platform ? `${platform} discovery` : "Web discovery", url: leadUrl, source_type: "discovery", trust_level: "discovery" }, event)
+        : { proposal:event, citations:[], audit:null };
+      event = resolved.proposal;
+      const stored = await upsertScoutProposal(env, db, event, "openai_web_search", [...provenance, ...resolved.citations], profile);
+      await recordSourceResolutionAttempt(db, resolved.audit, stored.candidate?.id || "");
       if (stored.candidate && !stored.existing) candidates += 1;
       if (stored.duplicate) duplicates += 1;
     } catch { failures += 1; }
@@ -5295,7 +5741,7 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
     try {
       let result;
       if (id === "direct") {
-        const direct = await monitorSources(env, db, profile, sourceId);
+        const direct = await monitorSources(env, db, profile, sourceId, runId);
         result = { candidates: direct.candidateCount, duplicates: direct.duplicateCount, failures: direct.failureCount, warnings: direct.warningCount, citations: [], usage: {}, queries: [], postsInspected: 0, details: direct.outcomes };
         searched.push(...direct.sourceIds);
       } else if (id === "general_web") result = await runOpenAiDiscovery(env, db, profile, connector.perRunLimit);
@@ -5363,7 +5809,7 @@ export async function handleCalendarAdminApi(request, env) {
     if (!parts.length) {
       if (request.method !== "GET") return errorResponse("Method not allowed.", 405);
       const db = requireDb(env);
-      const [candidates, sources, profile, socialSources, connectors] = await Promise.all([
+      const [candidates, sources, profile, socialSources, connectors, knownOrganizations] = await Promise.all([
         listCandidates(db, ""),
         db.prepare(
           `SELECT s.*,
@@ -5375,13 +5821,15 @@ export async function handleCalendarAdminApi(request, env) {
         db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first(),
         listSocialSources(db),
         listConnectors(db, env),
+        listKnownOrganizations(db),
       ]);
-      return json({ candidates, sources: (sources.results || []).map(normalizeSource), socialSources, connectors, profile: normalizeProfile(profile), broadDiscoveryEnabled: Boolean(env.OPENAI_API_KEY) });
+      return json({ candidates, sources: (sources.results || []).map(normalizeSource), socialSources, connectors, knownOrganizations, profile: normalizeProfile(profile), broadDiscoveryEnabled: Boolean(env.OPENAI_API_KEY) });
     }
     if (parts[0] === "candidates") return handleCandidates(request, env, parts);
     if (parts[0] === "sources") return handleSources(request, env, parts);
     if (parts[0] === "social-sources") return handleSocialSources(request, env, parts);
     if (parts[0] === "connectors") return handleConnectors(request, env, parts);
+    if (parts[0] === "known-organizations") return handleKnownOrganizations(request, env, parts);
     if (parts[0] === "profile") return handleProfile(request, env);
     if (parts[0] === "runs") return handleRuns(request, env);
     if (parts[0] === "suggestions") return handleSuggestions(request, env, parts);

@@ -62,6 +62,11 @@
       <p class="system-state" id="discoveryState"></p>
       <section class="connector-panel"><p class="eyebrow">Isolated discovery lanes</p><h3>Connectors</h3><div class="connector-list" id="connectorList"></div></section>
       <form class="profile-form" id="profileForm"></form>
+      <section class="known-organizations-panel">
+        <header class="subview-header"><div><p class="eyebrow">Source memory</p><h3>Known Organizations</h3></div><button id="addKnownOrganization" type="button">Add Organization</button></header>
+        <p class="view-note">Aliases help match event language to the right organizer or venue. Official domains prove original sources; event paths narrow searches; trusted ticket domains may support a listing; discovery-only domains can supply leads but never public source authority.</p>
+        <div class="known-organization-list" id="knownOrganizationList"></div>
+      </section>
       <section class="suggestions-panel"><h3>Suggested adjustments</h3><p>Feedback can create suggestions. The profile changes only after you accept one.</p><div id="suggestionList"></div></section>
     </section>
 
@@ -71,6 +76,6 @@
     </section>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/studio/calendar/calendar.js?v=20260819-pasted-source"></script>
+  <script src="/studio/calendar/calendar.js?v=20260819-scout-guidance"></script>
 </body>
 </html>
