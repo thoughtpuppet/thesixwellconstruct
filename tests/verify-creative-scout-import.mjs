@@ -51,12 +51,13 @@ db.exec(`
   INSERT INTO construct_pathways VALUES('path-events-03','x','x',datetime('now'));
   CREATE TABLE media_assets(
     id TEXT PRIMARY KEY,state TEXT,privacy TEXT,consent_status TEXT,
-    public_presentation TEXT,mime_type TEXT,width INTEGER,height INTEGER
+    public_presentation TEXT,mime_type TEXT,width INTEGER,height INTEGER,
+    alt_text TEXT,caption TEXT
   );
 `);
 
 const migrations = readdirSync(join(root, "migrations"))
-  .filter((name) => /^01(29|3[0-9]|4[0-7])_/.test(name))
+  .filter((name) => /^01(29|3[0-9]|4[0-9]|5[0-1])_/.test(name))
   .sort();
 
 for (const name of migrations) {
@@ -68,11 +69,35 @@ const counts = db.prepare(`
   SELECT
     (SELECT count(*) FROM calendar_entries) entries,
     (SELECT count(*) FROM calendar_candidates WHERE status='published') published,
-    (SELECT count(*) FROM calendar_candidate_notes) notes
+    (SELECT count(*) FROM calendar_candidate_notes) notes,
+    (SELECT count(*) FROM calendar_scout_strong_picks) strong_picks
 `).get();
 
 if (counts.entries < 14 || counts.published < 14) {
   throw new Error(`Expected at least 14 published Scout entries, received ${JSON.stringify(counts)}`);
+}
+if (counts.strong_picks !== 21) {
+  throw new Error(`Expected 21 historical Strong Picks, received ${JSON.stringify(counts)}`);
+}
+
+const recovered = db.prepare(`
+  SELECT id,status,verification_state,public_entry_id
+  FROM calendar_candidates
+  WHERE id IN (
+    'cal_candidate_adama_mending_to_preserve_2026',
+    'cal_candidate_plaza_film_love_milestones_2026',
+    'cal_candidate_plaza_lockjaw_2026',
+    'cal_candidate_miya_bailey_today_tomorrow_2026',
+    'cal_candidate_plaza_faust_nebulous_2026'
+  )
+  ORDER BY id
+`).all();
+if (recovered.length !== 5 || recovered.some((candidate) => candidate.public_entry_id)) {
+  throw new Error(`Recovered events must remain private candidates: ${JSON.stringify(recovered)}`);
+}
+const unresolvedToday = recovered.find((candidate) => candidate.id === 'cal_candidate_miya_bailey_today_tomorrow_2026');
+if (unresolvedToday?.status !== 'needs_verification' || unresolvedToday?.verification_state !== 'needs_verification') {
+  throw new Error(`Today and Tomorrow must remain unresolved: ${JSON.stringify(unresolvedToday)}`);
 }
 
 const leaked = db.prepare(`
