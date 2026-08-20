@@ -13,6 +13,8 @@
   var filtered = [];
   var activeMonth = new Date();
   var descriptionSyncFrame = 0;
+  var galleryEvents = {};
+  var activeGallery = null;
   activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth(), 1);
 
   var search = document.getElementById("calendarSearch");
@@ -142,6 +144,9 @@
     var relatedLinks = Array.isArray(event.relatedLinks) ? event.relatedLinks : [];
     var relatedOccurrences = Array.isArray(event.relatedOccurrences) ? event.relatedOccurrences : [];
     var flyer = event.flyer && event.flyer.url ? event.flyer : null;
+    var media = Array.isArray(event.media) && event.media.length ? event.media : (flyer ? [flyer] : []);
+    var galleryKey = eventAnchor(event);
+    galleryEvents[galleryKey] = { title:event.title, media:media };
     var accessNote = event.accessStatus === "restricted" ? (event.accessNotes || "Attendance is restricted. Check the official details for eligibility.") : "";
     var scheduleLabel = SCHEDULE_LABELS[event.scheduleStatus] || "";
     var ticketLabel = TICKET_LABELS[event.ticketStatus] || "";
@@ -167,12 +172,13 @@
       '<div class="calendar-tags">' + labels.map(function (label) { return '<span class="calendar-tag">' + escapeHtml(label) + '</span>'; }).join("") + '</div>' +
       (relatedOccurrences.length ? '<div class="calendar-related-schedule"><span>Related schedule</span>' + relatedOccurrences.map(function (occurrence) { return '<a href="#' + eventAnchor(occurrence) + '"><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small></a>'; }).join("") + '</div>' : '') +
       (relatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + relatedLinks.map(function (link) { return '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(link.label) + '</a>'; }).join("") + '</div>' : '') +
-      (flyer ? '<details class="calendar-event-flyer"><summary>Show flyer</summary><div><img src="' + escapeHtml(flyer.url) + '" alt="' + escapeHtml(flyer.altText || event.title + " event flyer") + '" loading="lazy" decoding="async"' + (flyer.width ? ' width="' + Number(flyer.width) + '"' : '') + (flyer.height ? ' height="' + Number(flyer.height) + '"' : '') + '></div></details>' : '') +
+      (media.length ? '<details class="calendar-event-media"><summary>View media ('+media.length+')</summary><div class="calendar-media-grid">'+media.map(function(item,index){return '<button type="button" data-gallery-event="'+escapeHtml(galleryKey)+'" data-gallery-index="'+index+'" aria-label="View '+escapeHtml(item.altText||event.title+' event image')+'"><img src="'+escapeHtml(item.url)+'" alt="'+escapeHtml(item.altText||event.title+' event image')+'" loading="lazy" decoding="async"'+(item.width?' width="'+Number(item.width)+'"':'')+(item.height?' height="'+Number(item.height)+'"':'')+'>'+(item.caption?'<span>'+escapeHtml(item.caption)+'</span>':'')+'</button>';}).join("")+'</div></details>' : '') +
       '<div class="calendar-event-actions">' + officialAction + ticketAction + '<a class="is-secondary" href="/api/calendar/events/' + encodeURIComponent(event.id) + '.ics">Add this event to your calendar</a></div>' +
       '</article>';
   }
 
   function renderLists() {
+    galleryEvents = {};
     var onView = filtered.filter(isOnViewExhibition);
     var dated = filtered.filter(function (event) { return !isOnViewExhibition(event); });
     var upcoming = dated.filter(function (event) { return !isPast(event); });
@@ -258,6 +264,8 @@
   document.getElementById("nextMonth").addEventListener("click", function () { activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 1); applyFilters(); });
   grid.addEventListener("click", function (event) { var button = event.target.closest("button[data-date]"); if (button) renderAgenda(button.dataset.date); });
   document.addEventListener("click", function (event) {
+    var galleryButton=event.target.closest("[data-gallery-event]");
+    if(galleryButton){openGallery(galleryButton.dataset.galleryEvent,Number(galleryButton.dataset.galleryIndex)||0);return;}
     var control = event.target.closest("[data-description-toggle]");
     if (!control) return;
     var description = document.getElementById(control.getAttribute("aria-controls"));
@@ -267,6 +275,14 @@
     control.textContent = shouldExpand ? "See less" : "See more";
     description.classList.toggle("is-collapsed", !shouldExpand);
   });
+  function renderLightbox(){if(!activeGallery)return;var collection=galleryEvents[activeGallery.key];var item=collection&&collection.media[activeGallery.index];var dialog=document.getElementById("calendarMediaDialog");if(!dialog||!item)return;document.getElementById("calendarMediaTitle").textContent=collection.title+" / "+(activeGallery.index+1)+" of "+collection.media.length;var image=document.getElementById("calendarMediaImage");image.src=item.url;image.alt=item.altText||collection.title+" event image";document.getElementById("calendarMediaCaption").textContent=item.caption||"";document.getElementById("calendarMediaPrevious").disabled=collection.media.length<2;document.getElementById("calendarMediaNext").disabled=collection.media.length<2;}
+  function openGallery(key,index){if(!galleryEvents[key]||!galleryEvents[key].media.length)return;activeGallery={key:key,index:index};renderLightbox();var dialog=document.getElementById("calendarMediaDialog");if(!dialog.open)dialog.showModal();}
+  function shiftGallery(direction){if(!activeGallery)return;var collection=galleryEvents[activeGallery.key];activeGallery.index=(activeGallery.index+direction+collection.media.length)%collection.media.length;renderLightbox();}
+  document.getElementById("calendarMediaPrevious").addEventListener("click",function(){shiftGallery(-1);});
+  document.getElementById("calendarMediaNext").addEventListener("click",function(){shiftGallery(1);});
+  document.getElementById("calendarMediaClose").addEventListener("click",function(){document.getElementById("calendarMediaDialog").close();});
+  document.getElementById("calendarMediaDialog").addEventListener("click",function(event){if(event.target===this)this.close();});
+  document.addEventListener("keydown",function(event){var dialog=document.getElementById("calendarMediaDialog");if(!dialog.open)return;if(event.key==="Escape"){event.preventDefault();dialog.close();activeGallery=null;return;}if(event.key==="ArrowLeft"){event.preventDefault();shiftGallery(-1);}if(event.key==="ArrowRight"){event.preventDefault();shiftGallery(1);}});
   window.addEventListener("resize", scheduleDescriptionSync);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleDescriptionSync);
 

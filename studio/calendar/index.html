@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
-<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260819-link-intake">
+<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260819-candidate-research">
 </head>
 <body>
   <header class="studio-header">
@@ -31,6 +31,14 @@
     </nav>
 
     <section class="studio-view" data-panel="review">
+      <section class="strong-picks-panel" aria-labelledby="strongPicksTitle">
+        <header class="strong-picks-header">
+          <div><p class="eyebrow">Private Scout intelligence</p><h2 id="strongPicksTitle">Strong Picks</h2></div>
+          <button id="refreshStrongPicks" type="button">Refresh Picks</button>
+        </header>
+        <p class="view-note">New strong matches and material updates appear here by discovery date. Each entry links to its private candidate; nothing becomes public until you approve it.</p>
+        <div class="strong-picks-scroll" id="strongPicksList" aria-live="polite"></div>
+      </section>
       <form class="link-intake" id="linkIntakeForm">
         <label><span>Event link</span><input id="eventLinkInput" type="url" inputmode="url" autocomplete="url" placeholder="https://…" required></label>
         <button id="scoutLinkButton" type="submit">Scout Link</button>
@@ -76,6 +84,6 @@
     </section>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/studio/calendar/calendar.js?v=20260819-scout-guidance"></script>
+  <script src="/studio/calendar/calendar.js?v=20260819-candidate-research"></script>
 </body>
 </html>

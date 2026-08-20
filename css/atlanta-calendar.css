@@ -109,6 +109,29 @@ button.calendar-day { cursor:pointer; }
 .calendar-event-flyer[open] summary::after { content:"−"; }
 .calendar-event-flyer>div { display:grid; place-items:center; padding:12px; background:#090909; }
 .calendar-event-flyer img { display:block; width:100%; max-height:720px; object-fit:contain; }
+.calendar-event-media { margin-top:18px; border:5px solid var(--ring-faint); }
+.calendar-event-media summary { min-height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 12px; color:var(--text); font:900 9px/1 var(--font-display); letter-spacing:.12em; text-transform:uppercase; cursor:pointer; list-style:none; }
+.calendar-event-media summary::-webkit-details-marker { display:none; }
+.calendar-event-media summary::after { content:"+"; color:var(--calendar-accent); font-size:18px; }
+.calendar-event-media[open] summary { border-bottom:5px solid var(--ring-faint); }
+.calendar-event-media[open] summary::after { content:"−"; }
+.calendar-media-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:12px; background:#090909; }
+.calendar-media-grid button { min-width:0; display:grid; gap:7px; border:5px solid var(--ring-faint); padding:0; background:var(--color-bg); color:var(--text); cursor:pointer; text-align:left; }
+.calendar-media-grid button:hover,.calendar-media-grid button:focus-visible { border-color:var(--calendar-accent); outline:none; }
+.calendar-media-grid img { display:block; width:100%; height:190px; object-fit:cover; }
+.calendar-media-grid span { padding:0 9px 9px; color:var(--text-dim); font-size:10px; line-height:1.45; }
+.calendar-media-dialog { width:min(1000px,calc(100vw - 32px)); max-height:calc(100vh - 32px); border:5px solid var(--calendar-accent); padding:16px; background:var(--color-bg); color:var(--text); }
+.calendar-media-dialog::backdrop { background:rgba(0,0,0,.88); }
+.calendar-media-dialog-head,.calendar-media-dialog-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.calendar-media-dialog-head { border-bottom:5px solid var(--ring-faint); padding-bottom:12px; }
+.calendar-media-dialog-head h2 { margin:0; font-size:clamp(18px,3vw,28px); }
+.calendar-media-dialog button { min-height:44px; border:5px solid var(--ring-faint); padding:0 12px; background:transparent; color:var(--text); font:900 9px/1 var(--font-display); letter-spacing:.12em; text-transform:uppercase; cursor:pointer; }
+.calendar-media-dialog button:hover,.calendar-media-dialog button:focus-visible { border-color:var(--calendar-accent); outline:none; }
+.calendar-media-stage { display:grid; place-items:center; min-height:260px; padding:14px; background:#090909; }
+.calendar-media-stage img { display:block; max-width:100%; max-height:calc(100vh - 230px); object-fit:contain; }
+.calendar-media-stage p { width:100%; margin:10px 0 0; color:var(--text-dim); line-height:1.5; }
+.calendar-media-stage p:empty { display:none; }
+.calendar-media-dialog-actions { border-top:5px solid var(--ring-faint); padding-top:12px; }
 .calendar-event-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:auto; padding-top:22px; }
 .calendar-event-actions a { min-height:44px; display:inline-flex; align-items:center; border:5px solid var(--calendar-accent); padding:0 12px; color:var(--text); font:900 9px/1 var(--font-display); letter-spacing:.12em; text-decoration:none; text-transform:uppercase; }
 .calendar-event-actions a:hover,
@@ -147,6 +170,8 @@ button.calendar-day { cursor:pointer; }
   .calendar-related-schedule a { grid-template-columns:minmax(0,1fr); }
   .calendar-related-schedule small { text-align:left; }
   .calendar-day-agenda a { grid-template-columns:minmax(0,1fr); }
+  .calendar-media-grid { grid-template-columns:minmax(0,1fr); }
+  .calendar-media-grid img { height:auto; max-height:420px; object-fit:contain; }
 }
 
 @media (max-width:390px) {
