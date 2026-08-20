@@ -207,9 +207,15 @@ WHERE candidate_id IN (
 -- SYNERGY remains in the private queue because the official Kai Lin source no
 -- longer exposes a confirmable start date. It must not be published with an
 -- invented date.
-DELETE FROM calendar_entries WHERE candidate_id='cal_candidate_synergy';
+DELETE FROM calendar_entries
+WHERE candidate_id IN (
+  SELECT id FROM calendar_candidates
+  WHERE id='cal_candidate_synergy'
+     OR source_url='https://www.kailinart.com/news/synergy-opening-at-annex'
+);
 
 UPDATE calendar_candidates
 SET status='needs_verification',verification_state='needs_verification',monitoring_enabled=1,
     public_entry_id='',next_check_at=datetime('now'),updated_at=datetime('now')
-WHERE id='cal_candidate_synergy';
+WHERE id='cal_candidate_synergy'
+   OR source_url='https://www.kailinart.com/news/synergy-opening-at-annex';

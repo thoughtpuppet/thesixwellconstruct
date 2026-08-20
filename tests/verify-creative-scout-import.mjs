@@ -88,8 +88,15 @@ const synergy = db.prepare(`
   SELECT status,verification_state,public_entry_id
   FROM calendar_candidates WHERE id='cal_candidate_synergy'
 `).get();
+const publicSynergy = db.prepare(`
+  SELECT count(*) n
+  FROM calendar_entries e
+  JOIN calendar_candidates c ON c.id=e.candidate_id
+  WHERE c.id='cal_candidate_synergy'
+     OR c.source_url='https://www.kailinart.com/news/synergy-opening-at-annex'
+`).get();
 
-if (synergy.status !== 'needs_verification' || synergy.public_entry_id) {
+if (synergy.status !== 'needs_verification' || synergy.public_entry_id || publicSynergy.n !== 0) {
   throw new Error(`SYNERGY must remain private until its dates are verified: ${JSON.stringify(synergy)}`);
 }
 
@@ -107,7 +114,9 @@ const publicTitles = [...publicPayload.events, ...publicPayload.series].map((eve
 for (const title of ["Words on Wylie 2026", "Cut Corners Presents: GRRL", "SITE 2026", "A Measure Without"]) {
   if (!publicTitles.includes(title)) throw new Error(`Expected ${title} on the public calendar.`);
 }
-if (publicTitles.includes("SYNERGY")) throw new Error("SYNERGY leaked onto the public calendar.");
+if (publicTitles.some((title) => title.startsWith("SYNERGY"))) {
+  throw new Error("SYNERGY leaked onto the public calendar.");
+}
 
 const feedResponse = await handleCalendarFeed(
   new Request("https://example.test/calendars/atlanta.ics"),
