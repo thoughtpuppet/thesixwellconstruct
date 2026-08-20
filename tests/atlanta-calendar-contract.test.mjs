@@ -2244,6 +2244,60 @@ test("candidate research preserves field changes when equivalent official citati
   }
 });
 
+test("candidate research repairs a confirmed venue address when the first response omits record changes", async () => {
+  const db = database();
+  const candidateId = "cal_candidate_sound_vision";
+  const officialUrl = "https://www.atlantafilmsociety.org/upcoming-events/sound-vision";
+  db.prepare("UPDATE calendar_candidates SET venue_address='' WHERE id=?").run(candidateId);
+  const runtime = env(db, { OPENAI_API_KEY:"test-key" });
+  const originalFetch = globalThis.fetch;
+  const requestBodies = [];
+  globalThis.fetch = async (url, init = {}) => {
+    assert.equal(String(url),"https://api.openai.com/v1/responses");
+    const body = JSON.parse(init.body);
+    requestBodies.push(body);
+    if (requestBodies.length === 1) return Response.json({
+      id:"resp_candidate_missing_change",
+      output:[
+        { type:"web_search_call", action:{ sources:[{ url:officialUrl,title:"Official event page" }] } },
+        { type:"message", content:[{ type:"output_text", text:JSON.stringify({
+          reply:"I confirmed the venue address and prepared the update for review.",
+          findings:[{text:"The official page lists 1401 Peachtree Street NE, Ste. A200, Atlanta, GA 30309.",status:"confirmed",citations:[officialUrl]}],
+          changes:[],eventMemories:[],sourceRuleSuggestions:[],
+        }) }] },
+      ],usage:{input_tokens:90,output_tokens:40,total_tokens:130},
+    });
+    return Response.json({
+      id:"resp_candidate_repaired_change",
+      output:[{type:"message",content:[{type:"output_text",text:JSON.stringify({changes:[{
+        id:"repaired-venue-address",path:"venueAddress",label:"Venue address",
+        valueJson:JSON.stringify("1401 Peachtree Street NE, Ste. A200, Atlanta, GA 30309"),
+        rationale:"The confirmed official event page supplies the missing address.",confidence:.98,citations:[officialUrl],
+      }]})}]}],
+      usage:{input_tokens:50,output_tokens:30,total_tokens:80},
+    });
+  };
+  try {
+    const response = await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/messages`, {
+      method:"POST",admin:true,body:{message:"Verify and correct the venue address."},
+    }),runtime);
+    assert.equal(response.status,201,await response.clone().text());
+    const result = await response.json();
+    const proposal = result.research.proposals[0];
+    assert.equal(requestBodies.length,2);
+    assert.equal(requestBodies[1].tools,undefined);
+    assert.match(requestBodies[1].instructions,/confirmed sourced facts but omitted its record changes/i);
+    assert.equal(proposal.changes.length,1);
+    assert.equal(proposal.changes[0].path,"venueAddress");
+    assert.equal(proposal.changes[0].before,"");
+    assert.equal(proposal.changes[0].value,"1401 Peachtree Street NE, Ste. A200, Atlanta, GA 30309");
+    assert.deepEqual(proposal.changes[0].citations,[officialUrl]);
+    assert.equal(db.prepare("SELECT venue_address FROM calendar_candidates WHERE id=?").get(candidateId).venue_address,"");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("approved research media captures privately without a record cap and snapshots only selected gallery items", async () => {
   const db = database();
   const bucket = new MemoryBucket();

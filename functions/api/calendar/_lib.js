@@ -2381,6 +2381,17 @@ function researchSchema() {
   };
 }
 
+function researchChangeSchema() {
+  return researchSchema().properties.changes;
+}
+
+function researchRepairSchema() {
+  return {
+    type:"object", additionalProperties:false, required:["changes"],
+    properties:{changes:researchChangeSchema()},
+  };
+}
+
 function researchValue(value) {
   if (typeof value !== "string") return value;
   try { return JSON.parse(value); } catch { return value; }
@@ -2541,9 +2552,39 @@ async function requestCandidateResearch(env, db, candidate, thread, instruction)
     text:asString(item.text).slice(0,3000),status:["confirmed","conflict","unknown"].includes(item.status)?item.status:"unknown",
     citations:resolveResearchCitations(item.citations,allowed),
   })).filter((item)=>item.text);
-  const changes=parsed.changes.slice(0,40).map((item)=>normalizeResearchChange(item,candidate,allowed)).filter(Boolean);
+  let changes=parsed.changes.slice(0,40).map((item)=>normalizeResearchChange(item,candidate,allowed)).filter(Boolean);
+  let usage=payload.usage||{};
+  if (!changes.length && findings.some((item)=>item.status==="confirmed" && item.citations.length)) {
+    const repairBody={
+      model,
+      instructions:[
+        "You repair a structured Atlanta Calendar research response that confirmed sourced facts but omitted its record changes.",
+        "Compare the confirmed findings and reply with the current candidate snapshot. Return a field-level change for every missing, corrected, or more precise value supported by the cited evidence. Return no change when the stored value already matches.",
+        "Use only the supplied citation URLs, preserve their exact spelling, and return valueJson as valid JSON. Never publish, approve, or alter the candidate.",
+      ].join(" "),
+      input:JSON.stringify({instruction,candidate,reply:parsed.reply,findings,originalChanges:parsed.changes,allowedCitationUrls:[...allowed.values()]}).slice(0,90_000),
+      text:{format:{type:"json_schema",name:"calendar_candidate_research_change_repair",strict:true,schema:researchRepairSchema()}},
+    };
+    const repairResponse=await fetch("https://api.openai.com/v1/responses",{
+      method:"POST",headers:{authorization:`Bearer ${env.OPENAI_API_KEY}`,"content-type":"application/json"},
+      signal:AbortSignal.timeout(OPENAI_TIMEOUT_MS),body:JSON.stringify(repairBody),
+    });
+    const repairPayload=parseJson(await boundedResponseText(repairResponse),{});
+    if (repairResponse.ok) {
+      const repairParsed=parseJson(outputText(repairPayload),null);
+      if (repairParsed && Array.isArray(repairParsed.changes)) {
+        changes=repairParsed.changes.slice(0,40).map((item)=>normalizeResearchChange(item,candidate,allowed)).filter(Boolean);
+      }
+      usage={
+        ...usage,
+        input_tokens:Number(usage.input_tokens||0)+Number(repairPayload.usage?.input_tokens||0),
+        output_tokens:Number(usage.output_tokens||0)+Number(repairPayload.usage?.output_tokens||0),
+        total_tokens:Number(usage.total_tokens||0)+Number(repairPayload.usage?.total_tokens||0),
+      };
+    }
+  }
   return {
-    model,payload,reply:asString(parsed.reply).slice(0,12_000),findings,changes,citations:webCitations,
+    model,payload:{...payload,usage},reply:asString(parsed.reply).slice(0,12_000),findings,changes,citations:webCitations,
     eventMemories:(Array.isArray(parsed.eventMemories)?parsed.eventMemories:[]).map(asString).filter(Boolean).slice(0,12),
     sourceRuleSuggestions:(Array.isArray(parsed.sourceRuleSuggestions)?parsed.sourceRuleSuggestions:[]).map(asString).filter(Boolean).slice(0,6),
   };
