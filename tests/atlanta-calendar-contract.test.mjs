@@ -85,14 +85,14 @@ async function admin(db, path, options = {}) {
 
 test("calendar migrations preserve seeded private candidates, verified official sources, and no public curated snapshots", () => {
   const db = database();
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 13);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE verification_state='verified'").get().count, 10);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 19);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE verification_state='verified'").get().count, 15);
   assert.deepEqual(
     { ...db.prepare("SELECT status,starts_at,verification_state FROM calendar_candidates WHERE id='cal_candidate_synergy'").get() },
     { status:"needs_verification", starts_at:null, verification_state:"needs_verification" },
   );
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE pending_revision_id<>''").get().count, 12);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE pending_revision_id<>''").get().count, 18);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE id LIKE 'cal_source_gsu_%'").get().count, 15);
   assert.deepEqual(
     { ...db.prepare("SELECT adapter_key,render_mode,source_type,trust_level FROM calendar_sources WHERE url='https://www.eventbrite.com/d/ga--atlanta/events/'").get() },
@@ -247,7 +247,7 @@ test("multi-day timed exhibitions become on-view ranges instead of continuous da
 
 test("social scout preserves calendar data, stages connectors disabled, and lists configured accounts", async () => {
   const db = database();
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 13);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates").get().count, 19);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_scout_connectors WHERE id IN ('threads_api','instagram_api','threads_web','instagram_web','tiktok_web') AND enabled=0").get().count, 5);
   assert.equal(db.prepare("SELECT discovery_channel FROM calendar_candidates LIMIT 1").get().discovery_channel, "");
@@ -2413,6 +2413,7 @@ test("Calendar Studio exposes editable guidance, known organization memory, and 
 
 test("Studio verification links and the public expandable flyer stay inline without detail-page routes", () => {
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
   const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
   const publicCss = readFileSync(join(ROOT,"css","atlanta-calendar.css"),"utf8");
   assert.match(studio,/Open original source/);
@@ -2431,6 +2432,10 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(studio,/Research with Scout/);
   assert.match(studio,/Remembered for this event/);
   assert.match(studio,/Apply selected changes/);
+  assert.match(studio,/Select all remaining/);
+  assert.match(studio,/syncResearchSelection/);
+  assert.match(studio,/data-research-change\]:checked/);
+  assert.match(studioCss,/\.research-change>input\[type="checkbox"\][^}]*appearance:auto/);
   assert.match(studio,/\/research\/messages/);
   assert.match(studio,/Private social evidence/);
   assert.match(studio,/Open registered profile/);
@@ -2441,6 +2446,13 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(studio,/Attendance access/);
   assert.match(studio,/Public access note/);
   assert.match(studio,/Restricted access is published on the event card, API, and calendar feeds/);
+  assert.match(studio,/type:\s*candidate\.dateKind==="timed"\?"datetime-local":"date"/);
+  assert.match(studio,/calendarPayloadValue\(value\("candidateDateKind"\)/);
+  assert.match(studio,/Studio adds the time-zone offset automatically/);
+  assert.match(studio,/Series means multiple separately dated programs/);
+  assert.match(studio,/data-use-single-event/);
+  assert.match(studio,/Fix the highlighted schedule before publishing/);
+  assert.match(studioCss,/\.candidate-schedule-guidance\.has-warning/);
   assert.match(studio,/data-run-source/);
   assert.match(studio,/Run This Source/);
   assert.match(studio,/Eventbrite discovery/);
@@ -2759,8 +2771,9 @@ test("scheduled Creative Scout handoffs create dated strong picks without repeat
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_scout_strong_picks WHERE candidate_id=?").get(candidateId).count, 3);
 
   const list = await (await admin(db, "/strong-picks")).json();
-  assert.equal(list.strongPicks.length, 3);
-  assert.equal(list.strongPicks[0].detectedAt, "2026-08-22T18:00:00.000Z");
+  const eventPicks = list.strongPicks.filter((pick) => pick.candidateId === candidateId);
+  assert.equal(eventPicks.length, 3);
+  assert.equal(eventPicks[0].detectedAt, "2026-08-22T18:00:00.000Z");
   const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
   assert.equal(publicPayload.events.some((item) => item.title === event.title), false);
   assert.doesNotMatch(JSON.stringify(publicPayload), /privateRationale|attendanceUse|programmingIdeas|potentialCollaborators/);
