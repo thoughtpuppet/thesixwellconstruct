@@ -95,7 +95,7 @@ test("calendar migrations preserve seeded private candidates, verified official 
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_event_suppressions").get().count, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_event_suppression_keys").get().count, 0);
   assert.equal(db.prepare("SELECT suppressed_count FROM calendar_scout_runs LIMIT 1").get()?.suppressed_count || 0, 0);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE pending_revision_id<>''").get().count, 18);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE pending_revision_id<>''").get().count, 16);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE id LIKE 'cal_source_gsu_%'").get().count, 15);
   assert.deepEqual(
     { ...db.prepare("SELECT adapter_key,render_mode,source_type,trust_level FROM calendar_sources WHERE url='https://www.eventbrite.com/d/ga--atlanta/events/'").get() },
@@ -109,6 +109,26 @@ test("calendar migrations preserve seeded private candidates, verified official 
   assert.equal(poshSource.name, "Posh Atlanta");
   assert.match(poshSource.url, /^https:\/\/posh\.vip\/explore\?location=/);
   assert.deepEqual(JSON.parse(poshSource.adapter_config_json).city, "Atlanta");
+  const eyedrumSource = db.prepare("SELECT adapter_config_json FROM calendar_sources WHERE id='cal_source_eyedrum'").get();
+  assert.deepEqual(JSON.parse(eyedrumSource.adapter_config_json).recurringSeries[0], {
+    id:"monday-night-creative-music",
+    title:"Monday Night Creative Music",
+    prefixes:["Monday Night Creative Music Series","Monday Night Creative Music"],
+    stableSourceIdentity:"eyedrum-series-monday-night-creative-music",
+    defaultOccurrenceType:"performance",
+    description:"Eyedrum's recurring experimental and improvised creative-music performance series with a separately announced lineup for each date.",
+  });
+  assert.deepEqual(
+    { ...db.prepare("SELECT title,event_structure,date_kind,starts_at,ends_at,source_event_id FROM calendar_candidates WHERE id='cal_candidate_eyedrum_anniversary'").get() },
+    { title:"Monday Night Creative Music", event_structure:"series", date_kind:"date_range", starts_at:"2026-09-14", ends_at:"2026-09-21", source_event_id:"eyedrum-series-monday-night-creative-music" },
+  );
+  assert.deepEqual(
+    db.prepare("SELECT title,starts_at FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_eyedrum_anniversary' ORDER BY starts_at").all().map((row) => ({ ...row })),
+    [
+      { title:"One Year Anniversary Party", starts_at:"2026-09-14T20:00:00-04:00" },
+      { title:"Angela Winter with Dylan Mantione and Aaron Kruziki", starts_at:"2026-09-21T20:00:00-04:00" },
+    ],
+  );
   const scoutProfile = db.prepare("SELECT geographic_rules_json,negative_terms_json,source_resolution_rules FROM calendar_scout_profiles WHERE id='atlanta-default'").get();
   assert.equal(JSON.parse(scoutProfile.geographic_rules_json).includeOnlineOnly, true);
   assert.equal(JSON.parse(scoutProfile.negative_terms_json).includes("online only"), false);
@@ -272,6 +292,27 @@ test("multi-day timed exhibitions become on-view ranges instead of continuous da
     { ...db.prepare("SELECT event_structure,date_kind,starts_at,ends_at FROM calendar_candidates WHERE id=?").get(candidate.id) },
     { event_structure:"exhibition", date_kind:"date_range", starts_at:"2026-03-27", ends_at:"2026-09-05" },
   );
+});
+
+test("calendar description normalization removes encoded markup before storage and public output", async () => {
+  const db = database();
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Encoded Description Exhibition", organizer:"Atlanta Gallery",
+      factualDescription:"&lt;p&gt;A &amp; B exhibition.&lt;/p&gt;\\N&lt;p&gt;Second line.&lt;/p&gt;",
+      sourceUrl:"https://gallery.example/events/encoded-description", organizerUrl:"https://gallery.example/events/encoded-description",
+      sourceAuthority:"organizer_event", dateKind:"timed", startsAt:"2026-09-12T18:00:00-04:00", endsAt:"2026-09-12T20:00:00-04:00",
+      venueName:"Atlanta Gallery", venueAddress:"10 Gallery Way, Atlanta, GA", subjects:["art"], formats:["exhibition"], verificationState:"verified",
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const candidate = (await created.json()).candidate;
+  assert.equal(candidate.factualDescription, "A & B exhibition. Second line.");
+  assert.equal(db.prepare("SELECT factual_description FROM calendar_candidates WHERE id=?").get(candidate.id).factual_description, "A & B exhibition. Second line.");
+  assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 200);
+  const payload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+  assert.equal(payload.events.find((event) => event.title === "Encoded Description Exhibition").description, "A & B exhibition. Second line.");
 });
 
 test("social scout preserves calendar data, stages connectors disabled, and lists configured accounts", async () => {
@@ -1734,6 +1775,210 @@ test("successful source retrieval with zero extracted proposals is recorded as a
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("Eyedrum's configured creative-music series groups lineup aliases and retains dates missing from a truncated scan", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_eyedrum'");
+  const sourceUrl = "https://www.eyedrum.org/calendar-events-performances-art-music";
+  const article = ({ slug, title, start, end, description="An experimental creative music performance at Eyedrum." }) => `<article class="eventlist-event eventlist-event--upcoming">
+    <h1 class="eventlist-title"><a href="/calendar-events-performances-art-music/${slug}" class="eventlist-title-link">${title}</a></h1>
+    <ul class="eventlist-meta event-meta">
+      <li class="eventlist-meta-item eventlist-meta-address">Eyedrum <a href="https://maps.google.com?q=515%20Ralph%20David%20Abernathy%20Boulevard%20SW%20Atlanta%20GA%2030312" class="eventlist-meta-address-maplink">(map)</a></li>
+      <li class="eventlist-meta-item eventlist-meta-export"><a href="https://www.google.com/calendar/event?action=TEMPLATE&amp;text=${encodeURIComponent(title)}&amp;dates=${start}/${end}" class="eventlist-meta-export-google">Google Calendar</a></li>
+    </ul>
+    <div class="eventlist-description"><p>${description}</p><a href="/calendar-events-performances-art-music/${slug}" class="eventlist-button">View Event</a></div>
+  </article>`;
+  const html = `<html><body>${article({
+    slug:"mncm-danny-kamins", title:"Monday Night Creative Music — Danny Kamins / Majid Araim / Zandia Covington and S’aints",
+    start:"20260908T000000Z", end:"20260908T023000Z",
+  })}${article({
+    slug:"angela-winter-2026-09-21", title:"Monday Night Creative Music: Angela Winter + Dylan Mantione + Aaron Kruziki",
+    start:"20260922T000000Z", end:"20260922T023000Z",
+  })}${article({
+    slug:"mncm-angela-alias", title:"Monday Night Creative Music Series: Angela Winter plus Dylan Mantione and Aaron Kruziki",
+    start:"20260922T000000Z", end:"20260922T023000Z",
+  })}${article({
+    slug:"mncm-showcase-unmatched", title:"Monday Night Creative Music Showcase",
+    start:"20261006T000000Z", end:"20261006T023000Z",
+  })}</body></html>`;
+  let fetchedHtml = html;
+  const before = db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_eyedrum_anniversary'").get().count;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), sourceUrl);
+    return new Response(fetchedHtml, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_eyedrum" });
+    assert.equal(run.status, "completed");
+    assert.equal(run.warnings, 0);
+    assert.equal(before, 2);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_eyedrum_anniversary'").get().count, 2);
+    const parent = db.prepare("SELECT title,starts_at,ends_at,pending_revision_id FROM calendar_candidates WHERE id='cal_candidate_eyedrum_anniversary'").get();
+    assert.deepEqual({ title:parent.title, startsAt:parent.starts_at, endsAt:parent.ends_at }, {
+      title:"Monday Night Creative Music", startsAt:"2026-09-14", endsAt:"2026-09-21",
+    });
+    assert.ok(parent.pending_revision_id);
+    const proposal = JSON.parse(db.prepare("SELECT snapshot_json FROM calendar_candidate_revisions WHERE id=?").get(parent.pending_revision_id).snapshot_json);
+    assert.equal(proposal.title, "Monday Night Creative Music");
+    assert.equal(proposal.eventStructure, "series");
+    assert.equal(proposal.startsAt, "2026-09-07");
+    assert.equal(proposal.endsAt, "2026-09-21");
+    assert.deepEqual(proposal.occurrences.map((occurrence) => [occurrence.title,occurrence.startsAt]), [
+      ["Danny Kamins / Majid Araim / Zandia Covington and S’aints","2026-09-08T00:00:00Z"],
+      ["One Year Anniversary Party","2026-09-14T20:00:00-04:00"],
+      ["Angela Winter with Dylan Mantione and Aaron Kruziki","2026-09-22T00:00:00Z"],
+    ]);
+    assert.equal(proposal.occurrences.filter((occurrence) => /Angela Winter/.test(occurrence.title)).length, 1);
+    assert.equal(proposal.occurrences.some((occurrence) => occurrence.status === "cancelled"), false);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE title='Monday Night Creative Music Showcase'").get().count, 1);
+
+    fetchedHtml = `<html><body>${article({
+      slug:"angela-winter-2026-09-21", title:"Monday Night Creative Music: Angela Winter plus Dylan Mantione and Aaron Kruziki",
+      start:"20260922T000000Z", end:"20260922T023000Z", description:"This exact Eyedrum performance listing is cancelled.",
+    })}</body></html>`;
+    const cancellationRun = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_eyedrum" });
+    assert.equal(cancellationRun.status, "completed");
+    const afterCancellationCheck = db.prepare("SELECT pending_revision_id FROM calendar_candidates WHERE id='cal_candidate_eyedrum_anniversary'").get();
+    const cancellationProposal = JSON.parse(db.prepare("SELECT snapshot_json FROM calendar_candidate_revisions WHERE id=?").get(afterCancellationCheck.pending_revision_id).snapshot_json);
+    assert.equal(cancellationProposal.occurrences.find((occurrence) => /Angela Winter/.test(occurrence.title)).status, "cancelled");
+    assert.equal(cancellationProposal.occurrences.some((occurrence) => /Danny Kamins/.test(occurrence.title)), true);
+    assert.equal(db.prepare("SELECT status FROM calendar_candidate_occurrences WHERE id='cal_occurrence_mncm_angela_20260921'").get().status, "scheduled");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("migration 0159 consolidates five published creative-music records into four stable public occurrences", async () => {
+  const db = databaseThrough("0158_calendar_public_submissions.sql");
+  const sourceUrl = "https://www.eyedrum.org/calendar-events-performances-art-music";
+  db.exec(`
+    UPDATE calendar_candidates SET
+      source_url='${sourceUrl}/monday-night-creative-music-one-year-anniversary',
+      status='published',public_entry_id='cal_entry_mncm_anniversary'
+    WHERE id='cal_candidate_eyedrum_anniversary';
+    UPDATE calendar_candidates SET
+      status='published',public_entry_id='cal_entry_mncm_angela_early'
+    WHERE id='cal_candidate_eyedrum_winter';
+
+    INSERT INTO calendar_candidates
+      (id,source_id,source_event_id,source_url,title,organizer,factual_description,date_kind,starts_at,ends_at,
+       timezone,venue_name,venue_address,subjects_json,formats_json,is_experimental,status,verification_state,
+       verification_notes,confidence,public_entry_id,pending_revision_id,discovered_by,first_seen_at,created_at,updated_at)
+    VALUES
+      ('cal_candidate_mncm_danny','cal_source_eyedrum','mncm-danny','${sourceUrl}/mncm-danny',
+       'Monday Night Creative Music: Danny Kamins / Majid Araim / Zandia Covington and S’aints','Eyedrum',
+       'Danny Kamins, Majid Araim, Zandia Covington and S’aints perform experimental music.','timed','2026-09-08T00:00:00Z','2026-09-08T02:30:00Z',
+       'America/New_York','Eyedrum','515 Ralph David Abernathy Boulevard SW, Atlanta, GA 30312','["poetry-music"]','["performance"]',1,
+       'published','verified','Verified from the exact Eyedrum detail listing.',0.98,'cal_entry_mncm_danny','','source_monitor',datetime('now'),datetime('now'),datetime('now')),
+      ('cal_candidate_mncm_angela_detail','cal_source_eyedrum','angela-winter-detail','${sourceUrl}/angela-winter-dylan-mantione-aaron-kruziki',
+       'Monday Night Creative Music Series: Angela Winter plus Dylan Mantione and Aaron Kruziki','Eyedrum',
+       'Angela Winter performs with Dylan Mantione and Aaron Kruziki in an ambient, ritual, experimental program with expanded official detail.','timed','2026-09-22T00:00:00Z','2026-09-22T02:30:00Z',
+       'America/New_York','Eyedrum','515 Ralph David Abernathy Boulevard SW, Atlanta, GA 30312','["poetry-music"]','["performance","experimental-event"]',1,
+       'published','verified','Verified from the richer exact Eyedrum detail listing.',0.99,'cal_entry_mncm_angela_later','','source_monitor',datetime('now'),datetime('now'),datetime('now')),
+      ('cal_candidate_mncm_toby','cal_source_eyedrum','mncm-toby','${sourceUrl}/mncm-toby',
+       'Monday Night Creative Music — Toby Summerfield plus Jeffrey Bützer’s Academy of Staring Daggers','Eyedrum',
+       'Toby Summerfield performs with Jeffrey Bützer’s Academy of Staring Daggers.','timed','2026-09-29T00:00:00Z','2026-09-29T02:30:00Z',
+       'America/New_York','Eyedrum','515 Ralph David Abernathy Boulevard SW, Atlanta, GA 30312','["poetry-music"]','["performance"]',1,
+       'published','verified','Verified from the exact Eyedrum detail listing.',0.98,'cal_entry_mncm_toby','cal_revision_mncm_toby_pending','source_monitor',datetime('now'),datetime('now'),datetime('now'));
+
+    INSERT INTO calendar_entries
+      (id,candidate_id,uid,sequence,status,source_url,title,starts_at,published_at,last_modified_at)
+    VALUES
+      ('cal_entry_mncm_danny','cal_candidate_mncm_danny','uid-mncm-danny',0,'published','${sourceUrl}/mncm-danny','Monday Night Creative Music: Danny Kamins / Majid Araim / Zandia Covington and S’aints','2026-09-08T00:00:00-04:00','2026-08-19T10:00:00Z','2026-08-19T10:00:00Z'),
+      ('cal_entry_mncm_anniversary','cal_candidate_eyedrum_anniversary','uid-mncm-anniversary',5,'published','${sourceUrl}/monday-night-creative-music-one-year-anniversary','Monday Night Creative Music: One Year Anniversary Party','2026-09-14T20:00:00-04:00','2026-08-18T10:00:00Z','2026-08-18T10:00:00Z'),
+      ('cal_entry_mncm_angela_early','cal_candidate_eyedrum_winter','uid-mncm-angela-earliest',2,'published','${sourceUrl}','Monday Night Creative Music: Angela Winter + Dylan Mantione + Aaron Kruziki','2026-09-21T20:00:00-04:00','2026-08-10T10:00:00Z','2026-08-10T10:00:00Z'),
+      ('cal_entry_mncm_angela_later','cal_candidate_mncm_angela_detail','uid-mncm-angela-later',0,'published','${sourceUrl}/angela-winter-dylan-mantione-aaron-kruziki','Monday Night Creative Music Series: Angela Winter plus Dylan Mantione and Aaron Kruziki','2026-09-22T00:00:00-04:00','2026-08-20T10:00:00Z','2026-08-20T10:00:00Z'),
+      ('cal_entry_mncm_toby','cal_candidate_mncm_toby','uid-mncm-toby',4,'published','${sourceUrl}/mncm-toby','Monday Night Creative Music — Toby Summerfield plus Jeffrey Bützer’s Academy of Staring Daggers','2026-09-29T00:00:00-04:00','2026-08-21T10:00:00Z','2026-08-21T10:00:00Z');
+
+    INSERT INTO calendar_candidate_revisions
+      (id,candidate_id,revision_number,revision_state,snapshot_json,provenance_json,change_summary,created_by,created_at)
+    VALUES('cal_revision_mncm_toby_pending','cal_candidate_mncm_toby',1,'pending','{}','[]','Stale standalone update.','scout',datetime('now'));
+
+    INSERT INTO calendar_candidate_links
+      (id,candidate_id,label,url,provenance_url,include_public,sort_order,created_at,updated_at,link_role,credit_role)
+    VALUES('cal_link_mncm_toby_artist','cal_candidate_mncm_toby','Toby Summerfield','https://artist.example/toby','${sourceUrl}/mncm-toby',1,0,datetime('now'),datetime('now'),'artist','Performer');
+
+    INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,alt_text,created_at,updated_at)
+    VALUES('media_mncm_toby','${sourceUrl}/mncm-toby','calendar/mncm-toby.jpg','mncm-toby.jpg','image/jpeg',1200,'Toby Summerfield performance flyer',datetime('now'),datetime('now'));
+    INSERT INTO calendar_candidate_media
+      (id,candidate_id,media_id,source_url,provenance_url,media_role,alt_text,caption,include_public,sort_order,created_at,updated_at)
+    VALUES('cal_media_mncm_toby','cal_candidate_mncm_toby','media_mncm_toby','${sourceUrl}/mncm-toby-flyer.jpg','${sourceUrl}/mncm-toby','flyer','Toby Summerfield performance flyer','',1,0,datetime('now'),datetime('now'));
+    INSERT INTO calendar_entry_media
+      (id,entry_id,candidate_media_id,media_id,media_role,alt_text,caption,sort_order)
+    VALUES('cal_entry_media_mncm_toby','cal_entry_mncm_toby','cal_media_mncm_toby','media_mncm_toby','flyer','Toby Summerfield performance flyer','',0);
+  `);
+
+  db.exec(readFileSync(join(ROOT,"migrations","0159_calendar_eyedrum_monday_night_series.sql"),"utf8"));
+
+  assert.deepEqual(
+    { ...db.prepare("SELECT title,status,event_structure,date_kind,starts_at,ends_at,source_event_id,public_entry_id FROM calendar_candidates WHERE id='cal_candidate_eyedrum_anniversary'").get() },
+    { title:"Monday Night Creative Music", status:"published", event_structure:"series", date_kind:"date_range", starts_at:"2026-09-07", ends_at:"2026-09-28", source_event_id:"eyedrum-series-monday-night-creative-music", public_entry_id:"cal_entry_mncm_anniversary" },
+  );
+  assert.deepEqual(
+    db.prepare("SELECT title,starts_at,ends_at,source_url FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_eyedrum_anniversary' ORDER BY starts_at").all().map((row) => ({ ...row })),
+    [
+      { title:"Danny Kamins / Majid Araim / Zandia Covington and S’aints", starts_at:"2026-09-07T20:00:00-04:00", ends_at:"2026-09-07T22:30:00-04:00", source_url:`${sourceUrl}/mncm-danny` },
+      { title:"One Year Anniversary Party", starts_at:"2026-09-14T20:00:00-04:00", ends_at:"2026-09-14T22:30:00-04:00", source_url:`${sourceUrl}/monday-night-creative-music-one-year-anniversary` },
+      { title:"Angela Winter with Dylan Mantione and Aaron Kruziki", starts_at:"2026-09-21T20:00:00-04:00", ends_at:"2026-09-21T22:30:00-04:00", source_url:`${sourceUrl}/angela-winter-dylan-mantione-aaron-kruziki` },
+      { title:"Toby Summerfield with Jeffrey Bützer’s Academy of Staring Daggers", starts_at:"2026-09-28T20:00:00-04:00", ends_at:"2026-09-28T22:30:00-04:00", source_url:`${sourceUrl}/mncm-toby` },
+    ],
+  );
+  assert.deepEqual(
+    db.prepare("SELECT title,uid,sequence FROM calendar_entry_occurrences ORDER BY starts_at").all().map((row) => ({ ...row })),
+    [
+      { title:"Monday Night Creative Music — Danny Kamins / Majid Araim / Zandia Covington and S’aints", uid:"uid-mncm-danny", sequence:1 },
+      { title:"Monday Night Creative Music — One Year Anniversary Party", uid:"uid-mncm-anniversary", sequence:6 },
+      { title:"Monday Night Creative Music — Angela Winter with Dylan Mantione and Aaron Kruziki", uid:"uid-mncm-angela-earliest", sequence:3 },
+      { title:"Monday Night Creative Music — Toby Summerfield with Jeffrey Bützer’s Academy of Staring Daggers", uid:"uid-mncm-toby", sequence:5 },
+    ],
+  );
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id IN ('cal_candidate_mncm_danny','cal_candidate_eyedrum_winter','cal_candidate_mncm_angela_detail','cal_candidate_mncm_toby')").get().count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE duplicate_of='cal_candidate_eyedrum_anniversary' AND status='duplicate' AND public_entry_id='' ").get().count, 4);
+  assert.equal(db.prepare("SELECT revision_state FROM calendar_candidate_revisions WHERE id='cal_revision_mncm_toby_pending'").get().revision_state, "superseded");
+  assert.deepEqual(
+    { ...db.prepare("SELECT label,url,include_public,credit_role FROM calendar_candidate_links WHERE candidate_id='cal_candidate_eyedrum_anniversary' AND url='https://artist.example/toby'").get() },
+    { label:"Toby Summerfield", url:"https://artist.example/toby", include_public:1, credit_role:"Performer" },
+  );
+  assert.deepEqual(
+    { ...db.prepare("SELECT media_id,include_public,media_role FROM calendar_candidate_media WHERE candidate_id='cal_candidate_eyedrum_anniversary' AND media_id='media_mncm_toby'").get() },
+    { media_id:"media_mncm_toby", include_public:1, media_role:"flyer" },
+  );
+  assert.deepEqual(
+    { ...db.prepare("SELECT media_id,media_role FROM calendar_entry_media WHERE entry_id='cal_entry_mncm_anniversary' AND media_id='media_mncm_toby'").get() },
+    { media_id:"media_mncm_toby", media_role:"flyer" },
+  );
+
+  const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+  const publicPrograms = publicPayload.events.filter((event) => event.parentTitle === "Monday Night Creative Music");
+  assert.equal(publicPayload.events.some((event) => event.title === "Monday Night Creative Music"), false);
+  const publicSeries = publicPayload.series.find((event) => event.title === "Monday Night Creative Music");
+  assert.ok(publicSeries);
+  assert.deepEqual(publicPrograms.map((event) => event.title), [
+    "Monday Night Creative Music — Danny Kamins / Majid Araim / Zandia Covington and S’aints",
+    "Monday Night Creative Music — One Year Anniversary Party",
+    "Monday Night Creative Music — Angela Winter with Dylan Mantione and Aaron Kruziki",
+    "Monday Night Creative Music — Toby Summerfield with Jeffrey Bützer’s Academy of Staring Daggers",
+  ]);
+  assert.deepEqual(publicSeries.relatedOccurrences.map((event) => event.title), [
+    "Monday Night Creative Music — Danny Kamins / Majid Araim / Zandia Covington and S’aints",
+    "Monday Night Creative Music — One Year Anniversary Party",
+    "Monday Night Creative Music — Angela Winter with Dylan Mantione and Aaron Kruziki",
+    "Monday Night Creative Music — Toby Summerfield with Jeffrey Bützer’s Academy of Staring Daggers",
+  ]);
+  const angelaDay = await (await handleCalendarPublicApi(request("/api/calendar/events?after=2026-09-21&before=2026-09-22"), env(db))).json();
+  assert.deepEqual(
+    angelaDay.events.filter((event) => event.parentTitle === "Monday Night Creative Music").map((event) => event.occurrenceLabel),
+    ["Angela Winter with Dylan Mantione and Aaron Kruziki"],
+  );
+  const feed = await (await handleCalendarFeed(request("/calendars/atlanta.ics"), env(db))).text();
+  assert.equal((feed.match(/SUMMARY:Monday Night Creative Music —/g) || []).length, 4);
+  assert.equal((feed.match(/RELATED-TO;RELTYPE=PARENT:/g) || []).length, 4);
+  const angela = publicPrograms.find((event) => /Angela Winter/.test(event.title));
+  const angelaFeed = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(angela.id)}.ics`), env(db))).text();
+  assert.match(angelaFeed, /UID:uid-mncm-angela-earliest/);
+  assert.match(angelaFeed, /RELATED-TO;RELTYPE=PARENT:/);
 });
 
 test("new generic sources can recover rendered event cards through bounded dynamic extraction", async () => {
@@ -3317,8 +3562,10 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(studio,/Moving to the next review/);
   assert.doesNotMatch(studio,/state\.filter="published"/);
   assert.match(publicCalendar,/<details class="calendar-event-media">/);
-  assert.match(publicCalendar,/event\.organizerUrl/);
-  assert.match(publicCalendar,/event\.venueUrl/);
+  assert.doesNotMatch(publicCalendar,/event\.organizerUrl/);
+  assert.doesNotMatch(publicCalendar,/event\.venueUrl/);
+  assert.match(publicCalendar,/<strong>organizer:<\/strong>/);
+  assert.match(publicCalendar,/<strong>venue:<\/strong>/);
   assert.match(publicCalendar,/exhibition:"Exhibitions \/ Art Openings"/);
   assert.match(publicCalendar,/gsu:"GSU Events"/);
   assert.match(publicCalendar,/MODE_LABELS = \{ virtual:"Virtual" \}/);
@@ -3343,7 +3590,7 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(publicCss,/\.calendar-event-access/);
 });
 
-test("public calendar card descriptions clamp to five lines and expand only through an accessible toggle", () => {
+test("public calendar card descriptions clamp to three lines and expand only through an accessible toggle", () => {
   const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
   const publicCss = readFileSync(join(ROOT,"css","atlanta-calendar.css"),"utf8");
   assert.match(publicCalendar,/class="calendar-event-description is-collapsed"/);
@@ -3352,14 +3599,71 @@ test("public calendar card descriptions clamp to five lines and expand only thro
   assert.match(publicCalendar,/description\.scrollHeight > description\.clientHeight \+ 1/);
   assert.match(publicCalendar,/control\.textContent = shouldExpand \? "See less" : "See more"/);
   assert.match(publicCalendar,/description\.classList\.toggle\("is-collapsed", !shouldExpand\)/);
-  assert.match(publicCss,/\.calendar-event-description\.is-collapsed \{ max-height:5lh; overflow:hidden; \}/);
+  assert.match(publicCss,/\.calendar-event-description\.is-collapsed \{ max-height:3lh; overflow:hidden; \}/);
   assert.match(publicCss,/\.calendar-description-toggle\[hidden\] \{ display:none; \}/);
 });
 
-test("public event cards use the complete add-to-calendar action label", () => {
+test("public calendar cards expose compact viewer actions without linking titles or identity facts", () => {
   const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
-  assert.match(publicCalendar,/>Add this event to your calendar<\/a>/);
-  assert.doesNotMatch(publicCalendar,/>Add this event<\/a>/);
+  const publicCss = readFileSync(join(ROOT,"css","atlanta-calendar.css"),"utf8");
+  assert.match(publicCalendar,/function addressFact\(event\)/);
+  assert.match(publicCalendar,/function displayText\(value\)/);
+  assert.match(publicCalendar,/var cleanDescription = displayText\(event\.description\)/);
+  assert.match(publicCalendar,/https:\/\/www\.google\.com\/maps\/dir\/\?api=1&destination=/);
+  assert.match(publicCalendar,/https:\/\/maps\.apple\.com\/\?daddr=/);
+  assert.match(publicCalendar,/event\.scheduleStatus === "moved_online"/);
+  assert.match(publicCalendar,/normalizedLabel\(address\) !== normalizedLabel\(venue\)/);
+  assert.match(publicCalendar,/'<h3>' \+ escapeHtml\(event\.title\) \+ '<\/h3>'/);
+  assert.doesNotMatch(publicCalendar,/<h3><a/);
+  assert.doesNotMatch(publicCalendar,/event\.organizerUrl|event\.venueUrl/);
+  assert.match(publicCalendar,/var officialAction = officialUrl \? '<a href="'/);
+  assert.doesNotMatch(publicCalendar,/officialUrl && officialUrl !== ticketUrl/);
+  assert.match(publicCalendar,/>Official details<\/a>/);
+  assert.match(publicCalendar,/>Tickets \/ Register<\/a>/);
+  assert.match(publicCalendar,/>Save date<\/a>/);
+  assert.match(publicCalendar,/data-share-event/);
+  assert.match(publicCalendar,/navigator\.share/);
+  assert.match(publicCalendar,/navigator\.clipboard\.writeText/);
+  assert.match(publicCalendar,/document\.execCommand\("copy"\)/);
+  assert.match(publicCalendar,/function relativeDateCue\(event\)/);
+  assert.match(publicCalendar,/"Today"/);
+  assert.match(publicCalendar,/"Tomorrow"/);
+  assert.match(publicCalendar,/"This weekend"/);
+  assert.match(publicCalendar,/"Ends " \+/);
+  assert.match(publicCalendar,/class="calendar-event-status"/);
+  assert.match(publicCalendar,/data-tag-toggle aria-expanded="false"/);
+  assert.match(publicCalendar,/Related schedule \('/);
+  assert.match(publicCalendar,/People \+ related \('/);
+  assert.match(publicCss,/\.calendar-map-choices a \{ min-height:44px;/);
+  assert.match(publicCss,/\.calendar-event-status \{[^}]*border:5px solid/);
+  assert.match(publicCss,/\.calendar-event-disclosure \{[^}]*border:5px solid/);
+});
+
+test("public calendar keeps search visible while progressively disclosing filters, alternate views, feeds, and past records", () => {
+  const publicHtml = readFileSync(join(ROOT,"calendar","index.html"),"utf8");
+  const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
+  const publicCss = readFileSync(join(ROOT,"css","atlanta-calendar.css"),"utf8");
+  assert.match(publicHtml,/id="calendarSearch"/);
+  assert.match(publicHtml,/id="toggleFilters"[^>]*aria-expanded="false"[^>]*aria-controls="calendarFilterPanel"/);
+  assert.match(publicHtml,/id="calendarFilterPanel" hidden/);
+  assert.match(publicHtml,/data-calendar-view="upcoming"[^>]*>Upcoming/);
+  assert.match(publicHtml,/data-calendar-view="on-view"[^>]*>On View/);
+  assert.match(publicHtml,/data-calendar-view="month"[^>]*>Month/);
+  assert.match(publicHtml,/id="on-view"[^>]*hidden/);
+  assert.match(publicHtml,/id="month"[^>]*hidden/);
+  assert.match(publicHtml,/class="calendar-utility-disclosure"/);
+  assert.match(publicHtml,/id="pastEventsDisclosure"/);
+  assert.match(publicHtml,/src="\/js\/construct-corner\.js"[\s\S]*src="\/js\/construct-nav\.js"/);
+  assert.match(publicCalendar,/var activeView = "upcoming"/);
+  assert.match(publicCalendar,/panel\.hidden = panel\.id !== activeView/);
+  assert.match(publicCalendar,/pastDisclosure\.open/);
+  assert.match(publicCss,/\.atlanta-calendar-page \.venture-hero \{ min-height:auto; align-content:start; align-items:start; \}/);
+});
+
+test("public event cards use the compact save-date action label", () => {
+  const publicCalendar = readFileSync(join(ROOT,"js","atlanta-calendar.js"),"utf8");
+  assert.match(publicCalendar,/>Save date<\/a>/);
+  assert.doesNotMatch(publicCalendar,/>Add this event to your calendar<\/a>/);
 });
 
 test("public exhibition cards separate approved artist identity links from other related links", () => {

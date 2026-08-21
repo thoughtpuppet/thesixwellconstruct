@@ -566,7 +566,7 @@ function normalizeCandidate(row) {
     relatedLinks: [],
     title: row.title || "",
     organizer: row.organizer || "",
-    factualDescription: row.factual_description || "",
+    factualDescription: cleanSourceText(row.factual_description),
     ...access,
     eventStructure: EVENT_STRUCTURES.has(row.event_structure) ? row.event_structure : "single",
     dateKind: row.date_kind || "timed",
@@ -659,7 +659,7 @@ function normalizeOccurrence(row) {
     sourceEventId: row.source_event_id || row.sourceEventId || "",
     occurrenceType: row.occurrence_type || row.occurrenceType || "other",
     title: row.title || "",
-    factualDescription: row.factual_description || row.factualDescription || "",
+    factualDescription: cleanSourceText(row.factual_description || row.factualDescription),
     ...access,
     dateKind: row.date_kind || row.dateKind || "timed",
     startsAt: canonicalCalendarDate(row.starts_at || row.startsAt, row.timezone || TIME_ZONE) || null,
@@ -703,7 +703,7 @@ function normalizeOccurrenceProposal(item, parent = {}, index = 0, { allowVerifi
     sourceEventId: asString(value.sourceEventId),
     occurrenceType,
     title: asString(value.title) || occurrenceTypeLabel(occurrenceType),
-    factualDescription: asString(value.factualDescription),
+    factualDescription: cleanSourceText(value.factualDescription),
     ...access,
     dateKind,
     startsAt: canonicalCalendarDate(value.startsAt, asString(value.timezone) || parent.timezone || TIME_ZONE) || null,
@@ -1363,7 +1363,7 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
     flyerAltText: asString(value("flyerAltText", current.flyerAltText || current.flyer?.altText || "")),
     title: asString(value("title")),
     organizer: asString(value("organizer")),
-    factualDescription: asString(value("factualDescription")),
+    factualDescription: cleanSourceText(value("factualDescription")),
     eventStructure,
     ...access,
     dateKind,
@@ -2469,7 +2469,7 @@ function curatedPublicView(row, relatedLinks = [], media = []) {
     origin: "curated",
     affiliations: affiliationsForEvent(row.source_url, row.organizer, row.venue_name, row.venue_address),
     title: row.title,
-    description: row.factual_description || "",
+    description: cleanSourceText(row.factual_description),
     ...access,
     organizer: row.organizer || "",
     dateKind: row.date_kind || "timed",
@@ -2543,7 +2543,7 @@ function curatedOccurrencePublicView(row, parent) {
     origin: "curated",
     affiliations: parent.affiliations,
     title: row.title,
-    description: row.factual_description || "",
+    description: cleanSourceText(row.factual_description),
     ...access,
     organizer: parent.organizer,
     dateKind: row.date_kind || "timed",
@@ -2621,7 +2621,7 @@ async function loadCuratedEvents(db) {
     occurrences.push(occurrence);
     parent.relatedOccurrences.push({
       id: occurrence.id,
-      title: occurrence.occurrenceLabel || occurrence.title,
+      title: parent.eventStructure === "series" ? occurrence.title : (occurrence.occurrenceLabel || occurrence.title),
       occurrenceType: occurrence.occurrenceType,
       startsAt: occurrence.startsAt,
       endsAt: occurrence.endsAt,
@@ -2663,7 +2663,7 @@ async function loadSixWellEvents(db) {
       eventStructure: "single",
       affiliations: [],
       title: row.title,
-      description: row.description || "",
+      description: cleanSourceText(row.description),
       accessStatus: "public",
       accessNotes: "",
       audiences: ["Public"],
@@ -5088,7 +5088,7 @@ function extractJsonEvents(text, source) {
       flyerUrl: asString(item.flyerUrl || firstStructuredImage(item.image)),
       flyerProvenanceUrl: asString(item.flyerProvenanceUrl || item.sourceUrl || item.url) || source.url,
       organizer: asString(item.organizer) || source.name,
-      factualDescription: asString(item.factualDescription || item.description),
+      factualDescription: cleanSourceText(item.factualDescription || item.description),
       dateKind: asString(item.dateKind) || (asString(item.startsAt || item.startDate).length === 10 ? "all_day" : "timed"),
       startsAt: asString(item.startsAt || item.startDate), endsAt: asString(item.endsAt || item.endDate) || null,
       venueName: asString(item.venueName || item.location?.name),
@@ -5108,7 +5108,21 @@ function isGsuLocalistSource(value) {
 }
 
 function cleanSourceText(value) {
-  return asString(value).replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/gi, " ").replace(/&amp;/gi, "&").replace(/\s+/g, " ");
+  let text = asString(value).replace(/\\[rRnN]/g, " ");
+  for (let pass = 0; pass < 2; pass += 1) {
+    text = text
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;|&#0*60;|&#x0*3c;/gi, "<")
+      .replace(/&gt;|&#0*62;|&#x0*3e;/gi, ">")
+      .replace(/&quot;|&#0*34;|&#x0*22;/gi, '"')
+      .replace(/&apos;|&#0*39;|&#x0*27;/gi, "'")
+      .replace(/&nbsp;|&#0*160;|&#x0*a0;/gi, " ");
+  }
+  return text
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function localistNames(value) {
@@ -5421,12 +5435,18 @@ function eyedrumSeriesTitleMatch(title, definitions) {
 }
 
 function equivalentLineup(value) {
-  return normalizeText(asString(value).replace(/\s*(?:\+|&)\s*|\bplus\b|\band\b/gi, " and "));
+  return normalizeText(asString(value).replace(/\s*(?:\+|&)\s*|\bplus\b|\band\b|\bwith\b/gi, " and "));
 }
 
 function occurrenceInstant(value) {
   const parsed = Date.parse(asString(value));
   return Number.isFinite(parsed) ? String(parsed) : asString(value);
+}
+
+function eyedrumOccurrenceStatus(event) {
+  const titleCancelled = /\bcancel(?:led|ed)\b/i.test(event.title);
+  const descriptionCancelled = /\b(?:event|performance|show|program|concert|listing|it)\s+(?:is|was|has been)\s+cancel(?:led|ed)\b|\bcancel(?:led|ed)\s+(?:due|because)\b/i.test(event.factualDescription);
+  return titleCancelled || descriptionCancelled ? "cancelled" : "scheduled";
 }
 
 function richerEyedrumListing(left, right, sourceUrl) {
@@ -5594,9 +5614,11 @@ function groupEyedrumRecurringEvents(events, source) {
         ? [occurrenceInstant(event.startsAt), normalizeText(event.venueName), equivalentLineup(occurrenceLabel)].join("|")
         : event.sourceEventId;
       const existing = distinct.get(duplicateKey);
-      distinct.set(duplicateKey, existing
-        ? { event:richerEyedrumListing(existing.event, event, source.url), seriesMatch:value.seriesMatch || existing.seriesMatch }
-        : value);
+      if (!existing) distinct.set(duplicateKey, value);
+      else {
+        const richer = richerEyedrumListing(existing.event, event, source.url);
+        distinct.set(duplicateKey, richer === event ? value : existing);
+      }
     }
     const ordered = [...distinct.values()].sort((left, right) => Date.parse(left.event.startsAt) - Date.parse(right.event.startsAt));
     const declaredRecurring = ordered.some(({ event }) => /\bevery week\b|\bweekly\b|\brecurring\b|\beach (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(event.factualDescription));
@@ -5622,7 +5644,7 @@ function groupEyedrumRecurringEvents(events, source) {
       venueAddress: event.venueAddress,
       sourceUrl: event.sourceUrl,
       ticketUrl: event.ticketUrl,
-      status: "scheduled",
+      status: eyedrumOccurrenceStatus(event),
       verificationState: "verified",
       verificationNotes: "This occurrence was retrieved from its dated listing on Eyedrum's official calendar.",
       sortOrder: index,
@@ -7133,11 +7155,28 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   if (rawProposal.scheduleStatus === undefined) proposal.scheduleStatus = current.scheduleStatus;
   proposal = ensurePrivateIntelligence(proposal, profile, discoveredBy, refreshPrivateIntelligence ? null : current);
   proposal.relatedLinks = proposal.relatedLinks.length ? proposal.relatedLinks : current.relatedLinks;
+  const pendingProposal = current.pendingRevisionId ? await db.prepare(
+    "SELECT created_by,snapshot_json FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'"
+  ).bind(current.pendingRevisionId, current.id).first() : null;
+  const automatedPending = pendingProposal && !["studio", "studio-research", "manual"].includes(pendingProposal.created_by);
+  const pendingSnapshot = automatedPending ? parseJson(pendingProposal.snapshot_json, {}) : null;
+  const occurrenceBaseline = [...current.occurrences];
+  for (const pendingOccurrence of pendingSnapshot?.occurrences || []) {
+    const index = occurrenceBaseline.findIndex((occurrence) => (
+      pendingOccurrence.sourceEventId && occurrence.sourceEventId === pendingOccurrence.sourceEventId
+    ) || (
+      sameEventStart(occurrence.startsAt, pendingOccurrence.startsAt)
+      && equivalentLineup(occurrence.title) === equivalentLineup(pendingOccurrence.title)
+      && normalizeText(occurrence.venueName) === normalizeText(pendingOccurrence.venueName)
+    ));
+    if (index >= 0) occurrenceBaseline[index] = { ...occurrenceBaseline[index], ...pendingOccurrence, id:occurrenceBaseline[index].id || pendingOccurrence.id };
+    else occurrenceBaseline.push(pendingOccurrence);
+  }
   const retainMissingSeriesOccurrences = proposal.sourceEventId === "eyedrum-series-monday-night-creative-music";
-  const matchedCurrentOccurrenceIds = new Set();
+  const matchedBaselineOccurrences = new Set();
   proposal.occurrences = proposal.occurrences.length
     ? proposal.occurrences.map((occurrence) => {
-      const currentOccurrence = current.occurrences.find((item) => (
+      const currentOccurrence = occurrenceBaseline.find((item) => (
         occurrence.sourceEventId && item.sourceEventId === occurrence.sourceEventId
       ) || (
         item.occurrenceType === occurrence.occurrenceType
@@ -7146,10 +7185,13 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
           && equivalentLineup(item.title) === equivalentLineup(occurrence.title)
           && normalizeText(item.venueName) === normalizeText(occurrence.venueName)
       ));
-      if (currentOccurrence?.id) matchedCurrentOccurrenceIds.add(currentOccurrence.id);
+      if (currentOccurrence) matchedBaselineOccurrences.add(currentOccurrence);
       return {
         ...occurrence,
         id: currentOccurrence?.id || occurrence.id,
+        title: currentOccurrence && equivalentLineup(currentOccurrence.title) === equivalentLineup(occurrence.title)
+          ? currentOccurrence.title
+          : occurrence.title,
         verificationState: currentOccurrence?.verificationState === "verified" ? "verified" : occurrence.verificationState,
         verificationNotes: currentOccurrence?.verificationState === "verified" ? currentOccurrence.verificationNotes : occurrence.verificationNotes,
       };
@@ -7158,7 +7200,7 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   if (retainMissingSeriesOccurrences && proposal.occurrences.length) {
     proposal.occurrences = [
       ...proposal.occurrences,
-      ...current.occurrences.filter((occurrence) => !matchedCurrentOccurrenceIds.has(occurrence.id)),
+      ...occurrenceBaseline.filter((occurrence) => !matchedBaselineOccurrences.has(occurrence)),
     ].sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt));
     const occurrenceDates = proposal.occurrences.map((occurrence) => wixLocalDate(occurrence.startsAt, occurrence.timezone || proposal.timezone)).filter(Boolean);
     if (occurrenceDates.length) {
@@ -7175,10 +7217,6 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   const protectedProposal = protectScoutProposal(current, proposal);
   proposal = protectedProposal.proposal;
   const changes = candidateChangeSet(candidateSnapshot(current), candidateSnapshot(proposal));
-  const pendingProposal = current.pendingRevisionId ? await db.prepare(
-    "SELECT created_by,snapshot_json FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'"
-  ).bind(current.pendingRevisionId, current.id).first() : null;
-  const automatedPending = pendingProposal && !["studio", "studio-research", "manual"].includes(pendingProposal.created_by);
   const reportedChanges = automatedPending
     ? candidateChangeSet(parseJson(pendingProposal.snapshot_json, {}), candidateSnapshot(proposal))
     : changes;

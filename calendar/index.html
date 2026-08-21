@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/css/venture-pages.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/hero.css">
-<link rel="stylesheet" href="/css/atlanta-calendar.css?v=20260819-candidate-research">
+<link rel="stylesheet" href="/css/atlanta-calendar.css?v=20260821-calendar-card-actions">
 </head>
 <body class="venture-page atlanta-calendar-page" data-venture="events">
   <main class="venture-shell entrance-fade">
@@ -23,11 +23,10 @@
         <h1 class="venture-title hero-title" id="page-title">Atlanta Calendar.</h1>
       </div>
       <div class="hero-copy">
-        <p class="hero-descriptor">Art, art-making, independent film, poetry, music, technology, AI, lectures, conferences, virtual programs, and experimental rooms across Atlanta.</p>
-        <p class="hero-note">The calendar combines selected Atlanta listings with public Six.Well events. Dates and details link back to their official sources.</p>
+        <p class="hero-descriptor">the lastest updates of all Art, art-making, independent film, poetry, music, technology, lectures, conferences, virtual programs, and experimental events across Atlanta.</p>
         <div class="hero-actions">
-          <a class="venture-link" href="#upcoming">upcoming</a>
-          <a class="venture-link" href="#month">month</a>
+          <a class="venture-link" href="#upcoming" data-calendar-view-link="upcoming">upcoming</a>
+          <a class="venture-link" href="#month" data-calendar-view-link="month">month</a>
           <a class="venture-link" href="#subscribe">subscribe</a>
           <a class="venture-link" href="/calendar/submit/">submit an event</a>
         </div>
@@ -41,17 +40,43 @@
       </header>
       <div class="calendar-search-row">
         <label class="calendar-search"><span>Search</span><input id="calendarSearch" type="search" placeholder="Event, artist, venue, organizer, or subject" autocomplete="off"></label>
-        <button class="calendar-button is-quiet" id="clearFilters" type="button">Clear filters</button>
+        <div class="calendar-search-actions">
+          <button class="calendar-button" id="toggleFilters" type="button" aria-expanded="false" aria-controls="calendarFilterPanel">Filters<span id="activeFilterCount"></span></button>
+          <button class="calendar-button is-quiet" id="clearFilters" type="button">Clear filters</button>
+        </div>
       </div>
-      <div class="filter-groups">
-        <fieldset><legend>Subjects</legend><div class="filter-options" id="subjectFilters"></div></fieldset>
-        <fieldset><legend>Formats</legend><div class="filter-options" id="formatFilters"></div></fieldset>
-        <fieldset><legend>Affiliations</legend><div class="filter-options" id="affiliationFilters"></div></fieldset>
-        <fieldset><legend>Location</legend><div class="filter-options" id="modeFilters"></div></fieldset>
+      <div class="calendar-filter-panel" id="calendarFilterPanel" hidden>
+        <div class="filter-groups">
+          <fieldset><legend>Subjects</legend><div class="filter-options" id="subjectFilters"></div></fieldset>
+          <fieldset><legend>Formats</legend><div class="filter-options" id="formatFilters"></div></fieldset>
+          <fieldset><legend>Affiliations</legend><div class="filter-options" id="affiliationFilters"></div></fieldset>
+          <fieldset><legend>Location</legend><div class="filter-options" id="modeFilters"></div></fieldset>
+        </div>
+      </div>
+      <div class="calendar-view-switch" role="tablist" aria-label="Calendar view">
+        <button id="calendarViewUpcoming" type="button" role="tab" aria-selected="true" aria-controls="upcoming" data-calendar-view="upcoming">Upcoming <span id="upcomingViewCount">0</span></button>
+        <button id="calendarViewOnView" type="button" role="tab" aria-selected="false" aria-controls="on-view" data-calendar-view="on-view">On View <span id="onViewCount">0</span></button>
+        <button id="calendarViewMonth" type="button" role="tab" aria-selected="false" aria-controls="month" data-calendar-view="month">Month</button>
       </div>
     </section>
 
-    <section class="section" id="month" aria-labelledby="month-title">
+    <section class="section calendar-view-panel" id="upcoming" role="tabpanel" tabindex="0" aria-labelledby="calendarViewUpcoming upcoming-title">
+      <header class="section-head">
+        <div><span class="section-kicker">chronology</span><h2 class="section-title" id="upcoming-title">Upcoming</h2></div>
+        <p class="section-copy">Approved listings and public Six.Well occurrences share one chronological record.</p>
+      </header>
+      <div class="calendar-event-list" id="upcomingEvents" aria-live="polite"><p class="calendar-empty">Loading the calendar.</p></div>
+    </section>
+
+    <section class="section calendar-on-view calendar-view-panel" id="on-view" role="tabpanel" tabindex="0" aria-labelledby="calendarViewOnView on-view-title" hidden>
+      <header class="section-head">
+        <div><span class="section-kicker">exhibitions</span><h2 class="section-title" id="on-view-title">On View</h2></div>
+        <p class="section-copy">Exhibitions remain here for every month their on-view dates overlap. Openings, talks, mixers, and screenings stay on their exact dates below.</p>
+      </header>
+      <div class="calendar-event-list" id="onViewEvents" aria-live="polite"></div>
+    </section>
+
+    <section class="section calendar-view-panel" id="month" role="tabpanel" tabindex="0" aria-labelledby="calendarViewMonth month-title" hidden>
       <header class="section-head">
         <div><span class="section-kicker">month view</span><h2 class="section-title" id="month-title">Calendar</h2></div>
         <div class="month-controls"><button type="button" id="previousMonth" aria-label="Previous month">Previous</button><span id="monthLabel"></span><button type="button" id="nextMonth" aria-label="Next month">Next</button></div>
@@ -63,44 +88,34 @@
       <div class="calendar-day-agenda" id="dayAgenda" aria-live="polite"></div>
     </section>
 
-    <section class="section calendar-on-view" id="on-view" aria-labelledby="on-view-title">
-      <header class="section-head">
-        <div><span class="section-kicker">exhibitions</span><h2 class="section-title" id="on-view-title">On View</h2></div>
-        <p class="section-copy">Exhibitions remain here for every month their on-view dates overlap. Openings, talks, mixers, and screenings stay on their exact dates below.</p>
-      </header>
-      <div class="calendar-event-list" id="onViewEvents" aria-live="polite"></div>
+    <section class="section calendar-utility-section" id="subscribe" aria-labelledby="subscribe-title">
+      <details class="calendar-utility-disclosure">
+        <summary>
+          <span class="calendar-utility-heading"><span class="section-kicker">live feeds</span><span class="section-title" id="subscribe-title" role="heading" aria-level="2">Subscribe</span></span>
+          <span class="section-copy">Choose one live calendar feed.</span>
+          <span class="calendar-disclosure-action">Choose feed</span>
+        </summary>
+        <div class="feed-grid">
+          <a href="/calendars/atlanta.ics"><strong>All Atlanta Events</strong><span>Every approved listing and Six.Well occurrence</span></a>
+          <a href="/calendars/art.ics"><strong>Art</strong><span>Exhibitions, installations, and visual art</span></a>
+          <a href="/calendars/film.ics"><strong>Film</strong><span>Independent and experimental moving image</span></a>
+          <a href="/calendars/poetry-music.ics"><strong>Poetry + Music</strong><span>Readings, sound, showcases, and performance</span></a>
+          <a href="/calendars/tech-ai.ics"><strong>Tech + AI</strong><span>Technology, AI, and creative technology</span></a>
+          <a href="/calendars/talks-conferences.ics"><strong>Talks + Conferences</strong><span>Lectures, panels, and conferences</span></a>
+          <a href="/calendars/sixwell.ics"><strong>Six.Well Events</strong><span>Events produced by the construct</span></a>
+        </div>
+      </details>
     </section>
 
-    <section class="section" id="upcoming" aria-labelledby="upcoming-title">
-      <header class="section-head">
-        <div><span class="section-kicker">chronology</span><h2 class="section-title" id="upcoming-title">Upcoming</h2></div>
-        <p class="section-copy">Approved listings and public Six.Well occurrences share one chronological record.</p>
-      </header>
-      <div class="calendar-event-list" id="upcomingEvents" aria-live="polite"><p class="calendar-empty">Loading the calendar.</p></div>
-    </section>
-
-    <section class="section" id="subscribe" aria-labelledby="subscribe-title">
-      <header class="section-head">
-        <div><span class="section-kicker">live feeds</span><h2 class="section-title" id="subscribe-title">Subscribe</h2></div>
-        <p class="section-copy">Subscribe once. Your calendar application will periodically retrieve new dates, edits, and approved cancellations.</p>
-      </header>
-      <div class="feed-grid">
-        <a href="/calendars/atlanta.ics"><strong>All Atlanta Events</strong><span>Every approved listing and Six.Well occurrence</span></a>
-        <a href="/calendars/art.ics"><strong>Art</strong><span>Exhibitions, installations, and visual art</span></a>
-        <a href="/calendars/film.ics"><strong>Film</strong><span>Independent and experimental moving image</span></a>
-        <a href="/calendars/poetry-music.ics"><strong>Poetry + Music</strong><span>Readings, sound, showcases, and performance</span></a>
-        <a href="/calendars/tech-ai.ics"><strong>Tech + AI</strong><span>Technology, AI, and creative technology</span></a>
-        <a href="/calendars/talks-conferences.ics"><strong>Talks + Conferences</strong><span>Lectures, panels, and conferences</span></a>
-        <a href="/calendars/sixwell.ics"><strong>Six.Well Events</strong><span>Events produced by the construct</span></a>
-      </div>
-    </section>
-
-    <section class="section" id="past" aria-labelledby="past-title">
-      <header class="section-head">
-        <div><span class="section-kicker">record</span><h2 class="section-title" id="past-title">Past Events</h2></div>
-        <p class="section-copy">Earlier approved dates remain available as a quieter record.</p>
-      </header>
-      <div class="calendar-event-list is-past" id="pastEvents"></div>
+    <section class="section calendar-utility-section" id="past" aria-labelledby="past-title">
+      <details class="calendar-utility-disclosure" id="pastEventsDisclosure">
+        <summary>
+          <span class="calendar-utility-heading"><span class="section-kicker">record</span><span class="section-title" id="past-title" role="heading" aria-level="2">Past Events</span></span>
+          <span class="section-copy">Earlier approved dates remain available as a quieter record.</span>
+          <span class="calendar-disclosure-action" id="pastEventCount">0 events</span>
+        </summary>
+        <div class="calendar-event-list is-past" id="pastEvents"></div>
+      </details>
     </section>
 
     <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/calendar/submit/">Submit an event</a><a href="/events/">Six.Well events</a><a href="/home/">return to construct</a></div></footer>
@@ -111,7 +126,8 @@
     <div class="calendar-media-dialog-actions"><button id="calendarMediaPrevious" type="button">Previous</button><button id="calendarMediaNext" type="button">Next</button></div>
   </dialog>
   <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
-  <script src="/js/atlanta-calendar.js?v=20260819-candidate-research"></script>
+  <script src="/js/atlanta-calendar.js?v=20260821-calendar-card-actions"></script>
 </body>
 </html>

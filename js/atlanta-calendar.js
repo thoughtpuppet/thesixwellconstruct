@@ -11,6 +11,9 @@
   var TIME_ZONE = "America/New_York";
   var allEvents = [];
   var filtered = [];
+  var activeView = "upcoming";
+  var viewBuckets = { upcoming:[], onView:[], past:[] };
+  var currentMonthName = "";
   var activeMonth = new Date();
   var descriptionSyncFrame = 0;
   var galleryEvents = {};
@@ -31,11 +34,33 @@
   var grid = document.getElementById("calendarGrid");
   var agenda = document.getElementById("dayAgenda");
   var monthLabel = document.getElementById("monthLabel");
+  var filterPanel = document.getElementById("calendarFilterPanel");
+  var filterToggle = document.getElementById("toggleFilters");
+  var filterCount = document.getElementById("activeFilterCount");
+  var clearFilters = document.getElementById("clearFilters");
+  var viewButtons = Array.from(document.querySelectorAll("[data-calendar-view]"));
+  var viewPanels = Array.from(document.querySelectorAll(".calendar-view-panel"));
+  var pastDisclosure = document.getElementById("pastEventsDisclosure");
+  var pastEventCount = document.getElementById("pastEventCount");
 
   function escapeHtml(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (character) {
       return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[character];
     });
+  }
+
+  function displayText(value) {
+    var text = String(value == null ? "" : value).replace(/\\[rRnN]/g, " ");
+    for (var pass = 0; pass < 2; pass += 1) {
+      text = text
+        .replace(/&amp;/gi, "&")
+        .replace(/&lt;|&#0*60;|&#x0*3c;/gi, "<")
+        .replace(/&gt;|&#0*62;|&#x0*3e;/gi, ">")
+        .replace(/&quot;|&#0*34;|&#x0*22;/gi, '"')
+        .replace(/&apos;|&#0*39;|&#x0*27;/gi, "'")
+        .replace(/&nbsp;|&#0*160;|&#x0*a0;/gi, " ");
+    }
+    return text.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   }
 
   function validDate(value) {
@@ -92,6 +117,96 @@
 
   function eventAnchor(event) { return "event-" + String(event.id || "").replace(/[^a-z0-9_-]+/gi, "-"); }
 
+  function normalizedLabel(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  }
+
+  function calendarDayDifference(fromKey, toKey) {
+    var from = /^\d{4}-\d{2}-\d{2}$/.test(fromKey) ? new Date(fromKey + "T12:00:00Z") : null;
+    var to = /^\d{4}-\d{2}-\d{2}$/.test(toKey) ? new Date(toKey + "T12:00:00Z") : null;
+    return from && to ? Math.round((to.getTime() - from.getTime()) / 86400000) : null;
+  }
+
+  function relativeDateCue(event) {
+    var todayKey = dateKey(new Date().toISOString());
+    var startKey = dateKey(event.startsAt);
+    var endKey = dateKey(event.endsAt || event.startsAt);
+    if (!todayKey || !startKey) return "";
+    var startDifference = calendarDayDifference(todayKey, startKey);
+    var endDifference = calendarDayDifference(todayKey, endKey);
+    if (isOnViewExhibition(event) && startDifference <= 0 && endDifference >= 0 && endDifference <= 7) {
+      if (endDifference === 0) return "Ends today";
+      if (endDifference === 1) return "Ends tomorrow";
+      return "Ends " + new Intl.DateTimeFormat("en-US", { weekday:"long", timeZone:"UTC" }).format(new Date(endKey + "T12:00:00Z"));
+    }
+    if (startDifference === 0) return "Today";
+    if (startDifference === 1) return "Tomorrow";
+    var today = new Date(todayKey + "T12:00:00Z");
+    var start = new Date(startKey + "T12:00:00Z");
+    var daysUntilSunday = (7 - today.getUTCDay()) % 7;
+    if (startDifference > 1 && startDifference <= daysUntilSunday && [0,6].includes(start.getUTCDay())) return "This weekend";
+    return "";
+  }
+
+  function ticketCardNote(event, ticketLabel) {
+    var parts = [];
+    var ticketClosed = ["sold_out","registration_closed"].includes(event.ticketStatus);
+    if (ticketLabel && !ticketClosed) parts.push(ticketLabel);
+    var onSaleDate = validDate(event.ticketOnSaleAt);
+    if (onSaleDate && onSaleDate.getTime() > Date.now()) parts.push("On sale " + eventDate({ startsAt:event.ticketOnSaleAt, dateKind:"timed" }));
+    var note = String(event.ticketNotes || "").trim();
+    var duplicateLabels = [ticketLabel].concat(parts).map(normalizedLabel).filter(Boolean);
+    if (note && !duplicateLabels.includes(normalizedLabel(note))) parts.push(note);
+    return parts.join(" / ");
+  }
+
+  function mapDestination(event) {
+    var planning = event.planning || {};
+    var hasLatitude = planning.latitude !== null && planning.latitude !== undefined && planning.latitude !== "";
+    var hasLongitude = planning.longitude !== null && planning.longitude !== undefined && planning.longitude !== "";
+    if (hasLatitude && hasLongitude && Number.isFinite(Number(planning.latitude)) && Number.isFinite(Number(planning.longitude))) {
+      return Number(planning.latitude) + "," + Number(planning.longitude);
+    }
+    return [event.venueName, event.venueAddress].filter(Boolean).join(", ");
+  }
+
+  function addressFact(event) {
+    var address = String(event.venueAddress || "").trim();
+    var venue = String(event.venueName || "").trim();
+    var movedOnline = event.scheduleStatus === "moved_online";
+    var isPhysicalAddress = address && normalizedLabel(address) !== normalizedLabel(venue) && !event.virtual && !movedOnline;
+    if (!address || normalizedLabel(address) === normalizedLabel(venue)) return "";
+    if (!isPhysicalAddress) return '<span><strong>address:</strong> ' + escapeHtml(address) + '</span>';
+    var destination = encodeURIComponent(mapDestination(event));
+    var googleUrl = "https://www.google.com/maps/dir/?api=1&destination=" + destination;
+    var appleUrl = "https://maps.apple.com/?daddr=" + destination + "&dirflg=d";
+    return '<details class="calendar-map-choices"><summary><strong>address:</strong> ' + escapeHtml(address) + '</summary>' +
+      '<div><a href="' + escapeHtml(googleUrl) + '" target="_blank" rel="noopener noreferrer">Google Maps</a>' +
+      '<a href="' + escapeHtml(appleUrl) + '" target="_blank" rel="noopener noreferrer">Apple Maps</a></div></details>';
+  }
+
+  function tagList(labels) {
+    var visible = labels.slice(0, 3);
+    var hidden = labels.slice(3);
+    return '<div class="calendar-tags">' +
+      visible.map(function (label) { return '<span class="calendar-tag">' + escapeHtml(label) + '</span>'; }).join("") +
+      hidden.map(function (label) { return '<span class="calendar-tag is-extra" hidden>' + escapeHtml(label) + '</span>'; }).join("") +
+      (hidden.length ? '<button class="calendar-tag-toggle" type="button" data-tag-toggle aria-expanded="false">+' + hidden.length + ' more</button>' : '') +
+      '</div>';
+  }
+
+  function relatedDisclosure(relatedOccurrences, artistLinks, participantLinks, organizerLinks, otherRelatedLinks, creditedLink) {
+    var peopleCount = artistLinks.length + participantLinks.length + organizerLinks.length + otherRelatedLinks.length;
+    var schedule = relatedOccurrences.length ? '<details class="calendar-event-disclosure"><summary>Related schedule (' + relatedOccurrences.length + ')</summary><div class="calendar-disclosure-content calendar-related-schedule">' + relatedOccurrences.map(function (occurrence) { return '<a href="#' + eventAnchor(occurrence) + '"><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small></a>'; }).join("") + '</div></details>' : '';
+    var people = peopleCount ? '<details class="calendar-event-disclosure"><summary>People + related (' + peopleCount + ')</summary><div class="calendar-disclosure-content">' +
+      (artistLinks.length ? '<div class="calendar-related-links calendar-artist-links"><span>Artists</span>' + artistLinks.map(creditedLink).join("") + '</div>' : '') +
+      (participantLinks.length ? '<div class="calendar-related-links"><span>Participants</span>' + participantLinks.map(creditedLink).join("") + '</div>' : '') +
+      (organizerLinks.length ? '<div class="calendar-related-links"><span>Additional organizers</span>' + organizerLinks.map(creditedLink).join("") + '</div>' : '') +
+      (otherRelatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + otherRelatedLinks.map(creditedLink).join("") + '</div>' : '') +
+      '</div></details>' : '';
+    return schedule + people;
+  }
+
   function syncDescriptionToggles() {
     Array.from(document.querySelectorAll(".calendar-event-description")).forEach(function (description) {
       var control = document.querySelector('[data-description-toggle][aria-controls="' + description.id + '"]');
@@ -141,7 +256,6 @@
   function eventCard(event) {
     var primarySubject = event.subjects[0] || "";
     var labels = event.subjects.map(function (value) { return SUBJECT_LABELS[value] || value; }).concat(event.formats.map(function (value) { return FORMAT_LABELS[value] || value; }), (event.affiliations || []).map(function (value) { return AFFILIATION_LABELS[value] || value; }), event.virtual ? [MODE_LABELS.virtual] : []);
-    var location = [event.venueName, event.venueAddress].filter(function (value, index, list) { return value && list.indexOf(value) === index; }).join(" / ");
     var sourceLabel = event.origin === "sixwell" ? "Six.Well event" : (event.affiliations || []).includes("gsu") ? "Georgia State University event" : "Selected Atlanta listing";
     var relatedLinks = Array.isArray(event.relatedLinks) ? event.relatedLinks : [];
     var artistLinks = relatedLinks.filter(function (link) { return link.role === "artist"; });
@@ -157,50 +271,119 @@
     var accessNote = event.accessStatus === "restricted" ? (event.accessNotes || "Attendance is restricted. Check the official details for eligibility.") : "";
     var scheduleLabel = SCHEDULE_LABELS[event.scheduleStatus] || "";
     var ticketLabel = TICKET_LABELS[event.ticketStatus] || "";
-    var ticketNote = [ticketLabel, event.ticketOnSaleAt ? "On sale " + eventDate({ startsAt:event.ticketOnSaleAt, dateKind:"timed" }) : "", event.ticketNotes || ""].filter(Boolean).join(" / ");
-    var organizerFact = event.organizer ? (event.organizerUrl ? '<a href="' + escapeHtml(event.organizerUrl) + '" target="_blank" rel="noopener noreferrer">Organizer / ' + escapeHtml(event.organizer) + '</a>' : '<span>Organizer / ' + escapeHtml(event.organizer) + '</span>') : '';
-    var venueFact = location ? (event.venueUrl ? '<a href="' + escapeHtml(event.venueUrl) + '" target="_blank" rel="noopener noreferrer">Venue / ' + escapeHtml(location) + '</a>' : '<span>Venue / ' + escapeHtml(location) + '</span>') : '';
+    var ticketNote = ticketCardNote(event, ticketLabel);
+    var organizerFact = event.organizer ? '<span><strong>organizer:</strong> ' + escapeHtml(event.organizer) + '</span>' : '';
+    var venueFact = event.venueName ? '<span><strong>venue:</strong> ' + escapeHtml(event.venueName) + '</span>' : '';
+    var mapFact = addressFact(event);
     var officialUrl = event.sourceUrl || "";
     var ticketUrl = event.ticketUrl || "";
-    if (!officialUrl && event.actionUrl && event.actionUrl !== ticketUrl) officialUrl = event.actionUrl;
-    var officialAction = officialUrl && officialUrl !== ticketUrl ? '<a href="' + escapeHtml(officialUrl) + '">Official details</a>' : '';
+    if (!officialUrl && event.actionUrl) officialUrl = event.actionUrl;
+    if (!officialUrl && ticketUrl) officialUrl = ticketUrl;
+    var officialAction = officialUrl ? '<a href="' + escapeHtml(officialUrl) + '">Official details</a>' : '';
     var ticketAction = ticketUrl ? '<a href="' + escapeHtml(ticketUrl) + '">Tickets / Register</a>' : '';
+    var relativeCue = relativeDateCue(event);
+    var scheduleState = scheduleLabel || (event.status === "cancelled" ? "Cancelled" : "");
+    var ticketState = ["sold_out","registration_closed"].includes(event.ticketStatus) ? ticketLabel : "";
+    var statusLabels = [scheduleState, ticketState].filter(function (value, index, list) { return value && list.indexOf(value) === index; });
+    var statusAlert = statusLabels.length ? '<p class="calendar-event-status">' + escapeHtml(statusLabels.join(" / ")) + '</p>' : '';
     var descriptionId = eventAnchor(event) + "-description";
-    var description = event.description ? '<p class="calendar-event-description is-collapsed" id="' + descriptionId + '">' + escapeHtml(event.description) + '</p>' +
+    var cleanDescription = displayText(event.description);
+    var description = cleanDescription ? '<p class="calendar-event-description is-collapsed" id="' + descriptionId + '">' + escapeHtml(cleanDescription) + '</p>' +
       '<button class="calendar-description-toggle" type="button" data-description-toggle aria-controls="' + descriptionId + '" aria-expanded="false" hidden>See more</button>' : '';
     return '<article class="calendar-event-card' + (event.status === "cancelled" ? ' is-cancelled' : '') + '" id="' + eventAnchor(event) + '" data-subject="' + escapeHtml(primarySubject) + '">' +
-      '<p class="calendar-event-meta">' + escapeHtml(scheduleLabel ? scheduleLabel + " / " + eventDate(event) : event.status === "cancelled" ? "Cancelled / " + eventDate(event) : eventDate(event)) + '</p>' +
+      '<p class="calendar-event-meta">' + escapeHtml([relativeCue, eventDate(event)].filter(Boolean).join(" / ")) + '</p>' +
+      statusAlert +
       (event.isOccurrence ? '<p class="calendar-event-series">Part of / ' + (event.parentEventStructure === "exhibition" ? '<a href="#' + eventAnchor({id:event.seriesId}) + '">' + escapeHtml(event.parentTitle) + '</a>' : escapeHtml(event.parentTitle)) + ' / ' + escapeHtml(OCCURRENCE_LABELS[event.occurrenceType] || "Related Program") + '</p>' : '') +
       '<h3>' + escapeHtml(event.title) + '</h3>' +
       (accessNote ? '<p class="calendar-event-access"><strong>Access / </strong>' + escapeHtml(accessNote) + '</p>' : '') +
       (ticketNote ? '<p class="calendar-event-ticket"><strong>Tickets / </strong>' + escapeHtml(ticketNote) + '</p>' : '') +
       description +
-      '<div class="calendar-event-facts">' + organizerFact + venueFact + '<span>' + escapeHtml(sourceLabel) + '</span></div>' +
-      '<div class="calendar-tags">' + labels.map(function (label) { return '<span class="calendar-tag">' + escapeHtml(label) + '</span>'; }).join("") + '</div>' +
-      (relatedOccurrences.length ? '<div class="calendar-related-schedule"><span>Related schedule</span>' + relatedOccurrences.map(function (occurrence) { return '<a href="#' + eventAnchor(occurrence) + '"><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small></a>'; }).join("") + '</div>' : '') +
-      (artistLinks.length ? '<div class="calendar-related-links calendar-artist-links"><span>Artists</span>' + artistLinks.map(creditedLink).join("") + '</div>' : '') +
-      (participantLinks.length ? '<div class="calendar-related-links"><span>Participants</span>' + participantLinks.map(creditedLink).join("") + '</div>' : '') +
-      (organizerLinks.length ? '<div class="calendar-related-links"><span>Additional organizers</span>' + organizerLinks.map(creditedLink).join("") + '</div>' : '') +
-      (otherRelatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + otherRelatedLinks.map(creditedLink).join("") + '</div>' : '') +
+      '<div class="calendar-event-facts">' + organizerFact + venueFact + mapFact + '<span class="calendar-event-source">' + escapeHtml(sourceLabel) + '</span></div>' +
+      tagList(labels) +
+      relatedDisclosure(relatedOccurrences, artistLinks, participantLinks, organizerLinks, otherRelatedLinks, creditedLink) +
       (media.length ? '<details class="calendar-event-media"><summary>View media ('+media.length+')</summary><div class="calendar-media-grid">'+media.map(function(item,index){return '<button type="button" data-gallery-event="'+escapeHtml(galleryKey)+'" data-gallery-index="'+index+'" aria-label="View '+escapeHtml(item.altText||event.title+' event image')+'"><img src="'+escapeHtml(item.url)+'" alt="'+escapeHtml(item.altText||event.title+' event image')+'" loading="lazy" decoding="async"'+(item.width?' width="'+Number(item.width)+'"':'')+(item.height?' height="'+Number(item.height)+'"':'')+'>'+(item.caption?'<span>'+escapeHtml(item.caption)+'</span>':'')+'</button>';}).join("")+'</div></details>' : '') +
-      '<div class="calendar-event-actions">' + officialAction + ticketAction + '<a class="is-secondary" href="/api/calendar/events/' + encodeURIComponent(event.id) + '.ics">Add this event to your calendar</a></div>' +
+      '<div class="calendar-event-actions">' + officialAction + ticketAction + '<a class="is-secondary" href="/api/calendar/events/' + encodeURIComponent(event.id) + '.ics">Save date</a><button class="is-secondary" type="button" data-share-event data-share-title="' + escapeHtml(event.title) + '" data-share-anchor="' + escapeHtml(eventAnchor(event)) + '">Share</button></div>' +
       '</article>';
   }
 
-  function renderLists() {
+  async function shareEvent(control) {
+    var shareUrl = location.origin + location.pathname + "#" + control.dataset.shareAnchor;
+    var shareData = { title:control.dataset.shareTitle || document.title, url:shareUrl };
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (error) {
+        if (error && error.name === "AbortError") return;
+      }
+    }
+    var copied = false;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try { await navigator.clipboard.writeText(shareUrl); copied = true; } catch (error) { copied = false; }
+    }
+    if (!copied) {
+      var field = document.createElement("textarea");
+      field.value = shareUrl;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      copied = document.execCommand("copy");
+      field.remove();
+    }
+    if (!copied) return;
+    control.textContent = "Link copied";
+    control.setAttribute("aria-live", "polite");
+    window.setTimeout(function () { control.textContent = "Share"; }, 2000);
+  }
+
+  function updateResultCount() {
+    var count = activeView === "on-view" ? viewBuckets.onView.length : activeView === "month" ? filtered.length : viewBuckets.upcoming.length;
+    var label = activeView === "on-view" ? " exhibition" : activeView === "month" ? " event" : " upcoming event";
+    resultCount.textContent = count + label + (count === 1 ? "" : "s") + " in " + currentMonthName;
+  }
+
+  function renderVisibleCollections() {
     galleryEvents = {};
+    upcomingRoot.innerHTML = activeView === "upcoming"
+      ? (viewBuckets.upcoming.length ? viewBuckets.upcoming.map(eventCard).join("") : '<p class="calendar-empty">No upcoming approved events match these filters.</p>')
+      : "";
+    onViewRoot.innerHTML = activeView === "on-view"
+      ? (viewBuckets.onView.length ? viewBuckets.onView.map(eventCard).join("") : '<p class="calendar-empty">No exhibitions on view match these filters.</p>')
+      : "";
+    pastRoot.innerHTML = pastDisclosure.open
+      ? (viewBuckets.past.length ? viewBuckets.past.map(eventCard).join("") : '<p class="calendar-empty">No past events match these filters.</p>')
+      : "";
+    scheduleDescriptionSync();
+  }
+
+  function setView(view) {
+    activeView = ["upcoming","on-view","month"].includes(view) ? view : "upcoming";
+    viewButtons.forEach(function (button) {
+      var selected = button.dataset.calendarView === activeView;
+      button.setAttribute("aria-selected", selected ? "true" : "false");
+      button.tabIndex = selected ? 0 : -1;
+    });
+    viewPanels.forEach(function (panel) { panel.hidden = panel.id !== activeView; });
+    renderVisibleCollections();
+    updateResultCount();
+  }
+
+  function renderLists() {
     var onView = filtered.filter(isOnViewExhibition);
     var dated = filtered.filter(function (event) { return !isOnViewExhibition(event); });
     var upcoming = dated.filter(function (event) { return !isPast(event); });
     var past = dated.filter(isPast).reverse();
     var monthName = new Intl.DateTimeFormat("en-US", { month:"long", year:"numeric" }).format(activeMonth);
+    currentMonthName = monthName;
+    viewBuckets = { upcoming:upcoming, onView:onView, past:past };
     onViewTitle.textContent = "On View in " + monthName;
-    onViewSection.hidden = !onView.length;
-    onViewRoot.innerHTML = onView.map(eventCard).join("");
-    resultCount.textContent = filtered.length + (filtered.length === 1 ? " event" : " events") + " shown in " + monthName;
-    upcomingRoot.innerHTML = upcoming.length ? upcoming.map(eventCard).join("") : '<p class="calendar-empty">No upcoming approved events match these filters.</p>';
-    pastRoot.innerHTML = past.length ? past.map(eventCard).join("") : '<p class="calendar-empty">No past events match these filters.</p>';
-    scheduleDescriptionSync();
+    document.getElementById("upcomingViewCount").textContent = upcoming.length;
+    document.getElementById("onViewCount").textContent = onView.length;
+    pastEventCount.textContent = past.length + (past.length === 1 ? " event" : " events");
+    renderVisibleCollections();
+    updateResultCount();
   }
 
   function dayEvents(key) {
@@ -216,7 +399,7 @@
   function renderAgenda(key) {
     var events = dayEvents(key);
     agenda.innerHTML = events.map(function (event) {
-      return '<a href="#' + eventAnchor(event) + '"><strong>' + escapeHtml(event.title) + '</strong><small>' + escapeHtml(eventDate(event)) + '</small></a>';
+      return '<a href="#' + eventAnchor(event) + '" data-calendar-event-link><strong>' + escapeHtml(event.title) + '</strong><small>' + escapeHtml(eventDate(event)) + '</small></a>';
     }).join("");
     Array.from(grid.querySelectorAll(".calendar-day")).forEach(function (day) { day.classList.toggle("is-selected", day.dataset.date === key); });
   }
@@ -252,8 +435,37 @@
       var end = dateKey(event.endsAt || event.startsAt);
       return start && start <= monthEnd && end >= monthStart;
     });
+    var selectedFilters = checkedValues(subjectRoot).length + checkedValues(formatRoot).length + checkedValues(affiliationRoot).length + checkedValues(modeRoot).length;
+    filterCount.textContent = selectedFilters ? " (" + selectedFilters + ")" : "";
     renderLists();
     renderMonth();
+  }
+
+  function eventForAnchor(anchor) {
+    return allEvents.find(function (event) { return eventAnchor(event) === anchor; });
+  }
+
+  function navigateToEvent(anchor, updateHistory) {
+    var event = eventForAnchor(anchor);
+    if (!event) return false;
+    if (isOnViewExhibition(event)) setView("on-view");
+    else if (isPast(event)) {
+      pastDisclosure.open = true;
+      renderVisibleCollections();
+    } else setView("upcoming");
+    if (updateHistory && history.replaceState) history.replaceState(null, "", "#" + anchor);
+    requestAnimationFrame(function () {
+      var target = document.getElementById(anchor);
+      if (target) target.scrollIntoView({ block:"start" });
+    });
+    return true;
+  }
+
+  function syncFromHash() {
+    var anchor = decodeURIComponent(location.hash.replace(/^#/, ""));
+    if (!anchor) return;
+    if (["upcoming","on-view","month"].includes(anchor)) setView(anchor);
+    else navigateToEvent(anchor, false);
   }
 
   renderFilters(subjectRoot, SUBJECT_LABELS, "subject");
@@ -265,17 +477,55 @@
   formatRoot.addEventListener("change", applyFilters);
   affiliationRoot.addEventListener("change", applyFilters);
   modeRoot.addEventListener("change", applyFilters);
-  document.getElementById("clearFilters").addEventListener("click", function () {
+  filterToggle.addEventListener("click", function () {
+    var shouldOpen = filterPanel.hidden;
+    filterPanel.hidden = !shouldOpen;
+    filterToggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+  });
+  clearFilters.addEventListener("click", function () {
     search.value = "";
     Array.from(document.querySelectorAll(".filter-chip input")).forEach(function (input) { input.checked = false; });
     applyFilters();
   });
+  viewButtons.forEach(function (button) {
+    button.addEventListener("click", function () { setView(button.dataset.calendarView); });
+  });
+  pastDisclosure.addEventListener("toggle", renderVisibleCollections);
   document.getElementById("previousMonth").addEventListener("click", function () { activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() - 1, 1); applyFilters(); });
   document.getElementById("nextMonth").addEventListener("click", function () { activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 1); applyFilters(); });
   grid.addEventListener("click", function (event) { var button = event.target.closest("button[data-date]"); if (button) renderAgenda(button.dataset.date); });
   document.addEventListener("click", function (event) {
+    var viewLink = event.target.closest("[data-calendar-view-link]");
+    if (viewLink) {
+      event.preventDefault();
+      var view = viewLink.dataset.calendarViewLink;
+      setView(view);
+      if (history.replaceState) history.replaceState(null, "", "#" + view);
+      document.getElementById(view).scrollIntoView({ block:"start" });
+      return;
+    }
+    var eventLink = event.target.closest('a[href^="#event-"]');
+    if (eventLink) {
+      var anchor = decodeURIComponent(eventLink.getAttribute("href").slice(1));
+      if (eventForAnchor(anchor)) {
+        event.preventDefault();
+        navigateToEvent(anchor, true);
+        return;
+      }
+    }
     var galleryButton=event.target.closest("[data-gallery-event]");
     if(galleryButton){openGallery(galleryButton.dataset.galleryEvent,Number(galleryButton.dataset.galleryIndex)||0);return;}
+    var shareControl = event.target.closest("[data-share-event]");
+    if (shareControl) { shareEvent(shareControl); return; }
+    var tagControl = event.target.closest("[data-tag-toggle]");
+    if (tagControl) {
+      var expanded = tagControl.getAttribute("aria-expanded") !== "true";
+      var tagRoot = tagControl.closest(".calendar-tags");
+      tagRoot.querySelectorAll(".calendar-tag.is-extra").forEach(function (tag) { tag.hidden = !expanded; });
+      tagControl.setAttribute("aria-expanded", expanded ? "true" : "false");
+      tagControl.textContent = expanded ? "Show fewer" : "+" + tagRoot.querySelectorAll(".calendar-tag.is-extra").length + " more";
+      return;
+    }
     var control = event.target.closest("[data-description-toggle]");
     if (!control) return;
     var description = document.getElementById(control.getAttribute("aria-controls"));
@@ -294,6 +544,7 @@
   document.getElementById("calendarMediaDialog").addEventListener("click",function(event){if(event.target===this)this.close();});
   document.addEventListener("keydown",function(event){var dialog=document.getElementById("calendarMediaDialog");if(!dialog.open)return;if(event.key==="Escape"){event.preventDefault();dialog.close();activeGallery=null;return;}if(event.key==="ArrowLeft"){event.preventDefault();shiftGallery(-1);}if(event.key==="ArrowRight"){event.preventDefault();shiftGallery(1);}});
   window.addEventListener("resize", scheduleDescriptionSync);
+  window.addEventListener("hashchange", syncFromHash);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleDescriptionSync);
 
   fetch("/api/calendar/events")
@@ -301,6 +552,7 @@
     .then(function (payload) {
       allEvents = Array.isArray(payload.events) ? payload.events.filter(function (event) { return !event.isSeriesParent; }) : [];
       applyFilters();
+      syncFromHash();
       requestAnimationFrame(function () { document.documentElement.classList.add("is-ready"); });
     })
     .catch(function () {
