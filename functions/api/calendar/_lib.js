@@ -3374,6 +3374,97 @@ async function listCandidates(db, status) {
   return candidates.map((candidate) => ({ ...candidate, relatedLinks: linksByCandidate.get(candidate.id) || [] }));
 }
 
+function validCalendarDay(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function calendarRecordCoversDay(record, day) {
+  const startsOn = dateKey(record.starts_at);
+  if (!startsOn) return false;
+  const endsOn = dateKey(record.ends_at) || startsOn;
+  if (day < startsOn || day > endsOn) return false;
+  if (
+    record.date_kind === "timed" &&
+    startsOn !== endsOn &&
+    day === endsOn &&
+    /T00:00(?::00)?(?:Z|[+-]\d{2}:?\d{2})?$/.test(asString(record.ends_at))
+  ) return false;
+  return true;
+}
+
+async function handleCalendarDay(request, env) {
+  if (request.method !== "GET") return errorResponse("Method not allowed.", 405);
+  const day = new URL(request.url).searchParams.get("date") || "";
+  if (!validCalendarDay(day)) return errorResponse("date must be a real calendar day in YYYY-MM-DD format.");
+  const db = requireDb(env);
+  const [candidateResult, occurrenceResult] = await Promise.all([
+    db.prepare(
+      `SELECT id,title,organizer,date_kind,starts_at,ends_at,timezone,venue_name,venue_address,
+              status,schedule_status,verification_state,source_url
+       FROM calendar_candidates
+       WHERE status NOT IN ('rejected','duplicate') AND starts_at IS NOT NULL`
+    ).all(),
+    db.prepare(
+      `SELECT o.id,o.candidate_id,o.occurrence_type,o.title,o.date_kind,o.starts_at,o.ends_at,
+              o.timezone,o.venue_name,o.venue_address,o.status,o.verification_state,o.source_url,
+              c.title parent_title,c.organizer,c.status candidate_status,c.schedule_status candidate_schedule_status,
+              c.venue_name parent_venue_name,c.venue_address parent_venue_address,c.source_url parent_source_url
+       FROM calendar_candidate_occurrences o
+       JOIN calendar_candidates c ON c.id=o.candidate_id
+       WHERE c.status NOT IN ('rejected','duplicate') AND o.starts_at IS NOT NULL`
+    ).all(),
+  ]);
+  const candidates = (candidateResult.results || []).filter((row) => calendarRecordCoversDay(row, day)).map((row) => ({
+    key: `candidate:${row.id}`,
+    kind: "event",
+    candidateId: row.id,
+    occurrenceId: "",
+    occurrenceType: "primary",
+    title: row.title,
+    parentTitle: "",
+    organizer: row.organizer || "",
+    dateKind: row.date_kind,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at || "",
+    timezone: row.timezone || "America/New_York",
+    venueName: row.venue_name || "",
+    venueAddress: row.venue_address || "",
+    candidateStatus: row.status,
+    scheduleStatus: row.schedule_status || "scheduled",
+    verificationState: row.verification_state || "unverified",
+    sourceUrl: row.source_url || "",
+  }));
+  const occurrences = (occurrenceResult.results || []).filter((row) => calendarRecordCoversDay(row, day)).map((row) => ({
+    key: `occurrence:${row.id}`,
+    kind: "occurrence",
+    candidateId: row.candidate_id,
+    occurrenceId: row.id,
+    occurrenceType: row.occurrence_type || "other",
+    title: row.title || occurrenceTypeLabel(row.occurrence_type),
+    parentTitle: row.parent_title,
+    organizer: row.organizer || "",
+    dateKind: row.date_kind,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at || "",
+    timezone: row.timezone || "America/New_York",
+    venueName: row.venue_name || row.parent_venue_name || "",
+    venueAddress: row.venue_address || row.parent_venue_address || "",
+    candidateStatus: row.candidate_status,
+    scheduleStatus: row.status === "cancelled" ? "cancelled" : row.candidate_schedule_status || "scheduled",
+    verificationState: row.verification_state || "unverified",
+    sourceUrl: row.source_url || row.parent_source_url || "",
+  }));
+  const items = [...candidates, ...occurrences].sort((left, right) => {
+    const leftAllDay = left.dateKind === "timed" ? 1 : 0;
+    const rightAllDay = right.dateKind === "timed" ? 1 : 0;
+    return leftAllDay - rightAllDay || asString(left.startsAt).localeCompare(asString(right.startsAt)) || left.title.localeCompare(right.title);
+  });
+  return json({ day, count: items.length, items });
+}
+
 async function handleCandidates(request, env, parts) {
   const db = requireDb(env);
   const method = request.method;
@@ -7493,6 +7584,7 @@ export async function handleCalendarAdminApi(request, env) {
       ]);
       return json({ candidates, sources: (sources.results || []).map(normalizeSource), socialSources, connectors, knownOrganizations, strongPicks, profile: normalizeProfile(profile), broadDiscoveryEnabled: Boolean(env.OPENAI_API_KEY) });
     }
+    if (parts[0] === "day") return handleCalendarDay(request, env);
     if (parts[0] === "candidates") return handleCandidates(request, env, parts);
     if (parts[0] === "sources") return handleSources(request, env, parts);
     if (parts[0] === "social-sources") return handleSocialSources(request, env, parts);

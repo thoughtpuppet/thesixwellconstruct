@@ -1,13 +1,16 @@
 (function () {
   "use strict";
   var TOKEN_KEY = "swc_submissions_admin_token";
+  var STRONG_PICKS_COLLAPSE_KEY = "swc_calendar_strong_picks_open";
   var SUBJECTS = [["art","Art"],["art-making","Art Making"],["film","Film"],["poetry-music","Poetry / Music"],["technology","Technology"],["ai","AI"],["creative-technology","Creative Technology"],["anthropology","Anthropology"],["engineering","Engineering"],["philosophy","Philosophy"]];
   var FORMATS = [["exhibition","Exhibition"],["screening","Screening"],["performance","Performance"],["experimental-event","Experimental Event"],["lecture-talk","Lecture / Talk"],["panel","Panel"],["workshop","Workshop"],["conference","Conference"]];
   var OCCURRENCE_TYPES = [["opening_reception","Opening Reception"],["artist_talk","Artist Talk"],["mixer","Mixer"],["screening","Screening"],["performance","Performance"],["workshop","Workshop"],["panel","Panel"],["lecture","Lecture"],["other","Related Program"]];
   var TICKET_STATUSES = [["unknown","Unknown"],["not_required","No ticket required"],["not_yet_on_sale","Not yet on sale"],["on_sale","On sale"],["sold_out","Sold out"],["registration_open","Registration open"],["registration_closed","Registration closed"]];
   var STATUSES = [["review","Review Queue"],["updates","Updates"],["ready","Ready to Publish"],["published","Published"],["needs_verification","Needs Verification"],["rejected","Rejected"],["cancelled","Cancelled"],["duplicate","Duplicates"]];
   var token = localStorage.getItem(TOKEN_KEY) || "";
-  var state = { candidates:[], sources:[], socialSources:[], connectors:[], knownOrganizations:[], strongPicks:[], profile:null, suggestions:[], runs:[], filter:"review", candidateQuery:"", selectedId:"", draftNew:false, broadDiscoveryEnabled:false, activeCandidate:null, research:null, mediaPreviewUrls:[], openSourceKey:"" };
+  var initialReviewParams = new URLSearchParams(location.search);
+  var initialDay = initialReviewParams.get("day") || "";
+  var state = { candidates:[], sources:[], socialSources:[], connectors:[], knownOrganizations:[], strongPicks:[], profile:null, suggestions:[], runs:[], filter:"review", candidateQuery:"", selectedId:"", draftNew:false, broadDiscoveryEnabled:false, activeCandidate:null, research:null, mediaPreviewUrls:[], openSourceKey:"", reviewMode:initialReviewParams.get("reviewMode")==="day"?"day":"queue", dayDate:validCalendarDay(initialDay)?initialDay:atlantaToday(), dayItems:[], dayLoading:false, dayError:"", selectedOccurrenceId:"" };
   var tokenInput = document.getElementById("tokenInput");
   var authPanel = document.getElementById("authPanel");
   var app = document.getElementById("studioApp");
@@ -23,6 +26,11 @@
   function isInstagramProfileUrl(value) { try { if(!isInstagramUrl(value))return false;var parts=new URL(value).pathname.split("/").filter(Boolean);return parts.length===1&&!['p','reel','reels','stories','explore','accounts','direct','tv'].includes(parts[0].toLowerCase()); } catch(error){return false;} }
   function isSocialUrl(value) { try { var host = new URL(value).hostname.toLowerCase().replace(/^www\./,""); return ["instagram.com","instagr.am","threads.net","tiktok.com"].some(function(domain){return host===domain||host.endsWith("."+domain);}); } catch (error) { return false; } }
   function displayDate(value) { var date = value ? new Date(value.length === 10 ? value + "T12:00:00" : value) : null; return date && !Number.isNaN(date.getTime()) ? new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", hour:value.length > 10 ? "numeric" : undefined, minute:value.length > 10 ? "2-digit" : undefined }).format(date) : "Date not confirmed"; }
+  function validCalendarDay(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value||"")))return false;var parts=value.split("-").map(Number);var date=new Date(Date.UTC(parts[0],parts[1]-1,parts[2]));return date.getUTCFullYear()===parts[0]&&date.getUTCMonth()===parts[1]-1&&date.getUTCDate()===parts[2];}
+  function atlantaToday(){var parts=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date()).reduce(function(result,part){result[part.type]=part.value;return result;},{});return parts.year+"-"+parts.month+"-"+parts.day;}
+  function shiftCalendarDay(day,amount){var parts=day.split("-").map(Number);var date=new Date(Date.UTC(parts[0],parts[1]-1,parts[2]+amount));return date.toISOString().slice(0,10);}
+  function agendaDayLabel(day){var parts=day.split("-").map(Number);return new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric",timeZone:"UTC"}).format(new Date(Date.UTC(parts[0],parts[1]-1,parts[2])));}
+  function agendaTime(item){if(item.dateKind!=="timed")return item.dateKind==="date_range"?"On view":"All day";var options={hour:"numeric",minute:"2-digit",timeZone:item.timezone||"America/New_York"};var start=new Date(item.startsAt);var end=item.endsAt?new Date(item.endsAt):null;var formatter=new Intl.DateTimeFormat("en-US",options);if(String(item.startsAt).slice(0,10)<state.dayDate)return end&&!Number.isNaN(end.getTime())?"Continues until "+formatter.format(end):"Ongoing";return formatter.format(start)+(end&&!Number.isNaN(end.getTime())?" – "+formatter.format(end):"");}
   function toast(message) { var root = document.getElementById("toast"); root.textContent = message; root.classList.add("is-visible"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { root.classList.remove("is-visible"); }, 3200); }
   async function api(path, options) {
     var response = await fetch(path, Object.assign({}, options || {}, { headers:Object.assign({ authorization:"Bearer " + token, "content-type":"application/json" }, options && options.headers || {}) }));
@@ -128,7 +136,52 @@
     }).join(""):'<p class="empty-state">No strong picks yet. The Scout adds an entry only when it finds a strong new match or a material update.</p>';
   }
   async function loadStrongPicks() {
-    var payload=await api("/api/admin/calendar/strong-picks");state.strongPicks=payload.strongPicks||[];renderStrongPicks();
+    var payload=await api("/api/admin/calendar/strong-picks");state.strongPicks=payload.strongPicks||[];renderStrongPicks();return state.strongPicks;
+  }
+  function strongPickIdentity(pick) {
+    return [pick.id||"",pick.candidateId||"",pick.kind||"",pick.detectedAt||""].join("|");
+  }
+  async function refreshStrongPicks() {
+    var button=document.getElementById("refreshStrongPicks");
+    var status=document.getElementById("strongPicksRefreshStatus");
+    var list=document.getElementById("strongPicksList");
+    var before=state.strongPicks.map(strongPickIdentity).join("\n");
+    button.disabled=true;
+    button.textContent="Refreshing…";
+    list.setAttribute("aria-busy","true");
+    status.classList.remove("is-error","is-success");
+    status.textContent="Checking saved Scout picks…";
+    try {
+      var picks=await loadStrongPicks();
+      var after=picks.map(strongPickIdentity).join("\n");
+      var checkedAt=new Intl.DateTimeFormat("en-US",{hour:"numeric",minute:"2-digit",second:"2-digit"}).format(new Date());
+      status.classList.add("is-success");
+      status.textContent=(before===after?"Up to date. ":"Updated. ")+picks.length+" saved pick"+(picks.length===1?"":"s")+" loaded at "+checkedAt+". Refresh does not start a Scout run.";
+    } catch(error) {
+      status.classList.add("is-error");
+      status.textContent="Could not refresh saved picks: "+error.message;
+      toast(error.message);
+    } finally {
+      list.removeAttribute("aria-busy");
+      button.disabled=false;
+      button.textContent="Refresh Picks";
+    }
+  }
+  function setStrongPicksExpanded(expanded, persist) {
+    var panel=document.querySelector(".strong-picks-panel");
+    var content=document.getElementById("strongPicksContent");
+    var button=document.getElementById("toggleStrongPicks");
+    if(!panel||!content||!button)return;
+    panel.dataset.collapsed=String(!expanded);
+    content.hidden=!expanded;
+    button.setAttribute("aria-expanded",String(expanded));
+    button.textContent=expanded?"Collapse":"Expand";
+    if(persist){try{localStorage.setItem(STRONG_PICKS_COLLAPSE_KEY,expanded?"open":"closed");}catch(error){/* Storage is optional; the control still works for this visit. */}}
+  }
+  function initializeStrongPicksCollapse() {
+    var stored="";
+    try{stored=localStorage.getItem(STRONG_PICKS_COLLAPSE_KEY)||"";}catch(error){/* Default open when storage is unavailable. */}
+    setStrongPicksExpanded(stored!=="closed",false);
   }
 
   function occurrenceOptions(choices, selected) { return choices.map(function (choice) { return '<option value="'+escapeHtml(choice[0])+'"'+(choice[0]===selected?' selected':'')+'>'+escapeHtml(choice[1])+'</option>'; }).join(''); }
@@ -291,7 +344,29 @@
   function renderStatusFilters() {
     document.getElementById("statusFilters").innerHTML = STATUSES.map(function (item) { var count = state.candidates.filter(function (candidate) { return matchesStatus(candidate,item[0]); }).length; return '<button type="button" data-status="' + item[0] + '" class="' + (state.filter === item[0] ? 'is-active' : '') + '">' + escapeHtml(item[1]) + ' / ' + count + '</button>'; }).join("");
   }
+  function persistReviewMode(){var url=new URL(location.href);if(state.reviewMode==="day"){url.searchParams.set("reviewMode","day");url.searchParams.set("day",state.dayDate);}else{url.searchParams.delete("reviewMode");url.searchParams.delete("day");}history.replaceState(null,"",url.pathname+url.search+url.hash);}
+  function renderReviewMode(){var controls=document.getElementById("reviewModeControls");controls.querySelectorAll("[data-review-mode]").forEach(function(button){var active=button.dataset.reviewMode===state.reviewMode;button.classList.toggle("is-active",active);button.setAttribute("aria-pressed",String(active));});document.getElementById("statusFilters").hidden=state.reviewMode==="day";document.getElementById("dayAgendaControls").hidden=state.reviewMode!=="day";document.getElementById("dayAgendaDate").value=state.dayDate;var search=document.getElementById("candidateSearch");search.placeholder=state.reviewMode==="day"?"Event, occurrence, organizer, or venue":"Event, artist, venue, source, or private note";}
+  function agendaSearchText(item){return [item.title,item.parentTitle,item.organizer,item.venueName,item.venueAddress,item.candidateStatus,item.scheduleStatus,item.occurrenceType].join(" ").toLowerCase();}
+  function renderDayAgenda(){
+    renderReviewMode();
+    var query=state.candidateQuery.trim().toLowerCase();
+    var items=state.dayItems.filter(function(item){return !query||agendaSearchText(item).includes(query);});
+    var status=document.getElementById("dayAgendaStatus");
+    var searchStatus=document.getElementById("candidateSearchStatus");
+    document.getElementById("clearCandidateSearch").disabled=!query;
+    if(state.dayLoading){status.textContent="Loading "+agendaDayLabel(state.dayDate)+"…";listRoot.setAttribute("aria-busy","true");listRoot.innerHTML='<p class="empty-state">Loading this day…</p>';return;}
+    listRoot.removeAttribute("aria-busy");
+    status.textContent=state.dayError?state.dayError:state.dayItems.length+" calendar item"+(state.dayItems.length===1?"":"s")+" on "+agendaDayLabel(state.dayDate)+".";
+    status.classList.toggle("is-error",Boolean(state.dayError));
+    searchStatus.textContent=query?items.length+" matching item"+(items.length===1?"":"s")+" on this day.":"Showing every editable event and related occurrence on this day.";
+    listRoot.innerHTML=items.length?items.map(function(item){var occurrence=item.kind==="occurrence";var active=item.candidateId===state.selectedId&&(!occurrence||item.occurrenceId===state.selectedOccurrenceId);return '<article class="day-agenda-card'+(occurrence?' is-occurrence':'')+(active?' is-active':'')+'"><button type="button" data-candidate-id="'+escapeHtml(item.candidateId)+'"'+(occurrence?' data-occurrence-id="'+escapeHtml(item.occurrenceId)+'"':'')+'><span class="day-agenda-time">'+escapeHtml(agendaTime(item))+'</span><span class="status">'+escapeHtml((occurrence?item.occurrenceType:item.candidateStatus).replace(/_/g," "))+'</span><strong>'+escapeHtml(item.title)+'</strong>'+(occurrence?'<span class="day-agenda-parent">Part of '+escapeHtml(item.parentTitle)+'</span>':'')+'<span>'+escapeHtml(item.venueName||item.organizer||"Venue not confirmed")+'</span>'+(item.scheduleStatus!=="scheduled"?'<span class="day-agenda-warning">'+escapeHtml(item.scheduleStatus.replace(/_/g," "))+'</span>':'')+'</button>'+externalLink(item.sourceUrl,"Open source","candidate-source-link")+'</article>';}).join(""):'<p class="empty-state">'+(query?"No calendar items on this day match the search.":"No editable calendar items on this day.")+'</p>';
+  }
+  async function loadDayAgenda(){state.dayLoading=true;state.dayError="";renderDayAgenda();try{var payload=await api("/api/admin/calendar/day?date="+encodeURIComponent(state.dayDate));state.dayItems=payload.items||[];}catch(error){state.dayItems=[];state.dayError=error.message;}finally{state.dayLoading=false;renderDayAgenda();}}
+  async function setReviewMode(mode){state.reviewMode=mode==="day"?"day":"queue";state.selectedOccurrenceId="";persistReviewMode();renderReviewMode();if(state.reviewMode==="day")await loadDayAgenda();else renderCandidateList();}
+  async function setAgendaDay(day){if(!validCalendarDay(day))return;state.dayDate=day;state.selectedOccurrenceId="";persistReviewMode();await loadDayAgenda();}
   function renderCandidateList() {
+    if(state.reviewMode==="day"){renderDayAgenda();return;}
+    renderReviewMode();
     var searching = Boolean(state.candidateQuery.trim());
     var candidates = state.candidates.filter(function (candidate) { return (searching || matchesStatus(candidate,state.filter)) && matchesCandidateSearch(candidate); });
     var statusRoot = document.getElementById("candidateSearchStatus");
@@ -301,6 +376,14 @@
     listRoot.innerHTML = candidates.length ? candidates.map(function (candidate) { return '<article class="candidate-card' + (candidate.id === state.selectedId ? ' is-active' : '') + '"><button class="candidate-card-select" type="button" data-candidate-id="' + escapeHtml(candidate.id) + '"><span class="status">' + escapeHtml(lifecycleLabel(candidate)) + '</span><strong>' + escapeHtml(candidate.title) + '</strong><span>' + escapeHtml(displayDate(candidate.startsAt)) + '</span><span>' + escapeHtml(candidate.venueName || candidate.organizer || "Venue not confirmed") + '</span>' + (candidate.lastCheckStatus && candidate.lastCheckStatus !== "never" ? '<span>Source check / ' + escapeHtml(candidate.lastCheckStatus.replace(/_/g," ")) + '</span>' : '') + '</button>' + externalLink(candidate.sourceUrl,"Open source","candidate-source-link") + '</article>'; }).join("") : '<p class="empty-state">' + (searching ? "No event records match this search." : "No event records in this view.") + '</p>';
   }
   function skipCandidate() {
+    if(state.reviewMode==="day"){
+      var dayQueue=state.dayItems.filter(function(item){return !state.candidateQuery.trim()||agendaSearchText(item).includes(state.candidateQuery.trim().toLowerCase());});
+      if(!dayQueue.length){toast("There are no events on this day.");return;}
+      var currentIndex=dayQueue.findIndex(function(item){return item.candidateId===state.selectedId&&item.occurrenceId===state.selectedOccurrenceId;});
+      var nextItem=currentIndex<0?dayQueue[0]:dayQueue[(currentIndex+1)%dayQueue.length];
+      if(!nextItem||(nextItem.candidateId===state.selectedId&&nextItem.occurrenceId===state.selectedOccurrenceId)){toast("There are no other events on this day.");return;}
+      toast("Skipped. No changes were saved.");selectCandidate(nextItem.candidateId,nextItem.occurrenceId);return;
+    }
     var searching = Boolean(state.candidateQuery.trim());
     var queue = state.candidates.filter(function (candidate) { return (searching || matchesStatus(candidate,state.filter)) && matchesCandidateSearch(candidate); });
     if (!queue.length) { toast("There are no events in this view."); return; }
@@ -385,15 +468,17 @@
   }
   async function hydrateMediaPreviews(){var images=Array.from(editorRoot.querySelectorAll("[data-media-preview]"));await Promise.all(images.map(async function(image){if(!image.dataset.mediaUrl)return;try{var response=await fetch(image.dataset.mediaUrl,{headers:{authorization:"Bearer "+token}});if(!response.ok)throw new Error("Media preview unavailable.");var blob=await response.blob();var url=URL.createObjectURL(blob);state.mediaPreviewUrls.push(url);image.src=url;image.alt=(image.closest("[data-candidate-media]").querySelector("[data-media-alt]")||{}).value||"Event media preview";}catch(error){toast(error.message);}}));}
   async function uploadMedia(files){if(!state.selectedId||!files.length)return;var current=candidatePayload();for(var file of files){if(!["image/jpeg","image/png","image/webp","image/gif"].includes(file.type))throw new Error("Use JPEG, PNG, WebP, or GIF images.");if(file.size>15*1024*1024)throw new Error("Each image must be 15 MB or smaller.");var form=new FormData();form.append("file",file);form.append("privacy","internal");form.append("consent_status","not-required");form.append("public_presentation","hidden");form.append("alt_text",(state.activeCandidate.title||"Event")+" image");var response=await fetch("/api/admin/media",{method:"POST",headers:{authorization:"Bearer "+token},body:form});var payload=await response.json().catch(function(){return {};});if(!response.ok)throw new Error(payload.error||"Media upload failed.");current.media.push({id:"",mediaId:payload.record.id,sourceUrl:"",provenanceUrl:"",role:current.media.length?"gallery":"primary",altText:(state.activeCandidate.title||"Event")+" image",caption:"",includePublic:false,sortOrder:current.media.length});}await api("/api/admin/calendar/candidates/"+encodeURIComponent(state.selectedId),{method:"PATCH",body:JSON.stringify(current)});toast(files.length+" media item"+(files.length===1?"":"s")+" uploaded privately.");await refreshCandidates(state.selectedId);}
-  async function selectCandidate(id) {
-    state.selectedId = id; state.draftNew = false; renderCandidateList();
-    try { var payload = await api("/api/admin/calendar/candidates/" + encodeURIComponent(id)); var index = state.candidates.findIndex(function (candidate) { return candidate.id === id; }); if (index >= 0) state.candidates[index] = payload.candidate; renderEditor(payload.candidate); }
+  function revealSelectedOccurrence(){if(!state.selectedOccurrenceId)return;var row=editorRoot.querySelector('[data-occurrence-id="'+CSS.escape(state.selectedOccurrenceId)+'"]');if(!row)return;var section=row.closest("details.editor-section");if(section)section.open=true;row.classList.add("is-day-selected");row.tabIndex=-1;requestAnimationFrame(function(){row.focus({preventScroll:true});row.scrollIntoView({behavior:"smooth",block:"center"});});}
+  async function selectCandidate(id,occurrenceId) {
+    state.selectedId = id; state.selectedOccurrenceId=occurrenceId||""; state.draftNew = false; renderCandidateList();
+    try { var payload = await api("/api/admin/calendar/candidates/" + encodeURIComponent(id)); var index = state.candidates.findIndex(function (candidate) { return candidate.id === id; }); if (index >= 0) state.candidates[index] = payload.candidate; renderEditor(payload.candidate);revealSelectedOccurrence();if(matchMedia("(max-width: 900px)").matches)editorRoot.scrollIntoView({behavior:"smooth",block:"start"}); }
     catch (error) { toast(error.message); }
   }
   async function refreshCandidates(selectId, options) {
     options = options || {};
     var payload = await api("/api/admin/calendar/candidates");
     state.candidates = payload.candidates || [];
+    if(state.reviewMode==="day")await loadDayAgenda();
     if (options.nextQueue) {
       state.filter = options.nextQueue;
       var remainingReview = state.candidates.filter(function (candidate) {
@@ -661,7 +746,7 @@
     document.getElementById("authMessage").textContent="";
     try {
       var payload = await api("/api/admin/calendar"); localStorage.setItem(TOKEN_KEY, token); state.candidates=payload.candidates||[]; state.sources=payload.sources||[]; state.socialSources=payload.socialSources||[]; state.connectors=payload.connectors||[]; state.knownOrganizations=payload.knownOrganizations||[]; state.strongPicks=payload.strongPicks||[]; state.profile=payload.profile; state.broadDiscoveryEnabled=payload.broadDiscoveryEnabled;
-      tokenInput.value=""; authPanel.hidden=true; app.hidden=false; renderStatusFilters(); renderCandidateList(); renderStrongPicks(); renderSources(); renderSocialSources(); renderConnectors(); renderProfile(); renderKnownOrganizations(); await Promise.all([loadSuggestions(),loadRuns()]);
+      tokenInput.value=""; authPanel.hidden=true; app.hidden=false; renderStatusFilters(); renderReviewMode(); renderCandidateList(); renderStrongPicks(); renderSources(); renderSocialSources(); renderConnectors(); renderProfile(); renderKnownOrganizations(); await Promise.all([loadSuggestions(),loadRuns(),state.reviewMode==="day"?loadDayAgenda():Promise.resolve()]);
     } catch (error) {
       if (error.status === 401 || error.status === 403) { token=""; localStorage.removeItem(TOKEN_KEY); tokenInput.value=""; }
       app.hidden=true; authPanel.hidden=false; document.getElementById("authMessage").textContent=error.message;
@@ -675,12 +760,18 @@
   deleteDialog.addEventListener("close",function(){var trigger=deleteContext&&deleteContext.trigger;deleteContext=null;if(trigger&&document.contains(trigger))trigger.focus();});
   if (token) { authPanel.hidden=true; connect(); } else { authPanel.hidden=false; }
   document.querySelector(".studio-tabs").addEventListener("click",function(event){var button=event.target.closest("button[data-view]");if(!button)return;document.querySelectorAll(".studio-tabs button").forEach(function(item){item.classList.toggle("is-active",item===button);});document.querySelectorAll("[data-panel]").forEach(function(panel){panel.hidden=panel.dataset.panel!==button.dataset.view;});});
+  document.getElementById("reviewModeControls").addEventListener("click",function(event){var button=event.target.closest("[data-review-mode]");if(button)setReviewMode(button.dataset.reviewMode);});
+  document.getElementById("dayAgendaDate").addEventListener("change",function(event){setAgendaDay(event.target.value);});
+  document.getElementById("dayAgendaToday").addEventListener("click",function(){setAgendaDay(atlantaToday());});
+  document.getElementById("dayAgendaControls").addEventListener("click",function(event){var button=event.target.closest("[data-day-shift]");if(button)setAgendaDay(shiftCalendarDay(state.dayDate,Number(button.dataset.dayShift)));});
   document.getElementById("statusFilters").addEventListener("click",function(event){var button=event.target.closest("button[data-status]");if(!button)return;state.filter=button.dataset.status;renderStatusFilters();renderCandidateList();});
   document.getElementById("candidateSearch").addEventListener("input",function(event){state.candidateQuery=event.target.value;renderCandidateList();});
   document.getElementById("clearCandidateSearch").addEventListener("click",function(){state.candidateQuery="";var input=document.getElementById("candidateSearch");input.value="";renderCandidateList();input.focus();});
-  document.getElementById("refreshStrongPicks").addEventListener("click",function(){loadStrongPicks().catch(function(error){toast(error.message);});});
-  document.getElementById("strongPicksList").addEventListener("click",async function(event){var button=event.target.closest("[data-review-strong-pick]");if(!button)return;var candidateId=button.dataset.reviewStrongPick;if(!state.candidates.some(function(candidate){return candidate.id===candidateId;}))await refreshCandidates();state.filter="review";state.candidateQuery="";document.getElementById("candidateSearch").value="";renderStatusFilters();renderCandidateList();await selectCandidate(candidateId);document.getElementById("candidateEditor").scrollIntoView({behavior:"smooth",block:"start"});});
-  listRoot.addEventListener("click",function(event){var button=event.target.closest("[data-candidate-id]");if(button)selectCandidate(button.dataset.candidateId);});
+  initializeStrongPicksCollapse();
+  document.getElementById("toggleStrongPicks").addEventListener("click",function(event){setStrongPicksExpanded(event.currentTarget.getAttribute("aria-expanded")!=="true",true);});
+  document.getElementById("refreshStrongPicks").addEventListener("click",refreshStrongPicks);
+  document.getElementById("strongPicksList").addEventListener("click",async function(event){var button=event.target.closest("[data-review-strong-pick]");if(!button)return;var candidateId=button.dataset.reviewStrongPick;if(!state.candidates.some(function(candidate){return candidate.id===candidateId;}))await refreshCandidates();state.reviewMode="queue";state.filter="review";state.candidateQuery="";state.selectedOccurrenceId="";persistReviewMode();document.getElementById("candidateSearch").value="";renderStatusFilters();renderCandidateList();await selectCandidate(candidateId);document.getElementById("candidateEditor").scrollIntoView({behavior:"smooth",block:"start"});});
+  listRoot.addEventListener("click",function(event){var button=event.target.closest("[data-candidate-id]");if(button)selectCandidate(button.dataset.candidateId,button.dataset.occurrenceId||"");});
   editorRoot.addEventListener("click",function(event){
     var actionButton=event.target.closest("button[data-action]");if(actionButton){editorAction(actionButton.dataset.action);return;}
     if(event.target.closest("[data-add-occurrence]")){var occurrenceList=document.getElementById("candidateOccurrences");var occurrenceEmpty=occurrenceList.querySelector(".occurrences-empty");if(occurrenceEmpty)occurrenceEmpty.remove();occurrenceList.insertAdjacentHTML("beforeend",occurrenceRow({occurrenceType:"other",status:"scheduled",ticketStatus:"unknown",dateKind:"timed",timezone:value("candidateTimezone")||"America/New_York",accessStatus:value("candidateAccessStatus")||"unknown",accessNotes:value("candidateAccessNotes"),audiences:value("candidateAudiences").split(",").map(function(item){return item.trim();}).filter(Boolean),verificationState:"needs_verification"}));return;}

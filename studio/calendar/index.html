@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
-<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260821-source-registry">
+<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260821-day-agenda-collapse">
 </head>
 <body>
   <header class="studio-header">
@@ -34,10 +34,16 @@
       <section class="strong-picks-panel" aria-labelledby="strongPicksTitle">
         <header class="strong-picks-header">
           <div><p class="eyebrow">Private Scout intelligence</p><h2 id="strongPicksTitle">Strong Picks</h2></div>
-          <button id="refreshStrongPicks" type="button">Refresh Picks</button>
+          <div class="strong-picks-header-actions">
+            <button id="toggleStrongPicks" type="button" aria-expanded="true" aria-controls="strongPicksContent">Collapse</button>
+            <button id="refreshStrongPicks" type="button" aria-describedby="strongPicksRefreshStatus">Refresh Picks</button>
+          </div>
         </header>
-        <p class="view-note">New strong matches and material updates appear here by discovery date. Each entry links to its private candidate; nothing becomes public until you approve it.</p>
-        <div class="strong-picks-scroll" id="strongPicksList" aria-live="polite"></div>
+        <div class="strong-picks-content" id="strongPicksContent">
+          <p class="view-note">New strong matches and material updates appear here by discovery date. Each entry links to its private candidate; nothing becomes public until you approve it.</p>
+          <p class="strong-picks-refresh-status" id="strongPicksRefreshStatus" role="status" aria-live="polite">Refresh reloads picks already saved by Scout runs. Run discovery from Scout Profile to search for new events.</p>
+          <div class="strong-picks-scroll" id="strongPicksList" aria-live="polite"></div>
+        </div>
       </section>
       <form class="link-intake" id="linkIntakeForm">
         <label><span>Event link</span><input id="eventLinkInput" type="url" inputmode="url" autocomplete="url" placeholder="https://…" required></label>
@@ -45,6 +51,17 @@
         <p id="linkIntakeStatus" role="status" aria-live="polite">Paste one event page. Scout will create or refresh a private candidate for review.</p>
       </form>
       <div class="review-toolbar">
+        <div class="review-mode-controls" id="reviewModeControls" aria-label="Calendar review view">
+          <button type="button" data-review-mode="queue">Queue</button>
+          <button type="button" data-review-mode="day">Day</button>
+        </div>
+        <div class="day-agenda-controls" id="dayAgendaControls" hidden>
+          <button type="button" data-day-shift="-1" aria-label="Previous day">Previous</button>
+          <label><span>Calendar day</span><input id="dayAgendaDate" type="date"></label>
+          <button type="button" id="dayAgendaToday">Today</button>
+          <button type="button" data-day-shift="1" aria-label="Next day">Next</button>
+          <p id="dayAgendaStatus" role="status" aria-live="polite"></p>
+        </div>
         <div class="candidate-search-row">
           <label class="candidate-search"><span>Search Studio calendar</span><input id="candidateSearch" type="search" placeholder="Event, artist, venue, source, or private note" autocomplete="off"></label>
           <button id="clearCandidateSearch" type="button">Clear search</button>
@@ -125,6 +142,6 @@
     </form>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/studio/calendar/calendar.js?v=20260821-source-registry"></script>
+<script src="/studio/calendar/calendar.js?v=20260821-day-agenda-collapse"></script>
 </body>
 </html>

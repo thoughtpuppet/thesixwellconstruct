@@ -3406,12 +3406,30 @@ test("Calendar Studio renders a private scrollable Strong Picks dashboard linked
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
   const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
   assert.match(studioHtml,/id="strongPicksList"/);
+  assert.match(studioHtml,/id="toggleStrongPicks" type="button" aria-expanded="true" aria-controls="strongPicksContent">Collapse<\/button>/);
+  assert.match(studioHtml,/class="strong-picks-content" id="strongPicksContent"/);
+  assert.match(studioHtml,/id="strongPicksRefreshStatus" role="status" aria-live="polite"/);
+  assert.match(studioHtml,/Refresh reloads picks already saved by Scout runs/);
   assert.match(studioHtml,/Private Scout intelligence/);
   assert.match(studio,/\/api\/admin\/calendar\/strong-picks/);
+  assert.match(studio,/async function refreshStrongPicks\(\)/);
+  assert.match(studio,/STRONG_PICKS_COLLAPSE_KEY = "swc_calendar_strong_picks_open"/);
+  assert.match(studio,/function setStrongPicksExpanded\(expanded, persist\)/);
+  assert.match(studio,/button\.setAttribute\("aria-expanded",String\(expanded\)\)/);
+  assert.match(studio,/addEventListener\("click",function\(event\)\{setStrongPicksExpanded/);
+  assert.match(studio,/button\.textContent="Refreshing…"/);
+  assert.match(studio,/list\.setAttribute\("aria-busy","true"\)/);
+  assert.match(studio,/"Up to date\. "/);
+  assert.match(studio,/Could not refresh saved picks/);
+  assert.match(studio,/addEventListener\("click",refreshStrongPicks\)/);
   assert.match(studio,/data-review-strong-pick/);
   assert.match(studio,/Why it fits/);
   assert.match(studio,/Programming model/);
   assert.match(studioCss,/\.strong-picks-scroll \{[^}]*max-height:520px;[^}]*overflow-y:auto;/);
+  assert.match(studioCss,/\.strong-picks-header-actions \{[^}]*display:flex;[^}]*gap:8px;/);
+  assert.match(studioCss,/\.strong-picks-panel\[data-collapsed="true"\] \.strong-picks-header \{ margin-bottom:0; \}/);
+  assert.match(studioCss,/\.strong-picks-refresh-status\.is-success \{[^}]*border-color:var\(--ok\);/);
+  assert.match(studioCss,/\.strong-picks-refresh-status\.is-error \{[^}]*border-color:var\(--danger\);/);
   assert.match(studioCss,/\.strong-pick-card \{[^}]*border:5px solid var\(--line\);/);
 });
 
@@ -3581,4 +3599,44 @@ test("planner fails closed when its identity-hash salt is absent", async () => {
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error:"Night planner is not configured." });
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_planner_rate_limits").get().count, 0);
+});
+
+test("authenticated Studio day agenda includes spanning events and their related occurrences", async () => {
+  const db = database();
+  const unauthorized = await handleCalendarAdminApi(request("/api/admin/calendar/day?date=2026-08-28"), env(db));
+  assert.equal(unauthorized.status, 401);
+
+  const invalid = await admin(db, "/day?date=2026-02-30");
+  assert.equal(invalid.status, 400);
+
+  const response = await admin(db, "/day?date=2026-08-28");
+  assert.equal(response.status, 200, await response.clone().text());
+  const payload = await response.json();
+  const parent = payload.items.find((item) => item.key === "candidate:cal_candidate_you_are_not_alone_bugs");
+  const opening = payload.items.find((item) => item.key === "occurrence:cal_occurrence_bugs_opening_2026");
+  assert.equal(payload.day, "2026-08-28");
+  assert.equal(parent.dateKind, "date_range");
+  assert.equal(opening.candidateId, parent.candidateId);
+  assert.equal(opening.occurrenceType, "opening_reception");
+  assert.equal(opening.parentTitle, parent.title);
+
+  const beforeRun = await admin(db, "/day?date=2026-08-16");
+  const beforeItems = (await beforeRun.json()).items;
+  assert.equal(beforeItems.some((item) => item.candidateId === parent.candidateId), false);
+});
+
+test("Calendar Studio day view is date-addressable and opens occurrences in the existing editor", () => {
+  const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studioHtml,/id="reviewModeControls"[\s\S]*data-review-mode="queue"[\s\S]*data-review-mode="day"/);
+  assert.match(studioHtml,/id="dayAgendaControls"[\s\S]*id="dayAgendaDate" type="date"[\s\S]*id="dayAgendaToday"/);
+  assert.match(studio,/\/api\/admin\/calendar\/day\?date=/);
+  assert.match(studio,/url\.searchParams\.set\("reviewMode","day"\)/);
+  assert.match(studio,/data-occurrence-id=/);
+  assert.match(studio,/function revealSelectedOccurrence\(\)/);
+  assert.match(studio,/section\.open=true/);
+  assert.match(studioCss,/\.day-agenda-card \{[^}]*border:5px solid var\(--line\);/);
+  assert.match(studioCss,/\.occurrence-row\.is-day-selected \{[^}]*border-color:var\(--accent\);/);
+  assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.day-agenda-controls \{ grid-template-columns:1fr 1fr; \}/);
 });
