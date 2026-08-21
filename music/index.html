@@ -3,184 +3,115 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="robots" content="noindex,nofollow">
-<title>Not found - the six.well construct</title>
+<title>music - the six.well construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
 <style>
   :root {
-    --bg:#0e0e0e;
-    --text:var(--color-body, #FBD19D);
-    --muted:var(--color-text-muted, rgba(251,209,157,0.66));
-    --accent:#FCB867;
-    --sans:Inter,Arial,sans-serif;
-    --serif:Georgia,"Times New Roman",Times,serif;
-  }
-  * { box-sizing:border-box; }
-  body {
-    margin:0;
-    min-height:100vh;
-    display:grid;
-    place-items:center;
-    background:var(--bg);
-    color:var(--text);
-    font-family:var(--serif);
-    padding:32px;
-    overflow:hidden;
-  }
-  #bg {
-    position:fixed;
-    inset:0;
-    width:100%;
-    height:100%;
-    z-index:0;
-    pointer-events:none;
-    filter:brightness(0.20) saturate(2);
-  }
-  main {
-    width:100%;
-    position:relative;
-    z-index:1;
-  }
-  p {
-    margin:0 0 18px;
-    color:var(--muted);
-    font-size:14px;
-    line-height:1.6;
-    font-family:var(--serif);
-    text-transform:uppercase;
-    letter-spacing:0.35em;
-  }
-  h1 {
-    margin:0 0 20px;
-    font-family:var(--sans);
-    font-size:23vw;
-    line-height:0.88;
-    letter-spacing:-0.02em;
-    text-transform:uppercase;
-    color:var(--accent);
-  }
-  a {
-    display:inline-block;
-    background:#7B1A1A;
-    color:var(--accent);
-    font-family:var(--sans);
-    font-size:12px;
-    font-weight:800;
-    letter-spacing:0.14em;
-    text-transform:uppercase;
-    text-decoration:none;
-    padding:10px 14px;
-    border-radius:6px;
+    --venture-accent: var(--color-music);
+    --venture-dim: var(--color-music-dim);
+    --venture-wash: rgba(162,47,141,0.1);
   }
 </style>
-<link rel="stylesheet" href="/css/mobile.css">
-<link rel="stylesheet" href="/css/site-typography.css">
 </head>
-<body>
-<canvas id="bg"></canvas>
-<main>
-  <h1>Nope.</h1>
-  <p>Come back later.</p>
-  <a href="/home/">Return home</a>
-</main>
-<script>
-(function () {
-  const canvas = document.getElementById('bg');
-  const ctx = canvas.getContext('2d');
+<body class="venture-page" data-venture="music">
+  <div class="venture-grain" aria-hidden="true"></div>
+  <main class="venture-shell entrance-fade">
+    <section class="venture-hero" aria-labelledby="page-title">
+      <div>
+        <span class="venture-kicker">sound node</span>
+        <h1 class="venture-title" id="page-title">Music.</h1>
+      </div>
+      <div class="hero-copy">
+        <p class="hero-lede">Sound as fragment, score, atmosphere, ringtone, release, and field signal inside the larger construct.</p>
+        <p class="hero-note">This first version gives the music node a real listening structure while the actual releases and embeds are still being assembled.</p>
+        <div class="hero-actions">
+          <a class="venture-link" href="/writings/">related writings</a>
+          <a class="venture-link" href="/archive/">sound archive</a>
+        </div>
+      </div>
+    </section>
 
-  // Tile dimensions — set responsively, called before anything uses them
-  let TW, TH, EYE, OX, OY;
+    <section class="section" id="board" aria-label="music visual board">
+      <div class="visual-board">
+        <span class="signal-mark" aria-hidden="true"></span>
+        <p class="visual-caption">Not only songs. This node can hold audio notes, voice, project scores, temporary loops, sonic branding, performance remnants, and releases that belong to a visual system.</p>
+        <div class="asset-strip" aria-hidden="true">
+          <div class="asset-tile" style="background-image:url('/assets/paintings/LUST.JPG')"></div>
+          <div class="asset-tile is-empty"><span>audio embed slot</span></div>
+          <div class="asset-tile" style="background-image:url('/assets/paintings/IMG_8907.jpg')"></div>
+        </div>
+        <h2 class="visual-title">Sound for the rooms, films, objects, and private weather.</h2>
+      </div>
+    </section>
 
-  function tileSize() {
-    const w = window.innerWidth;
-    if (w < 480)       { TW = 95;  TH = 85;  EYE = 65; }
-    else if (w < 768)  { TW = 120; TH = 108; EYE = 85; }
-    else if (w < 1200) { TW = 148; TH = 132; EYE = 100; }
-    else               { TW = 175; TH = 155; EYE = 115; }
-    OX = (TW - EYE) / 2;
-    OY = (TH - EYE) / 2;
-  }
+    <section class="section" id="listening-index">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">release board</span>
+          <h2 class="section-title">Listening Index</h2>
+        </div>
+        <p class="section-copy">The music page is organized for future audio without pretending a finished catalog exists before it does.</p>
+      </header>
+      <div class="media-grid">
+        <article class="media-panel is-open">
+          <span class="tile-kicker">in development</span>
+          <h3>Field score one</h3>
+          <p>A future slot for an ambient or project-attached piece. The page can accept an embedded player when the audio is ready.</p>
+        </article>
+        <article class="media-panel" style="--panel-image:url('/assets/paintings/THE%20FRUSTRATIONS%20OF%20INNER%20CHAOS.jpg')">
+          <span class="tile-kicker">fragment</span>
+          <h3>Voice / note / loop</h3>
+          <p>Short sounds, spoken fragments, ringtones, and repeatable motifs can live beside formal releases.</p>
+        </article>
+      </div>
+    </section>
 
-  tileSize(); // initialise before rowOffset/rowSpeed use TW
+    <section class="section" id="forms">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">forms</span>
+          <h2 class="section-title">What This Node Holds</h2>
+        </div>
+        <p class="section-copy">The structure keeps music flexible: some things may be full releases, some may be scores for other nodes, and some may be temporary traces.</p>
+      </header>
+      <div class="record-grid">
+        <article class="record-card"><h3>Scores</h3><p>Sound attached to film, event rooms, tattoo projects, image sequences, or performance containers.</p></article>
+        <article class="record-card"><h3>Releases</h3><p>Singles, EPs, mixes, and finished audio works can be indexed with art, notes, credits, and external links.</p></article>
+        <article class="record-card"><h3>Fragments</h3><p>Voice notes, field recordings, rough motifs, loops, and audio evidence that belongs to the archive.</p></article>
+      </div>
+    </section>
 
-  const GLOBAL_DOWN = 0.10;
-  const BASE_SPEED  = 0.18;
-  const POOL        = 20;
+    <section class="section" id="listening-surfaces">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">future wiring</span>
+          <h2 class="section-title">Listening Surfaces</h2>
+        </div>
+        <p class="section-copy">When audio is ready, each entry can support an embedded player, cover image, release notes, credits, and cross-links into film, writing, or archive.</p>
+      </header>
+      <div class="path-grid">
+        <article class="path-card"><h3>Embedded players</h3><p>Bandcamp, SoundCloud, Spotify, self-hosted files, or private previews can be dropped into the media panels.</p></article>
+        <article class="path-card"><h3>Release notes</h3><p>Short statements can explain where a sound came from and which project it belongs to.</p></article>
+        <article class="path-card"><h3>Credits</h3><p>Collaborators, producers, performers, rooms, tools, and samples can be tracked cleanly.</p></article>
+        <article class="path-card"><h3>Archive link</h3><p>Drafts and residue can move to the archive without crowding finished releases.</p></article>
+      </div>
+    </section>
 
-  const rowOffset = new Array(POOL);
-  const rowSpeed  = new Array(POOL);
-  for (let r = 0; r < POOL; r++) {
-    const dir    = r % 2 === 0 ? 1 : -1;
-    rowOffset[r] = Math.random() * TW * 1000;
-    rowSpeed[r]  = dir * BASE_SPEED * (0.70 + Math.random() * 0.60);
-  }
-
-  let W, H;
-  let slotY   = 0;
-  let baseRow = 0;
-  let lastTime = 0;
-
-  const openImg   = new Image();
-  const closedImg = new Image();
-  let loaded = 0;
-
-  function resize() {
-    tileSize();
-    W = canvas.width  = window.innerWidth;
-    H = canvas.height = window.innerHeight;
-  }
-
-  /* ---------- draw ---------- */
-  function draw() {
-    ctx.clearRect(0, 0, W, H);
-    ctx.globalAlpha = 1;
-
-    const slots = Math.ceil(H / TH) + 2;
-    const cols  = Math.ceil(W / TW) + 3;
-
-    for (let i = 0; i < slots; i++) {
-      const logicalRow = baseRow + i;
-      const rowId  = ((logicalRow % POOL) + POOL) % POOL;
-      const isOdd  = ((logicalRow % 2) + 2) % 2 === 1;
-      const stagger = isOdd ? TW / 2 : 0;
-      const ox = ((rowOffset[rowId] + stagger) % TW + TW) % TW - TW;
-      const y  = i * TH + slotY - TH;
-
-      for (let c = 0; c < cols; c++) {
-        const parity = ((logicalRow + c) % 2 + 2) % 2;
-        ctx.drawImage(parity === 0 ? openImg : closedImg, c * TW + ox + OX, y + OY, EYE, EYE);
-      }
-    }
-  }
-
-  /* ---------- loop ---------- */
-  function loop(ts) {
-    const dt = Math.min(ts - lastTime, 50);
-    lastTime = ts;
-    const f = dt / 16.667;
-    slotY += GLOBAL_DOWN * f;
-    while (slotY >= TH) { slotY -= TH; baseRow--; }
-    for (let r = 0; r < POOL; r++) {
-      rowOffset[r] = (rowOffset[r] + rowSpeed[r] * f + TW * 10000) % (TW * 10000);
-    }
-    draw();
-    requestAnimationFrame(loop);
-  }
-
-  function onLoad() {
-    if (++loaded < 2) return;
-    resize();
-    window.addEventListener('resize', resize);
-    requestAnimationFrame(ts => { lastTime = ts; requestAnimationFrame(loop); });
-  }
-
-  openImg.onload   = onLoad;
-  closedImg.onload = onLoad;
-  openImg.src   = '/assets/eyes/openeye.png';
-  closedImg.src = '/assets/eyes/closedeye.png';
-})();
-</script>
+    <footer class="footer">
+      <p>&copy; the six.well construct</p>
+      <div class="page-links">
+        <a href="/home/">return to construct</a>
+        <a href="/archive/">archive</a>
+      </div>
+    </footer>
+  </main>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
 </body>
 </html>

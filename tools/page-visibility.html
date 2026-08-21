@@ -8,502 +8,78 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
+<link rel="stylesheet" href="/studio/construct-manager.css?v=20260821-studio-visibility">
 <style>
   :root {
-    --bg:#0e0e0e;
-    --panel:#141414;
-    --text:#FFE7CA;
-    --muted:rgba(255,231,202,0.62);
-    --dim:rgba(255,231,202,0.36);
-    --accent:#FCB867;
-    --blue:#0071EB;
-    --green:#55BA5A;
-    --red:#6E0404;
-    --ring:rgba(252,184,103,0.22);
-    --sans:Inter,Arial,sans-serif;
-    --serif:Georgia,"Times New Roman",Times,serif;
+    --bg:#0e0e0e;--panel:#141414;--text:#FFE7CA;--muted:rgba(255,231,202,.62);
+    --dim:rgba(255,231,202,.36);--accent:#FCB867;--signal:#6E0404;
+    --ring:rgba(252,184,103,.36);--ring-faint:rgba(252,184,103,.18);
+    --sans:Inter,Arial,sans-serif;--serif:Georgia,"Times New Roman",Times,serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   }
-  * { box-sizing:border-box; }
-  body {
-    margin:0;
-    min-height:100vh;
-    background:var(--bg);
-    color:var(--text);
-    font-family:var(--serif);
-    padding:48px clamp(18px,4vw,56px);
-    overflow-x:hidden;
-  }
-  main { max-width:1240px; margin:0 auto; min-width:0; }
-  header {
-    display:grid;
-    grid-template-columns:minmax(0,1fr) auto;
-    gap:24px;
-    align-items:end;
-    padding-bottom:28px;
-    border-bottom:5px solid var(--ring);
-  }
-  h1 {
-    margin:0;
-    font-family:var(--sans);
-    font-size:clamp(40px,8vw,112px);
-    line-height:0.88;
-    letter-spacing:0;
-    text-transform:uppercase;
-    color:var(--accent);
-  }
-  .meta {
-    width:min(100%,360px);
-    margin:0 0 8px;
-    color:var(--muted);
-    font-size:11px;
-    line-height:1.55;
-    letter-spacing:0.16em;
-    text-transform:uppercase;
-    text-align:right;
-  }
-  .toolbar {
-    display:flex;
-    flex-wrap:wrap;
-    gap:10px;
-    align-items:center;
-    justify-content:space-between;
-    margin:24px 0 18px;
-  }
-  .actions { display:flex; flex-wrap:wrap; gap:10px; }
-  button {
-    min-height:42px;
-    border:1px solid rgba(252,184,103,0.28);
-    background:transparent;
-    color:var(--text);
-    font-family:var(--sans);
-    font-size:11px;
-    font-weight:800;
-    letter-spacing:0.12em;
-    text-transform:uppercase;
-    padding:0 14px;
-    cursor:pointer;
-  }
-  button:hover,
-  button:focus-visible {
-    outline:none;
-    border-color:var(--accent);
-    color:var(--accent);
-  }
-  button.primary {
-    background:var(--accent);
-    border-color:var(--accent);
-    color:#111;
-  }
-  button.danger { border-color:rgba(110,4,4,0.82); color:#ffb6ad; }
-  button.safe { border-color:rgba(85,186,90,0.7); color:#baf5bd; }
-  button:disabled { cursor:not-allowed; opacity:0.42; }
-  .status {
-    margin:0;
-    color:var(--muted);
-    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    font-size:11px;
-    line-height:1.4;
-  }
-  .grid {
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));
-    gap:14px;
-  }
-  .page-card {
-    display:grid;
-    grid-template-columns:minmax(0,1fr) auto;
-    gap:16px;
-    align-items:center;
-    border:2px solid var(--ring);
-    background:var(--panel);
-    padding:16px;
-    min-width:0;
-  }
-  .page-card.hidden {
-    border-color:rgba(110,4,4,0.72);
-    background:rgba(110,4,4,0.12);
-  }
-  .label {
-    margin:0 0 8px;
-    font-family:var(--sans);
-    font-size:13px;
-    font-weight:850;
-    letter-spacing:0.12em;
-    text-transform:uppercase;
-    color:var(--text);
-  }
-  .path {
-    margin:0;
-    color:var(--dim);
-    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    font-size:11px;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    white-space:nowrap;
-  }
-  .badge {
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    min-width:72px;
-    min-height:28px;
-    border:1px solid rgba(85,186,90,0.66);
-    color:#baf5bd;
-    font-family:var(--sans);
-    font-size:10px;
-    font-weight:850;
-    letter-spacing:0.14em;
-    text-transform:uppercase;
-  }
-  .hidden .badge {
-    border-color:rgba(110,4,4,0.82);
-    color:#ffb6ad;
-  }
-  .unsupported {
-    display:none;
-    margin:18px 0 0;
-    border:2px solid rgba(110,4,4,0.82);
-    padding:14px;
-    color:#ffb6ad;
-    line-height:1.45;
-  }
-  body.no-file-system .unsupported { display:block; }
-  @media (max-width:720px) {
-    body { padding:28px 14px; }
-    header { display:block; }
-    .meta { text-align:left; margin-top:18px; }
-    .page-card { grid-template-columns:1fr; }
-    .page-card button { width:100%; }
-  }
+  *{box-sizing:border-box}body{margin:0;min-height:100vh;padding:48px clamp(18px,4vw,56px);overflow-x:hidden;background:var(--bg);color:var(--text);font-family:var(--serif)}
+  main{width:min(100%,1240px);margin:0 auto;min-width:0}.tool-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,360px);gap:24px;align-items:end;margin-bottom:28px;padding-bottom:28px;border-bottom:5px solid var(--ring-faint)}
+  h1{margin:0;color:var(--accent);font:900 clamp(40px,8vw,112px)/.88 var(--sans);text-transform:uppercase}.tool-head p{margin:0 0 8px;color:var(--muted);font:800 11px/1.55 var(--sans);letter-spacing:.16em;text-align:right;text-transform:uppercase}
+  button,.button,select,input{min-height:42px;border:5px solid var(--ring-faint);background:var(--bg);color:var(--text);font-family:var(--sans)}button,.button{display:inline-flex;align-items:center;justify-content:center;padding:0 14px;cursor:pointer;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}button:hover,button:focus-visible,.button:hover,.button:focus-visible{outline:none;border-color:var(--accent);color:var(--accent)}button:disabled,.button:disabled{cursor:not-allowed;opacity:.46}.danger-button{border-color:rgba(110,4,4,.82)!important;color:#ffb6ad!important}select,input{padding:0 10px}
+  .access{display:grid;gap:12px;max-width:520px;padding:18px;border:5px solid var(--ring-faint);background:var(--panel)}.access h2{margin:0;font:900 15px/1.3 var(--sans);letter-spacing:.12em;text-transform:uppercase}.access p{margin:0;color:var(--muted);font-size:12px;line-height:1.6}.access form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px}.access[hidden]{display:none}
+  @media(max-width:720px){body{padding:28px 14px}.tool-head{display:block}.tool-head p{margin-top:18px;text-align:left}.access form{grid-template-columns:1fr}.access button{width:100%}}
 </style>
 </head>
 <body>
 <main>
-  <header>
+  <header class="tool-head">
     <h1>page visibility</h1>
-    <p class="meta">local-only controls for hiding or restoring deployed public pages.</p>
+    <p>Studio-backed controls for hiding or restoring deployed public pages immediately.</p>
   </header>
-
-  <p class="unsupported">This tool needs the local dev server, or Chrome/Edge on localhost so it can write files after you choose the site folder.</p>
-
-  <div class="toolbar">
-    <div class="actions">
-      <button class="primary" id="chooseFolder" type="button">Choose site folder</button>
-      <button id="reloadState" type="button">Reload</button>
-      <button id="hideAllExceptHome" class="danger" type="button">Hide all except home</button>
-      <button id="showAll" class="safe" type="button">Show all pages</button>
-    </div>
-    <p class="status" id="status">Choose the site folder to begin.</p>
-  </div>
-
-  <section class="grid" id="pageGrid" aria-label="page visibility controls"></section>
+  <section class="access" id="accessPanel">
+    <h2>Admin access</h2>
+    <p>Use the same Studio admin token. It is stored only in this browser's local storage.</p>
+    <form id="accessForm">
+      <input id="tokenInput" type="password" autocomplete="current-password" placeholder="Admin token" required>
+      <button type="submit">Unlock controls</button>
+    </form>
+  </section>
+  <div id="pageVisibilityRoot"></div>
 </main>
-
 <script type="module">
-const WORKER_PATH = ["_worker.js"];
-const NOT_FOUND_PATH = ["404.html"];
-const BACKUP_ROOT = ".hidden-pages";
-const WORKER_LIST_PATTERN = /const HIDDEN_PUBLIC_PATHS = \[[\s\S]*?\];/;
-const HOME_ONLY_PATTERN = /const HIDE_PUBLIC_PAGES_EXCEPT_HOME = (true|false);/;
-const DEFAULT_HIDDEN_PUBLIC_PATHS = [
-  "/about",
-  "/film",
-  "/music",
-  "/writings"
-];
-const pages = [
-  { label: "Home", path: "/" },
-  { label: "About", path: "/about/" },
-  { label: "Archive", path: "/archive/" },
-  { label: "Events", path: "/events/" },
-  { label: "Film", path: "/film/" },
-  { label: "Music", path: "/music/" },
-  { label: "Writings", path: "/writings/" },
-  { label: "Art Index", path: "/art/" },
-  { label: "Acquisition Inquiry", path: "/art/acquisitioninquiry.html" },
-  { label: "Homeland Security", path: "/art/homelandsecuritypainting.html" },
-  { label: "Lost Marbles Painting", path: "/art/lostmarblespainting.html" },
-  { label: "Lust Painting", path: "/art/lustpainting.html" },
-  { label: "Paranoia & Fostered Trauma", path: "/art/paranoiafosteredtraumapainting.html" },
-  { label: "Sloth Painting", path: "/art/slothpainting.html" },
-  { label: "The Frustrations Of Inner Chaos", path: "/art/thefrustrationsofinnercharospainting.html" },
-  { label: "Merch Index", path: "/merch/" },
-  { label: "Lost Marbles Hoodie", path: "/merch/lostmarbles-hoodie/" },
-  { label: "Marbles Print", path: "/merch/marbles-print/" },
-  { label: "Tattoos Index", path: "/tattoos/" },
-  { label: "Special Projects", path: "/tattoos/special-projects/" },
-  { label: "Special Projects Apply", path: "/tattoos/special-projects/apply/" },
-  { label: "Approved", path: "/tattoos/approved/" },
-  { label: "Booking", path: "/tattoos/booking/" },
-  { label: "Flash", path: "/tattoos/flash/" },
-  { label: "Flash Claim", path: "/tattoos/flash/claim/" },
-  { label: "Inquire", path: "/tattoos/inquire/" },
-  { label: "Portfolio", path: "/tattoos/portfolio/" },
-  { label: "Submission Received", path: "/tattoos/submission-received/" }
-];
+  import { mountPageVisibility } from "/studio/page-visibility-manager.js?v=20260821-studio-visibility";
 
-const state = {
-  backend: null,
-  folderHandle: null,
-  hiddenPaths: new Set(DEFAULT_HIDDEN_PUBLIC_PATHS.map(normalizePath)),
-  homeOnly: false
-};
+  const tokenKey = "swc_submissions_admin_token";
+  const accessPanel = document.querySelector("#accessPanel");
+  const accessForm = document.querySelector("#accessForm");
+  const tokenInput = document.querySelector("#tokenInput");
+  const root = document.querySelector("#pageVisibilityRoot");
+  let token = localStorage.getItem(tokenKey) || "";
 
-const els = {
-  chooseFolder: document.querySelector("#chooseFolder"),
-  reloadState: document.querySelector("#reloadState"),
-  hideAllExceptHome: document.querySelector("#hideAllExceptHome"),
-  showAll: document.querySelector("#showAll"),
-  status: document.querySelector("#status"),
-  pageGrid: document.querySelector("#pageGrid")
-};
-
-if (!("showDirectoryPicker" in window)) els.chooseFolder.disabled = true;
-
-function normalizePath(path) {
-  let normalized = path || "/";
-  if (!normalized.startsWith("/")) normalized = `/${normalized}`;
-  normalized = normalized.replace(/\/index\.html$/i, "/");
-  if (normalized.length > 1) normalized = normalized.replace(/\/+$/g, "");
-  return normalized || "/";
-}
-
-function displayPath(path) {
-  return path === "/" ? "/" : path;
-}
-
-function setStatus(message) {
-  els.status.textContent = message;
-}
-
-function serializeVisibility() {
-  const paths = Array.from(state.hiddenPaths).sort();
-  return `const HIDDEN_PUBLIC_PATHS = ${JSON.stringify(paths, null, 2)};`;
-}
-
-async function callToolApi(endpoint, body) {
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(data.error || `Tool helper failed with ${response.status}.`);
-    error.status = response.status;
-    throw error;
-  }
-  return data;
-}
-
-async function connectLocalHelper() {
-  try {
-    await callToolApi("/__tools/read-file", { pathSegments: WORKER_PATH });
-    state.backend = "helper";
-    document.body.classList.remove("no-file-system");
-    els.chooseFolder.textContent = "Using local helper";
-    els.chooseFolder.disabled = true;
-    await loadVisibilityState();
-    setStatus("Connected to the local helper. Changes save directly on this Mac.");
-    render();
-  } catch {
-    if (!("showDirectoryPicker" in window)) document.body.classList.add("no-file-system");
-  }
-}
-
-async function getFileHandle(pathSegments, options = {}) {
-  if (!state.folderHandle) throw new Error("Choose the site folder first.");
-  let current = state.folderHandle;
-  for (const segment of pathSegments.slice(0, -1)) {
-    current = await current.getDirectoryHandle(segment, { create: Boolean(options.createDirs) });
-  }
-  return current.getFileHandle(pathSegments.at(-1), options);
-}
-
-async function readFile(pathSegments, options = {}) {
-  if (state.backend === "helper") {
-    const data = await callToolApi("/__tools/read-file", { pathSegments });
-    return data.content;
-  }
-  const fileHandle = await getFileHandle(pathSegments, options);
-  const file = await fileHandle.getFile();
-  return file.text();
-}
-
-async function readOptionalFile(pathSegments) {
-  try {
-    return await readFile(pathSegments);
-  } catch (error) {
-    if (error.name === "NotFoundError" || error.status === 404) return null;
-    throw error;
-  }
-}
-
-async function writeFile(pathSegments, content, options = {}) {
-  if (state.backend === "helper") {
-    await callToolApi("/__tools/write-file", {
-      pathSegments,
-      content,
-      createDirs: Boolean(options.createDirs)
+  async function api(path, options = {}) {
+    const response = await fetch(path, {
+      ...options,
+      headers: { authorization: `Bearer ${token}`, ...(options.headers || {}) },
     });
-    return;
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Request failed with ${response.status}.`);
+    return payload;
   }
-  const fileHandle = await getFileHandle(pathSegments, { create: true, createDirs: options.createDirs });
-  const writable = await fileHandle.createWritable();
-  await writable.write(content);
-  await writable.close();
-}
 
-function pageFilePath(path) {
-  if (path === "/") return ["index.html"];
-  const trimmed = path.replace(/^\/+|\/+$/g, "");
-  if (!trimmed) return ["index.html"];
-  const segments = trimmed.split("/");
-  if (segments.at(-1).includes(".")) return segments;
-  return [...segments, "index.html"];
-}
-
-function backupFilePath(path) {
-  return [BACKUP_ROOT, ...pageFilePath(path)];
-}
-
-async function hidePageFile(path) {
-  const publicPath = pageFilePath(path);
-  const backupPath = backupFilePath(path);
-  const currentContent = await readOptionalFile(publicPath);
-  if (currentContent === null) return;
-  const existingBackup = await readOptionalFile(backupPath);
-  if (existingBackup === null && !currentContent.includes("<h1>Not found.</h1>")) {
-    await writeFile(backupPath, currentContent, { createDirs: true });
+  async function openControls() {
+    if (!token) {
+      accessPanel.hidden = false;
+      root.innerHTML = "";
+      return;
+    }
+    accessPanel.hidden = true;
+    await mountPageVisibility(root, api, (message) => { document.title = `${message} - page visibility`; });
+    if (root.querySelector('[data-kind="error"]')) accessPanel.hidden = false;
   }
-  await writeFile(publicPath, await readFile(NOT_FOUND_PATH));
-}
 
-async function restorePageFile(path) {
-  const backupContent = await readOptionalFile(backupFilePath(path));
-  if (backupContent === null) {
-    throw new Error(`No saved source copy exists for ${displayPath(path)}.`);
-  }
-  await writeFile(pageFilePath(path), backupContent);
-}
-
-function updateWorker(content) {
-  if (!WORKER_LIST_PATTERN.test(content)) {
-    throw new Error("_worker.js is missing the HIDDEN_PUBLIC_PATHS list.");
-  }
-  let next = content.replace(WORKER_LIST_PATTERN, serializeVisibility());
-  if (HOME_ONLY_PATTERN.test(next)) {
-    next = next.replace(HOME_ONLY_PATTERN, `const HIDE_PUBLIC_PAGES_EXCEPT_HOME = ${state.homeOnly};`);
-  }
-  return next;
-}
-
-function parseWorkerVisibility(content) {
-  const match = content.match(WORKER_LIST_PATTERN);
-  if (!match) return null;
-  const listMatch = match[0].match(/\[[\s\S]*\]/);
-  if (!listMatch) return null;
-  try {
-    const paths = JSON.parse(listMatch[0]);
-    if (!Array.isArray(paths)) return null;
-    return new Set(paths.map(normalizePath));
-  } catch {
-    return null;
-  }
-}
-
-function parseHomeOnlyMode(content) {
-  const match = content.match(HOME_ONLY_PATTERN);
-  return match ? match[1] === "true" : false;
-}
-
-async function loadVisibilityState() {
-  const worker = await readFile(WORKER_PATH);
-  const parsed = parseWorkerVisibility(worker);
-  if (parsed) state.hiddenPaths = parsed;
-  state.homeOnly = parseHomeOnlyMode(worker);
-}
-
-async function writeVisibilityFile() {
-  const worker = await readFile(WORKER_PATH);
-  await writeFile(WORKER_PATH, updateWorker(worker));
-}
-
-async function saveAndRender(message) {
-  await writeVisibilityFile();
-  render();
-  setStatus(message);
-}
-
-function render() {
-  els.pageGrid.innerHTML = "";
-  els.hideAllExceptHome.disabled = state.homeOnly;
-  els.hideAllExceptHome.textContent = state.homeOnly ? "Home-only mode on" : "Hide all except home";
-  pages.forEach((page) => {
-    const path = normalizePath(page.path);
-    const isHome = path === "/";
-    const isHidden = !isHome && (state.homeOnly || state.hiddenPaths.has(path));
-    const card = document.createElement("article");
-    card.className = `page-card${isHidden ? " hidden" : ""}`;
-    card.innerHTML = `
-      <div>
-        <p class="label"></p>
-        <p class="path"></p>
-      </div>
-      <div>
-        <span class="badge">${isHidden ? "hidden" : "public"}</span>
-      </div>
-      <button type="button" class="${isHidden ? "safe" : "danger"}">${isHidden ? "Show page" : "Hide page"}</button>
-    `;
-    card.querySelector(".label").textContent = page.label;
-    card.querySelector(".path").textContent = displayPath(path);
-    if (isHome) card.querySelector("button").disabled = true;
-    card.querySelector("button").addEventListener("click", async () => {
-      if (isHidden) {
-        await restorePageFile(path);
-        state.hiddenPaths.delete(path);
-        await saveAndRender(`${displayPath(path)} will be public after the next deploy.`);
-      } else {
-        await hidePageFile(path);
-        state.hiddenPaths.add(path);
-        await saveAndRender(`${displayPath(path)} will return 404 publicly after the next deploy.`);
-      }
-    });
-    els.pageGrid.append(card);
+  accessForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    token = tokenInput.value.trim();
+    localStorage.setItem(tokenKey, token);
+    await openControls();
   });
-}
 
-async function chooseFolder() {
-  state.folderHandle = await window.showDirectoryPicker({ mode: "readwrite" });
-  state.backend = "folder";
-  await loadVisibilityState();
-  await writeVisibilityFile();
-  setStatus("Connected. Hide/show changes now save to _worker.js.");
-  render();
-}
-
-async function showAllPages() {
-  for (const path of Array.from(state.hiddenPaths)) {
-    const backupContent = await readOptionalFile(backupFilePath(path));
-    if (backupContent !== null) await writeFile(pageFilePath(path), backupContent);
-  }
-  state.hiddenPaths.clear();
-  state.homeOnly = false;
-  await saveAndRender("All pages will be public after the next deploy.");
-}
-
-async function hideAllExceptHome() {
-  state.homeOnly = true;
-  await saveAndRender("Only the home page will be public after the next deploy.");
-}
-
-els.chooseFolder.addEventListener("click", () => chooseFolder().catch((error) => setStatus(error.message)));
-els.reloadState.addEventListener("click", () => window.location.reload());
-els.hideAllExceptHome.addEventListener("click", () => hideAllExceptHome().catch((error) => setStatus(error.message)));
-els.showAll.addEventListener("click", () => showAllPages().catch((error) => setStatus(error.message)));
-
-render();
-connectLocalHelper();
+  openControls();
 </script>
 </body>
 </html>

@@ -130,7 +130,7 @@
     if (affiliations.length && !affiliations.some(function (value) { return (event.affiliations || []).includes(value); })) return false;
     if (modes.includes("virtual") && !event.virtual) return false;
     if (query) {
-      var relatedSearch = (event.relatedLinks || []).reduce(function (values, link) { return values.concat([link.label, link.url, link.role]); }, []);
+      var relatedSearch = (event.relatedLinks || []).reduce(function (values, link) { return values.concat([link.label, link.url, link.role, link.creditRole]); }, []);
       var occurrenceSearch = (event.relatedOccurrences || []).reduce(function (values, occurrence) { return values.concat([occurrence.title, occurrence.occurrenceLabel, occurrence.startsAt]); }, []);
       var haystack = [event.title, event.description, event.organizer, event.venueName, event.venueAddress, event.accessNotes, event.ticketNotes].concat(event.audiences || [], event.subjects, event.formats, relatedSearch, occurrenceSearch).join(" ").toLowerCase();
       if (!haystack.includes(query)) return false;
@@ -145,7 +145,10 @@
     var sourceLabel = event.origin === "sixwell" ? "Six.Well event" : (event.affiliations || []).includes("gsu") ? "Georgia State University event" : "Selected Atlanta listing";
     var relatedLinks = Array.isArray(event.relatedLinks) ? event.relatedLinks : [];
     var artistLinks = relatedLinks.filter(function (link) { return link.role === "artist"; });
-    var otherRelatedLinks = relatedLinks.filter(function (link) { return link.role !== "artist"; });
+    var participantLinks = relatedLinks.filter(function (link) { return link.role === "participant"; });
+    var organizerLinks = relatedLinks.filter(function (link) { return link.role === "organizer"; });
+    var otherRelatedLinks = relatedLinks.filter(function (link) { return !["artist","participant","organizer"].includes(link.role); });
+    function creditedLink(link) { return '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(link.label) + (link.creditRole ? ' / ' + link.creditRole : '') + '</a>'; }
     var relatedOccurrences = Array.isArray(event.relatedOccurrences) ? event.relatedOccurrences : [];
     var flyer = event.flyer && event.flyer.url ? event.flyer : null;
     var media = Array.isArray(event.media) && event.media.length ? event.media : (flyer ? [flyer] : []);
@@ -175,8 +178,10 @@
       '<div class="calendar-event-facts">' + organizerFact + venueFact + '<span>' + escapeHtml(sourceLabel) + '</span></div>' +
       '<div class="calendar-tags">' + labels.map(function (label) { return '<span class="calendar-tag">' + escapeHtml(label) + '</span>'; }).join("") + '</div>' +
       (relatedOccurrences.length ? '<div class="calendar-related-schedule"><span>Related schedule</span>' + relatedOccurrences.map(function (occurrence) { return '<a href="#' + eventAnchor(occurrence) + '"><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small></a>'; }).join("") + '</div>' : '') +
-      (artistLinks.length ? '<div class="calendar-related-links calendar-artist-links"><span>Artists</span>' + artistLinks.map(function (link) { return '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(link.label) + '</a>'; }).join("") + '</div>' : '') +
-      (otherRelatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + otherRelatedLinks.map(function (link) { return '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(link.label) + '</a>'; }).join("") + '</div>' : '') +
+      (artistLinks.length ? '<div class="calendar-related-links calendar-artist-links"><span>Artists</span>' + artistLinks.map(creditedLink).join("") + '</div>' : '') +
+      (participantLinks.length ? '<div class="calendar-related-links"><span>Participants</span>' + participantLinks.map(creditedLink).join("") + '</div>' : '') +
+      (organizerLinks.length ? '<div class="calendar-related-links"><span>Additional organizers</span>' + organizerLinks.map(creditedLink).join("") + '</div>' : '') +
+      (otherRelatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + otherRelatedLinks.map(creditedLink).join("") + '</div>' : '') +
       (media.length ? '<details class="calendar-event-media"><summary>View media ('+media.length+')</summary><div class="calendar-media-grid">'+media.map(function(item,index){return '<button type="button" data-gallery-event="'+escapeHtml(galleryKey)+'" data-gallery-index="'+index+'" aria-label="View '+escapeHtml(item.altText||event.title+' event image')+'"><img src="'+escapeHtml(item.url)+'" alt="'+escapeHtml(item.altText||event.title+' event image')+'" loading="lazy" decoding="async"'+(item.width?' width="'+Number(item.width)+'"':'')+(item.height?' height="'+Number(item.height)+'"':'')+'>'+(item.caption?'<span>'+escapeHtml(item.caption)+'</span>':'')+'</button>';}).join("")+'</div></details>' : '') +
       '<div class="calendar-event-actions">' + officialAction + ticketAction + '<a class="is-secondary" href="/api/calendar/events/' + encodeURIComponent(event.id) + '.ics">Add this event to your calendar</a></div>' +
       '</article>';

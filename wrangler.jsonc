@@ -3,6 +3,7 @@
   "name": "thesixwellconstruct",
   "main": "_worker.js",
   "keep_vars": true,
+  "preview_urls": false,
   "compatibility_date": "2026-04-27",
   "observability": {
     "enabled": true
@@ -70,7 +71,7 @@
     "OUTREACH_PREFERENCES_ENABLED": "false",
     "OUTREACH_INDIVIDUAL_EMAIL_ENABLED": "false",
     "OUTREACH_EMAIL_CAMPAIGNS_ENABLED": "false",
-    "CALENDAR_SCOUT_MODEL": "gpt-5.6-terra"
+    "CALENDAR_SCOUT_MODEL": "gpt-5.6-luna"
   },
   "compatibility_flags": [
     "nodejs_compat"

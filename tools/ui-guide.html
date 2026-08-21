@@ -939,7 +939,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   <section class="guide" id="sitemap">
     <span class="kicker">09 · site map</span>
     <h2>Site map</h2>
-    <p class="lead">Nine mediums orbit the construct home (an interactive canvas ring at <code>/home/</code>). The entry room lives at <code>/</code> as the public threshold. Pathways are the routes inside each medium. Pages currently hidden from the public live in <code>.hidden-pages/</code> and 404 on the live site (managed via <code>/tools/page-visibility.html</code>).</p>
+    <p class="lead">Nine mediums orbit the construct home (an interactive canvas ring at <code>/home/</code>). The entry room lives at <code>/</code> as the public threshold. Pathways are the routes inside each medium. Public page reachability is managed in Studio under <code>Site → Public Visibility</code>; hidden routes redirect to the 404 surface without moving their source files.</p>
 
     <div class="map-medium" data-medium="tattooing"><div class="head"><span class="dot"></span><span class="label">Tattooing — Art.Pill Tattoo House</span><span class="url">/tattoos/</span></div>
       <ul>
@@ -956,8 +956,8 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <ul><li>Product pages (hoodie, puffer, print…) · Shopify Storefront via <code>/api/shop/*</code>, tagged <code>construct-merch</code></li></ul></div>
     <div class="map-medium" data-medium="about"><div class="head"><span class="dot"></span><span class="label">About</span><span class="url">/about/</span></div>
       <ul><li>Construct-connections prototypes in progress (<code>about-next.html</code>, connection maps)</li></ul></div>
-    <div class="map-medium" data-medium="events"><div class="head"><span class="dot"></span><span class="label">Events</span><span class="url">/events/</span></div><ul><li>Currently hidden (<code>.hidden-pages/events/</code>)</li></ul></div>
-    <div class="map-medium" data-medium="music"><div class="head"><span class="dot"></span><span class="label">Music</span><span class="url">/music/</span></div><ul><li>Hidden variant exists in <code>.hidden-pages/</code></li></ul></div>
+    <div class="map-medium" data-medium="events"><div class="head"><span class="dot"></span><span class="label">Events</span><span class="url">/events/</span></div><ul><li>Public reachability follows the live Studio visibility setting.</li></ul></div>
+    <div class="map-medium" data-medium="music"><div class="head"><span class="dot"></span><span class="label">Music</span><span class="url">/music/</span></div><ul><li>Source remains deployable while the live Studio visibility setting controls reachability.</li></ul></div>
     <div class="map-medium" data-medium="writings"><div class="head"><span class="dot"></span><span class="label">Writings</span><span class="url">/writings/</span></div><ul><li>Long-form — uses <code>--leading-relaxed</code> (1.8)</li></ul></div>
     <div class="map-medium" data-medium="archive"><div class="head"><span class="dot"></span><span class="label">Archive</span><span class="url">/archive/</span></div>
       <ul>
@@ -965,7 +965,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
         <li>Public catalogue guide <code>/archive/guide/</code>, two-subject comparison <code>/archive/compare/</code> via <code>/api/archive/compare</code>, collections, and timelines.</li>
         <li>Studio dossier management lives at <code>/studio/submissions/#archive/dossiers</code>; internal versions, states, documentation, and materials are omitted from public APIs.</li>
       </ul></div>
-    <div class="map-medium" data-medium="film"><div class="head"><span class="dot"></span><span class="label">Film</span><span class="url">/film/</span></div><ul><li>Hidden variant exists in <code>.hidden-pages/</code></li></ul></div>
+    <div class="map-medium" data-medium="film"><div class="head"><span class="dot"></span><span class="label">Film</span><span class="url">/film/</span></div><ul><li>Source remains deployable while the live Studio visibility setting controls reachability.</li></ul></div>
 
     <h3>Non-public surfaces</h3>
     <table>
@@ -1021,7 +1021,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <tr><td>Bare <code>1fr</code> mobile collapse</td><td><code>1fr</code> can't shrink below child min-content. Always <code>minmax(0, 1fr)</code> in collapse rules. When auditing a cut-off page, check the computed grid track width first.</td></tr>
       <tr><td><code>data-venture</code> is legacy</td><td>Attribute and <code>--venture-color</code> keep the old name on purpose. Renaming breaks construct-nav, wayfinding, and Shopify tag mapping.</td></tr>
       <tr><td>Two <code>.media-grid</code> definitions</td><td><code>css/media.css</code> defines the card grid (auto-fill 260px); <code>css/venture-pages.css</code> also defines a 2-up <code>.media-grid</code> for media panels. Don't load both on one page without checking which wins.</td></tr>
-      <tr><td>Hidden pages</td><td>Hiding/showing is done through <code>/tools/page-visibility.html</code>, which edits <code>_worker.js</code> and moves files to <code>.hidden-pages/</code>. Don't hand-move page files.</td></tr>
+      <tr><td>Hidden pages</td><td>Use Studio <code>Site → Public Visibility</code>, or the local authenticated <code>/tools/page-visibility.html</code> mirror. D1 is authoritative and changes are live immediately. Do not move page files or edit route lists by hand.</td></tr>
       <tr><td>Token sync</td><td><code>css/tokens.css</code> is the palette source. The guide, homepage canvas, and injected dot nav read those variables when served locally. Refresh open pages after saving; use a literal search only for older one-off hardcoded surfaces.</td></tr>
       <tr><td>UI Guide working URL</td><td>Use <code>http://localhost:4173/tools/ui-guide.html</code> as the canonical working surface. A direct <code>file://</code> view is not authoritative: root-relative styles, token reloads, and source-backed tool endpoints require the local HTTP server and can look stale or incomplete without it.</td></tr>
       <tr><td>Archive publication layers</td><td>Record, version, state, material, and documentation visibility are independent gates. A public state lead must belong to that state and its Digital asset must already be active, public, inline, and consent-granted or consent-not-required. Save shared asset eligibility before publishing the material.</td></tr>

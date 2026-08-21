@@ -114,18 +114,16 @@ No bundler, package install, or framework build step is required.
 
 ## Hiding public pages
 
-Open the local preview, then visit `/tools/page-visibility.html`. Choose the
-site folder when the browser asks, then use the Hide/Show buttons. The tool
-updates `_worker.js` and swaps the selected page files with the local 404
-fallback.
+Open Studio, choose `Site`, then `Public Visibility`. Each page can be hidden
+or shown as an exact route or with all descendants. Changes are stored in D1
+and affect the deployed Worker immediately; hidden routes temporarily redirect
+to `/404.html` without moving or replacing their source files.
 
-On Mac, run `node tools/dev-server.mjs` and open `/page-visibility`. The local
-helper built into the dev server lets the tool save changes directly without
-using the browser folder picker.
-
-Hidden page source files are saved under `.hidden-pages/`, while the deployed
-Worker returns a 404 for those paths on the public site. Commit and push the
-updated visibility files for the change to go live.
+The local-only `/tools/page-visibility.html` surface uses the same authenticated
+API and page registry. `.hidden-pages/` is retained only as legacy recovery
+material and is not part of the active visibility workflow. The local preview
+checks the configured Worker origin for effective visibility; `--show-hidden`
+still bypasses that check for development.
 
 ## Legacy Obsidian archive import
 

@@ -16,7 +16,7 @@ class D1Statement{constructor(database,sql,values=[]){this.database=database;thi
 class LocalD1{constructor(database){this.database=database}prepare(sql){return new D1Statement(this.database,sql)}async batch(statements){this.database.exec("BEGIN");try{const results=[];for(const statement of statements)results.push(await statement.run());this.database.exec("COMMIT");return results}catch(error){this.database.exec("ROLLBACK");throw error}}}
 function migratedDatabase(){const database=new DatabaseSync(":memory:");database.exec("PRAGMA foreign_keys=ON");for(const name of readdirSync(path.join(ROOT,"migrations")).filter(name=>name.endsWith(".sql")).sort())database.exec(readFileSync(path.join(ROOT,"migrations",name),"utf8"));return database}
 
-test("Exhibitions & Appearances opens only its About branch and corresponding published dossier",async()=>{
+test("About and Archive routes follow the page-visibility authority instead of legacy closure exceptions",async()=>{
   const database={
     prepare(){
       return {bind(slug){
@@ -30,7 +30,7 @@ test("Exhibitions & Appearances opens only its About branch and corresponding pu
   }
   for(const route of ["/about/founder/","/archive/records/lostmarbles/"]){
     const response=await worker.fetch(new Request(`https://example.test${route}`),{ASSETS:assets,SUBMISSIONS_DB:database},{});
-    assert.equal(response.status,302,route);
+    assert.equal(response.status,200,route);
   }
 });
 

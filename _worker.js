@@ -116,6 +116,11 @@ import {
   runDueCalendarScout,
 } from "./functions/api/calendar/_lib.js";
 import {
+  handleCalendarSubmissionAdminApi,
+  handleCalendarSubmissionPublicApi,
+  purgeClosedCalendarSubmissions,
+} from "./functions/api/calendar-submissions/_lib.js";
+import {
   handleAdminEmailDesign,
   handleAdminEmailTemplates,
   handleAdminPreviewNotification,
@@ -179,64 +184,16 @@ import {
   handlePublicTattooSpecials,
 } from "./functions/api/tattoo-specials/_lib.js";
 import { handleAdminManualTextTemplates } from "./functions/api/communications/_lib.js";
+import {
+  handleAdminSiteVisibility,
+  handlePublicSiteVisibility,
+  publicPageVisibilityDecision,
+} from "./functions/api/site-visibility/_lib.js";
+import { isPageVisibilityOperationalExemptPath } from "./shared/page-visibility.js";
 
-const HIDDEN_PUBLIC_PATHS = [
-  "/film",
-  "/music",
-  "/writings"
-];
-const HIDDEN_PUBLIC_EXACT_PATHS = new Set(["/events"]);
-const CLOSED_PUBLIC_PAGE_PATHS = ["/about", "/archive", "/tattoos/build"];
-const OPEN_PUBLIC_PAGE_PATHS = new Set(["/tattoos/build/maze"]);
-const OPEN_PUBLIC_PAGE_PREFIXES = ["/about/exhibitions-appearances"];
-
-const HIDE_PUBLIC_PAGES_EXCEPT_HOME = false;
 const PUBLIC_FRONT_DOOR_PATHS = new Set(["/", "/index", "/index/", "/index.html"]);
 const PUBLIC_ENTRY_ROOM_ALIAS_PATHS = new Set(["/entry-room", "/entry-room/", "/entry-room/index.html"]);
 const PUBLIC_HOME_PATHS = new Set(["/home", "/home/", "/home/index.html"]);
-const PUBLIC_ERROR_PATHS = new Set(["/404", "/404.html"]);
-const PUBLIC_ARCHIVE_PATHS = new Set([
-  "/archive",
-  "/archive/",
-  "/archive/index.html",
-  "/archive/failed-experiments",
-  "/archive/failed-experiments/",
-  "/archive/failed-experiments/index.html",
-  "/archive/guide",
-  "/archive/guide/",
-  "/archive/guide/index.html",
-  "/archive/compare",
-  "/archive/compare/",
-  "/archive/compare/index.html",
-  "/archive/about",
-  "/archive/about/",
-  "/archive/about/index.html",
-  "/archive/art",
-  "/archive/art/",
-  "/archive/art/index.html",
-  "/archive/events",
-  "/archive/events/",
-  "/archive/events/index.html",
-  "/archive/film",
-  "/archive/film/",
-  "/archive/film/index.html",
-  "/archive/merch",
-  "/archive/merch/",
-  "/archive/merch/index.html",
-  "/archive/music",
-  "/archive/music/",
-  "/archive/music/index.html",
-  "/archive/sixwell-construct",
-  "/archive/sixwell-construct/",
-  "/archive/sixwell-construct/index.html",
-  "/archive/tattoos",
-  "/archive/tattoos/",
-  "/archive/tattoos/index.html",
-  "/archive/writings",
-  "/archive/writings/",
-  "/archive/writings/index.html",
-]);
-const PUBLIC_CONSTRUCT_MAP_PATHS = new Set(["/construct-map", "/construct-map/", "/construct-map/index.html"]);
 
 function notFound(message = "Not found.") {
   return json({ error: message }, { status: 404 });
@@ -360,8 +317,7 @@ function isLocalOnlyPath(pathname) {
     pathname === "/page-visibility.html" ||
     pathname === "/tools/page-visibility.html" ||
     pathname === "/tools/live-text-editor.js" ||
-    pathname === "/js/live-text-editor.js" ||
-    pathname === "/shared/page-visibility.js"
+    pathname === "/js/live-text-editor.js"
   );
 }
 
@@ -373,20 +329,20 @@ function normalizePath(pathname) {
   return normalized || "/";
 }
 
-function isHiddenPublicPath(pathname) {
-  const normalizedPath = normalizePath(pathname);
-  if (HIDDEN_PUBLIC_EXACT_PATHS.has(normalizedPath)) return true;
-  return HIDDEN_PUBLIC_PATHS.some((hiddenPath) => {
-    const normalizedHidden = normalizePath(hiddenPath);
-    return (
-      normalizedPath === normalizedHidden ||
-      normalizedPath.startsWith(`${normalizedHidden}/`)
-    );
-  });
-}
-
 function hasFileExtension(pathname) {
   return /\/[^/]+\.[^/]+$/.test(pathname);
+}
+
+function isPageVisibilityExemptPath(pathname) {
+  return isPageVisibilityOperationalExemptPath(pathname) || isLocalOnlyPath(pathname);
+}
+
+async function pageVisibilityResponse(request, env) {
+  if (!["GET", "HEAD"].includes(request.method)) return null;
+  const pathname = new URL(request.url).pathname;
+  if (!isPublicPagePath(pathname) || isPageVisibilityExemptPath(pathname)) return null;
+  const decision = await publicPageVisibilityDecision(pathname, env);
+  return decision.hidden ? redirectToNotFoundPage(request) : null;
 }
 
 function isPublicPagePath(pathname) {
@@ -439,30 +395,6 @@ function appearanceDetailSlug(pathname) {
   const parts = normalizePath(pathname).split("/").filter(Boolean);
   if (parts.length !== 3 || parts[0] !== "about" || parts[1] !== "exhibitions-appearances") return "";
   return hasFileExtension(pathname) || parts[2] === "detail" ? "" : parts[2];
-}
-
-async function isPublishedAppearanceArchivePath(pathname, env) {
-  const parts = normalizePath(pathname).split("/").filter(Boolean);
-  if (parts.length !== 3 || parts[0] !== "archive" || parts[1] !== "records" || !env.SUBMISSIONS_DB) return false;
-  try {
-    return Boolean(await env.SUBMISSIONS_DB.prepare(`SELECT ad.entity_id
-      FROM archive_dossiers ad
-      JOIN content_entities ce ON ce.id=ad.entity_id AND ce.entity_type='appearance' AND ce.visibility='public'
-      JOIN artist_appearances app ON app.id=ce.id AND app.state='published'
-      WHERE ad.archive_slug=? AND ad.state='published' AND ad.public_visible=1 LIMIT 1`).bind(parts[2]).first());
-  } catch {
-    return false;
-  }
-}
-
-function isClosedPublicPagePath(pathname) {
-  if (!isPublicPagePath(pathname)) return false;
-  const normalizedPath = normalizePath(pathname).toLowerCase();
-  if (OPEN_PUBLIC_PAGE_PATHS.has(normalizedPath)) return false;
-  if (OPEN_PUBLIC_PAGE_PREFIXES.some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`))) return false;
-  return CLOSED_PUBLIC_PAGE_PATHS.some((closedPath) => (
-    normalizedPath === closedPath || normalizedPath.startsWith(`${closedPath}/`)
-  ));
 }
 
 const LEGEND_RECORD_RESERVED_SLUGS = new Set([
@@ -741,19 +673,6 @@ async function legacyMerchResponse(request, env, pathname) {
   target.pathname = `/merch/${legacy}/`;
   target.search = "";
   return Response.redirect(target, 308);
-}
-
-function isHiddenByHomeOnlyMode(pathname) {
-  if (!HIDE_PUBLIC_PAGES_EXCEPT_HOME) return false;
-  const normalizedPath = normalizePath(pathname);
-  if (PUBLIC_HOME_PATHS.has(pathname)) return false;
-  if (PUBLIC_ARCHIVE_PATHS.has(pathname) || normalizedPath === "/archive") return false;
-  if (archiveDynamicAssetPath(pathname)) return false;
-  if (PUBLIC_CONSTRUCT_MAP_PATHS.has(pathname) || normalizedPath === "/construct-map") return false;
-  if (PUBLIC_ERROR_PATHS.has(normalizedPath) || PUBLIC_ERROR_PATHS.has(pathname)) {
-    return false;
-  }
-  return isPublicPagePath(pathname);
 }
 
 function lineInputs(lines = []) {
@@ -1375,18 +1294,7 @@ export default {
       return notFoundPage(request, env);
     }
 
-    if (isClosedPublicPagePath(url.pathname) && !await isPublishedAppearanceArchivePath(url.pathname, env)) {
-      return redirectToNotFoundPage(request);
-    }
-
     if (shortBookingTokenFromPath(url.pathname)) {
-      if (
-        isClosedPublicPagePath("/booking/") ||
-        isHiddenPublicPath("/booking/") ||
-        isHiddenByHomeOnlyMode("/booking/")
-      ) {
-        return redirectToNotFoundPage(request);
-      }
       return servePublicAsset(request, env, "/booking/index.html");
     }
 
@@ -1395,6 +1303,9 @@ export default {
         await servePublicAsset(request, env, "/tattoos/specials/adjusted-offer/index.html")
       );
     }
+
+    const visibilityResponse = await pageVisibilityResponse(request, env);
+    if (visibilityResponse) return visibilityResponse;
 
     if (url.pathname === "/explore" || url.pathname === "/explore/" || url.pathname === "/explore/index.html") {
       const adventureUrl = new URL(request.url);
@@ -1418,6 +1329,14 @@ export default {
 
     if (url.pathname === "/api/admin/analytics/exclusion") {
       return handleAdminAnalyticsExclusion(request, env);
+    }
+
+    if (url.pathname === "/api/site/visibility") {
+      return handlePublicSiteVisibility(request, env);
+    }
+
+    if (url.pathname === "/api/admin/site-visibility") {
+      return handleAdminSiteVisibility(request, env);
     }
 
     if (url.pathname === "/api/admin/merch-workflow" || url.pathname.startsWith("/api/admin/merch-workflow/")) {
@@ -1500,8 +1419,16 @@ export default {
       return handleAdminEventsApi(request, env);
     }
 
+    if (url.pathname === "/api/admin/calendar/submissions" || url.pathname.startsWith("/api/admin/calendar/submissions/")) {
+      return handleCalendarSubmissionAdminApi(request, env);
+    }
+
     if (url.pathname === "/api/admin/calendar" || url.pathname.startsWith("/api/admin/calendar/")) {
       return handleCalendarAdminApi(request, env);
+    }
+
+    if (url.pathname === "/api/calendar/submissions" || url.pathname.startsWith("/api/calendar/submissions/")) {
+      return handleCalendarSubmissionPublicApi(request, env);
     }
 
     if (url.pathname === "/api/calendar/events" || url.pathname.startsWith("/api/calendar/events/") || url.pathname === "/api/calendar/plan") {
@@ -1759,13 +1686,6 @@ export default {
       return servePublicAsset(request, env, "/home/index.html");
     }
 
-    if (
-      !isLocalOnlyPath(url.pathname) &&
-      (isHiddenPublicPath(url.pathname) || isHiddenByHomeOnlyMode(url.pathname))
-    ) {
-      return redirectToNotFoundPage(request);
-    }
-
     if (isEventDetailPagePath(url.pathname)) {
       const bespokeEventPage = await servePublicAsset(request, env, eventDetailAssetPath(url.pathname));
       if (bespokeEventPage.status !== 404) return bespokeEventPage;
@@ -1803,5 +1723,6 @@ export default {
     ctx.waitUntil(processDueOutreach(env));
     ctx.waitUntil(rollupSiteAnalytics(env));
     ctx.waitUntil(runDueCalendarScout(env, controller.scheduledTime));
+    ctx.waitUntil(purgeClosedCalendarSubmissions(env, new Date(controller.scheduledTime)));
   },
 };

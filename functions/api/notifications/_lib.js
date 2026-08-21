@@ -2177,6 +2177,61 @@ export async function notifyAdminEventWaitlistReceived(env, request, entry, even
   });
 }
 
+export async function notifyCalendarSubmissionReceived(env, request, submission = {}, manageUrl = "", options = {}) {
+  const recipient = asString(submission.submitter?.email);
+  if (!recipient || !manageUrl) return { ok: false, skipped: true };
+  const reference = asString(submission.reference);
+  const title = asString(submission.payload?.title) || "Atlanta calendar event";
+  const lines = [
+    `Hi ${asString(submission.submitter?.name) || "there"},`,
+    "",
+    "Your Atlanta Calendar submission was received for private Studio review.",
+    "",
+    compactLine("Reference", reference),
+    compactLine("Event", title),
+    "",
+    "Use this private link to check status, edit while review is open, or withdraw the submission:",
+    manageUrl,
+    "",
+    "The link expires after 90 days. Submission does not guarantee publication, and nothing becomes public until Studio approval.",
+  ].filter((line) => line !== undefined).join("\n");
+  return sendTransactionalEmail(env, {
+    to: recipient,
+    ...eventsEmailIdentity(env),
+    subject: `Atlanta Calendar submission received — ${reference}`,
+    text: lines,
+    contentLocked: true,
+    templateKey: "calendar_submission_received",
+    relatedType: "calendar_public_submission",
+    relatedId: submission.id,
+    idempotencyKey: options.idempotencyKey || `calendar_submission_received:${submission.id}`,
+  });
+}
+
+export async function notifyAdminCalendarSubmissionReceived(env, request, submission = {}, options = {}) {
+  const studioUrl = `${publicBaseUrl(env, request)}/studio/calendar/#community-submissions`;
+  return sendAdminNotification(env, request, {
+    subject: `Atlanta Calendar submission: ${asString(submission.payload?.title) || submission.reference}`,
+    lines: [
+      "A community event submission is awaiting private Studio review.",
+      "",
+      compactLine("Reference", submission.reference),
+      compactLine("Kind", submission.kind),
+      compactLine("Event", submission.payload?.title),
+      compactLine("Starts", submission.payload?.startsAt),
+      compactLine("Venue", submission.payload?.venueName),
+      "",
+      compactLine("Submitter", submission.submitter?.name),
+      compactLine("Email", submission.submitter?.email),
+      compactLine("Studio queue", studioUrl),
+    ],
+    templateKey: "admin_calendar_submission_received",
+    relatedType: "calendar_public_submission",
+    relatedId: submission.id,
+    idempotencyKey: options.idempotencyKey || `admin_calendar_submission_received:${submission.id}`,
+  });
+}
+
 export async function notifyAdminEventOpenMicReceived(env, request, signup, event, options = {}) {
   return sendAdminNotification(env, request, {
     subject: `New open mic request: ${event.title || event.slug}`,

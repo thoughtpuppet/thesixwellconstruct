@@ -1,7 +1,41 @@
 # Atlanta night planner: phase-one contract
 
-Phase one establishes reviewed planning metadata, reusable venue coordinates, and the private request
-boundary. It does not call a routing provider or generate an itinerary.
+Phase one establishes reviewed planning metadata and the fail-closed public request boundary. The
+private Studio pilot now exercises routing and itinerary generation before any public rollout.
+
+## Private Studio pilot
+
+`GET /api/admin/calendar/planner?date=YYYY-MM-DD` loads events whose facts are verified in Studio.
+The pilot accepts timed, scheduled, in-person records with a venue address; it can temporarily
+geocode a verified venue address when reviewed coordinates have not yet been stored. Those temporary
+provider results are not written back to the event record.
+
+`POST /api/admin/calendar/planner` accepts the same location and selection shape documented below,
+plus `startTime` as a 24-hour Atlanta time representing the earliest the visitor is available to
+depart. The solver preserves that constraint while generating the latest safe `leaveByTime` from the
+starting location. Its first stop uses that departure rather than showing avoidable waiting at the
+venue, and each stop includes `departureTime` and `arrivalTime`. `mustAttendEventIds` is an array and
+may contain more than one selected event. Every ID in the array is a hard constraint: a successful
+itinerary contains all of them, while an impossible combination returns HTTP 409 with
+`code: "must_attend_conflict"`.
+
+The Studio route is admin-authenticated. Start and end locations are used only for the current
+provider request and are not written to D1. Mapbox geocoding resolves temporary endpoints and missing
+event coordinates, and the Matrix API supplies driving or walking travel durations for sequencing.
+
+### Attendance inference and sequencing
+
+- Exhibitions, openings, and closings are flexible attendance windows. When Studio has not supplied
+  visit lengths, the pilot tries a 45-minute visit and may shorten it to 30 minutes to preserve a
+  more constrained event.
+- Talks, lectures, panels, artist talks, and conversations are timed anchors. The route aims for an
+  on-time arrival and permits at most 15 minutes of lateness only when no otherwise-equivalent route
+  can stay on time.
+- Explicit occurrence types such as a screening, performance, or workshop remain fixed starts even
+  when the parent event is an exhibition.
+- The solver evaluates flexible stops inside the waiting time before a timed anchor. It ranks routes
+  by events included, then total lateness, then timed anchors preserved, before visit length and travel.
+  When route quality and travel are otherwise equal, it prefers the route with the later safe departure.
 
 ## Published event metadata
 
@@ -56,6 +90,8 @@ with `code: "routing_not_configured"`; location values are not echoed.
 
 Set `CALENDAR_PLANNER_RATE_LIMIT_SALT` to a secret, environment-specific value
 before enabling the public planner. Requests fail closed with HTTP 503 when it
-is absent; there is no predictable fallback salt. A future routing-provider
-key must also be stored as a Worker secret rather than shipped to browser
-JavaScript.
+is absent; there is no predictable fallback salt.
+
+The private pilot additionally requires `MAPBOX_ACCESS_TOKEN`. Keep it in local `.dev.vars` during
+local testing and use a Worker secret only when a deployment is separately approved; it must never
+ship to browser JavaScript.

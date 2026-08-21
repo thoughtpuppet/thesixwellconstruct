@@ -191,6 +191,21 @@ test("ticket-platform migration upgrades the existing Eventbrite homepage source
   assert.equal(db.prepare("PRAGMA foreign_key_check").all().length, 0);
 });
 
+test("LOOP Scout migration closes preexisting running rows with actionable diagnostics", () => {
+  const db = databaseThrough("0155_calendar_scout_proposal_boundary.sql");
+  db.prepare(`INSERT INTO calendar_scout_runs(id,run_kind,status,model,started_at) VALUES('cal_run_interrupted_before_0156','scheduled','running','test','2026-08-21T12:00:00.000Z')`).run();
+  db.exec(readFileSync(join(ROOT, "migrations", "0156_calendar_loop_bigtickets_scout.sql"), "utf8"));
+  assert.deepEqual(
+    { ...db.prepare("SELECT status,failure_count,error_message,source_results_json FROM calendar_scout_runs WHERE id='cal_run_interrupted_before_0156'").get() },
+    {
+      status:"failed",
+      failure_count:1,
+      error_message:"The Worker ended before this Scout run recorded final diagnostics.",
+      source_results_json:'[{"channel":"run_lifecycle","status":"failed","error":"The Worker ended before this Scout run recorded final diagnostics."}]',
+    },
+  );
+});
+
 test("attendance migration corrects an existing published snapshot and advances its calendar sequence", () => {
   const db = databaseThrough("0135_calendar_virtual_events.sql");
   db.exec(`
@@ -276,6 +291,11 @@ test("social scout preserves calendar data, stages connectors disabled, and list
     platform:"instagram",
     handle:"culturexcanvasartshow",
     profileUrl:"https://www.instagram.com/culturexcanvasartshow/",
+    enabled:true,
+  },{
+    platform:"instagram",
+    handle:"loop.atl",
+    profileUrl:"https://www.instagram.com/loop.atl/",
     enabled:true,
   }]);
   assert.equal(payload.connectors.find((item) => item.id === "threads_api").status, "disabled");
@@ -987,6 +1007,77 @@ test("Eventbrite discovers exact child pages from nested ItemList JSON-LD", asyn
   }
 });
 
+test("LOOP's embedded BigTickets calendar creates complete private event candidates", async () => {
+  const db = database();
+  const source = db.prepare("SELECT id,url,adapter_config_json FROM calendar_sources WHERE lower(rtrim(url,'/'))='https://loopatl.space/event-calendar'").get();
+  assert.ok(source);
+  assert.equal(JSON.parse(source.adapter_config_json).platform, "bigtickets");
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE lower(rtrim(url,'/'))='https://loopatl.space' AND enabled=1").get().count, 0);
+  assert.equal(db.prepare("SELECT enabled FROM calendar_social_sources WHERE platform='instagram' AND handle='loop.atl'").get().enabled, 1);
+  db.exec(`UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='${source.id}'`);
+  const eventToken = "7EE352A4B3282A6C6C60A3862D2A8C68";
+  const detailUrl = `https://www.bigtickets.com/event/widget_render.cfm?id=${eventToken}&type=purchase`;
+  const widget = `<main>
+    <div class="list-event-card">
+      <div class="item-title">Art in Transit: Research, Innovation &amp; Global Exchange</div>
+      <div class="item-date">September 9, 2026 4:00 PM - 6:00 PM</div>
+      <div class="item-loc">LOOP</div>
+      <div class="item-desc">A pop-up art exhibition and panel conversation about transport, transformation, and global exchange.</div>
+      <a class="btn-cta" href="/event/widget_render.cfm?id=${eventToken}&amp;type=purchase">Details</a>
+    </div>
+  </main>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const target = String(url);
+    if (target.includes("api.openai.com")) return Response.json({
+      output:[{ type:"web_search_call", action:{ sources:[{ url:"https://www.instagram.com/loop.atl/p/DcTfKpJRYuB/", title:"LOOP ATL post" }] } }, { type:"message", content:[{ type:"output_text", text:JSON.stringify({ events:[{
+        sourceUrl:detailUrl, ticketUrl:detailUrl, discoveryUrl:"https://www.instagram.com/loop.atl/p/DcTfKpJRYuB/", sourceEventId:"instagram:DcTfKpJRYuB",
+        sourceAuthority:"authorized_ticket_host", organizerUrl:"https://loopatl.space/", venueUrl:"https://loopatl.space/",
+        title:"Art in Transit: Research, Innovation & Global Exchange", organizer:"LOOP",
+        factualDescription:"A pop-up art exhibition and panel conversation about transport, transformation, and global exchange.",
+        dateKind:"timed", startsAt:"2026-09-09T16:00:00-04:00", endsAt:"2026-09-09T18:00:00-04:00", timezone:"America/New_York",
+        venueName:"LOOP", venueAddress:"665 Marietta Street NW, Atlanta, GA 30313", city:"Atlanta", region:"GA",
+        subjects:["art"], formats:["exhibition","panel"], verificationState:"verified", confidence:.96,
+        socialEvidence:[{ platform:"instagram", postId:"DcTfKpJRYuB", postUrl:"https://www.instagram.com/loop.atl/p/DcTfKpJRYuB/", authorHandle:"loop.atl", authorDisplayName:"LOOP ATL", captionExcerpt:"Transport | Transform | Transcend", mediaType:"image" }],
+      }] }) }] }], usage:{},
+    });
+    if (target === source.url) return new Response(`<iframe src="https://www.bigtickets.com/event/widget.cfm?A19618BA5655EF12DD160F42A1375CDE"></iframe>`, { status:200 });
+    if (target.includes("init=true") && target.includes("A19618BA5655EF12DD160F42A1375CDE")) return new Response(widget, { status:200 });
+    if (target === detailUrl) return new Response(`<h1>Art in Transit</h1><div class="by-line">Pop-Up Exhibition + Panel Conversation</div>`, { status:200 });
+    return new Response("not found", { status:404 });
+  };
+  try {
+    const response = await handleCalendarAdminApi(request(`/api/admin/calendar/sources/${source.id}/run`, { method:"POST", body:{}, admin:true }), env(db));
+    assert.equal(response.status, 200, await response.clone().text());
+    const result = await response.json();
+    const direct = JSON.parse(db.prepare("SELECT source_results_json FROM calendar_scout_runs WHERE id=?").get(result.runId).source_results_json)[0].sources[0];
+    assert.deepEqual(
+      { adapter:direct.adapter, hubDetected:direct.hubDetected, childLinksDiscovered:direct.childLinksDiscovered, childrenExtracted:direct.childrenExtracted, retrieval:direct.retrieval, completeness:direct.completeness },
+      { adapter:"bigtickets", hubDetected:true, childLinksDiscovered:1, childrenExtracted:1, retrieval:"embedded-widget", completeness:"complete" },
+    );
+    const candidate = db.prepare("SELECT status,title,starts_at,ends_at,venue_name,venue_address,source_url,ticket_url,source_authority,verification_state,subjects_json,formats_json FROM calendar_candidates WHERE source_event_id=?").get(`bigtickets-${eventToken.toLowerCase()}`);
+    assert.deepEqual({ ...candidate }, {
+      status:"candidate", title:"Art in Transit: Research, Innovation & Global Exchange",
+      starts_at:"2026-09-09T16:00:00-04:00", ends_at:"2026-09-09T18:00:00-04:00",
+      venue_name:"LOOP", venue_address:"665 Marietta Street NW, Atlanta, GA 30313",
+      source_url:detailUrl, ticket_url:detailUrl, source_authority:"authorized_ticket_host", verification_state:"verified",
+      subjects_json:'["art"]', formats_json:'["exhibition","panel"]',
+    });
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id=?)").get(`bigtickets-${eventToken.toLowerCase()}`).count, 0);
+    db.exec("UPDATE calendar_scout_connectors SET enabled=1 WHERE id='instagram_web'");
+    const socialRun = await runCalendarScout(env(db, { OPENAI_API_KEY:"test-key" }), { runKind:"manual", channels:["instagram_web"] });
+    assert.equal(socialRun.failures, 0);
+    assert.equal(socialRun.candidates, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE title='Art in Transit: Research, Innovation & Global Exchange'").get().count, 1);
+    assert.deepEqual(
+      { ...db.prepare("SELECT platform,post_id,author_handle,evidence_role FROM calendar_candidate_social_evidence WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id=?)").get(`bigtickets-${eventToken.toLowerCase()}`) },
+      { platform:"instagram", post_id:"DcTfKpJRYuB", author_handle:"loop.atl", evidence_role:"official" },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Posh Atlanta scouting spans organizers and accepts event-host identity profiles without requiring standalone websites", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_posh_atlanta'");
@@ -1041,12 +1132,16 @@ test("Posh Atlanta scouting spans organizers and accepts event-host identity pro
     assert.deepEqual({ action:browserCalls[0].action, url:browserCalls[0].url }, { action:"json", url:discoveryUrl });
     assert.deepEqual({ action:browserCalls[1].action, url:browserCalls[1].url }, { action:"json", url:secondEventUrl });
     assert.match(browserCalls[0].prompt, /currently shown for Atlanta, GA/);
-    const candidate = db.prepare("SELECT verification_state,starts_at,ends_at,venue_address,source_url,discovery_url,organizer_url,source_authority FROM calendar_candidates WHERE id='cal_candidate_posh_orca_open_house_2026'").get();
+    const candidate = db.prepare("SELECT verification_state,starts_at,ends_at,venue_address,source_url,discovery_url,organizer_url,source_authority,pending_revision_id FROM calendar_candidates WHERE id='cal_candidate_posh_orca_open_house_2026'").get();
     assert.deepEqual({ ...candidate }, {
-      verification_state:"verified", starts_at:"2026-08-23T16:00:00-04:00", ends_at:"2026-08-23T19:00:00-04:00",
-      venue_address:"6000 Lake Forrest Dr NW, Sandy Springs, GA, 30328", source_url:eventUrl, discovery_url:discoveryUrl,
-      organizer_url:"https://posh.vip/g/orca", source_authority:"authorized_ticket_host",
+      verification_state:"needs_verification", starts_at:"2026-08-23T16:00:00-04:00", ends_at:"2026-08-23T19:00:00-04:00",
+      venue_address:"6000 Lake Forrest Dr NW, Sandy Springs, GA 30328, USA", source_url:eventUrl, discovery_url:discoveryUrl,
+      organizer_url:"https://posh.vip/g/orca", source_authority:"authorized_ticket_host", pending_revision_id:candidate.pending_revision_id,
     });
+    assert.ok(candidate.pending_revision_id);
+    const proposed=JSON.parse(db.prepare("SELECT snapshot_json FROM calendar_candidate_revisions WHERE id=?").get(candidate.pending_revision_id).snapshot_json);
+    assert.equal(proposed.verificationState,"verified");
+    assert.equal(proposed.venueAddress,"6000 Lake Forrest Dr NW, Sandy Springs, GA, 30328");
     assert.deepEqual(
       { ...db.prepare("SELECT organizer,organizer_url,verification_state,ends_at,source_authority FROM calendar_candidates WHERE source_event_id='posh-atlanta-creative-technology-mixer'").get() },
       { organizer:"Atlanta Creative Guild", organizer_url:"https://posh.vip/g/atlanta-creative-guild", verification_state:"verified", ends_at:"2026-09-12T21:00:00-04:00", source_authority:"authorized_ticket_host" },
@@ -1641,6 +1736,48 @@ test("successful source retrieval with zero extracted proposals is recorded as a
   }
 });
 
+test("new generic sources can recover rendered event cards through bounded dynamic extraction", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  const created = await admin(db, "/sources", {
+    method:"POST",
+    body:{ name:"Rendered Arts Calendar", url:"https://rendered-arts.example/events", sourceType:"official_html", trustLevel:"official", adapterKey:"automatic", renderMode:"dynamic-fallback", enabled:true },
+  });
+  const source = (await created.json()).source;
+  const browser = {
+    async quickAction(action, options) {
+      assert.equal(action, "json");
+      assert.equal(options.url, source.url);
+      return new Response(JSON.stringify({ result:{ events:[{
+        title:"Atlanta Experimental Art Film Screening",
+        description:"An experimental artist-led film screening and discussion.",
+        startsAt:"2026-09-30T19:00:00-04:00",
+        endsAt:"2026-09-30T21:00:00-04:00",
+        eventUrl:"https://rendered-arts.example/events/experimental-film",
+        venueName:"Rendered Arts Space",
+        venueAddress:"100 Art Way, Atlanta, GA",
+        city:"Atlanta", region:"GA", accessStatus:"public",
+        subjects:["art","film"], formats:["screening"], experimental:true,
+      }] } }), { status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":"25" } });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<html><body><div id='events'></div></body></html>", { status:200, headers:{ "content-type":"text/html" } });
+  try {
+    const response = await handleCalendarAdminApi(request(`/api/admin/calendar/sources/${source.id}/run`, { method:"POST", body:{}, admin:true }), env(db, { BROWSER:browser }));
+    assert.equal(response.status, 200, await response.clone().text());
+    const run = await response.json();
+    assert.equal(run.status, "completed");
+    assert.equal(run.candidates, 1);
+    assert.equal(run.warnings, 0);
+    assert.equal(run.outcomes[0].sources[0].retrieval, "browser-extraction");
+    assert.equal(run.outcomes[0].sources[0].proposals, 1);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE source_id=?").get(source.id).count, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("direct monitoring accepts bounded large official pages and still rejects excessive responses", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0");
@@ -1753,6 +1890,8 @@ test("GSU Localist monitoring publishes confirmed audience restrictions across A
 
 test("OpenAI discovery uses web_search structured output, stores citations, and never auto-publishes", async () => {
   const db = database();
+  const profilePatch = await admin(db, "/profile", { method:"PATCH", body:{ model:"gpt-5.6-luna" } });
+  assert.equal(profilePatch.status, 200, await profilePatch.clone().text());
   const runtime = env(db, { OPENAI_API_KEY:"test-key" });
   const originalFetch = globalThis.fetch;
   var openAiBody;
@@ -1779,7 +1918,7 @@ test("OpenAI discovery uses web_search structured output, stores citations, and 
   try {
     const run = await runCalendarScout(runtime, { runKind:"manual", includeWeb:true });
     assert.equal(openAiCalls, 1);
-    assert.equal(openAiBody.model, "gpt-5.6-terra");
+    assert.equal(openAiBody.model, "gpt-5.6-luna");
     assert.equal(openAiBody.tools[0].type, "web_search");
     assert.equal(openAiBody.tools[0].user_location.city, "Atlanta");
     assert.equal(openAiBody.tool_choice, "required");
@@ -2166,6 +2305,65 @@ test("TikTok web discovery is domain-filtered, ignores thumbnails, and remains a
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("registered social web scouting names exact accounts, surfaces zero-inspection warnings, and closes stale runs", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_scout_connectors SET enabled=1 WHERE id='instagram_web'");
+  db.prepare(`INSERT INTO calendar_scout_runs(id,run_kind,status,model,started_at) VALUES('cal_run_stale_loop','scheduled','running','test','2026-08-21T12:00:00.000Z')`).run();
+  const originalFetch = globalThis.fetch;
+  let requestBody = "";
+  globalThis.fetch = async (url, init = {}) => {
+    assert.match(String(url), /api\.openai\.com/);
+    requestBody = String(init.body || "");
+    return Response.json({
+      output:[{ type:"message", content:[{ type:"output_text", text:JSON.stringify({ events:[] }) }] }],
+      usage:{},
+    });
+  };
+  try {
+    const run = await runCalendarScout(env(db, { OPENAI_API_KEY:"test-key" }), { runKind:"manual", channels:["instagram_web"] });
+    assert.equal(run.status, "partial");
+    assert.equal(run.warnings, 1);
+    assert.match(requestBody, /@loop\.atl/);
+    assert.match(requestBody, /https:\/\/www\.instagram\.com\/loop\.atl\//);
+    const outcome = run.outcomes[0];
+    assert.equal(outcome.postsInspected, 0);
+    assert.match(outcome.sources[0].warning, /inconclusive/);
+    assert.deepEqual(
+      { ...db.prepare("SELECT status,failure_count,error_message FROM calendar_scout_runs WHERE id='cal_run_stale_loop'").get() },
+      { status:"failed", failure_count:1, error_message:"Scout run exceeded 15 minutes and was closed as failed." },
+    );
+    assert.ok(db.prepare("SELECT last_success_at FROM calendar_social_sources WHERE handle='loop.atl'").get().last_success_at);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("an unexpected Scout lifecycle error finalizes the current run with visible diagnostics", async () => {
+  const db = database();
+  const local = new LocalD1(db);
+  let injected = false;
+  const failingD1 = {
+    prepare(sql) {
+      if (!injected && sql === "SELECT * FROM calendar_scout_connectors ORDER BY id") {
+        injected = true;
+        return { async all() { throw new Error("simulated connector registry failure"); } };
+      }
+      return local.prepare(sql);
+    },
+    async batch(statements) { return local.batch(statements); },
+  };
+  await assert.rejects(
+    runCalendarScout({ SUBMISSIONS_DB:failingD1, CALENDAR_SCOUT_MODEL:"gpt-5.6-terra" }, { runKind:"scheduled" }),
+    /simulated connector registry failure/,
+  );
+  const run = db.prepare("SELECT status,completed_at,failure_count,error_message,source_results_json FROM calendar_scout_runs ORDER BY started_at DESC,id DESC LIMIT 1").get();
+  assert.equal(run.status, "failed");
+  assert.ok(run.completed_at);
+  assert.equal(run.failure_count, 1);
+  assert.equal(run.error_message, "simulated connector registry failure");
+  assert.deepEqual(JSON.parse(run.source_results_json), [{ channel:"run_lifecycle", status:"failed", error:"simulated connector registry failure" }]);
 });
 
 test("related links and event media remain private until their individual publication choices are approved", async () => {
@@ -2870,9 +3068,9 @@ test("per-event source rechecks hold published changes for approval and retain f
     assert.equal(payload.checkStatus, "changes_detected");
     assert.equal(payload.candidate.status, "published");
     assert.ok(payload.candidate.pendingRevisionId);
-    assert.equal(payload.candidate.scheduleStatus, "postponed");
-    assert.equal(payload.candidate.ticketStatus, "on_sale");
-    assert.equal(payload.candidate.startsAt, "2026-11-19T18:00:00-05:00");
+    assert.equal(payload.candidate.scheduleStatus, "scheduled");
+    assert.equal(payload.candidate.ticketStatus, "not_yet_on_sale");
+    assert.equal(payload.candidate.startsAt, "2026-11-12T18:00:00-05:00");
     assert.ok(payload.candidate.nextCheckAt);
     assert.deepEqual(
       { ...db.prepare("SELECT starts_at,schedule_status,ticket_status,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id) },
@@ -2884,6 +3082,21 @@ test("per-event source rechecks hold published changes for approval and retain f
     assert.ok(changedFields.includes("scheduleStatus"));
     assert.ok(changedFields.includes("ticketStatus"));
 
+    const prematureApproval = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
+    assert.equal(prematureApproval.status, 409);
+    assert.match((await prematureApproval.json()).error,/apply at least one Scout change/i);
+    const applied = await admin(db, `/candidates/${candidate.id}/revisions/${payload.candidate.pendingRevisionId}/apply`, {
+      method:"POST", body:{ fields:["startsAt","endsAt","scheduleStatus","ticketStatus"] },
+    });
+    assert.equal(applied.status, 200, await applied.clone().text());
+    const privateAfterApply = (await applied.json()).candidate;
+    assert.equal(privateAfterApply.scheduleStatus, "postponed");
+    assert.equal(privateAfterApply.ticketStatus, "on_sale");
+    assert.equal(privateAfterApply.startsAt, "2026-11-19T18:00:00-05:00");
+    assert.deepEqual(
+      { ...db.prepare("SELECT starts_at,schedule_status,ticket_status,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id) },
+      { ...publicBefore },
+    );
     assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 200);
     assert.deepEqual(
       { ...db.prepare("SELECT starts_at,schedule_status,ticket_status,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id) },
@@ -2945,15 +3158,76 @@ test("compact offsets and string addresses from an official event page recheck c
     assert.equal(checked.status, 200, await checked.clone().text());
     const payload = await checked.json();
     assert.equal(payload.checkStatus, "changes_detected");
-    assert.equal(payload.candidate.eventStructure, "exhibition");
-    assert.equal(payload.candidate.dateKind, "date_range");
-    assert.equal(payload.candidate.startsAt, "2026-08-08");
-    assert.equal(payload.candidate.endsAt, "2026-08-22");
-    assert.equal(payload.candidate.venueAddress, "1401 Peachtree Street Northeast, Atlanta, GA, 30309, United States");
+    assert.equal(payload.candidate.dateKind, "timed");
+    assert.equal(payload.candidate.venueAddress, "");
+    const revision = db.prepare("SELECT change_set_json FROM calendar_candidate_revisions WHERE id=?").get(payload.candidate.pendingRevisionId);
+    const fields = JSON.parse(revision.change_set_json).map((change) => change.field);
+    const applied = await admin(db, `/candidates/${candidate.id}/revisions/${payload.candidate.pendingRevisionId}/apply`, { method:"POST", body:{ fields } });
+    assert.equal(applied.status, 200, await applied.clone().text());
+    const privateCandidate = (await applied.json()).candidate;
+    assert.equal(privateCandidate.eventStructure, "exhibition");
+    assert.equal(privateCandidate.dateKind, "date_range");
+    assert.equal(privateCandidate.startsAt, "2026-08-08");
+    assert.equal(privateCandidate.endsAt, "2026-08-22");
+    assert.equal(privateCandidate.venueAddress, "1401 Peachtree Street Northeast, Atlanta, GA, 30309, United States");
     assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 200);
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("Scout rechecks cannot erase verified access, richer schedules, or human-facing authority links", async () => {
+  const db = database();
+  const sourceUrl = "https://arctic.gsu.edu/training/scd/";
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Science and Cyberinfrastructure for Discovery Conference", organizer:"ARCTIC at Georgia State University",
+      factualDescription:"A three-day art and technology conference.", sourceUrl,
+      organizerUrl:"https://arctic.gsu.edu/", venueUrl:"https://calendar.gsu.edu/event/science-and-cyberinfrastructure-for-discovery-scd-conference",
+      sourceAuthority:"organizer_event", accessStatus:"public", accessNotes:"", audiences:["Public"],
+      eventStructure:"single", dateKind:"date_range", startsAt:"2026-09-21", endsAt:"2026-09-23",
+      timezone:"America/New_York", venueName:"Georgia State University", venueAddress:"55 Park Place NE, Atlanta, GA",
+      city:"Atlanta", region:"GA", subjects:["art","technology"], formats:["conference"], verificationState:"verified",
+    },
+  });
+  assert.equal(created.status,201,await created.clone().text());
+  const candidate=(await created.json()).candidate;
+  assert.equal((await admin(db,`/candidates/${candidate.id}/approve`,{method:"POST",body:{}})).status,200);
+  const originalFetch=globalThis.fetch;
+  globalThis.fetch=async()=>new Response(`<script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org", "@type":"Event", name:candidate.title,
+    url:"https://calendar.gsu.edu/event/science-and-cyberinfrastructure-for-discovery-scd-conference",
+    startDate:"2026-09-22", organizer:{name:"Georgia State University",url:"https://calendar.gsu.edu/api/2/events?days=365&pp=50&group_id=36298743501220"},
+    location:{name:"Georgia State University",address:{streetAddress:"55 Park Place NE",addressLocality:"Atlanta",addressRegion:"GA"}},
+  })}</script>`,{status:200,headers:{"content-type":"text/html"}});
+  try{
+    const response=await admin(db,`/candidates/${candidate.id}/recheck`,{method:"POST",body:{}});
+    assert.equal(response.status,200,await response.clone().text());
+    const payload=await response.json();
+    assert.equal(payload.candidate.accessStatus,"public");
+    assert.deepEqual(payload.candidate.audiences,["Public"]);
+    assert.equal(payload.candidate.dateKind,"date_range");
+    assert.equal(payload.candidate.startsAt,"2026-09-21");
+    assert.equal(payload.candidate.endsAt,"2026-09-23");
+    assert.equal(payload.candidate.organizerUrl,"https://arctic.gsu.edu/");
+    assert.equal(payload.candidate.venueUrl,"https://calendar.gsu.edu/event/science-and-cyberinfrastructure-for-discovery-scd-conference");
+    assert.equal(payload.candidate.sourceAuthority,"organizer_event");
+    assert.ok(payload.blockedChanges.length>=3);
+    const revision=db.prepare("SELECT change_set_json FROM calendar_candidate_revisions WHERE id=?").get(payload.candidate.pendingRevisionId);
+    const changes=JSON.parse(revision.change_set_json);
+    const changedFields=changes.map((change)=>change.field);
+    assert.ok(changedFields.includes("sourceUrl"));
+    for(const protectedField of ["accessStatus","accessNotes","audiences","dateKind","startsAt","endsAt","organizerUrl","venueUrl","sourceAuthority"]){
+      assert.ok(!changedFields.includes(protectedField),`${protectedField} should not be proposed as a regression`);
+    }
+    const applied=await admin(db,`/candidates/${candidate.id}/revisions/${payload.candidate.pendingRevisionId}/apply`,{method:"POST",body:{fields:["sourceUrl"]}});
+    assert.equal(applied.status,200,await applied.clone().text());
+    const privateCandidate=(await applied.json()).candidate;
+    assert.equal(privateCandidate.sourceUrl,"https://calendar.gsu.edu/event/science-and-cyberinfrastructure-for-discovery-scd-conference");
+    assert.equal(privateCandidate.startsAt,"2026-09-21");
+    assert.equal(privateCandidate.accessStatus,"public");
+  }finally{globalThis.fetch=originalFetch;}
 });
 
 test("Calendar Studio exposes source rechecks, update review, monitoring, and ticket state", () => {
@@ -2967,6 +3241,8 @@ test("Calendar Studio exposes source rechecks, update review, monitoring, and ti
   assert.match(studio,/candidateMonitoringEnabled/);
   assert.match(studio,/candidateTicketStatus/);
   assert.match(studio,/revision-changes/);
+  assert.match(studio,/data-apply-revision/);
+  assert.match(studio,/Apply selected changes/);
   assert.match(studioCss,/\.source-check-state/);
   assert.match(studioCss,/border:5px solid/);
   assert.match(publicJs,/calendar-event-ticket/);
@@ -3136,6 +3412,8 @@ test("Calendar Studio reuses a saved credential without showing the unlock contr
   assert.match(studioCss,/\[hidden\] \{ display:none !important; \}/);
   assert.match(studio,/if \(token\) \{ authPanel\.hidden=true; connect\(\); \} else \{ authPanel\.hidden=false; \}/);
   assert.match(studio,/tokenInput\.value=""; authPanel\.hidden=true; app\.hidden=false/);
+  assert.match(studio,/Promise\.all\(\[loadSuggestions\(\),loadRuns\(\),state\.reviewMode==="day"\?loadDayAgenda\(\):Promise\.resolve\(\)\]\)/);
+  assert.doesNotMatch(studio,/Promise\.all\(\[[^\]]*loadCommunitySubmissions\(\)/);
   assert.match(studio,/error\.status = response\.status/);
   assert.match(studio,/localStorage\.removeItem\(TOKEN_KEY\)/);
   assert.match(studio,/app\.hidden=true; authPanel\.hidden=false/);
@@ -3289,14 +3567,23 @@ test("pasting an Instagram post refreshes its caption, flyer evidence, and relat
     const payload = await refreshed.json();
     assert.equal(payload.existing, true);
     assert.equal(payload.candidate.id, firstPayload.candidate.id);
-    assert.equal(payload.candidate.organizer, "Brill Adium and Gallery Anderson Smith");
-    assert.equal(payload.candidate.factualDescription, "Brill Adium presents an artist talk followed by the exhibition's closing reception.");
-    assert.equal(payload.candidate.eventStructure, "series");
-    assert.equal(payload.candidate.startsAt, "2026-08-22T17:00:00-04:00");
-    assert.equal(payload.candidate.endsAt, "2026-08-22T22:00:00-04:00");
-    assert.equal(payload.candidate.venueAddress, "1401 Peachtree St NE, Atlanta, GA");
-    assert.equal(payload.candidate.accessNotes, "Children are welcome.");
-    assert.deepEqual(payload.candidate.occurrences.map((item) => ({ title:item.title, type:item.occurrenceType, startsAt:item.startsAt, endsAt:item.endsAt })), [
+    assert.equal(payload.candidate.organizer, "instagram.com");
+    assert.equal(payload.candidate.endsAt, null);
+    assert.equal(payload.candidate.occurrences.length,0);
+    assert.ok(payload.candidate.pendingRevisionId);
+    const revision=db.prepare("SELECT change_set_json FROM calendar_candidate_revisions WHERE id=?").get(payload.candidate.pendingRevisionId);
+    const fields=JSON.parse(revision.change_set_json).map((change)=>change.field);
+    const applied=await admin(db,`/candidates/${payload.candidate.id}/revisions/${payload.candidate.pendingRevisionId}/apply`,{method:"POST",body:{fields}});
+    assert.equal(applied.status,200,await applied.clone().text());
+    const appliedCandidate=(await applied.json()).candidate;
+    assert.equal(appliedCandidate.organizer, "Brill Adium and Gallery Anderson Smith");
+    assert.equal(appliedCandidate.factualDescription, "Brill Adium presents an artist talk followed by the exhibition's closing reception.");
+    assert.equal(appliedCandidate.eventStructure, "series");
+    assert.equal(appliedCandidate.startsAt, "2026-08-22T17:00:00-04:00");
+    assert.equal(appliedCandidate.endsAt, "2026-08-22T22:00:00-04:00");
+    assert.equal(appliedCandidate.venueAddress, "1401 Peachtree St NE, Atlanta, GA");
+    assert.equal(appliedCandidate.accessNotes, "Children are welcome.");
+    assert.deepEqual(appliedCandidate.occurrences.map((item) => ({ title:item.title, type:item.occurrenceType, startsAt:item.startsAt, endsAt:item.endsAt })), [
       { title:"Artist Talk", type:"artist_talk", startsAt:"2026-08-22T17:00:00-04:00", endsAt:"2026-08-22T19:00:00-04:00" },
       { title:"Closing Reception", type:"other", startsAt:"2026-08-22T19:00:00-04:00", endsAt:"2026-08-22T22:00:00-04:00" },
     ]);
@@ -3406,13 +3693,18 @@ test("Calendar Studio renders a private scrollable Strong Picks dashboard linked
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
   const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
   assert.match(studioHtml,/id="strongPicksList"/);
+  assert.match(studioHtml,/id="runStrongPicksScout" type="button" aria-describedby="strongPicksRefreshStatus">Run Scout<\/button>/);
   assert.match(studioHtml,/id="toggleStrongPicks" type="button" aria-expanded="true" aria-controls="strongPicksContent">Collapse<\/button>/);
   assert.match(studioHtml,/class="strong-picks-content" id="strongPicksContent"/);
   assert.match(studioHtml,/id="strongPicksRefreshStatus" role="status" aria-live="polite"/);
-  assert.match(studioHtml,/Refresh reloads picks already saved by Scout runs/);
+  assert.match(studioHtml,/Run Scout searches every enabled discovery lane and saves strong matches to the private candidate queue/);
   assert.match(studioHtml,/Private Scout intelligence/);
   assert.match(studio,/\/api\/admin\/calendar\/strong-picks/);
   assert.match(studio,/async function refreshStrongPicks\(\)/);
+  assert.match(studio,/async function runEnabledScouts\(button, buttonLabel, status\)/);
+  assert.match(studio,/async function runStrongPicksScout\(\)/);
+  assert.match(studio,/\/api\/admin\/calendar\/scout\/run/);
+  assert.match(studio,/Review every result before publishing/);
   assert.match(studio,/STRONG_PICKS_COLLAPSE_KEY = "swc_calendar_strong_picks_open"/);
   assert.match(studio,/function setStrongPicksExpanded\(expanded, persist\)/);
   assert.match(studio,/button\.setAttribute\("aria-expanded",String\(expanded\)\)/);
@@ -3422,11 +3714,14 @@ test("Calendar Studio renders a private scrollable Strong Picks dashboard linked
   assert.match(studio,/"Up to date\. "/);
   assert.match(studio,/Could not refresh saved picks/);
   assert.match(studio,/addEventListener\("click",refreshStrongPicks\)/);
+  assert.match(studio,/addEventListener\("click",runStrongPicksScout\)/);
   assert.match(studio,/data-review-strong-pick/);
   assert.match(studio,/Why it fits/);
   assert.match(studio,/Programming model/);
   assert.match(studioCss,/\.strong-picks-scroll \{[^}]*max-height:520px;[^}]*overflow-y:auto;/);
   assert.match(studioCss,/\.strong-picks-header-actions \{[^}]*display:flex;[^}]*gap:8px;/);
+  assert.match(studioCss,/\.strong-picks-header-actions \.strong-picks-run-button \{ background:var\(--accent\); color:#0e0e0e; \}/);
+  assert.match(studioCss,/\.strong-picks-header-actions \.strong-picks-run-button \{ grid-column:1 \/ -1; \}/);
   assert.match(studioCss,/\.strong-picks-panel\[data-collapsed="true"\] \.strong-picks-header \{ margin-bottom:0; \}/);
   assert.match(studioCss,/\.strong-picks-refresh-status\.is-success \{[^}]*border-color:var\(--ok\);/);
   assert.match(studioCss,/\.strong-picks-refresh-status\.is-error \{[^}]*border-color:var\(--danger\);/);
@@ -3480,6 +3775,19 @@ test("Calendar Studio sources use inline add forms and one-open compact editable
   assert.match(studioCss,/\.source-summary \{[^}]*min-height:52px;[^}]*cursor:pointer;/);
   assert.match(studioCss,/\.source-card-details \{[^}]*display:grid;[^}]*border-top:5px solid var\(--line\);/);
   assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.source-create-form,[^\{]*\.source-card-details[^\{]*\{ grid-template-columns:minmax\(0,1fr\); \}/);
+});
+
+test("Calendar Studio explains source warnings inline and defaults new sources to dynamic fallback", () => {
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studio,/renderMode:"dynamic-fallback"/);
+  assert.match(studio,/function sourceRunDiagnostic\(source\)/);
+  assert.match(studio,/What to do:/);
+  assert.match(studio,/Change Rendering to Dynamic fallback/);
+  assert.match(studio,/What the warning means/);
+  assert.match(studio,/runDetail\.warning\|\|runDetail\.error/);
+  assert.match(studioCss,/\.source-run-diagnostic\.is-warning \{ border-color:var\(--accent\); \}/);
+  assert.match(studioCss,/\.run-warning-summary \{[^}]*border:5px solid var\(--accent\);/);
 });
 
 test("Calendar Studio confirms permanent deletion without typed-title friction and advances", () => {
@@ -3537,12 +3845,23 @@ test("phase-one night planning metadata is editable, published, and privacy boun
 test("night planner phase-one contract and Studio controls remain explicit", () => {
   const contract = readFileSync(join(ROOT,"docs","atlanta-night-planner-api.md"),"utf8");
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
   const worker = readFileSync(join(ROOT,"_worker.js"),"utf8");
   assert.match(contract,/POST \/api\/calendar\/plan/);
   assert.match(contract,/Raw IP addresses, origins, and destinations are not written/);
+  assert.match(contract,/latest safe `leaveByTime`/);
   assert.match(studio,/Night planning/);
   assert.match(studio,/candidateAttendanceMode/);
   assert.match(studio,/candidatePlanningEligible/);
+  assert.match(studio,/itinerary\.leaveByTime/);
+  assert.match(studio,/stop\.departureTime/);
+  assert.match(studio,/state\.plannerEvents\.map\(plannerEventCard\)\.join\(""\)/);
+  assert.match(studio,/Related program/);
+  assert.match(studio,/Part of /);
+  assert.match(studioHtml,/available-from time is the earliest you can depart/);
+  assert.match(studioCss,/\.planner-summary \.planner-leave-by \{ border-color:var\(--accent\); \}/);
+  assert.match(studioCss,/\.planner-event-card\.is-occurrence \{ border-color:var\(--accent\); \}/);
   assert.match(worker,/url\.pathname === "\/api\/calendar\/plan"/);
 });
 
@@ -3601,6 +3920,159 @@ test("planner fails closed when its identity-hash salt is absent", async () => {
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_planner_rate_limits").get().count, 0);
 });
 
+test("private Studio planner accepts multiple must-attend events and routes every one", async () => {
+  const db = database();
+  db.prepare(
+    `UPDATE calendar_candidates
+     SET starts_at=?,ends_at=?,date_kind='timed',venue_name=?,venue_address=?,verification_state='verified',
+         schedule_status='scheduled',attendance_mode='flexible_window',minimum_visit_minutes=30,
+         recommended_visit_minutes=45,latitude=?,longitude=?
+     WHERE id=?`
+  ).run("2026-08-20T18:00:00-04:00","2026-08-20T21:00:00-04:00","Pilot Venue One","100 Peachtree Street, Atlanta, GA",33.758,-84.387,"cal_candidate_sound_vision");
+  db.prepare(
+    `UPDATE calendar_candidates
+     SET starts_at=?,ends_at=?,date_kind='timed',venue_name=?,venue_address=?,verification_state='verified',
+         schedule_status='scheduled',attendance_mode='flexible_window',minimum_visit_minutes=30,
+         recommended_visit_minutes=45,latitude=?,longitude=?
+     WHERE id=?`
+  ).run("2026-08-20T19:00:00-04:00","2026-08-20T22:00:00-04:00","Pilot Venue Two","200 Marietta Street, Atlanta, GA",33.761,-84.395,"cal_candidate_gsu_neurogenomics_forum_2026");
+
+  const runtime = env(db, {
+    MAPBOX_ACCESS_TOKEN:"test-mapbox-token",
+    CALENDAR_PLANNER_FETCH:async (url) => {
+      if (String(url).includes("/search/geocode/")) return new Response(JSON.stringify({ features:[{ geometry:{ coordinates:[-84.39,33.75] } }] }), { status:200 });
+      if (String(url).includes("/directions-matrix/")) return new Response(JSON.stringify({
+        durations:[[0,600,720],[600,0,480],[720,480,0]],
+        distances:[[0,3200,3900],[3200,0,1800],[3900,1800,0]],
+      }), { status:200 });
+      return new Response("not found", { status:404 });
+    },
+  });
+  const listResponse = await handleCalendarAdminApi(request("/api/admin/calendar/planner?date=2026-08-20", { admin:true }), runtime);
+  assert.equal(listResponse.status, 200, await listResponse.clone().text());
+  const listed = await listResponse.json();
+  const eventIds = ["candidate:cal_candidate_sound_vision", "candidate:cal_candidate_gsu_neurogenomics_forum_2026"];
+  assert.equal(listed.providerConfigured, true);
+  assert.deepEqual(eventIds.map((id) => listed.events.find((event) => event.id === id)?.pilotEligible), [true,true]);
+
+  const response = await handleCalendarAdminApi(request("/api/admin/calendar/planner", {
+    method:"POST", admin:true, body:{
+      date:"2026-08-20", startTime:"17:00", start:{ kind:"address", address:"364 Nelson Street SW, Atlanta, GA" },
+      end:{ mode:"last_event" }, travelMode:"driving", objective:"most_events",
+      eventIds, mustAttendEventIds:eventIds, arrivalBufferMinutes:10,
+    },
+  }), runtime);
+  assert.equal(response.status, 200, await response.clone().text());
+  const itinerary = (await response.json()).itinerary;
+  assert.deepEqual(itinerary.mustAttendEventIds, eventIds);
+  assert.equal(itinerary.includedEventCount, 2);
+  assert.equal(itinerary.availableFromTime, "5:00 PM");
+  assert.equal(itinerary.leaveByTime, "5:40 PM");
+  assert.equal(itinerary.stops[0].departureTime, itinerary.leaveByTime);
+  assert.equal(itinerary.stops[0].arrivalTime, "5:50 PM");
+  assert.deepEqual(new Set(itinerary.stops.filter((stop) => stop.mustAttend).map((stop) => stop.eventId)), new Set(eventIds));
+});
+
+test("private Studio planner fits a short exhibition before a talk and preserves flexible stops afterward", async () => {
+  const db = database();
+  const pilotEvents = [
+    ["cal_candidate_sound_vision","A Measure Without — Group Exhibition Opening","2026-08-20T18:00:00-04:00","2026-08-20T21:00:00-04:00","[\"exhibition\"]",33.760,-84.390],
+    ["cal_candidate_gsu_neurogenomics_forum_2026","Fashioning Futures: Raul Lopez of LUAR in Conversation with Andrew Westover","2026-08-20T19:00:00-04:00","2026-08-20T20:00:00-04:00","[\"lecture-talk\"]",33.790,-84.385],
+    ["cal_candidate_high_study_hall_2026","Dysport-Topia — Group Exhibition Opening","2026-08-20T18:00:00-04:00","2026-08-20T21:00:00-04:00","[\"exhibition\"]",33.755,-84.375],
+    ["cal_candidate_synergy","The Home Team Celebration","2026-08-20T18:00:00-04:00","2026-08-20T22:00:00-04:00","[\"exhibition\",\"performance\"]",33.758,-84.395],
+    ["cal_candidate_lost_shadows","We Hold These Truths","2026-08-20T18:00:00-04:00","2026-08-20T20:00:00-04:00","[\"panel\"]",33.780,-84.360],
+  ];
+  for (const [id,title,startsAt,endsAt,formats,latitude,longitude] of pilotEvents) {
+    db.prepare(
+      `UPDATE calendar_candidates
+       SET title=?,starts_at=?,ends_at=?,date_kind='timed',venue_name=title,venue_address='Atlanta, GA',
+           verification_state='verified',schedule_status='scheduled',attendance_mode='inferred',formats_json=?,
+           minimum_visit_minutes=NULL,recommended_visit_minutes=NULL,late_arrival_allowed=0,latitude=?,longitude=?
+       WHERE id=?`
+    ).run(title,startsAt,endsAt,formats,latitude,longitude,id);
+  }
+
+  const durations = [
+    [0,300,840,1200,900,300],
+    [300,0,600,1200,900,1200],
+    [840,600,0,600,900,1080],
+    [1200,1200,600,0,300,1200],
+    [900,900,900,300,0,1200],
+    [300,1200,1080,1200,1200,0],
+  ];
+  const runtime = env(db, {
+    MAPBOX_ACCESS_TOKEN:"test-mapbox-token",
+    CALENDAR_PLANNER_FETCH:async (url) => {
+      if (String(url).includes("/directions-matrix/")) return new Response(JSON.stringify({
+        durations, distances:durations.map((row) => row.map((seconds) => seconds * 8)),
+      }), { status:200 });
+      return new Response("not found", { status:404 });
+    },
+  });
+  const eventIds = pilotEvents.map(([id]) => `candidate:${id}`);
+  const mustAttendEventIds = [eventIds[1],eventIds[2]];
+  const listedResponse = await handleCalendarAdminApi(request("/api/admin/calendar/planner?date=2026-08-20", { admin:true }), runtime);
+  const listed = await listedResponse.json();
+  const planningById = new Map(listed.events.map((event) => [event.id,event.planning]));
+  assert.equal(planningById.get(eventIds[0]).attendanceMode, "flexible_window");
+  assert.equal(planningById.get(eventIds[1]).attendanceMode, "fixed_start");
+  assert.equal(planningById.get(eventIds[1]).startGraceMinutes, 15);
+  assert.equal(planningById.get(eventIds[3]).attendanceMode, "flexible_window");
+
+  const earlyResponse = await handleCalendarAdminApi(request("/api/admin/calendar/planner", {
+    method:"POST", admin:true, body:{
+      date:"2026-08-20", startTime:"17:00", start:{ kind:"coordinates", latitude:33.75, longitude:-84.4 },
+      end:{ mode:"last_event" }, travelMode:"driving", objective:"most_events",
+      eventIds, mustAttendEventIds:[eventIds[1],eventIds[2]], arrivalBufferMinutes:10,
+    },
+  }), runtime);
+  assert.equal(earlyResponse.status, 200, await earlyResponse.clone().text());
+  const earlyItinerary = (await earlyResponse.json()).itinerary;
+  assert.equal(earlyItinerary.availableFromTime, "5:00 PM");
+  assert.equal(earlyItinerary.leaveByTime, "5:45 PM");
+  assert.equal(earlyItinerary.stops[0].departureTime, "5:45 PM");
+  assert.equal(earlyItinerary.stops[0].arrivalTime, "5:50 PM");
+  assert.equal(earlyItinerary.stops[0].visitStartTime, "6:00 PM");
+
+  const body = {
+    date:"2026-08-20", startTime:"17:45", start:{ kind:"coordinates", latitude:33.75, longitude:-84.4 },
+    end:{ mode:"last_event" }, travelMode:"driving", objective:"most_events",
+    eventIds, mustAttendEventIds, arrivalBufferMinutes:10,
+  };
+  const response = await handleCalendarAdminApi(request("/api/admin/calendar/planner", { method:"POST", admin:true, body }), runtime);
+  assert.equal(response.status, 200, await response.clone().text());
+  const itinerary = (await response.json()).itinerary;
+  assert.deepEqual(itinerary.stops.map((stop) => stop.title), pilotEvents.slice(0,4).map((event) => event[1]));
+  assert.equal(itinerary.stops[0].visitMinutes, 30);
+  assert.equal(itinerary.stops[1].lateMinutes, 0);
+  assert.equal(itinerary.totalLateMinutes, 0);
+  assert.equal(itinerary.includedEventCount, 4);
+
+  const graceResponse = await handleCalendarAdminApi(request("/api/admin/calendar/planner", {
+    method:"POST", admin:true, body:{ ...body, startTime:"18:45" },
+  }), runtime);
+  assert.equal(graceResponse.status, 200, await graceResponse.clone().text());
+  const graceItinerary = (await graceResponse.json()).itinerary;
+  const talkStop = graceItinerary.stops.find((stop) => stop.eventId === eventIds[1]);
+  assert.equal(talkStop.lateMinutes, 9);
+  assert.equal(talkStop.startGraceMinutes, 15);
+
+  const tooLateResponse = await handleCalendarAdminApi(request("/api/admin/calendar/planner", {
+    method:"POST", admin:true, body:{ ...body, startTime:"18:52" },
+  }), runtime);
+  assert.equal(tooLateResponse.status, 409);
+  assert.equal((await tooLateResponse.json()).code, "must_attend_conflict");
+});
+
+test("private Studio planner is authenticated and fails closed without its provider token", async () => {
+  const db = database();
+  const unauthorized = await handleCalendarAdminApi(request("/api/admin/calendar/planner?date=2026-08-20"), env(db));
+  assert.equal(unauthorized.status, 401);
+  const response = await admin(db, "/planner", { method:"POST", body:{} });
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).code, "routing_not_configured");
+});
+
 test("authenticated Studio day agenda includes spanning events and their related occurrences", async () => {
   const db = database();
   const unauthorized = await handleCalendarAdminApi(request("/api/admin/calendar/day?date=2026-08-28"), env(db));
@@ -3620,6 +4092,17 @@ test("authenticated Studio day agenda includes spanning events and their related
   assert.equal(opening.occurrenceType, "opening_reception");
   assert.equal(opening.parentTitle, parent.title);
 
+  db.prepare(
+    "UPDATE calendar_candidate_occurrences SET verification_state='verified' WHERE id='cal_occurrence_bugs_opening_2026'"
+  ).run();
+  const plannerResponse = await admin(db, "/planner?date=2026-08-28");
+  assert.equal(plannerResponse.status, 200, await plannerResponse.clone().text());
+  const plannerPayload = await plannerResponse.json();
+  const plannerOpening = plannerPayload.events.find((item) => item.id === "occurrence:cal_occurrence_bugs_opening_2026");
+  assert.equal(plannerOpening.occurrenceType, "opening_reception");
+  assert.equal(plannerOpening.parentTitle, parent.title);
+  assert.equal(plannerOpening.pilotEligible, true);
+
   const beforeRun = await admin(db, "/day?date=2026-08-16");
   const beforeItems = (await beforeRun.json()).items;
   assert.equal(beforeItems.some((item) => item.candidateId === parent.candidateId), false);
@@ -3631,12 +4114,18 @@ test("Calendar Studio day view is date-addressable and opens occurrences in the 
   const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
   assert.match(studioHtml,/id="reviewModeControls"[\s\S]*data-review-mode="queue"[\s\S]*data-review-mode="day"/);
   assert.match(studioHtml,/id="dayAgendaControls"[\s\S]*id="dayAgendaDate" type="date"[\s\S]*id="dayAgendaToday"/);
+  assert.match(studioHtml,/id="dayAgendaOnView" type="checkbox"[\s\S]*Include what’s on view/);
   assert.match(studio,/\/api\/admin\/calendar\/day\?date=/);
   assert.match(studio,/url\.searchParams\.set\("reviewMode","day"\)/);
+  assert.match(studio,/showOnView:initialReviewParams\.get\("onView"\)==="1"/);
+  assert.match(studio,/item\.dateKind!=="date_range"/);
+  assert.match(studio,/state\.showOnView\?specificItems\.concat\(onViewItems\):specificItems/);
+  assert.match(studio,/dayAgendaOnView"\)\.addEventListener\("change"/);
   assert.match(studio,/data-occurrence-id=/);
   assert.match(studio,/function revealSelectedOccurrence\(\)/);
   assert.match(studio,/section\.open=true/);
   assert.match(studioCss,/\.day-agenda-card \{[^}]*border:5px solid var\(--line\);/);
   assert.match(studioCss,/\.occurrence-row\.is-day-selected \{[^}]*border-color:var\(--accent\);/);
+  assert.match(studioCss,/\.day-agenda-controls \.day-on-view-toggle \{[^}]*border:5px solid var\(--line\);/);
   assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.day-agenda-controls \{ grid-template-columns:1fr 1fr; \}/);
 });

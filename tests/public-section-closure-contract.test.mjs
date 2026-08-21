@@ -1,83 +1,38 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import worker from "../_worker.js";
-import { readFileSync } from "node:fs";
 
 const env = {
   ASSETS: {
     async fetch(request) {
-      return new Response(new URL(request.url).pathname, { status: 200 });
+      return new Response(new URL(request.url).pathname, { status: 200, headers: { "content-type": "text/html" } });
     },
   },
 };
 
-test("closed public page families temporarily redirect to the 404 page", async () => {
-  for (const path of [
-    "/about",
-    "/about/",
-    "/about/index.html",
-    "/about/founder/",
-    "/about/legend/open-eye/",
-    "/archive",
-    "/archive/",
-    "/archive/index.html",
-    "/archive/guide/",
-    "/archive/records/lostmarbles/",
-    "/archive/timelines/art/",
-    "/tattoos/build",
-    "/tattoos/build/",
-    "/tattoos/build/index.html",
-    "/tattoos/build/in-person/",
-  ]) {
-    const response = await worker.fetch(new Request(`https://example.test${path}?source=test`), env, {});
-    assert.equal(response.status, 302, path);
-    assert.equal(response.headers.get("location"), "https://example.test/404.html", path);
-  }
-});
-
-test("the Events landing page is hidden without closing event detail routes", async () => {
-  for (const path of ["/events", "/events/", "/events/index.html"]) {
-    const response = await worker.fetch(new Request(`https://example.test${path}?source=test`), env, {});
-    assert.equal(response.status, 302, path);
-    assert.equal(response.headers.get("location"), "https://example.test/404.html", path);
-  }
-
-  for (const path of ["/events/signal-symbol/", "/events/ss-and-f-live-audience/", "/api/events"]) {
+test("seeded visibility preserves hidden Film, Music, and Build while opening tool-state pages", async () => {
+  for (const path of ["/film/", "/music/", "/tattoos/build/", "/tattoos/build/in-person/"]) {
     const response = await worker.fetch(new Request(`https://example.test${path}`), env, {});
-    assert.notEqual(response.status, 302, path);
+    assert.equal(response.status, 302, path);
+    assert.equal(response.headers.get("location"), "https://example.test/404.html", path);
   }
-
-  const devServer = readFileSync(new URL("../tools/dev-server.mjs", import.meta.url), "utf8");
-  assert.match(devServer, /const hiddenPublicExactPaths = new Set\(\["\/events"\]\)/);
-  assert.match(devServer, /hiddenPublicExactPaths\.has\(normalizedLower\)/);
-});
-
-test("the Maze Studio remains public while the rest of the Build family is closed", async () => {
-  for (const path of [
-    "/tattoos/build/maze",
-    "/tattoos/build/maze/",
-    "/tattoos/build/maze/index.html",
-  ]) {
+  for (const path of ["/about/", "/archive/", "/events/", "/writings/", "/tattoos/build/maze/"]) {
     const response = await worker.fetch(new Request(`https://example.test${path}`), env, {});
     assert.equal(response.status, 200, path);
   }
-
-  const devServer = readFileSync(new URL("../tools/dev-server.mjs", import.meta.url), "utf8");
-  assert.match(devServer, /const openPublicPagePaths = new Set\(\["\/tattoos\/build\/maze"\]\)/);
-  assert.match(devServer, /openPublicPagePaths\.has\(normalizedLower\)/);
 });
 
-test("closing the page families does not redirect their static assets or similarly named routes", async () => {
-  for (const path of [
-    "/about/section-page.css",
-    "/archive-notes/",
-    "/aboutness/",
-    "/tattoos/building/",
-    "/tattoos/build/maze/assets/index.js",
-    "/api/build-drafts/current",
-  ]) {
-    const response = await worker.fetch(new Request(`https://example.test${path}`), env, {});
-    assert.notEqual(response.status, 302, path);
+test("legacy hard-coded visibility lists no longer override the shared authority", () => {
+  const workerSource = readFileSync(new URL("../_worker.js", import.meta.url), "utf8");
+  const devServerSource = readFileSync(new URL("../tools/dev-server.mjs", import.meta.url), "utf8");
+  for (const source of [workerSource, devServerSource]) {
+    assert.doesNotMatch(source, /HIDDEN_PUBLIC_PATHS|hiddenPublicPaths/);
+    assert.doesNotMatch(source, /CLOSED_PUBLIC_PAGE_PATHS|closedPublicPagePaths/);
+    assert.doesNotMatch(source, /OPEN_PUBLIC_PAGE_PATHS|openPublicPagePaths/);
+    assert.doesNotMatch(source, /HIDE_PUBLIC_PAGES_EXCEPT_HOME|hidePublicPagesExceptHome/);
   }
+  assert.match(workerSource, /pageVisibilityResponse\(request, env\)/);
+  assert.match(devServerSource, /\/api\/site\/visibility/);
 });

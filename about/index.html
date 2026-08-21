@@ -4,1854 +4,1156 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>about - the six.well construct</title>
-<link rel="stylesheet" href="/css/tokens.css">
-<link rel="stylesheet" href="/css/transitions.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
     --bg: #0e0e0e;
-    --body: var(--color-body, #FBD19D);
-    --body-muted: var(--color-text-muted, rgba(251, 209, 157, 0.66));
-    --base-text: rgba(252, 184, 103, 0.72);
-    --body-dim: var(--color-text-dim, rgba(251, 209, 157, 0.38));
+    --bg-raised: #111111;
     --accent: #FCB867;
-    --amber-soft: rgba(252, 184, 103, 0.18);
-    --amber-faint: rgba(252, 184, 103, 0.105);
-    --ring: #6D3D15;
+    --accent-dim: rgba(252, 184, 103, 0.25);
+    --accent-faint: rgba(252, 184, 103, 0.12);
+    --ring-soft: rgba(109, 61, 21, 0.4);
+    --ring-faint: rgba(109, 61, 21, 0.18);
+    --body: #FFE7CA;
+    --body-muted: rgba(255, 231, 202, 0.68);
+    --body-dim: rgba(255, 231, 202, 0.42);
     --sans: 'Inter', Arial, sans-serif;
     --serif: Georgia, 'Times New Roman', Times, serif;
-    --ease: cubic-bezier(0.2, 0, 0.2, 1);
+    --s1: 4px;
+    --s2: 8px;
+    --s3: 12px;
+    --s4: 16px;
+    --s5: 24px;
+    --s6: 40px;
+    --s7: 64px;
+    --s8: 96px;
+    --t-fast: 180ms cubic-bezier(0.2, 0, 0.2, 1);
+    --t-med: 350ms cubic-bezier(0.2, 0, 0.2, 1);
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html {
-    min-height: 100%;
-    background: var(--bg);
-  }
-
+  html { background: var(--bg); scroll-behavior: smooth; }
   body {
     min-height: 100vh;
     background: var(--bg);
     color: var(--body);
     font-family: var(--serif);
+    overflow-x: clip;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-
   a { color: inherit; text-decoration: none; }
-  button { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+  button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
 
-  .about-next {
-    width: min(100%, 1240px);
-    margin: 0 auto;
-    padding: clamp(28px, 5vw, 54px) clamp(16px, 4vw, 42px) 72px;
-  }
-
-  .stage {
-    position: relative;
-    min-height: min(760px, calc(100vh - 64px));
-    display: grid;
-    grid-template-rows: auto minmax(420px, 1fr) auto;
-    gap: 18px;
-    background: transparent;
-    overflow: visible;
-  }
-
-  /* Background layers — faint eyes wall (404-style) + floating amber particles (home-style) */
-  .stage-bg {
-    position: absolute;
+  .grain {
+    position: fixed;
     inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-  }
-
-  #eyesBg {
-    z-index: 0;
-  }
-
-  #particleBg {
     z-index: 1;
+    pointer-events: none;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
   }
 
-  .stage-head,
-  .diagram-wrap,
-  .details {
+  .about-page {
     position: relative;
     z-index: 2;
+    width: min(100%, 1480px);
+    margin: 0 auto;
+    padding: 132px var(--s6) var(--s7);
   }
 
-  .stage-head {
-    max-width: 880px;
-    margin: 0 auto;
-    padding: clamp(28px, 4vw, 42px) 24px 0;
-    text-align: center;
+  .intro {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+    align-items: end;
+    gap: var(--s6);
+    margin-bottom: var(--s7);
   }
 
   .eyebrow {
     display: block;
-    margin-bottom: 12px;
-    color: rgba(252, 184, 103, 0.58);
-    font-family: var(--serif);
-    font-size: 10px;
-    letter-spacing: 0.28em;
-    line-height: 1.4;
-    text-transform: uppercase;
-  }
-
-  .hero-copy {
-    margin: 18px auto 0;
-  }
-
-  .hero-jump {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 22px;
-  }
-
-  .text-link,
-  .hero-jump a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 32px;
-    padding: 7px 11px;
-    border: 0;
-    border-radius: 4px;
-    color: #0e0e0e;
-    background: var(--pill-color, var(--accent));
-    font-family: var(--sans);
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 0;
-    line-height: 1.2;
-    text-transform: uppercase;
-    transition: color 180ms var(--ease), outline-color 180ms var(--ease), transform 180ms var(--ease);
-  }
-
-  .text-link[href^="/tattoos"] { --pill-color: #6E0404; }
-  .text-link[href^="/art"] { --pill-color: #0071EB; }
-  .text-link[href^="/merch"] { --pill-color: #F08F15; }
-  .text-link[href^="/archive"] { --pill-color: #6D3D15; }
-  .text-link[href^="/writings"] { --pill-color: #FFE7CA; }
-  .text-link[href^="/events"] { --pill-color: #005D25; }
-  .text-link[href^="/music"] { --pill-color: #A22F8D; }
-  .text-link[href^="/film"] { --pill-color: #328C84; }
-  .text-link[href^="#"] { --pill-color: var(--accent); }
-
-  .text-link:hover,
-  .text-link:focus-visible,
-  .hero-jump a:hover,
-  .hero-jump a:focus-visible {
-    color: #0e0e0e;
-    outline: 1px solid rgba(255, 231, 202, 0.72);
-    outline-offset: 3px;
-    transform: translateY(-1px);
-  }
-
-  .hero-jump a {
-    min-height: 30px;
-    padding: 8px 13px;
-    --pill-color: var(--accent);
-  }
-
-  .hero-jump a:hover,
-  .hero-jump a:focus-visible {
-    transform: translateY(-1px);
-  }
-
-  .state-label {
-    display: block;
-    min-height: 20px;
-    margin-top: 18px;
-    color: rgba(252, 184, 103, 0.55);
+    margin-bottom: var(--s3);
+    color: var(--accent);
     font-family: var(--serif);
     font-size: 11px;
-    letter-spacing: 0.2em;
-    line-height: 1.4;
+    letter-spacing: 0;
     text-transform: uppercase;
   }
 
-  .diagram-wrap {
+  h1 {
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 160px;
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 0.86;
+    text-transform: uppercase;
+  }
+
+  .intro-copy {
+    max-width: 360px;
+    padding-bottom: var(--s4);
+    color: var(--body-muted);
+    font-size: 13px;
+    letter-spacing: 0;
+    line-height: 1.7;
+    text-align: right;
+    text-transform: uppercase;
+  }
+
+  .about-layout {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: var(--s6);
+    align-items: start;
+  }
+
+  .tab-rail {
+    position: sticky;
+    top: 116px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    padding-top: var(--s1);
+  }
+
+  .top-tab,
+  .nested-tab {
     position: relative;
     width: 100%;
-    min-height: 420px;
-    padding: 0 clamp(4px, 2vw, 20px);
-  }
-
-  .diagram {
-    display: block;
-    width: 100%;
-    height: min(61vw, 610px);
-    min-height: 420px;
-    overflow: visible;
-  }
-
-  .spoke {
-    stroke: rgba(252, 184, 103, 0.24);
-    stroke-width: 5;
-    vector-effect: non-scaling-stroke;
-  }
-
-  .center-ring {
-    fill: none;
-    stroke: #6D3D15;
-    stroke-width: 16;
-    vector-effect: non-scaling-stroke;
-  }
-
-  .center-dot {
-    fill: var(--accent);
-    opacity: 0.95;
-    transform-box: fill-box;
-    transform-origin: center;
-  }
-
-  .connection-line {
-    fill: none;
-    stroke-linecap: round;
-    vector-effect: non-scaling-stroke;
-    stroke-dasharray: var(--line-length);
-    stroke-dashoffset: var(--line-length);
-    animation: lineDraw 780ms var(--ease) forwards;
-  }
-
-  .connection-line {
-    stroke-width: 5;
-    opacity: 0.94;
-  }
-
-  .connection-line.is-dashed {
-    stroke-dasharray: 12 12;
-    animation: dashDraw 780ms var(--ease) forwards;
-  }
-
-  @keyframes lineDraw {
-    to { stroke-dashoffset: 0; }
-  }
-
-  @keyframes dashDraw {
-    from { stroke-dashoffset: var(--line-length); }
-    to { stroke-dashoffset: 0; }
-  }
-
-  .node-hit {
-    outline: none;
-    transform-box: fill-box;
-    transform-origin: center;
-  }
-
-  .node-core {
-    fill: var(--node-color);
-    opacity: 0.98;
-    transform-box: fill-box;
-    transform-origin: center;
-    transition: r 320ms var(--ease), opacity 300ms var(--ease);
-  }
-
-  .node-halo {
-    display: none;
-    fill: none;
-    opacity: 0;
-    transform-box: fill-box;
-    transform-origin: center;
-  }
-
-  .node-label {
-    fill: var(--node-color);
-    font-family: var(--sans);
-    font-size: 18px;
-    font-weight: 900;
-    letter-spacing: 0;
-    text-anchor: middle;
-    text-transform: uppercase;
-    transition: opacity 300ms var(--ease), fill 300ms var(--ease), transform 300ms var(--ease);
-    user-select: none;
-  }
-
-  .node-count {
-    fill: rgba(252, 184, 103, 0.6);
-    font-family: var(--serif);
-    font-size: 12px;
-    letter-spacing: 0;
-    text-anchor: middle;
-    opacity: 0;
-    transition: opacity 300ms var(--ease);
-    user-select: none;
-  }
-
-  .node-hit:focus-visible .node-core {
-    stroke: var(--body);
-    stroke-width: 5;
-  }
-
-  .diagram.has-active .node-hit {
-    opacity: 0.28;
-    transition: opacity 560ms var(--ease);
-  }
-
-  .diagram.has-active .node-hit.is-active,
-  .diagram.has-active .node-hit.is-connected,
-  .diagram.has-active .node-hit.is-connected-pending {
-    opacity: 1;
-  }
-
-  .node-hit.is-active .node-core {
-    r: 43;
-    fill: url(var(--sphere-gradient));
-  }
-
-  .node-hit.is-active .node-halo {
-    opacity: 0;
-  }
-
-  .node-hit.is-active .node-count {
-    opacity: 1;
-  }
-
-  .node-hit.is-connected .node-core {
-    r: 35;
-    fill: url(var(--sphere-gradient));
-  }
-
-  .node-hit.is-active .node-label,
-  .node-hit.is-connected .node-label {
-    opacity: 1;
-  }
-
-  .details {
-    display: grid;
-    grid-template-columns: minmax(280px, 0.86fr) minmax(0, 1.14fr);
-    gap: clamp(22px, 4vw, 42px);
-    align-items: start;
-    padding: 0 clamp(20px, 5vw, 64px) clamp(26px, 4vw, 42px);
-  }
-
-  .details:not(.has-selection) {
-    display: none;
-  }
-
-  .selected-copy {
-    min-height: 118px;
-    border-top: 5px solid rgba(252, 184, 103, 0.14);
-    padding-top: 18px;
-  }
-
-  /* Soft content swap: details fade out, repopulate, fade back in. */
-  .selected-copy,
-  .connection-list,
-  .state-label {
-    transition: opacity 360ms var(--ease), transform 360ms var(--ease);
-  }
-
-  .selected-copy.is-fading,
-  .connection-list.is-fading,
-  .state-label.is-fading {
-    opacity: 0;
-    transform: translateY(7px);
-  }
-
-  .selected-kicker,
-  .connection-kicker {
-    display: block;
-    margin-bottom: 10px;
-    color: rgba(252, 184, 103, 0.48);
-    font-family: var(--serif);
-    font-size: 10px;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-  }
-
-  .selected-title {
-    color: var(--accent);
-    font-family: var(--sans);
-    font-size: clamp(24px, 3.4vw, 38px);
-    font-weight: 900;
-    letter-spacing: 0;
-    line-height: 1;
-    text-transform: uppercase;
-  }
-
-  .selected-body {
-    max-width: 430px;
-    margin-top: 12px;
-    color: var(--base-text);
-    font-size: 13px;
-    line-height: 1.65;
-  }
-
-  .material-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    max-width: 460px;
-    margin-top: 15px;
-  }
-
-  .material-chip {
-    display: inline-flex;
-    align-items: center;
-    min-height: 24px;
-    padding: 5px 8px;
-    border: 0;
-    border-radius: 4px;
-    color: #0e0e0e;
-    background: var(--chip-color, var(--accent));
-    font-family: var(--sans);
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 0;
-    line-height: 1.2;
-    text-transform: uppercase;
-  }
-
-  .manifest-brand {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: clamp(18px, 2.8vw, 34px);
-    align-items: start;
-    margin-top: 22px;
-    padding: clamp(20px, 3vw, 30px);
-    background: #171717;
-  }
-
-  .manifest-brand-head {
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-  }
-
-  .manifest-brand-logo {
-    width: auto;
-    height: 42px;
-    max-width: 42px;
-    flex: 0 0 auto;
-    opacity: 0.9;
-  }
-
-  .manifest-brand-logo[hidden] {
-    display: none;
-  }
-
-  .manifest-brand-kicker {
-    color: var(--brand-color, var(--accent));
-    font-family: var(--serif);
-    font-size: 10px;
-    letter-spacing: 0.24em;
-    line-height: 1.4;
-    text-transform: uppercase;
-    opacity: 0.72;
-  }
-
-  .manifest-brand-title {
-    margin-top: 10px;
-    color: var(--brand-color, var(--accent));
-    font-family: var(--sans);
-    font-size: clamp(24px, 2.8vw, 36px);
-    font-weight: 900;
-    letter-spacing: 0;
-    line-height: 0.96;
-    text-transform: uppercase;
-    overflow-wrap: anywhere;
-  }
-
-  .manifest-brand-copy {
-    color: var(--base-text);
-    font-size: clamp(15px, 1.8vw, 22px);
-    line-height: 1.36;
-    text-wrap: balance;
-  }
-
-  .connection-list {
-    min-height: 118px;
-    border-top: 5px solid rgba(252, 184, 103, 0.14);
-    padding-top: 18px;
-  }
-
-  .connection-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .connection-card {
-    display: block;
-    min-height: 116px;
-    padding: 13px 14px;
-    border: 0;
-    border-radius: 6px;
-    background: #10100f;
-    color: var(--color-body, #FBD19D);
-    transition: transform 180ms var(--ease);
-    /* cards cascade in, paced with the connection lines drawing above */
-    animation: cardIn 520ms var(--ease) backwards;
-    animation-delay: var(--card-delay, 0ms);
-  }
-
-  @keyframes cardIn {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-  }
-
-  .connection-card:hover,
-  .connection-card:focus-visible {
-    transform: translateY(-2px);
-    outline: none;
-  }
-
-  .connection-name {
-    display: block;
-    color: var(--link-color);
+    min-height: 40px;
+    padding: var(--s2) 0;
+    color: var(--body-dim);
     font-family: var(--sans);
     font-size: 12px;
-    font-weight: 900;
+    font-weight: 700;
     letter-spacing: 0;
-    line-height: 1.2;
-    text-transform: uppercase;
-  }
-
-  .connection-desc {
-    display: block;
-    margin-top: 9px;
-    color: var(--base-text);
-    font-size: 12px;
-    line-height: 1.45;
-  }
-
-  .connection-materials {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 12px;
-  }
-
-  .connection-materials .material-chip {
-    min-height: 20px;
-    padding: 4px 6px;
-    background: var(--link-color);
-    color: #0e0e0e;
-    font-size: 9px;
-    letter-spacing: 0;
-  }
-
-  .empty-note {
-    color: rgba(252, 184, 103, 0.46);
-    font-family: var(--serif);
-    font-size: 12px;
-    letter-spacing: 0.18em;
-    line-height: 1.6;
-    text-transform: uppercase;
-  }
-
-  .content-bands {
-    display: grid;
-    gap: clamp(42px, 7vw, 84px);
-    margin-top: clamp(56px, 8vw, 96px);
-  }
-
-  .info-band {
-    display: grid;
-    grid-template-columns: minmax(180px, 0.48fr) minmax(0, 1fr);
-    gap: clamp(22px, 5vw, 60px);
-    padding-top: clamp(24px, 4vw, 40px);
-    border-top: 5px solid rgba(109, 61, 21, 0.34);
-  }
-
-  .band-kicker {
-    display: block;
-    margin-bottom: 12px;
-    color: rgba(252, 184, 103, 0.52);
-    font-family: var(--serif);
-    font-size: 10px;
-    letter-spacing: 0.24em;
-    line-height: 1.4;
-    text-transform: uppercase;
-  }
-
-  .band-title {
-    color: var(--accent);
-    font-family: var(--sans);
-    font-size: clamp(30px, 5vw, 58px);
-    font-weight: 900;
-    letter-spacing: 0;
-    line-height: 0.94;
-    text-transform: uppercase;
-  }
-
-  .band-lede {
-    max-width: 720px;
-    color: var(--base-text);
-    font-size: clamp(15px, 1.7vw, 19px);
-    line-height: 1.65;
-  }
-
-  .copy-grid,
-  .path-grid,
-  .state-grid,
-  .press-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-    margin-top: 28px;
-  }
-
-  .copy-block,
-  .path-card,
-  .state-card,
-  .press-card {
-    min-height: 150px;
-    padding-top: 16px;
-    border-top: 5px solid rgba(109, 61, 21, 0.24);
-  }
-
-  .copy-block h3,
-  .path-card h3,
-  .state-card h3,
-  .press-card h3 {
-    margin-bottom: 8px;
-    color: var(--accent);
-    font-family: var(--sans);
-    font-size: 13px;
-    font-weight: 900;
-    letter-spacing: 0;
-    line-height: 1.2;
-    text-transform: uppercase;
-  }
-
-  .copy-block p,
-  .path-card p,
-  .state-card p,
-  .press-card p {
-    color: var(--base-text);
-    font-size: 13px;
-    line-height: 1.62;
-  }
-
-  .breakdown-shell {
-    display: grid;
-    grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
-    gap: 22px;
-    margin-top: 30px;
-  }
-
-  .breakdown-root {
-    padding-top: 16px;
-    border-top: 5px solid rgba(109, 61, 21, 0.28);
-  }
-
-  .breakdown-root-title {
-    display: block;
-    margin-bottom: 13px;
-    color: var(--accent);
-    font-family: var(--sans);
-    font-size: 14px;
-    font-weight: 900;
-    letter-spacing: 0;
-    line-height: 1.15;
-    text-transform: uppercase;
-  }
-
-  .breakdown-group-list {
-    display: grid;
-    gap: 8px;
-  }
-
-  .breakdown-group {
-    position: relative;
-    width: 100%;
-    min-height: 42px;
-    padding: 10px 12px;
-    border-left: 5px solid rgba(109, 61, 21, 0.42);
-    color: var(--color-text-muted, rgba(251, 209, 157, 0.66));
-    background: rgba(252, 184, 103, 0.045);
-    font-family: var(--sans);
-    font-size: 12px;
-    font-weight: 900;
-    letter-spacing: 0;
-    line-height: 1.2;
+    line-height: 1.3;
     text-align: left;
     text-transform: uppercase;
-    transition: border-color 180ms var(--ease), color 180ms var(--ease), background 180ms var(--ease), transform 180ms var(--ease);
+    transition: color var(--t-fast), padding-left var(--t-fast);
   }
 
-  .breakdown-group:hover,
-  .breakdown-group:focus-visible,
-  .breakdown-group.is-active {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: rgba(252, 184, 103, 0.09);
-    transform: translateX(4px);
-  }
-
-  .breakdown-board {
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(220px, 0.72fr);
-    gap: 18px;
-    min-height: 310px;
-  }
-
-  .breakdown-children,
-  .breakdown-detail {
-    padding-top: 16px;
-    border-top: 5px solid rgba(109, 61, 21, 0.24);
-  }
-
-  .breakdown-children {
-    display: grid;
-    gap: 10px;
-    align-content: start;
-  }
-
-  .breakdown-child {
-    display: grid;
-    grid-template-columns: 18px minmax(0, 1fr);
-    gap: 10px;
-    align-items: baseline;
-    min-height: 34px;
-    color: var(--base-text);
-    font-size: 15px;
-    line-height: 1.35;
-  }
-
-  .breakdown-child::before {
+  .top-tab::before,
+  .nested-tab::before {
     content: "";
-    width: 10px;
-    height: 10px;
-    margin-top: 5px;
+    position: absolute;
+    left: -14px;
+    top: 50%;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
     background: var(--accent);
-    opacity: 0.78;
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity var(--t-fast);
   }
 
-  .breakdown-detail h3 {
-    margin-bottom: 10px;
+  .top-tab:hover,
+  .top-tab.is-active,
+  .nested-tab:hover,
+  .nested-tab.is-active {
     color: var(--accent);
-    font-family: var(--sans);
-    font-size: 18px;
-    font-weight: 900;
+    padding-left: var(--s2);
+  }
+
+  .top-tab.is-active::before,
+  .nested-tab.is-active::before { opacity: 1; }
+
+  .panel-shell {
+    min-height: 680px;
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s6);
+  }
+
+  .panel { display: none; }
+  .panel.is-active { display: block; }
+
+  .panel-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+    gap: var(--s6);
+    align-items: start;
+    margin-bottom: var(--s6);
+  }
+
+  .panel-kicker,
+  .section-kicker {
+    display: block;
+    margin-bottom: var(--s3);
+    color: var(--accent);
+    font-family: var(--serif);
+    font-size: 10px;
     letter-spacing: 0;
-    line-height: 1.1;
     text-transform: uppercase;
   }
 
-  .breakdown-detail p {
-    color: var(--base-text);
-    font-size: 14px;
+  .panel-title {
+    color: var(--body);
+    font-family: var(--sans);
+    font-size: 56px;
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 0.92;
+    text-transform: uppercase;
+  }
+
+  .panel-lede {
+    color: var(--body-muted);
+    font-size: 17px;
     line-height: 1.7;
   }
 
-  .breakdown-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin-top: 18px;
-  }
-
-  .breakdown-chip {
-    display: inline-flex;
-    align-items: center;
-    min-height: 28px;
-    padding: 6px 9px;
-    border-radius: 4px;
-    color: #0e0e0e;
-    background: var(--accent);
-    font-family: var(--sans);
-    font-size: 9px;
-    font-weight: 900;
+  .panel-note {
+    color: var(--body-dim);
+    font-size: 12px;
     letter-spacing: 0;
-    line-height: 1.1;
+    line-height: 1.7;
     text-transform: uppercase;
   }
 
-  .link-row {
+  .construct-grid {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: var(--s6);
+    align-items: start;
+  }
+
+  .nested-rail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+  }
+
+  .construct-section { display: none; }
+  .construct-section.is-active { display: block; }
+
+  .section-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s5);
+  }
+
+  .section-grid.single { grid-template-columns: 1fr; }
+
+  .text-block,
+  .stat-block,
+  .pathway,
+  .faq-item {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s4);
+  }
+
+  .text-block h3,
+  .stat-block h3,
+  .pathway h3,
+  .faq-item h3,
+  .node-detail h3 {
+    margin-bottom: var(--s2);
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.35;
+    text-transform: uppercase;
+  }
+
+  .text-block p,
+  .stat-block p,
+  .pathway p,
+  .faq-item p,
+  .node-detail p,
+  .bio-copy p {
+    color: var(--body-muted);
+    font-size: 15px;
+    line-height: 1.75;
+  }
+
+  .text-list {
+    display: grid;
+    gap: var(--s3);
+    list-style: none;
+  }
+
+  .text-list li {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s3);
+    color: var(--body-muted);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  .text-list strong {
+    display: block;
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 12px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .map-layout {
+    display: grid;
+    grid-template-columns: minmax(300px, 0.92fr) minmax(260px, 0.78fr);
+    gap: var(--s5);
+    align-items: start;
+  }
+
+  .map-stage {
+    position: relative;
+    min-height: 420px;
+    border: 5px solid var(--ring-faint);
+    overflow: hidden;
+    background: radial-gradient(circle at center, rgba(252, 184, 103, 0.08), transparent 58%);
+  }
+
+  #constructMap {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .node-buttons {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .map-node {
+    position: absolute;
+    min-width: 108px;
+    color: var(--body-muted);
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.2;
+    text-align: center;
+    text-transform: uppercase;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    transition: color var(--t-fast), transform var(--t-fast);
+  }
+
+  .map-node::before {
+    content: "";
+    display: block;
+    width: 14px;
+    height: 14px;
+    margin: 0 auto var(--s2);
+    border-radius: 50%;
+    background: var(--node-color);
+    box-shadow: 0 0 0 0 var(--node-color);
+    opacity: 0.8;
+    transition: box-shadow var(--t-fast), opacity var(--t-fast), transform var(--t-fast);
+  }
+
+  .map-node:hover,
+  .map-node.is-active {
+    color: var(--node-color);
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+
+  .map-node.is-active::before {
+    opacity: 1;
+    transform: scale(1.2);
+    box-shadow: 0 0 0 8px rgba(252, 184, 103, 0.14);
+  }
+
+  .node-detail {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s4);
+  }
+
+  .node-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 7px;
-    margin-top: 14px;
+    gap: var(--s2);
+    margin-top: var(--s4);
+  }
+
+  .link-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    border-top: 5px solid var(--ring-faint);
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    transition: color var(--t-fast), border-color var(--t-fast);
+  }
+
+  .link-pill:hover {
+    border-color: var(--accent);
+    color: var(--body);
+  }
+
+  .function-row,
+  .status-grid,
+  .timeline-list,
+  .manifesto-grid,
+  .pathway-grid,
+  .faq-grid {
+    display: grid;
+    gap: var(--s5);
+  }
+
+  .function-row {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .function-chip {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s3);
+  }
+
+  .function-chip span {
+    display: block;
+    margin-bottom: var(--s2);
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .function-chip p {
+    color: var(--body-muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .timeline-item {
+    display: grid;
+    grid-template-columns: 130px minmax(0, 1fr);
+    gap: var(--s5);
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s4);
+  }
+
+  .timeline-year {
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .timeline-item h3 {
+    margin-bottom: var(--s2);
+    color: var(--body);
+    font-family: var(--sans);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .timeline-item p {
+    color: var(--body-muted);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  .status-grid,
+  .manifesto-grid,
+  .pathway-grid,
+  .faq-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .bio-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.95fr) minmax(280px, 0.7fr);
+    gap: var(--s6);
+  }
+
+  .bio-copy {
+    display: grid;
+    gap: var(--s5);
+  }
+
+  .bio-stack,
+  .library-grid,
+  .press-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s5);
   }
 
   .footer-links {
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
-    gap: 14px;
-    margin-top: clamp(48px, 8vw, 92px);
-    padding-top: 26px;
-    border-top: 5px solid rgba(109, 61, 21, 0.24);
+    gap: var(--s5);
+    margin-top: var(--s7);
+    padding-top: var(--s5);
+    border-top: 5px solid var(--ring-faint);
   }
 
   .footer-links a {
-    color: rgba(252, 184, 103, 0.5);
+    color: var(--body-dim);
     font-family: var(--serif);
     font-size: 10px;
-    letter-spacing: 0.2em;
+    letter-spacing: 0;
     text-transform: uppercase;
+    transition: color var(--t-fast);
   }
 
-  .node-term {
-    color: var(--term-color);
-    font-weight: 900;
-    transition: color 360ms var(--ease);
-  }
+  .footer-links a:hover { color: var(--accent); }
 
-  /* Amber mode: every highlighted term collapses to the light amber accent. */
-  body.terms-amber .node-term {
-    color: var(--accent);
-  }
-
-  /* Floating term-color toggle (bottom-right). */
-  .term-toggle {
-    position: fixed;
-    right: 24px;
-    bottom: 24px;
-    z-index: 1000;
-    display: inline-flex;
-    align-items: center;
-    gap: 9px;
-    min-height: 38px;
-    padding: 9px 14px;
-    border-radius: 999px;
-    background: rgba(23, 23, 23, 0.92);
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
-    color: var(--accent);
-    font-family: var(--sans);
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 0.04em;
-    line-height: 1;
-    text-transform: uppercase;
-    -webkit-backdrop-filter: blur(6px);
-    backdrop-filter: blur(6px);
-    transition: color 180ms var(--ease), outline-color 180ms var(--ease), transform 180ms var(--ease);
-  }
-
-  .term-toggle:hover,
-  .term-toggle:focus-visible {
-    outline: 1px solid rgba(255, 231, 202, 0.5);
-    outline-offset: 3px;
-    transform: translateY(-1px);
-  }
-
-  /* Swatch: spectrum in color-coded mode, solid amber in amber mode. */
-  .term-toggle-swatch {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: conic-gradient(#6E0404, #0071EB, #F08F15, #FCB867, #005D25, #A22F8D, #6D3D15, #328C84, #6E0404);
-    transition: background 180ms var(--ease);
-  }
-
-  body.terms-amber .term-toggle-swatch {
-    background: var(--accent);
-  }
-
-  .term-toggle-label::after {
-    content: "Colors on";
-  }
-
-  body.terms-amber .term-toggle-label::after {
-    content: "Colors off";
-  }
-
-  @media (min-width: 901px) {
-    .stage-head {
-      width: min(1400px, calc(100vw - 40px));
-      max-width: none;
-      margin-right: 0;
-      margin-left: calc((100% - min(1400px, calc(100vw - 40px))) / 2);
-    }
-  }
-
-  @media (max-width: 700px) {
-    .term-toggle {
-      right: 14px;
-      bottom: 14px;
-    }
-  }
-
-  @media (max-width: 820px) {
-    .stage {
-      grid-template-rows: auto auto auto;
-      gap: 12px;
-    }
-
-    .diagram-wrap {
-      min-height: clamp(340px, 92vw, 520px);
-      overflow: visible;
-      padding: 0;
-    }
-
-    .diagram {
-      width: 100%;
-      height: clamp(340px, 92vw, 520px);
-      min-width: 0;
-      min-height: 0;
-      overflow: visible;
-    }
-
-    .node-label {
-      font-size: 16px;
-    }
-
-    .node-count {
-      font-size: 11px;
-    }
-
-    .spoke,
-    .connection-line {
-      stroke-width: 4;
-    }
-
-    .center-ring {
-      stroke-width: 12;
-    }
-
-    .details {
-      grid-template-columns: 1fr;
-      padding-inline: clamp(12px, 4vw, 24px);
-    }
-
-    .connection-grid {
+  @media (max-width: 1120px) {
+    .about-layout,
+    .construct-grid,
+    .panel-head,
+    .intro,
+    .map-layout,
+    .bio-grid {
       grid-template-columns: 1fr;
     }
 
-    .manifest-brand {
-      grid-template-columns: 1fr;
-      gap: 16px;
+    .tab-rail {
+      position: static;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--s3);
+      padding-bottom: var(--s5);
+      border-bottom: 5px solid var(--ring-faint);
     }
 
-    .info-band,
-    .copy-grid,
-    .path-grid,
-    .state-grid,
+    .top-tab {
+      min-height: 48px;
+      border-top: 5px solid var(--ring-faint);
+      padding-top: var(--s3);
+    }
+
+    .top-tab::before { left: 0; top: 0; transform: none; }
+    .intro-copy { text-align: left; }
+    .nested-rail {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--s3);
+    }
+
+    .nested-tab {
+      min-height: 44px;
+      border-top: 5px solid var(--ring-faint);
+      padding-top: var(--s3);
+    }
+
+    .nested-tab::before { left: 0; top: 0; transform: none; }
+    .function-row,
+    .status-grid,
+    .manifesto-grid,
+    .pathway-grid,
+    .faq-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .about-page {
+      padding: 116px var(--s5) var(--s6);
+    }
+
+    h1 { font-size: 68px; }
+    .tab-rail,
+    .nested-rail {
+      display: flex;
+      flex-direction: row;
+      gap: var(--s4);
+      overflow-x: auto;
+      padding-bottom: var(--s4);
+      scrollbar-width: thin;
+    }
+
+    .top-tab,
+    .nested-tab {
+      width: auto;
+      min-width: max-content;
+      padding-right: var(--s2);
+    }
+
+    .panel-shell { padding-top: var(--s5); }
+    .section-grid,
+    .status-grid,
+    .manifesto-grid,
+    .pathway-grid,
+    .faq-grid,
+    .bio-stack,
+    .library-grid,
     .press-grid,
-    .breakdown-shell,
-    .breakdown-board {
+    .function-row {
       grid-template-columns: 1fr;
     }
 
-    .copy-block,
-    .path-card,
-    .state-card,
-    .press-card {
-      min-height: 0;
+    .map-stage { min-height: 460px; }
+    .map-node {
+      min-width: 84px;
+      font-size: 9px;
     }
 
-    .breakdown-board {
-      min-height: 0;
-    }
-  }
-
-  @media (max-width: 520px) {
-    .about-next {
-      overflow-x: clip;
-    }
-
-    .stage-head {
-      padding-inline: 8px;
-    }
-
-    .diagram-wrap {
-      width: 114vw;
-      max-width: 114vw;
-      min-height: clamp(370px, 114vw, 470px);
-      margin-left: calc(50% - 57vw);
-      left: auto;
-      transform: none;
-    }
-
-    .diagram {
-      width: 100%;
-      height: clamp(370px, 114vw, 470px);
-    }
-
-    .node-label {
-      font-size: 14px;
-    }
-
-    .node-count {
-      font-size: 10px;
-    }
-
-    .spoke,
-    .connection-line {
-      stroke-width: 3.5;
-    }
-
-    .center-ring {
-      stroke-width: 10;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-      animation-duration: 1ms !important;
-      scroll-behavior: auto !important;
-      transition-duration: 1ms !important;
+    .timeline-item {
+      grid-template-columns: 1fr;
+      gap: var(--s2);
     }
   }
 </style>
-<link rel="stylesheet" href="/css/site-typography.css">
-<link rel="stylesheet" href="/css/hero.css">
 </head>
 <body data-venture="about">
-<main class="about-next entrance-fade">
-  <section class="stage" aria-labelledby="page-title">
-    <canvas class="stage-bg" id="eyesBg" aria-hidden="true"></canvas>
-    <canvas class="stage-bg" id="particleBg" aria-hidden="true"></canvas>
-    <header class="stage-head site-hero site-hero--landing">
-      <h1 class="wordmark hero-title" id="page-title">THE six.well CONSTRUCT.</h1>
-      <p class="hero-copy hero-descriptor">
-        The construct is the system. Nodes are the rooms inside it. Mediums are the
-        forms the work moves through. The archive keeps the proof, residue, and
-        evolution.
+  <div class="grain" aria-hidden="true"></div>
+
+  <main class="about-page entrance-fade">
+    <section class="intro" aria-labelledby="page-title">
+      <div>
+        <span class="eyebrow">about node</span>
+        <h1 id="page-title">About.</h1>
+      </div>
+      <p class="intro-copy">
+        The orientation layer for the six.well construct: system map, origin point,
+        entry paths, public record, and live operating language.
       </p>
-      <nav class="hero-jump" aria-label="about draft sections">
-        <a href="#orientation">ABOUT</a>
-        <a href="/about/visual-language/">Visual language</a>
-        <a href="/about/breakdown/">Breakdown</a>
-        <a href="/about/founder/">Founder</a>
-        <a href="/about/mediums/">Mediums</a>
-        <a href="/about/legend/">Legend</a>
-        <a href="/about/ways-in/">Ways in</a>
-        <a href="/about/current-state/">Current state</a>
-        <a href="/about/contact-press/">Contact / press</a>
+    </section>
+
+    <section class="about-layout" aria-label="about node sections">
+      <nav class="tab-rail" aria-label="about tabs">
+        <button class="top-tab is-active" type="button" data-tab="construct">The six.well Construct</button>
+        <button class="top-tab" type="button" data-tab="saiel">Saiel Dauhn Solehman</button>
+        <button class="top-tab" type="button" data-tab="access">Access</button>
+        <button class="top-tab" type="button" data-tab="library">Library</button>
+        <button class="top-tab" type="button" data-tab="contact">Contact / Press</button>
+        <button class="top-tab" type="button" data-tab="faq">FAQ</button>
       </nav>
-      <span class="state-label" id="stateLabel">click a construct entry - its connections illuminate</span>
-    </header>
 
-    <div class="diagram-wrap" aria-label="interactive construct connection diagram">
-      <svg class="diagram" id="diagram" viewBox="0 0 1000 640" role="img" aria-labelledby="diagramTitle diagramDesc">
-        <title id="diagramTitle">The six.well construct connections</title>
-        <desc id="diagramDesc">Nine clickable construct entries orbit the center. Selecting one animates its connection lines and reveals descriptions below.</desc>
-        <defs id="gradientDefs"></defs>
-        <g id="spokesLayer"></g>
-        <g id="connectionLayer"></g>
-        <g id="centerLayer" aria-hidden="true">
-          <circle class="center-ring" cx="500" cy="322" r="48"></circle>
-          <circle class="center-dot" cx="482" cy="294" r="7.5"></circle>
-          <circle class="center-dot" cx="518" cy="294" r="7.5"></circle>
-          <circle class="center-dot" cx="482" cy="322" r="7.5"></circle>
-          <circle class="center-dot" cx="518" cy="322" r="7.5"></circle>
-          <circle class="center-dot" cx="482" cy="350" r="7.5"></circle>
-          <circle class="center-dot" cx="518" cy="350" r="7.5"></circle>
-        </g>
-        <g id="nodeLayer"></g>
-      </svg>
-    </div>
-
-    <div class="details" aria-live="polite">
-      <section class="selected-copy">
-        <span class="selected-kicker">selected construct entry</span>
-        <h2 class="selected-title" id="selectedTitle"></h2>
-        <p class="selected-body" id="selectedBody"></p>
-        <div class="material-strip" id="selectedMaterials" aria-label="selected construct entry materials"></div>
-        <section class="manifest-brand" id="manifestBrand" aria-labelledby="manifestBrandTitle">
-          <div class="manifest-brand-head">
-            <img class="manifest-brand-logo" id="manifestBrandLogo" alt="" hidden>
+      <div class="panel-shell">
+        <article class="panel is-active" id="panel-construct" data-panel="construct">
+          <header class="panel-head">
             <div>
-              <p class="manifest-brand-kicker" id="manifestBrandKicker">construct system / orientation</p>
-              <h3 class="manifest-brand-title" id="manifestBrandTitle">The Six.Well Construct</h3>
+              <span class="panel-kicker">primary system layer</span>
+              <h2 class="panel-title">The six.well Construct</h2>
+            </div>
+            <p class="panel-lede">
+              A living structure for work that refuses to stay in one discipline.
+              The construct names the containers, shows how they connect, and keeps
+              each node accountable to the whole.
+            </p>
+          </header>
+
+          <div class="construct-grid">
+            <nav class="nested-rail" aria-label="construct sections">
+              <button class="nested-tab is-active" type="button" data-construct-section="overview">Overview</button>
+              <button class="nested-tab" type="button" data-construct-section="architecture">Architecture</button>
+              <button class="nested-tab" type="button" data-construct-section="framework">Framework</button>
+              <button class="nested-tab" type="button" data-construct-section="timeline">Timeline</button>
+              <button class="nested-tab" type="button" data-construct-section="state">Current State</button>
+              <button class="nested-tab" type="button" data-construct-section="manifesto">Manifesto</button>
+              <button class="nested-tab" type="button" data-construct-section="collaborators">Collaborators</button>
+              <button class="nested-tab" type="button" data-construct-section="accesspoints">Access Points</button>
+              <button class="nested-tab" type="button" data-construct-section="links">Links</button>
+            </nav>
+
+            <div class="construct-sections">
+              <section class="construct-section is-active" id="construct-overview" data-construct-panel="overview">
+                <span class="section-kicker">overview</span>
+                <div class="section-grid">
+                  <div class="text-block">
+                    <h3>What it is</h3>
+                    <p>
+                      The six.well construct is a creative operating system: a set of
+                      nodes that hold art, tattooing, merch, writing, film, music,
+                      events, archive, and the context that binds them.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>What it is not</h3>
+                    <p>
+                      It is not a moodboard, a loose brand family, or a pile of side
+                      projects. It is a structure built to let each discipline fund,
+                      document, sharpen, and challenge the others.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>Intent</h3>
+                    <p>
+                      The intent is coherence without flattening. The work can move
+                      between commerce, ritual, image, object, language, and gathering
+                      without pretending those forms are separate lives.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>Purpose</h3>
+                    <p>
+                      The purpose is to create, fund, distribute, archive, and evolve
+                      work through a system that can hold both public entry points and
+                      private logic.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-architecture" data-construct-panel="architecture">
+                <span class="section-kicker">architecture</span>
+                <div class="map-layout">
+                  <div class="map-stage" aria-label="animated construct map">
+                    <canvas id="constructMap"></canvas>
+                    <div class="node-buttons" id="nodeButtons"></div>
+                  </div>
+                  <aside class="node-detail" aria-live="polite">
+                    <h3 id="nodeTitle">About</h3>
+                    <p id="nodeCopy">
+                      The context layer. It explains the system, the origin point,
+                      the ways in, and the record around the work.
+                    </p>
+                    <div class="node-meta" id="nodeLinks"></div>
+                  </aside>
+                </div>
+
+                <div class="section-grid" style="margin-top: var(--s6);">
+                  <div class="text-block">
+                    <h3>Intent + purpose</h3>
+                    <p>
+                      The construct exists so each node can do specific work without
+                      losing relationship to the larger body. It gives shape to a
+                      practice that is artistic, operational, commercial, archival,
+                      and social at once.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>What this holds</h3>
+                    <p>
+                      Finished work, unfinished systems, public offerings, private
+                      methods, collaborators, experiments, evidence, objects, rituals,
+                      records, and future doors.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="function-row" style="margin-top: var(--s6);" aria-label="function model">
+                  <div class="function-chip"><span>Create</span><p>Make work through image, mark, event, object, sound, and text.</p></div>
+                  <div class="function-chip"><span>Fund</span><p>Let offerings support the next layer of the system.</p></div>
+                  <div class="function-chip"><span>Distribute</span><p>Move work through pages, products, appointments, gatherings, and letters.</p></div>
+                  <div class="function-chip"><span>Archive</span><p>Keep proof, process, and abandoned paths visible enough to matter.</p></div>
+                  <div class="function-chip"><span>Evolve</span><p>Allow nodes to split, merge, pause, or sharpen as the work changes.</p></div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-framework" data-construct-panel="framework">
+                <span class="section-kicker">framework</span>
+                <div class="section-grid">
+                  <div class="text-block">
+                    <h3>Principles</h3>
+                    <p>
+                      Nothing enters because it looks good next to the rest. It enters
+                      because it has a function, a charge, and a relationship to the
+                      whole.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>System design</h3>
+                    <p>
+                      Nodes organize energy. Containers give that energy a form.
+                      Links keep the form from becoming isolated. The archive remembers
+                      what the active system cannot carry every day.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>Core concepts</h3>
+                    <p>
+                      Nodes are active disciplines or ventures. Containers are the
+                      formats that hold them. Myth logic is the symbolic pressure that
+                      keeps the system from becoming plain administration.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>Rules</h3>
+                    <p>
+                      Things are added when they create a useful relation. Things evolve
+                      when the old container becomes too small. Things are archived when
+                      they still matter but no longer need to lead.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-timeline" data-construct-panel="timeline">
+                <span class="section-kicker">timeline</span>
+                <div class="timeline-list">
+                  <div class="timeline-item">
+                    <span class="timeline-year">Origin</span>
+                    <div><h3>Practice before system</h3><p>The work begins as separate disciplines, each demanding its own room.</p></div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-year">Key shifts</span>
+                    <div><h3>Nodes become containers</h3><p>The names and pages start acting as structure, not just labels.</p></div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-year">Active era</span>
+                    <div><h3>The construct becomes public</h3><p>Index pages, offerings, archive paths, and entry points begin to connect.</p></div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-year">Current phase</span>
+                    <div><h3>System clarity</h3><p>The About node explains how the whole thing works and where people should enter.</p></div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-year">Coming next</span>
+                    <div><h3>Deeper proof</h3><p>More live records, collaborator histories, press material, and archive bridges.</p></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-state" data-construct-panel="state">
+                <span class="section-kicker">current state</span>
+                <div class="status-grid">
+                  <div class="stat-block"><h3>Active nodes</h3><p>Tattooing, art, merch, writings, archive, and About are active public pathways.</p></div>
+                  <div class="stat-block"><h3>In development</h3><p>Events, music, film, library depth, collaborator records, and press surfaces.</p></div>
+                  <div class="stat-block"><h3>Paused / archived</h3><p>Past iterations, abandoned concepts, process fragments, and dormant project rooms.</p></div>
+                  <div class="stat-block"><h3>Current priorities</h3><p>Make the system legible, preserve the voice, and give each entry point a practical next step.</p></div>
+                  <div class="stat-block"><h3>Last updated</h3><p>About node structure drafted and implemented as the current public orientation layer.</p></div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-manifesto" data-construct-panel="manifesto">
+                <span class="section-kicker">manifesto</span>
+                <div class="manifesto-grid">
+                  <div class="stat-block"><h3>Beliefs</h3><p>Art can be a business without becoming hollow. Systems can be poetic without becoming vague.</p></div>
+                  <div class="stat-block"><h3>Rejections</h3><p>The construct rejects flattened branding, disposable output, and the idea that discipline has to mean separation.</p></div>
+                  <div class="stat-block"><h3>Direction</h3><p>Build a body of work that can hold itself, feed itself, remember itself, and keep mutating.</p></div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-collaborators" data-construct-panel="collaborators">
+                <span class="section-kicker">collaborators</span>
+                <div class="section-grid">
+                  <div class="text-block"><h3>Active collaborators</h3><p>People currently helping build, document, host, fabricate, perform, design, produce, or support active nodes.</p></div>
+                  <div class="text-block"><h3>Past collaborators</h3><p>People whose work, labor, presence, or exchange shaped earlier forms of the system.</p></div>
+                  <div class="text-block"><h3>Upcoming collaborators</h3><p>Future project partners, invited artists, volunteers, vendors, and temporary working groups.</p></div>
+                  <div class="text-block"><h3>By node / project</h3><p>Collaborators should eventually be tagged to the node or project they helped carry.</p></div>
+                  <div class="text-block"><h3>Volunteer / open-call pathways</h3><p>Clear ways for people to enter without guessing what kind of help is actually useful.</p></div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-accesspoints" data-construct-panel="accesspoints">
+                <span class="section-kicker">access points into the construct</span>
+                <div class="pathway-grid">
+                  <div class="pathway"><h3>Tattoos</h3><p>Enter through the body, appointment, flash, special project, or ritualized mark.</p></div>
+                  <div class="pathway"><h3>Events</h3><p>Enter through gathering, performance, hosting, shared time, and live participation.</p></div>
+                  <div class="pathway"><h3>Merch</h3><p>Enter through objects, garments, printed matter, and commerce that feeds the system.</p></div>
+                  <div class="pathway"><h3>Writings / letters</h3><p>Enter through language, record, theory, update, confession, and public thinking.</p></div>
+                  <div class="pathway"><h3>Archive</h3><p>Enter through residue, process, abandoned concepts, evidence, and past versions.</p></div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-links" data-construct-panel="links">
+                <span class="section-kicker">links to indexes + archive</span>
+                <ul class="text-list">
+                  <li><strong>Tattooing</strong><a class="link-pill" href="/tattoos/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Art making</strong><a class="link-pill" href="/art/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Merch</strong><a class="link-pill" href="/merch/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Events</strong><a class="link-pill" href="/events/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Music</strong><a class="link-pill" href="/music/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Writings</strong><a class="link-pill" href="/writings/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Film</strong><a class="link-pill" href="/film/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                </ul>
+              </section>
             </div>
           </div>
-          <p class="manifest-brand-copy" id="manifestBrandCopy">The operating architecture that holds the nodes, mediums, archive, and method in relation.</p>
-        </section>
-      </section>
+        </article>
 
-      <section class="connection-list">
-        <span class="connection-kicker">connections</span>
-        <div class="connection-grid" id="connectionGrid">
-        </div>
-      </section>
-    </div>
-  </section>
+        <article class="panel" id="panel-saiel" data-panel="saiel">
+          <header class="panel-head">
+            <div>
+              <span class="panel-kicker">origin point</span>
+              <h2 class="panel-title">Saiel Dauhn Solehman</h2>
+            </div>
+            <p class="panel-lede">
+              Founder, creator, visionary, artist, thinker, operator, and one-woman
+              army behind the construct.
+            </p>
+          </header>
+          <div class="bio-grid">
+            <div class="bio-copy">
+              <div class="text-block"><h3>Founder statement</h3><p>I build systems because the work keeps arriving in more than one form. The construct is the room I made so the forms could stop apologizing for knowing each other.</p></div>
+              <div class="text-block"><h3>Formal bio</h3><p>Saiel Dauhn Solehman is an interdisciplinary artist and founder working across tattooing, painting, systems, objects, writing, film, sound, and event-based forms.</p></div>
+              <div class="text-block"><h3>Method</h3><p>The method is accumulation with discipline: observe the charge, choose the container, make the work, document the residue, and let the result alter the system.</p></div>
+            </div>
+            <div class="bio-stack">
+              <div class="stat-block"><h3>Discipline stack</h3><p>Tattooing, painting, film, writing, design, hosting, commerce, archive, and system architecture.</p></div>
+              <div class="stat-block"><h3>Select work</h3><p>A tight edit belongs here: major paintings, tattoo projects, written pieces, films, events, and objects.</p></div>
+              <div class="stat-block"><h3>Practice links</h3><p><a class="link-pill" href="/art/">Art</a> <a class="link-pill" href="/tattoos/">Tattooing</a> <a class="link-pill" href="/writings/">Writings</a></p></div>
+            </div>
+          </div>
+        </article>
 
-  <section class="content-bands" aria-label="about content">
-    <article class="info-band" id="orientation">
-      <header>
-        <span class="band-kicker">orientation</span>
-        <h2 class="band-title">What this is.</h2>
-      </header>
-      <div>
-        <p class="band-lede">
-          The <span><span>Six.Well Construct</span></span> is the full operating solo creative ecosystem of saiel dauhn solehman. Its purpose is to create an environment where ideas and projects exist as interconnected parts of a larger world.&nbsp;Each node supports each other. It holds named
-          nodes, creative mediums, public-facing entry points, world-building logic, and the <span><span>archive</span></span>
-          <span><span>record</span></span> that helps place it.
-        </p>
-        <div class="copy-grid">
-          <div class="copy-block">
-            <h3>The construct</h3>
-            <p>The&nbsp;<span>system</span> that lets the work stay operational, and an anchor of the philosophy that informs all brands, nodes and mediums.</p>
+        <article class="panel" id="panel-access" data-panel="access">
+          <header class="panel-head">
+            <div><span class="panel-kicker">entry points</span><h2 class="panel-title">Access</h2></div>
+            <p class="panel-lede">This is where the maze gives you doors. Choose the form of entry that matches what you need.</p>
+          </header>
+          <div class="pathway-grid">
+            <div class="pathway"><h3>Work with me</h3><p>Book tattoo work, commission a project, inquire about acquisition, or request a focused collaboration.</p><a class="link-pill" href="/tattoos/inquire/">Tattoo inquiry</a></div>
+            <div class="pathway"><h3>Enter a project</h3><p>Events, open calls, volunteer support, and node-specific project entry points will live here.</p><a class="link-pill" href="/events/">Events</a></div>
+            <div class="pathway"><h3>Follow the system</h3><p>Track the work through writings, archive updates, drops, releases, and public records.</p><a class="link-pill" href="/writings/">Writings</a></div>
+            <div class="pathway"><h3>Practical pathways</h3><p>Use the index pages when you know the node. Use Library or Archive when you are tracing the record.</p><a class="link-pill" href="/archive/">Archive</a></div>
           </div>
-          <div class="copy-block">
-            <h3>Nodes</h3>
-            <p>Named houses, domains and project containers: <span><span>art.pill</span></span> <span><span>Tattoo House</span></span>, ThoughtPuppet, Sloth99, <span><span>Six.Well</span></span> <span><span>Clothing</span></span>, CULT[&amp;SHIFT], MILOWALKSONWATER, <span>Mindful Darkness</span>, The Seventh <span><span>Room and THE SOLEHMAN LETTERS.</span></span></p>
+        </article>
+
+        <article class="panel" id="panel-library" data-panel="library">
+          <header class="panel-head">
+            <div><span class="panel-kicker">archive bridge</span><h2 class="panel-title">Library</h2></div>
+            <p class="panel-lede">A calmer bridge into the record: projects, writing, visual work, and past iterations of nodes.</p>
+          </header>
+          <div class="library-grid">
+            <div class="text-block"><h3>Projects</h3><p>Finished, active, paused, and unrealized project rooms from across the construct.</p></div>
+            <div class="text-block"><h3>Writing</h3><p>Letters, statements, fragments, frameworks, and public thought records.</p></div>
+            <div class="text-block"><h3>Visual work</h3><p>Images, paintings, process documentation, sketch material, and visual evidence.</p></div>
+            <div class="text-block"><h3>Past iterations of nodes</h3><p>Older names, abandoned structures, temporary containers, and proof of evolution.</p></div>
           </div>
-          <div class="copy-block">
-            <h3>Mediums</h3>
-            <p>The forms the work MANIFESTS as: <span>tattooing</span>, <span>paintings</span>, woodworks,&nbsp;<span>film</span>, animation,&nbsp;<span>writing</span>, <span>clothing and other objects</span>, music and space or interior.</p>
+        </article>
+
+        <article class="panel" id="panel-contact" data-panel="contact">
+          <header class="panel-head">
+            <div><span class="panel-kicker">contact / press</span><h2 class="panel-title">Contact / Press</h2></div>
+            <p class="panel-lede">Utility without shrinking the system: inquiries, links, press text, and features.</p>
+          </header>
+          <div class="press-grid">
+            <div class="text-block"><h3>Inquiries</h3><p>Use node-specific forms when possible. General inquiries can be routed here once the public contact channel is finalized.</p></div>
+            <div class="text-block"><h3>Practical links</h3><p><a class="link-pill" href="/tattoos/inquire/">Tattoo inquiry</a> <a class="link-pill" href="/art/acquisitioninquiry.html">Acquire art</a> <a class="link-pill" href="/events/">Events</a></p></div>
+            <div class="text-block"><h3>Press text</h3><p>Short bio, construct description, and project language can be placed here for clean public reference.</p></div>
+            <div class="text-block"><h3>Features</h3><p>Press, interviews, external documentation, and notable public mentions will collect here.</p></div>
           </div>
-          <div class="copy-block">
-            <h3>Archive</h3>
-            <p>The record layer: works, process, releases, events, documents, and experiments that still speak after the active room changes.</p>
+        </article>
+
+        <article class="panel" id="panel-faq" data-panel="faq">
+          <header class="panel-head">
+            <div><span class="panel-kicker">questions</span><h2 class="panel-title">FAQ</h2></div>
+            <p class="panel-lede">Not client service basics. System questions, collaboration questions, process questions.</p>
+          </header>
+          <div class="faq-grid">
+            <div class="faq-item"><h3>System questions</h3><p>What is a node? What is a container? Why are disciplines connected instead of separated?</p></div>
+            <div class="faq-item"><h3>Collaboration questions</h3><p>How do people enter a project, volunteer, contribute, or become attached to a node?</p></div>
+            <div class="faq-item"><h3>Process questions</h3><p>How are projects added, changed, paused, archived, or made public?</p></div>
           </div>
-        </div>
+        </article>
       </div>
-    </article>
+    </section>
 
-  </section>
+    <footer class="footer-links">
+      <a href="/home/">return to construct</a>
+      <a href="/archive/">archive</a>
+      <a href="/art/">art</a>
+      <a href="/tattoos/">tattooing</a>
+      <a href="/merch/">merch</a>
+      <a href="/writings/">writings</a>
+    </footer>
+  </main>
 
-  <footer class="footer-links">
-    <a href="/home/">return to construct</a>
-    <a href="/tattoos/">tattooing</a>
-    <a href="/art/">art</a>
-    <a href="/merch/">merch</a>
-    <a href="/archive/">archive</a>
-    <a href="#orientation">orientation</a>
-  </footer>
-</main>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+  <script>
+    (function() {
+      const tabButtons = Array.from(document.querySelectorAll('[data-tab]'));
+      const panels = Array.from(document.querySelectorAll('[data-panel]'));
+      const nestedButtons = Array.from(document.querySelectorAll('[data-construct-section]'));
+      const constructPanels = Array.from(document.querySelectorAll('[data-construct-panel]'));
 
-<button class="term-toggle" id="termToggle" type="button" aria-pressed="false"
-        title="Toggle colored keywords" aria-label="Toggle colored keywords">
-  <span class="term-toggle-swatch" aria-hidden="true"></span>
-  <span class="term-toggle-label" aria-hidden="true"></span>
-</button>
+      const nodes = [
+        { key: 'tattooing', label: 'Tattooing', color: '#6E0404', url: '/tattoos/', note: 'The mark, the appointment, the ritual, and the public/private threshold of the body.' },
+        { key: 'art', label: 'Art making', color: '#0071EB', url: '/art/', note: 'Paintings, objects, statements, images, and the visual grammar of the construct.' },
+        { key: 'merch', label: 'Merch', color: '#F08F15', url: '/merch/', note: 'Commerce as object system: garments, prints, editions, and things that help fund the next layer.' },
+        { key: 'about', label: 'About', color: '#FCB867', url: '/about/', note: 'The context layer. It explains the system, the origin point, the ways in, and the record around the work.' },
+        { key: 'events', label: 'Events', color: '#005D25', url: '/events/', note: 'Gatherings, hosting, temporary containers, public ritual, and live social structure.' },
+        { key: 'music', label: 'Music', color: '#A22F8D', url: '/music/', note: 'Sound, scores, releases, ringtones, and audio fragments attached to the wider system.' },
+        { key: 'writings', label: 'Writings', color: '#328C84', url: '/writings/', note: 'Letters, statements, field notes, theory, and language that keeps the system legible.' },
+        { key: 'archive', label: 'Archive', color: '#EC5E26', url: '/archive/', note: 'The record: process, sketches, abandoned concepts, ephemera, and old versions that still speak.' },
+        { key: 'film', label: 'Film', color: '#FFE7CA', url: '/film/', note: 'Moving image, performance trace, animation, documentation, and cinematic containers.' }
+      ];
 
-<script src="/js/transition.js"></script>
-<script src="/js/construct-corner.js"></script>
-<script src="/js/construct-nav.js"></script>
-<script src="/js/construct-ambient-field.js"></script>
-<script>
-  /* Term-color toggle: flip highlighted keywords between their medium
-     colors (default) and the flat amber accent. Choice persists. */
-  (function() {
-    const STORAGE_KEY = 'sixwell:about:term-colors';
-    const toggle = document.getElementById('termToggle');
-    if (!toggle) return;
+      let activeNode = nodes.findIndex(node => node.key === 'about');
+      const nodeButtons = document.getElementById('nodeButtons');
+      const nodeTitle = document.getElementById('nodeTitle');
+      const nodeCopy = document.getElementById('nodeCopy');
+      const nodeLinks = document.getElementById('nodeLinks');
+      const canvas = document.getElementById('constructMap');
+      const ctx = canvas ? canvas.getContext('2d') : null;
+      let mapTime = 0;
 
-    function apply(amber) {
-      document.body.classList.toggle('terms-amber', amber);
-      toggle.setAttribute('aria-pressed', amber ? 'true' : 'false');
-    }
-
-    let amber = false;
-    try { amber = localStorage.getItem(STORAGE_KEY) === 'amber'; } catch (e) {}
-    apply(amber);
-
-    toggle.addEventListener('click', function() {
-      amber = !document.body.classList.contains('terms-amber');
-      apply(amber);
-      try { localStorage.setItem(STORAGE_KEY, amber ? 'amber' : 'coded'); } catch (e) {}
-    });
-  })();
-
-  (function() {
-    const groups = {
-      about: {
-        title: 'About',
-        copy: 'The orientation layer: it names the system, the founder, the architecture, the nodes, and the method so the rest of the site can stay strange without becoming illegible.',
-        children: ['The Construct', 'Saiel / Founder', 'Architecture', 'Nodes', 'Method'],
-        meta: ['orientation', 'public language', 'map']
-      },
-      nodes: {
-        title: 'Nodes',
-        copy: 'The named houses and project rooms. A node can use many mediums, hold its own tone, and still remain accountable to the whole construct.',
-        children: ['art.pill Tattoo House', 'ThoughtPuppet', 'Sloth99', 'Six.Well Clothing', 'CULT[&SHIFT]', 'MILOWALKSONWATER', 'Mindful Darkness', 'The Seventh Room'],
-        meta: ['houses', 'projects', 'rooms']
-      },
-      mediums: {
-        title: 'Mediums',
-        copy: 'The forms the work moves through. Mediums are not brands by themselves; they are ways the charge becomes visible, wearable, readable, spatial, or embodied.',
-        children: ['Tattoo', 'Painting', 'Film', 'Writing', 'Clothing', 'Space / Interior'],
-        meta: ['forms', 'materials', 'movement']
-      },
-      archive: {
-        title: 'Archive',
-        copy: 'The record layer. It keeps proof, residue, and evolution so older work, abandoned rooms, releases, documents, and experiments can still feed the living system.',
-        children: ['Works', 'Process', 'Releases', 'Events', 'Documents', 'Experiments'],
-        meta: ['proof', 'residue', 'memory']
-      }
-    };
-
-    const buttons = Array.from(document.querySelectorAll('[data-breakdown-group]'));
-    const title = document.getElementById('breakdownTitle');
-    const copy = document.getElementById('breakdownCopy');
-    const children = document.getElementById('breakdownChildren');
-    const meta = document.getElementById('breakdownMeta');
-    if (!buttons.length || !title || !copy || !children || !meta) return;
-
-    function setBreakdown(key) {
-      const group = groups[key] || groups.about;
-      buttons.forEach(button => {
-        const active = button.dataset.breakdownGroup === key;
-        button.classList.toggle('is-active', active);
-        button.setAttribute('aria-selected', active ? 'true' : 'false');
-      });
-      title.textContent = group.title;
-      copy.textContent = group.copy;
-      children.replaceChildren(...group.children.map(item => {
-        const row = document.createElement('div');
-        row.className = 'breakdown-child';
-        row.textContent = item;
-        return row;
-      }));
-      meta.replaceChildren(...group.meta.map(item => {
-        const chip = document.createElement('span');
-        chip.className = 'breakdown-chip';
-        chip.textContent = item;
-        return chip;
-      }));
-    }
-
-    buttons.forEach(button => {
-      button.addEventListener('click', () => setBreakdown(button.dataset.breakdownGroup));
-    });
-
-    window.setConstructBreakdown = setBreakdown;
-    setBreakdown('about');
-  })();
-
-  /* Stage background: shared 404 eye wall plus radial amber particle field. */
-  window.ConstructAmbientField.mount({
-    root: document.querySelector('.stage'),
-    eyesCanvas: document.getElementById('eyesBg'),
-    particleCanvas: document.getElementById('particleBg'),
-    eyeOpacity: 0.10,
-    eyeTint: '#6D3D15',
-    eyeMask: 'radial-gradient(ellipse 58% 48% at 50% 42%, black 18%, rgba(0,0,0,0.62) 46%, transparent 86%)',
-    particleCount: 120,
-    particleColor: '#FCB867',
-    particleOpacity: [0.12, 0.42],
-    particleSize: [2, 5.8],
-    centerX: 0.5,
-    centerY: 0.45
-  });
-
-  (function() {
-    const center = { x: 500, y: 322 };
-    const centerRingOuterRadius = 56;
-    const lineDuration = 780;
-    const connectionStagger = 155;
-    const lineLead = 180;      // beat between the click and the first line drawing
-    const detailFade = 320;    // details fade-out time before content swaps
-
-    const nodes = [
-      { key: 'tattooing', label: 'Tattooing', color: '#6E0404', activeColor: '#6E0404', url: '/tattoos/', angle: -90, status: 'live public door', role: 'Art.Pill / mark and body-ritual layer', note: 'What it is: the appointment, the symbolic mark, the client threshold, and the most intimate service surface. Why it matters: it proves the construct can touch real bodies with care, boundaries, and trust.', materials: ['consultations', 'custom inquiry', 'flash', 'healed work', 'aftercare'], brand: { kicker: 'node manifestation / tattoo', title: 'art.pill Tattoo House', copy: 'The tattoo medium manifests through art.pill Tattoo House: an artist-led mark and body-ritual room for flash, custom review, special projects, and private booking.', logo: '/assets/brand/art-pill-tattoo-house.svg.svg', logoAlt: 'art.pill Tattoo House logo' } },
-      { key: 'art', label: 'Art', color: '#0071EB', url: '/art/', angle: -50, status: 'live public door', role: 'visual root system', note: 'What it is: paintings, studies, objects, symbols, and the visual grammar beneath the wider system. Why it matters: it gives tattoos, garments, film, and archive records a shared image vocabulary.', materials: ['paintings', 'studies', 'symbols', 'objects', 'statements'], brand: { kicker: 'node manifestation / image', title: 'ThoughtPuppet', copy: 'The painting and visual-language medium manifests through ThoughtPuppet: the blue-origin image room where symbols, studies, objects, and source material begin talking to the rest of the construct.' } },
-      { key: 'merch', label: 'Merch', color: '#F08F15', url: '/merch/', angle: -10, status: 'live commerce door', role: 'six.well artifact economy', note: 'What it is: garments, prints, editions, and physical proof of participation. Why it matters: it lets commerce fund the system without reducing the work to generic product.', materials: ['garments', 'prints', 'editions', 'drops', 'release records'], brand: { kicker: 'node manifestation / clothing', title: 'Six.Well Clothing', copy: 'The clothing and object medium manifests through Six.Well Clothing: garments, prints, editions, and artifact commerce that lets source imagery move into the world.', logo: '/assets/brand/six-well-clothing.svg.svg', logoAlt: 'Six.Well Clothing logo' } },
-      { key: 'about', label: 'About', color: '#FCB867', url: '/about/', angle: 30, status: 'orientation layer', role: 'map / founder / access point', note: 'What it is: the public explanation of the construct. Why it matters: it names what is live, what is incubating, who built it, and which door someone should use first.', materials: ['system map', 'founder page', 'ways in', 'status', 'press language'], brand: { kicker: 'construct system / orientation', title: 'The Six.Well Construct', copy: 'The orientation layer manifests the construct itself: the public language that explains the founder, architecture, nodes, mediums, archive, and ways in.' } },
-      { key: 'events', label: 'Events', color: '#005D25', url: '/events/', angle: 70, status: 'incubating public room', role: 'gathering and ritual layer', note: 'What it is: performance rooms, hosted gatherings, annual rituals, and event relics. Why it matters: it makes the construct social, time-based, and physically witnessed.', materials: ['CULT[&SHIFT]', 'gatherings', 'recaps', 'tickets', 'ritual calendar'], brand: { kicker: 'node manifestation / events', title: 'CULT[&SHIFT]', copy: 'The events medium manifests through CULT[&SHIFT]: gatherings, hosted rooms, annual rituals, performance traces, and live containers that make the construct social and physically witnessed.' } },
-      { key: 'music', label: 'Music', color: '#A22F8D', url: '/music/', angle: 110, status: 'incubating atmosphere', role: 'sound and conversation layer', note: 'What it is: performance audio, interviews, scores, loops, and voice fragments. Why it matters: it gives the system atmosphere, cadence, and repeatable social texture.', materials: ['audio', 'scores', 'talks', 'clips', 'transcripts'], brand: { kicker: 'node manifestation / music', title: 'MILOWALKSONWATER', copy: 'The music medium manifests through MILOWALKSONWATER: performance audio, scores, loops, voice fragments, and sound work that gives the construct cadence and atmosphere.' } },
-      { key: 'writings', label: 'Writings', color: '#FFE7CA', url: '/writings/', angle: 150, status: 'thread to launch', role: 'language and letter layer', note: 'What it is: letters, statements, essays, release notes, newsletter dispatches, and field fragments. Why it matters: it keeps the public language alive without forcing every explanation into the first doorway.', materials: ['Mindful Darkness', 'THE SOLEHMAN LETTERS', 'essays', 'notes', 'field fragments'], brand: { kicker: 'node manifestation / writing', title: 'Mindful Darkness', copy: 'The writing medium manifests through Mindful Darkness, with THE SOLEHMAN LETTERS as its newsletter surface for letters, statements, field notes, theory, and the language that lets the deeper rooms keep their charge.' } },
-      { key: 'archive', label: 'Archive', color: '#6D3D15', url: '/archive/', angle: 190, status: 'live memory system', role: 'record and proof layer', note: 'What it is: process, residue, records, abandoned paths, and older rooms that still speak. Why it matters: it lets the system remember itself instead of disappearing into feeds.', materials: ['records', 'photos', 'process scans', 'timelines', 'source material'], brand: { kicker: 'construct system / record', title: 'The Archive', copy: 'The archive manifests as the construct memory: works, process, releases, events, documents, experiments, and older rooms that still feed the active system.' } },
-      { key: 'film', label: 'Film', color: '#328C84', url: '/film/', angle: 230, status: 'incubating narrative engine', role: 'moving-image and documentation layer', note: 'What it is: campaign footage, studio life, interviews, recaps, and mythic documentation. Why it matters: it makes the world visible as it is being built.', materials: ['short films', 'BTS', 'campaigns', 'recaps', 'lore videos'], brand: { kicker: 'node manifestation / film', title: 'Sloth99', copy: 'The film medium manifests through Sloth99: moving image, character, slow attention, documentation, campaign footage, and the narrative engine of the construct.' } }
-    ];
-
-    /*
-      Connection map informed by the current public construct-entry structure. It
-      keeps the existing route doors while translating the node/medium/archive
-      hierarchy into visible movement between doors, artifacts, memory, and community.
-    */
-    const connections = {
-      tattooing: [
-        { target: 'art', title: 'Tattooing -> Art', description: 'Flash, tattoo legend symbols, and client-ready drawings can grow out of the same visual vocabulary as paintings and studies.', materials: ['flash', 'symbol sets', 'visual systems'] },
-        { target: 'merch', title: 'Tattooing -> Merch', description: 'Aftercare, studio objects, printed studies, and mythic flash collections become artifacts that fund the next layer.', materials: ['aftercare', 'prints', 'studio goods'] },
-        { target: 'archive', title: 'Tattooing -> Archive', description: 'Healed work, design notes, appointment traces, deposits, and process images become proof that the world touches bodies.', materials: ['healed photos', 'booking traces', 'design notes'] },
-        { target: 'film', title: 'Tattooing -> Film', description: 'Sloth99 can document tattoo sessions, studio life, client education, and the making of symbolic body work.', materials: ['BTS footage', 'education clips', 'session records'] }
-      ],
-      art: [
-        { target: 'tattooing', title: 'Art -> Tattooing', description: 'Paintings and symbol maps become source material for original flash, premium concepts, and tattoo legend systems.', materials: ['studies', 'flash seeds', 'symbol maps'] },
-        { target: 'merch', title: 'Art -> Merch', description: 'Finished images, studies, and visual systems become prints, garments, editions, and collector objects.', materials: ['prints', 'editions', 'object graphics'] },
-        { target: 'film', title: 'Art -> Film', description: 'The visual root system gives Sloth99 imagery, atmosphere, campaign language, and documentary subject matter.', materials: ['painting footage', 'campaign images', 'visual essays'] },
-        { target: 'archive', title: 'Art -> Archive', description: 'Progress trackers, reference links, tags, and documentation preserve the emergence of the visual mythology.', materials: ['tracker records', 'references', 'process scans'] }
-      ],
-      merch: [
-        { target: 'archive', title: 'Merch -> Archive', description: 'Every release needs records: edition numbers, object descriptions, photos, release notes, and why the object exists.', materials: ['edition records', 'object photos', 'release notes'] },
-        { target: 'film', title: 'Merch -> Film', description: 'Drops need product video, premium renders, launch films, and process clips so the object feels like it came from the world.', materials: ['hero film', '3D assets', 'product reels'] },
-        { target: 'events', title: 'Merch -> Events', description: 'Garments can become event relics, uniforms, capsules, and physical proof that someone was inside a room.', materials: ['event capsules', 'relics', 'uniforms'] },
-        { target: 'writings', title: 'Merch -> Writings', description: 'Artifact pages and letters explain the story, edition logic, and cross-node meaning behind each object.', materials: ['object copy', 'drop letters', 'certificates'] }
-      ],
-      about: [
-        { target: 'tattooing', title: 'About -> Tattooing', description: 'The public map must make the tattoo door obvious before asking visitors to understand the whole mythology.', materials: ['book door', 'boundaries', 'pricing context'] },
-        { target: 'art', title: 'About -> Art', description: 'About names the visual root system and shows how paintings, studies, and symbols feed the wider construct.', materials: ['artist context', 'visual root', 'symbol map'] },
-        { target: 'merch', title: 'About -> Merch', description: 'The map clarifies why a garment is an artifact, not just a product, and points visitors toward what is available now.', materials: ['shop door', 'artifact language', 'availability'] },
-        { target: 'events', title: 'About -> Events', description: 'About can hold the public explanation for gatherings, annual rituals, and future live rooms before each event surface opens.', materials: ['public context', 'ritual calendar', 'gathering frame'] },
-        { target: 'music', title: 'About -> Music', description: 'About gives the sound layer enough context to feel like atmosphere and conversation inside the construct rather than a separate channel.', materials: ['sound context', 'performance audio', 'conversation layer'] },
-        { target: 'writings', title: 'About -> Writings', description: 'Layered public language routes curious visitors toward Mindful Darkness and THE SOLEHMAN LETTERS instead of overloading the first doorway.', materials: ['positioning', 'newsletter', 'founder voice'] },
-        { target: 'archive', title: 'About -> Archive', description: 'About translates the system; Archive proves it by keeping records, traces, and source material findable.', materials: ['node atlas', 'proof', 'records'] },
-        { target: 'film', title: 'About -> Film', description: 'About frames the moving-image branch as the narrative arm that documents, explains, and mythologizes the world being built.', materials: ['narrative frame', 'documentation', 'Sloth99'] }
-      ],
-      events: [
-        { target: 'music', title: 'Events -> Music', description: 'Cult.ATL and performance nights create live sound, conversation, clips, and social proof for the community layer.', materials: ['performances', 'guest audio', 'clips'] },
-        { target: 'merch', title: 'Events -> Merch', description: 'Solehman New Year and smaller rooms can produce one capsule, one artifact drop, or one relic tied to attendance.', materials: ['capsules', 'tickets', 'relics'] },
-        { target: 'film', title: 'Events -> Film', description: 'Every gathering should be documented through recaps, projection material, BTS footage, and visual evidence.', materials: ['recaps', 'projections', 'BTS'] },
-        { target: 'archive', title: 'Events -> Archive', description: 'Flyers, photos, set lists, talks, release objects, and recaps keep the ritual from vanishing after it ends.', materials: ['flyers', 'photos', 'recaps'] }
-      ],
-      music: [
-        { target: 'events', title: 'Music -> Events', description: 'Sound, conversation, and performance become the atmosphere of rooms where the construct gathers people.', materials: ['sets', 'talks', 'live audio'] },
-        { target: 'film', title: 'Music -> Film', description: 'Scores, loops, interviews, and voice fragments give moving-image work a sonic identity.', materials: ['scores', 'voice', 'field audio'] },
-        { target: 'writings', title: 'Music -> Writings', description: 'Conversations can become transcripts, notes, letters, and public context without overbuilding a media company too soon.', materials: ['transcripts', 'show notes', 'letters'] },
-        { target: 'archive', title: 'Music -> Archive', description: 'Raw audio, guest records, performance traces, and clips should be stored as evidence and future source material.', materials: ['raw audio', 'clips', 'guest records'] }
-      ],
-      writings: [
-        { target: 'about', title: 'Writings -> About', description: 'The letters refine the public language: surface, middle, and deep explanations that let strangers enter at the right depth.', materials: ['positioning', 'founder notes', 'public language'] },
-        { target: 'merch', title: 'Writings -> Merch', description: 'Release notes and object descriptions turn products into artifacts with memory, story, and collector logic.', materials: ['drop notes', 'object text', 'certificates'] },
-        { target: 'events', title: 'Writings -> Events', description: 'Letters can announce gatherings, recap rituals, and give the audience a thread to follow before and after the room.', materials: ['announcements', 'recaps', 'quiet closings'] },
-        { target: 'archive', title: 'Writings -> Archive', description: 'Letters, essays, drafts, and fragments become a readable record of the founder and system evolving over time.', materials: ['letters', 'drafts', 'essays'] }
-      ],
-      archive: [
-        { target: 'about', title: 'Archive -> About', description: 'The archive gives the map proof, history, and a way to show what is active, incubating, dormant, or mythic.', materials: ['timelines', 'node status', 'evidence'] },
-        { target: 'tattooing', title: 'Archive -> Tattooing', description: 'Healed work, flash records, appointment traces, and process images return to tattooing as trust, proof, and future source material.', materials: ['healed work', 'flash records', 'appointment traces'] },
-        { target: 'art', title: 'Archive -> Art', description: 'Old studies, abandoned concepts, references, and symbol tags can return as future paintings or visual systems.', materials: ['references', 'abandoned studies', 'tags'] },
-        { target: 'merch', title: 'Archive -> Merch', description: 'Ephemera, past marks, studies, and release records can become future editions or wearable archive objects.', materials: ['ephemera', 'edition history', 'source scans'] },
-        { target: 'events', title: 'Archive -> Events', description: 'Flyers, recaps, photos, set lists, and audience traces turn past gatherings into source material for future rooms.', materials: ['flyers', 'recaps', 'event traces'] },
-        { target: 'music', title: 'Archive -> Music', description: 'Stored audio, transcripts, performance notes, and guest records keep the sound layer usable instead of disappearing after release.', materials: ['raw audio', 'transcripts', 'guest records'] },
-        { target: 'writings', title: 'Archive -> Writings', description: 'Drafts, fragments, notes, and timelines become readable public context when the writing layer needs proof and lineage.', materials: ['drafts', 'fragments', 'timelines'] },
-        { target: 'film', title: 'Archive -> Film', description: 'Stored evidence gives Sloth99 source material for documentaries, campaign films, and lore videos.', materials: ['footage logs', 'stills', 'lore'] }
-      ],
-      film: [
-        { target: 'tattooing', title: 'Film -> Tattooing', description: 'Documentation makes premium tattoo work legible through process, education, studio atmosphere, and trust.', materials: ['session clips', 'education', 'studio life'] },
-        { target: 'merch', title: 'Film -> Merch', description: 'Campaign films, product viewers, and process footage help artifact garments feel authored instead of generic.', materials: ['campaigns', 'renders', 'launch film'] },
-        { target: 'events', title: 'Film -> Events', description: 'Screenings, projections, recaps, and captured performance can become live containers for the world.', materials: ['screenings', 'projections', 'recaps'] },
-        { target: 'archive', title: 'Film -> Archive', description: 'Cuts, stills, interviews, and making-of footage become the memory trail for future viewers and collectors.', materials: ['stills', 'interviews', 'footage'] }
-      ]
-    };
-
-    const diagram = document.getElementById('diagram');
-    const gradientDefs = document.getElementById('gradientDefs');
-    const spokesLayer = document.getElementById('spokesLayer');
-    const connectionLayer = document.getElementById('connectionLayer');
-    const nodeLayer = document.getElementById('nodeLayer');
-    const selectedTitle = document.getElementById('selectedTitle');
-    const selectedBody = document.getElementById('selectedBody');
-    const selectedMaterials = document.getElementById('selectedMaterials');
-    const manifestBrand = document.getElementById('manifestBrand');
-    const manifestBrandLogo = document.getElementById('manifestBrandLogo');
-    const manifestBrandKicker = document.getElementById('manifestBrandKicker');
-    const manifestBrandTitle = document.getElementById('manifestBrandTitle');
-    const manifestBrandCopy = document.getElementById('manifestBrandCopy');
-    const stateLabel = document.getElementById('stateLabel');
-    const connectionGrid = document.getElementById('connectionGrid');
-    const details = document.querySelector('.details');
-    const selectedCopy = document.querySelector('.selected-copy');
-    const connectionList = document.querySelector('.connection-list');
-    const fadeGroup = [selectedCopy, connectionList, stateLabel];
-    const highlightRules = [
-      { color: '#6E0404', terms: ['Art.Pill', 'tattoo house', 'tattooing', 'tattoo', 'tattoos', 'mark', 'marks', 'body', 'bodies', 'flash', 'aftercare', 'consultation', 'consultations', 'appointment', 'appointments', 'client', 'clients', 'healed work', 'symbolic mark'] },
-      { color: '#0071EB', terms: ['art index', 'acquisition inquiry', 'symbol maps', 'source material', 'visual vocabulary', 'art', 'artist', 'paintings', 'painting', 'studies', 'study', 'symbols', 'symbol', 'visual', 'image', 'images', 'objects', 'object', 'drawings'] },
-      { color: '#F08F15', terms: ['merch', 'garments', 'garment', 'prints', 'print', 'editions', 'edition', 'drops', 'drop', 'commerce', 'product', 'products', 'clothing', 'capsules'] },
-      { color: '#FCB867', terms: ['six.well construct', 'the construct', 'construct', 'six.well', 'about', 'orientation', 'map', 'hierarchy', 'current state', 'access', 'press', 'public language', 'system', 'door', 'doors', 'room', 'rooms', 'routes', 'ways in'] },
-      { color: '#005D25', terms: ['CULT[&SHIFT]', 'events', 'event', 'gatherings', 'gathering', 'rituals', 'ritual', 'performance', 'performances', 'hosted', 'social', 'annual'] },
-      { color: '#A22F8D', terms: ['music', 'sound', 'audio', 'scores', 'score', 'loops', 'loop', 'voice', 'atmosphere', 'cadence'] },
-      { color: '#FFE7CA', terms: ['THE SOLEHMAN LETTERS', 'newsletter', 'Mindful Darkness', 'writings', 'writing', 'letters', 'letter', 'essays', 'essay', 'language', 'statements', 'statement', 'notes', 'release notes', 'field fragments', 'fragments'] },
-      { color: '#6D3D15', terms: ['archive', 'record', 'records', 'proof', 'process', 'evidence', 'residue', 'memory', 'past iterations', 'source material', 'timelines', 'history'] },
-      { color: '#328C84', terms: ['film', 'films', 'moving-image', 'documentary', 'documentation', 'footage', 'recaps', 'recap', 'interviews', 'interview', 'campaign', 'campaigns', 'cinematic', 'subject matter'] }
-    ];
-    const highlightEntries = highlightRules
-      .flatMap(rule => rule.terms.map(term => ({ term, color: rule.color })))
-      .sort((a, b) => b.term.length - a.term.length);
-    const highlightPattern = new RegExp(`\\b(${highlightEntries.map(entry => escapeRegExp(entry.term).replace(/\\s+/g, '\\s+')).join('|')})\\b`, 'gi');
-
-    let activeKey = null;
-    let timers = [];
-    let activeConnections = [];
-    let rafId = null;
-    let connectionGradientSeq = 0;
-    const pointer = { active: false, x: center.x, y: center.y };
-
-    function escapeRegExp(value) {
-      return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-
-    function colorForTerm(value) {
-      const normalized = value.toLowerCase().replace(/\s+/g, ' ');
-      const entry = highlightEntries.find(item => item.term.toLowerCase() === normalized);
-      return entry ? entry.color : 'var(--accent)';
-    }
-
-    function shouldSkipHighlight(node) {
-      if (!node || node.nodeType !== 1) return false;
-      return node.closest('button, script, style, svg, .node-term, .material-chip, .text-link, .hero-jump, .footer-links, .connection-name, .state-label, .eyebrow, .band-kicker, .selected-kicker, .connection-kicker');
-    }
-
-    function highlightNodeTerms(root) {
-      if (!root) return;
-      const textNodes = [];
-
-      function collect(node) {
-        node.childNodes.forEach(child => {
-          if (child.nodeType === 3) {
-            if (highlightPattern.test(child.nodeValue)) textNodes.push(child);
-            highlightPattern.lastIndex = 0;
-            return;
-          }
-          if (child.nodeType === 1 && !shouldSkipHighlight(child)) collect(child);
-        });
+      function activateTopTab(key, updateHash) {
+        const target = panels.find(panel => panel.dataset.panel === key);
+        if (!target) return;
+        tabButtons.forEach(button => button.classList.toggle('is-active', button.dataset.tab === key));
+        panels.forEach(panel => panel.classList.toggle('is-active', panel.dataset.panel === key));
+        if (updateHash) history.replaceState(null, '', '#' + key);
       }
 
-      collect(root);
-      textNodes.forEach(textNode => {
-        const fragment = document.createDocumentFragment();
-        let lastIndex = 0;
-        textNode.nodeValue.replace(highlightPattern, (match, _term, offset) => {
-          if (offset > lastIndex) fragment.appendChild(document.createTextNode(textNode.nodeValue.slice(lastIndex, offset)));
-          const span = document.createElement('span');
-          span.className = 'node-term';
-          span.style.setProperty('--term-color', colorForTerm(match));
-          span.textContent = match;
-          fragment.appendChild(span);
-          lastIndex = offset + match.length;
-          return match;
-        });
-        if (lastIndex < textNode.nodeValue.length) fragment.appendChild(document.createTextNode(textNode.nodeValue.slice(lastIndex)));
-        textNode.parentNode.replaceChild(fragment, textNode);
-        highlightPattern.lastIndex = 0;
-      });
-    }
-
-    function polarPoint(angle, radiusX, radiusY) {
-      const radians = angle * Math.PI / 180;
-      return {
-        x: center.x + Math.cos(radians) * radiusX,
-        y: center.y + Math.sin(radians) * radiusY
-      };
-    }
-
-    function lighten(hex, amount) {
-      const normalized = hex.replace('#', '');
-      const number = parseInt(normalized, 16);
-      const r = Math.min(255, Math.round(((number >> 16) & 255) + (255 * amount)));
-      const g = Math.min(255, Math.round(((number >> 8) & 255) + (255 * amount)));
-      const b = Math.min(255, Math.round((number & 255) + (255 * amount)));
-      return '#' + [r, g, b].map(value => value.toString(16).padStart(2, '0')).join('');
-    }
-
-    function darken(hex, amount) {
-      const normalized = hex.replace('#', '');
-      const number = parseInt(normalized, 16);
-      const r = Math.max(0, Math.round(((number >> 16) & 255) * (1 - amount)));
-      const g = Math.max(0, Math.round(((number >> 8) & 255) * (1 - amount)));
-      const b = Math.max(0, Math.round((number & 255) * (1 - amount)));
-      return '#' + [r, g, b].map(value => value.toString(16).padStart(2, '0')).join('');
-    }
-
-    function nodeByKey(key) {
-      return nodes.find(node => node.key === key);
-    }
-
-    function clearTimers() {
-      timers.forEach(timer => clearTimeout(timer));
-      timers = [];
-    }
-
-    /* fade the details out, swap their content, then fade back in */
-    function softSwap(apply) {
-      fadeGroup.forEach(el => el.classList.add('is-fading'));
-      const timer = setTimeout(() => {
-        apply();
-        requestAnimationFrame(() => {
-          fadeGroup.forEach(el => el.classList.remove('is-fading'));
-        });
-      }, detailFade);
-      timers.push(timer);
-    }
-
-    function clearSelection() {
-      activeKey = null;
-      clearTimers();
-      activeConnections = [];
-      gradientDefs.querySelectorAll('.connection-gradient').forEach(gradient => gradient.remove());
-      diagram.classList.remove('has-active');
-      details.classList.remove('has-selection');
-      connectionLayer.replaceChildren();
-      nodeLayer.querySelectorAll('.node-hit').forEach(group => {
-        group.classList.remove('is-active', 'is-connected', 'is-connected-pending');
-      });
-      softSwap(() => {
-        selectedTitle.textContent = '';
-        selectedTitle.style.color = 'var(--accent)';
-        selectedBody.textContent = '';
-        selectedMaterials.replaceChildren();
-        selectedMaterials.style.removeProperty('--chip-color');
-        renderManifestBrand(null);
-        stateLabel.textContent = 'click a construct entry - its connections illuminate';
-        connectionGrid.replaceChildren();
-        highlightNodeTerms(selectedCopy);
-        highlightNodeTerms(connectionGrid);
-      });
-    }
-
-    function renderMaterialChips(container, items, color) {
-      container.replaceChildren();
-      if (color) container.style.setProperty('--chip-color', color);
-      else container.style.removeProperty('--chip-color');
-      items.forEach(item => {
-        const chip = document.createElement('span');
-        chip.className = 'material-chip';
-        chip.textContent = item;
-        container.appendChild(chip);
-      });
-    }
-
-    function renderManifestBrand(node) {
-      const brand = node && node.brand ? node.brand : {
-        kicker: 'construct system / orientation',
-        title: 'The Six.Well Construct',
-        copy: 'The operating architecture that holds the nodes, mediums, archive, and method in relation.'
-      };
-      manifestBrand.style.setProperty('--brand-color', node ? (node.activeColor || node.color) : 'var(--accent)');
-      if (brand.logo) {
-        manifestBrandLogo.src = brand.logo;
-        manifestBrandLogo.alt = brand.logoAlt || '';
-        manifestBrandLogo.hidden = false;
-      } else {
-        manifestBrandLogo.removeAttribute('src');
-        manifestBrandLogo.alt = '';
-        manifestBrandLogo.hidden = true;
+      function activateConstructSection(key, updateHash) {
+        const target = constructPanels.find(panel => panel.dataset.constructPanel === key);
+        if (!target) return;
+        nestedButtons.forEach(button => button.classList.toggle('is-active', button.dataset.constructSection === key));
+        constructPanels.forEach(panel => panel.classList.toggle('is-active', panel.dataset.constructPanel === key));
+        if (updateHash) history.replaceState(null, '', '#construct-' + key);
       }
-      manifestBrandKicker.textContent = brand.kicker;
-      manifestBrandTitle.textContent = brand.title;
-      manifestBrandCopy.textContent = brand.copy;
-    }
 
-    function drawConnection(source, target, color, index) {
-      const sourcePoint = livePoint(source);
-      const targetPoint = livePoint(target);
-      const delay = index * connectionStagger;
-      const path = `M ${sourcePoint.x} ${sourcePoint.y} L ${targetPoint.x} ${targetPoint.y}`;
-      const length = Math.hypot(targetPoint.x - sourcePoint.x, targetPoint.y - sourcePoint.y);
-      const blendStart = length < 190 ? 42 : length < 260 ? 46 : 50;
-      const blendEnd = length < 190 ? 88 : length < 260 ? 90 : 92;
-      const gradientId = `connection-gradient-${connectionGradientSeq++}`;
-      const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
-      gradient.id = gradientId;
-      gradient.classList.add('connection-gradient');
-      gradient.setAttribute('gradientUnits', 'userSpaceOnUse');
-      gradient.setAttribute('x1', sourcePoint.x);
-      gradient.setAttribute('y1', sourcePoint.y);
-      gradient.setAttribute('x2', targetPoint.x);
-      gradient.setAttribute('y2', targetPoint.y);
-
-      const startStop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-      startStop.setAttribute('offset', '0%');
-      startStop.setAttribute('stop-color', source.activeColor || source.color);
-
-      const holdStop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-      holdStop.setAttribute('offset', `${blendStart}%`);
-      holdStop.setAttribute('stop-color', source.activeColor || source.color);
-
-      const targetStartStop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-      targetStartStop.setAttribute('offset', `${blendEnd}%`);
-      targetStartStop.setAttribute('stop-color', target.activeColor || target.color);
-
-      const endStop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-      endStop.setAttribute('offset', '100%');
-      endStop.setAttribute('stop-color', target.activeColor || target.color);
-
-      gradient.append(startStop, holdStop, targetStartStop, endStop);
-      gradientDefs.appendChild(gradient);
-
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      line.setAttribute('d', path);
-      line.setAttribute('class', 'connection-line');
-      line.setAttribute('stroke', `url(#${gradientId})`);
-      line.style.setProperty('--line-length', length);
-      line.style.animationDelay = `${lineLead + delay}ms`;
-      connectionLayer.appendChild(line);
-      activeConnections.push({ line, gradient, source, target });
-
-      const timer = setTimeout(() => {
-        const targetGroup = nodeLayer.querySelector(`[data-node="${target.key}"]`);
-        if (targetGroup && activeKey === source.key) {
-          targetGroup.classList.remove('is-connected-pending');
-          targetGroup.classList.add('is-connected');
+      function readHash() {
+        const raw = window.location.hash.replace('#', '').toLowerCase();
+        if (!raw) return;
+        if (raw.startsWith('construct-')) {
+          activateTopTab('construct', false);
+          activateConstructSection(raw.replace('construct-', ''), false);
+          return;
         }
-      }, lineLead + delay + lineDuration - 80);
-      timers.push(timer);
-    }
-
-    function renderDetails(source, entries) {
-      softSwap(() => {
-      selectedTitle.textContent = source.label;
-      selectedTitle.style.color = source.activeColor || source.color;
-      selectedBody.textContent = `${source.role} - ${source.status}. ${source.note}`;
-      renderMaterialChips(selectedMaterials, source.materials || [], source.activeColor || source.color);
-      renderManifestBrand(source);
-      stateLabel.textContent = `${source.label.toLowerCase()} - ${entries.length} connections`;
-      connectionGrid.replaceChildren();
-
-      entries.forEach((entry, index) => {
-        const target = nodeByKey(entry.target);
-        const card = document.createElement('a');
-        card.className = 'connection-card';
-        card.href = target.url;
-        card.style.setProperty('--link-color', target.color);
-        card.style.setProperty('--card-delay', `${120 + index * 110}ms`);
-
-        const name = document.createElement('span');
-        name.className = 'connection-name';
-        name.textContent = entry.title;
-
-        const desc = document.createElement('span');
-        desc.className = 'connection-desc';
-        desc.textContent = entry.description;
-
-        const materials = document.createElement('span');
-        materials.className = 'connection-materials';
-        (entry.materials || []).forEach(item => {
-          const chip = document.createElement('span');
-          chip.className = 'material-chip';
-          chip.textContent = item;
-          materials.appendChild(chip);
-        });
-
-        card.append(name, desc, materials);
-        connectionGrid.appendChild(card);
-      });
-      highlightNodeTerms(selectedCopy);
-      highlightNodeTerms(connectionGrid);
-      });
-    }
-
-    function activateNode(key) {
-      if (activeKey === key) {
-        clearSelection();
-        return;
+        activateTopTab(raw, false);
       }
 
-      activeKey = key;
-      clearTimers();
-      activeConnections = [];
-      gradientDefs.querySelectorAll('.connection-gradient').forEach(gradient => gradient.remove());
-      connectionLayer.replaceChildren();
-      diagram.classList.add('has-active');
-      details.classList.add('has-selection');
-      nodeLayer.querySelectorAll('.node-hit').forEach(group => {
-        group.classList.toggle('is-active', group.dataset.node === key);
-        group.classList.remove('is-connected', 'is-connected-pending');
-      });
-
-      const source = nodeByKey(key);
-      const entries = connections[key] || [];
-      entries.forEach(entry => {
-        const targetGroup = nodeLayer.querySelector(`[data-node="${entry.target}"]`);
-        if (targetGroup) targetGroup.classList.add('is-connected-pending');
-      });
-      renderDetails(source, entries);
-      entries.forEach((entry, index) => drawConnection(source, nodeByKey(entry.target), source.activeColor || source.color, index));
-    }
-
-    function buildGradients() {
-      nodes.forEach((node, index) => {
-        const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'radialGradient');
-        gradient.id = `sphere-${node.key}`;
-        gradient.setAttribute('cx', '34%');
-        gradient.setAttribute('cy', '28%');
-        gradient.setAttribute('r', '72%');
-
-        const stops = [
-          ['0%', lighten(node.activeColor || node.color, 0.22)],
-          ['44%', node.activeColor || node.color],
-          ['100%', darken(node.activeColor || node.color, 0.38)]
-        ];
-
-        stops.forEach(([offset, color]) => {
-          const stop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
-          stop.setAttribute('offset', offset);
-          stop.setAttribute('stop-color', color);
-          gradient.appendChild(stop);
+      function setNode(index) {
+        activeNode = index;
+        const node = nodes[index];
+        nodeTitle.textContent = node.label;
+        nodeTitle.style.color = node.color;
+        nodeCopy.textContent = node.note;
+        nodeLinks.innerHTML = '';
+        const indexLink = document.createElement('a');
+        indexLink.className = 'link-pill';
+        indexLink.href = node.url;
+        indexLink.textContent = node.key === 'about' ? 'Current node' : 'Index';
+        const archiveLink = document.createElement('a');
+        archiveLink.className = 'link-pill';
+        archiveLink.href = '/archive/';
+        archiveLink.textContent = 'Archive';
+        nodeLinks.append(indexLink, archiveLink);
+        Array.from(document.querySelectorAll('.map-node')).forEach((button, buttonIndex) => {
+          button.classList.toggle('is-active', buttonIndex === activeNode);
         });
-
-        gradientDefs.appendChild(gradient);
-      });
-    }
-
-    function buildDiagram() {
-      buildGradients();
-
-      nodes.forEach((node, index) => {
-        node.point = polarPoint(node.angle, 258, 258);
-
-        const spoke = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        spoke.setAttribute('class', 'spoke');
-        spokesLayer.appendChild(spoke);
-
-        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        group.setAttribute('class', 'node-hit');
-        group.setAttribute('data-node', node.key);
-        group.setAttribute('tabindex', '0');
-        group.setAttribute('role', 'button');
-        group.setAttribute('aria-label', `Show ${node.label} connections`);
-        group.style.setProperty('--node-color', node.color);
-        group.style.setProperty('--sphere-gradient', `#sphere-${node.key}`);
-        node.index = index;
-        node.offset = { x: 0, y: 0 };
-        node.phase = index * 0.2;
-        node.spoke = spoke;
-        node.group = group;
-        updateSpoke(node);
-
-        const halo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        halo.setAttribute('class', 'node-halo');
-        halo.setAttribute('cx', node.point.x);
-        halo.setAttribute('cy', node.point.y);
-        halo.setAttribute('r', 46);
-
-        const core = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        core.setAttribute('class', 'node-core');
-        core.setAttribute('cx', node.point.x);
-        core.setAttribute('cy', node.point.y);
-        core.setAttribute('r', 32);
-
-        const labelOffset = node.point.y < center.y ? -52 : 60;
-        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        label.setAttribute('class', 'node-label');
-        label.setAttribute('x', node.point.x);
-        label.setAttribute('y', node.point.y + labelOffset);
-        label.textContent = node.label;
-
-        const count = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        count.setAttribute('class', 'node-count');
-        count.setAttribute('x', node.point.x);
-        count.setAttribute('y', node.point.y + (node.point.y < center.y ? 78 : -70));
-        count.textContent = `${(connections[node.key] || []).length} connections`;
-
-        group.append(halo, core, label, count);
-        group.addEventListener('click', () => activateNode(node.key));
-        group.addEventListener('keydown', event => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            activateNode(node.key);
-          }
-        });
-
-        nodeLayer.appendChild(group);
-      });
-    }
-
-    function livePoint(node) {
-      return {
-        x: node.point.x + (node.offset ? node.offset.x : 0),
-        y: node.point.y + (node.offset ? node.offset.y : 0)
-      };
-    }
-
-    function nodeCoreRadius(node) {
-      if (!node.group) return 32;
-      if (node.group.classList.contains('is-active')) return 43;
-      if (node.group.classList.contains('is-connected')) return 35;
-      return 32;
-    }
-
-    function spokeEndPoint(node) {
-      const point = livePoint(node);
-      const dx = point.x - center.x;
-      const dy = point.y - center.y;
-      const distance = Math.hypot(dx, dy) || 1;
-      const radius = nodeCoreRadius(node);
-      return {
-        x: point.x - (dx / distance) * radius,
-        y: point.y - (dy / distance) * radius
-      };
-    }
-
-    function spokeStartPoint(node) {
-      const point = livePoint(node);
-      const dx = point.x - center.x;
-      const dy = point.y - center.y;
-      const distance = Math.hypot(dx, dy) || 1;
-      return {
-        x: center.x + (dx / distance) * centerRingOuterRadius,
-        y: center.y + (dy / distance) * centerRingOuterRadius
-      };
-    }
-
-    function updateSpoke(node) {
-      const start = spokeStartPoint(node);
-      const end = spokeEndPoint(node);
-      node.spoke.setAttribute('x1', start.x.toFixed(2));
-      node.spoke.setAttribute('y1', start.y.toFixed(2));
-      node.spoke.setAttribute('x2', end.x.toFixed(2));
-      node.spoke.setAttribute('y2', end.y.toFixed(2));
-    }
-
-    function motionTarget(node, seconds) {
-      const phase = seconds * 0.64 + node.phase;
-      const bob = Math.sin(phase);
-      const sway = Math.sin(phase * 0.72 + 0.9);
-      let x = sway * 6;
-      let y = -7 + bob * 8;
-
-      if (pointer.active) {
-        const baseX = node.point.x + x;
-        const baseY = node.point.y + y;
-        const dx = pointer.x - baseX;
-        const dy = pointer.y - baseY;
-        const dist = Math.hypot(dx, dy);
-        const radius = 210;
-        if (dist > 0 && dist < radius) {
-          const pull = (1 - dist / radius) * 9;
-          x += (dx / dist) * pull;
-          y += (dy / dist) * pull;
-        }
       }
 
-      return { x, y };
-    }
+      function buildNodeButtons() {
+        if (!nodeButtons) return;
+        nodeButtons.innerHTML = '';
+        nodes.forEach((node, index) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'map-node';
+          button.textContent = node.label;
+          button.style.setProperty('--node-color', node.color);
+          button.dataset.node = node.key;
+          button.addEventListener('click', () => setNode(index));
+          nodeButtons.appendChild(button);
+        });
+        setNode(activeNode);
+      }
 
-    function updateMotion(timestamp) {
-      const seconds = timestamp / 1000;
-      nodes.forEach(node => {
-        const target = motionTarget(node, seconds);
-        node.offset.x += (target.x - node.offset.x) * 0.055;
-        node.offset.y += (target.y - node.offset.y) * 0.055;
-        node.group.setAttribute('transform', `translate(${node.offset.x.toFixed(2)} ${node.offset.y.toFixed(2)})`);
-        updateSpoke(node);
+      function positionNodeButtons() {
+        if (!nodeButtons) return;
+        const bounds = nodeButtons.getBoundingClientRect();
+        const width = bounds.width || 1;
+        const height = bounds.height || 1;
+        const radiusX = Math.max(92, width * 0.34);
+        const radiusY = Math.max(122, height * 0.33);
+        const cx = width / 2;
+        const cy = height / 2;
+        Array.from(nodeButtons.children).forEach((button, index) => {
+          const angle = -Math.PI / 2 + index * (Math.PI * 2 / nodes.length);
+          button.style.left = (cx + Math.cos(angle) * radiusX) + 'px';
+          button.style.top = (cy + Math.sin(angle) * radiusY) + 'px';
+        });
+      }
+
+      function resizeCanvas() {
+        if (!canvas || !ctx) return;
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        positionNodeButtons();
+      }
+
+      function drawMap(timestamp) {
+        if (!ctx || !canvas) return;
+        mapTime = timestamp * 0.001;
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        const cx = width / 2;
+        const cy = height / 2;
+        const radiusX = Math.max(92, width * 0.34);
+        const radiusY = Math.max(122, height * 0.33);
+        ctx.clearRect(0, 0, width, height);
+
+        const points = nodes.map((node, index) => {
+          const angle = -Math.PI / 2 + index * (Math.PI * 2 / nodes.length);
+          const drift = Math.sin(mapTime * 0.8 + index) * 3;
+          return {
+            x: cx + Math.cos(angle) * (radiusX + drift),
+            y: cy + Math.sin(angle) * (radiusY + drift),
+            node
+          };
+        });
+
+        ctx.lineWidth = 1;
+        points.forEach(point => {
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(point.x, point.y);
+          ctx.strokeStyle = 'rgba(252, 184, 103, 0.12)';
+          ctx.stroke();
+        });
+
+        ctx.beginPath();
+        points.forEach((point, index) => {
+          if (index === 0) ctx.moveTo(point.x, point.y);
+          else ctx.lineTo(point.x, point.y);
+        });
+        ctx.closePath();
+        ctx.strokeStyle = 'rgba(252, 184, 103, 0.18)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, 28 + Math.sin(mapTime) * 2, 0, Math.PI * 2);
+        ctx.arc(cx, cy, 18, 0, Math.PI * 2, true);
+        ctx.fillStyle = 'rgba(109, 61, 21, 0.82)';
+        ctx.fill();
+
+        points.forEach((point, index) => {
+          const isActive = index === activeNode;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, isActive ? 9 : 5, 0, Math.PI * 2);
+          ctx.fillStyle = point.node.color;
+          ctx.globalAlpha = isActive ? 1 : 0.42;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        });
+
+        requestAnimationFrame(drawMap);
+      }
+
+      tabButtons.forEach(button => {
+        button.addEventListener('click', () => activateTopTab(button.dataset.tab, true));
       });
 
-      activeConnections.forEach(connection => {
-        const sourcePoint = livePoint(connection.source);
-        const targetPoint = livePoint(connection.target);
-        connection.line.setAttribute('d', `M ${sourcePoint.x.toFixed(2)} ${sourcePoint.y.toFixed(2)} L ${targetPoint.x.toFixed(2)} ${targetPoint.y.toFixed(2)}`);
-        connection.gradient.setAttribute('x1', sourcePoint.x.toFixed(2));
-        connection.gradient.setAttribute('y1', sourcePoint.y.toFixed(2));
-        connection.gradient.setAttribute('x2', targetPoint.x.toFixed(2));
-        connection.gradient.setAttribute('y2', targetPoint.y.toFixed(2));
+      nestedButtons.forEach(button => {
+        button.addEventListener('click', () => activateConstructSection(button.dataset.constructSection, true));
       });
 
-      rafId = requestAnimationFrame(updateMotion);
-    }
-
-    function updatePointer(event) {
-      const rect = diagram.getBoundingClientRect();
-      const scaleX = 1000 / rect.width;
-      const scaleY = 640 / rect.height;
-      pointer.active = true;
-      pointer.x = (event.clientX - rect.left) * scaleX;
-      pointer.y = (event.clientY - rect.top) * scaleY;
-    }
-
-    diagram.addEventListener('pointermove', updatePointer);
-    diagram.addEventListener('pointerenter', updatePointer);
-    diagram.addEventListener('pointerleave', () => {
-      pointer.active = false;
-      pointer.x = center.x;
-      pointer.y = center.y;
-    });
-
-    buildDiagram();
-    highlightNodeTerms(document.querySelector('.hero-copy'));
-    highlightNodeTerms(document.querySelector('.selected-copy'));
-    highlightNodeTerms(document.querySelector('.connection-list'));
-    highlightNodeTerms(document.querySelector('.content-bands'));
-    rafId = requestAnimationFrame(updateMotion);
-  })();
-</script>
+      buildNodeButtons();
+      resizeCanvas();
+      readHash();
+      window.addEventListener('hashchange', readHash);
+      window.addEventListener('resize', resizeCanvas);
+      requestAnimationFrame(drawMap);
+    })();
+  </script>
 </body>
 </html>
