@@ -229,6 +229,7 @@ test("attendance migration corrects an existing published snapshot and advances 
 test("multi-day timed exhibitions become on-view ranges instead of continuous daily events", async () => {
   const db = databaseThrough("0139_calendar_public_access_backfill.sql");
   db.exec(readFileSync(join(ROOT, "migrations", "0142_calendar_source_rechecks.sql"), "utf8"));
+  db.exec(readFileSync(join(ROOT, "migrations", "0149_calendar_night_planning.sql"), "utf8"));
   const created = await admin(db, "/candidates", {
     method:"POST",
     body:{
@@ -295,6 +296,32 @@ test("social source registry validates platform URLs and exact-handle trust rema
   assert.equal((await admin(db, `/social-sources/${source.id}`, { method:"PATCH", body:{ enabled:true, cadenceHours:12 } })).status, 200);
 });
 
+test("registry source creation returns editable records and clear inline-ready validation errors", async () => {
+  const db = database();
+  const missingName = await admin(db, "/sources", { method:"POST", body:{ url:"https://new-source.example/events" } });
+  assert.equal(missingName.status, 400);
+  assert.match((await missingName.json()).error,/source name/i);
+
+  const createdResponse = await admin(db, "/sources", {
+    method:"POST",
+    body:{ name:"New Source",url:"https://new-source.example/events",sourceType:"discovery",trustLevel:"discovery" },
+  });
+  assert.equal(createdResponse.status, 201, await createdResponse.clone().text());
+  const source = (await createdResponse.json()).source;
+  assert.equal(source.name,"New Source");
+  assert.equal(source.sourceType,"discovery");
+  assert.equal(source.trustLevel,"discovery");
+  assert.equal(source.enabled,true);
+
+  const duplicate = await admin(db, "/sources", {
+    method:"POST",
+    body:{ name:"Duplicate Source",url:"https://new-source.example/events/",sourceType:"official_html",trustLevel:"official" },
+  });
+  assert.equal(duplicate.status,409);
+  assert.match((await duplicate.json()).error,/already registered.*Open that source below/i);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE url LIKE 'https://new-source.example/events%'").get().count,1);
+});
+
 test("admin authentication protects candidates and public APIs never expose private review fields", async () => {
   const db = database();
   assert.equal((await handleCalendarAdminApi(request("/api/admin/calendar/candidates"), env(db))).status, 401);
@@ -321,7 +348,7 @@ test("Instagram remains private discovery provenance and cannot become a public 
       title:"Instagram-discovered Atlanta Exhibition", organizer:"Atlanta Gallery", factualDescription:"An Atlanta exhibition opening.",
       sourceUrl:instagramUrl, ticketUrl:"https://instagram.com/p/example-ticket/", dateKind:"timed", startsAt:"2026-11-14T19:00:00-05:00",
       endsAt:"2026-11-14T21:00:00-05:00", venueName:"Atlanta Gallery", venueAddress:"1 Art Way, Atlanta, GA",
-      subjects:["art"], formats:["exhibition"], verificationState:"verified",
+      subjects:["art"], formats:["exhibition"], verificationState:"unverified",
       relatedLinks:[{ label:"Instagram post", url:instagramUrl, provenanceUrl:instagramUrl, includePublic:true }],
     },
   });
@@ -352,7 +379,7 @@ test("a human-verified Instagram-only source can publish while social ticket lin
       sourceUrl:instagramUrl, ticketUrl:"https://www.instagram.com/p/not-a-ticket-page/",
       dateKind:"timed", startsAt:"2026-11-21T18:00:00-05:00", endsAt:"2026-11-21T20:00:00-05:00",
       venueName:"Atlanta Artist Collective", venueAddress:"25 Art Way, Atlanta, GA",
-      subjects:["art"], formats:["lecture-talk"], verificationState:"verified",
+      subjects:["art"], formats:["lecture-talk"], verificationState:"needs_verification",
     },
   });
   assert.equal(created.status, 201, await created.clone().text());
@@ -385,6 +412,67 @@ test("a human-verified Instagram-only source can publish while social ticket lin
 
   const single = await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEvent.id)}.ics`), env(db));
   assert.match(await single.text(), /URL:https:\/\/www\.instagram\.com\/p\/human-verified-atlanta-event\//);
+});
+
+test("Studio verification outranks Instagram rules for candidates and occurrences and survives later Scout passes", async () => {
+  const db = database();
+  const instagramUrl = "https://www.instagram.com/p/studio-verified-series/";
+  const createdResponse = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Studio Verified Instagram Program", organizer:"Atlanta Art Room",
+      factualDescription:"An Atlanta performance and related artist conversation.",
+      sourceUrl:instagramUrl, dateKind:"timed", startsAt:"2026-12-05T18:00:00-05:00", endsAt:"2026-12-05T20:00:00-05:00",
+      venueName:"Atlanta Art Room", venueAddress:"50 Art Way, Atlanta, GA", subjects:["art"], formats:["performance"],
+      verificationState:"needs_verification",
+      occurrences:[{
+        occurrenceType:"artist_talk", title:"Artist Conversation", sourceUrl:instagramUrl,
+        dateKind:"timed", startsAt:"2026-12-05T17:00:00-05:00", endsAt:"2026-12-05T18:00:00-05:00",
+        venueName:"Atlanta Art Room", venueAddress:"50 Art Way, Atlanta, GA", accessStatus:"public", audiences:["Public"],
+        verificationState:"needs_verification",
+      }],
+    },
+  });
+  assert.equal(createdResponse.status, 201, await createdResponse.clone().text());
+  const created = (await createdResponse.json()).candidate;
+  assert.equal(created.verificationState, "needs_verification");
+  assert.equal(created.occurrences[0].verificationState, "needs_verification");
+
+  const verifiedResponse = await admin(db, `/candidates/${created.id}`, {
+    method:"PATCH",
+    body:{
+      verificationState:"verified",
+      verificationNotes:`${created.verificationNotes}\nStudio manually verified every displayed event fact.`,
+      sourceResolutionNotes:"Studio accepted the organizer's Instagram announcement as the event source.",
+      occurrences:created.occurrences.map((occurrence) => ({
+        ...occurrence,
+        verificationNotes:`${occurrence.verificationNotes}\nStudio manually verified the complete record, including this occurrence.`,
+      })),
+    },
+  });
+  assert.equal(verifiedResponse.status, 200, await verifiedResponse.clone().text());
+  const verified = (await verifiedResponse.json()).candidate;
+  assert.equal(verified.verificationState, "verified");
+  assert.equal(verified.occurrences[0].verificationState, "verified");
+  assert.doesNotMatch(verified.verificationNotes, /private discovery provenance|Resolve the discovery lead|same secondary source/i);
+  assert.doesNotMatch(verified.occurrences[0].verificationNotes, /private discovery provenance/i);
+  assert.equal((await admin(db, `/candidates/${created.id}/approve`, { method:"POST", body:{} })).status, 200);
+
+  const scoutResponse = await admin(db, "/strong-picks", {
+    method:"POST",
+    body:{ detectedAt:"2026-12-01T12:00:00-05:00", events:[{
+      ...verified,
+      verificationState:"needs_verification",
+      verificationNotes:"Automated source policy requested verification.",
+      occurrences:verified.occurrences.map((occurrence) => ({ ...occurrence, verificationState:"needs_verification", verificationNotes:"Automated occurrence policy requested verification." })),
+    }] },
+  });
+  assert.equal(scoutResponse.status, 200, await scoutResponse.clone().text());
+  const afterScout = (await (await admin(db, `/candidates/${created.id}`)).json()).candidate;
+  assert.equal(afterScout.verificationState, "verified");
+  assert.equal(afterScout.occurrences[0].verificationState, "verified");
+  assert.match(afterScout.verificationNotes, /Studio manually verified/);
+  assert.match(afterScout.occurrences[0].verificationNotes, /Studio manually verified/);
 });
 
 test("a reliable event source keeps an Instagram ticket post private instead of publishing it", async () => {
@@ -970,7 +1058,7 @@ test("Posh Atlanta scouting spans organizers and accepts event-host identity pro
   }
 });
 
-test("an incomplete Out of Hand rerun is held without replacing a complete private occurrence set", async () => {
+test("an incomplete Out of Hand rerun is held without replacing a complete occurrence set or downgrading verification", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_out_of_hand_truths'");
   const links = ["6988", "7024", "7023", "7029", "7030", "7022", "7031", "7032"];
@@ -990,7 +1078,7 @@ test("an incomplete Out of Hand rerun is held without replacing a complete priva
     const response = await handleCalendarAdminApi(request("/api/admin/calendar/sources/cal_source_out_of_hand_truths/run", { method:"POST", body:{}, admin:true }), runtime);
     assert.equal(response.status, 200, await response.clone().text());
     const candidate = db.prepare("SELECT status,verification_state,pending_revision_id FROM calendar_candidates WHERE id='cal_candidate_gulch_we_hold_truths'").get();
-    assert.deepEqual({ status:candidate.status, verificationState:candidate.verification_state }, { status:"needs_verification", verificationState:"needs_verification" });
+    assert.deepEqual({ status:candidate.status, verificationState:candidate.verification_state }, { status:"candidate", verificationState:"verified" });
     assert.ok(candidate.pending_revision_id);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 8);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 0);
@@ -1326,6 +1414,7 @@ test("Gallery FC's Squarespace calendar captures one exhibition with its related
       (id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
     VALUES('cal_source_gallery_fc_duplicate','Gallery FC','https://www.galleryfc.com/calendar','official_html','official',1,24,'automatic','static','{}',datetime('now'),datetime('now'));`);
   db.exec(readFileSync(join(ROOT,"migrations","0147_calendar_gallery_fc_squarespace.sql"),"utf8"));
+  db.exec(readFileSync(join(ROOT,"migrations","0149_calendar_night_planning.sql"),"utf8"));
   const configuredSource = db.prepare("SELECT url,enabled,adapter_key,render_mode,adapter_config_json FROM calendar_sources WHERE id='cal_source_gallery_fc'").get();
   assert.deepEqual(
     { url:configuredSource.url, enabled:configuredSource.enabled, adapterKey:configuredSource.adapter_key, renderMode:configuredSource.render_mode, adapterConfig:JSON.parse(configuredSource.adapter_config_json) },
@@ -2343,17 +2432,13 @@ test("permanent deletion removes private records, suppresses exact Scout redisco
   const original = (await beforeResponse.json()).candidate;
 
   const missingChoice = await admin(db, `/candidates/${original.id}`, {
-    method:"DELETE", body:{ confirmationTitle:original.title },
+    method:"DELETE", body:{},
   });
   assert.equal(missingChoice.status, 400);
-  const mismatch = await admin(db, `/candidates/${original.id}`, {
-    method:"DELETE", body:{ confirmationTitle:original.title.toLowerCase(), preventRediscovery:true },
-  });
-  assert.equal(mismatch.status, 409);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE id=?").get(original.id).count, 1);
 
   const removed = await admin(db, `/candidates/${original.id}`, {
-    method:"DELETE", body:{ confirmationTitle:original.title, preventRediscovery:true },
+    method:"DELETE", body:{ preventRediscovery:true },
   });
   assert.equal(removed.status, 200, await removed.clone().text());
   assert.deepEqual({ ...(await removed.json()), cleanupWarnings:[] }, {
@@ -2433,7 +2518,7 @@ test("permanent published deletion clears feeds and only removes orphaned Scout 
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entry_media WHERE entry_id=?").get(publicEntryId).count, 3);
 
   const deleted = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/cal_candidate_sound_vision", {
-    method:"DELETE", admin:true, body:{ confirmationTitle:"SOUND + VISION", preventRediscovery:false },
+    method:"DELETE", admin:true, body:{ preventRediscovery:false },
   }), runtime);
   assert.equal(deleted.status, 200, await deleted.clone().text());
   const result = await deleted.json();
@@ -3357,20 +3442,143 @@ test("Calendar Studio candidate sections are independently collapsible and close
   assert.match(studioCss,/\.editor-section>summary:focus-visible \{ outline:5px solid var\(--accent\);/);
 });
 
-test("Calendar Studio requires exact-title confirmation before permanently deleting and advancing", () => {
+test("Calendar Studio sources use inline add forms and one-open compact editable lists", () => {
+  const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studioHtml,/id="sourceCreateForm"[\s\S]*id="newSourceName"[\s\S]*id="newSourceUrl"[\s\S]*id="newSourceRole"/);
+  assert.match(studioHtml,/id="sourceCreateStatus" role="status" aria-live="polite"/);
+  assert.match(studioHtml,/id="socialSourceCreateForm"[\s\S]*id="socialSourceCreateStatus" role="status"/);
+  assert.doesNotMatch(studioHtml,/id="addSource"|id="addSocialSource"/);
+  assert.doesNotMatch(studio,/Scoutable source URL|Source kind: direct or discovery|Platform: threads, instagram, or tiktok/);
+  assert.match(studio,/class="source-card source-disclosure" name="calendar-source-details"/);
+  assert.match(studio,/class="social-source-card source-disclosure" name="calendar-source-details"/);
+  assert.match(studio,/class="source-summary"><strong>/);
+  assert.match(studio,/document\.querySelectorAll\("\.source-disclosure\[open\]"\)\.forEach/);
+  assert.match(studio,/other\.open=false/);
+  assert.match(studio,/sourceCreateForm"\)\.addEventListener\("submit",createRegistrySource\)/);
+  assert.match(studio,/setSourceFormStatus\("sourceCreateStatus",error\.message,"error"\)/);
+  assert.match(studioCss,/\.source-create-form \{[^}]*display:grid;[^}]*border:5px solid var\(--line\);/);
+  assert.match(studioCss,/\.source-summary \{[^}]*min-height:52px;[^}]*cursor:pointer;/);
+  assert.match(studioCss,/\.source-card-details \{[^}]*display:grid;[^}]*border-top:5px solid var\(--line\);/);
+  assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.source-create-form,[^\{]*\.source-card-details[^\{]*\{ grid-template-columns:minmax\(0,1fr\); \}/);
+});
+
+test("Calendar Studio confirms permanent deletion without typed-title friction and advances", () => {
   const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
   const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
   assert.match(studioHtml,/id="deleteCandidateDialog"/);
-  assert.match(studioHtml,/id="deleteCandidateConfirmation"/);
+  assert.doesNotMatch(studioHtml,/deleteCandidateConfirmation|Type the exact event title/);
   assert.match(studioHtml,/id="deleteCandidateSuppression" type="checkbox" checked/);
-  assert.match(studioHtml,/>Delete permanently<\/button>/);
+  assert.match(studioHtml,/>Confirm deletion<\/button>/);
   assert.match(studio,/data-action="delete">Delete</);
-  assert.match(studio,/confirmation\.value\.trim\(\)!==deleteContext\.title/);
+  assert.doesNotMatch(studio,/confirmationTitle|deleteCandidateConfirmation/);
+  assert.match(studio,/document\.getElementById\("confirmCandidateDelete"\)\.disabled=false;\s*deleteDialog\.showModal\(\);/);
   assert.match(studio,/method:"DELETE"/);
   assert.match(studio,/preventRediscovery:document\.getElementById\("deleteCandidateSuppression"\)\.checked/);
   assert.match(studio,/nextQueue:context\.queue,excludeId:context\.id,reviewIndex:context\.reviewIndex/);
   assert.match(studioCss,/\.delete-dialog \{[^}]*border:5px solid var\(--danger\);/);
   assert.match(studioCss,/\.delete-dialog-actions #confirmCandidateDelete \{[^}]*border-color:var\(--danger\);/);
   assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.delete-dialog-actions \{ align-items:stretch; flex-direction:column; \}/);
+});
+
+test("phase-one night planning metadata is editable, published, and privacy bounded", async () => {
+  const db = database();
+  const saved = await admin(db, "/candidates/cal_candidate_sound_vision", {
+    method:"PATCH",
+    body:{
+      attendanceMode:"flexible_window", recommendedArrivalMinutes:5, minimumVisitMinutes:30,
+      recommendedVisitMinutes:75, lateArrivalAllowed:true, planningEligible:true,
+      latitude:33.7712, longitude:-84.4077, planningNotes:"Arrive any time during the opening window.",
+    },
+  });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  const savedCandidate = (await saved.json()).candidate;
+  assert.equal(savedCandidate.attendanceMode, "flexible_window");
+  assert.equal(savedCandidate.minimumVisitMinutes, 30);
+  assert.equal(savedCandidate.latitude, 33.7712);
+
+  const approved = await admin(db, "/candidates/cal_candidate_sound_vision/approve", { method:"POST", body:{} });
+  assert.equal(approved.status, 200, await approved.clone().text());
+  const publicResponse = await handleCalendarPublicApi(request("/api/calendar/events"), env(db));
+  const event = (await publicResponse.json()).events.find((item) => item.id === "curated:" + db.prepare("SELECT public_entry_id FROM calendar_candidates WHERE id='cal_candidate_sound_vision'").get().public_entry_id);
+  assert.equal(event.planning.eligible, true);
+  assert.equal(event.planning.attendanceMode, "flexible_window");
+  assert.equal(event.planning.recommendedVisitMinutes, 75);
+  assert.deepEqual(event.planning.ineligibleReasons, []);
+
+  const address = "123 Private Home Street, Atlanta, GA";
+  const invalidPlan = await handleCalendarPublicApi(request("/api/calendar/plan", {
+    method:"POST", body:{ date:"2026-09-12", eventIds:[event.id], start:{ kind:"address", address } },
+  }), env(db, { CALENDAR_PLANNER_RATE_LIMIT_SALT:"test-secret" }));
+  assert.equal(invalidPlan.status, 400);
+  assert.doesNotMatch(JSON.stringify(db.prepare("SELECT * FROM calendar_planner_rate_limits").all()), /Private Home Street/);
+});
+
+test("night planner phase-one contract and Studio controls remain explicit", () => {
+  const contract = readFileSync(join(ROOT,"docs","atlanta-night-planner-api.md"),"utf8");
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const worker = readFileSync(join(ROOT,"_worker.js"),"utf8");
+  assert.match(contract,/POST \/api\/calendar\/plan/);
+  assert.match(contract,/Raw IP addresses, origins, and destinations are not written/);
+  assert.match(studio,/Night planning/);
+  assert.match(studio,/candidateAttendanceMode/);
+  assert.match(studio,/candidatePlanningEligible/);
+  assert.match(worker,/url\.pathname === "\/api\/calendar\/plan"/);
+});
+
+test("night planning defaults off and rejects malformed planning numbers", async () => {
+  const db = database();
+  const candidate = await admin(db, "/candidates/cal_candidate_sound_vision");
+  assert.equal((await candidate.json()).candidate.planningEligible, false);
+
+  const invalidLatitude = await admin(db, "/candidates/cal_candidate_sound_vision", {
+    method:"PATCH", body:{ latitude:91, longitude:-84.4 },
+  });
+  assert.equal(invalidLatitude.status, 400);
+  assert.match((await invalidLatitude.json()).error, /latitude must be between -90 and 90/);
+
+  const invalidDuration = await admin(db, "/candidates/cal_candidate_sound_vision", {
+    method:"PATCH", body:{ minimumVisitMinutes:90, recommendedVisitMinutes:30 },
+  });
+  assert.equal(invalidDuration.status, 400);
+  assert.match((await invalidDuration.json()).error, /cannot be shorter/);
+});
+
+test("reviewed known venues supply reusable coordinates at publication", async () => {
+  const db = database();
+  const venueResponse = await admin(db, "/known-organizations", {
+    method:"POST",
+    body:{
+      name:"LOOP", organizationType:"venue", officialDomains:["loop.example"],
+      venueAddress:"665 Marietta Street NW, Atlanta, GA 30313",
+      latitude:33.7712, longitude:-84.4077, enabled:true,
+    },
+  });
+  assert.equal(venueResponse.status, 201, await venueResponse.clone().text());
+  const venue = (await venueResponse.json()).organization;
+  assert.equal(venue.latitude, 33.7712);
+  assert.ok(venue.coordinatesVerifiedAt);
+
+  const saved = await admin(db, "/candidates/cal_candidate_sound_vision", {
+    method:"PATCH", body:{ planningEligible:true, attendanceMode:"flexible_window", minimumVisitMinutes:30, recommendedVisitMinutes:60 },
+  });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  assert.equal((await saved.json()).candidate.latitude, null);
+
+  const approved = await admin(db, "/candidates/cal_candidate_sound_vision/approve", { method:"POST", body:{} });
+  assert.equal(approved.status, 200, await approved.clone().text());
+  const entry = db.prepare("SELECT latitude,longitude,planning_eligible FROM calendar_entries WHERE candidate_id='cal_candidate_sound_vision'").get();
+  assert.deepEqual({ ...entry }, { latitude:33.7712, longitude:-84.4077, planning_eligible:1 });
+});
+
+test("planner fails closed when its identity-hash salt is absent", async () => {
+  const db = database();
+  const response = await handleCalendarPublicApi(request("/api/calendar/plan", {
+    method:"POST", body:{ date:"2026-09-12", eventIds:["one","two"], start:{ kind:"address", address:"Private" } },
+  }), env(db));
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error:"Night planner is not configured." });
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_planner_rate_limits").get().count, 0);
 });

@@ -7,7 +7,7 @@
   var TICKET_STATUSES = [["unknown","Unknown"],["not_required","No ticket required"],["not_yet_on_sale","Not yet on sale"],["on_sale","On sale"],["sold_out","Sold out"],["registration_open","Registration open"],["registration_closed","Registration closed"]];
   var STATUSES = [["review","Review Queue"],["updates","Updates"],["ready","Ready to Publish"],["published","Published"],["needs_verification","Needs Verification"],["rejected","Rejected"],["cancelled","Cancelled"],["duplicate","Duplicates"]];
   var token = localStorage.getItem(TOKEN_KEY) || "";
-  var state = { candidates:[], sources:[], socialSources:[], connectors:[], knownOrganizations:[], strongPicks:[], profile:null, suggestions:[], runs:[], filter:"review", candidateQuery:"", selectedId:"", draftNew:false, broadDiscoveryEnabled:false, activeCandidate:null, research:null, mediaPreviewUrls:[] };
+  var state = { candidates:[], sources:[], socialSources:[], connectors:[], knownOrganizations:[], strongPicks:[], profile:null, suggestions:[], runs:[], filter:"review", candidateQuery:"", selectedId:"", draftNew:false, broadDiscoveryEnabled:false, activeCandidate:null, research:null, mediaPreviewUrls:[], openSourceKey:"" };
   var tokenInput = document.getElementById("tokenInput");
   var authPanel = document.getElementById("authPanel");
   var app = document.getElementById("studioApp");
@@ -72,7 +72,10 @@
         accessStatus:occurrenceValue("access-status"), accessNotes:occurrenceValue("access-notes"),
         audiences:occurrenceValue("audiences").split(",").map(function (item) { return item.trim(); }).filter(Boolean),
         startsAt:calendarPayloadValue(occurrenceValue("date-kind"),occurrenceValue("starts"),occurrenceValue("timezone")||"America/New_York"), endsAt:calendarPayloadValue(occurrenceValue("date-kind"),occurrenceValue("ends"),occurrenceValue("timezone")||"America/New_York"), timezone:occurrenceValue("timezone")||"America/New_York",
-        venueName:occurrenceValue("venue"), venueAddress:occurrenceValue("address"), sourceUrl:occurrenceValue("source"),
+        venueName:occurrenceValue("venue"), venueAddress:occurrenceValue("address"), attendanceMode:occurrenceValue("attendance-mode"),
+        recommendedArrivalMinutes:Number(occurrenceValue("arrival"))||0, minimumVisitMinutes:occurrenceValue("minimum-visit")===""?null:Number(occurrenceValue("minimum-visit")), recommendedVisitMinutes:occurrenceValue("recommended-visit")===""?null:Number(occurrenceValue("recommended-visit")),
+        lateArrivalAllowed:Boolean(row.querySelector("[data-occurrence-late-arrival]")&&row.querySelector("[data-occurrence-late-arrival]").checked), planningEligible:Boolean(row.querySelector("[data-occurrence-planning-eligible]")&&row.querySelector("[data-occurrence-planning-eligible]").checked),
+        latitude:occurrenceValue("latitude")===""?null:Number(occurrenceValue("latitude")), longitude:occurrenceValue("longitude")===""?null:Number(occurrenceValue("longitude")), planningNotes:occurrenceValue("planning-notes"), sourceUrl:occurrenceValue("source"),
         ticketUrl:occurrenceValue("ticket"), ticketStatus:occurrenceValue("ticket-status"), ticketOnSaleAt:occurrenceValue("ticket-on-sale"), ticketNotes:occurrenceValue("ticket-notes"), status:occurrenceValue("status"), verificationState:occurrenceValue("verification"),
         verificationNotes:occurrenceValue("notes"), sortOrder:index
       };
@@ -88,7 +91,11 @@
       title:value("candidateTitle"), organizer:value("candidateOrganizer"), factualDescription:value("candidateDescription"), eventStructure:value("candidateEventStructure"), dateKind:value("candidateDateKind"),
       accessStatus:value("candidateAccessStatus"), accessNotes:value("candidateAccessNotes"), audiences:value("candidateAudiences").split(",").map(function (item) { return item.trim(); }).filter(Boolean),
       startsAt:calendarPayloadValue(value("candidateDateKind"),value("candidateStartsAt"),value("candidateTimezone")||"America/New_York"), endsAt:calendarPayloadValue(value("candidateDateKind"),value("candidateEndsAt"),value("candidateTimezone")||"America/New_York"), timezone:value("candidateTimezone") || "America/New_York", venueName:value("candidateVenueName"),
-      venueAddress:value("candidateVenueAddress"), city:value("candidateCity") || "Atlanta", region:value("candidateRegion") || "GA", subjects:checked("subjects"), formats:checked("formats"),
+      venueAddress:value("candidateVenueAddress"), attendanceMode:value("candidateAttendanceMode"), recommendedArrivalMinutes:Number(value("candidateArrivalMinutes"))||0,
+      minimumVisitMinutes:value("candidateMinimumVisit")===""?null:Number(value("candidateMinimumVisit")), recommendedVisitMinutes:value("candidateRecommendedVisit")===""?null:Number(value("candidateRecommendedVisit")),
+      lateArrivalAllowed:document.getElementById("candidateLateArrival").checked, planningEligible:document.getElementById("candidatePlanningEligible").checked,
+      latitude:value("candidateLatitude")===""?null:Number(value("candidateLatitude")), longitude:value("candidateLongitude")===""?null:Number(value("candidateLongitude")), planningNotes:value("candidatePlanningNotes"),
+      city:value("candidateCity") || "Atlanta", region:value("candidateRegion") || "GA", subjects:checked("subjects"), formats:checked("formats"),
       experimental:document.getElementById("candidateExperimental").checked, verificationState:value("candidateVerificationState"), verificationNotes:value("candidateVerificationNotes"),
       confidence:value("candidateConfidence") === "" ? null : Number(value("candidateConfidence")), privateRationale:value("candidatePrivateRationale"), attendanceUse:value("candidateAttendanceUse"),
       programmingIdeas:value("candidateProgrammingIdeas"), potentialCollaborators:value("candidateCollaborators"), internalNotes:value("candidateInternalNotes"), rejectionReason:value("candidateRejectionReason"), duplicateOf:value("candidateDuplicateOf"),
@@ -96,7 +103,7 @@
       monitoringEnabled:Boolean(document.getElementById("candidateMonitoringEnabled") && document.getElementById("candidateMonitoringEnabled").checked), monitoringCadenceHours:Number(value("candidateMonitoringCadenceHours")) || 24
     };
   }
-  function blankCandidate() { return { id:"", title:"", status:"needs_verification", scheduleStatus:"scheduled", ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"", verificationState:"needs_verification", sourceAuthority:"unresolved", accessStatus:"unknown", accessNotes:"Attendance eligibility has not been confirmed.", audiences:[], eventStructure:"single", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[], relatedLinks:[], occurrences:[], media:[], monitoringEnabled:false, monitoringCadenceHours:24, lastCheckStatus:"never" }; }
+  function blankCandidate() { return { id:"", title:"", status:"needs_verification", scheduleStatus:"scheduled", ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"", verificationState:"needs_verification", sourceAuthority:"unresolved", accessStatus:"unknown", accessNotes:"Attendance eligibility has not been confirmed.", audiences:[], eventStructure:"single", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[], relatedLinks:[], occurrences:[], media:[], attendanceMode:"inferred", recommendedArrivalMinutes:10, minimumVisitMinutes:null, recommendedVisitMinutes:null, lateArrivalAllowed:false, planningEligible:false, latitude:null, longitude:null, planningNotes:"", flyerPublicApproved:false, monitoringEnabled:false, monitoringCadenceHours:24, lastCheckStatus:"never" }; }
 
   function strongPickWhen(pick) {
     var start=displayDate(pick.startsAt);
@@ -140,6 +147,15 @@
       '<label class="field"><span>Ends (optional)</span><input type="'+(occurrence.dateKind==="all_day"?'date':'datetime-local')+'" data-occurrence-ends value="'+escapeHtml(calendarControlValue(occurrence.dateKind||"timed",occurrence.endsAt))+'"></label>' +
       '<label class="field"><span>Venue override</span><input data-occurrence-venue value="'+escapeHtml(occurrence.venueName||"")+'"></label>' +
       '<label class="field"><span>Address override</span><input data-occurrence-address value="'+escapeHtml(occurrence.venueAddress||"")+'"></label>' +
+      '<label class="field"><span>Attendance mode</span><select data-occurrence-attendance-mode>'+occurrenceOptions([["inferred","Infer from program type"],["fixed_start","Fixed start"],["flexible_window","Flexible window"],["drop_in","Drop in"]],occurrence.attendanceMode||"inferred")+'</select></label>' +
+      '<label class="field"><span>Arrival buffer / minutes</span><input type="number" min="0" max="180" data-occurrence-arrival value="'+escapeHtml(occurrence.recommendedArrivalMinutes==null?10:occurrence.recommendedArrivalMinutes)+'"></label>' +
+      '<label class="field"><span>Minimum visit / minutes</span><input type="number" min="5" max="720" data-occurrence-minimum-visit value="'+escapeHtml(occurrence.minimumVisitMinutes==null?"":occurrence.minimumVisitMinutes)+'"></label>' +
+      '<label class="field"><span>Recommended visit / minutes</span><input type="number" min="5" max="720" data-occurrence-recommended-visit value="'+escapeHtml(occurrence.recommendedVisitMinutes==null?"":occurrence.recommendedVisitMinutes)+'"></label>' +
+      '<label class="field"><span>Latitude</span><input type="number" min="-90" max="90" step="any" data-occurrence-latitude value="'+escapeHtml(occurrence.latitude==null?"":occurrence.latitude)+'"></label>' +
+      '<label class="field"><span>Longitude</span><input type="number" min="-180" max="180" step="any" data-occurrence-longitude value="'+escapeHtml(occurrence.longitude==null?"":occurrence.longitude)+'"></label>' +
+      '<label class="check-option"><input type="checkbox" data-occurrence-planning-eligible'+(occurrence.planningEligible===true?' checked':'')+'><span>Eligible for night planning</span></label>' +
+      '<label class="check-option"><input type="checkbox" data-occurrence-late-arrival'+(occurrence.lateArrivalAllowed?' checked':'')+'><span>Late arrival allowed</span></label>' +
+      '<label class="field is-wide"><span>Public planning note</span><textarea data-occurrence-planning-notes>'+escapeHtml(occurrence.planningNotes||"")+'</textarea></label>' +
       '<label class="field is-wide"><span>Factual description</span><textarea data-occurrence-description>'+escapeHtml(occurrence.factualDescription||"")+'</textarea></label>' +
       '<label class="field"><span>Attendance access</span><select data-occurrence-access-status>'+occurrenceOptions([["public","Open to the public"],["restricted","Restricted audience"],["unknown","Needs access verification"]],occurrence.accessStatus||"unknown")+'</select></label>' +
       '<label class="field"><span>Eligible audiences (comma-separated)</span><input data-occurrence-audiences value="'+escapeHtml((occurrence.audiences||[]).join(", "))+'"></label>' +
@@ -341,6 +357,14 @@
       '<p class="section-guidance is-wide">Restricted access is published on the event card, API, and calendar feeds. Verification notes below remain private.</p>' +
       '</div><p class="field-label">Subjects</p>' + checkboxes("subjects",SUBJECTS,candidate.subjects) + '<p class="field-label">Formats</p>' + checkboxes("formats",FORMATS,candidate.formats) +
       '<label class="check-option"><input id="candidateExperimental" type="checkbox"' + (candidate.experimental ? ' checked' : '') + '><span>Experimental attribute</span></label></div>' +
+      '<div class="editor-section"><h3>Night planning</h3><p class="section-guidance">Review timing behavior and venue coordinates before enabling this listing. Visitor start and end locations are never stored with event records.</p><div class="field-grid">' +
+      field("candidateAttendanceMode","Attendance mode",candidate.attendanceMode||"inferred",{type:"select",choices:[["inferred","Infer from format"],["fixed_start","Fixed start"],["flexible_window","Flexible window"],["drop_in","Drop in"]]}) +
+      field("candidateArrivalMinutes","Arrival buffer / minutes",candidate.recommendedArrivalMinutes==null?10:candidate.recommendedArrivalMinutes,{type:"number"}) +
+      field("candidateMinimumVisit","Minimum visit / minutes",candidate.minimumVisitMinutes,{type:"number"}) + field("candidateRecommendedVisit","Recommended visit / minutes",candidate.recommendedVisitMinutes,{type:"number"}) +
+      field("candidateLatitude","Verified latitude",candidate.latitude,{type:"number",step:"any"}) + field("candidateLongitude","Verified longitude",candidate.longitude,{type:"number",step:"any"}) +
+      field("candidatePlanningNotes","Public planning note",candidate.planningNotes,{type:"textarea",wide:true}) +
+      '<label class="check-option"><input id="candidatePlanningEligible" type="checkbox"'+(candidate.planningEligible===true?' checked':'')+'><span>Eligible for night planning</span></label>' +
+      '<label class="check-option"><input id="candidateLateArrival" type="checkbox"'+(candidate.lateArrivalAllowed?' checked':'')+'><span>Late arrival allowed</span></label></div></div>' +
       occurrenceSection(candidate) +
       '<div class="editor-section"><div class="section-title-row"><h3>Related links</h3><button type="button" data-add-related-link>Add link</button></div><p class="section-guidance">Links remain private unless Include publicly is checked and the event is approved.</p><div class="related-link-list" id="candidateRelatedLinks">' + ((candidate.relatedLinks || []).map(relatedLinkRow).join("") || '<p class="related-links-empty">No related links captured.</p>') + '</div></div>' +
       mediaSection(candidate,isNew) +
@@ -428,24 +452,20 @@
     document.getElementById("deleteCandidateConsequence").textContent=deleteContext.wasPublished
       ? "This immediately removes the event from the public calendar and calendar feeds. Its candidate, revisions, Scout conversation, related schedule, links, and private intelligence will also be permanently deleted."
       : "Its candidate, revisions, Scout conversation, related schedule, links, and private intelligence will be permanently deleted.";
-    var confirmation=document.getElementById("deleteCandidateConfirmation");
-    confirmation.value="";
     document.getElementById("deleteCandidateSuppression").checked=true;
-    document.getElementById("confirmCandidateDelete").disabled=true;
+    document.getElementById("confirmCandidateDelete").disabled=false;
     deleteDialog.showModal();
-    confirmation.focus();
+    document.getElementById("cancelCandidateDelete").focus();
   }
   function closeDeleteDialog(){if(deleteDialog.open)deleteDialog.close();}
   async function submitCandidateDelete(event){
     event.preventDefault();
     if(!deleteContext)return;
-    var confirmation=document.getElementById("deleteCandidateConfirmation");
-    if(confirmation.value.trim()!==deleteContext.title)return;
     var button=document.getElementById("confirmCandidateDelete");
     button.disabled=true;
     try{
       var context=deleteContext;
-      var result=await api("/api/admin/calendar/candidates/"+encodeURIComponent(context.id),{method:"DELETE",body:JSON.stringify({confirmationTitle:confirmation.value.trim(),preventRediscovery:document.getElementById("deleteCandidateSuppression").checked})});
+      var result=await api("/api/admin/calendar/candidates/"+encodeURIComponent(context.id),{method:"DELETE",body:JSON.stringify({preventRediscovery:document.getElementById("deleteCandidateSuppression").checked})});
       closeDeleteDialog();
       var message=result.removedPublicEntry?"Entry permanently deleted from Studio, the public calendar, and calendar feeds.":"Candidate permanently deleted from Studio.";
       if(result.suppressionCreated)message+=" The Scout will not re-add this exact event.";
@@ -480,8 +500,10 @@
   }
 
   function renderSources() {
-    document.getElementById("sourceList").innerHTML = state.sources.map(function (source) {
-      return '<article class="source-card" data-source-id="' + escapeHtml(source.id) + '">' +
+    document.getElementById("sourceList").innerHTML = state.sources.length ? state.sources.map(function (source) {
+      var sourceKey="registry:"+source.id;
+      return '<details class="source-card source-disclosure" name="calendar-source-details" data-source-key="' + escapeHtml(sourceKey) + '" data-source-id="' + escapeHtml(source.id) + '"' + (state.openSourceKey===sourceKey?' open':'') + '>' +
+        '<summary class="source-summary"><strong>' + escapeHtml(source.name) + '</strong></summary><div class="source-card-details">' +
         field("sourceName-"+source.id,"Name",source.name) +
         '<div class="source-url-field">' + field("sourceUrl-"+source.id,"URL",source.url,{type:"url"}) + externalLink(source.url,"Open source") + '</div>' +
         field("sourceCadence-"+source.id,"Cadence hours",source.cadenceHours,{type:"number"}) +
@@ -493,8 +515,8 @@
         '<label class="field"><span>Trust</span><select id="sourceTrust-' + source.id + '">' + [["official","Official"],["trusted","Trusted"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.trustLevel===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
         '<p class="section-guidance is-wide-mobile">' + (source.sourceType === "discovery" || source.trustLevel === "discovery" ? 'Lead source: the scout must search past each listing to an original organizer, venue, or authorized ticket page.' : 'Direct source: cite this organization only when its own event page confirms the facts.') + '</p>' +
         '<div class="source-actions"><button type="button" data-save-source>Save</button><button type="button" data-run-source>Run This Source</button></div>' +
-        '<p class="source-meta is-wide-mobile">Last attempt: ' + escapeHtml(displayDate(source.lastAttemptAt)) + '<br>Last success: ' + escapeHtml(displayDate(source.lastSuccessAt)) + '<br>Acceptance: ' + (source.acceptanceRate === null ? 'No decisions yet' : Math.round(source.acceptanceRate*100)+'%') + (source.lastError ? '<br>Error: '+escapeHtml(source.lastError) : '') + '</p></article>';
-    }).join("");
+        '<p class="source-meta is-wide-mobile">Last attempt: ' + escapeHtml(displayDate(source.lastAttemptAt)) + '<br>Last success: ' + escapeHtml(displayDate(source.lastSuccessAt)) + '<br>Acceptance: ' + (source.acceptanceRate === null ? 'No decisions yet' : Math.round(source.acceptanceRate*100)+'%') + (source.lastError ? '<br>Error: '+escapeHtml(source.lastError) : '') + '</p></div></details>';
+    }).join("") : '<p class="empty-state">No registry sources yet. Use the form above to add the first source.</p>';
   }
 
   function sourcePayload(id) {
@@ -507,6 +529,67 @@
     };
   }
 
+  function setSourceFormStatus(id,message,tone) {
+    var root=document.getElementById(id);
+    root.textContent=message||"";
+    root.classList.toggle("is-error",tone==="error");
+    root.classList.toggle("is-success",tone==="success");
+  }
+  function sourceFormUrl(raw) {
+    var url;
+    try { url=new URL(String(raw||"").trim()); } catch(error) { throw new Error("Enter a complete public URL beginning with http:// or https://."); }
+    if(!["http:","https:"].includes(url.protocol))throw new Error("The source URL must begin with http:// or https://.");
+    return url.href;
+  }
+  async function createRegistrySource(event) {
+    event.preventDefault();
+    var form=event.currentTarget;
+    var button=form.querySelector('button[type="submit"]');
+    var name=value("newSourceName");
+    var url;
+    if(!name){setSourceFormStatus("sourceCreateStatus","Enter the source name.","error");document.getElementById("newSourceName").focus();return;}
+    try{url=sourceFormUrl(value("newSourceUrl"));}catch(error){setSourceFormStatus("sourceCreateStatus",error.message,"error");document.getElementById("newSourceUrl").focus();return;}
+    var discovery=value("newSourceRole")!=="direct";
+    button.disabled=true;
+    setSourceFormStatus("sourceCreateStatus","Adding source…","");
+    try{
+      var payload=await api("/api/admin/calendar/sources",{method:"POST",body:JSON.stringify({name:name,url:url,sourceType:discovery?"discovery":"official_html",trustLevel:discovery?"discovery":"official",enabled:true,cadenceHours:24,adapterKey:"automatic",renderMode:"static",adapterConfig:{}})});
+      state.sources.push(payload.source);
+      state.sources.sort(function(a,b){return a.name.localeCompare(b.name);});
+      state.openSourceKey="registry:"+payload.source.id;
+      renderSources();
+      form.reset();
+      setSourceFormStatus("sourceCreateStatus",discovery?"Source added as a discovery lead. Its editable details are open below.":"Direct source added. Its editable details are open below.","success");
+      var source=document.querySelector('[data-source-id="'+payload.source.id+'"]');
+      if(source)source.scrollIntoView({behavior:"smooth",block:"nearest"});
+    }catch(error){setSourceFormStatus("sourceCreateStatus",error.message,"error");}
+    finally{button.disabled=false;}
+  }
+  async function createSocialSource(event) {
+    event.preventDefault();
+    var form=event.currentTarget;
+    var button=form.querySelector('button[type="submit"]');
+    var platform=value("newSocialSourcePlatform");
+    var handle=value("newSocialSourceHandle").replace(/^@+/,"");
+    var url;
+    if(!handle){setSourceFormStatus("socialSourceCreateStatus","Enter the public account handle.","error");document.getElementById("newSocialSourceHandle").focus();return;}
+    try{url=sourceFormUrl(value("newSocialSourceUrl"));}catch(error){setSourceFormStatus("socialSourceCreateStatus",error.message,"error");document.getElementById("newSocialSourceUrl").focus();return;}
+    button.disabled=true;
+    setSourceFormStatus("socialSourceCreateStatus","Adding social account…","");
+    try{
+      var payload=await api("/api/admin/calendar/social-sources",{method:"POST",body:JSON.stringify({name:value("newSocialSourceName"),platform:platform,handle:handle,profileUrl:url,trustLevel:value("newSocialSourceTrust"),enabled:false})});
+      state.socialSources.push(payload.socialSource);
+      state.socialSources.sort(function(a,b){return (a.name||a.handle).localeCompare(b.name||b.handle);});
+      state.openSourceKey="social:"+payload.socialSource.id;
+      renderSocialSources();
+      form.reset();
+      setSourceFormStatus("socialSourceCreateStatus","Social account added in a paused state. Its editable details are open below.","success");
+      var source=document.querySelector('[data-social-source-id="'+payload.socialSource.id+'"]');
+      if(source)source.scrollIntoView({behavior:"smooth",block:"nearest"});
+    }catch(error){setSourceFormStatus("socialSourceCreateStatus",error.message,"error");}
+    finally{button.disabled=false;}
+  }
+
   async function refreshSources() {
     var payload=await api("/api/admin/calendar/sources");
     state.sources=payload.sources||[];
@@ -515,7 +598,9 @@
   function renderSocialSources() {
     document.getElementById("socialSourceList").innerHTML = state.socialSources.length ? state.socialSources.map(function (source) {
       var id=source.id;
-      return '<article class="social-source-card" data-social-source-id="' + escapeHtml(id) + '">' +
+      var sourceKey="social:"+id;
+      return '<details class="social-source-card source-disclosure" name="calendar-source-details" data-source-key="' + escapeHtml(sourceKey) + '" data-social-source-id="' + escapeHtml(id) + '"' + (state.openSourceKey===sourceKey?' open':'') + '>' +
+        '<summary class="source-summary"><strong>' + escapeHtml(source.name||"@"+source.handle) + '</strong></summary><div class="source-card-details social-source-card-details">' +
         field("socialName-"+id,"Name",source.name) +
         '<label class="field"><span>Platform</span><select id="socialPlatform-' + id + '">' + [["threads","Threads"],["instagram","Instagram"],["tiktok","TikTok"]].map(function(option){return '<option value="'+option[0]+'"'+(source.platform===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
         field("socialHandle-"+id,"Handle",source.handle) +
@@ -523,7 +608,7 @@
         '<label class="field"><span>Trust</span><select id="socialTrust-' + id + '">' + [["official","Official"],["trusted","Trusted"],["discovery","Discovery"]].map(function(option){return '<option value="'+option[0]+'"'+(source.trustLevel===option[0]?' selected':'')+'>'+option[1]+'</option>';}).join('') + '</select></label>' +
         '<label class="field"><span>Enabled</span><select id="socialEnabled-' + id + '"><option value="1"'+(source.enabled?' selected':'')+'>Enabled</option><option value="0"'+(!source.enabled?' selected':'')+'>Paused</option></select></label>' +
         field("socialCadence-"+id,"Cadence hours",source.cadenceHours,{type:"number"}) + '<button type="button" data-save-social-source>Save</button>' +
-        '<p class="source-meta is-wide-mobile">Last success: ' + escapeHtml(displayDate(source.lastSuccessAt)) + '<br>Acceptance: ' + (source.acceptanceRate===null?'No decisions yet':Math.round(source.acceptanceRate*100)+'%') + (source.lastError?'<br>Error: '+escapeHtml(source.lastError):'') + '</p></article>';
+        '<p class="source-meta is-wide-mobile">Last success: ' + escapeHtml(displayDate(source.lastSuccessAt)) + '<br>Acceptance: ' + (source.acceptanceRate===null?'No decisions yet':Math.round(source.acceptanceRate*100)+'%') + (source.lastError?'<br>Error: '+escapeHtml(source.lastError):'') + '</p></div></details>';
     }).join('') : '<p class="empty-state">No social accounts registered. New accounts remain paused until you enable them.</p>';
   }
   function connectorLabel(id) { return ({direct:"Official sources",general_web:"General web search",threads_api:"Threads API",instagram_api:"Instagram API",threads_web:"Threads web search",instagram_web:"Instagram web search",tiktok_web:"TikTok web search"})[id] || id; }
@@ -554,7 +639,9 @@
         field("knownName-"+id,"Name",organization.name) + field("knownType-"+id,"Role",organization.organizationType,{type:"select",choices:[["both","Organizer + venue"],["organizer","Organizer"],["venue","Venue"]]}) +
         field("knownAliases-"+id,"Aliases",commaList(organization.aliases),{wide:true}) + field("knownOfficialDomains-"+id,"Official domains",commaList(organization.officialDomains),{wide:true}) +
         field("knownEventPaths-"+id,"Event path prefixes",commaList(organization.eventPaths),{wide:true}) + field("knownTicketDomains-"+id,"Trusted ticket domains",commaList(organization.trustedTicketDomains),{wide:true}) +
-        field("knownDiscoveryDomains-"+id,"Discovery-only domains",commaList(organization.discoveryOnlyDomains),{wide:true}) + field("knownNotes-"+id,"Private notes",organization.notes,{type:"textarea",wide:true}) +
+        field("knownDiscoveryDomains-"+id,"Discovery-only domains",commaList(organization.discoveryOnlyDomains),{wide:true}) +
+        field("knownVenueAddress-"+id,"Reviewed venue address",organization.venueAddress,{wide:true}) + field("knownLatitude-"+id,"Verified latitude",organization.latitude,{type:"number",step:"any"}) + field("knownLongitude-"+id,"Verified longitude",organization.longitude,{type:"number",step:"any"}) +
+        field("knownCoordinatesVerifiedAt-"+id,"Coordinates verified at",organization.coordinatesVerifiedAt,{wide:true}) + field("knownNotes-"+id,"Private notes",organization.notes,{type:"textarea",wide:true}) +
         field("knownEnabled-"+id,"Status",organization.enabled?"1":"0",{type:"select",choices:[["1","Enabled"],["0","Paused"]]}) +
         '<div class="known-organization-actions"><button type="button" data-save-known-organization>Save Organization</button><button type="button" data-delete-known-organization>Remove</button></div></article>';
     }).join('') : '<p class="empty-state">No organization records yet. Registered direct sources still provide limited domain context; add recurring organizers and venues here for stronger matching.</p>';
@@ -582,7 +669,6 @@
   }
 
   document.getElementById("connectButton").addEventListener("click",connect); tokenInput.addEventListener("keydown",function(event){if(event.key==="Enter")connect();});
-  document.getElementById("deleteCandidateConfirmation").addEventListener("input",function(){document.getElementById("confirmCandidateDelete").disabled=!deleteContext||this.value.trim()!==deleteContext.title;});
   document.getElementById("cancelCandidateDelete").addEventListener("click",closeDeleteDialog);
   deleteForm.addEventListener("submit",submitCandidateDelete);
   deleteDialog.addEventListener("click",function(event){if(event.target===deleteDialog)closeDeleteDialog();});
@@ -616,6 +702,18 @@
   editorRoot.addEventListener("submit",function(event){var form=event.target.closest("[data-research-form]");if(!form)return;event.preventDefault();var input=document.getElementById("candidateResearchMessage");var message=input.value.trim();if(!message)return;var button=form.querySelector("button[type=submit]");button.disabled=true;button.textContent="Researching…";api("/api/admin/calendar/candidates/"+encodeURIComponent(state.selectedId)+"/research/messages",{method:"POST",body:JSON.stringify({message:message})}).then(function(result){result.research.broadDiscoveryEnabled=true;renderResearch(result.research);toast("Research complete. Review the sourced proposal.");}).catch(function(error){toast(error.message);button.disabled=false;button.textContent="Research this event";});});
   document.getElementById("newCandidate").addEventListener("click",function(){state.selectedId="";state.draftNew=true;renderCandidateList();renderEditor(blankCandidate());});
   document.getElementById("linkIntakeForm").addEventListener("submit",scoutPastedLink);
+  document.querySelector('[data-panel="sources"]').addEventListener("click",function(event){
+    var summary=event.target.closest(".source-summary");
+    if(!summary)return;
+    var disclosure=summary.closest(".source-disclosure");
+    if(!disclosure)return;
+    if(!disclosure.open){
+      document.querySelectorAll(".source-disclosure[open]").forEach(function(other){if(other!==disclosure)other.open=false;});
+      state.openSourceKey=disclosure.dataset.sourceKey||"";
+    }else if(state.openSourceKey===disclosure.dataset.sourceKey){state.openSourceKey="";}
+  });
+  document.getElementById("sourceCreateForm").addEventListener("submit",createRegistrySource);
+  document.getElementById("socialSourceCreateForm").addEventListener("submit",createSocialSource);
   document.getElementById("sourceList").addEventListener("click",async function(event){
     var button=event.target.closest("[data-save-source],[data-run-source]");
     if(!button)return;
@@ -631,12 +729,10 @@
       await Promise.all([refreshCandidates(),refreshSources(),loadRuns(),loadStrongPicks()]);
     }catch(error){toast(error.message);}finally{button.disabled=false;}
   });
-  document.getElementById("addSource").addEventListener("click",async function(){var url=window.prompt("Scoutable source URL");if(!url)return;var name=window.prompt("Source name")||new URL(url).hostname;var kind=(window.prompt("Source kind: direct or discovery","discovery")||"discovery").trim().toLowerCase();var discovery=kind!=="direct";try{var payload=await api("/api/admin/calendar/sources",{method:"POST",body:JSON.stringify({name:name,url:url,sourceType:discovery?"discovery":"official_html",trustLevel:discovery?"discovery":"official"})});state.sources.push(payload.source);renderSources();var card=document.querySelector('[data-source-id="'+payload.source.id+'"]');if(card)card.scrollIntoView({behavior:"smooth",block:"center"});toast(discovery?"Lead source added. Its events must resolve to original sources.":"Direct source added. Use Run This Source when ready.");}catch(error){toast(error.message);}});
   document.getElementById("socialSourceList").addEventListener("click",async function(event){var button=event.target.closest("[data-save-social-source]");if(!button)return;var card=button.closest("[data-social-source-id]");var id=card.dataset.socialSourceId;try{var payload=await api("/api/admin/calendar/social-sources/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({name:value("socialName-"+id),platform:value("socialPlatform-"+id),handle:value("socialHandle-"+id),profileUrl:value("socialProfileUrl-"+id),trustLevel:value("socialTrust-"+id),enabled:value("socialEnabled-"+id)==="1",cadenceHours:Number(value("socialCadence-"+id))})});var index=state.socialSources.findIndex(function(item){return item.id===id;});if(index>=0)state.socialSources[index]=payload.socialSource;renderSocialSources();toast("Social account saved.");}catch(error){toast(error.message);}});
-  document.getElementById("addSocialSource").addEventListener("click",async function(){var platform=(window.prompt("Platform: threads, instagram, or tiktok")||"").trim().toLowerCase();if(!platform)return;var handle=(window.prompt("Public handle without @")||"").trim();if(!handle)return;var profileUrl=window.prompt("Public profile URL");if(!profileUrl)return;var trust=(window.prompt("Trust: official, trusted, or discovery","trusted")||"trusted").trim().toLowerCase();try{var payload=await api("/api/admin/calendar/social-sources",{method:"POST",body:JSON.stringify({platform:platform,handle:handle,profileUrl:profileUrl,trustLevel:trust,enabled:false})});state.socialSources.push(payload.socialSource);renderSocialSources();toast("Social account added in a paused state.");}catch(error){toast(error.message);}});
   document.getElementById("connectorList").addEventListener("click",async function(event){var card=event.target.closest("[data-connector-id]");if(!card)return;var id=card.dataset.connectorId;if(event.target.closest("[data-save-connector]")){try{var payload=await api("/api/admin/calendar/connectors/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({enabled:value("connectorEnabled-"+id)==="1",cadenceHours:Number(value("connectorCadence-"+id)),perRunLimit:Number(value("connectorLimit-"+id))})});var index=state.connectors.findIndex(function(item){return item.id===id;});if(index>=0)state.connectors[index]=payload.connector;renderConnectors();toast("Connector saved.");}catch(error){toast(error.message);}return;}if(event.target.closest("[data-run-connector]")){var button=event.target.closest("[data-run-connector]");button.disabled=true;toast(connectorLabel(id)+" started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:JSON.stringify({channels:[id]})});toast(connectorLabel(id)+": "+(result.strongPicks||0)+" strong picks, "+result.candidates+" candidates, "+(result.suppressed||0)+" suppressed, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns(),loadStrongPicks()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{button.disabled=false;}}});
   document.getElementById("profileForm").addEventListener("submit",async function(event){event.preventDefault();try{var payload=await api("/api/admin/calendar/profile",{method:"PATCH",body:JSON.stringify({scoutBrief:value("profileScoutBrief"),sourceResolutionRules:value("profileSourceResolutionRules"),sourceResolutionPasses:Number(value("profileSourceResolutionPasses")),name:value("profileName"),model:value("profileModel"),weightedSubjects:JSON.parse(value("profileSubjects")),weightedFormats:JSON.parse(value("profileFormats")),positiveConcepts:parseComma(value("profilePositive")),negativeTerms:parseComma(value("profileNegative")),geographicRules:JSON.parse(value("profileGeography")),socialSettings:JSON.parse(value("profileSocialSettings")),dateHorizonDays:Number(value("profileHorizon")),relevanceThreshold:Number(value("profileThreshold")),duplicateSensitivity:Number(value("profileDuplicate")),perRunLimit:Number(value("profileLimit")),sourceCadenceHours:Number(value("profileSourceCadence")),webCadenceHours:Number(value("profileWebCadence"))})});state.profile=payload.profile;renderProfile();toast("Scout profile saved.");}catch(error){toast(error.message);}});
-  document.getElementById("knownOrganizationList").addEventListener("click",async function(event){var card=event.target.closest("[data-known-organization-id]");if(!card)return;var id=card.dataset.knownOrganizationId;if(event.target.closest("[data-save-known-organization]")){try{var payload=await api("/api/admin/calendar/known-organizations/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({name:value("knownName-"+id),organizationType:value("knownType-"+id),aliases:parseComma(value("knownAliases-"+id)),officialDomains:parseComma(value("knownOfficialDomains-"+id)),eventPaths:parseComma(value("knownEventPaths-"+id)),trustedTicketDomains:parseComma(value("knownTicketDomains-"+id)),discoveryOnlyDomains:parseComma(value("knownDiscoveryDomains-"+id)),notes:value("knownNotes-"+id),enabled:value("knownEnabled-"+id)==="1"})});var index=state.knownOrganizations.findIndex(function(item){return item.id===id;});if(index>=0)state.knownOrganizations[index]=payload.organization;renderKnownOrganizations();toast("Known organization saved.");}catch(error){toast(error.message);}return;}if(event.target.closest("[data-delete-known-organization]")){if(!window.confirm("Remove this known organization from Scout source memory?"))return;try{await api("/api/admin/calendar/known-organizations/"+encodeURIComponent(id),{method:"DELETE"});state.knownOrganizations=state.knownOrganizations.filter(function(item){return item.id!==id;});renderKnownOrganizations();toast("Known organization removed.");}catch(error){toast(error.message);}}});
+  document.getElementById("knownOrganizationList").addEventListener("click",async function(event){var card=event.target.closest("[data-known-organization-id]");if(!card)return;var id=card.dataset.knownOrganizationId;if(event.target.closest("[data-save-known-organization]")){try{var payload=await api("/api/admin/calendar/known-organizations/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify({name:value("knownName-"+id),organizationType:value("knownType-"+id),aliases:parseComma(value("knownAliases-"+id)),officialDomains:parseComma(value("knownOfficialDomains-"+id)),eventPaths:parseComma(value("knownEventPaths-"+id)),trustedTicketDomains:parseComma(value("knownTicketDomains-"+id)),discoveryOnlyDomains:parseComma(value("knownDiscoveryDomains-"+id)),venueAddress:value("knownVenueAddress-"+id),latitude:value("knownLatitude-"+id)===""?null:Number(value("knownLatitude-"+id)),longitude:value("knownLongitude-"+id)===""?null:Number(value("knownLongitude-"+id)),coordinatesVerifiedAt:value("knownCoordinatesVerifiedAt-"+id),notes:value("knownNotes-"+id),enabled:value("knownEnabled-"+id)==="1"})});var index=state.knownOrganizations.findIndex(function(item){return item.id===id;});if(index>=0)state.knownOrganizations[index]=payload.organization;renderKnownOrganizations();toast("Known organization saved.");}catch(error){toast(error.message);}return;}if(event.target.closest("[data-delete-known-organization]")){if(!window.confirm("Remove this known organization from Scout source memory?"))return;try{await api("/api/admin/calendar/known-organizations/"+encodeURIComponent(id),{method:"DELETE"});state.knownOrganizations=state.knownOrganizations.filter(function(item){return item.id!==id;});renderKnownOrganizations();toast("Known organization removed.");}catch(error){toast(error.message);}}});
   document.getElementById("addKnownOrganization").addEventListener("click",async function(){var name=(window.prompt("Organizer or venue name")||"").trim();if(!name)return;var domain=(window.prompt("Official domain, for example gallery.org")||"").trim();if(!domain)return;try{var payload=await api("/api/admin/calendar/known-organizations",{method:"POST",body:JSON.stringify({name:name,organizationType:"both",officialDomains:[domain],enabled:true})});state.knownOrganizations.push(payload.organization);state.knownOrganizations.sort(function(a,b){return a.name.localeCompare(b.name);});renderKnownOrganizations();var card=document.querySelector('[data-known-organization-id="'+payload.organization.id+'"]');if(card)card.scrollIntoView({behavior:"smooth",block:"center"});toast("Known organization added. Add aliases, event paths, and ticket domains when useful.");}catch(error){toast(error.message);}});
   document.getElementById("runScout").addEventListener("click",async function(){this.disabled=true;toast("Enabled scout lanes started.");try{var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:"{}"});toast("Scout finished: "+(result.strongPicks||0)+" strong picks, "+(result.materialUpdates||0)+" material updates, "+result.candidates+" candidates, "+(result.suppressed||0)+" suppressed, "+result.failures+" failures.");await Promise.all([refreshCandidates(),loadRuns(),loadStrongPicks()]);var connectors=await api("/api/admin/calendar/connectors");state.connectors=connectors.connectors||[];renderConnectors();}catch(error){toast(error.message);}finally{this.disabled=false;}});
   document.getElementById("refreshRuns").addEventListener("click",loadRuns);

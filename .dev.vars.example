@@ -50,6 +50,9 @@ SQUARE_EVENTS_LOCATION_ID=replace-with-your-events-square-location-id
 SQUARE_EVENTS_WEBHOOK_NOTIFICATION_URL=https://thesixwellconstruct.com/api/square-events/webhook
 SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY=replace-with-your-events-square-webhook-signature-key
 STUDIO_CALENDAR_LOCATION=364 Nelson Street SW, Atlanta, GA 30313
+# Required before /api/calendar/plan accepts requests. Use a long random value;
+# it salts short-lived network-identity hashes and is never sent to browsers.
+CALENDAR_PLANNER_RATE_LIMIT_SALT=replace-with-a-long-random-calendar-planner-salt
 STUDIO_CONTACT_PHONE=(770) 820-5800
 ZOOM_ACCOUNT_ID=replace-with-your-zoom-account-id
 ZOOM_CLIENT_ID=replace-with-your-zoom-client-id

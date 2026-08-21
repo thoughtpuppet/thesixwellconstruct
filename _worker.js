@@ -1504,7 +1504,7 @@ export default {
       return handleCalendarAdminApi(request, env);
     }
 
-    if (url.pathname === "/api/calendar/events" || url.pathname.startsWith("/api/calendar/events/")) {
+    if (url.pathname === "/api/calendar/events" || url.pathname.startsWith("/api/calendar/events/") || url.pathname === "/api/calendar/plan") {
       return handleCalendarPublicApi(request, env);
     }
 

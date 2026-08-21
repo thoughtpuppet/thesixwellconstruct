@@ -8,6 +8,7 @@ const OCCURRENCE_STATUSES = new Set(["scheduled", "tbd", "cancelled"]);
 const ACCESS_STATUSES = new Set(["public", "restricted", "unknown"]);
 const SCHEDULE_STATUSES = new Set(["scheduled", "postponed", "rescheduled", "cancelled", "moved_online"]);
 const TICKET_STATUSES = new Set(["unknown", "not_required", "not_yet_on_sale", "on_sale", "sold_out", "registration_open", "registration_closed"]);
+const ATTENDANCE_MODES = new Set(["inferred", "fixed_start", "flexible_window", "drop_in"]);
 const SOURCE_CHECK_STATUSES = new Set(["never", "unchanged", "changes_detected", "source_unavailable", "needs_verification"]);
 const SOURCE_AUTHORITIES = new Set(["organizer_event", "venue_event", "official_calendar", "authorized_ticket_host", "unresolved"]);
 const LINK_ROLES = new Set(["organizer", "venue", "ticket", "artist", "supporting", "discovery"]);
@@ -342,6 +343,16 @@ function isInstagramProfileUrl(value) {
   return !new Set(["p", "reel", "reels", "stories", "explore", "accounts", "direct", "tv"]).has(parts[0].toLowerCase());
 }
 
+const INSTAGRAM_EVENT_RELIABILITY_NOTE = "Instagram is private discovery provenance only. Confirm this event on an event-specific organizer, venue, or ticket-host page before publication.";
+const INSTAGRAM_OCCURRENCE_RELIABILITY_NOTE = "Instagram is private discovery provenance only. Confirm this occurrence on an event-specific official organizer, venue, or ticket-host page before publication.";
+const SOURCE_RESOLUTION_REQUIRED_NOTE = "Resolve the discovery lead to an original organizer, venue, official calendar, or authorized ticket-host page before publication.";
+const SECONDARY_SOURCE_REQUIRED_NOTE = "The public source cannot be the same secondary source that supplied the lead.";
+
+function withoutAutomatedVerificationNotes(value, notes) {
+  const blocked = new Set((Array.isArray(notes) ? notes : [notes]).map(asString));
+  return asString(value).split(/\r?\n/).filter((line) => line.trim() && !blocked.has(line.trim())).join("\n");
+}
+
 function identityEvidenceUrl(proposal, role) {
   const direct = role === "organizer" ? asString(proposal.organizerUrl) : asString(proposal.venueUrl);
   if (validHttpUrl(direct)) return direct;
@@ -364,10 +375,10 @@ function sourceAuthorityErrors(proposal, { allowVerifiedInstagramSource = false 
   const organizerEvidence = identityEvidenceUrl(proposal, "organizer");
   const venueEvidence = identityEvidenceUrl(proposal, "venue");
   const documentedIdentity = documentedStudioIdentityConfirmation(proposal);
-  if (authority === "unresolved" && !verifiedInstagram) errors.push("Resolve the discovery lead to an original organizer, venue, official calendar, or authorized ticket-host page before publication.");
+  if (authority === "unresolved" && !verifiedInstagram) errors.push(SOURCE_RESOLUTION_REQUIRED_NOTE);
   if (discoveryUrl && !validHttpUrl(discoveryUrl)) errors.push("Discovery URL must use http or https.");
   if (discoveryUrl && sameSourceHost(discoveryUrl, proposal.sourceUrl) && authority !== "authorized_ticket_host" && !verifiedInstagram && !pastedConfirmation) {
-    errors.push("The public source cannot be the same secondary source that supplied the lead.");
+    errors.push(SECONDARY_SOURCE_REQUIRED_NOTE);
   }
   if (proposal.organizerUrl && !validHttpUrl(proposal.organizerUrl)) errors.push("Organizer identity URL must use http or https.");
   if (proposal.venueUrl && !validHttpUrl(proposal.venueUrl)) errors.push("Venue identity URL must use http or https.");
@@ -430,7 +441,7 @@ function applySourceReliabilityPolicy(proposal, current = {}, { allowVerifiedIns
   const hasInstagramSource = isInstagramUrl(proposal.sourceUrl);
   const verifiedInstagram = allowVerifiedInstagramSource && hasInstagramSource && proposal.verificationState === "verified";
   const notes = hasInstagramSource
-    ? "Instagram is private discovery provenance only. Confirm this event on an event-specific organizer, venue, or ticket-host page before publication."
+    ? INSTAGRAM_EVENT_RELIABILITY_NOTE
     : `${sourcePlatform || "Social"} discovery requires an exact registered official handle or an event-specific organizer, venue, or ticket-host page before publication.`;
   const requiresCorroboration = Boolean(sourcePlatform && !officialSocialEvidence && !verifiedInstagram);
   return applySourceAuthorityPolicy({
@@ -440,9 +451,11 @@ function applySourceReliabilityPolicy(proposal, current = {}, { allowVerifiedIns
     ticketUrl: isInstagramUrl(proposal.ticketUrl) ? "" : proposal.ticketUrl,
     relatedLinks,
     verificationState: requiresCorroboration ? "needs_verification" : proposal.verificationState,
-    verificationNotes: requiresCorroboration && !proposal.verificationNotes.includes(notes)
-      ? [proposal.verificationNotes, notes].filter(Boolean).join("\n")
-      : proposal.verificationNotes,
+    verificationNotes: verifiedInstagram
+      ? withoutAutomatedVerificationNotes(proposal.verificationNotes, [INSTAGRAM_EVENT_RELIABILITY_NOTE, SOURCE_RESOLUTION_REQUIRED_NOTE, SECONDARY_SOURCE_REQUIRED_NOTE])
+      : requiresCorroboration && !proposal.verificationNotes.includes(notes)
+        ? [proposal.verificationNotes, notes].filter(Boolean).join("\n")
+        : proposal.verificationNotes,
   }, { allowVerifiedInstagramSource });
 }
 
@@ -467,6 +480,49 @@ function validTimeZone(value) {
 
 function isoNow(now = new Date()) {
   return now.toISOString();
+}
+
+function optionalNumber(value, minimum, maximum) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= minimum && number <= maximum ? number : null;
+}
+
+function planningDetails(value = {}, fallback = {}) {
+  const read = (camel, snake, defaultValue) => value[camel] ?? value[snake] ?? fallback[camel] ?? fallback[snake] ?? defaultValue;
+  const requestedMode = asString(read("attendanceMode", "attendance_mode", "inferred"));
+  return {
+    attendanceMode: ATTENDANCE_MODES.has(requestedMode) ? requestedMode : "inferred",
+    recommendedArrivalMinutes: optionalNumber(read("recommendedArrivalMinutes", "recommended_arrival_minutes", 10), 0, 180) ?? 10,
+    minimumVisitMinutes: optionalNumber(read("minimumVisitMinutes", "minimum_visit_minutes", null), 5, 720),
+    recommendedVisitMinutes: optionalNumber(read("recommendedVisitMinutes", "recommended_visit_minutes", null), 5, 720),
+    lateArrivalAllowed: Boolean(read("lateArrivalAllowed", "late_arrival_allowed", false)),
+    planningEligible: Boolean(read("planningEligible", "planning_eligible", false)),
+    latitude: optionalNumber(read("latitude", "latitude", null), -90, 90),
+    longitude: optionalNumber(read("longitude", "longitude", null), -180, 180),
+    planningNotes: asString(read("planningNotes", "planning_notes", "")),
+  };
+}
+
+function planningInputErrors(value = {}, label = "Planning") {
+  const errors = [];
+  const numberField = (name, minimum, maximum, display) => {
+    if (value[name] === null || value[name] === undefined || value[name] === "") return null;
+    const number = Number(value[name]);
+    if (!Number.isFinite(number) || number < minimum || number > maximum) errors.push(`${label} ${display} must be between ${minimum} and ${maximum}.`);
+    return Number.isFinite(number) ? number : null;
+  };
+  if (value.attendanceMode !== undefined && !ATTENDANCE_MODES.has(asString(value.attendanceMode))) errors.push(`${label} attendance mode is invalid.`);
+  numberField("recommendedArrivalMinutes", 0, 180, "arrival buffer");
+  const minimumVisit = numberField("minimumVisitMinutes", 5, 720, "minimum visit time");
+  const recommendedVisit = numberField("recommendedVisitMinutes", 5, 720, "recommended visit time");
+  const latitude = numberField("latitude", -90, 90, "latitude");
+  const longitude = numberField("longitude", -180, 180, "longitude");
+  if ((value.latitude === null || value.latitude === undefined || value.latitude === "") !== (value.longitude === null || value.longitude === undefined || value.longitude === "")) {
+    errors.push(`${label} coordinates require both latitude and longitude.`);
+  }
+  if (minimumVisit !== null && recommendedVisit !== null && recommendedVisit < minimumVisit) errors.push(`${label} recommended visit time cannot be shorter than its minimum visit time.`);
+  return errors;
 }
 
 function normalizeCandidate(row) {
@@ -503,6 +559,7 @@ function normalizeCandidate(row) {
     timezone: row.timezone || TIME_ZONE,
     venueName: row.venue_name || "",
     venueAddress: row.venue_address || "",
+    ...planningDetails(row),
     city: row.city || "Atlanta",
     region: row.region || "GA",
     subjects: uniqueStrings(row.subjects_json, SUBJECTS),
@@ -594,6 +651,7 @@ function normalizeOccurrence(row) {
     timezone: row.timezone || TIME_ZONE,
     venueName: row.venue_name || row.venueName || "",
     venueAddress: row.venue_address || row.venueAddress || "",
+    ...planningDetails(row),
     sourceUrl: row.source_url || row.sourceUrl || "",
     ticketUrl: row.ticket_url || row.ticketUrl || "",
     ...ticketDetails(
@@ -620,8 +678,9 @@ function normalizeOccurrenceProposal(item, parent = {}, index = 0, { allowVerifi
   const instagramSource = isInstagramUrl(sourceUrl);
   const verificationState = ["verified", "unverified", "needs_verification"].includes(asString(value.verificationState))
     ? asString(value.verificationState) : "unverified";
-  const verifiedInstagram = allowVerifiedInstagramSource && instagramSource && verificationState === "verified";
-  const reliabilityNote = "Instagram is private discovery provenance only. Confirm this occurrence on an event-specific official organizer, venue, or ticket-host page before publication.";
+  const parentStudioVerified = allowVerifiedInstagramSource && parent.verificationState === "verified";
+  const verifiedInstagram = allowVerifiedInstagramSource && instagramSource && (verificationState === "verified" || parentStudioVerified);
+  const reliabilityNote = INSTAGRAM_OCCURRENCE_RELIABILITY_NOTE;
   const access = accessDetails(value.accessStatus, value.accessNotes, value.audiences, parent);
   return {
     id: asString(value.id),
@@ -636,14 +695,17 @@ function normalizeOccurrenceProposal(item, parent = {}, index = 0, { allowVerifi
     timezone: asString(value.timezone) || parent.timezone || TIME_ZONE,
     venueName: asString(value.venueName),
     venueAddress: asString(value.venueAddress),
+    ...planningDetails(value, parent),
     sourceUrl,
     ticketUrl,
     ...ticketDetails(value.ticketStatus, value.ticketOnSaleAt, value.ticketNotes, parent),
     status,
-    verificationState: instagramSource && !verifiedInstagram ? "needs_verification" : verificationState,
-    verificationNotes: instagramSource && !verifiedInstagram && !asString(value.verificationNotes).includes(reliabilityNote)
-      ? [asString(value.verificationNotes), reliabilityNote].filter(Boolean).join("\n")
-      : asString(value.verificationNotes),
+    verificationState: verifiedInstagram ? "verified" : instagramSource ? "needs_verification" : verificationState,
+    verificationNotes: verifiedInstagram
+      ? withoutAutomatedVerificationNotes(value.verificationNotes, reliabilityNote)
+      : instagramSource && !asString(value.verificationNotes).includes(reliabilityNote)
+        ? [asString(value.verificationNotes), reliabilityNote].filter(Boolean).join("\n")
+        : asString(value.verificationNotes),
     sortOrder: Number.isFinite(Number(value.sortOrder)) ? Number(value.sortOrder) : index,
   };
 }
@@ -750,6 +812,10 @@ function normalizeKnownOrganization(row) {
     eventPaths: normalizePathList(row.event_paths_json),
     trustedTicketDomains: normalizeDomainList(row.trusted_ticket_domains_json),
     discoveryOnlyDomains: normalizeDomainList(row.discovery_only_domains_json),
+    venueAddress: row.venue_address || "",
+    latitude: optionalNumber(row.latitude, -90, 90),
+    longitude: optionalNumber(row.longitude, -180, 180),
+    coordinatesVerifiedAt: row.coordinates_verified_at || null,
     notes: row.notes || "",
     enabled: row.enabled === 1,
     createdAt: row.created_at,
@@ -1229,6 +1295,24 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
   const requestedStructure = asString(value("eventStructure", inferredStructure));
   const eventStructure = EVENT_STRUCTURES.has(requestedStructure) ? requestedStructure : "single";
   const access = accessDetails(value("accessStatus", "public"), value("accessNotes"), value("audiences", ["Public"]), current);
+  const planningInput = {
+    attendanceMode: value("attendanceMode", "inferred"),
+    recommendedArrivalMinutes: value("recommendedArrivalMinutes", 10),
+    minimumVisitMinutes: value("minimumVisitMinutes", null),
+    recommendedVisitMinutes: value("recommendedVisitMinutes", null),
+    lateArrivalAllowed: value("lateArrivalAllowed", false),
+    planningEligible: value("planningEligible", false),
+    latitude: value("latitude", null),
+    longitude: value("longitude", null),
+    planningNotes: value("planningNotes", ""),
+  };
+  const planningErrors = planningInputErrors(planningInput);
+  if (planningErrors.length) throw new Error(planningErrors.join(" "));
+  const occurrenceInputs = Array.isArray(value("occurrences", [])) ? value("occurrences", []) : [];
+  for (const [index, occurrence] of occurrenceInputs.entries()) {
+    const errors = planningInputErrors({ ...occurrence, latitude:occurrence.latitude ?? planningInput.latitude, longitude:occurrence.longitude ?? planningInput.longitude }, `Related program ${index + 1}`);
+    if (errors.length) throw new Error(errors.join(" "));
+  }
   return applySourceReliabilityPolicy({
     sourceId: asString(value("sourceId")),
     sourceEventId: asString(value("sourceEventId")),
@@ -1259,6 +1343,7 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
     timezone: asString(value("timezone", TIME_ZONE)) || TIME_ZONE,
     venueName: asString(value("venueName")),
     venueAddress: asString(value("venueAddress")),
+    ...planningDetails(planningInput, current),
     city: asString(value("city", "Atlanta")) || "Atlanta",
     region: asString(value("region", "GA")) || "GA",
     subjects,
@@ -1277,9 +1362,10 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
     monitoringCadenceHours: Math.min(Math.max(Number(value("monitoringCadenceHours", 24)) || 24, 1), 720),
     discoveryChannel: asString(value("discoveryChannel")),
     socialEvidence: Array.isArray(value("socialEvidence", [])) ? value("socialEvidence", []) : [],
-    occurrences: (Array.isArray(value("occurrences", [])) ? value("occurrences", []) : [])
+    occurrences: occurrenceInputs
       .map((item, index) => normalizeOccurrenceProposal(item, {
         timezone: asString(value("timezone", TIME_ZONE)) || TIME_ZONE,
+        verificationState: asString(value("verificationState")),
         ...access,
       }, index, { allowVerifiedInstagramSource })),
   }, current, { allowVerifiedInstagramSource });
@@ -1309,6 +1395,11 @@ function publicationErrors(proposal) {
   if (!validTimeZone(proposal.timezone)) errors.push("A valid IANA time zone is required.");
   if (!proposal.venueName) errors.push(virtual ? "A confirmed virtual venue label is required." : "A confirmed venue name is required.");
   else if (!virtual && !proposal.venueAddress && !seriesUsesOccurrenceVenues) errors.push("A confirmed venue address is required.");
+  if ((proposal.latitude === null) !== (proposal.longitude === null)) errors.push("Planning coordinates require both latitude and longitude.");
+  if (proposal.planningEligible && !virtual && (proposal.latitude === null || proposal.longitude === null)) errors.push("Night-planning eligibility requires reviewed venue coordinates.");
+  if (proposal.minimumVisitMinutes && proposal.recommendedVisitMinutes && proposal.recommendedVisitMinutes < proposal.minimumVisitMinutes) {
+    errors.push("Recommended visit time cannot be shorter than the minimum visit time.");
+  }
   if (!geographicMatch(proposal)) errors.push("The event must be located in the Atlanta metro area.");
   if (!proposal.sourceUrl || !validHttpUrl(proposal.sourceUrl)) errors.push("A valid official source URL is required.");
   const sourcePlatform = socialPlatformFromUrl(proposal.sourceUrl);
@@ -1355,6 +1446,11 @@ function occurrencePublicationErrors(occurrence, parent) {
   const virtual = onlineOnlyEvent({ venueName, venueAddress });
   if (!venueName) errors.push(virtual ? `${label} requires a confirmed virtual venue label.` : `${label} requires a confirmed venue name.`);
   else if (!virtual && !venueAddress) errors.push(`${label} requires a confirmed venue address.`);
+  if ((occurrence.latitude === null) !== (occurrence.longitude === null)) errors.push(`${label} planning coordinates require both latitude and longitude.`);
+  if (occurrence.planningEligible && !virtual && (occurrence.latitude === null || occurrence.longitude === null)) errors.push(`${label} night-planning eligibility requires reviewed venue coordinates.`);
+  if (occurrence.minimumVisitMinutes && occurrence.recommendedVisitMinutes && occurrence.recommendedVisitMinutes < occurrence.minimumVisitMinutes) {
+    errors.push(`${label} recommended visit time cannot be shorter than its minimum visit time.`);
+  }
   const sourceUrl = occurrence.sourceUrl || parent.sourceUrl;
   const verifiedInstagram = isInstagramUrl(sourceUrl) && occurrence.verificationState === "verified";
   if (!validHttpUrl(sourceUrl) || (socialPlatformFromUrl(sourceUrl) && !verifiedInstagram)) errors.push(`${label} requires an event-specific official organizer, venue, ticket-host, or manually verified Instagram URL.`);
@@ -1368,9 +1464,9 @@ function occurrencePublicationErrors(occurrence, parent) {
   return errors;
 }
 
-async function syncCandidateOccurrences(db, candidateId, values, parent) {
+async function syncCandidateOccurrences(db, candidateId, values, parent, { allowVerifiedInstagramSource = false } = {}) {
   const occurrences = (Array.isArray(values) ? values : []).slice(0, 50)
-    .map((item, index) => normalizeOccurrenceProposal(item, parent, index));
+    .map((item, index) => normalizeOccurrenceProposal(item, parent, index, { allowVerifiedInstagramSource }));
   let currentRows;
   try {
     currentRows = await db.prepare(
@@ -1389,14 +1485,19 @@ async function syncCandidateOccurrences(db, candidateId, values, parent) {
     return db.prepare(
       `INSERT INTO calendar_candidate_occurrences
         (id,candidate_id,source_event_id,occurrence_type,title,factual_description,access_status,access_notes,audiences_json,date_kind,starts_at,ends_at,
-         timezone,venue_name,venue_address,source_url,ticket_url,ticket_status,ticket_on_sale_at,ticket_notes,status,verification_state,verification_notes,
+         timezone,venue_name,venue_address,attendance_mode,recommended_arrival_minutes,minimum_visit_minutes,recommended_visit_minutes,
+         late_arrival_allowed,planning_eligible,latitude,longitude,planning_notes,source_url,ticket_url,ticket_status,ticket_on_sale_at,ticket_notes,status,verification_state,verification_notes,
          sort_order,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(id) DO UPDATE SET source_event_id=excluded.source_event_id,
           occurrence_type=excluded.occurrence_type,title=excluded.title,factual_description=excluded.factual_description,
           access_status=excluded.access_status,access_notes=excluded.access_notes,audiences_json=excluded.audiences_json,
           date_kind=excluded.date_kind,starts_at=excluded.starts_at,ends_at=excluded.ends_at,
          timezone=excluded.timezone,venue_name=excluded.venue_name,venue_address=excluded.venue_address,
+         attendance_mode=excluded.attendance_mode,recommended_arrival_minutes=excluded.recommended_arrival_minutes,
+         minimum_visit_minutes=excluded.minimum_visit_minutes,recommended_visit_minutes=excluded.recommended_visit_minutes,
+         late_arrival_allowed=excluded.late_arrival_allowed,planning_eligible=excluded.planning_eligible,
+         latitude=excluded.latitude,longitude=excluded.longitude,planning_notes=excluded.planning_notes,
          source_url=excluded.source_url,ticket_url=excluded.ticket_url,ticket_status=excluded.ticket_status,
          ticket_on_sale_at=excluded.ticket_on_sale_at,ticket_notes=excluded.ticket_notes,status=excluded.status,
          verification_state=excluded.verification_state,verification_notes=excluded.verification_notes,
@@ -1405,8 +1506,10 @@ async function syncCandidateOccurrences(db, candidateId, values, parent) {
       id, candidateId, occurrence.sourceEventId, occurrence.occurrenceType, occurrence.title,
       occurrence.factualDescription, occurrence.accessStatus, occurrence.accessNotes, JSON.stringify(occurrence.audiences),
       occurrence.dateKind, occurrence.startsAt, occurrence.endsAt,
-      occurrence.timezone, occurrence.venueName, occurrence.venueAddress, occurrence.sourceUrl,
-      occurrence.ticketUrl, occurrence.ticketStatus, occurrence.ticketOnSaleAt, occurrence.ticketNotes,
+      occurrence.timezone, occurrence.venueName, occurrence.venueAddress,
+      occurrence.attendanceMode, occurrence.recommendedArrivalMinutes, occurrence.minimumVisitMinutes, occurrence.recommendedVisitMinutes,
+      occurrence.lateArrivalAllowed ? 1 : 0, occurrence.planningEligible ? 1 : 0, occurrence.latitude, occurrence.longitude, occurrence.planningNotes,
+      occurrence.sourceUrl, occurrence.ticketUrl, occurrence.ticketStatus, occurrence.ticketOnSaleAt, occurrence.ticketNotes,
       occurrence.status, occurrence.verificationState, occurrence.verificationNotes,
       Number.isFinite(occurrence.sortOrder) ? occurrence.sortOrder : index, now, now,
     );
@@ -1635,9 +1738,9 @@ async function appendRevision(db, candidateId, snapshot, provenance, changeSumma
   return id;
 }
 
-async function createCandidate(env, body, discoveredBy = "manual", provenance = [], { restoreSuppression = false } = {}) {
+async function createCandidate(env, body, discoveredBy = "manual", provenance = [], { restoreSuppression = false, allowVerifiedInstagramSource = false } = {}) {
   const db = requireDb(env);
-  const proposal = proposalFromBody(body);
+  const proposal = proposalFromBody(body, {}, { allowVerifiedInstagramSource });
   if (!proposal.title && proposal.sourceUrl) {
     try { proposal.title = `Review event from ${new URL(proposal.sourceUrl).hostname.replace(/^www\./, "")}`; } catch { /* validated below */ }
   }
@@ -1651,16 +1754,19 @@ async function createCandidate(env, body, discoveredBy = "manual", provenance = 
   await db.prepare(
     `INSERT INTO calendar_candidates
       (id,source_id,source_event_id,source_url,ticket_url,schedule_status,ticket_status,ticket_on_sale_at,ticket_notes,discovery_url,organizer_url,venue_url,source_authority,source_resolution_notes,title,organizer,factual_description,event_structure,access_status,access_notes,audiences_json,date_kind,
-       starts_at,ends_at,timezone,venue_name,venue_address,city,region,subjects_json,formats_json,is_experimental,
+       starts_at,ends_at,timezone,venue_name,venue_address,attendance_mode,recommended_arrival_minutes,minimum_visit_minutes,recommended_visit_minutes,late_arrival_allowed,planning_eligible,latitude,longitude,planning_notes,city,region,subjects_json,formats_json,is_experimental,
        status,verification_state,verification_notes,confidence,duplicate_of,discovered_by,discovery_channel,first_seen_at,last_verified_at,created_at,updated_at,monitoring_enabled,monitoring_cadence_hours,next_check_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(
     id, proposal.sourceId || null, proposal.sourceEventId, proposal.sourceUrl, proposal.ticketUrl,
     proposal.scheduleStatus, proposal.ticketStatus, proposal.ticketOnSaleAt, proposal.ticketNotes,
     proposal.discoveryUrl, proposal.organizerUrl, proposal.venueUrl, proposal.sourceAuthority, proposal.sourceResolutionNotes, proposal.title,
     proposal.organizer, proposal.factualDescription, proposal.eventStructure, proposal.accessStatus, proposal.accessNotes, JSON.stringify(proposal.audiences),
     proposal.dateKind, proposal.startsAt, proposal.endsAt,
-    proposal.timezone, proposal.venueName, proposal.venueAddress, proposal.city, proposal.region,
+    proposal.timezone, proposal.venueName, proposal.venueAddress,
+    proposal.attendanceMode, proposal.recommendedArrivalMinutes, proposal.minimumVisitMinutes, proposal.recommendedVisitMinutes,
+    proposal.lateArrivalAllowed ? 1 : 0, proposal.planningEligible ? 1 : 0, proposal.latitude, proposal.longitude, proposal.planningNotes,
+    proposal.city, proposal.region,
     JSON.stringify(proposal.subjects), JSON.stringify(proposal.formats), proposal.experimental ? 1 : 0,
     status, proposal.verificationState, proposal.verificationNotes, proposal.confidence,
     duplicate?.id || "", discoveredBy, proposal.discoveryChannel, now, proposal.verificationState === "verified" ? now : null, now, now,
@@ -1674,7 +1780,7 @@ async function createCandidate(env, body, discoveredBy = "manual", provenance = 
   ).bind(id, proposal.privateRationale, proposal.attendanceUse, proposal.programmingIdeas, proposal.potentialCollaborators, proposal.internalNotes, now).run();
   await syncCandidateLinks(db, id, proposal.relatedLinks, proposal.sourceUrl);
   await syncSocialEvidence(db, id, proposal.socialEvidence);
-  await syncCandidateOccurrences(db, id, proposal.occurrences, proposal);
+  await syncCandidateOccurrences(db, id, proposal.occurrences, proposal, { allowVerifiedInstagramSource });
   if (proposal.flyerMediaId) await saveCandidateFlyer(db, id, proposal);
   if (proposal.flyerUrl && proposal.flyerProvenanceUrl) {
     try {
@@ -1702,7 +1808,7 @@ async function saveCandidate(env, id, body, { appendChangeRevision = true, allow
   await db.prepare(
       `UPDATE calendar_candidates SET
        source_id=?,source_event_id=?,source_url=?,ticket_url=?,schedule_status=?,ticket_status=?,ticket_on_sale_at=?,ticket_notes=?,discovery_url=?,organizer_url=?,venue_url=?,source_authority=?,source_resolution_notes=?,title=?,organizer=?,factual_description=?,event_structure=?,access_status=?,access_notes=?,audiences_json=?,date_kind=?,
-       starts_at=?,ends_at=?,timezone=?,venue_name=?,venue_address=?,city=?,region=?,subjects_json=?,formats_json=?,
+       starts_at=?,ends_at=?,timezone=?,venue_name=?,venue_address=?,attendance_mode=?,recommended_arrival_minutes=?,minimum_visit_minutes=?,recommended_visit_minutes=?,late_arrival_allowed=?,planning_eligible=?,latitude=?,longitude=?,planning_notes=?,city=?,region=?,subjects_json=?,formats_json=?,
        is_experimental=?,status=?,verification_state=?,verification_notes=?,confidence=?,duplicate_of=?,discovery_channel=?,last_verified_at=?,updated_at=?,monitoring_enabled=?,monitoring_cadence_hours=?,next_check_at=?
      WHERE id=?`
   ).bind(
@@ -1711,7 +1817,10 @@ async function saveCandidate(env, id, body, { appendChangeRevision = true, allow
     proposal.discoveryUrl, proposal.organizerUrl, proposal.venueUrl, proposal.sourceAuthority, proposal.sourceResolutionNotes, proposal.title,
     proposal.organizer, proposal.factualDescription, proposal.eventStructure, proposal.accessStatus, proposal.accessNotes, JSON.stringify(proposal.audiences),
     proposal.dateKind, proposal.startsAt, proposal.endsAt,
-    proposal.timezone, proposal.venueName, proposal.venueAddress, proposal.city, proposal.region,
+    proposal.timezone, proposal.venueName, proposal.venueAddress,
+    proposal.attendanceMode, proposal.recommendedArrivalMinutes, proposal.minimumVisitMinutes, proposal.recommendedVisitMinutes,
+    proposal.lateArrivalAllowed ? 1 : 0, proposal.planningEligible ? 1 : 0, proposal.latitude, proposal.longitude, proposal.planningNotes,
+    proposal.city, proposal.region,
     JSON.stringify(proposal.subjects), JSON.stringify(proposal.formats), proposal.experimental ? 1 : 0, status,
     proposal.verificationState, proposal.verificationNotes, proposal.confidence,
     body.duplicateOf !== undefined ? asString(body.duplicateOf) : current.duplicateOf, proposal.discoveryChannel,
@@ -1733,7 +1842,7 @@ async function saveCandidate(env, id, body, { appendChangeRevision = true, allow
   ).bind(id, proposal.privateRationale, proposal.attendanceUse, proposal.programmingIdeas, proposal.potentialCollaborators, proposal.internalNotes, now).run();
   await syncCandidateLinks(db, id, proposal.relatedLinks, proposal.sourceUrl);
   await syncSocialEvidence(db, id, proposal.socialEvidence);
-  await syncCandidateOccurrences(db, id, proposal.occurrences, proposal);
+  await syncCandidateOccurrences(db, id, proposal.occurrences, proposal, { allowVerifiedInstagramSource: allowVerifiedInstagramSource || preserveVerifiedInstagram });
   await saveCandidateFlyer(db, id, proposal);
   if (Array.isArray(body.media)) await syncCandidateMedia(db, id, body.media);
   const before = JSON.stringify(candidateSnapshot(current));
@@ -1768,12 +1877,16 @@ async function syncEntryOccurrences(db, entryId, candidate, now) {
       await db.prepare(
         `UPDATE calendar_entry_occurrences SET sequence=?,status=?,occurrence_type=?,title=?,
          factual_description=?,access_status=?,access_notes=?,audiences_json=?,date_kind=?,starts_at=?,ends_at=?,timezone=?,venue_name=?,venue_address=?,
+         attendance_mode=?,recommended_arrival_minutes=?,minimum_visit_minutes=?,recommended_visit_minutes=?,late_arrival_allowed=?,planning_eligible=?,latitude=?,longitude=?,planning_notes=?,
          source_url=?,ticket_url=?,ticket_status=?,ticket_on_sale_at=?,ticket_notes=?,last_modified_at=?,last_verified_at=? WHERE id=?`
       ).bind(
         Number(existing.sequence) + 1, status, occurrence.occurrenceType, title,
         occurrence.factualDescription, access.accessStatus, access.accessNotes, JSON.stringify(access.audiences),
         occurrence.dateKind, occurrence.startsAt, occurrence.endsAt,
-        occurrence.timezone || candidate.timezone, venueName, venueAddress, sourceUrl, ticketUrl,
+        occurrence.timezone || candidate.timezone, venueName, venueAddress,
+        occurrence.attendanceMode, occurrence.recommendedArrivalMinutes, occurrence.minimumVisitMinutes, occurrence.recommendedVisitMinutes,
+        occurrence.lateArrivalAllowed ? 1 : 0, occurrence.planningEligible ? 1 : 0, occurrence.latitude, occurrence.longitude, occurrence.planningNotes,
+        sourceUrl, ticketUrl,
         occurrence.ticketStatus, occurrence.ticketOnSaleAt, occurrence.ticketNotes,
         now, occurrence.verificationState === "verified" ? now : null, id,
       ).run();
@@ -1782,13 +1895,20 @@ async function syncEntryOccurrences(db, entryId, candidate, now) {
         `INSERT INTO calendar_entry_occurrences
           (id,entry_id,candidate_occurrence_id,uid,sequence,status,occurrence_type,title,
            factual_description,access_status,access_notes,audiences_json,date_kind,starts_at,ends_at,timezone,venue_name,venue_address,
+           attendance_mode,recommended_arrival_minutes,minimum_visit_minutes,recommended_visit_minutes,late_arrival_allowed,planning_eligible,latitude,longitude,planning_notes,
            source_url,ticket_url,ticket_status,ticket_on_sale_at,ticket_notes,published_at,last_modified_at,last_verified_at)
-         VALUES (?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         VALUES (?,?,?,?,0,
+          ?,?,?,?,?,?,?,?,?,?,
+          ?,?,?,?,?,?,?,?,?,?,
+          ?,?,?,?,?,?,?,?,?,?)`
       ).bind(
         id, entryId, occurrence.id, `${id}@${PUBLIC_HOST}`, status, occurrence.occurrenceType, title,
         occurrence.factualDescription, access.accessStatus, access.accessNotes, JSON.stringify(access.audiences),
         occurrence.dateKind, occurrence.startsAt, occurrence.endsAt,
-        occurrence.timezone || candidate.timezone, venueName, venueAddress, sourceUrl, ticketUrl,
+        occurrence.timezone || candidate.timezone, venueName, venueAddress,
+        occurrence.attendanceMode, occurrence.recommendedArrivalMinutes, occurrence.minimumVisitMinutes, occurrence.recommendedVisitMinutes,
+        occurrence.lateArrivalAllowed ? 1 : 0, occurrence.planningEligible ? 1 : 0, occurrence.latitude, occurrence.longitude, occurrence.planningNotes,
+        sourceUrl, ticketUrl,
         occurrence.ticketStatus, occurrence.ticketOnSaleAt, occurrence.ticketNotes,
         now, now, occurrence.verificationState === "verified" ? now : null,
       ).run();
@@ -1828,8 +1948,40 @@ async function syncEntryMedia(db, entryId, candidate, now) {
   ).bind(now,item.mediaId)));
 }
 
+async function applyReviewedVenueCoordinates(db, candidate) {
+  if (!candidate) return null;
+  const organizations = await listKnownOrganizations(db, true);
+  const venueKey = normalizeText(candidate.venueName);
+  const findVenue = (name) => {
+    const key = normalizeText(name);
+    if (!key) return null;
+    return organizations.find((organization) => {
+      if (!["venue", "both"].includes(organization.organizationType) || !organization.coordinatesVerifiedAt) return false;
+      return [organization.name, ...(organization.aliases || [])].some((value) => normalizeText(value) === key);
+    }) || null;
+  };
+  const parentVenue = findVenue(venueKey);
+  if ((candidate.latitude === null || candidate.longitude === null) && parentVenue) {
+    candidate.latitude = parentVenue.latitude;
+    candidate.longitude = parentVenue.longitude;
+    if (!candidate.venueAddress && parentVenue.venueAddress) candidate.venueAddress = parentVenue.venueAddress;
+  }
+  candidate.occurrences = (candidate.occurrences || []).map((occurrence) => {
+    if (occurrence.latitude !== null && occurrence.longitude !== null) return occurrence;
+    const venue = findVenue(occurrence.venueName || candidate.venueName) || parentVenue;
+    if (!venue) return occurrence;
+    return {
+      ...occurrence,
+      latitude: venue.latitude,
+      longitude: venue.longitude,
+      venueAddress: occurrence.venueAddress || venue.venueAddress || candidate.venueAddress,
+    };
+  });
+  return candidate;
+}
+
 async function approveCandidate(db, id) {
-  const candidate = await getCandidate(db, id);
+  const candidate = await applyReviewedVenueCoordinates(db, await getCandidate(db, id));
   if (!candidate) return { error: "Candidate not found.", status: 404 };
   const errors = publicationErrors(candidate);
   for (const occurrence of candidate.occurrences || []) {
@@ -1854,7 +2006,7 @@ async function approveCandidate(db, id) {
   if (existing) {
     await db.prepare(
       `UPDATE calendar_entries SET sequence=?,status='published',source_url=?,ticket_url=?,schedule_status=?,ticket_status=?,ticket_on_sale_at=?,ticket_notes=?,organizer_url=?,venue_url=?,source_authority=?,title=?,organizer=?,
-       factual_description=?,event_structure=?,access_status=?,access_notes=?,audiences_json=?,date_kind=?,starts_at=?,ends_at=?,timezone=?,venue_name=?,venue_address=?,city=?,region=?,
+       factual_description=?,event_structure=?,access_status=?,access_notes=?,audiences_json=?,date_kind=?,starts_at=?,ends_at=?,timezone=?,venue_name=?,venue_address=?,attendance_mode=?,recommended_arrival_minutes=?,minimum_visit_minutes=?,recommended_visit_minutes=?,late_arrival_allowed=?,planning_eligible=?,latitude=?,longitude=?,planning_notes=?,city=?,region=?,
        subjects_json=?,formats_json=?,is_experimental=?,flyer_media_id=?,flyer_alt_text=?,last_modified_at=?,last_verified_at=? WHERE id=?`
     ).bind(
       Number(existing.sequence) + 1, candidate.sourceUrl, candidate.ticketUrl, candidate.scheduleStatus,
@@ -1862,7 +2014,10 @@ async function approveCandidate(db, id) {
       candidate.organizerUrl, candidate.venueUrl, candidate.sourceAuthority, candidate.title, candidate.organizer,
       candidate.factualDescription, candidate.eventStructure, candidate.accessStatus, candidate.accessNotes, JSON.stringify(candidate.audiences),
       candidate.dateKind, candidate.startsAt, candidate.endsAt, candidate.timezone,
-      candidate.venueName, candidate.venueAddress, candidate.city, candidate.region, JSON.stringify(candidate.subjects),
+      candidate.venueName, candidate.venueAddress,
+      candidate.attendanceMode, candidate.recommendedArrivalMinutes, candidate.minimumVisitMinutes, candidate.recommendedVisitMinutes,
+      candidate.lateArrivalAllowed ? 1 : 0, candidate.planningEligible ? 1 : 0, candidate.latitude, candidate.longitude, candidate.planningNotes,
+      candidate.city, candidate.region, JSON.stringify(candidate.subjects),
       JSON.stringify(candidate.formats), candidate.experimental ? 1 : 0,
       candidate.flyerPublicApproved ? candidate.flyerMediaId || null : null,
       candidate.flyerPublicApproved ? candidate.flyerAltText || "" : "", now, candidate.lastVerifiedAt, entryId
@@ -1871,16 +2026,24 @@ async function approveCandidate(db, id) {
     await db.prepare(
       `INSERT INTO calendar_entries
        (id,candidate_id,uid,sequence,status,source_url,ticket_url,schedule_status,ticket_status,ticket_on_sale_at,ticket_notes,organizer_url,venue_url,source_authority,title,organizer,factual_description,event_structure,date_kind,
-         access_status,access_notes,audiences_json,starts_at,ends_at,timezone,venue_name,venue_address,city,region,subjects_json,formats_json,is_experimental,
+         access_status,access_notes,audiences_json,starts_at,ends_at,timezone,venue_name,venue_address,attendance_mode,recommended_arrival_minutes,minimum_visit_minutes,recommended_visit_minutes,late_arrival_allowed,planning_eligible,latitude,longitude,planning_notes,city,region,subjects_json,formats_json,is_experimental,
          flyer_media_id,flyer_alt_text,published_at,last_modified_at,last_verified_at)
-        VALUES (?,?,?,0,'published',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        VALUES (?,?,?,0,'published',
+          ?,?,?,?,?,?,?,?,?,?,
+          ?,?,?,?,?,?,?,?,?,?,
+          ?,?,?,?,?,?,?,?,?,?,
+          ?,?,?,?,?,?,?,?,?,?,
+          ?)`
     ).bind(
       entryId, id, uid, candidate.sourceUrl, candidate.ticketUrl, candidate.scheduleStatus,
       candidate.ticketStatus, candidate.ticketOnSaleAt, candidate.ticketNotes,
       candidate.organizerUrl, candidate.venueUrl, candidate.sourceAuthority, candidate.title, candidate.organizer,
       candidate.factualDescription, candidate.eventStructure, candidate.dateKind, candidate.accessStatus, candidate.accessNotes, JSON.stringify(candidate.audiences),
       candidate.startsAt, candidate.endsAt, candidate.timezone,
-      candidate.venueName, candidate.venueAddress, candidate.city, candidate.region, JSON.stringify(candidate.subjects),
+      candidate.venueName, candidate.venueAddress,
+      candidate.attendanceMode, candidate.recommendedArrivalMinutes, candidate.minimumVisitMinutes, candidate.recommendedVisitMinutes,
+      candidate.lateArrivalAllowed ? 1 : 0, candidate.planningEligible ? 1 : 0, candidate.latitude, candidate.longitude, candidate.planningNotes,
+      candidate.city, candidate.region, JSON.stringify(candidate.subjects),
       JSON.stringify(candidate.formats), candidate.experimental ? 1 : 0,
       candidate.flyerPublicApproved ? candidate.flyerMediaId || null : null,
       candidate.flyerPublicApproved ? candidate.flyerAltText || "" : "", now, now, candidate.lastVerifiedAt
@@ -1985,9 +2148,6 @@ async function deleteCandidate(env, id, body) {
   if (typeof body.preventRediscovery !== "boolean") {
     return { error: "Choose whether the Scout should be prevented from re-adding this event.", status: 400 };
   }
-  if (asString(body.confirmationTitle) !== asString(candidate.title)) {
-    return { error: "Type the event title exactly to confirm permanent deletion.", status: 409 };
-  }
   const publicEntry = await db.prepare(
     "SELECT id FROM calendar_entries WHERE candidate_id=? LIMIT 1"
   ).bind(id).first();
@@ -2084,6 +2244,36 @@ function publicCalendarMedia(row) {
   };
 }
 
+function inferredAttendanceMode(formats = [], occurrenceType = "") {
+  if (["opening_reception", "mixer"].includes(occurrenceType)) return "flexible_window";
+  if (["screening", "performance", "workshop", "panel", "lecture", "artist_talk"].includes(occurrenceType)) return "fixed_start";
+  if (formats.some((format) => ["screening", "performance", "lecture-talk", "panel", "workshop", "conference"].includes(format))) return "fixed_start";
+  return formats.includes("exhibition") ? "flexible_window" : "fixed_start";
+}
+
+function publicPlanningDetails(row, { formats = [], occurrenceType = "", virtual = false, status = "scheduled", dateKind = "timed" } = {}) {
+  const details = planningDetails(row);
+  const reasons = [];
+  if (!details.planningEligible) reasons.push("disabled");
+  if (virtual) reasons.push("virtual");
+  if (status !== "scheduled" && status !== "published") reasons.push("schedule_unavailable");
+  if (dateKind !== "timed") reasons.push("not_timed");
+  if (!asString(row.venue_address)) reasons.push("missing_address");
+  if (details.latitude === null || details.longitude === null) reasons.push("missing_coordinates");
+  return {
+    eligible: reasons.length === 0,
+    ineligibleReasons: reasons,
+    attendanceMode: details.attendanceMode === "inferred" ? inferredAttendanceMode(formats, occurrenceType) : details.attendanceMode,
+    recommendedArrivalMinutes: details.recommendedArrivalMinutes,
+    minimumVisitMinutes: details.minimumVisitMinutes,
+    recommendedVisitMinutes: details.recommendedVisitMinutes,
+    lateArrivalAllowed: details.lateArrivalAllowed,
+    latitude: details.latitude,
+    longitude: details.longitude,
+    notes: details.planningNotes,
+  };
+}
+
 function curatedPublicView(row, relatedLinks = [], media = []) {
   const flyerEligible = Boolean(
     row.flyer_media_id
@@ -2094,6 +2284,8 @@ function curatedPublicView(row, relatedLinks = [], media = []) {
     && FLYER_MIME_TYPES.has(asString(row.flyer_mime_type).toLowerCase())
   );
   const access = accessDetails(row.access_status, row.access_notes, row.audiences_json);
+  const formats = uniqueStrings(row.formats_json, FORMATS);
+  const virtual = onlineOnlyEvent({ venueName: row.venue_name, venueAddress: row.venue_address });
   return {
     id: `curated:${row.id}`,
     seriesId: `curated:${row.id}`,
@@ -2117,11 +2309,12 @@ function curatedPublicView(row, relatedLinks = [], media = []) {
     timezone: row.timezone || TIME_ZONE,
     venueName: row.venue_name || "",
     venueAddress: row.venue_address || "",
-    virtual: onlineOnlyEvent({ venueName: row.venue_name, venueAddress: row.venue_address }),
+    virtual,
     city: row.city || "Atlanta",
     region: row.region || "GA",
     subjects: uniqueStrings(row.subjects_json, SUBJECTS),
-    formats: uniqueStrings(row.formats_json, FORMATS),
+    formats,
+    planning: publicPlanningDetails(row, { formats, virtual, status: scheduleStatus(row.schedule_status), dateKind: row.date_kind }),
     experimental: row.is_experimental === 1,
     status: row.status,
     scheduleStatus: scheduleStatus(row.schedule_status),
@@ -2163,6 +2356,8 @@ function curatedOccurrencePublicView(row, parent) {
   const venueName = row.venue_name || parent.venueName;
   const venueAddress = row.venue_address || parent.venueAddress;
   const access = accessDetails(row.access_status, row.access_notes, row.audiences_json, parent);
+  const formats = formatsForOccurrence(parent.formats, row.occurrence_type);
+  const virtual = onlineOnlyEvent({ venueName, venueAddress });
   return {
     id: `curated-occurrence:${row.id}`,
     seriesId: parent.seriesId,
@@ -2188,11 +2383,12 @@ function curatedOccurrencePublicView(row, parent) {
     timezone: row.timezone || parent.timezone || TIME_ZONE,
     venueName,
     venueAddress,
-    virtual: onlineOnlyEvent({ venueName, venueAddress }),
+    virtual,
     city: parent.city,
     region: parent.region,
     subjects: parent.subjects,
-    formats: formatsForOccurrence(parent.formats, row.occurrence_type),
+    formats,
+    planning: publicPlanningDetails({ ...row, venue_address: venueAddress }, { formats, occurrenceType: row.occurrence_type, virtual, status: row.status, dateKind: row.date_kind }),
     experimental: parent.experimental,
     status: row.status,
     sourceUrl: row.source_url || parent.sourceUrl,
@@ -2288,6 +2484,8 @@ async function loadSixWellEvents(db) {
     const occurrenceId = row.occurrence_id || `event-${row.event_id}`;
     const status = row.occurrence_status || (row.event_status === "cancelled" ? "cancelled" : "published");
     const venueName = row.occurrence_location || row.event_location || "";
+    const formats = uniqueStrings(row.formats_json, FORMATS);
+    const virtual = onlineOnlyEvent({ venueName, venueAddress: venueName });
     return {
       id: `sixwell:${occurrenceId}`,
       origin: "sixwell",
@@ -2306,12 +2504,13 @@ async function loadSixWellEvents(db) {
       timezone: TIME_ZONE,
       venueName,
       venueAddress: venueName,
-      virtual: onlineOnlyEvent({ venueName, venueAddress: venueName }),
+      virtual,
       city: "Atlanta",
       region: "GA",
       subjects: uniqueStrings(row.subjects_json, SUBJECTS),
-      formats: uniqueStrings(row.formats_json, FORMATS),
-      experimental: uniqueStrings(row.formats_json, FORMATS).includes("experimental-event"),
+      formats,
+      planning: publicPlanningDetails({ venue_address:venueName, planning_eligible:0 }, { formats, virtual, status, dateKind:"timed" }),
+      experimental: formats.includes("experimental-event"),
       status: status === "cancelled" ? "cancelled" : "published",
       scheduleStatus: status === "cancelled" ? "cancelled" : "scheduled",
       sourceUrl: row.source_url || `/events/${encodeURIComponent(row.slug)}/`,
@@ -2437,10 +2636,97 @@ function calendarResponse(events, name, filename) {
   });
 }
 
+async function plannerIdentityHash(request, env) {
+  if (!asString(env.CALENDAR_PLANNER_RATE_LIMIT_SALT)) throw new Error("Calendar planner rate limiting is not configured.");
+  const identity = request.headers.get("CF-Connecting-IP") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const bytes = new TextEncoder().encode(`${env.CALENDAR_PLANNER_RATE_LIMIT_SALT}:${identity}`);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function enforcePlannerRateLimit(db, request, env, now = new Date()) {
+  const windowStartedAt = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000).toISOString();
+  const identityHash = await plannerIdentityHash(request, env);
+  await db.prepare("DELETE FROM calendar_planner_rate_limits WHERE window_started_at<?").bind(new Date(now.getTime() - 86_400_000).toISOString()).run();
+  await db.prepare(
+    `INSERT INTO calendar_planner_rate_limits(identity_hash,window_started_at,request_count) VALUES (?,?,1)
+     ON CONFLICT(identity_hash,window_started_at) DO UPDATE SET request_count=request_count+1`
+  ).bind(identityHash, windowStartedAt).run();
+  const row = await db.prepare("SELECT request_count FROM calendar_planner_rate_limits WHERE identity_hash=? AND window_started_at=?").bind(identityHash, windowStartedAt).first();
+  return Number(row?.request_count) <= 30;
+}
+
+function plannerLocation(value, label, { optional = false } = {}) {
+  if ((value === null || value === undefined) && optional) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be a location object.`);
+  const kind = asString(value.kind);
+  if (!new Set(["place_id", "coordinates", "address"]).has(kind)) throw new Error(`${label} kind must be place_id, coordinates, or address.`);
+  if (kind === "place_id") {
+    const placeId = asString(value.placeId);
+    if (!placeId || placeId.length > 300) throw new Error(`${label} placeId is required and must be 300 characters or fewer.`);
+    return { kind, placeId };
+  }
+  if (kind === "address") {
+    const address = asString(value.address);
+    if (!address || address.length > 500) throw new Error(`${label} address is required and must be 500 characters or fewer.`);
+    return { kind, address };
+  }
+  const latitude = optionalNumber(value.latitude, -90, 90);
+  const longitude = optionalNumber(value.longitude, -180, 180);
+  if (latitude === null || longitude === null) throw new Error(`${label} requires valid latitude and longitude.`);
+  return { kind, latitude, longitude };
+}
+
+function plannerRequest(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("A JSON planning request is required.");
+  const date = asString(body.date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T12:00:00Z`))) throw new Error("date must be a valid YYYY-MM-DD value.");
+  const eventIds = [...new Set((Array.isArray(body.eventIds) ? body.eventIds : []).map(asString).filter(Boolean))];
+  if (eventIds.length < 2 || eventIds.length > 12) throw new Error("Choose between 2 and 12 unique events.");
+  if (eventIds.some((id) => id.length > 200)) throw new Error("Event IDs must be 200 characters or fewer.");
+  const travelMode = asString(body.travelMode || "driving");
+  if (!["driving", "walking"].includes(travelMode)) throw new Error("travelMode must be driving or walking.");
+  const objective = asString(body.objective || "most_events");
+  if (!["most_events", "minimum_travel"].includes(objective)) throw new Error("objective must be most_events or minimum_travel.");
+  const mustAttendEventIds = [...new Set((Array.isArray(body.mustAttendEventIds) ? body.mustAttendEventIds : []).map(asString).filter(Boolean))];
+  if (mustAttendEventIds.some((id) => !eventIds.includes(id))) throw new Error("Must-attend events must also appear in eventIds.");
+  const endMode = asString(body.end?.mode || "last_event");
+  if (!["last_event", "return_to_start", "custom"].includes(endMode)) throw new Error("end.mode must be last_event, return_to_start, or custom.");
+  return {
+    date, eventIds, start: plannerLocation(body.start, "start"),
+    end: endMode === "custom" ? { mode:endMode, location:plannerLocation(body.end.location, "end location") } : { mode:endMode },
+    travelMode, objective, mustAttendEventIds,
+    arrivalBufferMinutes: optionalNumber(body.arrivalBufferMinutes ?? 10, 0, 180) ?? 10,
+  };
+}
+
+async function handleCalendarPlan(request, env, db) {
+  if (request.method !== "POST") return errorResponse("Method not allowed.", 405);
+  if (!asString(env.CALENDAR_PLANNER_RATE_LIMIT_SALT)) return errorResponse("Night planner is not configured.", 503);
+  if (!(await enforcePlannerRateLimit(db, request, env))) return errorResponse("Too many planning requests. Try again later.", 429);
+  const body = await readBody(request);
+  if (body === null) return errorResponse("Invalid JSON body.");
+  let plan;
+  try { plan = plannerRequest(body); }
+  catch (error) { return errorResponse(error.message); }
+  const events = await normalizedEvents(db);
+  const selected = plan.eventIds.map((id) => events.find((event) => event.id === id)).filter(Boolean);
+  if (selected.length !== plan.eventIds.length) return errorResponse("One or more selected events are unavailable.", 404);
+  if (selected.some((event) => dateKey(event.startsAt) !== plan.date)) return errorResponse("Every selected event must begin on the requested Atlanta date.", 409);
+  if (selected.some((event) => !event.planning?.eligible)) return errorResponse("One or more selected events are not ready for night planning.", 409);
+  return json({
+    error: "Night-planner routing is not configured yet.",
+    code: "routing_not_configured",
+    phase: 1,
+    selectedEventIds: plan.eventIds,
+  }, { status: 501 });
+}
+
 export async function handleCalendarPublicApi(request, env) {
   try {
     const db = requireDb(env);
     const url = new URL(request.url);
+    if (url.pathname === "/api/calendar/plan") return handleCalendarPlan(request, env, db);
     const match = url.pathname.match(/^\/api\/calendar\/events\/(.+)\.ics$/);
     const events = await normalizedEvents(db);
     if (match) {
@@ -3111,7 +3397,7 @@ async function handleCandidates(request, env, parts) {
     if (method === "POST") {
       const body = await readBody(request);
       if (!body) return errorResponse("Invalid JSON body.");
-      try { return json(await createCandidate(env, body, "manual", [{ url: body.sourceUrl || "", enteredAt: isoNow() }], { restoreSuppression: true }), { status: 201 }); }
+      try { return json(await createCandidate(env, body, "manual", [{ url: body.sourceUrl || "", enteredAt: isoNow() }], { restoreSuppression: true, allowVerifiedInstagramSource: true }), { status: 201 }); }
       catch (error) { return errorResponse(error.message); }
     }
     return errorResponse("Method not allowed.", 405);
@@ -3195,16 +3481,32 @@ async function handleSources(request, env, parts) {
   if (!body) return errorResponse("Invalid JSON body.");
   const now = isoNow();
   if (request.method === "POST" && !id) {
-    if (!asString(body.name) || !validHttpUrl(body.url)) return errorResponse("Name and a valid URL are required.");
+    const name = asString(body.name);
+    const url = asString(body.url);
+    const sourceType = asString(body.sourceType) || "official_html";
+    const trustLevel = asString(body.trustLevel) || "official";
+    if (!name) return errorResponse("Enter a source name.");
+    if (!validHttpUrl(url)) return errorResponse("Enter a complete public source URL beginning with http:// or https://.");
+    if (!["official_html", "calendar", "json", "rss", "discovery"].includes(sourceType)) return errorResponse("Choose a valid source type.");
+    if (!["official", "trusted", "discovery"].includes(trustLevel)) return errorResponse("Choose a valid source trust level.");
+    const existing = await db.prepare(
+      "SELECT id,name FROM calendar_sources WHERE lower(rtrim(url,'/'))=lower(rtrim(?,'/')) LIMIT 1"
+    ).bind(url).first();
+    if (existing) return errorResponse(`This URL is already registered as "${existing.name}". Open that source below to edit it.`, 409);
     const adapterKey = SOURCE_ADAPTERS.has(asString(body.adapterKey)) ? asString(body.adapterKey) : "automatic";
     const renderMode = SOURCE_RENDER_MODES.has(asString(body.renderMode)) ? asString(body.renderMode) : "static";
     const adapterConfig = body.adapterConfig && typeof body.adapterConfig === "object" && !Array.isArray(body.adapterConfig) ? body.adapterConfig : {};
     const storedAdapter = storedSourceAdapter(adapterKey, adapterConfig);
     const sourceId = `cal_source_${crypto.randomUUID()}`;
-    await db.prepare(
-      `INSERT INTO calendar_sources (id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-    ).bind(sourceId, asString(body.name), asString(body.url), asString(body.sourceType) || "official_html", asString(body.trustLevel) || "official", body.enabled === false ? 0 : 1, Number(body.cadenceHours) || 24, storedAdapter.adapterKey, renderMode, JSON.stringify(storedAdapter.adapterConfig), now, now).run();
+    try {
+      await db.prepare(
+        `INSERT INTO calendar_sources (id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).bind(sourceId, name, url, sourceType, trustLevel, body.enabled === false ? 0 : 1, Math.max(1, Number(body.cadenceHours) || 24), storedAdapter.adapterKey, renderMode, JSON.stringify(storedAdapter.adapterConfig), now, now).run();
+    } catch (error) {
+      if (/unique/i.test(asString(error.message))) return errorResponse("This source URL is already registered. Open the existing source below to edit it.", 409);
+      throw error;
+    }
     return json({ source: normalizeSource(await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(sourceId).first()) }, { status: 201 });
   }
   if (request.method === "PATCH" && id) {
@@ -3396,6 +3698,12 @@ function knownOrganizationValues(body, current = {}) {
   const organizationType = ["organizer", "venue", "both"].includes(asString(body.organizationType))
     ? asString(body.organizationType)
     : current.organizationType || "both";
+  const venueAddress = asString(body.venueAddress ?? current.venueAddress).slice(0, 500);
+  const coordinateInput = { latitude:body.latitude ?? current.latitude, longitude:body.longitude ?? current.longitude };
+  const coordinateErrors = planningInputErrors(coordinateInput, "Venue");
+  const latitude = optionalNumber(coordinateInput.latitude, -90, 90);
+  const longitude = optionalNumber(coordinateInput.longitude, -180, 180);
+  if ((latitude === null) !== (longitude === null)) throw new Error("Venue coordinates require both latitude and longitude.");
   return {
     name: asString(body.name ?? current.name).trim().slice(0, 200),
     organizationType,
@@ -3404,6 +3712,11 @@ function knownOrganizationValues(body, current = {}) {
     eventPaths: normalizePathList(body.eventPaths ?? current.eventPaths),
     trustedTicketDomains: normalizeDomainList(body.trustedTicketDomains ?? current.trustedTicketDomains),
     discoveryOnlyDomains: normalizeDomainList(body.discoveryOnlyDomains ?? current.discoveryOnlyDomains),
+    venueAddress,
+    latitude,
+    longitude,
+    coordinatesVerifiedAt: latitude !== null && longitude !== null ? asString(body.coordinatesVerifiedAt ?? current.coordinatesVerifiedAt) || isoNow() : null,
+    validationErrors: coordinateErrors,
     notes: asString(body.notes ?? current.notes).slice(0, 4000),
     enabled: body.enabled === undefined ? current.enabled !== false : Boolean(body.enabled),
   };
@@ -3417,6 +3730,7 @@ async function handleKnownOrganizations(request, env, parts) {
     const body = await readBody(request);
     if (!body) return errorResponse("Invalid JSON body.");
     const value = knownOrganizationValues(body);
+    if (value.validationErrors.length) return errorResponse(value.validationErrors.join(" "));
     if (!value.name) return errorResponse("Organization name is required.");
     if (!value.officialDomains.length) return errorResponse("Add at least one official domain so the Scout can prove the source chain.");
     const now = isoNow();
@@ -3424,12 +3738,12 @@ async function handleKnownOrganizations(request, env, parts) {
     await db.prepare(
       `INSERT INTO calendar_known_organizations
        (id,name,organization_type,aliases_json,official_domains_json,event_paths_json,trusted_ticket_domains_json,
-        discovery_only_domains_json,notes,enabled,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+        discovery_only_domains_json,venue_address,latitude,longitude,coordinates_verified_at,notes,enabled,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(
       organizationId, value.name, value.organizationType, JSON.stringify(value.aliases), JSON.stringify(value.officialDomains),
       JSON.stringify(value.eventPaths), JSON.stringify(value.trustedTicketDomains), JSON.stringify(value.discoveryOnlyDomains),
-      value.notes, value.enabled ? 1 : 0, now, now,
+      value.venueAddress, value.latitude, value.longitude, value.coordinatesVerifiedAt, value.notes, value.enabled ? 1 : 0, now, now,
     ).run();
     return json({ organization: normalizeKnownOrganization(await db.prepare("SELECT * FROM calendar_known_organizations WHERE id=?").bind(organizationId).first()) }, { status:201 });
   }
@@ -3439,14 +3753,16 @@ async function handleKnownOrganizations(request, env, parts) {
     const body = await readBody(request);
     if (!body) return errorResponse("Invalid JSON body.");
     const value = knownOrganizationValues(body, normalizeKnownOrganization(row));
+    if (value.validationErrors.length) return errorResponse(value.validationErrors.join(" "));
     if (!value.name) return errorResponse("Organization name is required.");
     if (!value.officialDomains.length) return errorResponse("Add at least one official domain so the Scout can prove the source chain.");
     await db.prepare(
       `UPDATE calendar_known_organizations SET name=?,organization_type=?,aliases_json=?,official_domains_json=?,
-       event_paths_json=?,trusted_ticket_domains_json=?,discovery_only_domains_json=?,notes=?,enabled=?,updated_at=? WHERE id=?`
+       event_paths_json=?,trusted_ticket_domains_json=?,discovery_only_domains_json=?,venue_address=?,latitude=?,longitude=?,coordinates_verified_at=?,notes=?,enabled=?,updated_at=? WHERE id=?`
     ).bind(
       value.name, value.organizationType, JSON.stringify(value.aliases), JSON.stringify(value.officialDomains),
       JSON.stringify(value.eventPaths), JSON.stringify(value.trustedTicketDomains), JSON.stringify(value.discoveryOnlyDomains),
+      value.venueAddress, value.latitude, value.longitude, value.coordinatesVerifiedAt,
       value.notes, value.enabled ? 1 : 0, isoNow(), id,
     ).run();
     return json({ organization: normalizeKnownOrganization(await db.prepare("SELECT * FROM calendar_known_organizations WHERE id=?").bind(id).first()) });
@@ -6023,6 +6339,11 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   if (!existing) return createCandidate(env, proposal, discoveredBy, provenance);
   const current = await getCandidate(db, existing.id, false);
   if (["rejected", "duplicate"].includes(current.status)) return { candidate: current, existing: true };
+  const automatedVerificationRequested = proposal.verificationState === "needs_verification";
+  if (current.verificationState === "verified") {
+    proposal.verificationState = "verified";
+    proposal.verificationNotes = current.verificationNotes;
+  }
   proposal.monitoringEnabled = current.monitoringEnabled;
   proposal.monitoringCadenceHours = current.monitoringCadenceHours;
   if (proposal.ticketStatus === "unknown" && current.ticketStatus !== "unknown") {
@@ -6034,9 +6355,8 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   proposal = ensurePrivateIntelligence(proposal, profile, discoveredBy, refreshPrivateIntelligence ? null : current);
   proposal.relatedLinks = proposal.relatedLinks.length ? proposal.relatedLinks : current.relatedLinks;
   proposal.occurrences = proposal.occurrences.length
-    ? proposal.occurrences.map((occurrence) => ({
-      ...occurrence,
-      id: current.occurrences.find((item) => (
+    ? proposal.occurrences.map((occurrence) => {
+      const currentOccurrence = current.occurrences.find((item) => (
         occurrence.sourceEventId && item.sourceEventId === occurrence.sourceEventId
       ) || (
         !occurrence.sourceEventId && item.occurrenceType === occurrence.occurrenceType
@@ -6044,8 +6364,14 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
             || (!item.startsAt && !occurrence.startsAt && normalizeText(item.title) === normalizeText(occurrence.title)))
           && normalizeText(item.title) === normalizeText(occurrence.title)
           && normalizeText(item.venueName) === normalizeText(occurrence.venueName)
-      ))?.id || occurrence.id,
-    }))
+      ));
+      return {
+        ...occurrence,
+        id: currentOccurrence?.id || occurrence.id,
+        verificationState: currentOccurrence?.verificationState === "verified" ? "verified" : occurrence.verificationState,
+        verificationNotes: currentOccurrence?.verificationState === "verified" ? currentOccurrence.verificationNotes : occurrence.verificationNotes,
+      };
+    })
     : current.occurrences;
   proposal.flyerMediaId = current.flyerMediaId;
   proposal.flyerSourceUrl = current.flyerSourceUrl;
@@ -6055,14 +6381,16 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   const proposedFlyerUrl = asString(rawProposal.flyerUrl);
   const flyerChanged = Boolean(proposedFlyerUrl && proposedFlyerUrl !== current.flyerSourceUrl);
   const incompleteExistingSeries = proposal.eventStructure === "series"
-    && proposal.verificationState === "needs_verification"
+    && automatedVerificationRequested
     && current.occurrences.length > 0;
   if (incompleteExistingSeries) {
     const now = isoNow();
-    await db.prepare(
-      `UPDATE calendar_candidates SET verification_state='needs_verification',verification_notes=?,
-       status=CASE WHEN status='published' THEN status ELSE 'needs_verification' END,updated_at=? WHERE id=?`
-    ).bind(proposal.verificationNotes, now, current.id).run();
+    if (current.verificationState !== "verified") {
+      await db.prepare(
+        `UPDATE calendar_candidates SET verification_state='needs_verification',verification_notes=?,
+         status=CASE WHEN status='published' THEN status ELSE 'needs_verification' END,updated_at=? WHERE id=?`
+      ).bind(proposal.verificationNotes, now, current.id).run();
+    }
     const changes = candidateChangeSet(candidateSnapshot(current), candidateSnapshot(proposal));
     await appendRevision(db, current.id, candidateSnapshot(proposal), provenance, "Incomplete series result held for verification", discoveredBy, changes);
     await db.prepare(

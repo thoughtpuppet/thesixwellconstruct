@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
-<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260820-permanent-delete">
+<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260821-source-registry">
 </head>
 <body>
   <header class="studio-header">
@@ -62,11 +62,34 @@
     </section>
 
     <section class="studio-view" data-panel="sources" hidden>
-      <header class="view-header"><div><p class="eyebrow">Approved inputs</p><h2>Source Registry</h2></div><button id="addSource" type="button">Add Source</button></header>
-      <p class="view-note">Direct sources may confirm their own events. Discovery sources only supply leads; the Scout must resolve each lead to an original organizer, venue, official calendar, or authorized ticket page before publication. Acceptance rates and recurring failures make weak sources visible.</p>
+      <header class="view-header"><div><p class="eyebrow">Approved inputs</p><h2>Source Registry</h2></div></header>
+      <form class="source-create-form" id="sourceCreateForm" novalidate>
+        <div class="source-create-heading">
+          <div><p class="eyebrow">New registry source</p><h3>Add a source</h3></div>
+          <p>Direct sources can confirm their own events. Discovery sources provide leads that the Scout must trace to an original event source.</p>
+        </div>
+        <label class="field"><span>Name</span><input id="newSourceName" type="text" autocomplete="organization" required></label>
+        <label class="field"><span>Public source URL</span><input id="newSourceUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://…" required></label>
+        <label class="field"><span>Source role</span><select id="newSourceRole"><option value="discovery">Discovery lead</option><option value="direct">Direct / official</option></select></label>
+        <button type="submit">Add Source</button>
+        <p class="source-form-status" id="sourceCreateStatus" role="status" aria-live="polite"></p>
+      </form>
+      <p class="source-list-help">Select a source name to edit it. Opening one source closes the previously open source.</p>
       <div class="source-list" id="sourceList"></div>
-      <header class="subview-header"><div><p class="eyebrow">Platform monitoring</p><h3>Social Accounts</h3></div><button id="addSocialSource" type="button">Add Social Account</button></header>
-        <p class="view-note">Exact registered handles preserve trustworthy discovery provenance. Confirm event facts and organizer or venue identity through an event-specific source, official profile, partner page, flyer, or documented Studio review; verification badges alone are informational.</p>
+      <header class="subview-header"><div><p class="eyebrow">Platform monitoring</p><h3>Social Accounts</h3></div></header>
+      <form class="source-create-form social-source-create-form" id="socialSourceCreateForm" novalidate>
+        <div class="source-create-heading">
+          <div><p class="eyebrow">New social source</p><h3>Add a social account</h3></div>
+          <p>Social accounts preserve discovery provenance. New accounts remain paused until you review and enable them.</p>
+        </div>
+        <label class="field"><span>Name</span><input id="newSocialSourceName" type="text" autocomplete="organization"></label>
+        <label class="field"><span>Platform</span><select id="newSocialSourcePlatform"><option value="instagram">Instagram</option><option value="threads">Threads</option><option value="tiktok">TikTok</option></select></label>
+        <label class="field"><span>Handle</span><input id="newSocialSourceHandle" type="text" autocomplete="off" placeholder="without @" required></label>
+        <label class="field"><span>Public profile URL</span><input id="newSocialSourceUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://…" required></label>
+        <label class="field"><span>Trust</span><select id="newSocialSourceTrust"><option value="trusted">Trusted</option><option value="official">Official</option><option value="discovery">Discovery</option></select></label>
+        <button type="submit">Add Social Account</button>
+        <p class="source-form-status" id="socialSourceCreateStatus" role="status" aria-live="polite"></p>
+      </form>
       <div class="social-source-list" id="socialSourceList"></div>
     </section>
 
@@ -94,15 +117,14 @@
       <h2 id="deleteCandidateTitle">Delete calendar entry?</h2>
       <p id="deleteCandidateConsequence"></p>
       <p class="delete-dialog-record"><strong id="deleteCandidateRecordTitle"></strong></p>
-      <label class="field"><span>Type the exact event title to confirm</span><input id="deleteCandidateConfirmation" type="text" autocomplete="off" required></label>
       <label class="delete-suppression-option"><input id="deleteCandidateSuppression" type="checkbox" checked><span>Prevent the Scout from re-adding this exact event</span></label>
       <div class="delete-dialog-actions">
         <button id="cancelCandidateDelete" type="button">Keep entry</button>
-        <button id="confirmCandidateDelete" type="submit" disabled>Delete permanently</button>
+        <button id="confirmCandidateDelete" type="submit">Confirm deletion</button>
       </div>
     </form>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/studio/calendar/calendar.js?v=20260820-permanent-delete"></script>
+  <script src="/studio/calendar/calendar.js?v=20260821-source-registry"></script>
 </body>
 </html>
