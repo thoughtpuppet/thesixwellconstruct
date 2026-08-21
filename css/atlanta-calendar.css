@@ -13,6 +13,7 @@ body,
 .atlanta-calendar-page { background:var(--color-bg); }
 
 .atlanta-calendar-page .venture-shell { isolation:isolate; }
+.atlanta-calendar-page .venture-hero { min-height:auto; align-content:start; align-items:start; }
 .calendar-controls { border-top:5px solid var(--calendar-accent-dim); }
 .calendar-search-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px; align-items:end; }
 .calendar-search-actions { display:grid; grid-template-columns:repeat(2,auto); gap:8px; }
@@ -97,7 +98,7 @@ button.calendar-day { cursor:pointer; }
 .calendar-description-toggle:hover,
 .calendar-description-toggle:focus-visible { border-color:var(--calendar-accent); background:var(--calendar-accent-wash); outline:none; }
 .calendar-event-facts { display:grid; gap:7px; margin:18px 0 0; color:var(--text-dim); font:700 10px/1.5 var(--font-display); letter-spacing:.04em; }
-.calendar-event-facts strong { color:var(--calendar-accent); font-weight:900; }
+.calendar-event-facts strong { color:inherit; font-weight:900; }
 .calendar-event-source { letter-spacing:.08em; text-transform:uppercase; }
 .calendar-map-choices { min-width:0; }
 .calendar-map-choices>summary { min-height:44px; display:flex; align-items:center; color:var(--calendar-accent); cursor:pointer; text-decoration:underline; text-decoration-thickness:2px; text-underline-offset:3px; list-style:none; }
@@ -225,10 +226,6 @@ button.calendar-day { cursor:pointer; }
   .calendar-utility-disclosure>summary { grid-template-columns:minmax(0,1fr) auto; gap:12px; min-height:96px; padding:16px; }
   .calendar-utility-disclosure>summary .section-copy { grid-column:1/-1; grid-row:2; }
   .calendar-disclosure-action { grid-column:2; grid-row:1; }
-}
-
-@media (max-width:1080px) {
-  .atlanta-calendar-page .venture-hero { min-height:auto; align-content:start; align-items:start; }
 }
 
 @media (max-width:390px) {

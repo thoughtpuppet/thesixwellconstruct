@@ -3613,6 +3613,8 @@ test("public calendar cards expose compact viewer actions without linking titles
   assert.match(publicCalendar,/https:\/\/maps\.apple\.com\/\?daddr=/);
   assert.match(publicCalendar,/event\.scheduleStatus === "moved_online"/);
   assert.match(publicCalendar,/normalizedLabel\(address\) !== normalizedLabel\(venue\)/);
+  assert.doesNotMatch(publicCalendar,/<strong>address:<\/strong>/);
+  assert.doesNotMatch(publicCalendar,/Selected Atlanta listing/);
   assert.match(publicCalendar,/'<h3>' \+ escapeHtml\(event\.title\) \+ '<\/h3>'/);
   assert.doesNotMatch(publicCalendar,/<h3><a/);
   assert.doesNotMatch(publicCalendar,/event\.organizerUrl|event\.venueUrl/);
@@ -3635,6 +3637,7 @@ test("public calendar cards expose compact viewer actions without linking titles
   assert.match(publicCalendar,/Related schedule \('/);
   assert.match(publicCalendar,/People \+ related \('/);
   assert.match(publicCss,/\.calendar-map-choices a \{ min-height:44px;/);
+  assert.match(publicCss,/\.calendar-event-facts strong \{ color:inherit; font-weight:900; \}/);
   assert.match(publicCss,/\.calendar-event-status \{[^}]*border:5px solid/);
   assert.match(publicCss,/\.calendar-event-disclosure \{[^}]*border:5px solid/);
 });
@@ -3658,6 +3661,7 @@ test("public calendar keeps search visible while progressively disclosing filter
   assert.match(publicCalendar,/panel\.hidden = panel\.id !== activeView/);
   assert.match(publicCalendar,/pastDisclosure\.open/);
   assert.match(publicCss,/\.atlanta-calendar-page \.venture-hero \{ min-height:auto; align-content:start; align-items:start; \}/);
+  assert.ok(publicCss.indexOf(".atlanta-calendar-page .venture-hero") < publicCss.indexOf("@media"));
 });
 
 test("public event cards use the compact save-date action label", () => {
