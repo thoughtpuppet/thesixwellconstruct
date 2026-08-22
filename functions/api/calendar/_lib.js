@@ -14,7 +14,7 @@ const SOURCE_AUTHORITIES = new Set(["organizer_event", "venue_event", "official_
 const LINK_ROLES = new Set(["organizer", "venue", "ticket", "artist", "participant", "supporting", "discovery"]);
 const CALENDAR_CREDIT_ROLE_CACHE = new WeakMap();
 const PLATFORM_SOURCE_ADAPTERS = new Set(["eventbrite", "posh", "bigtickets"]);
-const INTERNAL_SOURCE_ADAPTERS = new Set(["eyedrum", "high_art_making", "rampant", "squarespace"]);
+const INTERNAL_SOURCE_ADAPTERS = new Set(["beltline", "eyedrum", "high_art_making", "rampant", "squarespace"]);
 const STORED_SOURCE_ADAPTERS = new Set(["automatic", "wix", "localist", "out_of_hand", "json", "icalendar", "rss"]);
 const SOURCE_ADAPTERS = new Set([...STORED_SOURCE_ADAPTERS, ...PLATFORM_SOURCE_ADAPTERS, ...INTERNAL_SOURCE_ADAPTERS]);
 const SOURCE_RENDER_MODES = new Set(["static", "dynamic-fallback"]);
@@ -35,6 +35,10 @@ const RESEARCH_CHANGE_PATHS = new Set([
 ]);
 const SOURCE_TIMEOUT_MS = 20_000;
 const OPENAI_TIMEOUT_MS = 60_000;
+const DEFAULT_SITE_CRAWL_PAGES = 8;
+const MAX_SITE_CRAWL_PAGES = 20;
+const MAX_SITE_CRAWL_DEPTH = 2;
+const SITE_CRAWL_CONCURRENCY = 2;
 const SOCIAL_PLATFORMS = new Set(["threads", "instagram", "tiktok"]);
 const CONNECTOR_IDS = new Set(["direct", "general_web", "threads_api", "instagram_api", "threads_web", "instagram_web", "tiktok_web"]);
 const SOCIAL_DOMAINS = { threads: "threads.net", instagram: "instagram.com", tiktok: "tiktok.com" };
@@ -4879,6 +4883,120 @@ function extractJsonLdEvents(html, source) {
   return events.filter((event) => event.title && event.startsAt);
 }
 
+function beltlineEventIdentity(value, baseUrl = "https://beltline.org/events/") {
+  try {
+    const url = new URL(sourceHtmlEntities(asString(value)), baseUrl);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const match = url.pathname.match(/^\/events\/([a-f0-9]{16,64})\/?$/i);
+    if (host !== "beltline.org" || !match) return null;
+    const id = match[1].toLowerCase();
+    return { id: `beltline-${id}`, url: `${url.origin}/events/${id}` };
+  } catch {
+    return null;
+  }
+}
+
+function beltlineMainHtml(html) {
+  return asString(html).match(/<main\b[^>]*>[\s\S]*?<\/main>/i)?.[0] || asString(html);
+}
+
+function beltlineVisibleLines(html) {
+  const text = beltlineMainHtml(html)
+    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+    .replace(/<(?:br|p|div|section|article|li|h[1-6]|dt|dd)\b[^>]*>/gi, "\n")
+    .replace(/<\/(?:p|div|section|article|li|h[1-6]|dt|dd)>/gi, "\n")
+    .replace(/<[^>]*>/g, " ");
+  return sourceHtmlEntities(text).split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function beltlineLineIndex(lines, label) {
+  const expected = normalizeText(label).replace(/\s+/g, " ");
+  return lines.findIndex((line) => normalizeText(line).replace(/\s+/g, " ").replace(/\s*:\s*$/, "") === expected);
+}
+
+function beltlineLineAfter(lines, label) {
+  const index = beltlineLineIndex(lines, label);
+  return index >= 0 ? asString(lines[index + 1]) : "";
+}
+
+function beltlineTopicText(lines) {
+  const start = beltlineLineIndex(lines, "topics");
+  if (start < 0) return "";
+  const end = beltlineLineIndex(lines, "share");
+  return lines.slice(start + 1, end > start ? end : start + 4).join(" ").slice(0, 500);
+}
+
+function beltlineDescription(lines) {
+  const location = beltlineLineIndex(lines, "location");
+  const topics = beltlineLineIndex(lines, "topics");
+  if (location < 0 || topics <= location) return "";
+  return lines.slice(Math.min(location + 3, topics), topics)
+    .filter((line) => !/^(?:date|time|location|topics|share|organizer|contact):?$/i.test(line))
+    .join(" ")
+    .slice(0, 5_000);
+}
+
+function beltlineTicketUrl(html, detailUrl) {
+  const pattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = pattern.exec(beltlineMainHtml(html)))) {
+    const label = sourceHtmlEntities(cleanSourceText(match[2]));
+    if (!/\b(?:register|registration|rsvp|tickets?|reserve|sign up)\b/i.test(label)) continue;
+    try {
+      const url = new URL(htmlAttribute(`<a ${match[1]}>`, "href"), detailUrl).toString();
+      if (validHttpUrl(url) && url !== detailUrl) return url;
+    } catch {
+      // Malformed untrusted links are ignored.
+    }
+  }
+  return "";
+}
+
+function extractBeltlineRenderedEvents(html, source) {
+  const identity = beltlineEventIdentity(source.url);
+  if (!identity) return [];
+  const renderedSource = { ...source, url: identity.url };
+  const structured = extractJsonLdEvents(html, renderedSource)[0];
+  if (!structured) return [];
+  const lines = beltlineVisibleLines(html);
+  const venueName = beltlineLineAfter(lines, "location") || structured.venueName;
+  const locationIndex = beltlineLineIndex(lines, "location");
+  const venueAddress = locationIndex >= 0 ? asString(lines[locationIndex + 2]) : structured.venueAddress;
+  const organizer = beltlineLineAfter(lines, "organizer") || structured.organizer || source.name;
+  const topics = beltlineTopicText(lines);
+  const description = beltlineDescription(lines) || structured.factualDescription || topics;
+  const ticketUrl = beltlineTicketUrl(html, identity.url);
+  const explicitlyFree = /\b(?:free admission|free event|no cost)\b/i.test(`${description} ${topics}`);
+  return [inferSubjectsAndFormats({
+    ...structured,
+    sourceId: source.id,
+    sourceEventId: identity.id,
+    sourceUrl: identity.url,
+    ticketUrl,
+    ...directSourceFields(source, identity.url, "https://beltline.org/"),
+    relatedLinks: [],
+    title: structured.title,
+    organizer,
+    factualDescription: [description, topics ? `Topic: ${topics}.` : ""].filter(Boolean).join(" "),
+    accessStatus: explicitlyFree ? "public" : "unknown",
+    accessNotes: explicitlyFree
+      ? "The official event page identifies this as free; Studio should confirm whether registration is still required."
+      : ticketUrl
+        ? "The official event page supplies a registration or ticket link; Studio should confirm admission details."
+        : "The official event page does not clearly establish admission or registration requirements.",
+    audiences: explicitlyFree ? ["Public"] : [],
+    venueName,
+    venueAddress,
+    city: "Atlanta",
+    region: "GA",
+    verificationState: "needs_verification",
+    verificationNotes: "Date, time, location, organizer, and descriptive facts were extracted from the rendered official Atlanta BeltLine event page. Studio review is required before publication.",
+    confidence: 0.9,
+  })];
+}
+
 function wixWarmupEvents(value, output = []) {
   if (!value || typeof value !== "object") return output;
   if (Array.isArray(value)) {
@@ -5332,6 +5450,7 @@ function sourceAdapterKey(source) {
   if (host === "eventbrite.com" || host.endsWith(".eventbrite.com")) return "eventbrite";
   if (host === "posh.vip" || host.endsWith(".posh.vip")) return "posh";
   if (host === "eyedrum.org") return "eyedrum";
+  if (host === "beltline.org" && /^\/events(?:\/|$)/i.test(new URL(source.url).pathname)) return "beltline";
   if (host === "rampantgallery.com" || host.endsWith(".rampantgallery.com")) return "rampant";
   if (host === "high.org" && /\/event-category\/for-adults\/art-making\/?/i.test(new URL(source.url).pathname)) return "high_art_making";
   if (source.source_type === "calendar") return "icalendar";
@@ -5712,6 +5831,127 @@ function highArchiveRange(label) {
   };
 }
 
+function htmlAttribute(tag, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = asString(tag).match(new RegExp(`\\b${escaped}\\s*=\\s*["']([^"']*)["']`, "i"));
+  return sourceHtmlEntities(match?.[1] || "");
+}
+
+function officialListingTitle(anchorTag, innerHtml, dateLabel) {
+  const imageTag = asString(innerHtml).match(/<img\b[^>]*>/i)?.[0] || "";
+  const candidates = [
+    htmlAttribute(imageTag, "alt"),
+    htmlAttribute(anchorTag, "aria-label"),
+    htmlAttribute(anchorTag, "title"),
+    sourceHtmlEntities(cleanSourceText(innerHtml))
+      .replace(/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:\s*(?:-|–|—|to)\s*(?:[A-Za-z]+\s+)?\d{1,2}(?:st|nd|rd|th)?)?,?\s+20\d{2}\b/gi, " ")
+      .replace(/\b(?:view|learn more|details?|information|apply|register|tickets?)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  ];
+  return candidates.find((value) => {
+    const text = asString(value);
+    return text.length >= 4
+      && text.length <= 180
+      && normalizeText(text) !== normalizeText(dateLabel)
+      && !/^(?:image|festival|event|calendar|click here|read more)$/i.test(text);
+  }) || "";
+}
+
+function officialListingClassifications(title, pageContext = "") {
+  const text = normalizeText(title);
+  const subjects = [];
+  const formats = [];
+  if (/\bart\b|artsapalooza|craft|handmade|gallery|visual/.test(text)) {
+    subjects.push("art");
+    formats.push("exhibition");
+  }
+  if (/film|cinema/.test(text)) {
+    subjects.push("film");
+    formats.push("screening");
+  }
+  if (/music|concert|poetry|open mic/.test(text)) {
+    subjects.push("poetry-music");
+    formats.push("performance");
+  }
+  if (/technology|\btech\b|digital|robot|\bai\b/.test(text)) subjects.push("technology");
+  if (!subjects.length && /festival|market/.test(text) && /\bart festivals?\b|\barts festivals?\b|\barts and crafts\b|\bhandmade\b/.test(pageContext)) {
+    subjects.push("art");
+    formats.push("exhibition");
+  }
+  if (/conference|symposium/.test(text)) formats.push("conference");
+  if (/workshop|class|hands on/.test(text)) formats.push("workshop");
+  return { subjects: [...new Set(subjects)], formats: [...new Set(formats)] };
+}
+
+function extractOfficialListingEvents(html, source, pageUrl = source.url) {
+  if (leadSource(source) || source.source_type !== "official_html") return [];
+  const config = parseJson(source.adapter_config_json, {});
+  const registryUrl = asString(source.registry_url) || source.url;
+  const pageContext = normalizeText(asString(html).slice(0, 100_000));
+  const events = [];
+  const seen = new Set();
+  const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let match;
+  let inspected = 0;
+  while ((match = anchorPattern.exec(asString(html))) && events.length < 100 && inspected < 1_000) {
+    inspected += 1;
+    const anchorTag = `<a ${match[1]}>`;
+    const rawHref = htmlAttribute(anchorTag, "href");
+    let href = "";
+    try { href = new URL(rawHref, pageUrl).toString(); } catch { continue; }
+    if (!validHttpUrl(href)) continue;
+    const dateLabel = sourceHtmlEntities(cleanSourceText(match[2])).replace(/\s+/g, " ").trim();
+    const range = highArchiveRange(dateLabel);
+    if (!range?.startsAt) continue;
+    const title = officialListingTitle(anchorTag, match[2], dateLabel);
+    if (!title) continue;
+    const identity = `${normalizeText(title)}|${range.startsAt}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    const hrefUrl = new URL(href);
+    const dedicatedSameOrigin = sameOriginUrl(href, registryUrl)
+      && (hrefUrl.pathname.replace(/\/+$/, "") || "/") !== "/"
+      && href !== pageUrl;
+    const sourceUrl = dedicatedSameOrigin ? href : pageUrl;
+    const classifications = officialListingClassifications(title, pageContext);
+    events.push({
+      sourceId: source.id,
+      sourceEventId: `official-listing-${normalizeText(title).replace(/\s+/g, "-").slice(0, 120)}-${range.startsAt}`,
+      sourceUrl,
+      ticketUrl: "",
+      ...directSourceFields({ ...source, url: registryUrl }, sourceUrl, registryUrl),
+      relatedLinks: dedicatedSameOrigin ? [] : [{
+        label: `${title} linked information`,
+        url: href,
+        provenanceUrl: pageUrl,
+        role: "supporting",
+        includePublic: false,
+      }],
+      title,
+      organizer: source.name,
+      factualDescription: `${source.name} lists ${title} on its official calendar for ${dateLabel}.`,
+      eventStructure: "single",
+      accessStatus: "unknown",
+      accessNotes: "The official calendar listing does not establish public attendance eligibility.",
+      audiences: [],
+      ...range,
+      timezone: TIME_ZONE,
+      venueName: asString(config.venueName),
+      venueAddress: asString(config.venueAddress),
+      city: asString(config.city),
+      region: asString(config.region),
+      subjects: classifications.subjects,
+      formats: classifications.formats,
+      experimental: false,
+      verificationState: "needs_verification",
+      verificationNotes: "The official site supplied the event title and date. Studio must confirm venue, address, attendance eligibility, and any missing daily hours before publication.",
+      confidence: 0.78,
+    });
+  }
+  return events;
+}
+
 function highArtMakingOccurrenceTitle(event) {
   const localDate = event.dateKind === "timed" ? wixLocalDate(event.startsAt, event.timezone) : dateKey(event.startsAt);
   if (!localDate) return "Session";
@@ -6082,6 +6322,106 @@ async function browserContent(env, url, waitForSelector = "") {
     text,
     contentType,
     browserMs: Number(response.headers.get("x-browser-ms-used") || 0) || 0,
+  };
+}
+
+function browserActionResult(payload) {
+  let result = payload?.result ?? payload?.data?.result ?? payload?.data ?? payload;
+  if (typeof result === "string") result = parseJson(result, result);
+  return result;
+}
+
+async function browserRenderedLinks(env, url, waitForSelector) {
+  if (!env.BROWSER?.quickAction) throw new Error("Cloudflare Browser rendering is unavailable for this dynamic source.");
+  const response = await env.BROWSER.quickAction("links", {
+    url,
+    gotoOptions: { waitUntil: "networkidle2", timeout: 60_000 },
+    waitForSelector: { selector: waitForSelector, timeout: 30_000, visible: true },
+    waitForTimeout: 1_000,
+    rejectResourceTypes: ["image", "media", "font"],
+    visibleLinksOnly: true,
+    excludeExternalLinks: true,
+    cacheTTL: 0,
+  });
+  if (!response?.ok) throw new Error(`Browser link extraction returned HTTP ${response?.status || "unknown"}.`);
+  const result = browserActionResult(parseJson(await boundedResponseText(response), {}));
+  return {
+    links: Array.isArray(result) ? result.map(asString).filter(Boolean) : [],
+    browserMs: Number(response.headers.get("x-browser-ms-used") || 0) || 0,
+  };
+}
+
+async function browserScrapeElements(env, url, selectors, waitForSelector) {
+  if (!env.BROWSER?.quickAction) throw new Error("Cloudflare Browser rendering is unavailable for this dynamic source.");
+  const response = await env.BROWSER.quickAction("scrape", {
+    url,
+    elements: selectors.map((selector) => ({ selector })),
+    gotoOptions: { waitUntil: "networkidle2", timeout: 60_000 },
+    waitForSelector: { selector: waitForSelector, timeout: 30_000 },
+    waitForTimeout: 750,
+    rejectResourceTypes: ["image", "media", "font"],
+    cacheTTL: 0,
+  });
+  if (!response?.ok) throw new Error(`Browser detail extraction returned HTTP ${response?.status || "unknown"}.`);
+  const result = browserActionResult(parseJson(await boundedResponseText(response), {}));
+  return {
+    groups: Array.isArray(result) ? result : [],
+    browserMs: Number(response.headers.get("x-browser-ms-used") || 0) || 0,
+  };
+}
+
+function browserScrapeHtml(groups) {
+  return (Array.isArray(groups) ? groups : []).flatMap((group) => Array.isArray(group?.results) ? group.results : [])
+    .map((item) => asString(item?.html) || asString(item?.text))
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function extractBeltlineEvents(env, source, maximum) {
+  if (source.render_mode !== "dynamic-fallback") {
+    throw new Error("The Atlanta BeltLine calendar requires Dynamic fallback rendering.");
+  }
+  const index = await browserRenderedLinks(env, source.url, 'a[href^="/events/"]');
+  const links = [];
+  const seen = new Set();
+  for (const value of index.links) {
+    const identity = beltlineEventIdentity(value, source.url);
+    if (!identity || seen.has(identity.id)) continue;
+    seen.add(identity.id);
+    links.push(identity);
+    if (links.length >= maximum) break;
+  }
+  let browserMs = index.browserMs;
+  const failures = [];
+  const proposals = (await mapConcurrent(links, 2, async (detail) => {
+    try {
+      const rendered = await browserScrapeElements(
+        env,
+        detail.url,
+        ['script[type="application/ld+json"]', "main"],
+        'script[type="application/ld+json"]',
+      );
+      browserMs += rendered.browserMs;
+      const detailSource = { ...source, url: detail.url, registry_url: source.url };
+      const proposal = extractBeltlineRenderedEvents(browserScrapeHtml(rendered.groups), detailSource)[0];
+      if (!proposal) throw new Error("Rendered event metadata was incomplete.");
+      return proposal;
+    } catch (error) {
+      failures.push({ id: detail.id, url: detail.url, error: asString(error.message) || "Detail extraction failed." });
+      return null;
+    }
+  })).filter(Boolean);
+  return {
+    proposals,
+    diagnostics: {
+      hubDetected: true,
+      childLinksDiscovered: links.length,
+      childrenExtracted: proposals.length,
+      missingChildren: failures,
+      retrieval: "beltline-rendered-details",
+      browserMs,
+      completeness: failures.length ? "needs_verification" : "complete",
+    },
   };
 }
 
@@ -6599,7 +6939,7 @@ async function extractPastedLinkProposal(env, pastedUrl) {
   }
 
   if (staticText) {
-    const proposals = extractSourceEvents(staticText, source).map(inferSubjectsAndFormats);
+    const proposals = extractCalendarSourceEvents(staticText, source).map(inferSubjectsAndFormats);
     const exact = proposals.find((proposal) => proposal.sourceUrl === pastedUrl) || (proposals.length === 1 ? proposals[0] : null);
     if (exact?.title && validDate(exact.startsAt)) {
       return { proposal: holdPastedLinkForReview(exact, pastedUrl), diagnostics: { retrieval: "static", browserMs: 0, adapter: sourceAdapterKey(source) } };
@@ -6879,8 +7219,9 @@ async function extractOutOfHandSeries(env, staticText, source) {
   return outOfHandSeriesResult(source, config, occurrences, links, failed, retrieval, browserMs);
 }
 
-function extractSourceEvents(text, source) {
+export function extractCalendarSourceEvents(text, source) {
   const adapterKey = sourceAdapterKey(source);
+  if (adapterKey === "beltline") return extractBeltlineRenderedEvents(text, source);
   if (adapterKey === "eyedrum") return extractEyedrumEvents(text, source);
   if (adapterKey === "squarespace") return extractSquarespaceEvents(text, source);
   if (adapterKey === "high_art_making") return extractHighArtMakingEvents(text, source);
@@ -6890,10 +7231,136 @@ function extractSourceEvents(text, source) {
   if (source.source_type === "rss") return extractRssEvents(text, source);
   const structuredEvents = extractJsonLdEvents(text, source);
   const wixEvents = extractWixEvents(text, source);
-  return [...structuredEvents, ...wixEvents].filter((event, index, events) => events.findIndex((candidate) =>
+  const listingEvents = extractOfficialListingEvents(text, source);
+  return [...structuredEvents, ...wixEvents, ...listingEvents].filter((event, index, events) => events.findIndex((candidate) =>
     (candidate.sourceEventId && candidate.sourceEventId === event.sourceEventId)
       || `${candidate.title}|${candidate.startsAt}` === `${event.title}|${event.startsAt}`
   ) === index);
+}
+
+function canonicalSiteCrawlUrl(value, baseUrl) {
+  try {
+    const url = new URL(value, baseUrl);
+    if (!validHttpUrl(url.toString()) || !sameOriginUrl(url.toString(), baseUrl)) return "";
+    url.hash = "";
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(?:utm_|fbclid$|gclid$|mc_)/i.test(key)) url.searchParams.delete(key);
+    }
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function siteCrawlLinkScore(url, label) {
+  const text = normalizeText(`${new URL(url).pathname} ${label}`);
+  let score = 0;
+  if (/\bevents?\b|\bcalendar\b|\bfestivals?\b|\bwhat s on\b/.test(text)) score += 12;
+  if (/\bprogram(?:s|ming)?\b|\bexhibitions?\b|\bperformances?\b|\bworkshops?\b|\bclasses\b|\bschedule\b/.test(text)) score += 9;
+  if (/\bnews\b|\bannouncements?\b|\bvisit\b|\bthings to do\b/.test(text)) score += 4;
+  return score;
+}
+
+function siteCrawlLinks(html, pageUrl, registryUrl, visited) {
+  const links = [];
+  const seen = new Set();
+  const pattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let match;
+  let inspected = 0;
+  while ((match = pattern.exec(asString(html))) && links.length < 300 && inspected < 1_000) {
+    inspected += 1;
+    const anchorTag = `<a ${match[1]}>`;
+    const url = canonicalSiteCrawlUrl(htmlAttribute(anchorTag, "href"), pageUrl);
+    if (!url || visited.has(url) || seen.has(url) || url === canonicalSiteCrawlUrl(pageUrl, registryUrl)) continue;
+    const parsed = new URL(url);
+    if (/\.(?:avif|css|csv|docx?|gif|ico|jpe?g|json|m4a|mov|mp3|mp4|pdf|png|pptx?|rss|svg|txt|webm|webp|xlsx?|xml|zip)$/i.test(parsed.pathname)) continue;
+    if (/\/(?:account|admin|cart|checkout|login|logout|privacy|search|shop|sign-in|terms)(?:\/|$)/i.test(parsed.pathname)) continue;
+    const label = [
+      htmlAttribute(anchorTag, "aria-label"),
+      htmlAttribute(anchorTag, "title"),
+      sourceHtmlEntities(cleanSourceText(match[2])),
+    ].filter(Boolean).join(" ");
+    const score = siteCrawlLinkScore(url, label);
+    if (!score) continue;
+    seen.add(url);
+    links.push({ url, score });
+  }
+  return links.sort((left, right) => right.score - left.score || left.url.localeCompare(right.url));
+}
+
+function officialSiteCrawlEnabled(source) {
+  const config = parseJson(source.adapter_config_json, {});
+  return source.source_type === "official_html"
+    && !leadSource(source)
+    && sourceAdapterKey(source) === "automatic"
+    && config.siteCrawl !== false;
+}
+
+async function crawlOfficialSite(source, firstText) {
+  const config = parseJson(source.adapter_config_json, {});
+  const maximumPages = Math.min(Math.max(Number(config.siteCrawlMaxPages) || DEFAULT_SITE_CRAWL_PAGES, 2), MAX_SITE_CRAWL_PAGES);
+  const registryUrl = canonicalSiteCrawlUrl(source.url, source.url);
+  const visited = new Set([registryUrl]);
+  const queued = new Set();
+  const failures = [];
+  const proposals = [];
+  let pagesCrawled = 1;
+  let linksDiscovered = 0;
+  let frontier = siteCrawlLinks(firstText, registryUrl, registryUrl, visited).map((item) => ({ ...item, depth: 1 }));
+  frontier.forEach((item) => queued.add(item.url));
+  linksDiscovered += frontier.length;
+
+  while (frontier.length && visited.size < maximumPages) {
+    const depth = frontier[0].depth;
+    const available = maximumPages - visited.size;
+    const batch = frontier.filter((item) => item.depth === depth).slice(0, available);
+    frontier = frontier.filter((item) => !batch.includes(item));
+    batch.forEach((item) => visited.add(item.url));
+    const results = await mapConcurrent(batch, SITE_CRAWL_CONCURRENCY, async (item) => {
+      try {
+        const response = await fetchExternalSource(item.url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const contentType = asString(response.headers.get("content-type"));
+        if (contentType && !/html|xhtml/i.test(contentType)) throw new Error(`Unsupported content type ${contentType}`);
+        const text = await boundedResponseText(response);
+        const pageSource = { ...source, url: item.url, registry_url: registryUrl };
+        return {
+          item,
+          proposals: extractCalendarSourceEvents(text, pageSource).map(inferSubjectsAndFormats),
+          links: item.depth < MAX_SITE_CRAWL_DEPTH ? siteCrawlLinks(text, item.url, registryUrl, visited) : [],
+        };
+      } catch (error) {
+        return { item, proposals: [], links: [], error: asString(error.message) || "Page retrieval failed." };
+      }
+    });
+    for (const result of results) {
+      if (result.error) failures.push({ url: result.item.url, error: result.error });
+      else pagesCrawled += 1;
+      proposals.push(...result.proposals);
+      for (const link of result.links) {
+        if (visited.has(link.url) || queued.has(link.url)) continue;
+        queued.add(link.url);
+        frontier.push({ ...link, depth: result.item.depth + 1 });
+        linksDiscovered += 1;
+      }
+    }
+    frontier.sort((left, right) => left.depth - right.depth || right.score - left.score || left.url.localeCompare(right.url));
+  }
+
+  const unique = proposals.filter((event, index, events) => events.findIndex((candidate) => (
+    (candidate.sourceEventId && candidate.sourceEventId === event.sourceEventId)
+      || `${normalizeText(candidate.title)}|${candidate.startsAt}` === `${normalizeText(event.title)}|${event.startsAt}`
+  )) === index);
+  return {
+    proposals: unique,
+    diagnostics: {
+      pagesAttempted: visited.size,
+      pagesCrawled,
+      linksDiscovered,
+      crawlDepth: MAX_SITE_CRAWL_DEPTH,
+      crawlFailures: failures,
+    },
+  };
 }
 
 async function completeLocalistPayload(source, firstText) {
@@ -7372,12 +7839,12 @@ async function extractCandidateCheckProposal(env, candidate, registered) {
   } else if (adapterKey === "out_of_hand" && registered?.url === candidate.sourceUrl) {
     bundle = await extractOutOfHandSeries(env, staticText, source);
   } else {
-    let proposals = extractSourceEvents(staticText, source).map(inferSubjectsAndFormats);
+    let proposals = extractCalendarSourceEvents(staticText, source).map(inferSubjectsAndFormats);
     let retrieval = source.source_type === "json" ? "api" : "static";
     let browserMs = 0;
     if (!proposals.length && source.render_mode === "dynamic-fallback" && env.BROWSER?.quickAction) {
       const rendered = await browserContent(env, source.url);
-      proposals = extractSourceEvents(rendered.text, source).map(inferSubjectsAndFormats);
+      proposals = extractCalendarSourceEvents(rendered.text, source).map(inferSubjectsAndFormats);
       retrieval = "browser";
       browserMs = rendered.browserMs;
     }
@@ -7472,7 +7939,9 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "") {
       if (!response.ok && !platformFallback) throw new Error(`HTTP ${response.status}`);
       const text = response.ok ? await completeSourcePayload(source, await boundedResponseText(response)) : "";
       let bundle;
-      if (adapterKey === "out_of_hand") {
+      if (adapterKey === "beltline") {
+        bundle = await extractBeltlineEvents(env, source, sourceLimit);
+      } else if (adapterKey === "out_of_hand") {
         bundle = await extractOutOfHandSeries(env, text, source);
       } else if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) {
         bundle = await extractTicketPlatformEvents(env, text, source, adapterKey, {
@@ -7480,9 +7949,16 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "") {
           browserMs: 0,
         });
       } else {
-        let proposals = extractSourceEvents(text, source);
+        let proposals = extractCalendarSourceEvents(text, source);
         let retrieval = adapterKey === "localist" ? "api" : "static";
         let browserMs = 0;
+        let crawlDiagnostics = {};
+        if (!proposals.length && officialSiteCrawlEnabled(source)) {
+          const crawled = await crawlOfficialSite(source, text);
+          proposals = crawled.proposals;
+          crawlDiagnostics = crawled.diagnostics;
+          if (proposals.length) retrieval = "site-crawl";
+        }
         if (!proposals.length && source.render_mode === "dynamic-fallback") {
           const rendered = await browserPlatformEvents(env, source, adapterKey, source.url, sourceLimit, "index");
           proposals = rendered.events.map((item) => registeredBrowserProposal(item, source));
@@ -7492,16 +7968,19 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "") {
         proposals = proposals.map(inferSubjectsAndFormats);
         const hub = proposals.some((proposal) => proposal.eventStructure === "series");
         const childCount = proposals.reduce((sum, proposal) => sum + (proposal.occurrences || []).length, 0);
-        bundle = { proposals, diagnostics: { hubDetected: hub, childLinksDiscovered: childCount, childrenExtracted: childCount, missingChildren: [], retrieval, browserMs, completeness: hub && childCount < 2 ? "needs_verification" : "complete" } };
+        bundle = { proposals, diagnostics: { hubDetected: hub, childLinksDiscovered: childCount, childrenExtracted: childCount, missingChildren: [], retrieval, browserMs, ...crawlDiagnostics, completeness: hub && childCount < 2 ? "needs_verification" : "complete" } };
       }
       const proposalFingerprint = JSON.stringify(bundle.proposals.map((proposal) => ({
         id: proposal.sourceEventId, title: proposal.title, startsAt: proposal.startsAt, endsAt: proposal.endsAt,
       })));
-      const fingerprint = await sha256(adapterKey === "bigtickets" ? `${text}\n${proposalFingerprint}` : (text || proposalFingerprint));
+      const fingerprint = await sha256(adapterKey === "bigtickets" || bundle.diagnostics.retrieval === "site-crawl" ? `${text}\n${proposalFingerprint}` : (text || proposalFingerprint));
       const proposals = bundle.proposals.slice(0, sourceLimit);
-      const emptyWarning = proposals.length ? "" : bundle.diagnostics.retrieval === "browser-extraction"
+      const renderedEmpty = ["browser-extraction", "beltline-rendered-details"].includes(bundle.diagnostics.retrieval);
+      const emptyWarning = proposals.length ? "" : renderedEmpty
         ? "The source loaded and dynamic extraction ran, but no upcoming Atlanta event cards were found. Confirm that the URL is the exact events or calendar page and that its source type and adapter match the page."
-        : "The source loaded, but no event proposals were extracted from Static/API structured data. Choose Dynamic fallback for JavaScript-rendered event cards, or select the matching calendar, feed, or platform adapter, then run this source again.";
+        : bundle.diagnostics.pagesAttempted > 1
+          ? `The source loaded and the Scout checked ${bundle.diagnostics.pagesAttempted} bounded same-site pages, but no event proposals were extracted. Confirm that event links use recognizable calendar, festival, program, exhibition, workshop, performance, schedule, news, or visit labels.`
+          : "The source loaded, but no event proposals were extracted from Static/API structured data. Choose Dynamic fallback for JavaScript-rendered event cards, or select the matching calendar, feed, or platform adapter, then run this source again.";
       if (emptyWarning) warningCount += 1;
       const sourceOutcome = {
         sourceId: source.id,

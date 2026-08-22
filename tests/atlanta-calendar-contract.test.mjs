@@ -56,7 +56,7 @@ class MemoryBucket {
 function databaseThrough(lastMigration = "") {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
-  for (const name of readdirSync(join(ROOT, "migrations")).filter((item) => item.endsWith(".sql") && item !== "0147_calendar_creative_scout_import.sql").sort()) {
+  for (const name of readdirSync(join(ROOT, "migrations")).filter((item) => item.endsWith(".sql") && !["0147_calendar_creative_scout_import.sql", "0160_atlanta_fall_2026_arts_preview.sql", "0162_calendar_latest_creative_scout_strong_picks.sql"].includes(item)).sort()) {
     if (lastMigration && name > lastMigration) break;
     db.exec(readFileSync(join(ROOT, "migrations", name), "utf8"));
   }
@@ -1777,6 +1777,96 @@ test("successful source retrieval with zero extracted proposals is recorded as a
   }
 });
 
+test("official homepage image cards create private review candidates without treating application links as tickets", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.exec(`UPDATE calendar_scout_profiles
+    SET weighted_subjects_json='{"art":1,"film":1}',weighted_formats_json='{"exhibition":1,"screening":1}',positive_concepts_json='[]',negative_terms_json='[]',relevance_threshold=0.5,date_horizon_days=500
+    WHERE id='atlanta-default'`);
+  db.exec(`INSERT INTO calendar_sources(id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
+    VALUES('cal_source_affps_fixture','AFFPS','https://www.affps.com/','official_html','official',1,24,'automatic','static','{}',datetime('now'),datetime('now'))`);
+  const html = `<html><body><h1>Upcoming Festival Calendar</h1>
+    <a href="https://www.zapplication.org/event-info.php?ID=13857"><img alt="Northside Handmade Arts Festival"><span>September 12-13, 2026</span></a>
+    <a href="https://www.zapplication.org/event-info.php?ID=13879"><img alt="West End Independent Film Festival"><span>September 19-20, 2026</span></a>
+  </body></html>`;
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    return new Response(html, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_affps_fixture" });
+    assert.equal(run.status, "completed");
+    assert.equal(run.candidates, 2);
+    assert.equal(run.outcomes[0].sources[0].proposals, 2);
+    assert.equal(run.outcomes[0].sources[0].retrieval, "static");
+    assert.deepEqual(calls, ["https://www.affps.com/"]);
+    const candidate = db.prepare(`SELECT title,source_url,ticket_url,verification_state,venue_address
+      FROM calendar_candidates WHERE title='Northside Handmade Arts Festival'`).get();
+    assert.deepEqual({ ...candidate }, {
+      title:"Northside Handmade Arts Festival",
+      source_url:"https://www.affps.com/",
+      ticket_url:"",
+      verification_state:"needs_verification",
+      venue_address:"",
+    });
+    const application = db.prepare(`SELECT url,link_role,include_public FROM calendar_candidate_links
+      WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE title='Northside Handmade Arts Festival')`).get();
+    assert.deepEqual({ ...application }, {
+      url:"https://www.zapplication.org/event-info.php?ID=13857",
+      link_role:"supporting",
+      include_public:0,
+    });
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("zero-result official sources crawl only bounded same-origin event-like links to depth two", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.exec(`UPDATE calendar_scout_profiles
+    SET weighted_subjects_json='{"art":1}',weighted_formats_json='{"exhibition":1}',positive_concepts_json='[]',negative_terms_json='[]',relevance_threshold=0.5,date_horizon_days=500
+    WHERE id='atlanta-default'`);
+  db.exec(`INSERT INTO calendar_sources(id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
+    VALUES('cal_source_site_crawl_fixture','Official Arts Organization','https://official.example/','official_html','official',1,24,'automatic','static','{"siteCrawlMaxPages":4}',datetime('now'),datetime('now'))`);
+  const root = `<nav><a href="/about">About</a><a href="/programming">Programming</a><a href="https://outside.example/events">External events</a></nav>`;
+  const programming = `<main><a href="/programming/fall-exhibition">Upcoming exhibition</a><a href="/privacy">Privacy</a></main>`;
+  const detailUrl = "https://official.example/programming/fall-exhibition";
+  const detail = `<script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org", "@type":"Event", "@id":"fall-exhibition-opening",
+    name:"Atlanta Fall Art Exhibition Opening", description:"An Atlanta visual art exhibition opening.",
+    startDate:"2026-10-10T18:00:00-04:00", endDate:"2026-10-10T21:00:00-04:00", url:detailUrl,
+    location:{ "@type":"Place", name:"Official Arts Gallery", address:{ streetAddress:"100 Art Way", addressLocality:"Atlanta", addressRegion:"GA" } },
+  })}</script>`;
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const value = String(url);
+    calls.push(value);
+    const html = value === "https://official.example/" ? root : value === "https://official.example/programming" ? programming : value === detailUrl ? detail : "not found";
+    return new Response(html, { status:value === "https://official.example/about" ? 404 : 200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_site_crawl_fixture" });
+    assert.equal(run.status, "completed");
+    assert.equal(run.candidates, 1);
+    const sourceRun = run.outcomes[0].sources[0];
+    assert.equal(sourceRun.retrieval, "site-crawl");
+    assert.equal(sourceRun.pagesAttempted, 3);
+    assert.equal(sourceRun.pagesCrawled, 3);
+    assert.equal(sourceRun.crawlDepth, 2);
+    assert.deepEqual(calls, ["https://official.example/", "https://official.example/programming", detailUrl]);
+    assert.equal(calls.every((url) => new URL(url).hostname === "official.example"), true);
+    assert.equal(db.prepare("SELECT source_url FROM calendar_candidates WHERE title='Atlanta Fall Art Exhibition Opening'").get().source_url, detailUrl);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Eyedrum's configured creative-music series groups lineup aliases and retains dates missing from a truncated scan", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_eyedrum'");
@@ -2018,6 +2108,94 @@ test("new generic sources can recover rendered event cards through bounded dynam
     assert.equal(run.outcomes[0].sources[0].retrieval, "browser-extraction");
     assert.equal(run.outcomes[0].sources[0].proposals, 1);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE source_id=?").get(source.id).count, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Atlanta BeltLine uses rendered event links and deterministic detail metadata without publishing candidates", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.exec(`UPDATE calendar_scout_profiles
+    SET weighted_subjects_json='{"art":1,"film":1,"poetry-music":1}',weighted_formats_json='{"performance":1,"experimental-event":1}',positive_concepts_json='[]',negative_terms_json='[]',relevance_threshold=0.5,date_horizon_days=500
+    WHERE id='atlanta-default'`);
+  db.exec(`INSERT INTO calendar_sources
+    (id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
+    VALUES('cal_source_beltline_fixture','Atlanta BeltLine','https://beltline.org/events/?contract=1','official_html','official',1,24,'automatic','dynamic-fallback','{}',datetime('now'),datetime('now'))`);
+  const artUrl = "https://beltline.org/events/6a832a5e26f6d97e07822dfb";
+  const fitnessUrl = "https://beltline.org/events/69b19af113e88b3e73528d0a";
+  const detailResult = (url) => {
+    const art = url === artUrl;
+    const title = art ? "There's Not That Much Difference Between a Volcano and Our Tears" : "e-Bike Lesson with Lime";
+    const jsonLd = JSON.stringify({
+      "@context":"https://schema.org", "@type":"Event", eventStatus:"https://schema.org/EventScheduled", name:title,
+      startDate:art ? "2026-08-21T21:00:00-04:00" : "2026-08-22T09:00:00-04:00",
+      endDate:art ? "2026-08-21T22:00:00-04:00" : "2026-08-22T09:30:00-04:00",
+    });
+    const venue = art ? "Pittsburgh Yards" : "Lee + White Parking Garage";
+    const address = art ? "352 University Avenue Southwest" : "1020 White Street Southwest";
+    const description = art
+      ? "An experimental outdoor theatre experience using video projection and live performance."
+      : "A basic electric bicycle lesson.";
+    const topic = art ? "Atlanta Beltline Art" : "Fitness and Wellness";
+    const main = `<main><a href="/events">All Events</a><h1>${title}</h1><p>Date:</p><p>${art ? "Friday, August 21, 2026" : "Saturday, August 22, 2026"}</p><p>Time:</p><p>${art ? "9:00 PM - 10:00 PM" : "9:00 AM - 9:30 AM"}</p><p>Location:</p><p>${venue}</p><p>${address}</p><p>${description}</p><p>TOPICS:</p><p>${topic}</p><p>SHARE:</p><p>Organizer</p><p>ABI</p></main>`;
+    return [
+      { selector:'script[type="application/ld+json"]', results:[{ html:`<script type="application/ld+json">${jsonLd}</script>`, text:jsonLd }] },
+      { selector:"main", results:[{ html:main, text:`All Events\n${title}\nDate:\n${art ? "Friday, August 21, 2026" : "Saturday, August 22, 2026"}\nTime:\n${art ? "9:00 PM - 10:00 PM" : "9:00 AM - 9:30 AM"}\nLocation:\n${venue}\n${address}\n${description}\nTOPICS:\n${topic}\nSHARE:\nOrganizer\nABI` }] },
+    ];
+  };
+  const calls = [];
+  const browser = {
+    async quickAction(action, options) {
+      calls.push({ action, url:options.url });
+      if (action === "links") {
+        assert.equal(options.visibleLinksOnly, true);
+        assert.equal(options.excludeExternalLinks, true);
+        return new Response(JSON.stringify({ success:true, result:[new URL(artUrl).pathname, fitnessUrl, "https://beltline.org/about-us/"] }), {
+          status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":"20" },
+        });
+      }
+      assert.equal(action, "scrape");
+      assert.deepEqual(options.elements, [{ selector:'script[type="application/ld+json"]' }, { selector:"main" }]);
+      return new Response(JSON.stringify({ success:true, result:detailResult(options.url) }), {
+        status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":"10" },
+      });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<html><body><div id='events'></div></body></html>", { status:200, headers:{ "content-type":"text/html" } });
+  try {
+    const run = await runCalendarScout(env(db, { BROWSER:browser }), { runKind:"manual", includeWeb:false, sourceId:"cal_source_beltline_fixture" });
+    assert.equal(run.status, "completed");
+    assert.equal(run.candidates, 1);
+    assert.equal(run.warnings, 0);
+    const sourceRun = run.outcomes[0].sources[0];
+    assert.equal(sourceRun.adapter, "beltline");
+    assert.equal(sourceRun.retrieval, "beltline-rendered-details");
+    assert.equal(sourceRun.childLinksDiscovered, 2);
+    assert.equal(sourceRun.childrenExtracted, 2);
+    assert.equal(sourceRun.proposals, 2);
+    assert.equal(sourceRun.skipped, 1);
+    assert.deepEqual(sourceRun.skipReasons, { unclassified:1 });
+    assert.deepEqual(calls.map((call) => call.action), ["links", "scrape", "scrape"]);
+    const candidate = db.prepare(`SELECT title,organizer,source_url,starts_at,ends_at,venue_name,venue_address,city,region,verification_state,public_entry_id
+      FROM calendar_candidates WHERE source_id='cal_source_beltline_fixture'`).get();
+    assert.deepEqual({ ...candidate }, {
+      title:"There's Not That Much Difference Between a Volcano and Our Tears",
+      organizer:"ABI",
+      source_url:artUrl,
+      starts_at:"2026-08-21T21:00:00-04:00",
+      ends_at:"2026-08-21T22:00:00-04:00",
+      venue_name:"Pittsburgh Yards",
+      venue_address:"352 University Avenue Southwest",
+      city:"Atlanta",
+      region:"GA",
+      verification_state:"needs_verification",
+      public_entry_id:"",
+    });
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
+    const publicEvents = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+    assert.equal(publicEvents.events.some((event) => event.title === candidate.title), false);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -4089,6 +4267,7 @@ test("Calendar Studio explains source warnings inline and defaults new sources t
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
   const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
   assert.match(studio,/renderMode:"dynamic-fallback"/);
+  assert.match(studio,/\["beltline","Atlanta BeltLine"\]/);
   assert.match(studio,/function sourceRunDiagnostic\(source\)/);
   assert.match(studio,/What to do:/);
   assert.match(studio,/Change Rendering to Dynamic fallback/);
