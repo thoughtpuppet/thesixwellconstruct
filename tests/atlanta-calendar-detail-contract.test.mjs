@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 import worker from "../_worker.js";
 import { handleCalendarAdminApi, handleCalendarPublicApi } from "../functions/api/calendar/_lib.js";
@@ -172,6 +173,7 @@ test("calendar detail UI keeps titles plain and replaces new in-page event ancho
   const html = readFileSync(join(ROOT, "calendar", "event", "index.html"), "utf8");
   const css = readFileSync(join(ROOT, "css", "atlanta-calendar.css"), "utf8");
   assert.match(record, /data-calendar-detail-link>View event<\/a>/);
+  assert.match(record, /data-calendar-card-href=/);
   assert.match(record, /headingTag \+ \(options\.detail/);
   assert.doesNotMatch(record, /<h3><a/);
   assert.match(calendar, /calendar-day-agenda-item/);
@@ -182,11 +184,83 @@ test("calendar detail UI keeps titles plain and replaces new in-page event ancho
   assert.match(calendar, /subjects:checkedValues\(subjectRoot\)/);
   assert.match(calendar, /scrollY:Math\.max/);
   assert.match(calendar, /else syncFromHash\(\)/);
+  assert.match(calendar, /event\.target\.closest\("\[data-calendar-card-href\]"\)/);
+  assert.match(calendar, /interactiveCardTarget = event\.target\.closest\('a,button,summary,input,select,textarea,label,\[contenteditable="true"\]'\)/);
+  assert.match(calendar, /location\.assign\(clickableCard\.dataset\.calendarCardHref\)/);
   assert.match(record, /data-share-url=/);
   assert.match(detail, /Back to your calendar view/);
+  assert.doesNotMatch(detail, /syncDescriptionToggles|data-tag-toggle|data-description-toggle/);
   assert.match(html, /data-calendar-event-canonical/);
   assert.match(html, /data-calendar-event-og-title/);
-  assert.match(html, /atlanta-calendar-record\.js\?v=20260821-calendar-event-pages/);
+  assert.match(html, /atlanta-calendar-record\.js\?v=20260822-calendar-detail-expanded/);
   assert.match(css, /\.calendar-day-agenda-item>a \{ min-height:44px/);
+  assert.match(css, /\.calendar-event-card\[data-calendar-card-href\] \{ cursor:pointer; \}/);
   assert.match(css, /\.calendar-event-detail-record/);
+});
+
+test("dedicated event records render every approved detail without collapsed controls", () => {
+  const source = readFileSync(join(ROOT, "js", "atlanta-calendar-record.js"), "utf8");
+  const context = { window:{} };
+  runInNewContext(source, context);
+  const fixture = {
+    id:"curated:expanded-detail",
+    origin:"curated",
+    title:"Expanded Detail Record",
+    description:"A complete description that remains visible on the dedicated page without a show-more control.",
+    dateKind:"timed",
+    startsAt:"2026-08-29T19:00:00-04:00",
+    endsAt:"2026-08-29T21:00:00-04:00",
+    timezone:"America/New_York",
+    organizer:"Primary Arts Organizer",
+    venueName:"Expanded Arts Hall",
+    venueAddress:"100 Peachtree Street, Atlanta, GA 30303",
+    subjects:["art", "poetry-music", "technology"],
+    formats:["performance", "panel"],
+    affiliations:[],
+    planning:{ latitude:33.749, longitude:-84.388 },
+    status:"published",
+    scheduleStatus:"scheduled",
+    ticketStatus:"on_sale",
+    sourceUrl:"https://example.com/official",
+    ticketUrl:"https://example.com/tickets",
+    detailUrl:"/calendar/events/expanded-detail-record--curated%3Aexpanded-detail/",
+    relatedOccurrences:[{
+      id:"curated-occurrence:expanded-program",
+      title:"Related Artist Program",
+      occurrenceLabel:"Artist Program",
+      dateKind:"timed",
+      startsAt:"2026-08-30T17:00:00-04:00",
+      endsAt:"2026-08-30T18:00:00-04:00",
+      detailUrl:"/calendar/events/related-artist-program--curated-occurrence%3Aexpanded-program/",
+    }],
+    relatedLinks:[
+      { role:"artist", label:"Participating Artist", creditRole:"Painter", url:"https://example.com/artist" },
+      { role:"participant", label:"Program Participant", url:"https://example.com/participant" },
+      { role:"organizer", label:"Additional Organizer", url:"https://example.com/organizer" },
+      { role:"related", label:"Program details", url:"https://example.com/details" },
+    ],
+    flyer:{ url:"https://example.com/flyer.jpg", altText:"Expanded Detail Record flyer", caption:"Official event flyer" },
+    media:[{ url:"https://example.com/gallery.jpg", altText:"Participating artists", caption:"Artist preview" }],
+  };
+  const expanded = context.window.AtlantaCalendarRecord.renderEvent(fixture, { headingTag:"h1", includeViewEvent:false, detail:true });
+  assert.match(expanded, /hero-descriptor calendar-event-description"/);
+  assert.match(expanded, /calendar-map-choices is-expanded/);
+  assert.match(expanded, /Google Maps/);
+  assert.match(expanded, /Apple Maps/);
+  assert.match(expanded, /<h2>Related schedule<\/h2>/);
+  assert.match(expanded, /<h2>People \+ related<\/h2>/);
+  assert.match(expanded, /Artists<\/span>.*Participating Artist/s);
+  assert.match(expanded, /Participants<\/span>.*Program Participant/s);
+  assert.match(expanded, /Additional organizers<\/span>.*Additional Organizer/s);
+  assert.match(expanded, /Related<\/span>.*Program details/s);
+  assert.match(expanded, /<h2>Flyer \+ media<\/h2>/);
+  assert.match(expanded, /flyer\.jpg/);
+  assert.match(expanded, /gallery\.jpg/);
+  assert.doesNotMatch(expanded, /<details|<summary|data-description-toggle|data-tag-toggle|is-collapsed| hidden|data-calendar-card-href/);
+
+  const compact = context.window.AtlantaCalendarRecord.renderEvent(fixture, { headingTag:"h3", includeViewEvent:true });
+  assert.match(compact, /<details/);
+  assert.match(compact, /data-description-toggle/);
+  assert.match(compact, /data-tag-toggle/);
+  assert.match(compact, /data-calendar-card-href/);
 });

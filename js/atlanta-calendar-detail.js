@@ -18,16 +18,6 @@
     } catch (error) { return false; }
   }
 
-  function syncDescriptionToggles() {
-    Array.from(root.querySelectorAll(".calendar-event-description")).forEach(function (description) {
-      var control = root.querySelector('[data-description-toggle][aria-controls="' + description.id + '"]');
-      if (!control) return;
-      if (control.getAttribute("aria-expanded") === "true") { control.hidden = false; return; }
-      description.classList.add("is-collapsed");
-      control.hidden = !(description.scrollHeight > description.clientHeight + 1);
-    });
-  }
-
   async function shareEvent(control) {
     var shareUrl = new URL(control.dataset.shareUrl || location.pathname, location.origin).toString();
     var shareData = { title:control.dataset.shareTitle || document.title, url:shareUrl };
@@ -94,32 +84,12 @@
   root.innerHTML = record.renderEvent(event, { headingTag:"h1", includeViewEvent:false, detail:true });
   document.documentElement.classList.add("is-ready");
   if (hasReturnState()) backLink.textContent = "Back to your calendar view";
-  requestAnimationFrame(syncDescriptionToggles);
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncDescriptionToggles);
-  window.addEventListener("resize", syncDescriptionToggles);
 
   root.addEventListener("click", function (clickEvent) {
     var shareControl = clickEvent.target.closest("[data-share-event]");
     if (shareControl) { shareEvent(shareControl); return; }
     var galleryButton = clickEvent.target.closest("[data-gallery-event]");
     if (galleryButton) { openGallery(Number(galleryButton.dataset.galleryIndex) || 0); return; }
-    var tagControl = clickEvent.target.closest("[data-tag-toggle]");
-    if (tagControl) {
-      var expanded = tagControl.getAttribute("aria-expanded") !== "true";
-      var tagRoot = tagControl.closest(".calendar-tags");
-      tagRoot.querySelectorAll(".calendar-tag.is-extra").forEach(function (tag) { tag.hidden = !expanded; });
-      tagControl.setAttribute("aria-expanded", expanded ? "true" : "false");
-      tagControl.textContent = expanded ? "Show fewer" : "+" + tagRoot.querySelectorAll(".calendar-tag.is-extra").length + " more";
-      return;
-    }
-    var control = clickEvent.target.closest("[data-description-toggle]");
-    if (!control) return;
-    var description = document.getElementById(control.getAttribute("aria-controls"));
-    if (!description) return;
-    var shouldExpand = control.getAttribute("aria-expanded") !== "true";
-    control.setAttribute("aria-expanded", shouldExpand ? "true" : "false");
-    control.textContent = shouldExpand ? "See less" : "See more";
-    description.classList.toggle("is-collapsed", !shouldExpand);
   });
 
   document.getElementById("calendarMediaPrevious").addEventListener("click", function () { shiftGallery(-1); });

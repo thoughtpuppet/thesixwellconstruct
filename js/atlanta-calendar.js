@@ -552,6 +552,14 @@
   document.addEventListener("click", function (event) {
     var detailLink = event.target.closest("[data-calendar-detail-link]");
     if (detailLink && detailLink.getAttribute("href") && !detailLink.getAttribute("href").startsWith("#")) saveCalendarReturnState();
+    var clickableCard = event.target.closest("[data-calendar-card-href]");
+    var interactiveCardTarget = event.target.closest('a,button,summary,input,select,textarea,label,[contenteditable="true"]');
+    if (clickableCard && !interactiveCardTarget) {
+      event.preventDefault();
+      saveCalendarReturnState();
+      location.assign(clickableCard.dataset.calendarCardHref);
+      return;
+    }
     var viewLink = event.target.closest("[data-calendar-view-link]");
     if (viewLink) {
       event.preventDefault();

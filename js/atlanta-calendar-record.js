@@ -128,7 +128,7 @@
     return [event.venueName, event.venueAddress].filter(Boolean).join(", ");
   }
 
-  function addressFact(event) {
+  function addressFact(event, expanded) {
     var address = String(event.venueAddress || "").trim();
     var venue = String(event.venueName || "").trim();
     var movedOnline = event.scheduleStatus === "moved_online";
@@ -136,12 +136,16 @@
     if (!address || normalizedLabel(address) === normalizedLabel(venue)) return "";
     if (!isPhysicalAddress) return '<span>' + escapeHtml(address) + '</span>';
     var destination = encodeURIComponent(mapDestination(event));
+    if (expanded) return '<div class="calendar-map-choices is-expanded"><span class="calendar-map-address">' + escapeHtml(address) + '</span>' +
+      '<div><a href="https://www.google.com/maps/dir/?api=1&amp;destination=' + destination + '" target="_blank" rel="noopener noreferrer">Google Maps</a>' +
+      '<a href="https://maps.apple.com/?daddr=' + destination + '&amp;dirflg=d" target="_blank" rel="noopener noreferrer">Apple Maps</a></div></div>';
     return '<details class="calendar-map-choices"><summary>' + escapeHtml(address) + '</summary>' +
       '<div><a href="https://www.google.com/maps/dir/?api=1&amp;destination=' + destination + '" target="_blank" rel="noopener noreferrer">Google Maps</a>' +
       '<a href="https://maps.apple.com/?daddr=' + destination + '&amp;dirflg=d" target="_blank" rel="noopener noreferrer">Apple Maps</a></div></details>';
   }
 
-  function tagList(labels) {
+  function tagList(labels, expanded) {
+    if (expanded) return '<div class="calendar-tags">' + labels.map(function (label) { return '<span class="calendar-tag">' + escapeHtml(label) + '</span>'; }).join("") + '</div>';
     var visible = labels.slice(0, 3);
     var hidden = labels.slice(3);
     return '<div class="calendar-tags">' +
@@ -151,7 +155,7 @@
       '</div>';
   }
 
-  function relatedDisclosure(event, creditedLink) {
+  function relatedDisclosure(event, creditedLink, expanded) {
     var relatedOccurrences = Array.isArray(event.relatedOccurrences) ? event.relatedOccurrences : [];
     var relatedLinks = Array.isArray(event.relatedLinks) ? event.relatedLinks : [];
     var artistLinks = relatedLinks.filter(function (link) { return link.role === "artist"; });
@@ -159,22 +163,29 @@
     var organizerLinks = relatedLinks.filter(function (link) { return link.role === "organizer"; });
     var otherRelatedLinks = relatedLinks.filter(function (link) { return !["artist","participant","organizer"].includes(link.role); });
     var peopleCount = artistLinks.length + participantLinks.length + organizerLinks.length + otherRelatedLinks.length;
-    var schedule = relatedOccurrences.length ? '<details class="calendar-event-disclosure"><summary>Related schedule (' + relatedOccurrences.length + ')</summary><div class="calendar-disclosure-content calendar-related-schedule">' + relatedOccurrences.map(function (occurrence) {
+    var scheduleContent = relatedOccurrences.map(function (occurrence) {
       var href = occurrence.detailUrl || ("#" + eventAnchor(occurrence));
       return '<a href="' + escapeHtml(href) + '"' + (occurrence.detailUrl ? ' data-calendar-detail-link' : '') + '><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small></a>';
-    }).join("") + '</div></details>' : '';
-    var people = peopleCount ? '<details class="calendar-event-disclosure"><summary>People + related (' + peopleCount + ')</summary><div class="calendar-disclosure-content">' +
+    }).join("");
+    var peopleContent =
       (artistLinks.length ? '<div class="calendar-related-links calendar-artist-links"><span>Artists</span>' + artistLinks.map(creditedLink).join("") + '</div>' : '') +
       (participantLinks.length ? '<div class="calendar-related-links"><span>Participants</span>' + participantLinks.map(creditedLink).join("") + '</div>' : '') +
       (organizerLinks.length ? '<div class="calendar-related-links"><span>Additional organizers</span>' + organizerLinks.map(creditedLink).join("") + '</div>' : '') +
-      (otherRelatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + otherRelatedLinks.map(creditedLink).join("") + '</div>' : '') +
-      '</div></details>' : '';
+      (otherRelatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + otherRelatedLinks.map(creditedLink).join("") + '</div>' : '');
+    var schedule = relatedOccurrences.length ? (expanded
+      ? '<section class="calendar-event-detail-section"><h2>Related schedule</h2><div class="calendar-disclosure-content calendar-related-schedule">' + scheduleContent + '</div></section>'
+      : '<details class="calendar-event-disclosure"><summary>Related schedule (' + relatedOccurrences.length + ')</summary><div class="calendar-disclosure-content calendar-related-schedule">' + scheduleContent + '</div></details>') : '';
+    var people = peopleCount ? (expanded
+      ? '<section class="calendar-event-detail-section"><h2>People + related</h2><div class="calendar-disclosure-content">' + peopleContent + '</div></section>'
+      : '<details class="calendar-event-disclosure"><summary>People + related (' + peopleCount + ')</summary><div class="calendar-disclosure-content">' + peopleContent + '</div></details>') : '';
     return schedule + people;
   }
 
   function eventMedia(event) {
     var flyer = event.flyer && event.flyer.url ? event.flyer : null;
-    return Array.isArray(event.media) && event.media.length ? event.media : (flyer ? [flyer] : []);
+    var media = Array.isArray(event.media) ? event.media.slice() : [];
+    if (flyer && !media.some(function (item) { return item && item.url === flyer.url; })) media.unshift(flyer);
+    return media;
   }
 
   function renderEvent(event, options) {
@@ -198,14 +209,26 @@
     var statusLabels = [scheduleState, ticketState].filter(function (value, index, list) { return value && list.indexOf(value) === index; });
     var descriptionId = eventAnchor(event) + "-description";
     var cleanDescription = displayText(event.description);
-    var descriptionClass = options.detail ? "hero-descriptor calendar-event-description is-collapsed" : "calendar-event-description is-collapsed";
-    var description = cleanDescription ? '<p class="' + descriptionClass + '" id="' + descriptionId + '">' + escapeHtml(cleanDescription) + '</p><button class="calendar-description-toggle" type="button" data-description-toggle aria-controls="' + descriptionId + '" aria-expanded="false" hidden>See more</button>' : '';
+    var descriptionClass = options.detail ? "hero-descriptor calendar-event-description" : "calendar-event-description is-collapsed";
+    var descriptionToggle = options.detail ? '' : '<button class="calendar-description-toggle" type="button" data-description-toggle aria-controls="' + descriptionId + '" aria-expanded="false" hidden>See more</button>';
+    var description = cleanDescription ? '<p class="' + descriptionClass + '" id="' + descriptionId + '">' + escapeHtml(cleanDescription) + '</p>' + descriptionToggle : '';
     var parent = event.isOccurrence ? '<p class="calendar-event-series">Part of / ' + (event.parentDetailUrl ? '<a href="' + escapeHtml(event.parentDetailUrl) + '" data-calendar-detail-link>' + escapeHtml(event.parentTitle) + '</a>' : escapeHtml(event.parentTitle)) + ' / ' + escapeHtml(OCCURRENCE_LABELS[event.occurrenceType] || "Related Program") + '</p>' : '';
     var viewAction = includeViewEvent && event.detailUrl ? '<a href="' + escapeHtml(event.detailUrl) + '" data-calendar-detail-link>View event</a>' : '';
     var officialAction = officialUrl ? '<a href="' + escapeHtml(officialUrl) + '">Official details</a>' : '';
     var ticketAction = event.ticketUrl ? '<a href="' + escapeHtml(event.ticketUrl) + '">Tickets / Register</a>' : '';
     var classes = 'calendar-event-card' + (options.detail ? ' calendar-event-detail-record' : '') + (event.status === "cancelled" ? ' is-cancelled' : '');
-    return '<article class="' + classes + '" id="' + eventAnchor(event) + '" data-subject="' + escapeHtml(primarySubject) + '">' +
+    var cardHref = includeViewEvent && event.detailUrl ? event.detailUrl : '';
+    var cardHrefAttribute = cardHref ? ' data-calendar-card-href="' + escapeHtml(cardHref) + '"' : '';
+    var flyerUrl = event.flyer && event.flyer.url ? event.flyer.url : '';
+    var mediaMarkup = media.map(function (item, index) {
+      var flyerClass = flyerUrl && item.url === flyerUrl ? ' class="is-flyer"' : '';
+      return '<button type="button"' + flyerClass + ' data-gallery-event="' + escapeHtml(galleryKey) + '" data-gallery-index="' + index + '" aria-label="View ' + escapeHtml(item.altText || event.title + ' event image') + '"><img src="' + escapeHtml(item.url) + '" alt="' + escapeHtml(item.altText || event.title + ' event image') + '" loading="lazy" decoding="async"' + (item.width ? ' width="' + Number(item.width) + '"' : '') + (item.height ? ' height="' + Number(item.height) + '"' : '') + '>' + (item.caption ? '<span>' + escapeHtml(item.caption) + '</span>' : '') + '</button>';
+    }).join("");
+    var mediaLabel = flyerUrl ? (media.length > 1 ? "Flyer + media" : "Event flyer") : "Event media";
+    var mediaSection = media.length ? (options.detail
+      ? '<section class="calendar-event-detail-section calendar-event-detail-media"><h2>' + mediaLabel + '</h2><div class="calendar-media-grid">' + mediaMarkup + '</div></section>'
+      : '<details class="calendar-event-media"><summary>View media (' + media.length + ')</summary><div class="calendar-media-grid">' + mediaMarkup + '</div></details>') : '';
+    return '<article class="' + classes + '" id="' + eventAnchor(event) + '" data-subject="' + escapeHtml(primarySubject) + '"' + cardHrefAttribute + '>' +
       '<p class="calendar-event-meta">' + escapeHtml([relativeDateCue(event), eventDate(event)].filter(Boolean).join(" / ")) + '</p>' +
       (statusLabels.length ? '<p class="calendar-event-status">' + escapeHtml(statusLabels.join(" / ")) + '</p>' : '') +
       parent +
@@ -216,12 +239,12 @@
       '<div class="calendar-event-facts">' +
         (event.organizer ? '<span><strong>organizer:</strong> ' + escapeHtml(event.organizer) + '</span>' : '') +
         (event.venueName ? '<span><strong>venue:</strong> ' + escapeHtml(event.venueName) + '</span>' : '') +
-        addressFact(event) +
+        addressFact(event, options.detail) +
         (sourceLabel ? '<span class="calendar-event-source">' + escapeHtml(sourceLabel) + '</span>' : '') +
       '</div>' +
-      tagList(labels) +
-      relatedDisclosure(event, creditedLink) +
-      (media.length ? '<details class="calendar-event-media"><summary>View media (' + media.length + ')</summary><div class="calendar-media-grid">' + media.map(function (item, index) { return '<button type="button" data-gallery-event="' + escapeHtml(galleryKey) + '" data-gallery-index="' + index + '" aria-label="View ' + escapeHtml(item.altText || event.title + ' event image') + '"><img src="' + escapeHtml(item.url) + '" alt="' + escapeHtml(item.altText || event.title + ' event image') + '" loading="lazy" decoding="async"' + (item.width ? ' width="' + Number(item.width) + '"' : '') + (item.height ? ' height="' + Number(item.height) + '"' : '') + '>' + (item.caption ? '<span>' + escapeHtml(item.caption) + '</span>' : '') + '</button>'; }).join("") + '</div></details>' : '') +
+      tagList(labels, options.detail) +
+      relatedDisclosure(event, creditedLink, options.detail) +
+      mediaSection +
       '<div class="calendar-event-actions">' + viewAction + officialAction + ticketAction + '<a class="is-secondary" href="/api/calendar/events/' + encodeURIComponent(event.id) + '.ics">Save date</a><button class="is-secondary" type="button" data-share-event data-share-title="' + escapeHtml(event.title) + '" data-share-url="' + escapeHtml(event.detailUrl || "") + '">Share</button></div>' +
       '</article>';
   }

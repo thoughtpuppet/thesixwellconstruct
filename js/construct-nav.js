@@ -53,7 +53,7 @@
       ['Build Your Own', '/tattoos/build/'],
     ],
     art: [
-      ['statements', '/writings/#featured'], ['artist bio', '/about/#saiel'],
+      ['statements', '/writings/#featured'], ['artist bio', '/about/saieldauhnsolehman/'],
       ['portfolio', '/art/'], ['meridian in conflux', '/art/#sectionPainting'],
       ['studio visit', '/booking/studio-visit/'],
     ],
@@ -63,7 +63,7 @@
       ['all merch', '/merch/'],
     ],
     about: [
-      ['the construct', '/about/#construct'], ['saiel / founder', '/about/#saiel'],
+      ['the construct', '/about/#construct'], ['saiel / founder', '/about/saieldauhnsolehman/'],
       ['architecture', '/about/#construct-architecture'], ['nodes', '/about/#access'],
       ['method', '/about/#library'], ['faq', '/about/#faq'], ['Legend', '/about/legend/'],
     ],

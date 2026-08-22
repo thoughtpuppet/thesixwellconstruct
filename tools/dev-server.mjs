@@ -83,6 +83,7 @@ const checkRoutes = [
   ["/about/legend/open-eye/", 200],
   ["/about/breakdown/", 200],
   ["/about/founder/", 200],
+  ["/about/saieldauhnsolehman/", 200],
   ["/about/mediums/", 200],
   ["/about/six-well/", 200],
   ["/about/ways-in/", 200],
