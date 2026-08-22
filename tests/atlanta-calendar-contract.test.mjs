@@ -4305,7 +4305,12 @@ test("Instagram intake retries a rejected detailed schema and keeps the enumerat
     const payload = await response.json();
     assert.equal(browserCalls.length, 2);
     assert.ok(browserCalls[0].options.response_format);
-    assert.equal(browserCalls[1].options.response_format, undefined);
+    assert.ok(browserCalls[1].options.response_format);
+    const fallbackEventSchema = browserCalls[1].options.response_format.json_schema.properties.events.items;
+    assert.deepEqual(fallbackEventSchema.required, ["title", "startsAt"]);
+    assert.ok(fallbackEventSchema.properties.occurrences);
+    assert.equal(fallbackEventSchema.properties.carouselImages, undefined);
+    assert.equal(fallbackEventSchema.properties.recurringOccurrences, undefined);
     assert.match(browserCalls[1].options.prompt, /Enumerate every dated opening/);
     assert.match(browserCalls[1].options.prompt, /every actual date in any repeated weekly schedule/);
     assert.deepEqual(payload.extraction, { retrieval:"browser", browserMs:24, adapter:"pasted", browserFallback:true });

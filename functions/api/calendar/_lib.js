@@ -7026,7 +7026,58 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
     fallbackUsed = true;
     response = await env.BROWSER.quickAction("json", {
       url,
-      prompt: `Extract the one primary event announced by this social post. Read the complete caption and all visible carousel images, including flyer text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. Return a JSON object with one events array. The event must contain title, startsAt, endsAt, description, caption, organizer, venueName, venueAddress, city, region, eventStructure, dateKind, timezone, imageUrl, imageAlt, and occurrences. If this is an exhibition, keep its full on-view range on the parent event. Enumerate every dated opening, talk, mixer, workshop, visit, closing, and every actual date in any repeated weekly schedule as a separate occurrences item. Each occurrence must contain title, occurrenceType, factualDescription, startsAt, endsAt, timezone, venueName, venueAddress, accessStatus, accessNotes, and audiences. Use explicit UTC offsets for timed values. Do not omit repeated dates, merge programs, or replace the exhibition range with a program date. Return empty strings for genuinely missing facts and no commentary outside the JSON object.`,
+      prompt: `Extract the one primary event announced by this social post. Read the complete caption and visible flyer text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. If this is an exhibition, keep its full on-view range on the parent event. Enumerate every dated opening, talk, mixer, workshop, visit, closing, and every actual date in any repeated weekly schedule as a separate occurrence. Use explicit UTC offsets for timed values. Do not omit repeated dates, merge programs, or replace the exhibition range with a program date. Return empty strings for genuinely missing optional facts.`,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          type: "object",
+          properties: {
+            events: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  startsAt: { type: "string" },
+                  endsAt: { type: "string" },
+                  description: { type: "string" },
+                  caption: { type: "string" },
+                  organizer: { type: "string" },
+                  venueName: { type: "string" },
+                  venueAddress: { type: "string" },
+                  city: { type: "string" },
+                  region: { type: "string" },
+                  eventStructure: { type: "string" },
+                  dateKind: { type: "string" },
+                  timezone: { type: "string" },
+                  imageUrl: { type: "string" },
+                  imageAlt: { type: "string" },
+                  accessStatus: { type: "string" },
+                  accessNotes: { type: "string" },
+                  audiences: { type: "array", items: { type: "string" } },
+                  occurrences: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string" },
+                        occurrenceType: { type: "string" },
+                        factualDescription: { type: "string" },
+                        startsAt: { type: "string" },
+                        endsAt: { type: "string" },
+                        timezone: { type: "string" },
+                      },
+                      required: ["title", "startsAt"],
+                    },
+                  },
+                },
+                required: ["title", "startsAt"],
+              },
+            },
+          },
+          required: ["events"],
+        },
+      },
       gotoOptions: { waitUntil: "networkidle2", timeout: 60_000 },
       waitForTimeout: 1_000,
       rejectResourceTypes: ["media", "font"],
