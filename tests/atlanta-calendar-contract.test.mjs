@@ -4253,10 +4253,109 @@ test("PHOSPHENES Instagram intake creates one exhibition with one-time and recur
   }
 });
 
+test("PHOSPHENES intake sends rendered caption and carousel assets to vision extraction before creating a candidate", async () => {
+  const db = database();
+  const eventUrl = "https://www.instagram.com/p/DcRzECRkQSj/";
+  const flyerUrl = "https://scontent-atl3-2.cdninstagram.com/phosphenes-flyer-live.jpg";
+  const artworkUrl = "https://scontent-atl3-2.cdninstagram.com/phosphenes-artwork-live.jpg";
+  const caption = "PHOSPHENES runs through September 8. Melee Tournament, Sun 8/23. Artist Talk, Mon 8/24, 6pm. Music Mixer, Thu 8/27, 6-9pm. The Science of Art, Fri 9/4, 6pm. Dance + Draw, Sat 9/5, 2-5pm. Studio Visits, Tue + Thu 5-8pm, Wed 6-8pm. Contact me, Stretch, or @billystonecipher for off hours inquiries. Curated by @1.stretch. 309A Peters St SW, Atlanta.";
+  const renderedHtml = `<html><head><meta property="og:description" content="${caption}"></head><body><article><p>${caption}</p><img src="${flyerUrl}" alt="PHOSPHENES event flyer"><img src="${artworkUrl}" alt="Artwork in the PHOSPHENES exhibition"></article></body></html>`;
+  const oneTimeOccurrences = [
+    { title:"Melee Tournament", occurrenceType:"other", factualDescription:"Melee Tournament.", startsAt:"2026-08-23T13:00:00-04:00", endsAt:"2026-08-23T18:00:00-04:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"", audiences:[] },
+    { title:"Artist Talk", occurrenceType:"artist_talk", factualDescription:"Artist talk.", startsAt:"2026-08-24T18:00:00-04:00", endsAt:"", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"", audiences:[] },
+    { title:"Music Mixer", occurrenceType:"mixer", factualDescription:"Music mixer.", startsAt:"2026-08-27T18:00:00-04:00", endsAt:"2026-08-27T21:00:00-04:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"", audiences:[] },
+    { title:"The Science of Art Talk", occurrenceType:"lecture", factualDescription:"The Science of Art talk.", startsAt:"2026-09-04T18:00:00-04:00", endsAt:"", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"", audiences:[] },
+    { title:"Dance + Draw", occurrenceType:"workshop", factualDescription:"Figure drawing with the artist and partner.", startsAt:"2026-09-05T14:00:00-04:00", endsAt:"2026-09-05T17:00:00-04:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"", audiences:[] },
+  ];
+  const recurringOccurrences = [
+    { title:"Studio Visits with Artist", occurrenceType:"other", factualDescription:"Studio visits with the artist.", daysOfWeek:["Tuesday","Thursday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"17:00", endTime:"20:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"Contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[] },
+    { title:"Studio Visits with Artist", occurrenceType:"other", factualDescription:"Studio visits with the artist.", daysOfWeek:["Wednesday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"18:00", endTime:"20:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"Contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[] },
+  ];
+  const visionEvent = {
+    title:"PHOSPHENES", description:"A solo exhibition by Timothy Hunter, curated by Stretch G.", caption, organizer:"Timothy Hunter",
+    organizerUrl:"", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", venueUrl:"", city:"Atlanta", region:"GA",
+    startsAt:"2026-08-14", endsAt:"2026-09-08", eventUrl, ticketUrl:"", imageUrl:flyerUrl, imageAlt:"PHOSPHENES exhibition flyer",
+    accessStatus:"unknown", accessNotes:"Contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[],
+    eventStructure:"exhibition", dateKind:"date_range", timezone:"America/New_York", subjects:["art","art-making"], formats:["exhibition","lecture-talk","performance","workshop"], experimental:true,
+    authorHandle:"timmy_hr", authorDisplayName:"Timothy Hunter", authorIsVerified:false, postedAt:"", mediaType:"carousel",
+    extractionNotes:["The caption supplied the program schedule and the flyer supplied the exhibition title, artist, curator, and date range."], conflicts:[],
+    carouselImages:[
+      { url:flyerUrl, altText:"PHOSPHENES event flyer", extractedText:"PHOSPHENES. A Solo Exhibition by Timothy Hunter. Curated by Stretch G. August 14th–September 8th 2026 at 309A Peters Street SW Atlanta, GA.", role:"flyer" },
+      { url:artworkUrl, altText:"Artwork in the PHOSPHENES exhibition", extractedText:"", role:"artwork" },
+    ],
+    occurrences:oneTimeOccurrences, recurringOccurrences,
+  };
+  const browser = {
+    async quickAction(action, options) {
+      assert.equal(action, "content");
+      assert.deepEqual(options.rejectResourceTypes, ["media", "font"]);
+      return new Response(renderedHtml, { status:200, headers:{ "content-type":"text/html", "x-browser-ms-used":"17" } });
+    },
+  };
+  let visionRequest = null;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url) === eventUrl) return new Response("<main>Instagram post</main>", { status:200, headers:{ "content-type":"text/html" } });
+    if (String(url) === "https://api.openai.com/v1/responses") {
+      const body = JSON.parse(options.body);
+      if (body.text?.format?.name === "pasted_social_event") {
+        visionRequest = body;
+        return new Response(JSON.stringify({ output_text:JSON.stringify({ events:[visionEvent] }), usage:{ input_tokens:1200, output_tokens:900, total_tokens:2100 } }), { status:200, headers:{ "content-type":"application/json" } });
+      }
+      return new Response(JSON.stringify({ output_text:JSON.stringify({ events:[] }), usage:{} }), { status:200, headers:{ "content-type":"application/json" } });
+    }
+    if (String(url).startsWith("https://scontent-atl3-2.cdninstagram.com/")) return new Response(new Uint8Array([1,2,3]), { status:200, headers:{ "content-type":"image/jpeg" } });
+    throw new Error(`Unexpected fetch ${url}`);
+  };
+  try {
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }));
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.equal(payload.extraction.retrieval, "rendered-social-vision");
+    assert.equal(payload.extraction.browserMs, 17);
+    assert.equal(payload.extraction.mediaInspected, 2);
+    assert.ok(visionRequest);
+    const visionContent = visionRequest.input[0].content;
+    assert.match(visionContent.find((item) => item.type === "input_text").text, /Studio Visits, Tue \+ Thu 5-8pm/);
+    assert.deepEqual(visionContent.filter((item) => item.type === "input_image").map((item) => item.image_url), [flyerUrl, artworkUrl]);
+    assert.equal(visionRequest.text.format.strict, true);
+
+    const candidate = payload.candidate;
+    assert.equal(candidate.title, "PHOSPHENES");
+    assert.equal(candidate.organizer, "Timothy Hunter");
+    assert.equal(candidate.factualDescription, "A solo exhibition by Timothy Hunter, curated by Stretch G.");
+    assert.equal(candidate.eventStructure, "exhibition");
+    assert.equal(candidate.dateKind, "date_range");
+    assert.equal(candidate.startsAt, "2026-08-14");
+    assert.equal(candidate.endsAt, "2026-09-08");
+    assert.equal(candidate.venueName, "");
+    assert.equal(candidate.venueAddress, "309A Peters Street SW, Atlanta, GA");
+    assert.deepEqual(candidate.subjects, ["art","art-making"]);
+    assert.equal(candidate.occurrences.length, 15);
+    assert.equal(candidate.occurrences.filter((occurrence) => occurrence.title === "Studio Visits with Artist").length, 10);
+    const evidence = db.prepare("SELECT media_url,provenance_json FROM calendar_candidate_social_evidence WHERE candidate_id=?").get(candidate.id);
+    assert.equal(evidence.media_url, flyerUrl);
+    assert.equal(JSON.parse(evidence.provenance_json).filter((item) => item.channel === "social_carousel_image").length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Instagram intake retries a rejected detailed schema and keeps the enumerated exhibition schedule", async () => {
   const db = database();
   const eventUrl = "https://www.instagram.com/p/DcRzECRkQSj/";
   const browserCalls = [];
+  const oneTimeOccurrences = [
+    { title:"Melee Tournament", occurrenceType:"other", startsAt:"2026-08-23T13:00:00-04:00", endsAt:"2026-08-23T18:00:00-04:00", timezone:"America/New_York" },
+    { title:"Artist Talk", occurrenceType:"artist_talk", startsAt:"2026-08-24T18:00:00-04:00", endsAt:"", timezone:"America/New_York" },
+    { title:"Music Mixer", occurrenceType:"mixer", startsAt:"2026-08-27T18:00:00-04:00", endsAt:"2026-08-27T21:00:00-04:00", timezone:"America/New_York" },
+    { title:"The Science of Art Talk", occurrenceType:"lecture", startsAt:"2026-09-04T18:00:00-04:00", endsAt:"", timezone:"America/New_York" },
+    { title:"Dance + Draw", occurrenceType:"workshop", startsAt:"2026-09-05T14:00:00-04:00", endsAt:"2026-09-05T17:00:00-04:00", timezone:"America/New_York" },
+  ];
+  const recurringOccurrences = [
+    { title:"Studio Visits with Artist", occurrenceType:"other", daysOfWeek:["Tuesday","Thursday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"17:00", endTime:"20:00" },
+    { title:"Studio Visits with Artist", occurrenceType:"other", daysOfWeek:["Wednesday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"18:00", endTime:"20:00" },
+  ];
   const browser = {
     async quickAction(action, options) {
       browserCalls.push({ action, options });
@@ -4264,6 +4363,12 @@ test("Instagram intake retries a rejected detailed schema and keeps the enumerat
         return new Response(JSON.stringify({ error:{ message:"Invalid response schema" } }), {
           status:422,
           headers:{ "content-type":"application/json", "x-browser-ms-used":"5" },
+        });
+      }
+      if (browserCalls.length === 3) {
+        return new Response(JSON.stringify({ result:{ occurrences:oneTimeOccurrences, recurringOccurrences } }), {
+          status:200,
+          headers:{ "content-type":"application/json", "x-browser-ms-used":"11" },
         });
       }
       return new Response(JSON.stringify({ result:{ events:[{
@@ -4286,11 +4391,7 @@ test("Instagram intake retries a rejected detailed schema and keeps the enumerat
         eventStructure:"exhibition",
         dateKind:"date_range",
         timezone:"America/New_York",
-        occurrences:[
-          { title:"Melee Tournament", occurrenceType:"other", startsAt:"2026-08-23T13:00:00-04:00", endsAt:"2026-08-23T18:00:00-04:00", timezone:"America/New_York" },
-          { title:"Artist Talk", occurrenceType:"artist_talk", startsAt:"2026-08-24T18:00:00-04:00", endsAt:"", timezone:"America/New_York" },
-          { title:"Studio Visits with Artist", occurrenceType:"other", startsAt:"2026-08-25T17:00:00-04:00", endsAt:"2026-08-25T20:00:00-04:00", timezone:"America/New_York" },
-        ],
+        occurrences:[],
       }] } }), { status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":"19" } });
     },
   };
@@ -4303,7 +4404,7 @@ test("Instagram intake retries a rejected detailed schema and keeps the enumerat
     const response = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db, { BROWSER:browser }));
     assert.equal(response.status, 201, await response.clone().text());
     const payload = await response.json();
-    assert.equal(browserCalls.length, 2);
+    assert.equal(browserCalls.length, 3);
     assert.ok(browserCalls[0].options.response_format);
     assert.ok(browserCalls[1].options.response_format);
     const fallbackEventSchema = browserCalls[1].options.response_format.json_schema.properties.events.items;
@@ -4313,16 +4414,24 @@ test("Instagram intake retries a rejected detailed schema and keeps the enumerat
     assert.equal(fallbackEventSchema.properties.recurringOccurrences, undefined);
     assert.match(browserCalls[1].options.prompt, /Enumerate every dated opening/);
     assert.match(browserCalls[1].options.prompt, /every actual date in any repeated weekly schedule/);
-    assert.deepEqual(payload.extraction, { retrieval:"browser", browserMs:24, adapter:"pasted", browserFallback:true });
+    assert.match(browserCalls[2].options.prompt, /Extract only the related schedule/);
+    assert.match(browserCalls[2].options.prompt, /Do not return the parent exhibition itself/);
+    assert.deepEqual(browserCalls[2].options.response_format.json_schema.required, ["occurrences", "recurringOccurrences"]);
+    assert.deepEqual(payload.extraction, { retrieval:"browser", browserMs:35, adapter:"pasted", browserFallback:true, scheduleScan:true });
     assert.equal(payload.candidate.title, "PHOSPHENES");
     assert.equal(payload.candidate.eventStructure, "exhibition");
     assert.equal(payload.candidate.startsAt, "2026-08-14");
     assert.equal(payload.candidate.endsAt, "2026-09-08");
-    assert.deepEqual(payload.candidate.occurrences.map((occurrence) => occurrence.title), [
-      "Melee Tournament",
+    assert.equal(payload.candidate.occurrences.length, 15);
+    assert.deepEqual([...new Set(payload.candidate.occurrences.map((occurrence) => occurrence.title))].sort(), [
       "Artist Talk",
+      "Dance + Draw",
+      "Melee Tournament",
+      "Music Mixer",
       "Studio Visits with Artist",
+      "The Science of Art Talk",
     ]);
+    assert.equal(payload.candidate.occurrences.filter((occurrence) => occurrence.title === "Studio Visits with Artist").length, 10);
   } finally {
     globalThis.fetch = originalFetch;
   }
