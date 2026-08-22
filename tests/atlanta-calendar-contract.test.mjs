@@ -1288,6 +1288,37 @@ test("direct monitoring remains safe without an OpenAI key and scheduler due gat
   }
 });
 
+test("Strong Picks scouting runs only the verified intake source scope", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.exec("UPDATE calendar_scout_connectors SET enabled=1,status='ready' WHERE id='direct'");
+  db.exec("UPDATE calendar_sources SET enabled=1 WHERE id IN ('cal_source_carlos_calendar','cal_source_gsu_cmii')");
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    return new Response(`<script type="application/ld+json">${JSON.stringify({
+      "@context":"https://schema.org", "@type":"Event", "@id":"strong-picks-scope-event",
+      name:"Atlanta Art and Technology Forum", description:"An Atlanta lecture connecting art, design, and creative technology.",
+      startDate:"2026-11-29T18:00:00-05:00", endDate:"2026-11-29T20:00:00-05:00",
+      url:"https://carlos.emory.edu/calendar/atlanta-art-technology-forum",
+      location:{ "@type":"Place", name:"Michael C. Carlos Museum", address:{ addressLocality:"Atlanta", addressRegion:"GA" } },
+    })}</script>`, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const result = await runCalendarScout(env(db), {
+      runKind:"manual", includeWeb:false, channels:["direct"], sourceScope:"strong-picks",
+    });
+    assert.equal(result.failures, 0);
+    assert.deepEqual(calls, ["https://carlos.emory.edu/calendar"]);
+    assert.ok(JSON.parse(db.prepare("SELECT sources_searched_json FROM calendar_scout_runs WHERE id=?").get(result.runId).sources_searched_json).includes("cal_source_carlos_calendar"));
+    assert.equal(db.prepare("SELECT last_attempt_at FROM calendar_sources WHERE id='cal_source_gsu_cmii'").get().last_attempt_at, null);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta Art and Technology Forum'").get().count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("one registered source can be run immediately without invoking other sources or discovery lanes", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0");
@@ -4183,13 +4214,15 @@ test("Calendar Studio renders a private scrollable Strong Picks dashboard linked
   assert.match(studioHtml,/id="toggleStrongPicks" type="button" aria-expanded="true" aria-controls="strongPicksContent">Collapse<\/button>/);
   assert.match(studioHtml,/class="strong-picks-content" id="strongPicksContent"/);
   assert.match(studioHtml,/id="strongPicksRefreshStatus" role="status" aria-live="polite"/);
-  assert.match(studioHtml,/Run Scout searches every enabled discovery lane and saves strong matches to the private candidate queue/);
+  assert.match(studioHtml,/Run Scout searches the verified Strong Picks source intake and saves strong matches to the private candidate queue/);
   assert.match(studioHtml,/Private Scout intelligence/);
   assert.match(studio,/\/api\/admin\/calendar\/strong-picks/);
   assert.match(studio,/async function refreshStrongPicks\(\)/);
-  assert.match(studio,/async function runEnabledScouts\(button, buttonLabel, status\)/);
+  assert.match(studio,/async function runEnabledScouts\(button, buttonLabel, status, scope\)/);
   assert.match(studio,/async function runStrongPicksScout\(\)/);
   assert.match(studio,/\/api\/admin\/calendar\/scout\/run/);
+  assert.match(studio,/JSON\.stringify\(scope\?\{scope:scope\}:\{\}\)/);
+  assert.match(studio,/runEnabledScouts\(button,"Run Scout",status,"strong-picks"\)/);
   assert.match(studio,/Review every result before publishing/);
   assert.match(studio,/STRONG_PICKS_COLLAPSE_KEY = "swc_calendar_strong_picks_open"/);
   assert.match(studio,/function setStrongPicksExpanded\(expanded, persist\)/);

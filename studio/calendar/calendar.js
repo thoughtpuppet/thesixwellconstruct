@@ -171,13 +171,13 @@
   function strongPicksScoutSummary(result) {
     return (result.strongPicks||0)+" strong pick"+((result.strongPicks||0)===1?"":"s")+", "+(result.materialUpdates||0)+" material update"+((result.materialUpdates||0)===1?"":"s")+", "+result.candidates+" candidate"+(result.candidates===1?"":"s")+", "+(result.suppressed||0)+" suppressed, and "+result.failures+" failure"+(result.failures===1?"":"s")+".";
   }
-  async function runEnabledScouts(button, buttonLabel, status) {
+  async function runEnabledScouts(button, buttonLabel, status, scope) {
     button.disabled=true;
     button.textContent="Running…";
-    if(status){status.classList.remove("is-error","is-success");status.textContent="Running every enabled Scout lane. New matches will stay private for review…";}
+    if(status){status.classList.remove("is-error","is-success");status.textContent=scope==="strong-picks"?"Running the verified Strong Picks source intake. New matches will stay private for review…":"Running every enabled Scout lane. New matches will stay private for review…";}
     toast("Enabled scout lanes started.");
     try {
-      var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:"{}"});
+      var result=await api("/api/admin/calendar/scout/run",{method:"POST",body:JSON.stringify(scope?{scope:scope}:{})});
       var summary=strongPicksScoutSummary(result);
       await Promise.all([refreshCandidates(),loadRuns(),loadStrongPicks()]);
       var connectors=await api("/api/admin/calendar/connectors");
@@ -198,7 +198,7 @@
   async function runStrongPicksScout() {
     var button=document.getElementById("runStrongPicksScout");
     var status=document.getElementById("strongPicksRefreshStatus");
-    try { await runEnabledScouts(button,"Run Scout",status); } catch(error) { /* Status and toast already explain the failure. */ }
+    try { await runEnabledScouts(button,"Run Scout",status,"strong-picks"); } catch(error) { /* Status and toast already explain the failure. */ }
   }
   function setStrongPicksExpanded(expanded, persist) {
     var panel=document.querySelector(".strong-picks-panel");

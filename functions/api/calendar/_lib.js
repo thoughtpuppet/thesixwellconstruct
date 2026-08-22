@@ -7916,10 +7916,12 @@ async function monitorDueCandidates(env, db, scheduledTime) {
   return { checked: outcomes.length, outcomes };
 }
 
-async function monitorSources(env, db, profile, sourceId = "", runId = "") {
+async function monitorSources(env, db, profile, sourceId = "", runId = "", sourceScope = "") {
   const result = sourceId
     ? await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(sourceId).all()
-    : await db.prepare("SELECT * FROM calendar_sources WHERE enabled=1 ORDER BY name").all();
+    : sourceScope === "strong-picks"
+      ? await db.prepare("SELECT * FROM calendar_sources WHERE enabled=1 AND COALESCE(json_extract(adapter_config_json,'$.strongPicksIntake'),0)=1 ORDER BY name").all()
+      : await db.prepare("SELECT * FROM calendar_sources WHERE enabled=1 ORDER BY name").all();
   const sources = result.results || [];
   const outcomes = [];
   let candidateCount = 0;
@@ -8740,7 +8742,7 @@ async function failActiveScoutRun(db, runId, error) {
   }
 }
 
-export async function runCalendarScout(env, { runKind = "scheduled", includeWeb = true, channels = null, sourceId = "" } = {}) {
+export async function runCalendarScout(env, { runKind = "scheduled", includeWeb = true, channels = null, sourceId = "", sourceScope = "" } = {}) {
   const db = requireDb(env);
   await expireStaleScoutRuns(db);
   const profileRow = await db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first();
@@ -8785,7 +8787,7 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
     try {
       let result;
       if (id === "direct") {
-        const direct = await monitorSources(env, db, profile, sourceId, runId);
+        const direct = await monitorSources(env, db, profile, sourceId, runId, sourceScope);
         result = { candidates: direct.candidateCount, duplicates: direct.duplicateCount, suppressed: direct.suppressedCount, failures: direct.failureCount, warnings: direct.warningCount, strongPicks: direct.strongPickCount, materialUpdates: direct.materialUpdateCount, citations: [], usage: {}, queries: [], postsInspected: 0, details: direct.outcomes };
         searched.push(...direct.sourceIds);
       } else if (id === "general_web") result = await runOpenAiDiscovery(env, db, profile, connector.perRunLimit, runId);
@@ -8852,7 +8854,7 @@ export async function runDueCalendarScout(env, scheduledTime = Date.now()) {
     const connectors = (await db.prepare("SELECT * FROM calendar_scout_connectors WHERE enabled=1").all()).results || [];
     const due = connectors.filter((connector) => !connector.last_attempt_at || now - Date.parse(connector.last_attempt_at) >= Number(connector.cadence_hours || 24) * 3_600_000).map((connector) => connector.id);
     if (!due.length) return monitoring.checked ? { status: "completed", monitoring } : { skipped: "not-due" };
-    const result = await runCalendarScout(env, { runKind: "scheduled", channels: due });
+    const result = await runCalendarScout(env, { runKind: "scheduled", channels: due, sourceScope: "strong-picks" });
     return { ...result, monitoring };
   } catch (error) {
     console.error(JSON.stringify({ event: "calendar_scout_schedule_failed", error: asString(error.message) }));
@@ -8904,7 +8906,9 @@ export async function handleCalendarAdminApi(request, env) {
       if (body === null) return errorResponse("Invalid JSON body.");
       const channels = body.channels === undefined ? null : body.channels;
       if (channels !== null && (!Array.isArray(channels) || channels.some((id) => !CONNECTOR_IDS.has(asString(id))))) return errorResponse("channels contains an unknown connector.");
-      return json(await runCalendarScout(env, { runKind: "manual", includeWeb: true, channels }));
+      const sourceScope = asString(body.scope);
+      if (sourceScope && sourceScope !== "strong-picks") return errorResponse("scope contains an unknown Scout intake.");
+      return json(await runCalendarScout(env, { runKind: "manual", includeWeb: true, channels, sourceScope }));
     }
     return errorResponse("Unknown calendar administration route.", 404);
   } catch (error) {
