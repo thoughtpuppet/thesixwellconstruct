@@ -2703,9 +2703,36 @@ async function loadSixWellEvents(db) {
   });
 }
 
+function calendarEventTitleSlug(value) {
+  const slug = asString(value)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96)
+    .replace(/-+$/g, "");
+  return slug || "event";
+}
+
+function calendarEventDetailUrl(event) {
+  if (event.origin === "sixwell") return asString(event.actionUrl || event.sourceUrl);
+  return `/calendar/events/${calendarEventTitleSlug(event.title)}--${encodeURIComponent(event.id)}/`;
+}
+
 async function normalizedEvents(db) {
   const [curated, sixwell] = await Promise.all([loadCuratedEvents(db), loadSixWellEvents(db)]);
-  return [...curated, ...sixwell].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt) || a.title.localeCompare(b.title));
+  const events = [...curated, ...sixwell];
+  const detailUrls = new Map(events.map((event) => [event.id, calendarEventDetailUrl(event)]));
+  return events.map((event) => ({
+    ...event,
+    detailUrl: detailUrls.get(event.id) || "",
+    parentDetailUrl: event.isOccurrence ? (detailUrls.get(event.seriesId) || "") : "",
+    relatedOccurrences: (event.relatedOccurrences || []).map((occurrence) => ({
+      ...occurrence,
+      detailUrl: detailUrls.get(occurrence.id) || "",
+    })),
+  })).sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt) || a.title.localeCompare(b.title));
 }
 
 function filteredEvents(events, searchParams) {
@@ -2913,6 +2940,14 @@ export async function handleCalendarPublicApi(request, env) {
         ? events.filter((item) => item.isOccurrence && item.seriesId === event.seriesId)
         : [event];
       return calendarResponse(selected, event.title, `${id.replace(/[^a-z0-9_-]+/gi, "-")}.ics`);
+    }
+    const detailMatch = url.pathname.match(/^\/api\/calendar\/events\/(.+)$/);
+    if (detailMatch) {
+      if (request.method !== "GET") return errorResponse("Method not allowed.", 405);
+      const id = decodeURIComponent(detailMatch[1]);
+      const event = events.find((item) => item.id === id);
+      if (!event) return errorResponse("Event not found.", 404);
+      return json({ event });
     }
     if (url.pathname !== "/api/calendar/events") return errorResponse("Unknown calendar route.", 404);
     if (request.method !== "GET") return errorResponse("Method not allowed.", 405);

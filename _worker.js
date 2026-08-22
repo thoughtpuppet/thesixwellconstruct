@@ -373,6 +373,20 @@ function eventDetailAssetPath(pathname) {
   return `/events/${parts[1]}/index.html`;
 }
 
+function calendarEventDetailReference(pathname) {
+  const parts = normalizePath(pathname).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "calendar" || parts[1] !== "events" || hasFileExtension(pathname)) return null;
+  let key = "";
+  try { key = decodeURIComponent(parts[2]); }
+  catch { return null; }
+  const separator = key.indexOf("--");
+  if (separator < 1) return null;
+  const titleSlug = key.slice(0, separator);
+  const eventId = key.slice(separator + 2);
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(titleSlug) || !eventId || eventId.length > 500) return null;
+  return { titleSlug, eventId };
+}
+
 function isFlashDetailPagePath(pathname) {
   const normalizedPath = normalizePath(pathname);
   const parts = normalizedPath.split("/").filter(Boolean);
@@ -654,6 +668,49 @@ async function serveMerchRecordPage(request, env, slug) {
   headers.delete("etag");
   headers.set("cache-control", "no-store");
   return new Response(html, { status: assetResponse.status, headers });
+}
+
+async function serveCalendarEventPage(request, env, reference) {
+  if (!["GET", "HEAD"].includes(request.method)) return methodNotAllowed(request.method, ["GET", "HEAD"]);
+  const apiUrl = new URL(`/api/calendar/events/${encodeURIComponent(reference.eventId)}`, request.url);
+  const apiResponse = await handleCalendarPublicApi(new Request(apiUrl, { method:"GET", headers:{ accept:"application/json" } }), env);
+  if (apiResponse.status === 404) return notFoundPage(request, env);
+  if (!apiResponse.ok) return apiResponse;
+  const payload = await apiResponse.json();
+  const event = payload.event;
+  if (!event?.detailUrl) return notFoundPage(request, env);
+
+  const canonicalPath = event.detailUrl;
+  if (event.origin === "sixwell") return Response.redirect(new URL(canonicalPath, request.url), 308);
+  if (new URL(request.url).pathname !== canonicalPath) {
+    const canonicalUrl = new URL(canonicalPath, request.url);
+    canonicalUrl.search = "";
+    canonicalUrl.hash = "";
+    return Response.redirect(canonicalUrl, 308);
+  }
+
+  const assetResponse = await servePublicAsset(request, env, "/calendar/event/index.html");
+  if (request.method === "HEAD") return assetResponse;
+  const siteOrigin = String(env.PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/g, "");
+  const canonicalUrl = `${siteOrigin}${canonicalPath}`;
+  const title = `${event.title} · Atlanta Calendar · the six.well construct`;
+  const description = String(event.description || `${event.title}, an approved Atlanta Calendar event.`).slice(0, 320);
+  const media = Array.isArray(event.media) && event.media.length ? event.media : (event.flyer?.url ? [event.flyer] : []);
+  const imageUrl = media[0]?.url ? new URL(media[0].url, `${siteOrigin}/`).toString() : "";
+  const html = (await assetResponse.text())
+    .replace(/<title data-calendar-event-title>[\s\S]*?<\/title>/, `<title data-calendar-event-title>${escapeHtml(title)}</title>`)
+    .replace(/<meta data-calendar-event-description name="description" content="[^"]*">/, `<meta data-calendar-event-description name="description" content="${escapeHtml(description)}">`)
+    .replace(/<meta data-calendar-event-og-title property="og:title" content="[^"]*">/, `<meta data-calendar-event-og-title property="og:title" content="${escapeHtml(title)}">`)
+    .replace(/<meta data-calendar-event-og-description property="og:description" content="[^"]*">/, `<meta data-calendar-event-og-description property="og:description" content="${escapeHtml(description)}">`)
+    .replace(/<meta data-calendar-event-og-url property="og:url" content="[^"]*">/, `<meta data-calendar-event-og-url property="og:url" content="${escapeHtml(canonicalUrl)}">`)
+    .replace(/<meta data-calendar-event-og-image property="og:image" content="[^"]*">/, `<meta data-calendar-event-og-image property="og:image" content="${escapeHtml(imageUrl)}">`)
+    .replace(/<link data-calendar-event-canonical rel="canonical" href="[^"]*">/, `<link data-calendar-event-canonical rel="canonical" href="${escapeHtml(canonicalUrl)}">`)
+    .replace('<script id="calendar-event-data" type="application/json"></script>', `<script id="calendar-event-data" type="application/json">${legendRecordJson(payload)}</script>`);
+  const headers = new Headers(assetResponse.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  headers.set("cache-control", "no-store");
+  return new Response(html, { status:assetResponse.status, headers });
 }
 
 async function legacyMerchResponse(request, env, pathname) {
@@ -1677,6 +1734,9 @@ export default {
       }
       return serveMerchRecordPage(request, env, requestedMerchSlug);
     }
+
+    const requestedCalendarEvent = calendarEventDetailReference(url.pathname);
+    if (requestedCalendarEvent) return serveCalendarEventPage(request, env, requestedCalendarEvent);
 
     if (isFrontDoorPath(url.pathname)) {
       return servePublicAsset(request, env, "/index.html");

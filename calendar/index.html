@@ -13,17 +13,17 @@
 <link rel="stylesheet" href="/css/venture-pages.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/hero.css">
-<link rel="stylesheet" href="/css/atlanta-calendar.css?v=20260821-calendar-card-actions">
+<link rel="stylesheet" href="/css/atlanta-calendar.css?v=20260821-calendar-event-pages">
 </head>
 <body class="venture-page atlanta-calendar-page" data-venture="events">
   <main class="venture-shell entrance-fade">
     <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="page-title">
       <div>
-        <span class="venture-kicker">Atlanta / selected events</span>
+        <span class="venture-kicker"><br></span>
         <h1 class="venture-title hero-title" id="page-title">Atlanta Calendar.</h1>
       </div>
       <div class="hero-copy">
-        <p class="hero-descriptor">the lastest updates of all Art, art-making, independent film, poetry, music, technology, lectures, conferences, virtual programs, and experimental events across Atlanta.</p>
+        <p class="hero-descriptor">the latest updates of all Art, art-making, independent film, poetry, music, technology, lectures, conferences, virtual programs, and experimental events across Atlanta.</p>
         <div class="hero-actions">
           <a class="venture-link" href="#upcoming" data-calendar-view-link="upcoming">upcoming</a>
           <a class="venture-link" href="#month" data-calendar-view-link="month">month</a>
@@ -62,8 +62,8 @@
 
     <section class="section calendar-view-panel" id="upcoming" role="tabpanel" tabindex="0" aria-labelledby="calendarViewUpcoming upcoming-title">
       <header class="section-head">
-        <div><span class="section-kicker">chronology</span><h2 class="section-title" id="upcoming-title">Upcoming</h2></div>
-        <p class="section-copy">Approved listings and public Six.Well occurrences share one chronological record.</p>
+        <div><span class="section-kicker"><br></span><h2 class="section-title" id="upcoming-title">Upcoming</h2></div>
+        <p class="section-copy"><br></p>
       </header>
       <div class="calendar-event-list" id="upcomingEvents" aria-live="polite"><p class="calendar-empty">Loading the calendar.</p></div>
     </section>
@@ -78,7 +78,7 @@
 
     <section class="section calendar-view-panel" id="month" role="tabpanel" tabindex="0" aria-labelledby="calendarViewMonth month-title" hidden>
       <header class="section-head">
-        <div><span class="section-kicker">month view</span><h2 class="section-title" id="month-title">Calendar</h2></div>
+        <div><span class="section-kicker"><br></span><h2 class="section-title" id="month-title">Calendar</h2></div>
         <div class="month-controls"><button type="button" id="previousMonth" aria-label="Previous month">Previous</button><span id="monthLabel"></span><button type="button" id="nextMonth" aria-label="Next month">Next</button></div>
       </header>
       <div class="calendar-month" id="calendarMonth">
@@ -111,7 +111,7 @@
       <details class="calendar-utility-disclosure" id="pastEventsDisclosure">
         <summary>
           <span class="calendar-utility-heading"><span class="section-kicker">record</span><span class="section-title" id="past-title" role="heading" aria-level="2">Past Events</span></span>
-          <span class="section-copy">Earlier approved dates remain available as a quieter record.</span>
+          <span class="section-copy">Past events that might have records attached...</span>
           <span class="calendar-disclosure-action" id="pastEventCount">0 events</span>
         </summary>
         <div class="calendar-event-list is-past" id="pastEvents"></div>
@@ -128,6 +128,7 @@
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
-  <script src="/js/atlanta-calendar.js?v=20260821-calendar-card-actions"></script>
+  <script src="/js/atlanta-calendar-record.js?v=20260821-calendar-event-pages"></script>
+  <script src="/js/atlanta-calendar.js?v=20260821-calendar-event-pages"></script>
 </body>
 </html>

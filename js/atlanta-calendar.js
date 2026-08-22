@@ -15,9 +15,11 @@
   var viewBuckets = { upcoming:[], onView:[], past:[] };
   var currentMonthName = "";
   var activeMonth = new Date();
+  var selectedDate = "";
   var descriptionSyncFrame = 0;
   var galleryEvents = {};
   var activeGallery = null;
+  var RETURN_STATE_KEY = "atlanta-calendar-return-state-v1";
   activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth(), 1);
 
   var search = document.getElementById("calendarSearch");
@@ -253,7 +255,7 @@
     return true;
   }
 
-  function eventCard(event) {
+  function legacyEventCard(event) {
     var primarySubject = event.subjects[0] || "";
     var labels = event.subjects.map(function (value) { return SUBJECT_LABELS[value] || value; }).concat(event.formats.map(function (value) { return FORMAT_LABELS[value] || value; }), (event.affiliations || []).map(function (value) { return AFFILIATION_LABELS[value] || value; }), event.virtual ? [MODE_LABELS.virtual] : []);
     var sourceLabel = event.origin === "sixwell" ? "Six.Well event" : (event.affiliations || []).includes("gsu") ? "Georgia State University event" : "";
@@ -306,8 +308,15 @@
       '</article>';
   }
 
+  function eventCard(event) {
+    var record = window.AtlantaCalendarRecord;
+    var media = record.eventMedia(event);
+    galleryEvents[record.eventAnchor(event)] = { title:event.title, media:media };
+    return record.renderEvent(event, { headingTag:"h3", includeViewEvent:true });
+  }
+
   async function shareEvent(control) {
-    var shareUrl = location.origin + location.pathname + "#" + control.dataset.shareAnchor;
+    var shareUrl = control.dataset.shareUrl ? new URL(control.dataset.shareUrl, location.origin).toString() : location.origin + location.pathname + "#" + control.dataset.shareAnchor;
     var shareData = { title:control.dataset.shareTitle || document.title, url:shareUrl };
     if (navigator.share) {
       try {
@@ -397,9 +406,10 @@
   }
 
   function renderAgenda(key) {
+    selectedDate = key;
     var events = dayEvents(key);
     agenda.innerHTML = events.map(function (event) {
-      return '<a href="#' + eventAnchor(event) + '" data-calendar-event-link><strong>' + escapeHtml(event.title) + '</strong><small>' + escapeHtml(eventDate(event)) + '</small></a>';
+      return '<div class="calendar-day-agenda-item"><span><strong>' + escapeHtml(event.title) + '</strong><small>' + escapeHtml(eventDate(event)) + '</small></span><a href="' + escapeHtml(event.detailUrl || "#" + eventAnchor(event)) + '" data-calendar-detail-link>View event</a></div>';
     }).join("");
     Array.from(grid.querySelectorAll(".calendar-day")).forEach(function (day) { day.classList.toggle("is-selected", day.dataset.date === key); });
   }
@@ -424,6 +434,51 @@
     }
     grid.innerHTML = html;
     agenda.innerHTML = "";
+    if (selectedDate && selectedDate.slice(0, 7) === year + "-" + String(month + 1).padStart(2, "0")) renderAgenda(selectedDate);
+  }
+
+  function calendarReturnState() {
+    return {
+      path:location.pathname,
+      view:activeView,
+      month:activeMonth.getFullYear() + "-" + String(activeMonth.getMonth() + 1).padStart(2, "0"),
+      selectedDate:selectedDate,
+      search:search.value,
+      subjects:checkedValues(subjectRoot),
+      formats:checkedValues(formatRoot),
+      affiliations:checkedValues(affiliationRoot),
+      modes:checkedValues(modeRoot),
+      filtersOpen:!filterPanel.hidden,
+      pastOpen:pastDisclosure.open,
+      scrollY:Math.max(0, Math.round(window.scrollY || 0)),
+      savedAt:Date.now(),
+    };
+  }
+
+  function saveCalendarReturnState() {
+    try { sessionStorage.setItem(RETURN_STATE_KEY, JSON.stringify(calendarReturnState())); } catch (error) { /* Navigation still works when storage is unavailable. */ }
+  }
+
+  function restoreCalendarReturnState() {
+    var value = "";
+    try {
+      value = sessionStorage.getItem(RETURN_STATE_KEY) || "";
+      sessionStorage.removeItem(RETURN_STATE_KEY);
+    } catch (error) { return null; }
+    if (!value) return null;
+    try {
+      var state = JSON.parse(value);
+      if (!state || state.path !== "/calendar/" || Date.now() - Number(state.savedAt || 0) > 7200000) return null;
+      if (/^\d{4}-\d{2}$/.test(state.month || "")) activeMonth = new Date(Number(state.month.slice(0, 4)), Number(state.month.slice(5, 7)) - 1, 1);
+      search.value = String(state.search || "");
+      var selected = new Set([].concat(state.subjects || [], state.formats || [], state.affiliations || [], state.modes || []));
+      Array.from(document.querySelectorAll(".filter-chip input")).forEach(function (input) { input.checked = selected.has(input.value); });
+      filterPanel.hidden = !state.filtersOpen;
+      filterToggle.setAttribute("aria-expanded", state.filtersOpen ? "true" : "false");
+      pastDisclosure.open = Boolean(state.pastOpen);
+      selectedDate = String(state.selectedDate || "");
+      return state;
+    } catch (error) { return null; }
   }
 
   function applyFilters() {
@@ -491,10 +546,12 @@
     button.addEventListener("click", function () { setView(button.dataset.calendarView); });
   });
   pastDisclosure.addEventListener("toggle", renderVisibleCollections);
-  document.getElementById("previousMonth").addEventListener("click", function () { activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() - 1, 1); applyFilters(); });
-  document.getElementById("nextMonth").addEventListener("click", function () { activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 1); applyFilters(); });
+  document.getElementById("previousMonth").addEventListener("click", function () { selectedDate = ""; activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() - 1, 1); applyFilters(); });
+  document.getElementById("nextMonth").addEventListener("click", function () { selectedDate = ""; activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 1); applyFilters(); });
   grid.addEventListener("click", function (event) { var button = event.target.closest("button[data-date]"); if (button) renderAgenda(button.dataset.date); });
   document.addEventListener("click", function (event) {
+    var detailLink = event.target.closest("[data-calendar-detail-link]");
+    if (detailLink && detailLink.getAttribute("href") && !detailLink.getAttribute("href").startsWith("#")) saveCalendarReturnState();
     var viewLink = event.target.closest("[data-calendar-view-link]");
     if (viewLink) {
       event.preventDefault();
@@ -551,8 +608,13 @@
     .then(function (response) { if (!response.ok) throw new Error("Calendar request failed."); return response.json(); })
     .then(function (payload) {
       allEvents = Array.isArray(payload.events) ? payload.events.filter(function (event) { return !event.isSeriesParent; }) : [];
+      var returnState = restoreCalendarReturnState();
       applyFilters();
-      syncFromHash();
+      if (returnState) {
+        setView(returnState.view);
+        if (returnState.view === "month" && selectedDate) renderAgenda(selectedDate);
+        requestAnimationFrame(function () { window.scrollTo(0, Math.max(0, Number(returnState.scrollY || 0))); });
+      } else syncFromHash();
       requestAnimationFrame(function () { document.documentElement.classList.add("is-ready"); });
     })
     .catch(function () {
