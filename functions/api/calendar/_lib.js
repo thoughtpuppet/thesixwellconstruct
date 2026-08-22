@@ -1760,22 +1760,26 @@ async function syncCandidateMedia(db, candidateId, values) {
   ).bind(primary?.mediaId || null,primary?.sourceUrl || "",primary?.provenanceUrl || "",primary?.includePublic?1:0,now,candidateId).run();
 }
 
-async function appendRevision(db, candidateId, snapshot, provenance, changeSummaryText, createdBy = "studio", changes = []) {
+async function appendRevision(db, candidateId, snapshot, provenance, changeSummaryText, createdBy = "studio", changes = [], { preservePending = false } = {}) {
   const latest = await db.prepare(
     "SELECT COALESCE(MAX(revision_number),0) number FROM calendar_candidate_revisions WHERE candidate_id=?"
   ).bind(candidateId).first();
   const revisionNumber = Number(latest?.number) + 1;
   const id = `cal_revision_${crypto.randomUUID()}`;
-  await db.prepare(
-    "UPDATE calendar_candidate_revisions SET revision_state='superseded',reviewed_at=? WHERE candidate_id=? AND revision_state='pending'"
-  ).bind(isoNow(), candidateId).run();
+  if (!preservePending) {
+    await db.prepare(
+      "UPDATE calendar_candidate_revisions SET revision_state='superseded',reviewed_at=? WHERE candidate_id=? AND revision_state='pending'"
+    ).bind(isoNow(), candidateId).run();
+  }
   await db.prepare(
     `INSERT INTO calendar_candidate_revisions
       (id,candidate_id,revision_number,revision_state,snapshot_json,provenance_json,change_summary,created_by,created_at,change_set_json)
-     VALUES (?,?,?,'pending',?,?,?,?,?,?)`
-  ).bind(id, candidateId, revisionNumber, JSON.stringify(snapshot), JSON.stringify(provenance || []), asString(changeSummaryText), createdBy, isoNow(), JSON.stringify(changes || [])).run();
-  await db.prepare("UPDATE calendar_candidates SET pending_revision_id=?,updated_at=? WHERE id=?")
-    .bind(id, isoNow(), candidateId).run();
+     VALUES (?,?,?,?,?,?,?,?,?,?)`
+  ).bind(id, candidateId, revisionNumber, preservePending ? "superseded" : "pending", JSON.stringify(snapshot), JSON.stringify(provenance || []), asString(changeSummaryText), createdBy, isoNow(), JSON.stringify(changes || [])).run();
+  if (!preservePending) {
+    await db.prepare("UPDATE calendar_candidates SET pending_revision_id=?,updated_at=? WHERE id=?")
+      .bind(id, isoNow(), candidateId).run();
+  }
   return id;
 }
 
@@ -1896,6 +1900,14 @@ async function saveCandidate(env, id, body, { appendChangeRevision = true, allow
   const db = requireDb(env);
   const current = await getCandidate(db, id, false);
   if (!current) return null;
+  const pendingAtSave = appendChangeRevision && current.pendingRevisionId
+    ? await db.prepare(
+      "SELECT created_by FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'"
+    ).bind(current.pendingRevisionId, id).first()
+    : null;
+  const preserveAutomatedPending = Boolean(
+    pendingAtSave && !["studio", "studio-research", "manual"].includes(pendingAtSave.created_by),
+  );
   const preserveVerifiedInstagram = current.verificationState === "verified" && isInstagramUrl(current.sourceUrl);
   const proposal = proposalFromBody(body, current, { allowVerifiedInstagramSource: allowVerifiedInstagramSource || preserveVerifiedInstagram });
   const status = body.status !== undefined && CANDIDATE_STATUSES.has(asString(body.status)) ? asString(body.status) : current.status;
@@ -1945,7 +1957,16 @@ async function saveCandidate(env, id, body, { appendChangeRevision = true, allow
   const after = JSON.stringify(candidateSnapshot(saved));
   if (appendChangeRevision && before !== after) {
     const changes = candidateChangeSet(candidateSnapshot(current), candidateSnapshot(saved));
-    await appendRevision(db, id, candidateSnapshot(saved), [{ url: proposal.sourceUrl, savedAt: now }], changeSummary(changes, "Studio edit"), "studio", changes);
+    await appendRevision(
+      db,
+      id,
+      candidateSnapshot(saved),
+      [{ url: proposal.sourceUrl, savedAt: now }],
+      preserveAutomatedPending ? "Studio edit saved while Scout proposal remains pending" : changeSummary(changes, "Studio edit"),
+      "studio",
+      changes,
+      { preservePending: preserveAutomatedPending },
+    );
   }
   return getCandidate(db, id);
 }
@@ -2117,17 +2138,31 @@ async function applyReviewedVenueCoordinates(db, candidate) {
   return candidate;
 }
 
-async function approveCandidate(db, id) {
-  const candidate = await applyReviewedVenueCoordinates(db, await getCandidate(db, id));
+async function approveCandidate(env, id) {
+  const db = requireDb(env);
+  let candidate = await applyReviewedVenueCoordinates(db, await getCandidate(db, id));
   if (!candidate) return { error: "Candidate not found.", status: 404 };
   if (candidate.status === "published" && candidate.pendingRevisionId) {
     const pending = await db.prepare(
       "SELECT created_by,change_set_json FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'"
     ).bind(candidate.pendingRevisionId, id).first();
     const automatedProposal = pending && !["studio", "studio-research", "manual"].includes(pending.created_by);
-    const appliedChanges = automatedProposal ? parseJson(pending.change_set_json, []).filter((change) => change.applied) : [];
+    const proposalChanges = automatedProposal ? parseJson(pending.change_set_json, []) : [];
+    const appliedChanges = proposalChanges.filter((change) => change.applied);
     if (automatedProposal && !appliedChanges.length) {
       return { error: "Select and apply at least one Scout change before approving the public update.", status: 409, errors: [] };
+    }
+    if (automatedProposal) {
+      const currentSnapshot = candidateSnapshot(candidate);
+      const unappliedPatch = Object.fromEntries(proposalChanges
+        .filter((change) => !change.applied
+          && Object.hasOwn(CANDIDATE_CHANGE_LABELS, change.field)
+          && JSON.stringify(currentSnapshot[change.field] ?? null) !== JSON.stringify(change.before ?? null))
+        .map((change) => [change.field, change.before]));
+      if (Object.keys(unappliedPatch).length) {
+        await saveCandidate(env, id, unappliedPatch, { appendChangeRevision: false, allowVerifiedInstagramSource: true });
+        candidate = await applyReviewedVenueCoordinates(db, await getCandidate(db, id));
+      }
     }
   }
   const errors = publicationErrors(candidate);
@@ -4035,7 +4070,7 @@ async function handleCandidates(request, env, parts) {
   if (method !== "POST") return errorResponse("Method not allowed.", 405);
   const body = await readBody(request) || {};
   if (action === "approve") {
-    const result = await approveCandidate(db, id);
+    const result = await approveCandidate(env, id);
     return result.error ? json({ error: result.error, errors: result.errors || [] }, { status: result.status }) : json(result);
   }
   if (action === "recheck") {
@@ -6647,6 +6682,7 @@ function pastedOccurrenceType(item) {
   const title = asString(item?.title);
   if (/artist talk/i.test(title)) return "artist_talk";
   if (/opening reception/i.test(title)) return "opening_reception";
+  if (/mixer/i.test(title)) return "mixer";
   if (/screening/i.test(title)) return "screening";
   if (/performance|concert/i.test(title)) return "performance";
   if (/workshop/i.test(title)) return "workshop";
@@ -6662,6 +6698,67 @@ function pastedSocialPostId(sourceUrl, platform) {
   return path.split("/").filter(Boolean).at(-1) || "";
 }
 
+function pastedCarouselImages(item) {
+  return (Array.isArray(item?.carouselImages) ? item.carouselImages : []).slice(0, 20).map((image, index) => {
+    const role = ["flyer", "installation", "artwork", "other"].includes(asString(image?.role)) ? asString(image.role) : "other";
+    return {
+      index,
+      url: validHttpUrl(image?.url || image?.imageUrl) ? asString(image.url || image.imageUrl) : "",
+      altText: cleanSourceText(image?.altText || image?.imageAlt).slice(0, 1500),
+      extractedText: cleanSourceText(image?.extractedText || image?.text).slice(0, 4000),
+      role,
+    };
+  }).filter((image) => image.url || image.altText || image.extractedText);
+}
+
+function pastedLocalTime(value) {
+  const text = asString(value).toLowerCase().replace(/\s+/g, "");
+  const twelveHour = text.match(/^(\d{1,2})(?::(\d{2}))?(am|pm)$/);
+  if (twelveHour) {
+    let hour = Number(twelveHour[1]) % 12;
+    if (twelveHour[3] === "pm") hour += 12;
+    return `${String(hour).padStart(2, "0")}:${twelveHour[2] || "00"}`;
+  }
+  const twentyFourHour = text.match(/^([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/);
+  return twentyFourHour ? `${String(Number(twentyFourHour[1])).padStart(2, "0")}:${twentyFourHour[2]}` : "";
+}
+
+function pastedWeekday(value) {
+  const key = normalizeText(value).slice(0, 3);
+  return ({ sun:0, mon:1, tue:2, wed:3, thu:4, fri:5, sat:6 })[key];
+}
+
+function expandPastedRecurringOccurrences(item, timezone) {
+  const rules = Array.isArray(item?.recurringOccurrences) ? item.recurringOccurrences : [];
+  const parentStart = dateKey(item?.startsAt);
+  const parentEnd = dateKey(item?.endsAt);
+  const output = [];
+  for (const rule of rules.slice(0, 20)) {
+    const startsOn = /^\d{4}-\d{2}-\d{2}$/.test(asString(rule?.startsOn)) ? asString(rule.startsOn) : parentStart;
+    const endsOn = /^\d{4}-\d{2}-\d{2}$/.test(asString(rule?.endsOn)) ? asString(rule.endsOn) : parentEnd;
+    const startTime = pastedLocalTime(rule?.startTime);
+    const endTime = pastedLocalTime(rule?.endTime);
+    const weekdays = new Set((Array.isArray(rule?.daysOfWeek) ? rule.daysOfWeek : []).map(pastedWeekday).filter((day) => Number.isInteger(day)));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startsOn) || !/^\d{4}-\d{2}-\d{2}$/.test(endsOn) || !startTime || !weekdays.size) continue;
+    const first = new Date(`${startsOn}T12:00:00Z`);
+    const last = new Date(`${endsOn}T12:00:00Z`);
+    if (!Number.isFinite(first.getTime()) || !Number.isFinite(last.getTime()) || first > last) continue;
+    for (let cursor = first, scanned = 0; cursor <= last && scanned < 370 && output.length < 100; scanned += 1) {
+      const localDate = cursor.toISOString().slice(0, 10);
+      if (weekdays.has(cursor.getUTCDay())) {
+        output.push({
+          ...rule,
+          startsAt: `${localDate}T${startTime}:00`,
+          endsAt: endTime ? `${localDate}T${endTime}:00` : "",
+          timezone: validTimeZone(rule?.timezone) ? asString(rule.timezone) : timezone,
+        });
+      }
+      cursor = new Date(cursor.getTime() + 86_400_000);
+    }
+  }
+  return output;
+}
+
 function browserPastedLinkProposal(item, source) {
   const sourceUrl = source.url;
   const socialPlatform = socialPlatformFromUrl(sourceUrl);
@@ -6669,12 +6766,17 @@ function browserPastedLinkProposal(item, source) {
   const occurrenceAccessStatus = ["public", "restricted"].includes(asString(item.accessStatus)) ? asString(item.accessStatus) : "unknown";
   const occurrenceAccessNotes = asString(item.accessNotes);
   const occurrenceAudiences = audienceStrings(item.audiences);
-  const occurrenceItems = Array.isArray(item.occurrences) ? item.occurrences : [];
+  const occurrenceItems = [
+    ...(Array.isArray(item.occurrences) ? item.occurrences : []),
+    ...expandPastedRecurringOccurrences(item, timezone),
+  ];
   const stableEventKey = normalizeText(asString(item.title) || "event").replace(/\s+/g, "-").slice(0, 70);
   const occurrences = occurrenceItems.map((occurrence, index) => {
     const occurrenceTimezone = validTimeZone(occurrence.timezone) ? asString(occurrence.timezone) : timezone;
+    const startsAt = pastedTimedDate(occurrence.startsAt, occurrenceTimezone);
+    const occurrenceKey = normalizeText(`${occurrence.title || "occurrence"}-${startsAt}`).replace(/\s+/g, "-").slice(0, 100);
     return {
-      sourceEventId: `pasted-${stableEventKey}-${index + 1}`,
+      sourceEventId: `pasted-${stableEventKey}-${occurrenceKey || index + 1}`,
       occurrenceType: pastedOccurrenceType(occurrence),
       title: asString(occurrence.title),
       factualDescription: cleanSourceText(occurrence.factualDescription),
@@ -6682,7 +6784,7 @@ function browserPastedLinkProposal(item, source) {
       accessNotes: asString(occurrence.accessNotes) || occurrenceAccessNotes,
       audiences: audienceStrings(occurrence.audiences).length ? audienceStrings(occurrence.audiences) : occurrenceAudiences,
       dateKind: "timed",
-      startsAt: pastedTimedDate(occurrence.startsAt, occurrenceTimezone),
+      startsAt,
       endsAt: pastedTimedDate(occurrence.endsAt, occurrenceTimezone) || null,
       timezone: occurrenceTimezone,
       venueName: asString(occurrence.venueName) || asString(item.venueName),
@@ -6696,20 +6798,25 @@ function browserPastedLinkProposal(item, source) {
         : "Schedule facts were extracted from the rendered pasted page and require Studio verification.",
       sortOrder: index,
     };
-  }).filter((occurrence) => occurrence.title && validDate(occurrence.startsAt));
+  }).filter((occurrence) => occurrence.title && validDate(occurrence.startsAt))
+    .sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt))
+    .map((occurrence, index) => ({ ...occurrence, sortOrder:index }));
   const occurrenceStarts = occurrences.map((occurrence) => occurrence.startsAt).filter(validDate).sort((left, right) => Date.parse(left) - Date.parse(right));
   const occurrenceEnds = occurrences.map((occurrence) => occurrence.endsAt).filter(validDate).sort((left, right) => Date.parse(left) - Date.parse(right));
-  const startsAt = occurrenceStarts[0] || pastedTimedDate(item.startsAt, timezone);
-  const endsAt = occurrenceEnds.at(-1) || pastedTimedDate(item.endsAt, timezone) || null;
+  const startsAt = pastedTimedDate(item.startsAt, timezone) || occurrenceStarts[0];
+  const endsAt = pastedTimedDate(item.endsAt, timezone) || occurrenceEnds.at(-1) || null;
   const organizerUrl = validHttpUrl(item.organizerUrl) ? asString(item.organizerUrl) : "";
   const venueUrl = validHttpUrl(item.venueUrl) ? asString(item.venueUrl) : "";
   const ticketUrl = validHttpUrl(item.ticketUrl) && !socialPlatformFromUrl(item.ticketUrl) ? asString(item.ticketUrl) : "";
   const sourceAuthority = pastedLinkAuthority(sourceUrl, organizerUrl, venueUrl);
+  const conflicts = (Array.isArray(item.conflicts) ? item.conflicts : []).map(cleanSourceText).filter(Boolean).slice(0, 20);
+  const extractionNotes = (Array.isArray(item.extractionNotes) ? item.extractionNotes : []).map(cleanSourceText).filter(Boolean).slice(0, 20);
   const issues = [
     sourceAuthority === "unresolved"
       ? "Confirm whether the pasted page is an original organizer, venue, official-calendar, or authorized ticket source before publication."
       : "Review the extracted source classification before publication.",
     ...(!validDate(endsAt) ? ["The pasted page did not provide a verified event end time."] : []),
+    ...conflicts.map((conflict) => `Caption or image conflict: ${conflict}`),
   ];
   const relatedLinks = normalizeRelatedLinks([
     ...(organizerUrl ? [{ label: "Organizer identity", url: organizerUrl, provenanceUrl: sourceUrl, role: "organizer", includePublic: false }] : []),
@@ -6717,7 +6824,10 @@ function browserPastedLinkProposal(item, source) {
     ...(ticketUrl && ticketUrl !== sourceUrl ? [{ label: "Tickets or registration", url: ticketUrl, provenanceUrl: sourceUrl, role: "ticket", includePublic: false }] : []),
   ], sourceUrl);
   const stableLead = normalizeText(`${item.title || "event"}-${startsAt || "undated"}`).replace(/\s+/g, "-").slice(0, 100);
-  const imageUrl = validHttpUrl(item.imageUrl) ? asString(item.imageUrl) : "";
+  const carouselImages = pastedCarouselImages(item);
+  const primaryImage = carouselImages.find((image) => image.role === "flyer") || carouselImages[0] || null;
+  const imageUrl = validHttpUrl(item.imageUrl) ? asString(item.imageUrl) : primaryImage?.url || "";
+  const imageAlt = asString(item.imageAlt) || primaryImage?.altText || primaryImage?.extractedText.slice(0, 1000) || "";
   const socialEvidence = socialPlatform ? [{
     platform: socialPlatform,
     postId: pastedSocialPostId(sourceUrl, socialPlatform),
@@ -6731,8 +6841,20 @@ function browserPastedLinkProposal(item, source) {
     mediaUrl: imageUrl,
     evidenceRole: "discovery",
     corroborated: false,
-    provenance: [{ channel: "pasted_link", postUrl: sourceUrl, retrievedAt: isoNow() }],
+    provenance: [
+      { channel: "pasted_link", postUrl: sourceUrl, retrievedAt: isoNow(), captionText: asString(item.caption).slice(0, 8000) },
+      ...carouselImages.map((image) => ({
+        channel: "social_carousel_image",
+        imageIndex: image.index,
+        mediaUrl: image.url,
+        mediaRole: image.role,
+        altText: image.altText,
+        extractedText: image.extractedText,
+      })),
+    ],
   }] : [];
+  const requestedStructure = asString(item.eventStructure);
+  const eventStructure = EVENT_STRUCTURES.has(requestedStructure) ? requestedStructure : occurrences.length > 1 ? "series" : "single";
   return {
     sourceId: "",
     sourceEventId: `pasted-${stableLead}`,
@@ -6750,7 +6872,7 @@ function browserPastedLinkProposal(item, source) {
     title: asString(item.title),
     organizer: asString(item.organizer) || asString(item.authorDisplayName) || asString(item.authorHandle) || source.name,
     factualDescription: cleanSourceText(item.description || item.caption),
-    eventStructure: occurrences.length > 1 ? "series" : EVENT_STRUCTURES.has(asString(item.eventStructure)) ? asString(item.eventStructure) : "single",
+    eventStructure,
     accessStatus: occurrenceAccessStatus,
     accessNotes: occurrenceAccessNotes,
     audiences: occurrenceAudiences,
@@ -6764,13 +6886,17 @@ function browserPastedLinkProposal(item, source) {
     region: asString(item.region) || "GA",
     flyerUrl: imageUrl,
     flyerProvenanceUrl: sourceUrl,
-    flyerAltText: asString(item.imageAlt) || `${asString(item.title)} event flyer`,
+    flyerAltText: imageAlt || `${asString(item.title)} event flyer`,
     relatedLinks,
     subjects: uniqueStrings(item.subjects, SUBJECTS),
     formats: uniqueStrings(item.formats, FORMATS),
     experimental: Boolean(item.experimental),
     verificationState: "needs_verification",
-    verificationNotes: [socialPlatform ? "Event facts were extracted from the social post caption and flyer." : "Event facts were extracted from the rendered pasted page.", ...issues].join("\n"),
+    verificationNotes: [
+      socialPlatform ? `Event facts were extracted from the social post caption and ${carouselImages.length || "its"} carousel image${carouselImages.length === 1 ? "" : "s"}.` : "Event facts were extracted from the rendered pasted page.",
+      ...extractionNotes,
+      ...issues,
+    ].join("\n"),
     confidence: 0.62,
     discoveryChannel: "pasted_link",
     socialEvidence,
@@ -6807,7 +6933,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
   const response = await env.BROWSER.quickAction("json", {
     url,
     prompt: socialDetail
-      ? `Extract the one primary event announced by this social post. Read the visible caption and the text or accessibility description of every event flyer in the post. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. Use the post or flyer publication date to supply the event year only when the visible month and day make that year unambiguous. Return explicit UTC offsets for every timed value. Keep separately named schedule blocks such as an artist talk and a closing reception in occurrences with their own start and end times; do not merge them into one incomplete time block. Preserve factual caption details such as accessibility, audience, admission, and whether children are welcome. Return the first event-flyer image URL and its accessibility text when the page exposes them. Return empty strings for genuinely missing facts.`
+      ? `Extract the one primary event announced by this social post. Read the complete visible caption, inspect every carousel slide, and perform OCR on visible flyer text instead of relying only on platform-generated accessibility text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. Use the post or flyer publication date to supply the event year only when the visible month and day make that year unambiguous. Return explicit UTC offsets for every one-time timed value. If the post describes an exhibition with an on-view date range plus openings, talks, mixers, workshops, visits, or other programs, return the exhibition as the parent event with eventStructure exhibition and dateKind date_range; keep its own opening and closing dates in startsAt and endsAt. Return each one-time program in occurrences. For a repeated schedule such as every Tuesday and Thursday during the exhibition, return a bounded recurringOccurrences rule with daysOfWeek, startsOn, endsOn, startTime, and endTime so every actual date can be created deterministically. Do not collapse an exhibition into a series or replace its date range with the first and last related program. Reconcile caption and flyer facts using the most specific visibly supported detail. Put any genuine disagreement in conflicts instead of silently choosing or deleting a fact. Preserve factual caption details such as accessibility, audience, admission, and whether children are welcome. Return carouselImages for every slide with its URL when exposed, accessibility text, OCR text, and a role of flyer, installation, artwork, or other. Choose the primary event flyer for imageUrl and imageAlt when possible. Return empty strings for genuinely missing facts.`
       : mode === "detail"
       ? "Extract the one primary event on this event or ticket page. Use ISO 8601 start and end timestamps exactly as shown. Return empty strings for missing facts. Return organizerUrl or venueUrl only when the page exposes a website, official profile, platform identity, or partner page. Return the primary event flyer image URL and accessibility text when the rendered page exposes them. Never infer an end time, identity link, or event URL."
       : `Extract up to ${maximum} upcoming event cards currently shown for ${configuredCity}, ${configuredRegion}. Do not include featured or nearby events outside that location section. Use ISO 8601 dates or timestamps only when the page supplies them. Include an event URL only when the page exposes the exact ticket-page URL. Return empty strings for facts the page does not supply.`,
@@ -6833,6 +6959,18 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
                 experimental: { type: "boolean" },
                 authorHandle: { type: "string" }, authorDisplayName: { type: "string" }, authorIsVerified: { type: "boolean" },
                 postedAt: { type: "string" }, mediaType: { type: "string" },
+                extractionNotes: { type: "array", items: { type: "string" } },
+                conflicts: { type: "array", items: { type: "string" } },
+                carouselImages: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      url: { type: "string" }, altText: { type: "string" }, extractedText: { type: "string" },
+                      role: { type: "string", enum: ["flyer", "installation", "artwork", "other"] },
+                    },
+                  },
+                },
                 occurrences: {
                   type: "array",
                   items: {
@@ -6844,6 +6982,20 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
                       accessNotes: { type: "string" }, audiences: { type: "array", items: { type: "string" } },
                     },
                     required: ["title", "startsAt"],
+                  },
+                },
+                recurringOccurrences: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: { type: "string" }, occurrenceType: { type: "string" }, factualDescription: { type: "string" },
+                      daysOfWeek: { type: "array", items: { type: "string" } },
+                      startsOn: { type: "string" }, endsOn: { type: "string" }, startTime: { type: "string" }, endTime: { type: "string" },
+                      timezone: { type: "string" }, venueName: { type: "string" }, venueAddress: { type: "string" },
+                      accessStatus: { type: "string" }, accessNotes: { type: "string" }, audiences: { type: "array", items: { type: "string" } },
+                    },
+                    required: ["title", "daysOfWeek", "startTime"],
                   },
                 },
               },

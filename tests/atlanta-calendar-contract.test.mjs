@@ -3512,7 +3512,7 @@ test("per-event source rechecks hold published changes for approval and retain f
     url:sourceUrl, description:"An exhibition with timed entry.", eventStatus:"https://schema.org/EventPostponed",
     startDate:"2026-11-19T18:00:00-05:00", endDate:"2026-11-19T20:00:00-05:00",
     organizer:{ name:"Official Arts", url:"https://official.example/" },
-    location:{ name:"Official Arts", url:"https://official.example/", address:{ streetAddress:"12 Source Way", addressLocality:"Atlanta", addressRegion:"GA" } },
+    location:{ name:"Official Arts", url:"https://official.example/", address:{ streetAddress:"99 Unapproved Way", addressLocality:"Atlanta", addressRegion:"GA" } },
     offers:{ url:"https://official.example/tickets/source-check", availability:"https://schema.org/InStock", validFrom:"2026-10-01T10:00:00-04:00" },
   })}</script>`, { status:200, headers:{ "content-type":"text/html" } });
   try {
@@ -3535,6 +3535,7 @@ test("per-event source rechecks hold published changes for approval and retain f
     assert.ok(changedFields.includes("startsAt"));
     assert.ok(changedFields.includes("scheduleStatus"));
     assert.ok(changedFields.includes("ticketStatus"));
+    assert.ok(changedFields.includes("venueAddress"));
 
     const prematureApproval = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
     assert.equal(prematureApproval.status, 409);
@@ -3547,15 +3548,26 @@ test("per-event source rechecks hold published changes for approval and retain f
     assert.equal(privateAfterApply.scheduleStatus, "postponed");
     assert.equal(privateAfterApply.ticketStatus, "on_sale");
     assert.equal(privateAfterApply.startsAt, "2026-11-19T18:00:00-05:00");
+    assert.equal(privateAfterApply.venueAddress, "12 Source Way, Atlanta, GA");
     assert.deepEqual(
       { ...db.prepare("SELECT starts_at,schedule_status,ticket_status,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id) },
       { ...publicBefore },
     );
+    const proposedSnapshot = JSON.parse(db.prepare(
+      "SELECT snapshot_json FROM calendar_candidate_revisions WHERE id=?"
+    ).get(payload.candidate.pendingRevisionId).snapshot_json);
+    const staleFormSave = await admin(db, `/candidates/${candidate.id}`, { method:"PATCH", body:proposedSnapshot });
+    assert.equal(staleFormSave.status, 200, await staleFormSave.clone().text());
+    const staleCandidate = (await staleFormSave.json()).candidate;
+    assert.equal(staleCandidate.venueAddress, "99 Unapproved Way, Atlanta, GA");
+    assert.equal(staleCandidate.pendingRevisionId, payload.candidate.pendingRevisionId);
     assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 200);
     assert.deepEqual(
-      { ...db.prepare("SELECT starts_at,schedule_status,ticket_status,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id) },
-      { starts_at:"2026-11-19T18:00:00-05:00", schedule_status:"postponed", ticket_status:"on_sale", sequence:1 },
+      { ...db.prepare("SELECT starts_at,schedule_status,ticket_status,venue_address,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id) },
+      { starts_at:"2026-11-19T18:00:00-05:00", schedule_status:"postponed", ticket_status:"on_sale", venue_address:"12 Source Way, Atlanta, GA", sequence:1 },
     );
+    const privateAfterApproval = (await (await admin(db, `/candidates/${candidate.id}`)).json()).candidate;
+    assert.equal(privateAfterApproval.venueAddress, "12 Source Way, Atlanta, GA");
     const publicEvent = (await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json()).events.find((event) => event.title === candidate.title);
     assert.equal(publicEvent.scheduleStatus, "postponed");
     assert.equal(publicEvent.ticketStatus, "on_sale");
@@ -4039,8 +4051,8 @@ test("pasting an Instagram post refreshes its caption, flyer evidence, and relat
     async quickAction(action, options) {
       browserCall += 1;
       assert.equal(action, "json");
-      assert.match(options.prompt, /caption and the text or accessibility description of every event flyer/);
-      assert.match(options.prompt, /Keep separately named schedule blocks/);
+      assert.match(options.prompt, /complete visible caption, inspect every carousel slide/);
+      assert.match(options.prompt, /Return each one-time program in occurrences/);
       assert.deepEqual(options.rejectResourceTypes, ["media", "font"]);
       const item = browserCall === 1 ? {
         title:"Artist Talk and Closing Reception", description:"", organizer:"", organizerUrl:"", venueName:"Gallery Anderson Smith",
@@ -4110,6 +4122,132 @@ test("pasting an Instagram post refreshes its caption, flyer evidence, and relat
       caption_excerpt:"Artist Talk 5-7PM. Closing Reception 7-10PM. August 22nd. Kids are welcome.", media_url:flyerUrl,
     });
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payload.candidate.id).count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("PHOSPHENES Instagram intake creates one exhibition with one-time and recurring occurrences", async () => {
+  const db = database();
+  const eventUrl = "https://www.instagram.com/p/DcRzECRkQSj/";
+  const flyerUrl = "https://scontent-atl3-2.cdninstagram.com/phosphenes-flyer.jpg";
+  const installationOne = "https://scontent-atl3-2.cdninstagram.com/phosphenes-installation-1.jpg";
+  const installationTwo = "https://scontent-atl3-2.cdninstagram.com/phosphenes-installation-2.jpg";
+  const caption = "PHOSPHENES runs through September 8. Melee Tournament, Sun 8/23. Artist Talk, Mon 8/24, 6pm. Music Mixer, Thu 8/27, 6-9pm. The Science of Art, Fri 9/4, 6pm. Dance + Draw, Sat 9/5, 2-5pm. Studio Visits, Tue + Thu 5-8pm, Wed 6-8pm. Curated by @1.stretch. 309A Peters St SW, Atlanta.";
+  const browserCalls = [];
+  const browser = {
+    async quickAction(action, options) {
+      browserCalls.push({ action, options });
+      return new Response(JSON.stringify({ result:{ events:[{
+        title:"PHOSPHENES",
+        description:"A solo exhibition by Timothy Hunter, curated by Stretch G.",
+        caption,
+        organizer:"Timothy Hunter",
+        organizerUrl:"https://www.instagram.com/timmy_hr/",
+        venueName:"Peters Street Station",
+        venueAddress:"309A Peters Street SW, Atlanta, GA",
+        venueUrl:"https://www.instagram.com/petersstreetstation/",
+        city:"Atlanta",
+        region:"GA",
+        startsAt:"2026-08-14",
+        endsAt:"2026-09-08",
+        eventUrl,
+        ticketUrl:"",
+        imageUrl:"",
+        imageAlt:"",
+        accessStatus:"unknown",
+        accessNotes:"Contact the artist, curator, or Billy Stonecipher for off-hours inquiries.",
+        audiences:[],
+        eventStructure:"exhibition",
+        dateKind:"date_range",
+        timezone:"America/New_York",
+        subjects:["art"],
+        formats:["exhibition","lecture-talk","performance","workshop"],
+        experimental:true,
+        authorHandle:"timmy_hr",
+        authorDisplayName:"Timmy Hunter",
+        authorIsVerified:false,
+        postedAt:"2026-08-20T12:00:00-04:00",
+        mediaType:"carousel",
+        extractionNotes:["The caption clarified the recurring studio-visit schedule; the flyer supplied the Melee Tournament time."],
+        conflicts:[],
+        carouselImages:[
+          { url:flyerUrl, role:"flyer", altText:"PHOSPHENES exhibition flyer", extractedText:"PHOSPHENES. A Solo Exhibition by Timothy Hunter. Curated by Stretch G. August 14th–September 8th 2026. Melee Tournament Sunday 8/23 1pm–6pm." },
+          { url:installationOne, role:"installation", altText:"PHOSPHENES gallery installation view", extractedText:"" },
+          { url:installationTwo, role:"installation", altText:"PHOSPHENES exterior installation view at 309A Peters Street", extractedText:"309A" },
+        ],
+        occurrences:[
+          { title:"Melee Tournament", occurrenceType:"other", startsAt:"2026-08-23T13:00:00-04:00", endsAt:"2026-08-23T18:00:00-04:00" },
+          { title:"Artist Talk", occurrenceType:"artist_talk", startsAt:"2026-08-24T18:00:00-04:00", endsAt:"" },
+          { title:"Music Mixer", occurrenceType:"mixer", startsAt:"2026-08-27T18:00:00-04:00", endsAt:"2026-08-27T21:00:00-04:00" },
+          { title:"The Science of Art Talk", occurrenceType:"lecture", startsAt:"2026-09-04T18:00:00-04:00", endsAt:"" },
+          { title:"Dance + Draw", occurrenceType:"workshop", startsAt:"2026-09-05T14:00:00-04:00", endsAt:"2026-09-05T17:00:00-04:00" },
+        ],
+        recurringOccurrences:[
+          { title:"Studio Visits with Artist", occurrenceType:"other", daysOfWeek:["Tuesday","Thursday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"17:00", endTime:"20:00" },
+          { title:"Studio Visits with Artist", occurrenceType:"other", daysOfWeek:["Wednesday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"18:00", endTime:"20:00" },
+        ],
+      }] } }), { status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":"34" } });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), eventUrl);
+    return new Response("<main>Instagram carousel post</main>", { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db, { BROWSER:browser }));
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.deepEqual(payload.extraction, { retrieval:"browser", browserMs:34, adapter:"pasted" });
+    assert.equal(browserCalls.length, 1);
+    assert.match(browserCalls[0].options.prompt, /inspect every carousel slide/);
+    assert.match(browserCalls[0].options.prompt, /perform OCR/);
+    assert.match(browserCalls[0].options.prompt, /return the exhibition as the parent event/);
+    assert.match(browserCalls[0].options.prompt, /bounded recurringOccurrences rule/);
+    assert.deepEqual(browserCalls[0].options.rejectResourceTypes, ["media", "font"]);
+
+    const candidate = payload.candidate;
+    assert.equal(candidate.title, "PHOSPHENES");
+    assert.equal(candidate.eventStructure, "exhibition");
+    assert.equal(candidate.dateKind, "date_range");
+    assert.equal(candidate.startsAt, "2026-08-14");
+    assert.equal(candidate.endsAt, "2026-09-08");
+    assert.equal(candidate.status, "needs_verification");
+    assert.equal(candidate.verificationState, "needs_verification");
+    assert.equal(candidate.sourceAuthority, "unresolved");
+    assert.equal(candidate.discoveryUrl, eventUrl);
+    assert.equal(candidate.occurrences.length, 15);
+    assert.equal(candidate.occurrences.filter((occurrence) => occurrence.title === "Studio Visits with Artist").length, 10);
+    assert.deepEqual(candidate.occurrences.filter((occurrence) => occurrence.title === "Studio Visits with Artist").map((occurrence) => occurrence.startsAt), [
+      "2026-08-18T17:00:00-04:00",
+      "2026-08-19T18:00:00-04:00",
+      "2026-08-20T17:00:00-04:00",
+      "2026-08-25T17:00:00-04:00",
+      "2026-08-26T18:00:00-04:00",
+      "2026-08-27T17:00:00-04:00",
+      "2026-09-01T17:00:00-04:00",
+      "2026-09-02T18:00:00-04:00",
+      "2026-09-03T17:00:00-04:00",
+      "2026-09-08T17:00:00-04:00",
+    ]);
+    const melee = candidate.occurrences.find((occurrence) => occurrence.title === "Melee Tournament");
+    assert.deepEqual({ startsAt:melee.startsAt, endsAt:melee.endsAt }, {
+      startsAt:"2026-08-23T13:00:00-04:00",
+      endsAt:"2026-08-23T18:00:00-04:00",
+    });
+    assert.equal(candidate.occurrences.find((occurrence) => occurrence.title === "Music Mixer").occurrenceType, "mixer");
+
+    const evidence = db.prepare("SELECT post_id,caption_excerpt,media_type,media_url,provenance_json FROM calendar_candidate_social_evidence WHERE candidate_id=?").get(candidate.id);
+    assert.equal(evidence.post_id, "DcRzECRkQSj");
+    assert.equal(evidence.caption_excerpt, caption);
+    assert.equal(evidence.media_type, "carousel");
+    assert.equal(evidence.media_url, flyerUrl);
+    const provenance = JSON.parse(evidence.provenance_json);
+    assert.equal(provenance.find((item) => item.channel === "pasted_link").captionText, caption);
+    assert.equal(provenance.filter((item) => item.channel === "social_carousel_image").length, 3);
+    assert.match(provenance.find((item) => item.mediaRole === "flyer").extractedText, /Melee Tournament Sunday 8\/23 1pm–6pm/);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }
