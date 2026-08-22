@@ -4253,6 +4253,99 @@ test("PHOSPHENES Instagram intake creates one exhibition with one-time and recur
   }
 });
 
+test("Instagram intake retries a rejected detailed schema and keeps the enumerated exhibition schedule", async () => {
+  const db = database();
+  const eventUrl = "https://www.instagram.com/p/DcRzECRkQSj/";
+  const browserCalls = [];
+  const browser = {
+    async quickAction(action, options) {
+      browserCalls.push({ action, options });
+      if (browserCalls.length === 1) {
+        return new Response(JSON.stringify({ error:{ message:"Invalid response schema" } }), {
+          status:422,
+          headers:{ "content-type":"application/json", "x-browser-ms-used":"5" },
+        });
+      }
+      return new Response(JSON.stringify({ result:{ events:[{
+        title:"PHOSPHENES",
+        description:"A solo exhibition by Timothy Hunter, curated by Stretch G.",
+        caption:"PHOSPHENES runs through September 8 with studio visits and public programs.",
+        organizer:"Timothy Hunter",
+        venueName:"Peters Street Station",
+        venueAddress:"309A Peters Street SW, Atlanta, GA",
+        city:"Atlanta",
+        region:"GA",
+        startsAt:"2026-08-14",
+        endsAt:"2026-09-08",
+        eventUrl,
+        imageUrl:"https://scontent-atl3-2.cdninstagram.com/phosphenes-flyer.jpg",
+        imageAlt:"PHOSPHENES exhibition flyer",
+        accessStatus:"unknown",
+        accessNotes:"",
+        audiences:[],
+        eventStructure:"exhibition",
+        dateKind:"date_range",
+        timezone:"America/New_York",
+        occurrences:[
+          { title:"Melee Tournament", occurrenceType:"other", startsAt:"2026-08-23T13:00:00-04:00", endsAt:"2026-08-23T18:00:00-04:00", timezone:"America/New_York" },
+          { title:"Artist Talk", occurrenceType:"artist_talk", startsAt:"2026-08-24T18:00:00-04:00", endsAt:"", timezone:"America/New_York" },
+          { title:"Studio Visits with Artist", occurrenceType:"other", startsAt:"2026-08-25T17:00:00-04:00", endsAt:"2026-08-25T20:00:00-04:00", timezone:"America/New_York" },
+        ],
+      }] } }), { status:200, headers:{ "content-type":"application/json", "x-browser-ms-used":"19" } });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), eventUrl);
+    return new Response("<main>Instagram carousel post</main>", { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db, { BROWSER:browser }));
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.equal(browserCalls.length, 2);
+    assert.ok(browserCalls[0].options.response_format);
+    assert.equal(browserCalls[1].options.response_format, undefined);
+    assert.match(browserCalls[1].options.prompt, /Enumerate every dated opening/);
+    assert.match(browserCalls[1].options.prompt, /every actual date in any repeated weekly schedule/);
+    assert.deepEqual(payload.extraction, { retrieval:"browser", browserMs:24, adapter:"pasted", browserFallback:true });
+    assert.equal(payload.candidate.title, "PHOSPHENES");
+    assert.equal(payload.candidate.eventStructure, "exhibition");
+    assert.equal(payload.candidate.startsAt, "2026-08-14");
+    assert.equal(payload.candidate.endsAt, "2026-09-08");
+    assert.deepEqual(payload.candidate.occurrences.map((occurrence) => occurrence.title), [
+      "Melee Tournament",
+      "Artist Talk",
+      "Studio Visits with Artist",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Instagram intake returns Browser's actual 422 detail when both extraction attempts fail", async () => {
+  const db = database();
+  const eventUrl = "https://www.instagram.com/p/DcRzECRkQSj/";
+  const browser = {
+    async quickAction() {
+      return new Response(JSON.stringify({ error:{ message:"Instagram page could not be rendered" } }), {
+        status:422,
+        headers:{ "content-type":"application/json" },
+      });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<main>Instagram post</main>", { status:200, headers:{ "content-type":"text/html" } });
+  try {
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db, { BROWSER:browser }));
+    assert.equal(response.status, 422);
+    const payload = await response.json();
+    assert.match(payload.error, /Instagram page could not be rendered/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Calendar Studio exposes one paste-and-scout link intake", () => {
   const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");

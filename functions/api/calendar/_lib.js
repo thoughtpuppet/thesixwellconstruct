@@ -6930,7 +6930,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
   const configuredCity = asString(config.city) || "Atlanta";
   const configuredRegion = asString(config.region) || "GA";
   const socialDetail = mode === "social-detail";
-  const response = await env.BROWSER.quickAction("json", {
+  const browserOptions = {
     url,
     prompt: socialDetail
       ? `Extract the one primary event announced by this social post. Read the complete visible caption, inspect every carousel slide, and perform OCR on visible flyer text instead of relying only on platform-generated accessibility text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. Use the post or flyer publication date to supply the event year only when the visible month and day make that year unambiguous. Return explicit UTC offsets for every one-time timed value. If the post describes an exhibition with an on-view date range plus openings, talks, mixers, workshops, visits, or other programs, return the exhibition as the parent event with eventStructure exhibition and dateKind date_range; keep its own opening and closing dates in startsAt and endsAt. Return each one-time program in occurrences. For a repeated schedule such as every Tuesday and Thursday during the exhibition, return a bounded recurringOccurrences rule with daysOfWeek, startsOn, endsOn, startTime, and endTime so every actual date can be created deterministically. Do not collapse an exhibition into a series or replace its date range with the first and last related program. Reconcile caption and flyer facts using the most specific visibly supported detail. Put any genuine disagreement in conflicts instead of silently choosing or deleting a fact. Preserve factual caption details such as accessibility, audience, admission, and whether children are welcome. Return carouselImages for every slide with its URL when exposed, accessibility text, OCR text, and a role of flyer, installation, artwork, or other. Choose the primary event flyer for imageUrl and imageAlt when possible. Return empty strings for genuinely missing facts.`
@@ -7009,14 +7009,51 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
     gotoOptions: { waitUntil: "networkidle2", timeout: 60_000 },
     waitForTimeout: 1_000,
     rejectResourceTypes: socialDetail ? ["media", "font"] : ["image", "media", "font"],
-  });
-  if (!response?.ok) throw new Error(`Browser event extraction returned HTTP ${response?.status || "unknown"}.`);
+  };
+  let response = await env.BROWSER.quickAction("json", browserOptions);
+  let browserMs = Number(response?.headers?.get?.("x-browser-ms-used") || 0) || 0;
+  let fallbackUsed = false;
+  let firstFailure = "";
+  if (!response?.ok && socialDetail && [400, 422].includes(Number(response?.status))) {
+    const failureText = await boundedResponseText(response).catch(() => "");
+    const failurePayload = parseJson(failureText, {});
+    firstFailure = cleanSourceText(
+      failurePayload?.error?.message
+      || failurePayload?.errors?.[0]?.message
+      || failurePayload?.message
+      || failureText,
+    ).slice(0, 600);
+    fallbackUsed = true;
+    response = await env.BROWSER.quickAction("json", {
+      url,
+      prompt: `Extract the one primary event announced by this social post. Read the complete caption and all visible carousel images, including flyer text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. Return a JSON object with one events array. The event must contain title, startsAt, endsAt, description, caption, organizer, venueName, venueAddress, city, region, eventStructure, dateKind, timezone, imageUrl, imageAlt, and occurrences. If this is an exhibition, keep its full on-view range on the parent event. Enumerate every dated opening, talk, mixer, workshop, visit, closing, and every actual date in any repeated weekly schedule as a separate occurrences item. Each occurrence must contain title, occurrenceType, factualDescription, startsAt, endsAt, timezone, venueName, venueAddress, accessStatus, accessNotes, and audiences. Use explicit UTC offsets for timed values. Do not omit repeated dates, merge programs, or replace the exhibition range with a program date. Return empty strings for genuinely missing facts and no commentary outside the JSON object.`,
+      gotoOptions: { waitUntil: "networkidle2", timeout: 60_000 },
+      waitForTimeout: 1_000,
+      rejectResourceTypes: ["media", "font"],
+    });
+    browserMs += Number(response?.headers?.get?.("x-browser-ms-used") || 0) || 0;
+  }
+  if (!response?.ok) {
+    const responseText = await boundedResponseText(response).catch(() => "");
+    const responsePayload = parseJson(responseText, {});
+    const detail = cleanSourceText(
+      responsePayload?.error?.message
+      || responsePayload?.errors?.[0]?.message
+      || responsePayload?.message
+      || responseText
+      || firstFailure,
+    ).slice(0, 600);
+    const error = new Error(`Browser event extraction returned HTTP ${response?.status || "unknown"}${detail ? `: ${detail}` : "."}`);
+    error.httpStatus = 422;
+    throw error;
+  }
   const payload = parseJson(await boundedResponseText(response), {});
   let result = payload?.result ?? payload?.data?.result ?? payload;
   if (typeof result === "string") result = parseJson(result, {});
   return {
     events: (Array.isArray(result?.events) ? result.events : []).slice(0, maximum),
-    browserMs: Number(response.headers.get("x-browser-ms-used") || 0) || 0,
+    browserMs,
+    fallbackUsed,
   };
 }
 
@@ -7152,7 +7189,15 @@ async function extractPastedLinkProposal(env, pastedUrl) {
     error.httpStatus = 422;
     throw error;
   }
-  return { proposal: browserPastedLinkProposal(item, source), diagnostics: { retrieval: "browser", browserMs: rendered.browserMs, adapter: "pasted" } };
+  return {
+    proposal: browserPastedLinkProposal(item, source),
+    diagnostics: {
+      retrieval: "browser",
+      browserMs: rendered.browserMs,
+      adapter: "pasted",
+      ...(rendered.fallbackUsed ? { browserFallback: true } : {}),
+    },
+  };
 }
 
 async function createCandidateFromUrl(env, db, pastedUrl) {
