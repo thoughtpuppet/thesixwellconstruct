@@ -1783,6 +1783,12 @@ async function appendRevision(db, candidateId, snapshot, provenance, changeSumma
   return id;
 }
 
+function revisionRequiresStudioSelection(createdBy, changes = []) {
+  const proposedChanges = Array.isArray(changes) ? changes : [];
+  return proposedChanges.length > 0
+    && !["studio", "studio-research"].includes(asString(createdBy));
+}
+
 async function createCandidate(env, body, discoveredBy = "manual", provenance = [], { restoreSuppression = false, allowVerifiedInstagramSource = false } = {}) {
   const db = requireDb(env);
   const proposal = proposalFromBody(body, {}, { allowVerifiedInstagramSource });
@@ -1902,11 +1908,11 @@ async function saveCandidate(env, id, body, { appendChangeRevision = true, allow
   if (!current) return null;
   const pendingAtSave = appendChangeRevision && current.pendingRevisionId
     ? await db.prepare(
-      "SELECT created_by FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'"
+      "SELECT created_by,change_set_json FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'"
     ).bind(current.pendingRevisionId, id).first()
     : null;
   const preserveAutomatedPending = Boolean(
-    pendingAtSave && !["studio", "studio-research", "manual"].includes(pendingAtSave.created_by),
+    pendingAtSave && revisionRequiresStudioSelection(pendingAtSave.created_by, parseJson(pendingAtSave.change_set_json, [])),
   );
   const preserveVerifiedInstagram = current.verificationState === "verified" && isInstagramUrl(current.sourceUrl);
   const proposal = proposalFromBody(body, current, { allowVerifiedInstagramSource: allowVerifiedInstagramSource || preserveVerifiedInstagram });
@@ -2146,8 +2152,9 @@ async function approveCandidate(env, id) {
     const pending = await db.prepare(
       "SELECT created_by,change_set_json FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'"
     ).bind(candidate.pendingRevisionId, id).first();
-    const automatedProposal = pending && !["studio", "studio-research", "manual"].includes(pending.created_by);
-    const proposalChanges = automatedProposal ? parseJson(pending.change_set_json, []) : [];
+    const pendingChanges = pending ? parseJson(pending.change_set_json, []) : [];
+    const automatedProposal = pending && revisionRequiresStudioSelection(pending.created_by, pendingChanges);
+    const proposalChanges = automatedProposal ? pendingChanges : [];
     const appliedChanges = proposalChanges.filter((change) => change.applied);
     if (automatedProposal && !appliedChanges.length) {
       return { error: "Select and apply at least one Scout change before approving the public update.", status: 409, errors: [] };
@@ -7034,9 +7041,34 @@ async function openAiPastedSocialEvents(env, sourceUrl, renderedHtml, maximum = 
       const identity = normalizeText(value);
       return identity && supportedText.includes(identity) ? asString(value) : "";
     };
+    const supportedScheduleTitle = (value) => {
+      const title = normalizeText(value);
+      if (!title) return false;
+      if (supportedText.includes(title)) return true;
+      const essentialTitle = title
+        .replace(/\b(?:with (?:the )?artist|talk|reception|event|program)\b/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return essentialTitle.length >= 5 && supportedText.includes(essentialTitle);
+    };
+    const sanitizeScheduleItem = (scheduleItem) => ({
+      ...scheduleItem,
+      venueName: supportedIdentity(scheduleItem?.venueName),
+    });
+    const occurrences = (Array.isArray(item.occurrences) ? item.occurrences : [])
+      .filter((occurrence) => supportedScheduleTitle(occurrence?.title))
+      .map(sanitizeScheduleItem);
+    const recurringOccurrences = (Array.isArray(item.recurringOccurrences) ? item.recurringOccurrences : [])
+      .filter((occurrence) => supportedScheduleTitle(occurrence?.title))
+      .map(sanitizeScheduleItem);
+    const omittedScheduleCount = (Array.isArray(item.occurrences) ? item.occurrences.length : 0)
+      + (Array.isArray(item.recurringOccurrences) ? item.recurringOccurrences.length : 0)
+      - occurrences.length
+      - recurringOccurrences.length;
     const dropped = [
       item.organizer && !supportedIdentity(item.organizer) ? "The extracted organizer was omitted because the rendered caption and flyer OCR did not support that exact name." : "",
       item.venueName && !supportedIdentity(item.venueName) ? "The extracted venue name was omitted because the post supplied only an address or did not support that exact name." : "",
+      omittedScheduleCount ? `${omittedScheduleCount} proposed schedule item${omittedScheduleCount === 1 ? " was" : "s were"} omitted because the caption and flyer OCR did not name the program.` : "",
     ].filter(Boolean);
     return {
       ...item,
@@ -7046,6 +7078,8 @@ async function openAiPastedSocialEvents(env, sourceUrl, renderedHtml, maximum = 
       ticketUrl: "",
       imageUrl,
       carouselImages,
+      occurrences,
+      recurringOccurrences,
       extractionNotes: [...(Array.isArray(item.extractionNotes) ? item.extractionNotes : []), ...dropped],
     };
   });
@@ -8169,9 +8203,10 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   proposal = ensurePrivateIntelligence(proposal, profile, discoveredBy, refreshPrivateIntelligence ? null : current);
   proposal.relatedLinks = proposal.relatedLinks.length ? proposal.relatedLinks : current.relatedLinks;
   const pendingProposal = current.pendingRevisionId ? await db.prepare(
-    "SELECT created_by,snapshot_json FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'"
+    "SELECT created_by,snapshot_json,change_set_json FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'"
   ).bind(current.pendingRevisionId, current.id).first() : null;
-  const automatedPending = pendingProposal && !["studio", "studio-research", "manual"].includes(pendingProposal.created_by);
+  const automatedPending = pendingProposal
+    && revisionRequiresStudioSelection(pendingProposal.created_by, parseJson(pendingProposal.change_set_json, []));
   const pendingSnapshot = automatedPending ? parseJson(pendingProposal.snapshot_json, {}) : null;
   const occurrenceBaseline = [...current.occurrences];
   for (const pendingOccurrence of pendingSnapshot?.occurrences || []) {
@@ -8242,7 +8277,10 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
     : "";
   if (changes.length) {
     if (!automatedPending || reportedChanges.length) {
-      await appendRevision(db, current.id, candidateSnapshot(proposal), provenance, changeSummary(changes, "Scout changes proposed"), discoveredBy, changes);
+      const revisionCreatedBy = discoveredBy === "manual" && proposal.discoveryChannel === "pasted_link"
+        ? "pasted-link"
+        : discoveredBy;
+      await appendRevision(db, current.id, candidateSnapshot(proposal), provenance, changeSummary(changes, "Scout changes proposed"), revisionCreatedBy, changes);
     }
   } else {
     await db.prepare("UPDATE calendar_candidates SET last_verified_at=?,updated_at=? WHERE id=?")

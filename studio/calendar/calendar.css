@@ -229,6 +229,11 @@ input:focus,textarea:focus,select:focus { border-color:var(--accent); outline:no
 .occurrence-row-head strong { color:var(--accent); font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
 .occurrence-row-head button { border-color:var(--danger); }
 .occurrences-empty { margin:0; border:5px solid var(--line); padding:14px; color:var(--dim); font-size:12px; }
+.pending-schedule-notice { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0 0 16px; border:5px solid var(--accent); padding:14px; background:var(--panel); }
+.pending-schedule-notice strong { display:block; color:var(--accent); text-transform:uppercase; letter-spacing:.08em; }
+.pending-schedule-notice p { margin:6px 0 0; color:var(--text); }
+.pending-schedule-notice button { flex:0 0 auto; }
+@media (max-width: 600px) { .pending-schedule-notice { align-items:stretch; flex-direction:column; } .pending-schedule-notice button { width:100%; } }
 .related-link-list { display:grid; gap:12px; margin-top:14px; }
 .related-link-row { border:5px solid var(--line); padding:14px; }
 .related-link-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:12px; }

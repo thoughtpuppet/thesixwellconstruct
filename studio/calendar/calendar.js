@@ -298,9 +298,21 @@
     if (typeof value === "object") return JSON.stringify(value);
     return String(value);
   }
+  function revisionRequiresSelection(revision) {
+    var changes=Array.isArray(revision&&revision.changes)?revision.changes:[];
+    return Boolean(revision&&revision.revisionState==="pending"&&changes.length&&!['studio','studio-research'].includes(revision.createdBy));
+  }
+  function pendingScheduleNotice(candidate) {
+    var revision=(candidate.revisions||[]).find(function(item){return item.id===candidate.pendingRevisionId&&revisionRequiresSelection(item);});
+    if(!revision)return '';
+    var scheduleChange=(revision.changes||[]).find(function(change){return change.field==="occurrences"&&!change.applied&&Array.isArray(change.after);});
+    if(!scheduleChange)return '';
+    var count=scheduleChange.after.length;
+    return '<div class="pending-schedule-notice" role="status"><div><strong>'+count+' related schedule item'+(count===1?'':'s')+' extracted and awaiting approval</strong><p>The Scout saved these as a proposal. Review and apply the Related schedule change to add them to this private candidate.</p></div><button type="button" data-action="review-change">Review proposed schedule</button></div>';
+  }
   function revisionMarkup(revision) {
     var changes = Array.isArray(revision.changes) ? revision.changes : [];
-    var selectable=revision.revisionState==="pending"&&changes.length&&!['studio','studio-research','manual'].includes(revision.createdBy);
+    var selectable=revisionRequiresSelection(revision);
     var remaining=changes.filter(function(change){return !change.applied;});
     var appliedCount=changes.length-remaining.length;
     return '<article class="revision'+(selectable?' is-proposal':'')+'" data-revision-id="'+escapeHtml(revision.id)+'"><strong>Revision ' + revision.revisionNumber + ' / ' + escapeHtml(revision.revisionState) + '</strong><br>' + escapeHtml(revision.changeSummary || "Saved candidate snapshot") + '<br>' + escapeHtml(displayDate(revision.createdAt)) +(selectable?'<p class="revision-proposal-note">'+(appliedCount?'Applied fields are now in the private candidate. Unapplied fields remain inert; review the candidate, then use Approve + Update when ready.':'Scout proposal only. The candidate has not changed. Select fields below, then apply them to the private candidate.')+'</p>':'')+ (changes.length ? '<div class="revision-changes">' + changes.map(function (change,index) {var inputId='revision-change-'+revision.id+'-'+index;return '<div class="revision-change'+(change.applied?' is-applied':'')+'">'+(selectable?'<input id="'+escapeHtml(inputId)+'" type="checkbox" data-revision-field="'+escapeHtml(change.field)+'"'+(change.applied?' checked disabled':'')+'>':'')+'<dl><dt>' + escapeHtml(change.label || change.field) + (change.applied?' / applied':'')+'</dt><dd><span>' + escapeHtml(changeValue(change.before)) + '</span><strong>to</strong><span>' + escapeHtml(changeValue(change.after)) + '</span></dd></dl></div>'; }).join("") + '</div>' : '')+(selectable?'<div class="revision-proposal-actions"><span class="revision-selection-status" aria-live="polite">0 changes selected</span><button type="button" data-select-revision="all"'+(remaining.length?'':' disabled')+'>Select all remaining</button><button type="button" data-apply-revision="'+escapeHtml(revision.id)+'" disabled>Apply selected changes</button>'+(appliedCount?'':'<button type="button" data-dismiss-revision="'+escapeHtml(revision.id)+'">Dismiss proposal</button>')+'</div>':'')+'</article>';
@@ -459,11 +471,11 @@
     var verifiedInstagram = verifiedInstagramSource(candidate);
     var occurrencesReady = (candidate.occurrences||[]).every(function (occurrence) { var occurrenceSource=occurrence.sourceUrl||candidate.sourceUrl;var occurrenceSourceReady=!isSocialUrl(occurrenceSource)||(isInstagramUrl(occurrenceSource)&&occurrence.verificationState==="verified");return occurrence.status === "tbd" || (occurrence.verificationState === "verified" && accessReady(occurrence) && occurrence.startsAt && occurrenceSourceReady); });
     var pendingRevision=revisions.find(function(revision){return revision.id===candidate.pendingRevisionId&&revision.revisionState==="pending";});
-    var pendingNeedsSelection=pendingRevision&&!['studio','studio-research','manual'].includes(pendingRevision.createdBy);
+    var pendingNeedsSelection=revisionRequiresSelection(pendingRevision);
     var pendingHasAppliedChange=pendingRevision&&(pendingRevision.changes||[]).some(function(change){return change.applied;});
     var canPublish = !isNew && candidate.verificationState === "verified" && sourceReady(candidate) && accessReady(candidate) && !instagramTicket && occurrencesReady && !["rejected","cancelled","duplicate"].includes(candidate.status) && (candidate.status !== "published" || (candidate.pendingRevisionId&&(!pendingNeedsSelection||pendingHasAppliedChange)));
     var publishLabel = candidate.status === "published" ? "Approve + Update" : "Approve + Publish";
-    editorRoot.innerHTML = '<div class="editor-head"><div><p class="eyebrow">' + (isNew ? 'Manual intake' : recordLabel(candidate)) + '</p><h2>' + escapeHtml(candidate.title || "New candidate") + '</h2></div><span class="status-badge">' + escapeHtml(lifecycleLabel(candidate)) + '</span></div>' +
+    editorRoot.innerHTML = '<div class="editor-head"><div><p class="eyebrow">' + (isNew ? 'Manual intake' : recordLabel(candidate)) + '</p><h2>' + escapeHtml(candidate.title || "New candidate") + '</h2></div><span class="status-badge">' + escapeHtml(lifecycleLabel(candidate)) + '</span></div>' + pendingScheduleNotice(candidate) +
       '<div class="editor-section"><h3>Public factual record</h3><div class="field-grid">' +
       '<label class="field"><span>Registry source</span><select id="candidateSourceId">' + sourceChoices(candidate.sourceId || "") + '</select></label>' +
       field("candidateSourceEventId","Source event ID",candidate.sourceEventId) +

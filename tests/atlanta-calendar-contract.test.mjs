@@ -4100,7 +4100,8 @@ test("pasting an Instagram post refreshes its caption, flyer evidence, and relat
     assert.equal(payload.candidate.endsAt, null);
     assert.equal(payload.candidate.occurrences.length,0);
     assert.ok(payload.candidate.pendingRevisionId);
-    const revision=db.prepare("SELECT change_set_json FROM calendar_candidate_revisions WHERE id=?").get(payload.candidate.pendingRevisionId);
+    const revision=db.prepare("SELECT created_by,change_set_json FROM calendar_candidate_revisions WHERE id=?").get(payload.candidate.pendingRevisionId);
+    assert.equal(revision.created_by,"pasted-link");
     const fields=JSON.parse(revision.change_set_json).map((change)=>change.field);
     const applied=await admin(db,`/candidates/${payload.candidate.id}/revisions/${payload.candidate.pendingRevisionId}/apply`,{method:"POST",body:{fields}});
     assert.equal(applied.status,200,await applied.clone().text());
@@ -4271,9 +4272,10 @@ test("PHOSPHENES intake sends rendered caption and carousel assets to vision ext
     { title:"Studio Visits with Artist", occurrenceType:"other", factualDescription:"Studio visits with the artist.", daysOfWeek:["Tuesday","Thursday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"17:00", endTime:"20:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"Contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[] },
     { title:"Studio Visits with Artist", occurrenceType:"other", factualDescription:"Studio visits with the artist.", daysOfWeek:["Wednesday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"18:00", endTime:"20:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"Contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[] },
   ];
+  const unsupportedOpening = { title:"Opening Night Reception", occurrenceType:"opening_reception", factualDescription:"Opening reception.", startsAt:"2026-08-14T19:00:00-04:00", endsAt:"", timezone:"America/New_York", venueName:"Old Rabbit Gallery", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"", audiences:[] };
   const visionEvent = {
     title:"PHOSPHENES", description:"A solo exhibition by Timothy Hunter, curated by Stretch G.", caption, organizer:"Timothy Hunter",
-    organizerUrl:"", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", venueUrl:"", city:"Atlanta", region:"GA",
+    organizerUrl:"", venueName:"Old Rabbit Gallery", venueAddress:"309A Peters Street SW, Atlanta, GA", venueUrl:"", city:"Atlanta", region:"GA",
     startsAt:"2026-08-14", endsAt:"2026-09-08", eventUrl, ticketUrl:"", imageUrl:flyerUrl, imageAlt:"PHOSPHENES exhibition flyer",
     accessStatus:"unknown", accessNotes:"Contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[],
     eventStructure:"exhibition", dateKind:"date_range", timezone:"America/New_York", subjects:["art","art-making"], formats:["exhibition","lecture-talk","performance","workshop"], experimental:true,
@@ -4283,7 +4285,8 @@ test("PHOSPHENES intake sends rendered caption and carousel assets to vision ext
       { url:flyerUrl, altText:"PHOSPHENES event flyer", extractedText:"PHOSPHENES. A Solo Exhibition by Timothy Hunter. Curated by Stretch G. August 14th–September 8th 2026 at 309A Peters Street SW Atlanta, GA.", role:"flyer" },
       { url:artworkUrl, altText:"Artwork in the PHOSPHENES exhibition", extractedText:"", role:"artwork" },
     ],
-    occurrences:oneTimeOccurrences, recurringOccurrences,
+    occurrences:[unsupportedOpening,...oneTimeOccurrences.map((occurrence)=>({...occurrence,venueName:"Old Rabbit Gallery"}))],
+    recurringOccurrences:recurringOccurrences.map((occurrence)=>({...occurrence,venueName:"Old Rabbit Gallery"})),
   };
   const browser = {
     async quickAction(action, options) {
@@ -4333,6 +4336,8 @@ test("PHOSPHENES intake sends rendered caption and carousel assets to vision ext
     assert.deepEqual(candidate.subjects, ["art","art-making"]);
     assert.equal(candidate.occurrences.length, 15);
     assert.equal(candidate.occurrences.filter((occurrence) => occurrence.title === "Studio Visits with Artist").length, 10);
+    assert.equal(candidate.occurrences.some((occurrence) => occurrence.title === "Opening Night Reception"), false);
+    assert.equal(candidate.occurrences.every((occurrence) => occurrence.venueName === ""), true);
     const evidence = db.prepare("SELECT media_url,provenance_json FROM calendar_candidate_social_evidence WHERE candidate_id=?").get(candidate.id);
     assert.equal(evidence.media_url, flyerUrl);
     assert.equal(JSON.parse(evidence.provenance_json).filter((item) => item.channel === "social_carousel_image").length, 2);
@@ -4639,6 +4644,17 @@ test("Calendar Studio sources use inline add forms and one-open compact editable
   assert.match(studioCss,/\.source-summary \{[^}]*min-height:52px;[^}]*cursor:pointer;/);
   assert.match(studioCss,/\.source-card-details \{[^}]*display:grid;[^}]*border-top:5px solid var\(--line\);/);
   assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.source-create-form,[^\{]*\.source-card-details[^\{]*\{ grid-template-columns:minmax\(0,1fr\); \}/);
+});
+
+test("Calendar Studio exposes pasted-link and legacy manual occurrence proposals for selective approval", () => {
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studio,/function revisionRequiresSelection\(revision\)/);
+  assert.match(studio,/!\['studio','studio-research'\]\.includes\(revision\.createdBy\)/);
+  assert.doesNotMatch(studio,/\['studio','studio-research','manual'\]/);
+  assert.match(studio,/related schedule item[\s\S]*extracted and awaiting approval/);
+  assert.match(studio,/Review proposed schedule/);
+  assert.match(studioCss,/\.pending-schedule-notice \{[^}]*border:5px solid var\(--accent\);/);
 });
 
 test("Calendar Studio explains source warnings inline and defaults new sources to dynamic fallback", () => {
