@@ -880,7 +880,7 @@ test("one exhibition publishes its dated related schedule without publishing TBD
   const talks = await (await handleCalendarPublicApi(request("/api/calendar/events?format=lecture-talk"), runtime)).json();
   assert.deepEqual(talks.events.map((event) => event.occurrenceType), ["artist_talk"]);
   const feed = await (await handleCalendarFeed(request("/calendars/atlanta.ics"), runtime)).text();
-  assert.doesNotMatch(feed, new RegExp(`UID:${parent.uid.replace(/[.*+?^${}()|[\]\\]/g, "\\  assert.match(feed, new RegExp(`UID:${parent.uid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));")}`));
+  assert.doesNotMatch(feed, new RegExp(`UID:${parent.uid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   children.forEach((event) => assert.match(feed, new RegExp(`UID:${event.uid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)));
   assert.equal((feed.match(/RELATED-TO;RELTYPE=PARENT:/g) || []).length, 2);
   const childIcs = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(children[0].id)}.ics`), runtime)).text();
