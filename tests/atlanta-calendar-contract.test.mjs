@@ -92,6 +92,9 @@ test("calendar migrations preserve seeded private candidates, verified official 
     { status:"needs_verification", starts_at:null, verification_state:"needs_verification" },
   );
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
+  for (const table of ["calendar_candidates","calendar_entries","calendar_candidate_occurrences","calendar_entry_occurrences"]) {
+    assert.equal(db.prepare(`SELECT COUNT(*) count FROM ${table} WHERE planning_eligible<>1`).get().count, 0);
+  }
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_event_suppressions").get().count, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_event_suppression_keys").get().count, 0);
   assert.equal(db.prepare("SELECT suppressed_count FROM calendar_scout_runs LIMIT 1").get()?.suppressed_count || 0, 0);
@@ -4746,10 +4749,10 @@ test("night planner phase-one contract and Studio controls remain explicit", () 
   assert.match(worker,/url\.pathname === "\/api\/calendar\/plan"/);
 });
 
-test("night planning defaults off and rejects malformed planning numbers", async () => {
+test("night planning defaults on and rejects malformed planning numbers", async () => {
   const db = database();
   const candidate = await admin(db, "/candidates/cal_candidate_sound_vision");
-  assert.equal((await candidate.json()).candidate.planningEligible, false);
+  assert.equal((await candidate.json()).candidate.planningEligible, true);
 
   const invalidLatitude = await admin(db, "/candidates/cal_candidate_sound_vision", {
     method:"PATCH", body:{ latitude:91, longitude:-84.4 },
@@ -4762,6 +4765,52 @@ test("night planning defaults off and rejects malformed planning numbers", async
   });
   assert.equal(invalidDuration.status, 400);
   assert.match((await invalidDuration.json()).error, /cannot be shorter/);
+});
+
+test("related occurrences inherit reviewed parent access and publish without stored coordinates", async () => {
+  const db = database();
+  const sourceUrl = "https://gallery.example/events/inherited-access";
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Inherited Access Exhibition", organizer:"Atlanta Gallery", factualDescription:"An exhibition with one related artist talk.",
+      sourceUrl, organizerUrl:sourceUrl, sourceAuthority:"organizer_event", accessStatus:"public", accessNotes:"", audiences:["Public"],
+      eventStructure:"exhibition", dateKind:"date_range", startsAt:"2026-10-01", endsAt:"2026-10-10", timezone:"America/New_York",
+      venueName:"Atlanta Gallery", venueAddress:"10 Gallery Way, Atlanta, GA", city:"Atlanta", region:"GA",
+      subjects:["art"], formats:["exhibition","lecture-talk"], verificationState:"verified",
+      occurrences:[{
+        title:"Artist Talk", occurrenceType:"artist_talk", factualDescription:"A related artist talk.", dateKind:"timed",
+        startsAt:"2026-10-04T18:00:00-04:00", endsAt:"2026-10-04T19:00:00-04:00", timezone:"America/New_York",
+        venueName:"", venueAddress:"", accessStatus:"unknown", accessNotes:"Attendance eligibility has not been confirmed.", audiences:[],
+        verificationState:"verified", sourceUrl,
+      }],
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const candidate = (await created.json()).candidate;
+  assert.equal(candidate.planningEligible, true);
+  assert.equal(candidate.latitude, null);
+  assert.equal(candidate.occurrences[0].planningEligible, true);
+  assert.equal(candidate.occurrences[0].accessStatus, "public");
+  assert.equal(candidate.occurrences[0].accessNotes, "");
+
+  const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
+  assert.equal(approved.status, 200, await approved.clone().text());
+  assert.deepEqual(
+    { ...db.prepare("SELECT access_status,planning_eligible,latitude,longitude FROM calendar_entry_occurrences WHERE entry_id=(SELECT public_entry_id FROM calendar_candidates WHERE id=?)").get(candidate.id) },
+    { access_status:"public", planning_eligible:1, latitude:null, longitude:null },
+  );
+});
+
+test("Calendar Studio shows publication blockers and defaults events and occurrences into Night Planning", () => {
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studio,/planningEligible:true/);
+  assert.match(studio,/function publicationBlockers\(candidate,pendingRevision,pendingNeedsSelection,pendingHasAppliedChange\)/);
+  assert.match(studio,/Not ready to publish/);
+  assert.match(studio,/data-action="approve"' \+ \(canPublish\?'':' disabled'\)/);
+  assert.match(studio,/Every event and related schedule item is eligible by default/);
+  assert.match(studioCss,/\.publication-readiness\.is-blocked \{ border-color:var\(--danger\); \}/);
 });
 
 test("reviewed known venues supply reusable coordinates at publication", async () => {

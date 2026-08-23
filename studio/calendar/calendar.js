@@ -112,7 +112,7 @@
       monitoringEnabled:Boolean(document.getElementById("candidateMonitoringEnabled") && document.getElementById("candidateMonitoringEnabled").checked), monitoringCadenceHours:Number(value("candidateMonitoringCadenceHours")) || 24
     };
   }
-  function blankCandidate() { return { id:"", title:"", status:"needs_verification", scheduleStatus:"scheduled", ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"", verificationState:"needs_verification", sourceAuthority:"unresolved", accessStatus:"unknown", accessNotes:"Attendance eligibility has not been confirmed.", audiences:[], eventStructure:"single", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[], relatedLinks:[], occurrences:[], media:[], attendanceMode:"inferred", recommendedArrivalMinutes:10, minimumVisitMinutes:null, recommendedVisitMinutes:null, lateArrivalAllowed:false, planningEligible:false, latitude:null, longitude:null, planningNotes:"", flyerPublicApproved:false, monitoringEnabled:false, monitoringCadenceHours:24, lastCheckStatus:"never" }; }
+  function blankCandidate() { return { id:"", title:"", status:"needs_verification", scheduleStatus:"scheduled", ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"", verificationState:"needs_verification", sourceAuthority:"unresolved", accessStatus:"unknown", accessNotes:"Attendance eligibility has not been confirmed.", audiences:[], eventStructure:"single", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[], relatedLinks:[], occurrences:[], media:[], attendanceMode:"inferred", recommendedArrivalMinutes:10, minimumVisitMinutes:null, recommendedVisitMinutes:null, lateArrivalAllowed:false, planningEligible:true, latitude:null, longitude:null, planningNotes:"", flyerPublicApproved:false, monitoringEnabled:false, monitoringCadenceHours:24, lastCheckStatus:"never" }; }
 
   function strongPickWhen(pick) {
     var start=displayDate(pick.startsAt);
@@ -360,6 +360,34 @@
   function sourceReady(record) {
     return verifiedInstagramSource(record) || (record.sourceAuthority !== "unresolved" && !isSocialUrl(record.sourceUrl));
   }
+  function occurrenceAccessReady(occurrence,parent) {
+    return accessReady(occurrence) || (occurrence.accessStatus === "unknown" && accessReady(parent));
+  }
+  function publicationBlockers(candidate,pendingRevision,pendingNeedsSelection,pendingHasAppliedChange) {
+    var blockers=[];
+    if(!candidate.title)blockers.push("Add the event title.");
+    if(!candidate.organizer)blockers.push("Add the organizer.");
+    if(!candidate.factualDescription)blockers.push("Add the factual description.");
+    if(!candidate.startsAt)blockers.push("Confirm the event start.");
+    if(candidate.dateKind==="date_range"&&!candidate.endsAt)blockers.push("Confirm the final date.");
+    if(!candidate.venueName)blockers.push("Confirm the venue.");
+    if(!candidate.venueAddress)blockers.push("Confirm the venue address.");
+    if(candidate.verificationState!=="verified")blockers.push("Set Verification to Verified.");
+    if(!sourceReady(candidate))blockers.push("Confirm a publishable event source.");
+    if(!accessReady(candidate))blockers.push("Confirm attendance access.");
+    if(isInstagramUrl(candidate.ticketUrl))blockers.push("Remove Instagram from the public ticket URL.");
+    if(!(candidate.subjects||[]).length)blockers.push("Select at least one subject.");
+    if(!(candidate.formats||[]).length)blockers.push("Select at least one format.");
+    var blockedOccurrences=(candidate.occurrences||[]).filter(function(occurrence){var occurrenceSource=occurrence.sourceUrl||candidate.sourceUrl;var occurrenceSourceReady=!isSocialUrl(occurrenceSource)||(isInstagramUrl(occurrenceSource)&&occurrence.verificationState==="verified");return occurrence.status!=="tbd"&&(occurrence.verificationState!=="verified"||!occurrenceAccessReady(occurrence,candidate)||!occurrence.startsAt||!occurrenceSourceReady);});
+    if(blockedOccurrences.length)blockers.push(blockedOccurrences.length+" related schedule item"+(blockedOccurrences.length===1?" needs":"s need")+" verification, access, timing, or source review.");
+    if(["rejected","cancelled","duplicate"].includes(candidate.status))blockers.push("This record is marked "+candidate.status.replace(/_/g," ")+".");
+    if(candidate.status==="published"&&(!candidate.pendingRevisionId||(pendingNeedsSelection&&!pendingHasAppliedChange)))blockers.push("Apply at least one proposed update before approving the published event again.");
+    return blockers;
+  }
+  function publicationReadinessMarkup(blockers) {
+    if(!blockers.length)return '<div class="publication-readiness is-ready" role="status"><strong>Ready to publish</strong><p>All required event and related-schedule facts are ready.</p></div>';
+    return '<div class="publication-readiness is-blocked" role="status"><strong>Not ready to publish</strong><ul>'+blockers.map(function(blocker){return '<li>'+escapeHtml(blocker)+'</li>';}).join("")+'</ul></div>';
+  }
 
   function matchesStatus(candidate, status) {
     if (status === "review") return candidate.status === "candidate" || candidate.status === "needs_verification";
@@ -469,11 +497,11 @@
     var instagramSource = isInstagramUrl(candidate.sourceUrl);
     var instagramTicket = isInstagramUrl(candidate.ticketUrl);
     var verifiedInstagram = verifiedInstagramSource(candidate);
-    var occurrencesReady = (candidate.occurrences||[]).every(function (occurrence) { var occurrenceSource=occurrence.sourceUrl||candidate.sourceUrl;var occurrenceSourceReady=!isSocialUrl(occurrenceSource)||(isInstagramUrl(occurrenceSource)&&occurrence.verificationState==="verified");return occurrence.status === "tbd" || (occurrence.verificationState === "verified" && accessReady(occurrence) && occurrence.startsAt && occurrenceSourceReady); });
     var pendingRevision=revisions.find(function(revision){return revision.id===candidate.pendingRevisionId&&revision.revisionState==="pending";});
     var pendingNeedsSelection=revisionRequiresSelection(pendingRevision);
     var pendingHasAppliedChange=pendingRevision&&(pendingRevision.changes||[]).some(function(change){return change.applied;});
-    var canPublish = !isNew && candidate.verificationState === "verified" && sourceReady(candidate) && accessReady(candidate) && !instagramTicket && occurrencesReady && !["rejected","cancelled","duplicate"].includes(candidate.status) && (candidate.status !== "published" || (candidate.pendingRevisionId&&(!pendingNeedsSelection||pendingHasAppliedChange)));
+    var publishBlockers=isNew?[]:publicationBlockers(candidate,pendingRevision,pendingNeedsSelection,pendingHasAppliedChange);
+    var canPublish = !isNew && publishBlockers.length===0;
     var publishLabel = candidate.status === "published" ? "Approve + Update" : "Approve + Publish";
     editorRoot.innerHTML = '<div class="editor-head"><div><p class="eyebrow">' + (isNew ? 'Manual intake' : recordLabel(candidate)) + '</p><h2>' + escapeHtml(candidate.title || "New candidate") + '</h2></div><span class="status-badge">' + escapeHtml(lifecycleLabel(candidate)) + '</span></div>' + pendingScheduleNotice(candidate) +
       '<div class="editor-section"><h3>Public factual record</h3><div class="field-grid">' +
@@ -496,7 +524,7 @@
       '<p class="section-guidance is-wide">Restricted access is published on the event card, API, and calendar feeds. Verification notes below remain private.</p>' +
       '</div><p class="field-label">Subjects</p>' + checkboxes("subjects",SUBJECTS,candidate.subjects) + '<p class="field-label">Formats</p>' + checkboxes("formats",FORMATS,candidate.formats) +
       '<label class="check-option"><input id="candidateExperimental" type="checkbox"' + (candidate.experimental ? ' checked' : '') + '><span>Experimental attribute</span></label></div>' +
-      '<div class="editor-section"><h3>Night planning</h3><p class="section-guidance">Review timing behavior and venue coordinates before enabling this listing. Visitor start and end locations are never stored with event records.</p><div class="field-grid">' +
+      '<div class="editor-section"><h3>Night planning</h3><p class="section-guidance">Every event and related schedule item is eligible by default. The planner can locate a confirmed street address when reviewed coordinates are unavailable; turn eligibility off only when this event should not appear as a planning option. Visitor start and end locations are never stored with event records.</p><div class="field-grid">' +
       field("candidateAttendanceMode","Attendance mode",candidate.attendanceMode||"inferred",{type:"select",choices:[["inferred","Infer from format"],["fixed_start","Fixed start"],["flexible_window","Flexible window"],["drop_in","Drop in"]]}) +
       field("candidateArrivalMinutes","Arrival buffer / minutes",candidate.recommendedArrivalMinutes==null?10:candidate.recommendedArrivalMinutes,{type:"number"}) +
       field("candidateMinimumVisit","Minimum visit / minutes",candidate.minimumVisitMinutes,{type:"number"}) + field("candidateRecommendedVisit","Recommended visit / minutes",candidate.recommendedVisitMinutes,{type:"number"}) +
@@ -516,7 +544,8 @@
       field("candidateVerificationNotes","Verification notes",candidate.verificationNotes,{type:"textarea",wide:true}) + field("candidateRejectionReason","Rejection reason",candidate.rejectionReason) + field("candidateDuplicateOf","Duplicate of",candidate.duplicateOf) + '</div></div>' +
       '<div class="editor-section"><h3>Private review intelligence</h3><p class="section-guidance">The Scout generates these private fields for every discovered event. They remain editable here and never appear on the public calendar or feeds.</p><div class="field-grid">' + field("candidatePrivateRationale","Why it fits",candidate.privateRationale,{type:"textarea",wide:true}) + field("candidateAttendanceUse","Best use",candidate.attendanceUse,{type:"textarea"}) + field("candidateProgrammingIdeas","Programming model worth studying",candidate.programmingIdeas,{type:"textarea"}) + field("candidateCollaborators","Potential collaborators",candidate.potentialCollaborators,{type:"textarea"}) + field("candidateInternalNotes","Internal notes",candidate.internalNotes,{type:"textarea"}) + '</div></div>' +
       (!isNew ? '<div class="editor-section"><h3>Detected changes + revisions</h3><div class="revision-list">' + (revisions.length ? revisions.map(revisionMarkup).join("") : '<p class="empty-state">No revisions recorded.</p>') + '</div></div>' : '') +
-      '<div class="editor-actions"><button type="button" data-action="save">' + (isNew ? 'Create candidate' : 'Save') + '</button>' + (!isNew ? '<button type="button" data-action="skip">Skip</button><button type="button" data-action="recheck"' + (!candidate.sourceUrl ? ' disabled' : '') + '>Recheck Source</button>' + (candidate.pendingRevisionId ? '<button type="button" data-action="review-change">Review Detected Change</button>' : '') + (canPublish ? '<button type="button" data-action="approve">' + publishLabel + '</button>' : '') + '<button type="button" data-action="reject">Reject</button><button type="button" data-action="duplicate">Mark Duplicate</button><button type="button" data-action="cancel">Mark Cancelled</button><button type="button" data-action="delete">Delete</button>' : '') + '</div>';
+      (!isNew?publicationReadinessMarkup(publishBlockers):'') +
+      '<div class="editor-actions"><button type="button" data-action="save">' + (isNew ? 'Create candidate' : 'Save') + '</button>' + (!isNew ? '<button type="button" data-action="skip">Skip</button><button type="button" data-action="recheck"' + (!candidate.sourceUrl ? ' disabled' : '') + '>Recheck Source</button>' + (candidate.pendingRevisionId ? '<button type="button" data-action="review-change">Review Detected Change</button>' : '') + '<button type="button" data-action="approve"' + (canPublish?'':' disabled') + '>' + publishLabel + '</button><button type="button" data-action="reject">Reject</button><button type="button" data-action="duplicate">Mark Duplicate</button><button type="button" data-action="cancel">Mark Cancelled</button><button type="button" data-action="delete">Delete</button>' : '') + '</div>';
     collapseEditorSections();
     scheduleGuidance();
     hydrateMediaPreviews();
@@ -888,7 +917,7 @@
   listRoot.addEventListener("click",function(event){var button=event.target.closest("[data-candidate-id]");if(button)selectCandidate(button.dataset.candidateId,button.dataset.occurrenceId||"");});
   editorRoot.addEventListener("click",function(event){
     var actionButton=event.target.closest("button[data-action]");if(actionButton){editorAction(actionButton.dataset.action);return;}
-    if(event.target.closest("[data-add-occurrence]")){var occurrenceList=document.getElementById("candidateOccurrences");var occurrenceEmpty=occurrenceList.querySelector(".occurrences-empty");if(occurrenceEmpty)occurrenceEmpty.remove();occurrenceList.insertAdjacentHTML("beforeend",occurrenceRow({occurrenceType:"other",status:"scheduled",ticketStatus:"unknown",dateKind:"timed",timezone:value("candidateTimezone")||"America/New_York",accessStatus:value("candidateAccessStatus")||"unknown",accessNotes:value("candidateAccessNotes"),audiences:value("candidateAudiences").split(",").map(function(item){return item.trim();}).filter(Boolean),verificationState:"needs_verification"}));return;}
+    if(event.target.closest("[data-add-occurrence]")){var occurrenceList=document.getElementById("candidateOccurrences");var occurrenceEmpty=occurrenceList.querySelector(".occurrences-empty");if(occurrenceEmpty)occurrenceEmpty.remove();occurrenceList.insertAdjacentHTML("beforeend",occurrenceRow({occurrenceType:"other",status:"scheduled",ticketStatus:"unknown",dateKind:"timed",timezone:value("candidateTimezone")||"America/New_York",accessStatus:value("candidateAccessStatus")||"unknown",accessNotes:value("candidateAccessNotes"),audiences:value("candidateAudiences").split(",").map(function(item){return item.trim();}).filter(Boolean),verificationState:"needs_verification",planningEligible:true}));return;}
     var removeOccurrence=event.target.closest("[data-remove-occurrence]");if(removeOccurrence){removeOccurrence.closest("[data-occurrence]").remove();var occurrences=document.getElementById("candidateOccurrences");if(!occurrences.querySelector("[data-occurrence]"))occurrences.innerHTML='<p class="occurrences-empty">No related schedule items.</p>';return;}
     if(event.target.closest("[data-add-related-link]")){var list=document.getElementById("candidateRelatedLinks");var empty=list.querySelector(".related-links-empty");if(empty)empty.remove();list.insertAdjacentHTML("beforeend",relatedLinkRow({ provenanceUrl:value("candidateSourceUrl") }));return;}
     var removeLink=event.target.closest("[data-remove-related-link]");if(removeLink){removeLink.closest("[data-related-link]").remove();var related=document.getElementById("candidateRelatedLinks");if(!related.querySelector("[data-related-link]"))related.innerHTML='<p class="related-links-empty">No related links captured.</p>';return;}

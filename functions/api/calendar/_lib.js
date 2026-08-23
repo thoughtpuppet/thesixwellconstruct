@@ -118,6 +118,9 @@ function accessDetails(statusValue, notesValue, audienceValue, fallback = {}) {
   const requested = asString(statusValue === undefined ? fallback.accessStatus : statusValue);
   const accessStatus = ACCESS_STATUSES.has(requested) ? requested : "public";
   let accessNotes = asString(notesValue === undefined ? fallback.accessNotes : notesValue);
+  if (accessStatus === "public" && accessNotes === "Attendance eligibility has not been confirmed.") {
+    accessNotes = "";
+  }
   if (accessStatus === "restricted" && !accessNotes) {
     accessNotes = audiences.length
       ? `Attendance restricted to: ${audiences.join(", ")}.`
@@ -127,6 +130,17 @@ function accessDetails(statusValue, notesValue, audienceValue, fallback = {}) {
     accessNotes = "Attendance eligibility has not been confirmed.";
   }
   return { accessStatus, accessNotes, audiences };
+}
+
+function occurrenceAccessDetails(value = {}, parent = {}) {
+  const own = accessDetails(value.access_status ?? value.accessStatus, value.access_notes ?? value.accessNotes, value.audiences_json ?? value.audiences);
+  if (own.accessStatus !== "unknown" || !["public", "restricted"].includes(asString(parent.accessStatus))) return own;
+  const ownNote = own.accessNotes === "Attendance eligibility has not been confirmed." ? undefined : own.accessNotes;
+  return accessDetails(
+    parent.accessStatus,
+    ownNote === undefined ? parent.accessNotes : ownNote,
+    own.audiences.length ? own.audiences : parent.audiences,
+  );
 }
 
 function scheduleStatus(value, fallback = "scheduled") {
@@ -517,7 +531,7 @@ function planningDetails(value = {}, fallback = {}) {
     minimumVisitMinutes: optionalNumber(read("minimumVisitMinutes", "minimum_visit_minutes", null), 5, 720),
     recommendedVisitMinutes: optionalNumber(read("recommendedVisitMinutes", "recommended_visit_minutes", null), 5, 720),
     lateArrivalAllowed: Boolean(read("lateArrivalAllowed", "late_arrival_allowed", false)),
-    planningEligible: Boolean(read("planningEligible", "planning_eligible", false)),
+    planningEligible: Boolean(read("planningEligible", "planning_eligible", true)),
     latitude: optionalNumber(read("latitude", "latitude", null), -90, 90),
     longitude: optionalNumber(read("longitude", "longitude", null), -180, 180),
     planningNotes: asString(read("planningNotes", "planning_notes", "")),
@@ -651,13 +665,9 @@ function occurrenceTypeLabel(value) {
   })[value] || "Related Program";
 }
 
-function normalizeOccurrence(row) {
+function normalizeOccurrence(row, parent = {}) {
   if (!row) return null;
-  const access = accessDetails(
-    row.access_status ?? row.accessStatus,
-    row.access_notes ?? row.accessNotes,
-    row.audiences_json ?? row.audiences,
-  );
+  const access = occurrenceAccessDetails(row, parent);
   return {
     id: row.id || "",
     sourceEventId: row.source_event_id || row.sourceEventId || "",
@@ -701,7 +711,7 @@ function normalizeOccurrenceProposal(item, parent = {}, index = 0, { allowVerifi
   const parentStudioVerified = allowVerifiedInstagramSource && parent.verificationState === "verified";
   const verifiedInstagram = allowVerifiedInstagramSource && instagramSource && (verificationState === "verified" || parentStudioVerified);
   const reliabilityNote = INSTAGRAM_OCCURRENCE_RELIABILITY_NOTE;
-  const access = accessDetails(value.accessStatus, value.accessNotes, value.audiences, parent);
+  const access = occurrenceAccessDetails(value, parent);
   return {
     id: asString(value.id),
     sourceEventId: asString(value.sourceEventId),
@@ -1226,7 +1236,7 @@ async function getCandidate(db, id, includeRevisions = true) {
     corroborationState: item.corroboration_state,
     provenance: parseJson(item.provenance_json, []),
   }));
-  candidate.occurrences = (occurrences.results || []).map(normalizeOccurrence);
+  candidate.occurrences = (occurrences.results || []).map((occurrence) => normalizeOccurrence(occurrence, candidate));
   candidate.sourceResolutionAttempts = resolutionAttempts;
   if (!includeRevisions) return candidate;
   const revisions = await db.prepare(
@@ -1334,7 +1344,7 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
     minimumVisitMinutes: value("minimumVisitMinutes", null),
     recommendedVisitMinutes: value("recommendedVisitMinutes", null),
     lateArrivalAllowed: value("lateArrivalAllowed", false),
-    planningEligible: value("planningEligible", false),
+    planningEligible: value("planningEligible", true),
     latitude: value("latitude", null),
     longitude: value("longitude", null),
     planningNotes: value("planningNotes", ""),
@@ -1429,7 +1439,6 @@ function publicationErrors(proposal) {
   if (!proposal.venueName) errors.push(virtual ? "A confirmed virtual venue label is required." : "A confirmed venue name is required.");
   else if (!virtual && !proposal.venueAddress && !seriesUsesOccurrenceVenues) errors.push("A confirmed venue address is required.");
   if ((proposal.latitude === null) !== (proposal.longitude === null)) errors.push("Planning coordinates require both latitude and longitude.");
-  if (proposal.planningEligible && !virtual && (proposal.latitude === null || proposal.longitude === null)) errors.push("Night-planning eligibility requires reviewed venue coordinates.");
   if (proposal.minimumVisitMinutes && proposal.recommendedVisitMinutes && proposal.recommendedVisitMinutes < proposal.minimumVisitMinutes) {
     errors.push("Recommended visit time cannot be shorter than the minimum visit time.");
   }
@@ -1480,7 +1489,6 @@ function occurrencePublicationErrors(occurrence, parent) {
   if (!venueName) errors.push(virtual ? `${label} requires a confirmed virtual venue label.` : `${label} requires a confirmed venue name.`);
   else if (!virtual && !venueAddress) errors.push(`${label} requires a confirmed venue address.`);
   if ((occurrence.latitude === null) !== (occurrence.longitude === null)) errors.push(`${label} planning coordinates require both latitude and longitude.`);
-  if (occurrence.planningEligible && !virtual && (occurrence.latitude === null || occurrence.longitude === null)) errors.push(`${label} night-planning eligibility requires reviewed venue coordinates.`);
   if (occurrence.minimumVisitMinutes && occurrence.recommendedVisitMinutes && occurrence.recommendedVisitMinutes < occurrence.minimumVisitMinutes) {
     errors.push(`${label} recommended visit time cannot be shorter than its minimum visit time.`);
   }
@@ -1489,8 +1497,9 @@ function occurrencePublicationErrors(occurrence, parent) {
   if (!validHttpUrl(sourceUrl) || (socialPlatformFromUrl(sourceUrl) && !verifiedInstagram)) errors.push(`${label} requires an event-specific official organizer, venue, ticket-host, or manually verified Instagram URL.`);
   if (occurrence.ticketUrl && (!validHttpUrl(occurrence.ticketUrl) || socialPlatformFromUrl(occurrence.ticketUrl))) errors.push(`${label} has an invalid public ticket URL.`);
   if (occurrence.ticketOnSaleAt && !validDate(occurrence.ticketOnSaleAt)) errors.push(`${label} has an invalid tickets-on-sale time.`);
-  if (occurrence.accessStatus === "unknown") errors.push(`${label} attendance eligibility must be confirmed before publication.`);
-  if (occurrence.accessStatus === "restricted" && (!occurrence.accessNotes || !occurrence.audiences.length)) {
+  const access = occurrenceAccessDetails(occurrence, parent);
+  if (access.accessStatus === "unknown") errors.push(`${label} attendance eligibility must be confirmed before publication.`);
+  if (access.accessStatus === "restricted" && (!access.accessNotes || !access.audiences.length)) {
     errors.push(`${label} requires a public access note and at least one eligible audience.`);
   }
   if (occurrence.verificationState !== "verified") errors.push(`${label} must be verified before publication.`);
@@ -2036,7 +2045,7 @@ async function syncEntryOccurrences(db, entryId, candidate, now) {
     const ticketUrl = occurrence.ticketUrl || candidate.ticketUrl;
     const venueName = occurrence.venueName || candidate.venueName;
     const venueAddress = occurrence.venueAddress || candidate.venueAddress;
-    const access = accessDetails(occurrence.accessStatus, occurrence.accessNotes, occurrence.audiences, candidate);
+    const access = occurrenceAccessDetails(occurrence, candidate);
     if (existing) {
       await db.prepare(
         `UPDATE calendar_entry_occurrences SET sequence=?,status=?,occurrence_type=?,title=?,
@@ -2473,7 +2482,6 @@ function publicPlanningDetails(row, { formats = [], occurrenceType = "", title =
   if (status !== "scheduled" && status !== "published") reasons.push("schedule_unavailable");
   if (dateKind !== "timed") reasons.push("not_timed");
   if (!asString(row.venue_address)) reasons.push("missing_address");
-  if (details.latitude === null || details.longitude === null) reasons.push("missing_coordinates");
   return {
     eligible: reasons.length === 0,
     ineligibleReasons: reasons,
@@ -3629,6 +3637,7 @@ async function listCandidates(db, status) {
 
 function studioPlanningReasons(event) {
   const reasons = [];
+  if (!event.planningEligible) reasons.push("disabled");
   if (event.verificationState !== "verified") reasons.push("not_verified");
   if (event.scheduleStatus !== "scheduled") reasons.push("schedule_unavailable");
   if (event.dateKind !== "timed") reasons.push("not_timed");
@@ -3659,6 +3668,7 @@ function studioPlanningEvent(row, fallback = {}) {
     verificationState: row.verification_state || "unverified",
     scheduleStatus: row.occurrence_id ? (row.status === "cancelled" ? "cancelled" : row.parent_schedule_status || "scheduled") : row.schedule_status || "scheduled",
     virtual: onlineOnlyEvent({ venueName:row.venue_name || fallback.venue_name, venueAddress:row.venue_address || fallback.venue_address }),
+    planningEligible: planning.planningEligible,
     planning: {
       attendanceMode,
       startGraceMinutes: plannerStartGraceMinutes(formats, occurrenceType, title, attendanceMode, planning.lateArrivalAllowed),
