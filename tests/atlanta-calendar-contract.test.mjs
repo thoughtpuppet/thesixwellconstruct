@@ -695,6 +695,15 @@ test("approval, filters, single-event ICS, subscription feeds, rejection, and ca
   assert.match(await cancelledFeed.text(), /STATUS:CANCELLED[\s\S]*SEQUENCE:1|SEQUENCE:1[\s\S]*STATUS:CANCELLED/);
 });
 
+test("public feed controls use webcal subscriptions instead of ICS imports", () => {
+  const page = readFileSync(join(ROOT, "calendar", "index.html"), "utf8");
+  const feeds = ["atlanta", "art", "film", "poetry-music", "tech-ai", "talks-conferences", "sixwell"];
+  feeds.forEach((feed) => assert.match(page, new RegExp(`href="webcal:\\/\\/thesixwellconstruct\\.com\\/calendars\\/${feed}\\.ics"`)));
+  assert.doesNotMatch(page, /href="\\/calendars\\/[a-z-]+\\.ics"/);
+  assert.match(page, /installs as a separate calendar and updates automatically/i);
+  assert.match(page, /Exhibition ranges stay on this website/i);
+});
+
 test("approved GSU events expose deterministic affiliation and public filtering", async () => {
   const db = database();
   const runtime = env(db);
@@ -871,7 +880,7 @@ test("one exhibition publishes its dated related schedule without publishing TBD
   const talks = await (await handleCalendarPublicApi(request("/api/calendar/events?format=lecture-talk"), runtime)).json();
   assert.deepEqual(talks.events.map((event) => event.occurrenceType), ["artist_talk"]);
   const feed = await (await handleCalendarFeed(request("/calendars/atlanta.ics"), runtime)).text();
-  assert.match(feed, new RegExp(`UID:${parent.uid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  assert.doesNotMatch(feed, new RegExp(`UID:${parent.uid.replace(/[.*+?^${}()|[\]\\]/g, "\\  assert.match(feed, new RegExp(`UID:${parent.uid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));")}`));
   children.forEach((event) => assert.match(feed, new RegExp(`UID:${event.uid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)));
   assert.equal((feed.match(/RELATED-TO;RELTYPE=PARENT:/g) || []).length, 2);
   const childIcs = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(children[0].id)}.ics`), runtime)).text();
