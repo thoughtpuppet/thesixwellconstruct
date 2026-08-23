@@ -3012,6 +3012,16 @@ export async function handleCalendarPublicApi(request, env) {
   }
 }
 
+function calendarSubscriptionEvents(events) {
+  return events.filter((event) => {
+    if (event.isSeriesParent) return false;
+    // Exhibition parents describe an on-view window, not continuous all-day
+    // attendance. Keep them on the website and publish only dated programs.
+    if (!event.isOccurrence && event.dateKind === "date_range" && event.formats.includes("exhibition")) return false;
+    return true;
+  });
+}
+
 export async function handleCalendarFeed(request, env) {
   try {
     if (request.method !== "GET") return errorResponse("Method not allowed.", 405);
@@ -3026,7 +3036,7 @@ export async function handleCalendarFeed(request, env) {
       sixwell: { name: "Six.Well Events", test: (event) => event.origin === "sixwell" },
     };
     if (!definitions[feed]) return errorResponse("Calendar feed not found.", 404);
-    const events = (await normalizedEvents(requireDb(env))).filter((event) => !event.isSeriesParent && definitions[feed].test(event));
+    const events = calendarSubscriptionEvents(await normalizedEvents(requireDb(env))).filter(definitions[feed].test);
     return calendarResponse(events, definitions[feed].name, `${feed}.ics`);
   } catch (error) {
     return errorResponse("Unable to build the calendar feed.", 500, error.message);
