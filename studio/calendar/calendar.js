@@ -363,6 +363,15 @@
   function occurrenceAccessReady(occurrence,parent) {
     return accessReady(occurrence) || (occurrence.accessStatus === "unknown" && accessReady(parent));
   }
+  function publicCopyNarratesSource(record) {
+    return [record&&record.factualDescription,record&&record.accessNotes,record&&record.ticketNotes,record&&record.planningNotes].some(function(value){
+      var text=String(value||"").trim();
+      return /\baccording to\s+(?:the|an?)\b/i.test(text)
+        || /\b(?:caption|flyer|social post|post|webpage|website|event page|official page|page|listing|calendar listing|official calendar|source page|official source|sources|official site|site|faq)\b.{0,90}\b(?:says?|states?|lists?|notes?|confirms?|reports?|indicates?|mentions?|shows?|describes?|identifies?|provides?|directs?|links?|asks?|does not|do not|did not|was not|were not|has not|have not)\b/i.test(text)
+        || /\b(?:from|on|in|via)\s+(?:the\s+)?(?:official\s+|authorized\s+)?(?:event\s+|organizer\s+|venue\s+|ticket\s+|museum\s+|gallery\s+|conference\s+|conversation\s+)?(?:page|listing|source|website|site|caption|flyer|post|calendar)\b/i.test(text)
+        || /\b(?:retrieved|extracted|verified|confirmed)\s+(?:from|against|on|by)\b/i.test(text);
+    });
+  }
   function publicationBlockers(candidate,pendingRevision,pendingNeedsSelection,pendingHasAppliedChange) {
     var blockers=[];
     if(!candidate.title)blockers.push("Add the event title.");
@@ -375,11 +384,14 @@
     if(candidate.verificationState!=="verified")blockers.push("Set Verification to Verified.");
     if(!sourceReady(candidate))blockers.push("Confirm a publishable event source.");
     if(!accessReady(candidate))blockers.push("Confirm attendance access.");
+    if(publicCopyNarratesSource(candidate))blockers.push("Rewrite public descriptions and notes as direct event facts; remove references to captions, flyers, posts, pages, listings, or sources.");
     if(isInstagramUrl(candidate.ticketUrl))blockers.push("Remove Instagram from the public ticket URL.");
     if(!(candidate.subjects||[]).length)blockers.push("Select at least one subject.");
     if(!(candidate.formats||[]).length)blockers.push("Select at least one format.");
     var blockedOccurrences=(candidate.occurrences||[]).filter(function(occurrence){var occurrenceSource=occurrence.sourceUrl||candidate.sourceUrl;var occurrenceSourceReady=!isSocialUrl(occurrenceSource)||(isInstagramUrl(occurrenceSource)&&occurrence.verificationState==="verified");return occurrence.status!=="tbd"&&(occurrence.verificationState!=="verified"||!occurrenceAccessReady(occurrence,candidate)||!occurrence.startsAt||!occurrenceSourceReady);});
     if(blockedOccurrences.length)blockers.push(blockedOccurrences.length+" related schedule item"+(blockedOccurrences.length===1?" needs":"s need")+" verification, access, timing, or source review.");
+    var sourceNarratingOccurrences=(candidate.occurrences||[]).filter(publicCopyNarratesSource);
+    if(sourceNarratingOccurrences.length)blockers.push(sourceNarratingOccurrences.length+" related schedule item"+(sourceNarratingOccurrences.length===1?" contains":"s contain")+" source narration in public copy; rewrite the facts directly.");
     if(["rejected","cancelled","duplicate"].includes(candidate.status))blockers.push("This record is marked "+candidate.status.replace(/_/g," ")+".");
     if(candidate.status==="published"&&(!candidate.pendingRevisionId||(pendingNeedsSelection&&!pendingHasAppliedChange)))blockers.push("Apply at least one proposed update before approving the published event again.");
     return blockers;

@@ -637,6 +637,14 @@ test("a documented Studio review can verify an exact ticket listing without requ
   assert.equal(verified.verificationState,"verified");
   assert.equal(verified.organizerUrl,"");
   assert.equal(verified.venueUrl,"");
+  const narratedApproval=await admin(db,`/candidates/${candidate.id}/approve`,{method:"POST",body:{}});
+  assert.equal(narratedApproval.status,409);
+  assert.match((await narratedApproval.json()).errors.join(" "),/must state the fact directly/i);
+  const directCopy=await admin(db,`/candidates/${candidate.id}`,{
+    method:"PATCH",body:{accessNotes:"Tickets are available."},
+  });
+  assert.equal(directCopy.status,200,await directCopy.clone().text());
+  assert.equal((await directCopy.json()).candidate.accessNotes,"Tickets are available.");
   const approved=await admin(db,`/candidates/${candidate.id}/approve`,{method:"POST",body:{}});
   assert.equal(approved.status,200,await approved.clone().text());
   const publicEvent=(await (await handleCalendarPublicApi(request("/api/calendar/events"),env(db))).json()).events.find((event)=>event.title===candidate.title);
@@ -699,7 +707,7 @@ test("public feed controls use webcal subscriptions instead of ICS imports", () 
   const page = readFileSync(join(ROOT, "calendar", "index.html"), "utf8");
   const feeds = ["atlanta", "art", "film", "poetry-music", "tech-ai", "talks-conferences", "sixwell"];
   feeds.forEach((feed) => assert.match(page, new RegExp(`href="webcal:\\/\\/thesixwellconstruct\\.com\\/calendars\\/${feed}\\.ics"`)));
-  assert.doesNotMatch(page, /href="\\/calendars\\/[a-z-]+\\.ics"/);
+  assert.doesNotMatch(page, /href="\/calendars\/[a-z-]+\.ics"/);
   assert.match(page, /installs as a separate calendar and updates automatically/i);
   assert.match(page, /Exhibition ranges stay on this website/i);
 });
@@ -2172,8 +2180,8 @@ test("Atlanta BeltLine uses rendered event links and deterministic detail metada
     const title = art ? "There's Not That Much Difference Between a Volcano and Our Tears" : "e-Bike Lesson with Lime";
     const jsonLd = JSON.stringify({
       "@context":"https://schema.org", "@type":"Event", eventStatus:"https://schema.org/EventScheduled", name:title,
-      startDate:art ? "2026-08-21T21:00:00-04:00" : "2026-08-22T09:00:00-04:00",
-      endDate:art ? "2026-08-21T22:00:00-04:00" : "2026-08-22T09:30:00-04:00",
+      startDate:art ? "2026-09-21T21:00:00-04:00" : "2026-09-22T09:00:00-04:00",
+      endDate:art ? "2026-09-21T22:00:00-04:00" : "2026-09-22T09:30:00-04:00",
     });
     const venue = art ? "Pittsburgh Yards" : "Lee + White Parking Garage";
     const address = art ? "352 University Avenue Southwest" : "1020 White Street Southwest";
@@ -2181,10 +2189,10 @@ test("Atlanta BeltLine uses rendered event links and deterministic detail metada
       ? "An experimental outdoor theatre experience using video projection and live performance."
       : "A basic electric bicycle lesson.";
     const topic = art ? "Atlanta Beltline Art" : "Fitness and Wellness";
-    const main = `<main><a href="/events">All Events</a><h1>${title}</h1><p>Date:</p><p>${art ? "Friday, August 21, 2026" : "Saturday, August 22, 2026"}</p><p>Time:</p><p>${art ? "9:00 PM - 10:00 PM" : "9:00 AM - 9:30 AM"}</p><p>Location:</p><p>${venue}</p><p>${address}</p><p>${description}</p><p>TOPICS:</p><p>${topic}</p><p>SHARE:</p><p>Organizer</p><p>ABI</p></main>`;
+    const main = `<main><a href="/events">All Events</a><h1>${title}</h1><p>Date:</p><p>${art ? "Monday, September 21, 2026" : "Tuesday, September 22, 2026"}</p><p>Time:</p><p>${art ? "9:00 PM - 10:00 PM" : "9:00 AM - 9:30 AM"}</p><p>Location:</p><p>${venue}</p><p>${address}</p><p>${description}</p><p>TOPICS:</p><p>${topic}</p><p>SHARE:</p><p>Organizer</p><p>ABI</p></main>`;
     return [
       { selector:'script[type="application/ld+json"]', results:[{ html:`<script type="application/ld+json">${jsonLd}</script>`, text:jsonLd }] },
-      { selector:"main", results:[{ html:main, text:`All Events\n${title}\nDate:\n${art ? "Friday, August 21, 2026" : "Saturday, August 22, 2026"}\nTime:\n${art ? "9:00 PM - 10:00 PM" : "9:00 AM - 9:30 AM"}\nLocation:\n${venue}\n${address}\n${description}\nTOPICS:\n${topic}\nSHARE:\nOrganizer\nABI` }] },
+      { selector:"main", results:[{ html:main, text:`All Events\n${title}\nDate:\n${art ? "Monday, September 21, 2026" : "Tuesday, September 22, 2026"}\nTime:\n${art ? "9:00 PM - 10:00 PM" : "9:00 AM - 9:30 AM"}\nLocation:\n${venue}\n${address}\n${description}\nTOPICS:\n${topic}\nSHARE:\nOrganizer\nABI` }] },
     ];
   };
   const calls = [];
@@ -2227,8 +2235,8 @@ test("Atlanta BeltLine uses rendered event links and deterministic detail metada
       title:"There's Not That Much Difference Between a Volcano and Our Tears",
       organizer:"ABI",
       source_url:artUrl,
-      starts_at:"2026-08-21T21:00:00-04:00",
-      ends_at:"2026-08-21T22:00:00-04:00",
+      starts_at:"2026-09-21T21:00:00-04:00",
+      ends_at:"2026-09-21T22:00:00-04:00",
       venue_name:"Pittsburgh Yards",
       venue_address:"352 University Avenue Southwest",
       city:"Atlanta",
@@ -4281,15 +4289,15 @@ test("PHOSPHENES intake sends rendered caption and carousel assets to vision ext
     { title:"Dance + Draw", occurrenceType:"workshop", factualDescription:"Figure drawing with the artist and partner.", startsAt:"2026-09-05T14:00:00-04:00", endsAt:"2026-09-05T17:00:00-04:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"", audiences:[] },
   ];
   const recurringOccurrences = [
-    { title:"Studio Visits with Artist", occurrenceType:"other", factualDescription:"Studio visits with the artist.", daysOfWeek:["Tuesday","Thursday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"17:00", endTime:"20:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"Contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[] },
-    { title:"Studio Visits with Artist", occurrenceType:"other", factualDescription:"Studio visits with the artist.", daysOfWeek:["Wednesday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"18:00", endTime:"20:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"Contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[] },
+    { title:"Studio Visits with Artist", occurrenceType:"other", factualDescription:"Studio visits with the artist.", daysOfWeek:["Tuesday","Thursday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"17:00", endTime:"20:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"The caption says to contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[] },
+    { title:"Studio Visits with Artist", occurrenceType:"other", factualDescription:"Studio visits with the artist.", daysOfWeek:["Wednesday"], startsOn:"2026-08-14", endsOn:"2026-09-08", startTime:"18:00", endTime:"20:00", timezone:"America/New_York", venueName:"", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"The caption says to contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[] },
   ];
   const unsupportedOpening = { title:"Opening Night Reception", occurrenceType:"opening_reception", factualDescription:"Opening reception.", startsAt:"2026-08-14T19:00:00-04:00", endsAt:"", timezone:"America/New_York", venueName:"Old Rabbit Gallery", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"", audiences:[] };
   const visionEvent = {
     title:"PHOSPHENES", description:"A solo exhibition by Timothy Hunter, curated by Stretch G.", caption, organizer:"Timothy Hunter",
     organizerUrl:"", venueName:"Old Rabbit Gallery", venueAddress:"309A Peters Street SW, Atlanta, GA", venueUrl:"", city:"Atlanta", region:"GA",
     startsAt:"2026-08-14", endsAt:"2026-09-08", eventUrl, ticketUrl:"", imageUrl:flyerUrl, imageAlt:"PHOSPHENES exhibition flyer",
-    accessStatus:"unknown", accessNotes:"Contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[],
+    accessStatus:"unknown", accessNotes:"The caption says to contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[],
     eventStructure:"exhibition", dateKind:"date_range", timezone:"America/New_York", subjects:["art","art-making"], formats:["exhibition","lecture-talk","performance","workshop"], experimental:true,
     authorHandle:"timmy_hr", authorDisplayName:"Timothy Hunter", authorIsVerified:false, postedAt:"", mediaType:"carousel",
     extractionNotes:["The caption supplied the program schedule and the flyer supplied the exhibition title, artist, curator, and date range."], conflicts:[],
@@ -4334,6 +4342,7 @@ test("PHOSPHENES intake sends rendered caption and carousel assets to vision ext
     assert.match(visionContent.find((item) => item.type === "input_text").text, /Studio Visits, Tue \+ Thu 5-8pm/);
     assert.deepEqual(visionContent.filter((item) => item.type === "input_image").map((item) => item.image_url), [flyerUrl, artworkUrl]);
     assert.equal(visionRequest.text.format.strict, true);
+    assert.match(visionRequest.instructions, /public-facing description and note as a direct event fact/i);
 
     const candidate = payload.candidate;
     assert.equal(candidate.title, "PHOSPHENES");
@@ -4346,10 +4355,12 @@ test("PHOSPHENES intake sends rendered caption and carousel assets to vision ext
     assert.equal(candidate.venueName, "");
     assert.equal(candidate.venueAddress, "309A Peters Street SW, Atlanta, GA");
     assert.deepEqual(candidate.subjects, ["art","art-making"]);
+    assert.equal(candidate.accessNotes,"Contact the artist, curator, or Billy Stonecipher for off-hours inquiries.");
     assert.equal(candidate.occurrences.length, 15);
     assert.equal(candidate.occurrences.filter((occurrence) => occurrence.title === "Studio Visits with Artist").length, 10);
     assert.equal(candidate.occurrences.some((occurrence) => occurrence.title === "Opening Night Reception"), false);
     assert.equal(candidate.occurrences.every((occurrence) => occurrence.venueName === ""), true);
+    assert.equal(candidate.occurrences.filter((occurrence) => occurrence.title === "Studio Visits with Artist").every((occurrence) => occurrence.accessNotes === "Contact the artist, curator, or Billy Stonecipher for off-hours inquiries."), true);
     const evidence = db.prepare("SELECT media_url,provenance_json FROM calendar_candidate_social_evidence WHERE candidate_id=?").get(candidate.id);
     assert.equal(evidence.media_url, flyerUrl);
     assert.equal(JSON.parse(evidence.provenance_json).filter((item) => item.channel === "social_carousel_image").length, 2);
@@ -4816,6 +4827,8 @@ test("Calendar Studio shows publication blockers and defaults events and occurre
   const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
   assert.match(studio,/planningEligible:true/);
   assert.match(studio,/function publicationBlockers\(candidate,pendingRevision,pendingNeedsSelection,pendingHasAppliedChange\)/);
+  assert.match(studio,/function publicCopyNarratesSource\(record\)/);
+  assert.match(studio,/Rewrite public descriptions and notes as direct event facts/);
   assert.match(studio,/Not ready to publish/);
   assert.match(studio,/data-action="approve"' \+ \(canPublish\?'':' disabled'\)/);
   assert.match(studio,/Every event and related schedule item is eligible by default/);

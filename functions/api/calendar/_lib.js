@@ -117,7 +117,7 @@ function accessDetails(statusValue, notesValue, audienceValue, fallback = {}) {
   const audiences = audienceStrings(audienceValue === undefined ? fallback.audiences : audienceValue);
   const requested = asString(statusValue === undefined ? fallback.accessStatus : statusValue);
   const accessStatus = ACCESS_STATUSES.has(requested) ? requested : "public";
-  let accessNotes = asString(notesValue === undefined ? fallback.accessNotes : notesValue);
+  let accessNotes = directPublicCopy(notesValue === undefined ? fallback.accessNotes : notesValue);
   if (accessStatus === "public" && accessNotes === "Attendance eligibility has not been confirmed.") {
     accessNotes = "";
   }
@@ -155,7 +155,7 @@ function ticketDetails(statusValue, onSaleAtValue, notesValue, fallback = {}) {
   return {
     ticketStatus,
     ticketOnSaleAt,
-    ticketNotes: asString(notesValue === undefined ? fallback.ticketNotes : notesValue),
+    ticketNotes: directPublicCopy(notesValue === undefined ? fallback.ticketNotes : notesValue),
   };
 }
 
@@ -534,7 +534,7 @@ function planningDetails(value = {}, fallback = {}) {
     planningEligible: Boolean(read("planningEligible", "planning_eligible", true)),
     latitude: optionalNumber(read("latitude", "latitude", null), -90, 90),
     longitude: optionalNumber(read("longitude", "longitude", null), -180, 180),
-    planningNotes: asString(read("planningNotes", "planning_notes", "")),
+    planningNotes: directPublicCopy(read("planningNotes", "planning_notes", "")),
   };
 }
 
@@ -584,7 +584,7 @@ function normalizeCandidate(row) {
     relatedLinks: [],
     title: row.title || "",
     organizer: row.organizer || "",
-    factualDescription: cleanSourceText(row.factual_description),
+    factualDescription: directPublicCopy(row.factual_description),
     ...access,
     eventStructure: EVENT_STRUCTURES.has(row.event_structure) ? row.event_structure : "single",
     dateKind: row.date_kind || "timed",
@@ -673,7 +673,7 @@ function normalizeOccurrence(row, parent = {}) {
     sourceEventId: row.source_event_id || row.sourceEventId || "",
     occurrenceType: row.occurrence_type || row.occurrenceType || "other",
     title: row.title || "",
-    factualDescription: cleanSourceText(row.factual_description || row.factualDescription),
+    factualDescription: directPublicCopy(row.factual_description || row.factualDescription),
     ...access,
     dateKind: row.date_kind || row.dateKind || "timed",
     startsAt: canonicalCalendarDate(row.starts_at || row.startsAt, row.timezone || TIME_ZONE) || null,
@@ -717,7 +717,7 @@ function normalizeOccurrenceProposal(item, parent = {}, index = 0, { allowVerifi
     sourceEventId: asString(value.sourceEventId),
     occurrenceType,
     title: asString(value.title) || occurrenceTypeLabel(occurrenceType),
-    factualDescription: cleanSourceText(value.factualDescription),
+    factualDescription: directPublicCopy(value.factualDescription),
     ...access,
     dateKind,
     startsAt: canonicalCalendarDate(value.startsAt, asString(value.timezone) || parent.timezone || TIME_ZONE) || null,
@@ -1377,7 +1377,7 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
     flyerAltText: asString(value("flyerAltText", current.flyerAltText || current.flyer?.altText || "")),
     title: asString(value("title")),
     organizer: asString(value("organizer")),
-    factualDescription: cleanSourceText(value("factualDescription")),
+    factualDescription: directPublicCopy(value("factualDescription")),
     eventStructure,
     ...access,
     dateKind,
@@ -1416,6 +1416,7 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
 
 function publicationErrors(proposal) {
   const errors = [];
+  errors.push(...publicCopyErrors(proposal));
   const virtual = onlineOnlyEvent(proposal);
   const scheduledOccurrences = (proposal.occurrences || []).filter((occurrence) => occurrence.status !== "tbd");
   const seriesUsesOccurrenceVenues = proposal.eventStructure === "series"
@@ -1477,6 +1478,7 @@ function occurrencePublicationErrors(occurrence, parent) {
   if (occurrence.status === "tbd") return [];
   const label = occurrence.title || occurrenceTypeLabel(occurrence.occurrenceType);
   const errors = [];
+  errors.push(...publicCopyErrors(occurrence, label));
   if (!occurrence.startsAt || !validDate(occurrence.startsAt)) errors.push(`${label} requires a confirmed valid start date.`);
   if (occurrence.dateKind === "timed" && occurrence.startsAt && !hasExplicitUtcOffset(occurrence.startsAt)) errors.push(`${label} requires an explicit UTC offset.`);
   if (occurrence.dateKind === "all_day" && occurrence.startsAt && !/^\d{4}-\d{2}-\d{2}$/.test(occurrence.startsAt)) errors.push(`${label} requires a YYYY-MM-DD date.`);
@@ -2523,7 +2525,7 @@ function curatedPublicView(row, relatedLinks = [], media = []) {
     origin: "curated",
     affiliations: affiliationsForEvent(row.source_url, row.organizer, row.venue_name, row.venue_address),
     title: row.title,
-    description: cleanSourceText(row.factual_description),
+    description: directPublicCopy(row.factual_description),
     ...access,
     organizer: row.organizer || "",
     dateKind: row.date_kind || "timed",
@@ -2597,7 +2599,7 @@ function curatedOccurrencePublicView(row, parent) {
     origin: "curated",
     affiliations: parent.affiliations,
     title: row.title,
-    description: cleanSourceText(row.factual_description),
+    description: directPublicCopy(row.factual_description),
     ...access,
     organizer: parent.organizer,
     dateKind: row.date_kind || "timed",
@@ -2717,7 +2719,7 @@ async function loadSixWellEvents(db) {
       eventStructure: "single",
       affiliations: [],
       title: row.title,
-      description: cleanSourceText(row.description),
+      description: directPublicCopy(row.description),
       accessStatus: "public",
       accessNotes: "",
       audiences: ["Public"],
@@ -3370,6 +3372,7 @@ async function requestCandidateResearch(env, db, candidate, thread, instruction)
       "Prefer the exact organizer or venue event page, official calendar item, or authorized ticket page. Cite every public factual change. Say unknown when evidence is insufficient and expose disagreements as conflicts.",
       "Compare every confirmed fact with the current candidate snapshot. When the evidence supplies a missing, corrected, or more precise record value, you must include the corresponding field-level change; a confirmed finding by itself is not a proposed correction. Do not propose a change when the stored value already matches.",
       "Use explicit UTC offsets for timed dates. Confirm public eligibility instead of assuming a public webpage means a public event. Keep exhibition ranges distinct from dated openings, talks, performances, screenings, panels, and workshops.",
+      "For every public-facing field, including factualDescription, accessNotes, ticketNotes, planningNotes, and occurrence equivalents, state the event fact directly. Never mention what a caption, flyer, post, page, listing, source, extraction, verification, or research process says. Keep evidence narration only in private findings, sourceResolutionNotes, verificationNotes, citations, or private Studio notes.",
       "For an exhibition, identify every credited artist and research each artist's official website and official Instagram profile. Propose relatedLinks with role artist for both verified destinations. If neither can be verified, propose a Google search link labeled Search for followed by the artist's name. Artist links may be public, but Instagram posts, reels, galleries, articles, fan accounts, and similarly named people are not artist identity links.",
       "When evidence establishes a parent exhibition or series plus dated related programs, propose one coordinated structure update: correct the parent title, eventStructure, dateKind, startsAt, endsAt, factualDescription, and strongest exact source fields as needed, and propose one occurrences value containing every already-saved occurrence plus every confirmed opening reception, closing reception, artist talk, screening, performance, panel, workshop, lecture, mixer, or other dated program. Preserve existing occurrence IDs and confirmed facts. Give each occurrence its own exact sourceUrl or ticketUrl when available. Gallery or venue hours describe when the parent is viewable; do not turn routine hours into separate occurrences unless the source presents them as distinct public programs.",
       "A proposed image must include mediaUrl and provenanceUrl in valueJson. Use retrievedMediaCandidates when available; each one was extracted from the static or fully rendered provenance page. Suggest at most 20 images and never suggest an image merely because it appears in search results. If the event page visibly has a flyer but no asset URL can be recovered, describe that extraction limitation without claiming that no flyer exists.",
@@ -5079,10 +5082,10 @@ function extractBeltlineRenderedEvents(html, source) {
     factualDescription: [description, topics ? `Topic: ${topics}.` : ""].filter(Boolean).join(" "),
     accessStatus: explicitlyFree ? "public" : "unknown",
     accessNotes: explicitlyFree
-      ? "The official event page identifies this as free; Studio should confirm whether registration is still required."
+      ? "Free admission; registration requirements have not been confirmed."
       : ticketUrl
-        ? "The official event page supplies a registration or ticket link; Studio should confirm admission details."
-        : "The official event page does not clearly establish admission or registration requirements.",
+        ? "Registration or ticketing is available; admission details have not been confirmed."
+        : "Admission and registration requirements have not been confirmed.",
     audiences: explicitlyFree ? ["Public"] : [],
     venueName,
     venueAddress,
@@ -5338,6 +5341,40 @@ function cleanSourceText(value) {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function directPublicCopy(value) {
+  let text = cleanSourceText(value);
+  const prefixes = [
+    /^(?:according to|per)\s+(?:the\s+)?(?:caption|flyer|social post|post|webpage|website|event page|official page|page|listing|calendar listing|official calendar|source)\s*[,;:]?\s*/i,
+    /^(?:the\s+|this\s+)?(?:official\s+)?(?:caption|flyer|social post|post|webpage|website|event page|page|listing|calendar listing|calendar|source)\s+(?:says?|states?|lists?|notes?|confirms?|reports?|indicates?|mentions?|shows?|describes?|identifies?)\s+(?:that\s+)?/i,
+  ];
+  for (const prefix of prefixes) text = text.replace(prefix, "");
+  text = text.replace(/^to (?=(?:contact|register|attend|visit|purchase|buy|rsvp|reserve)\b)/i, "");
+  if (!text) return "";
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function publicCopyNarratesSource(value) {
+  const text = cleanSourceText(value);
+  if (!text) return false;
+  return /\baccording to\s+(?:the|an?)\b/i.test(text)
+    || /\b(?:caption|flyer|social post|post|webpage|website|event page|official page|page|listing|calendar listing|official calendar|source page|official source|sources|official site|site|faq)\b.{0,90}\b(?:says?|states?|lists?|notes?|confirms?|reports?|indicates?|mentions?|shows?|describes?|identifies?|provides?|directs?|links?|asks?|does not|do not|did not|was not|were not|has not|have not)\b/i.test(text)
+    || /\b(?:says?|states?|lists?|notes?|confirms?|reports?|indicates?|mentions?|shows?|describes?|identifies?|provides?|directs?|links?|asks?)\b.{0,70}\b(?:caption|flyer|social post|post|webpage|website|event page|official page|page|listing|calendar|source|site|faq)\b/i.test(text)
+    || /\b(?:from|on|in|via)\s+(?:the\s+)?(?:official\s+|authorized\s+)?(?:event\s+|organizer\s+|venue\s+|ticket\s+|museum\s+|gallery\s+|conference\s+|conversation\s+)?(?:page|listing|source|website|site|caption|flyer|post|calendar)\b/i.test(text)
+    || /\b(?:retrieved|extracted|verified|confirmed)\s+(?:from|against|on|by)\b/i.test(text);
+}
+
+function publicCopyErrors(record, label = "Event") {
+  const fields = [
+    ["factualDescription", "description"],
+    ["accessNotes", "access note"],
+    ["ticketNotes", "ticket note"],
+    ["planningNotes", "planning note"],
+  ];
+  return fields
+    .filter(([field]) => publicCopyNarratesSource(record?.[field]))
+    .map(([, fieldLabel]) => `${label} ${fieldLabel} must state the fact directly and cannot describe what a caption, flyer, post, page, listing, or source says.`);
 }
 
 function localistNames(value) {
@@ -6027,10 +6064,10 @@ function extractOfficialListingEvents(html, source, pageUrl = source.url) {
       }],
       title,
       organizer: source.name,
-      factualDescription: `${source.name} lists ${title} on its official calendar for ${dateLabel}.`,
+      factualDescription: `${title} is scheduled for ${dateLabel}.`,
       eventStructure: "single",
       accessStatus: "unknown",
-      accessNotes: "The official calendar listing does not establish public attendance eligibility.",
+      accessNotes: "Attendance eligibility has not been confirmed.",
       audiences: [],
       ...range,
       timezone: TIME_ZONE,
@@ -6081,7 +6118,7 @@ function highArtMakingProposal(block, source) {
     organizer: "High Museum of Art",
     factualDescription,
     accessStatus: explicitlyPublic ? "public" : "unknown",
-    accessNotes: explicitlyPublic ? "Open to the public; review the official event page for admission or registration details." : "Attendance and admission details must be confirmed on the official event page.",
+    accessNotes: explicitlyPublic ? "Open to the public; admission or registration requirements may apply." : "Attendance and admission details have not been confirmed.",
     audiences: explicitlyPublic ? ["Public"] : [],
     ...range,
     timezone: TIME_ZONE,
@@ -6229,7 +6266,7 @@ function extractRampantEvents(html, source) {
   const sourceUrl = source.url;
   const access = {
     accessStatus: "public",
-    accessNotes: "Public exhibition at Rampant Gallery; review the official gallery page for current hours and reception details.",
+    accessNotes: "Open to the public during Rampant Gallery hours.",
     audiences: ["Public"],
   };
   const base = {
@@ -6376,7 +6413,7 @@ function outOfHandOccurrence(html, child, source) {
     occurrenceType: "other",
     title,
     factualDescription: "A theater, shared-meal or refreshments, and facilitated-dialogue gathering in the We Hold These Truths series.",
-    accessStatus: "public", accessNotes: "Registration is available on the official conversation page.", audiences: ["Public"],
+    accessStatus: "public", accessNotes: "Advance registration is available.", audiences: ["Public"],
     dateKind: "timed", ...range, timezone: TIME_ZONE, venueName, venueAddress: address,
     sourceUrl: child.url, ticketUrl: child.url, status: "scheduled", verificationState: "verified",
     verificationNotes: "Date, time, venue, and registration were retrieved from the official conversation page.",
@@ -6791,7 +6828,7 @@ function browserPastedLinkProposal(item, source) {
   const socialPlatform = socialPlatformFromUrl(sourceUrl);
   const timezone = validTimeZone(item.timezone) ? asString(item.timezone) : TIME_ZONE;
   const occurrenceAccessStatus = ["public", "restricted"].includes(asString(item.accessStatus)) ? asString(item.accessStatus) : "unknown";
-  const occurrenceAccessNotes = asString(item.accessNotes);
+  const occurrenceAccessNotes = directPublicCopy(item.accessNotes);
   const occurrenceAudiences = audienceStrings(item.audiences);
   const occurrenceItems = [
     ...(Array.isArray(item.occurrences) ? item.occurrences : []),
@@ -6806,9 +6843,9 @@ function browserPastedLinkProposal(item, source) {
       sourceEventId: `pasted-${stableEventKey}-${occurrenceKey || index + 1}`,
       occurrenceType: pastedOccurrenceType(occurrence),
       title: asString(occurrence.title),
-      factualDescription: cleanSourceText(occurrence.factualDescription),
+      factualDescription: directPublicCopy(occurrence.factualDescription),
       accessStatus: ["public", "restricted"].includes(asString(occurrence.accessStatus)) ? asString(occurrence.accessStatus) : occurrenceAccessStatus,
-      accessNotes: asString(occurrence.accessNotes) || occurrenceAccessNotes,
+      accessNotes: directPublicCopy(occurrence.accessNotes) || occurrenceAccessNotes,
       audiences: audienceStrings(occurrence.audiences).length ? audienceStrings(occurrence.audiences) : occurrenceAudiences,
       dateKind: "timed",
       startsAt,
@@ -6898,7 +6935,7 @@ function browserPastedLinkProposal(item, source) {
       : "The pasted event page and its official organization link share the same website. Studio review is still required.",
     title: asString(item.title),
     organizer: asString(item.organizer) || asString(item.authorDisplayName) || asString(item.authorHandle) || source.name,
-    factualDescription: cleanSourceText(item.description || item.caption),
+    factualDescription: directPublicCopy(item.description || item.caption),
     eventStructure,
     accessStatus: occurrenceAccessStatus,
     accessNotes: occurrenceAccessNotes,
@@ -7036,6 +7073,7 @@ async function openAiPastedSocialEvents(env, sourceUrl, renderedHtml, maximum = 
       "For an exhibition, keep its on-view date range on the parent using YYYY-MM-DD values and dateKind date_range. Put separately dated programs in occurrences. Put repeated weekly programs in recurringOccurrences so the application can expand every actual date deterministically.",
       "A street address is not a venue name. Leave venueName empty when the post names only an address. Keep curator credits in the factual description; do not replace the named exhibiting artist with the curator or social account.",
       "Use only supplied image URLs for imageUrl and carouselImages. Choose the event flyer as imageUrl when one is present. Return empty values rather than guesses and put genuine source disagreements in conflicts.",
+      "Write every public-facing description and note as a direct event fact. Never say that a caption, flyer, post, page, listing, source, extraction, or verification says, lists, confirms, or shows something. Evidence narration belongs only in private evidence or conflicts.",
     ].join(" "),
     input: [{ role: "user", content }],
     text: { format: { type: "json_schema", name: "pasted_social_event", strict: true, schema: pastedSocialVisionSchema() } },
@@ -7116,7 +7154,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
   const browserOptions = {
     url,
     prompt: socialDetail
-      ? `Extract the one primary event announced by this social post. Read the complete visible caption, inspect every carousel slide, and perform OCR on visible flyer text instead of relying only on platform-generated accessibility text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. Use the post or flyer publication date to supply the event year only when the visible month and day make that year unambiguous. Return explicit UTC offsets for every one-time timed value. If the post describes an exhibition with an on-view date range plus openings, talks, mixers, workshops, visits, or other programs, return the exhibition as the parent event with eventStructure exhibition and dateKind date_range; keep its own opening and closing dates in startsAt and endsAt. Return each one-time program in occurrences. For a repeated schedule such as every Tuesday and Thursday during the exhibition, return a bounded recurringOccurrences rule with daysOfWeek, startsOn, endsOn, startTime, and endTime so every actual date can be created deterministically. Do not collapse an exhibition into a series or replace its date range with the first and last related program. Reconcile caption and flyer facts using the most specific visibly supported detail. Put any genuine disagreement in conflicts instead of silently choosing or deleting a fact. Preserve factual caption details such as accessibility, audience, admission, and whether children are welcome. Return carouselImages for every slide with its URL when exposed, accessibility text, OCR text, and a role of flyer, installation, artwork, or other. Choose the primary event flyer for imageUrl and imageAlt when possible. Return empty strings for genuinely missing facts.`
+      ? `Extract the one primary event announced by this social post. Read the complete visible caption, inspect every carousel slide, and perform OCR on visible flyer text instead of relying only on platform-generated accessibility text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. Use the post or flyer publication date to supply the event year only when the visible month and day make that year unambiguous. Return explicit UTC offsets for every one-time timed value. If the post describes an exhibition with an on-view date range plus openings, talks, mixers, workshops, visits, or other programs, return the exhibition as the parent event with eventStructure exhibition and dateKind date_range; keep its own opening and closing dates in startsAt and endsAt. Return each one-time program in occurrences. For a repeated schedule such as every Tuesday and Thursday during the exhibition, return a bounded recurringOccurrences rule with daysOfWeek, startsOn, endsOn, startTime, and endTime so every actual date can be created deterministically. Do not collapse an exhibition into a series or replace its date range with the first and last related program. Reconcile caption and flyer facts using the most specific visibly supported detail. Put any genuine disagreement in conflicts instead of silently choosing or deleting a fact. Preserve factual caption details such as accessibility, audience, admission, and whether children are welcome. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Return carouselImages for every slide with its URL when exposed, accessibility text, OCR text, and a role of flyer, installation, artwork, or other. Choose the primary event flyer for imageUrl and imageAlt when possible. Return empty strings for genuinely missing facts.`
       : mode === "detail"
       ? "Extract the one primary event on this event or ticket page. Use ISO 8601 start and end timestamps exactly as shown. Return empty strings for missing facts. Return organizerUrl or venueUrl only when the page exposes a website, official profile, platform identity, or partner page. Return the primary event flyer image URL and accessibility text when the rendered page exposes them. Never infer an end time, identity link, or event URL."
       : `Extract up to ${maximum} upcoming event cards currently shown for ${configuredCity}, ${configuredRegion}. Do not include featured or nearby events outside that location section. Use ISO 8601 dates or timestamps only when the page supplies them. Include an event URL only when the page exposes the exact ticket-page URL. Return empty strings for facts the page does not supply.`,
@@ -7209,7 +7247,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
     fallbackUsed = true;
     response = await env.BROWSER.quickAction("json", {
       url,
-      prompt: `Extract the one primary event announced by this social post. Read the complete caption and visible flyer text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. If this is an exhibition, keep its full on-view range on the parent event. Enumerate every dated opening, talk, mixer, workshop, visit, closing, and every actual date in any repeated weekly schedule as a separate occurrence. Use explicit UTC offsets for timed values. Do not omit repeated dates, merge programs, or replace the exhibition range with a program date. Return empty strings for genuinely missing optional facts.`,
+      prompt: `Extract the one primary event announced by this social post. Read the complete caption and visible flyer text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. If this is an exhibition, keep its full on-view range on the parent event. Enumerate every dated opening, talk, mixer, workshop, visit, closing, and every actual date in any repeated weekly schedule as a separate occurrence. Use explicit UTC offsets for timed values. Do not omit repeated dates, merge programs, or replace the exhibition range with a program date. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Return empty strings for genuinely missing optional facts.`,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -7300,7 +7338,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
     scheduleScanUsed = true;
     const scheduleResponse = await env.BROWSER.quickAction("json", {
       url,
-      prompt: `Extract only the related schedule announced by this social post. Read the complete caption and visible flyer text. The parent event is ${asString(primaryEvent.title)} and runs from ${asString(primaryEvent.startsAt)} through ${asString(primaryEvent.endsAt)} in ${TIME_ZONE}. Return every one-time opening, reception, talk, tournament, mixer, screening, performance, workshop, visit, closing, or other dated program in occurrences. Return repeated weekly schedules in recurringOccurrences with every stated weekday, the schedule start and end dates, and local start and end times. Do not return the parent exhibition itself as an occurrence. Do not summarize, omit, or merge separately named programs. Use explicit UTC offsets for one-time timed values. Use an empty array only when the post genuinely announces no related schedule.`,
+      prompt: `Extract only the related schedule announced by this social post. Read the complete caption and visible flyer text. The parent event is ${asString(primaryEvent.title)} and runs from ${asString(primaryEvent.startsAt)} through ${asString(primaryEvent.endsAt)} in ${TIME_ZONE}. Return every one-time opening, reception, talk, tournament, mixer, screening, performance, workshop, visit, closing, or other dated program in occurrences. Return repeated weekly schedules in recurringOccurrences with every stated weekday, the schedule start and end dates, and local start and end times. Do not return the parent exhibition itself as an occurrence. Do not summarize, omit, or merge separately named programs. Use explicit UTC offsets for one-time timed values. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Use an empty array only when the post genuinely announces no related schedule.`,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -7658,7 +7696,7 @@ async function extractBigTicketsWidgetEvents(staticText, source) {
       factualDescription: description,
       eventStructure: "single",
       accessStatus: "public",
-      accessNotes: "Public ticket or registration listing.",
+      accessNotes: "Open to the public; tickets or registration are available.",
       audiences: ["Public"],
       dateKind: "timed",
       startsAt: range.startsAt,
@@ -7757,7 +7795,7 @@ function outOfHandSeriesResult(source, config, occurrences, links, failed, retri
       ...directSourceFields(source, source.url, "https://outofhandtheater.com/"), relatedLinks: [],
       title: "We Hold These Truths", organizer: "Out of Hand Theater",
       factualDescription: "A Metro Atlanta conversation series using theater, shared meals, and guided dialogue to explore the American Dream, community stories, belonging, resilience, and collective possibility.",
-      eventStructure: "series", accessStatus: "public", accessNotes: "Registration is available on each official conversation page.", audiences: ["Public"],
+      eventStructure: "series", accessStatus: "public", accessNotes: "Advance registration is available for each conversation.", audiences: ["Public"],
       dateKind: "date_range", startsAt: dateKey(starts[0]), endsAt: dateKey(ends.at(-1)), timezone: TIME_ZONE,
       venueName: "Metro Atlanta", venueAddress: "", city: "Atlanta", region: "GA",
       subjects: ["art", "anthropology", "philosophy"], formats: ["performance", "panel"], experimental: false,
@@ -8788,6 +8826,7 @@ async function requestOpenAiEvents(env, profile, { query, domains = [], sourceDa
       "A social verification badge is informational and never establishes trust. Preserve the original post identity and a short factual caption excerpt as private evidence.",
       "Use explicit UTC offsets for timed dates and YYYY-MM-DD for all-day dates. Omit anything without a confirmable date.",
       "Capture attendance eligibility as a public fact. Set accessStatus to public only when the source explicitly says Public, open to all, or equivalent; restricted when attendance is limited to students, alumni, faculty, staff, members, registrants, or invitees; and unknown when the source does not establish eligibility. Copy the named eligible groups into audiences and write a concise factual accessNotes sentence for restricted events. Never assume a public webpage means a public event.",
+      "Every public-facing string, including factualDescription, accessNotes, ticketNotes, planningNotes, and occurrence equivalents, must state the event fact directly. Never write that a caption, flyer, post, page, listing, source, extraction, verification, or research process says, lists, confirms, or shows something. Keep that evidence narration only in private evidence, sourceResolutionNotes, verificationNotes, citations, or private Studio intelligence.",
       "Classify eventStructure as single, series, or exhibition. Keep one exhibition or multi-program series as the parent proposal. Put its opening receptions, artist talks, mixers, screenings, performances, workshops, panels, and lectures in occurrences instead of returning duplicate top-level events. A date marked TBD may be retained only as an occurrence with status tbd and empty startsAt. A series parent range is metadata, never a continuous public event.",
       "For every exhibition, identify each credited artist and search for the artist's official website and official Instagram profile. Add both verified destinations to relatedLinks with role artist and labels that name the artist and destination. If neither official destination can be verified, add a Google search URL labeled Search for followed by the artist's name. Never substitute an Instagram post, gallery page, article, fan account, or similarly named person for an artist identity link.",
       "Treat participatory public art programs as art-making: sip-and-paint programs, live or figure drawing, critique groups, open studios, hands-on workshops, and art classes open to the public. Classify these with the art-making subject and workshop format when supported by the source.",
