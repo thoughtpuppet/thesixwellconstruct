@@ -1352,7 +1352,7 @@
   </footer>
 </main>
 
-<button class="term-toggle" id="termToggle" type="button" aria-pressed="false"
+<button class="term-toggle" id="termToggle" type="button" aria-pressed="true"
         title="Toggle colored keywords" aria-label="Toggle colored keywords">
   <span class="term-toggle-swatch" aria-hidden="true"></span>
   <span class="term-toggle-label" aria-hidden="true"></span>
@@ -1363,8 +1363,8 @@
 <script src="/js/construct-nav.js"></script>
 <script src="/js/construct-ambient-field.js"></script>
 <script>
-  /* Term-color toggle: flip highlighted keywords between their medium
-     colors (default) and the flat amber accent. Choice persists. */
+  /* Term-color toggle: start highlighted keywords in the flat amber
+     treatment, with medium colors available as an opt-in. Choice persists. */
   (function() {
     const STORAGE_KEY = 'sixwell:about:term-colors';
     const toggle = document.getElementById('termToggle');
@@ -1375,8 +1375,8 @@
       toggle.setAttribute('aria-pressed', amber ? 'true' : 'false');
     }
 
-    let amber = false;
-    try { amber = localStorage.getItem(STORAGE_KEY) === 'amber'; } catch (e) {}
+    let amber = true;
+    try { amber = localStorage.getItem(STORAGE_KEY) !== 'coded'; } catch (e) {}
     apply(amber);
 
     toggle.addEventListener('click', function() {
