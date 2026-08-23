@@ -609,7 +609,7 @@ test("a documented Studio review can verify an exact ticket listing without requ
     method:"POST",
     body:{
       title:"No Website Art Collective Showcase",organizer:"No Website Art Collective",
-      factualDescription:"An Atlanta art showcase listed by its organizing collective.",
+      factualDescription:"An Atlanta art showcase organized by its collective.",
       sourceUrl:ticketUrl,ticketUrl,sourceAuthority:"authorized_ticket_host",
       sourceResolutionNotes:"The exact Posh listing identifies the collective and venue; Studio identity review is still pending.",
       dateKind:"timed",startsAt:"2026-11-28T18:00:00-05:00",endsAt:"2026-11-28T21:00:00-05:00",
@@ -4294,7 +4294,7 @@ test("PHOSPHENES intake sends rendered caption and carousel assets to vision ext
   ];
   const unsupportedOpening = { title:"Opening Night Reception", occurrenceType:"opening_reception", factualDescription:"Opening reception.", startsAt:"2026-08-14T19:00:00-04:00", endsAt:"", timezone:"America/New_York", venueName:"Old Rabbit Gallery", venueAddress:"309A Peters Street SW, Atlanta, GA", accessStatus:"unknown", accessNotes:"", audiences:[] };
   const visionEvent = {
-    title:"PHOSPHENES", description:"A solo exhibition by Timothy Hunter, curated by Stretch G.", caption, organizer:"Timothy Hunter",
+    title:"PHOSPHENES", description:"The site identifies Timothy Hunter as the artist presenting PHOSPHENES, a solo exhibition curated by Stretch G.", caption, organizer:"Timothy Hunter",
     organizerUrl:"", venueName:"Old Rabbit Gallery", venueAddress:"309A Peters Street SW, Atlanta, GA", venueUrl:"", city:"Atlanta", region:"GA",
     startsAt:"2026-08-14", endsAt:"2026-09-08", eventUrl, ticketUrl:"", imageUrl:flyerUrl, imageAlt:"PHOSPHENES exhibition flyer",
     accessStatus:"unknown", accessNotes:"The caption says to contact the artist, curator, or Billy Stonecipher for off-hours inquiries.", audiences:[],
@@ -4347,7 +4347,7 @@ test("PHOSPHENES intake sends rendered caption and carousel assets to vision ext
     const candidate = payload.candidate;
     assert.equal(candidate.title, "PHOSPHENES");
     assert.equal(candidate.organizer, "Timothy Hunter");
-    assert.equal(candidate.factualDescription, "A solo exhibition by Timothy Hunter, curated by Stretch G.");
+    assert.equal(candidate.factualDescription, "Timothy Hunter is the artist presenting PHOSPHENES, a solo exhibition curated by Stretch G.");
     assert.equal(candidate.eventStructure, "exhibition");
     assert.equal(candidate.dateKind, "date_range");
     assert.equal(candidate.startsAt, "2026-08-14");

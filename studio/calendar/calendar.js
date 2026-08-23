@@ -367,8 +367,9 @@
     return [record&&record.factualDescription,record&&record.accessNotes,record&&record.ticketNotes,record&&record.planningNotes].some(function(value){
       var text=String(value||"").trim();
       return /\baccording to\s+(?:the|an?)\b/i.test(text)
-        || /\b(?:caption|flyer|social post|post|webpage|website|event page|official page|page|listing|calendar listing|official calendar|source page|official source|sources|official site|site|faq)\b.{0,90}\b(?:says?|states?|lists?|notes?|confirms?|reports?|indicates?|mentions?|shows?|describes?|identifies?|provides?|directs?|links?|asks?|does not|do not|did not|was not|were not|has not|have not)\b/i.test(text)
+        || /\b(?:caption|flyer|social post|post|webpage|website|event page|official page|page|listing|calendar listing|official calendar|source page|official source|sources|official site|site|faq)\b.{0,90}\b(?:says?|states?|lists?|labels?|notes?|confirms?|reports?|indicates?|mentions?|shows?|describes?|identifies?|provides?|directs?|links?|asks?|does not|do not|did not|was not|were not|has not|have not)\b/i.test(text)
         || /\b(?:from|on|in|via)\s+(?:the\s+)?(?:official\s+|authorized\s+)?(?:event\s+|organizer\s+|venue\s+|ticket\s+|museum\s+|gallery\s+|conference\s+|conversation\s+)?(?:page|listing|source|website|site|caption|flyer|post|calendar)\b/i.test(text)
+        || /\b(?:listed|described|announced|confirmed|reported|identified|verified|retrieved|extracted)\s+(?:on|in|by|from|against|via)\s+(?:the\s+)?(?:official\s+|authorized\s+)?(?:event\s+|organizer\s+|venue\s+|ticket\s+|museum\s+|gallery\s+|conference\s+|conversation\s+)?(?:page|listing|source|website|site|caption|flyer|post|calendar|faq)\b/i.test(text)
         || /\b(?:retrieved|extracted|verified|confirmed)\s+(?:from|against|on|by)\b/i.test(text);
     });
   }
