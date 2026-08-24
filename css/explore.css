@@ -24,6 +24,9 @@ body {
   --explore-blue: #006eff;
   --explore-focus: var(--color-about, #fcb867);
   --explore-description: rgba(252, 184, 103, 0.55);
+  --explore-active-signal: var(--explore-red);
+  --explore-active-copy: #ff3b30;
+  --explore-active-ink: #fff1e0;
   position: fixed;
   inset: 0;
   min-height: 100vh;
@@ -31,6 +34,24 @@ body {
   overflow: hidden;
   isolation: isolate;
   background: var(--color-bg);
+}
+
+.explore-room[data-explore-active-scope="works"] {
+  --explore-active-signal: var(--explore-orange);
+  --explore-active-copy: var(--explore-orange);
+  --explore-active-ink: #000;
+}
+
+.explore-room[data-explore-active-scope="process"] {
+  --explore-active-signal: var(--explore-yellow);
+  --explore-active-copy: var(--explore-yellow);
+  --explore-active-ink: #000;
+}
+
+.explore-room[data-explore-active-scope="pages"] {
+  --explore-active-signal: var(--explore-blue);
+  --explore-active-copy: #338dff;
+  --explore-active-ink: #000;
 }
 
 .explore-sr-only {
@@ -82,6 +103,12 @@ body {
 .explore-actions {
   z-index: 2;
   pointer-events: none;
+  transition: opacity 220ms ease, visibility 220ms step-end;
+}
+
+.explore-room[data-explore-state="preview"] .explore-actions {
+  visibility: hidden;
+  opacity: 0;
 }
 
 .explore-action {
@@ -305,7 +332,7 @@ body {
   position: absolute;
   left: 50%;
   bottom: clamp(18px, 3.5vh, 38px);
-  z-index: 3;
+  z-index: 5;
   width: min(calc(100% - 40px), 520px);
   min-height: 20px;
   margin: 0;
@@ -329,6 +356,179 @@ body {
 .explore-status[data-state="error"] {
   color: #fff1e0;
   opacity: 1;
+}
+
+.explore-portal[hidden] {
+  display: none !important;
+}
+
+.explore-portal {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-rows: minmax(230px, 44vh) auto auto auto;
+  align-content: center;
+  gap: clamp(16px, 2.4vh, 26px);
+  width: min(42vw, 560px);
+  padding: clamp(22px, 3vw, 40px);
+  overflow-y: auto;
+  border-left: 5px solid var(--explore-active-signal);
+  background: var(--color-bg);
+  color: var(--color-body);
+}
+
+.explore-portal__preview {
+  position: relative;
+  min-height: 230px;
+  overflow: hidden;
+  border: 5px solid var(--explore-active-signal);
+  background: var(--color-bg);
+}
+
+.explore-portal__frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 200%;
+  height: 200%;
+  border: 0;
+  background: var(--color-bg);
+  pointer-events: none;
+  transform: scale(0.5);
+  transform-origin: 0 0;
+}
+
+.explore-portal__preview-status {
+  position: absolute;
+  inset: auto 14px 14px;
+  z-index: 1;
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--color-bg);
+  color: var(--color-body);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  line-height: 1.45;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.explore-portal__preview[data-explore-preview-state="loaded"] .explore-portal__preview-status,
+.explore-portal__preview[data-explore-preview-state="idle"] .explore-portal__preview-status {
+  display: none;
+}
+
+.explore-portal__copy {
+  display: grid;
+  gap: 8px;
+}
+
+.explore-portal__medium,
+.explore-portal__title {
+  margin: 0;
+}
+
+.explore-portal__medium {
+  color: var(--explore-active-copy);
+  font-family: var(--font-sans, Inter, Arial, sans-serif);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.explore-portal__title {
+  max-width: 24ch;
+  color: var(--color-body);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: clamp(19px, 2vw, 30px);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  line-height: 1.16;
+  text-transform: uppercase;
+}
+
+.explore-portal__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.explore-portal__action,
+.explore-portal__back {
+  min-height: 44px;
+  appearance: none;
+  border-radius: 0;
+  font-family: var(--font-sans, Inter, Arial, sans-serif);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  line-height: 1.35;
+  text-transform: uppercase;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.explore-portal__action {
+  padding: 10px 14px;
+  border: 5px solid var(--explore-active-signal);
+  transition: filter 180ms ease, transform 180ms ease;
+}
+
+.explore-portal__action--again {
+  background: var(--color-bg);
+  color: var(--explore-active-copy);
+}
+
+.explore-portal__action--enter {
+  background: var(--explore-active-signal);
+  color: var(--explore-active-ink);
+}
+
+.explore-portal__action:hover,
+.explore-portal__action:focus-visible {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+}
+
+.explore-portal__action:focus-visible,
+.explore-portal__back:focus-visible {
+  outline: 3px solid var(--explore-focus);
+  outline-offset: 3px;
+}
+
+.explore-portal__action:disabled,
+.explore-portal__back:disabled {
+  cursor: wait;
+  opacity: 0.52;
+}
+
+.explore-portal__back {
+  justify-self: start;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-body);
+  opacity: 0.66;
+}
+
+.explore-portal__back:hover,
+.explore-portal__back:focus-visible {
+  opacity: 1;
+}
+
+.explore-room[data-explore-state="preview"] .explore-status:not(:empty) {
+  right: min(42vw, 560px);
+  left: 0;
+  width: auto;
+  padding-inline: 24px;
+  transform: none;
 }
 
 @keyframes explore-label-pulse {
@@ -423,6 +623,32 @@ body {
     bottom: max(14px, env(safe-area-inset-bottom));
     font-size: 9px;
   }
+
+  .explore-portal {
+    top: 30%;
+    width: 100%;
+    padding: 18px 16px 24px;
+    border-top: 5px solid var(--explore-active-signal);
+    border-left: 0;
+  }
+
+  .explore-portal__preview {
+    min-height: 180px;
+  }
+
+  .explore-portal__title {
+    font-size: clamp(18px, 5.4vw, 24px);
+  }
+
+  .explore-room[data-explore-state="preview"] .explore-status:not(:empty) {
+    top: 18px;
+    right: 12px;
+    bottom: auto;
+    left: 12px;
+    width: auto;
+    padding-inline: 0;
+    transform: none;
+  }
 }
 
 @media (hover: none) {
@@ -456,7 +682,8 @@ body {
   .explore-action::after,
   .explore-action__label,
   .explore-action__description,
-  .explore-status {
+  .explore-status,
+  .explore-portal__action {
     animation: none !important;
     transition: none !important;
   }

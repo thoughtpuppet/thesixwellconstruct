@@ -1180,11 +1180,42 @@
     }).sort((a, b) => timelineDate(a).localeCompare(timelineDate(b)) || Number(first(a.sort_order, 0)) - Number(first(b.sort_order, 0)));
   }
 
+  function archiveLensCard(record, kind) {
+    const title = text(record.title, record.name, record.slug, kind === "timeline" ? "Timeline" : "Origin thread");
+    const summary = text(record.summary, record.description);
+    const route = safeUrl(record.route) || "/archive/";
+    const meta = kind === "timeline"
+      ? text(record.subject_name, record.subjectName, "Interactive history")
+      : `${Number(record.record_count || record.recordCount || 0)} connected ${Number(record.record_count || record.recordCount || 0) === 1 ? "record" : "records"}`;
+    return `<article class="archive-connection-card-shell"><a class="archive-connection-card" href="${escapeHtml(route)}"><span class="archive-label">${escapeHtml(kind === "timeline" ? "Timeline" : "Origin thread")}</span><h3>${escapeHtml(title)}</h3>${summary ? `<p>${escapeHtml(summary)}</p>` : ""}<span class="archive-meta"><span>${escapeHtml(meta)}</span></span></a></article>`;
+  }
+
+  async function originThreadIndex() {
+    app.innerHTML = loading("Following the threads…");
+    try {
+      const payload = await getJson("/api/archive/origin-threads");
+      const records = list(first(payload.records, payload.origin_threads, payload.originThreads, []));
+      document.title = "Origin Threads · Archive · the six.well construct";
+      app.innerHTML = `<header class="archive-timeline-header site-hero site-hero--supporting"><div><span class="archive-kicker">Archive lineages</span><h1 class="hero-title">Origin Threads.</h1></div><div><p class="hero-descriptor">Curated paths joining works and evidence that share a source, question, or inception.</p><div class="archive-meta"><span>${records.length} public ${records.length === 1 ? "thread" : "threads"}</span></div></div></header>${records.length ? `<section class="archive-connection-grid" aria-label="Public origin threads">${records.map((record) => archiveLensCard(record, "origin")).join("")}</section>` : `<section class="archive-empty"><span class="archive-kicker">Threads forming</span><h2>No public origin threads yet.</h2><p>Published lineages will appear here after their records and evidence have been reviewed.</p></section>`}`;
+    } catch (error) {
+      app.innerHTML = errorState("Origin Threads could not be opened.", "The public lineage index did not answer. Try again in a moment.");
+      app.querySelector("[data-archive-retry]")?.addEventListener("click", originThreadIndex);
+    }
+  }
+
   async function timeline() {
     const slug = slugFromPath("timelines");
     if (!slug) {
-      app.innerHTML = errorState("No timeline was named.", "Return to the Archive and follow a published history path.");
-      app.querySelector("[data-archive-retry]")?.remove();
+      app.innerHTML = loading("Assembling public histories…");
+      try {
+        const payload = await getJson("/api/archive/timelines");
+        const records = list(first(payload.records, payload.timelines, []));
+        document.title = "Timelines · Archive · the six.well construct";
+        app.innerHTML = `<header class="archive-timeline-header site-hero site-hero--supporting"><div><span class="archive-kicker">Archive histories</span><h1 class="hero-title">Timelines.</h1></div><div><p class="hero-descriptor">Follow documented change across works, people, organizations, and the Construct itself.</p><div class="archive-meta"><span>${records.length} public ${records.length === 1 ? "timeline" : "timelines"}</span></div></div></header>${records.length ? `<section class="archive-connection-grid" aria-label="Public Archive timelines">${records.map((record) => archiveLensCard(record, "timeline")).join("")}</section>` : `<section class="archive-empty"><span class="archive-kicker">Histories forming</span><h2>No public timelines yet.</h2><p>Published histories will appear here as their dated chapters are reviewed.</p></section>`}`;
+      } catch (error) {
+        app.innerHTML = errorState("Timelines could not be opened.", "The public history index did not answer. Try again in a moment.");
+        app.querySelector("[data-archive-retry]")?.addEventListener("click", timeline);
+      }
       return;
     }
     app.innerHTML = loading("Assembling this history…");
@@ -1240,5 +1271,6 @@
 
   if (view === "explorer") explorer();
   if (view === "record") dossier();
+  if (view === "origin-threads") originThreadIndex();
   if (view === "timeline") timeline();
 })();

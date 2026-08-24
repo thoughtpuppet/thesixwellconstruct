@@ -61,6 +61,40 @@ function request(path, { method = "GET", body, admin = false } = {}) {
   });
 }
 
+test("homepage Archive pathways use seven Archive lenses with real destinations", async () => {
+  const expected = [
+    ["Records", "/archive/"],
+    ["Collections", "/archive/collections/"],
+    ["Origin Threads", "/archive/origin-threads/"],
+    ["Making Practices", "/archive/?record_type=practice"],
+    ["Colors & Materials", "/archive/colors-materials/"],
+    ["Blackboards", "/archive/blackboards/"],
+    ["Timelines", "/archive/timelines/"],
+  ];
+  const db = database();
+  const pathways = db.prepare("SELECT name,route,color FROM construct_pathways WHERE node_id='node-archive' AND state='published' AND homepage_enabled=1 ORDER BY sort_order").all();
+  assert.deepEqual(pathways.map(({ name, route }) => [name, route]), expected);
+  assert.ok(pathways.every(({ color }) => color === "#6D3D15"));
+
+  const home = readFileSync(join(ROOT, "home", "index.html"), "utf8");
+  const navigation = readFileSync(join(ROOT, "js", "construct-nav.js"), "utf8");
+  for (const [label, route] of expected) {
+    assert.ok(home.includes(`name:'${label}',url:'${route}'`));
+    assert.ok(navigation.includes(`['${label}', '${route}']`));
+  }
+  assert.match(readFileSync(join(ROOT, "archive", "origin-threads", "index.html"), "utf8"), /data-archive-view="origin-threads"/);
+
+  const originResponse = await handleConstructApi(request("/api/archive/origin-threads"), env(db));
+  assert.equal(originResponse.status, 200);
+  const origins = await originResponse.json();
+  assert.ok(origins.records.some((record) => record.slug === "lost-marbles" && record.route === "/archive/?origin=lost-marbles"));
+
+  const timelineResponse = await handleConstructApi(request("/api/archive/timelines"), env(db));
+  assert.equal(timelineResponse.status, 200);
+  const timelines = await timelineResponse.json();
+  assert.ok(timelines.records.some((record) => record.slug === "art" && record.route === "/archive/timelines/art/"));
+});
+
 test("Studio saves attached media eligibility before publishing an Archive material", () => {
   const studio = readFileSync(join(ROOT, "studio", "construct-manager.js"), "utf8");
   assert.match(studio, /const publishingAttachedMedia=Boolean\(payload\.media_id&&payload\.state==="published"&&payload\.visibility==="public"\)/);

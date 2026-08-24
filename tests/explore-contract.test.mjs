@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 import { handleConstructApi, selectExploreDestination } from "../functions/api/construct/_lib.js";
 
@@ -55,6 +56,75 @@ function request(path, method = "GET") { return new Request(`https://example.tes
 function destination(scope, key, medium = "art", entityKey = key) {
   return { key, scope, kind: "test", medium: { id: medium, label: medium.toUpperCase() }, title: key, route: `/test/${key}/`, entityKey };
 }
+
+function exploreElement({ dataset = {}, hidden = false } = {}) {
+  const events = {};
+  return {
+    attributes: {}, dataset: { ...dataset }, disabled: false, hidden, textContent: "", title: "", parentElement: null,
+    addEventListener(name, handler) { events[name] = handler; },
+    dispatch(name, event = {}) { return events[name]?.(event); },
+    setAttribute(name, value) { this.attributes[name] = String(value); },
+    getAttribute(name) { return this.attributes[name] ?? null; },
+    removeAttribute(name) { delete this.attributes[name]; },
+  };
+}
+
+function exploreClientHarness({ storedPortal = null, responses = [] } = {}) {
+  const pageEvents = {};
+  const storage = new Map();
+  if (storedPortal) storage.set("sixwell_explore_portal_v1", JSON.stringify(storedPortal));
+  const buttons = ["all", "works", "process", "pages"].map((scope) => exploreElement({ dataset: { exploreScope: scope } }));
+  const room = exploreElement({ dataset: { exploreState: "loading", exploreActiveScope: "all" } });
+  const actionGroup = exploreElement();
+  const status = exploreElement({ dataset: { state: "loading" } });
+  const portal = exploreElement({ hidden: true });
+  const preview = exploreElement({ dataset: { explorePreviewState: "idle" } });
+  const previewFrame = exploreElement();
+  previewFrame.parentElement = preview;
+  previewFrame.setAttribute("src", "about:blank");
+  const previewStatus = exploreElement();
+  const previewMedium = exploreElement();
+  const previewTitle = exploreElement();
+  const diveAgain = exploreElement();
+  const enterPage = exploreElement();
+  const backToBoard = exploreElement();
+  const selectorMap = new Map([
+    ["[data-explore-room]", room], ["[data-explore-actions]", actionGroup], ["[data-explore-status]", status],
+    ["[data-explore-portal]", portal], ["[data-explore-preview-frame]", previewFrame],
+    ["[data-explore-preview-status]", previewStatus], ["[data-explore-preview-medium]", previewMedium],
+    ["[data-explore-preview-title]", previewTitle], ["[data-explore-dive-again]", diveAgain],
+    ["[data-explore-enter-page]", enterPage], ["[data-explore-back-to-board]", backToBoard],
+  ]);
+  const document = {
+    querySelector(selector) { return selectorMap.get(selector) || null; },
+    querySelectorAll(selector) { return selector === "[data-explore-scope]" ? buttons : []; },
+  };
+  const fetchCalls = [];
+  const window = {
+    addEventListener(name, handler) { pageEvents[name] = handler; },
+    clearTimeout() {},
+    setTimeout() { return 1; },
+    location: { href: "" },
+    _constructFade(route) { this.fadedTo = route; },
+  };
+  const sessionStorage = {
+    getItem(key) { return storage.get(key) ?? null; },
+    setItem(key, value) { storage.set(key, String(value)); },
+    removeItem(key) { storage.delete(key); },
+  };
+  const fetch = async (url) => {
+    fetchCalls.push(String(url));
+    const payload = responses.shift() || {};
+    return { ok: payload.ok !== false, async json() { return payload; } };
+  };
+  runInNewContext(read("js/explore.js"), { document, window, sessionStorage, URLSearchParams, fetch });
+  return {
+    actionGroup, backToBoard, buttons, diveAgain, enterPage, fetchCalls, pageEvents, portal, preview,
+    previewFrame, previewMedium, previewStatus, previewTitle, room, status, storage, window,
+  };
+}
+
+const flushExploreClient = () => new Promise((resolve) => setImmediate(resolve));
 
 test("all-site selection uses 50/30/20 family bands and omits unavailable families", () => {
   const pools = {
@@ -203,6 +273,13 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   }
   assert.match(html, /data-explore-scope="all" data-explore-shape="disc" aria-label="Take me anywhere"/);
   assert.match(html, /data-explore-status[^>]*aria-live="polite"/);
+  assert.match(html, /<section[^>]+data-explore-portal[^>]+hidden/);
+  assert.match(html, /<iframe[\s\S]*?data-explore-preview-frame[\s\S]*?tabindex="-1"[\s\S]*?aria-hidden="true"[\s\S]*?inert[\s\S]*?sandbox="allow-scripts allow-same-origin"/);
+  assert.match(html, /data-explore-preview-medium/);
+  assert.match(html, /data-explore-preview-title/);
+  assert.match(html, /data-explore-dive-again>Dive again/);
+  assert.match(html, /data-explore-enter-page>Enter page/);
+  assert.match(html, /data-explore-back-to-board>Back to diving board/);
   assert.doesNotMatch(html, /data-venture=|href="\/css\/hero\.css"/);
   assert.doesNotMatch(html, /\bsite-hero\b|\bhero-title\b|\bhero-descriptor\b|\bconstruct-breadcrumb\b|\bexplore-panel\b|<footer\b/);
   assert.match(html, /<body data-live-text-editor="off" data-construct-wayfinding="off">/);
@@ -220,6 +297,16 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(css, /\.explore-room\[data-explore-renderer="fallback"\]/);
   assert.match(css, /\.explore-action::before/);
   assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+  for (const [scope, signal] of [["works", "--explore-orange"], ["process", "--explore-yellow"], ["pages", "--explore-blue"]]) {
+    assert.match(css, new RegExp(`data-explore-active-scope="${scope}"[\\s\\S]*?--explore-active-signal:\\s*var\\(${signal}\\)`));
+  }
+  assert.match(css, /\.explore-portal\s*\{[\s\S]*?border-left:\s*5px solid var\(--explore-active-signal\)[\s\S]*?background:\s*var\(--color-bg\)/);
+  assert.match(css, /\.explore-portal__preview\s*\{[\s\S]*?border:\s*5px solid var\(--explore-active-signal\)[\s\S]*?background:\s*var\(--color-bg\)/);
+  assert.match(css, /\.explore-portal__frame\s*\{[\s\S]*?pointer-events:\s*none/);
+  assert.match(css, /\.explore-portal__action--again\s*\{[\s\S]*?background:\s*var\(--color-bg\)[\s\S]*?color:\s*var\(--explore-active-copy\)/);
+  assert.match(css, /\.explore-portal__action--enter\s*\{[\s\S]*?background:\s*var\(--explore-active-signal\)[\s\S]*?color:\s*var\(--explore-active-ink\)/);
+  assert.match(css, /\.explore-portal__action,[\s\S]*?min-height:\s*44px/);
+  assert.match(css, /@media\s*\(max-width:\s*700px\)[\s\S]*?\.explore-portal\s*\{[\s\S]*?top:\s*30%[\s\S]*?border-top:\s*5px solid var\(--explore-active-signal\)/);
 
   assert.match(room, /from\s+["']\/entry-room\/3d\/vendor\/three\.module\.js["']/);
   assert.match(room, /all:\s*\{[\s\S]*?color:\s*0xd01006[\s\S]*?geometry:\s*\(\)\s*=>\s*prismGeometry\(48\)/i);
@@ -278,17 +365,31 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(room, /item\.spec\.rotation\[1\] \+ depthTumbleY/);
   assert.match(room, /reduceMotionQuery\.addEventListener\("change", onMotionChange\)/);
   assert.match(room, /reduceMotionQuery\.removeEventListener\("change", onMotionChange\)/);
+  assert.match(room, /function onPageHide\(event\)[\s\S]*if \(!event\.persisted\)[\s\S]*dispose\(\)/);
+  assert.match(room, /function onPageShow\(event\)[\s\S]*if \(!event\.persisted \|\| disposed\) return/);
+  assert.match(room, /window\.addEventListener\("pagehide", onPageHide\)/);
+  assert.match(room, /window\.addEventListener\("pageshow", onPageShow\)/);
+  assert.doesNotMatch(room, /window\.addEventListener\("pagehide", dispose, \{ once: true \}\)/);
   assert.match(room, /dataset\.exploreRenderer\s*=\s*["'](?:webgl|fallback)["']/);
   assert.match(client, /Finding somewhere…/);
   assert.match(client, /data-explore-state|dataset\.exploreState/);
   assert.match(client, /data-explore-active-scope|dataset\.exploreActiveScope/);
   assert.match(client, /interactive_start/);
   assert.match(client, /interactive_complete/);
-  assert.match(client, /sessionStorage/);
-  assert.match(client, /_constructFade/);
+  assert.match(client, /sixwell_explore_portal_v1/);
+  assert.match(client, /showPreview\(scope, destination\)/);
+  assert.match(client, /function enterCurrentPage\(\)[\s\S]*?_constructFade\(currentPortal\.destination\.route\)/);
+  assert.match(client, /previewFrame\.setAttribute\("src", "about:blank"\)/);
+  assert.match(client, /window\.addEventListener\("pageshow", function \(event\)/);
+  assert.match(client, /if \(!event\.persisted\) return;[\s\S]*setControlsBusy\(false\);[\s\S]*setRoomState\("preview", currentPortal\.scope\)/);
   assert.match(nav, /className = 'cnav-explore'/);
   assert.match(nav, /id = 'cnav-mobile-explore'/);
-  assert.equal((nav.match(/textContent = 'ADVENTURE'/g) || []).length, 2);
+  assert.equal((nav.match(/appendChild\(createExploreCompassIcon\(\)\)/g) || []).length, 2);
+  assert.doesNotMatch(nav, /textContent = 'ADVENTURE'/);
+  assert.match(nav, /M32 12 L37 32 L32 52 L27 32 Z/);
+  assert.match(nav, /stroke:var\(--color-archive, #6D3D15\);stroke-width:5/);
+  assert.match(nav, /stroke:var\(--color-about, #F8B468\);stroke-width:3/);
+  assert.match(nav, /center\.setAttribute\('r', '3\.5'\)/);
   assert.equal((nav.match(/setAttribute\('aria-label', 'Adventure through the Construct'\)/g) || []).length, 2);
   assert.doesNotMatch(nav, /textContent = 'EXPLORE'|Explore the Construct/);
   assert.match(nav, /aria-current', 'page'/);
@@ -309,6 +410,66 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.doesNotMatch(exploreTemplate, /css\/hero\.css/);
   assert.match(worker, /url\.pathname === "\/api\/site\/explore"/);
   assert.match(worker, /url\.pathname === "\/explore"[\s\S]*?adventureUrl\.pathname = "\/adventure\/"[\s\S]*?Response\.redirect\(adventureUrl, 308\)/);
+});
+
+test("Explore previews and re-dives without navigating until Enter Page", async () => {
+  const first = destination("works", "first-work");
+  const second = destination("works", "second-work");
+  const harness = exploreClientHarness({ responses: [{ destination: first }, { destination: second }] });
+
+  harness.buttons[1].dispatch("click");
+  await flushExploreClient();
+  assert.equal(harness.portal.hidden, false);
+  assert.equal(harness.room.dataset.exploreState, "preview");
+  assert.equal(harness.room.dataset.exploreActiveScope, "works");
+  assert.equal(harness.previewFrame.getAttribute("src"), first.route);
+  assert.equal(harness.previewTitle.textContent, first.title);
+  assert.equal(harness.previewMedium.textContent, first.medium.label);
+  assert.equal(harness.actionGroup.attributes["aria-hidden"], "true");
+  assert.equal(harness.actionGroup.attributes.inert, "");
+  assert.equal(harness.window.fadedTo, undefined);
+  assert.match(harness.storage.get("sixwell_explore_portal_v1"), /first-work/);
+
+  harness.diveAgain.dispatch("click");
+  await flushExploreClient();
+  assert.equal(harness.previewFrame.getAttribute("src"), second.route);
+  assert.match(harness.fetchCalls[1], /scope=works/);
+  assert.match(harness.fetchCalls[1], /exclude=first-work/);
+  assert.equal(harness.window.fadedTo, undefined);
+
+  harness.enterPage.dispatch("click");
+  assert.equal(harness.window.fadedTo, second.route);
+  assert.match(harness.storage.get("sixwell_explore_portal_v1"), /second-work/);
+
+  harness.backToBoard.dispatch("click");
+  assert.equal(harness.portal.hidden, true);
+  assert.equal(harness.previewFrame.getAttribute("src"), "about:blank");
+  assert.equal(harness.room.dataset.exploreState, "idle");
+  assert.equal("exploreActiveScope" in harness.room.dataset, false);
+  assert.equal(harness.actionGroup.attributes["aria-hidden"], undefined);
+  assert.equal(harness.storage.has("sixwell_explore_portal_v1"), false);
+  assert.match(harness.storage.get("sixwell_explore_history_v1"), /second-work/);
+});
+
+test("Explore restores the current portal after a reload or BFCache return", () => {
+  const saved = { scope: "process", destination: destination("process", "saved-process") };
+  const harness = exploreClientHarness({ storedPortal: saved });
+
+  assert.equal(harness.portal.hidden, false);
+  assert.equal(harness.room.dataset.exploreState, "preview");
+  assert.equal(harness.room.dataset.exploreActiveScope, "process");
+  assert.equal(harness.previewFrame.getAttribute("src"), saved.destination.route);
+  assert.equal(typeof harness.pageEvents.pageshow, "function");
+
+  harness.room.dataset.exploreState = "loading";
+  harness.buttons.forEach((button) => { button.disabled = true; });
+  harness.pageEvents.pageshow({ persisted: true });
+  assert.deepEqual(harness.buttons.map((button) => button.disabled), [false, false, false, false]);
+  assert.equal(harness.room.dataset.exploreState, "preview");
+  assert.equal(harness.room.dataset.exploreActiveScope, "process");
+  assert.equal(harness.portal.hidden, false);
+  assert.equal(harness.status.textContent, "");
+  assert.equal(harness.status.dataset.state, "idle");
 });
 
 test("the shared ambient field preserves 404 and About behavior while giving Explore a quieter configuration", () => {

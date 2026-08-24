@@ -442,6 +442,23 @@ if (root) {
       }
     }
 
+    function onPageHide(event) {
+      if (!event.persisted) {
+        dispose();
+        return;
+      }
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+      animationFrame = 0;
+    }
+
+    function onPageShow(event) {
+      if (!event.persisted || disposed) return;
+      resize();
+      syncRoomState();
+      renderFrame(performance.now());
+      startLoop();
+    }
+
     function dispose() {
       if (disposed) return;
       disposed = true;
@@ -449,6 +466,8 @@ if (root) {
       stateObserver.disconnect();
       if (resizeObserver) resizeObserver.disconnect();
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
       if (reduceMotionQuery.removeEventListener) {
         reduceMotionQuery.removeEventListener("change", onMotionChange);
       } else if (reduceMotionQuery.removeListener) {
@@ -482,7 +501,8 @@ if (root) {
     } else if (reduceMotionQuery.addListener) {
       reduceMotionQuery.addListener(onMotionChange);
     }
-    window.addEventListener("pagehide", dispose, { once: true });
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
 
     resize();
     syncRoomState();
@@ -491,6 +511,8 @@ if (root) {
     startLoop();
   } catch (error) {
     useFallback();
-    window.addEventListener("pagehide", unmountAmbient, { once: true });
+    window.addEventListener("pagehide", (event) => {
+      if (!event.persisted) unmountAmbient();
+    });
   }
 }

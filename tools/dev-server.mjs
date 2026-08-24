@@ -112,6 +112,8 @@ const checkRoutes = [
   ["/archive/guide/", 200],
   ["/archive/compare/", 200],
   ["/archive/collections/", 200],
+  ["/archive/origin-threads/", 200],
+  ["/archive/timelines/", 200],
   ["/archive/about/", 200],
   ["/archive/art/", 200],
   ["/archive/events/", 200],

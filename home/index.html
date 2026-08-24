@@ -1060,7 +1060,7 @@ const SUB_NODE_DATA = {
   'EVENTS':     [{name:'CULT[&SHIFT]',url:'/events/cultandshift/'},{name:'Signal & Symbol',url:'/events/signal-symbol/'},{name:'calendar',url:'/events/calendar/'},{name:'rent the studio',url:'/booking/studio/'},{name:'archive',url:'/archive/events/',color:MEDIUM_COLORS.archive},{name:"solehman's new years",url:'/events/solehmans-new-year/'},{name:'SS&F live audience',url:'/events/ss-and-f-live-audience/'},{name:'open studios',url:'/events/open-studios/',color:MEDIUM_COLORS.art}],
   'MUSIC':      [{name:'ringtones',url:'/music/#listening-surfaces'},{name:'MILOWALKSONWATER',url:'/music/#listening-index'},{name:'scores',url:'/music/#forms'}],
   'WRITINGS':   [{name:'Mindful Darkness',url:'/writings/#reading-paths'},{name:'THE SOLEHMAN LETTERS',url:'https://thesolehmanletters.com'},{name:'essays & notes',url:'/writings/#featured'}],
-  'ARCHIVE':    [{name:'tattoos',url:'/archive/tattoos/',color:MEDIUM_COLORS.tattooing},{name:'art',url:'/archive/art/',color:MEDIUM_COLORS.art},{name:'merch',url:'/archive/merch/',color:MEDIUM_COLORS.merch},{name:'events',url:'/archive/events/',color:MEDIUM_COLORS.events},{name:'music',url:'/archive/music/',color:MEDIUM_COLORS.music},{name:'writings',url:'/archive/writings/',color:MEDIUM_COLORS.writings},{name:'film',url:'/archive/film/',color:MEDIUM_COLORS.film},{name:'The six.well Construct',url:'/archive/sixwell-construct/',color:MEDIUM_COLORS.about}],
+  'ARCHIVE':    [{name:'Records',url:'/archive/'},{name:'Collections',url:'/archive/collections/'},{name:'Origin Threads',url:'/archive/origin-threads/'},{name:'Making Practices',url:'/archive/?record_type=practice'},{name:'Colors & Materials',url:'/archive/colors-materials/'},{name:'Blackboards',url:'/archive/blackboards/'},{name:'Timelines',url:'/archive/timelines/'}],
   'FILM':       [{name:'isolated.take',url:'/film/#projects'},{name:'&friends',url:'/film/#projects'},{name:'animations',url:'/film/#forms'},{name:'sloth99',url:'/film/#status'}],
 };
 
@@ -1116,7 +1116,7 @@ function SUB_NODE_RADIUS(){
   }
   return BASE_SUB_NODE_RADIUS*scale;
 }
-function SUB_NODE_DIST(){return BASE_SUB_NODE_DIST*scale;}
+function SUB_NODE_DIST(ventureIdx){return (VENTURES[ventureIdx]?.name==='ARCHIVE'?96:BASE_SUB_NODE_DIST)*scale;}
 const SUB_SPREAD_DEG    = 26;    // (unused in orbit mode — kept for reference)
 const SUB_EXPAND_SPEED  = 0.00038;
 const SUB_COLLAPSE_SPEED= 0.0018;
@@ -1168,8 +1168,8 @@ function getSubNodeTargetPos(ventureIdx, subIdx){
   }
   const outAngle = Math.atan2(py - cy, px - cx);
   const angle = outAngle + (subIdx / n) * Math.PI * 2;
-  return { x: px + Math.cos(angle) * SUB_NODE_DIST(),
-           y: py + Math.sin(angle) * SUB_NODE_DIST() };
+  return { x: px + Math.cos(angle) * SUB_NODE_DIST(ventureIdx),
+           y: py + Math.sin(angle) * SUB_NODE_DIST(ventureIdx) };
 }
 
 // ── Helper: staggered arrival factor for pathway i during expansion ─────────

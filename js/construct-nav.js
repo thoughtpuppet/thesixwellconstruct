@@ -82,9 +82,10 @@
       ['essays & notes', '/writings/#featured'],
     ],
     archive: [
-      ['tattoos', '/archive/tattoos/'], ['art', '/archive/art/'], ['merch', '/archive/merch/'],
-      ['events', '/archive/events/'], ['music', '/archive/music/'], ['writings', '/archive/writings/'],
-      ['film', '/archive/film/'], ['The six.well Construct', '/archive/sixwell-construct/'],
+      ['Records', '/archive/'], ['Collections', '/archive/collections/'],
+      ['Origin Threads', '/archive/origin-threads/'], ['Making Practices', '/archive/?record_type=practice'],
+      ['Colors & Materials', '/archive/colors-materials/'], ['Blackboards', '/archive/blackboards/'],
+      ['Timelines', '/archive/timelines/'],
     ],
     film: [
       ['isolated.take', '/film/#projects'], ['&friends', '/film/#projects'],
@@ -100,6 +101,40 @@
   function readTokenColor(token, fallback) {
     var value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
     return value || fallback;
+  }
+
+  function createExploreCompassIcon() {
+    var svgNs = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('viewBox', '0 0 64 64');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.style.cssText = 'display:block;width:100%;height:100%;overflow:visible';
+
+    var ring = document.createElementNS(svgNs, 'circle');
+    ring.setAttribute('cx', '32');
+    ring.setAttribute('cy', '32');
+    ring.setAttribute('r', '28');
+    ring.style.cssText = 'fill:none;stroke:var(--color-archive, #6D3D15);stroke-width:5';
+
+    var needleGroup = document.createElementNS(svgNs, 'g');
+    needleGroup.setAttribute('transform', 'rotate(23 32 32)');
+
+    var needle = document.createElementNS(svgNs, 'path');
+    needle.setAttribute('d', 'M32 12 L37 32 L32 52 L27 32 Z');
+    needle.style.cssText = 'fill:none;stroke:var(--color-about, #F8B468);stroke-width:3;stroke-linejoin:miter';
+
+    var center = document.createElementNS(svgNs, 'circle');
+    center.setAttribute('cx', '32');
+    center.setAttribute('cy', '32');
+    center.setAttribute('r', '3.5');
+    center.style.cssText = 'fill:var(--color-about, #F8B468)';
+
+    needleGroup.appendChild(needle);
+    svg.appendChild(ring);
+    svg.appendChild(needleGroup);
+    svg.appendChild(center);
+    return svg;
   }
 
   function tokenColorsAvailable() {
@@ -396,22 +431,18 @@
   var exploreAction = document.createElement('button');
   exploreAction.type = 'button';
   exploreAction.className = 'cnav-explore';
-  exploreAction.textContent = 'ADVENTURE';
+  exploreAction.appendChild(createExploreCompassIcon());
   exploreAction.setAttribute('aria-label', 'Adventure through the Construct');
   if (isExplorePage) exploreAction.setAttribute('aria-current', 'page');
   exploreAction.style.cssText = [
+    'width:32px',
+    'height:32px',
+    'min-width:32px',
     'min-height:32px',
-    'padding:6px 8px 5px 12px',
+    'padding:0',
     'border:0',
-    'border-left:5px solid ' + readTokenColor('--color-about', '#FCB867'),
     'border-radius:0',
-    'background:' + (isExplorePage ? readTokenColor('--color-about', '#FCB867') : 'transparent'),
-    'color:' + (isExplorePage ? readTokenColor('--color-bg', '#0e0e0e') : readTokenColor('--color-about', '#FCB867')),
-    'font-family:' + CONFIG.labelFont,
-    'font-size:9px',
-    'font-weight:700',
-    'letter-spacing:0.14em',
-    'line-height:1',
+    'background:transparent',
     'cursor:' + (isExplorePage ? 'default' : 'pointer'),
     'pointer-events:auto',
   ].join(';');
@@ -622,7 +653,7 @@
   var mExplore = document.createElement('button');
   mExplore.id = 'cnav-mobile-explore';
   mExplore.type = 'button';
-  mExplore.textContent = 'ADVENTURE';
+  mExplore.appendChild(createExploreCompassIcon());
   mExplore.setAttribute('aria-label', 'Adventure through the Construct');
   if (isExplorePage) mExplore.setAttribute('aria-current', 'page');
   mExplore.style.cssText = [
@@ -633,24 +664,21 @@
     'display:inline-flex',
     'align-items:center',
     'justify-content:center',
-    'min-width:132px',
-    'min-height:44px',
-    'padding:9px 14px',
-    'border:5px solid ' + PARTICLE_COLOR,
+    'width:52px',
+    'height:52px',
+    'min-width:52px',
+    'min-height:52px',
+    'padding:3px',
+    'border:5px solid ' + WORDMARK_RING_COLOR,
     'border-radius:0',
-    'background:' + (isExplorePage ? PARTICLE_COLOR : SITE_BG),
-    'color:' + (isExplorePage ? SITE_BG : PARTICLE_COLOR),
-    'font-family:' + CONFIG.labelFont,
-    'font-size:10px',
-    'font-weight:700',
-    'letter-spacing:0.18em',
-    'text-transform:uppercase',
+    'background:' + SITE_BG,
     'cursor:' + (isExplorePage ? 'default' : 'pointer'),
     'opacity:0',
     'transition:opacity 350ms ease',
     'pointer-events:none',
     'z-index:2',
   ].join(';');
+  mExplore.querySelector('svg').style.cssText = 'display:block;width:36px;height:36px;overflow:visible';
 
   mScrim.appendChild(mCanvas);
   mScrim.appendChild(mLabels);

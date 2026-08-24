@@ -51,6 +51,34 @@
     </button>
   </div>
 
+  <section class="explore-portal" data-explore-portal aria-labelledby="explore-portal-title" hidden>
+    <div class="explore-portal__preview" data-explore-preview-state="idle">
+      <iframe
+        class="explore-portal__frame"
+        data-explore-preview-frame
+        src="about:blank"
+        title="Adventure destination preview"
+        tabindex="-1"
+        aria-hidden="true"
+        inert
+        sandbox="allow-scripts allow-same-origin"
+      ></iframe>
+      <p class="explore-portal__preview-status" data-explore-preview-status aria-hidden="true"></p>
+    </div>
+
+    <div class="explore-portal__copy">
+      <p class="explore-portal__medium" data-explore-preview-medium></p>
+      <h2 class="explore-portal__title" id="explore-portal-title" data-explore-preview-title></h2>
+    </div>
+
+    <div class="explore-portal__actions" aria-label="Adventure destination controls">
+      <button class="explore-portal__action explore-portal__action--again" type="button" data-explore-dive-again>Dive again</button>
+      <button class="explore-portal__action explore-portal__action--enter" type="button" data-explore-enter-page>Enter page</button>
+    </div>
+
+    <button class="explore-portal__back" type="button" data-explore-back-to-board>Back to diving board</button>
+  </section>
+
   <p class="explore-status" data-explore-status aria-live="polite" aria-atomic="true"></p>
 </main>
 <script src="/js/transition.js"></script>

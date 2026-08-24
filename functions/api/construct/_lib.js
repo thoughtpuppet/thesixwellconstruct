@@ -1885,9 +1885,36 @@ async function publicArchiveCompare(request,env){
 
 function timelineSubjectName(row){return row.organization_name||row.person_name||row.node_name||row.title||row.slug;}
 
+async function publicArchiveOriginThreads(request,env){
+  if(request.method!=="GET")return failure("Method not allowed.",405);
+  const rows=(await db(env).prepare(`SELECT ot.id,ot.slug,ot.title,ot.summary,ot.sort_order,ot.updated_at,
+      COUNT(DISTINCT CASE WHEN ce.visibility='public' THEN ote.entity_id END) record_count
+    FROM archive_origin_threads ot
+    LEFT JOIN archive_origin_thread_entities ote ON ote.thread_id=ot.id
+    LEFT JOIN content_entities ce ON ce.id=ote.entity_id
+    WHERE ot.state='published' AND ot.public_visible=1
+    GROUP BY ot.id,ot.slug,ot.title,ot.summary,ot.sort_order,ot.updated_at
+    ORDER BY ot.sort_order,ot.title`).all()).results||[];
+  const records=rows.map(row=>({...row,route:`/archive/?origin=${encodeURIComponent(row.slug)}`}));
+  return json({records,origin_threads:records,count:records.length},{cache:"public, max-age=60"});
+}
+
 async function publicArchiveTimeline(request,env,timelineSlug){
   if(request.method!=="GET")return failure("Method not allowed.",405);
   const database=db(env);
+  if(!timelineSlug){
+    const rows=(await database.prepare(`SELECT at.*,ce.entity_type,o.name organization_name,p.name person_name,n.name node_name
+      FROM archive_timelines at JOIN content_entities ce ON ce.id=at.subject_entity_id AND ce.visibility='public'
+      LEFT JOIN organizations o ON o.id=ce.id AND o.state='published'
+      LEFT JOIN people p ON p.id=ce.id AND p.state='published' AND p.privacy='public'
+      LEFT JOIN construct_nodes n ON n.id=ce.id AND n.state='published'
+      WHERE at.state='published' AND at.public_visible=1
+        AND (ce.entity_type<>'person' OR p.id IS NOT NULL)
+        AND (ce.entity_type<>'organization' OR o.id IS NOT NULL)
+      ORDER BY at.sort_order,at.title`).all()).results||[];
+    const records=rows.map(row=>({...row,subject_name:timelineSubjectName(row),route:`/archive/timelines/${encodeURIComponent(row.slug)}/`}));
+    return json({records,timelines:records,count:records.length},{cache:"public, max-age=60"});
+  }
   const timeline=await database.prepare(`SELECT at.*,ce.entity_type,o.name organization_name,p.name person_name,n.name node_name
     FROM archive_timelines at JOIN content_entities ce ON ce.id=at.subject_entity_id AND ce.visibility='public'
     LEFT JOIN organizations o ON o.id=ce.id AND o.state='published'
@@ -4975,9 +5002,11 @@ export async function handleConstructApi(request,env){
   if(path==="/api/archive/failed-experiments")return publicFailedExperimentsApi(request,env);
   const failedExperimentPublicMatch=path.match(/^\/api\/archive\/failed-experiments\/([^/]+)$/);if(failedExperimentPublicMatch)return publicFailedExperimentsApi(request,env,decodeURIComponent(failedExperimentPublicMatch[1]));
   if(path==="/api/archive/blackboards")return publicArchiveBlackboards(request,env);
+  if(path==="/api/archive/origin-threads")return publicArchiveOriginThreads(request,env);
   if(path==="/api/archive/items")return publicArchiveItems(request,env);
   if(path==="/api/archive/compare")return publicArchiveCompare(request,env);
   const archiveItemMatch=path.match(/^\/api\/archive\/items\/([^/]+)$/);if(archiveItemMatch)return publicArchiveDetail(request,env,decodeURIComponent(archiveItemMatch[1]));
+  if(path==="/api/archive/timelines")return publicArchiveTimeline(request,env,"");
   const archiveTimelinePublicMatch=path.match(/^\/api\/archive\/timelines\/([^/]+)$/);if(archiveTimelinePublicMatch)return publicArchiveTimeline(request,env,decodeURIComponent(archiveTimelinePublicMatch[1]));
   const connectionsMatch=path.match(/^\/api\/connections\/([^/]+)$/);if(connectionsMatch&&request.method==="GET")return publicConnections(env,decodeURIComponent(connectionsMatch[1]));
   const mediaPublic=path.match(/^\/api\/construct\/media\/([^/]+)$/);if(mediaPublic)return publicMediaApi(request,env,decodeURIComponent(mediaPublic[1]));
