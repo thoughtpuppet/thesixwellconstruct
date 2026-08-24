@@ -3,9 +3,10 @@
 
   var SUBJECT_LABELS = { art:"Art", "art-making":"Art Making", film:"Film", "poetry-music":"Poetry / Music", technology:"Technology", ai:"AI", "creative-technology":"Creative Technology", anthropology:"Anthropology", engineering:"Engineering", philosophy:"Philosophy" };
   var FORMAT_LABELS = { exhibition:"Exhibitions / Art Openings", screening:"Screening", performance:"Performance", "experimental-event":"Experimental Event", "lecture-talk":"Lecture / Talk", panel:"Panel", workshop:"Workshop", conference:"Conference" };
+  var ADMISSION_LABELS = { free:"Free", rsvp:"RSVP Required", ticketed:"Ticketed" };
   var AFFILIATION_LABELS = { gsu:"GSU Events" };
   var MODE_LABELS = { virtual:"Virtual" };
-  var OCCURRENCE_LABELS = { opening_reception:"Opening Reception", artist_talk:"Artist Talk", mixer:"Mixer", screening:"Screening", performance:"Performance", workshop:"Workshop", panel:"Panel", lecture:"Lecture", other:"Related Program" };
+  var OCCURRENCE_LABELS = { opening_reception:"Opening Reception", closing_reception:"Closing Reception", artist_talk:"Artist Talk", mixer:"Mixer", screening:"Screening", performance:"Performance", workshop:"Workshop", panel:"Panel", lecture:"Lecture", other:"Related Program" };
   var SCHEDULE_LABELS = { postponed:"Postponed", rescheduled:"Rescheduled", cancelled:"Cancelled", moved_online:"Moved Online" };
   var TICKET_LABELS = { not_required:"No Ticket Required", not_yet_on_sale:"Tickets Not Yet On Sale", on_sale:"Tickets On Sale", sold_out:"Sold Out", registration_open:"Registration Open", registration_closed:"Registration Closed" };
   var TIME_ZONE = "America/New_York";
@@ -25,6 +26,7 @@
   var search = document.getElementById("calendarSearch");
   var subjectRoot = document.getElementById("subjectFilters");
   var formatRoot = document.getElementById("formatFilters");
+  var admissionRoot = document.getElementById("admissionFilters");
   var affiliationRoot = document.getElementById("affiliationFilters");
   var modeRoot = document.getElementById("modeFilters");
   var resultCount = document.getElementById("resultCount");
@@ -92,8 +94,10 @@
     if (event.dateKind === "all_day") return new Intl.DateTimeFormat("en-US", { weekday:"short", month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(new Date(event.startsAt + "T12:00:00Z"));
     if (event.dateKind === "date_range" || isOnViewExhibition(event)) {
       var start = new Date(dateKey(event.startsAt) + "T12:00:00Z");
+      var formatter = new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" });
+      if (!event.endsAt && event.confirmedThrough) return "On view from " + formatter.format(start) + " / confirmed through " + formatter.format(new Date(dateKey(event.confirmedThrough) + "T12:00:00Z")) + " / closing date TBA";
       var end = new Date(dateKey(event.endsAt || event.startsAt) + "T12:00:00Z");
-      return new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(start) + " - " + new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(end);
+      return formatter.format(start) + " - " + formatter.format(end);
     }
     var startDate = validDate(event.startsAt);
     if (!startDate) return "Date unavailable";
@@ -109,7 +113,7 @@
   }
 
   function isPast(event) {
-    var end = validDate(event.endsAt) || validDate(event.startsAt);
+    var end = validDate(event.endsAt) || validDate(event.confirmedThrough) || validDate(event.startsAt);
     return end ? end.getTime() < Date.now() : false;
   }
 
@@ -132,7 +136,7 @@
   function relativeDateCue(event) {
     var todayKey = dateKey(new Date().toISOString());
     var startKey = dateKey(event.startsAt);
-    var endKey = dateKey(event.endsAt || event.startsAt);
+    var endKey = dateKey(event.endsAt || event.confirmedThrough || event.startsAt);
     if (!todayKey || !startKey) return "";
     var startDifference = calendarDayDifference(todayKey, startKey);
     var endDifference = calendarDayDifference(todayKey, endKey);
@@ -236,14 +240,24 @@
     }).join("");
   }
 
+  function admissionCategory(event) {
+    var status = String(event.ticketStatus || "");
+    if (status === "not_required") return "free";
+    if (["registration_open","registration_closed"].includes(status)) return "rsvp";
+    if (["not_yet_on_sale","on_sale","sold_out"].includes(status)) return "ticketed";
+    return "";
+  }
+
   function matches(event) {
     var query = search.value.trim().toLowerCase();
     var subjects = checkedValues(subjectRoot);
     var formats = checkedValues(formatRoot);
+    var admissions = checkedValues(admissionRoot);
     var affiliations = checkedValues(affiliationRoot);
     var modes = checkedValues(modeRoot);
     if (subjects.length && !subjects.some(function (value) { return event.subjects.includes(value); })) return false;
     if (formats.length && !formats.some(function (value) { return event.formats.includes(value); })) return false;
+    if (admissions.length && !admissions.includes(admissionCategory(event))) return false;
     if (affiliations.length && !affiliations.some(function (value) { return (event.affiliations || []).includes(value); })) return false;
     if (modes.includes("virtual") && !event.virtual) return false;
     if (query) {
@@ -399,7 +413,7 @@
     return filtered.filter(function (event) {
       if (isOnViewExhibition(event)) return false;
       var start = dateKey(event.startsAt);
-      var end = dateKey(event.endsAt || event.startsAt);
+      var end = dateKey(event.endsAt || event.confirmedThrough || event.startsAt);
       if (event.dateKind === "date_range") return key === start;
       return key >= start && key <= end;
     });
@@ -446,6 +460,7 @@
       search:search.value,
       subjects:checkedValues(subjectRoot),
       formats:checkedValues(formatRoot),
+      admissions:checkedValues(admissionRoot),
       affiliations:checkedValues(affiliationRoot),
       modes:checkedValues(modeRoot),
       filtersOpen:!filterPanel.hidden,
@@ -471,7 +486,7 @@
       if (!state || state.path !== "/calendar/" || Date.now() - Number(state.savedAt || 0) > 7200000) return null;
       if (/^\d{4}-\d{2}$/.test(state.month || "")) activeMonth = new Date(Number(state.month.slice(0, 4)), Number(state.month.slice(5, 7)) - 1, 1);
       search.value = String(state.search || "");
-      var selected = new Set([].concat(state.subjects || [], state.formats || [], state.affiliations || [], state.modes || []));
+      var selected = new Set([].concat(state.subjects || [], state.formats || [], state.admissions || [], state.affiliations || [], state.modes || []));
       Array.from(document.querySelectorAll(".filter-chip input")).forEach(function (input) { input.checked = selected.has(input.value); });
       filterPanel.hidden = !state.filtersOpen;
       filterToggle.setAttribute("aria-expanded", state.filtersOpen ? "true" : "false");
@@ -487,10 +502,10 @@
     var monthEnd = monthEndDate.getFullYear() + "-" + String(monthEndDate.getMonth() + 1).padStart(2, "0") + "-" + String(monthEndDate.getDate()).padStart(2, "0");
     filtered = allEvents.filter(matches).filter(function (event) {
       var start = dateKey(event.startsAt);
-      var end = dateKey(event.endsAt || event.startsAt);
+      var end = dateKey(event.endsAt || event.confirmedThrough || event.startsAt);
       return start && start <= monthEnd && end >= monthStart;
     });
-    var selectedFilters = checkedValues(subjectRoot).length + checkedValues(formatRoot).length + checkedValues(affiliationRoot).length + checkedValues(modeRoot).length;
+    var selectedFilters = checkedValues(subjectRoot).length + checkedValues(formatRoot).length + checkedValues(admissionRoot).length + checkedValues(affiliationRoot).length + checkedValues(modeRoot).length;
     filterCount.textContent = selectedFilters ? " (" + selectedFilters + ")" : "";
     renderLists();
     renderMonth();
@@ -525,11 +540,13 @@
 
   renderFilters(subjectRoot, SUBJECT_LABELS, "subject");
   renderFilters(formatRoot, FORMAT_LABELS, "format");
+  renderFilters(admissionRoot, ADMISSION_LABELS, "admission");
   renderFilters(affiliationRoot, AFFILIATION_LABELS, "affiliation");
   renderFilters(modeRoot, MODE_LABELS, "mode");
   search.addEventListener("input", applyFilters);
   subjectRoot.addEventListener("change", applyFilters);
   formatRoot.addEventListener("change", applyFilters);
+  admissionRoot.addEventListener("change", applyFilters);
   affiliationRoot.addEventListener("change", applyFilters);
   modeRoot.addEventListener("change", applyFilters);
   filterToggle.addEventListener("click", function () {

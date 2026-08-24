@@ -4,7 +4,7 @@
   var SUBJECT_LABELS = { art:"Art", "art-making":"Art Making", film:"Film", "poetry-music":"Poetry / Music", technology:"Technology", ai:"AI", "creative-technology":"Creative Technology", anthropology:"Anthropology", engineering:"Engineering", philosophy:"Philosophy" };
   var FORMAT_LABELS = { exhibition:"Exhibitions / Art Openings", screening:"Screening", performance:"Performance", "experimental-event":"Experimental Event", "lecture-talk":"Lecture / Talk", panel:"Panel", workshop:"Workshop", conference:"Conference" };
   var AFFILIATION_LABELS = { gsu:"GSU Events" };
-  var OCCURRENCE_LABELS = { opening_reception:"Opening Reception", artist_talk:"Artist Talk", mixer:"Mixer", screening:"Screening", performance:"Performance", workshop:"Workshop", panel:"Panel", lecture:"Lecture", other:"Related Program" };
+  var OCCURRENCE_LABELS = { opening_reception:"Opening Reception", closing_reception:"Closing Reception", artist_talk:"Artist Talk", mixer:"Mixer", screening:"Screening", performance:"Performance", workshop:"Workshop", panel:"Panel", lecture:"Lecture", other:"Related Program" };
   var SCHEDULE_LABELS = { postponed:"Postponed", rescheduled:"Rescheduled", cancelled:"Cancelled", moved_online:"Moved Online" };
   var TICKET_LABELS = { not_required:"No Ticket Required", not_yet_on_sale:"Tickets Not Yet On Sale", on_sale:"Tickets On Sale", sold_out:"Sold Out", registration_open:"Registration Open", registration_closed:"Registration Closed" };
   var TIME_ZONE = "America/New_York";
@@ -56,8 +56,13 @@
     if (event.dateKind === "all_day") return new Intl.DateTimeFormat("en-US", { weekday:"short", month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(new Date(event.startsAt + "T12:00:00Z"));
     if (event.dateKind === "date_range" || isOnViewExhibition(event)) {
       var start = new Date(dateKey(event.startsAt) + "T12:00:00Z");
+      var dateFormatter = new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" });
+      if (!event.endsAt && event.confirmedThrough) {
+        var confirmed = new Date(dateKey(event.confirmedThrough) + "T12:00:00Z");
+        return "On view from " + dateFormatter.format(start) + " / confirmed through " + dateFormatter.format(confirmed) + " / closing date TBA";
+      }
       var end = new Date(dateKey(event.endsAt || event.startsAt) + "T12:00:00Z");
-      return new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(start) + " - " + new Intl.DateTimeFormat("en-US", { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(end);
+      return dateFormatter.format(start) + " - " + dateFormatter.format(end);
     }
     var startDate = validDate(event.startsAt);
     if (!startDate) return "Date unavailable";
@@ -88,7 +93,7 @@
   function relativeDateCue(event) {
     var todayKey = dateKey(new Date().toISOString());
     var startKey = dateKey(event.startsAt);
-    var endKey = dateKey(event.endsAt || event.startsAt);
+    var endKey = dateKey(event.endsAt || event.confirmedThrough || event.startsAt);
     if (!todayKey || !startKey) return "";
     var startDifference = calendarDayDifference(todayKey, startKey);
     var endDifference = calendarDayDifference(todayKey, endKey);
@@ -235,6 +240,7 @@
       '<' + headingTag + (options.detail ? ' class="venture-title hero-title"' : '') + '>' + escapeHtml(event.title) + '</' + headingTag + '>' +
       (accessNote ? '<p class="calendar-event-access"><strong>Access / </strong>' + escapeHtml(accessNote) + '</p>' : '') +
       (ticketNote ? '<p class="calendar-event-ticket"><strong>Tickets / </strong>' + escapeHtml(ticketNote) + '</p>' : '') +
+      (event.visitingHoursLabel ? '<p class="calendar-event-hours"><strong>Gallery hours / </strong>' + escapeHtml(event.visitingHoursLabel) + (event.visitingHoursNote ? ' / ' + escapeHtml(event.visitingHoursNote) : '') + '</p>' : '') +
       description +
       '<div class="calendar-event-facts">' +
         (event.organizer ? '<span><strong>organizer:</strong> ' + escapeHtml(event.organizer) + '</span>' : '') +

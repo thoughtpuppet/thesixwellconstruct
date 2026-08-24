@@ -904,6 +904,48 @@ test("one exhibition publishes its dated related schedule without publishing TBD
   assert.equal(cancelledTalk.sequence, 1);
 });
 
+test("closing receptions are first-class related programs from Studio through public feeds", async () => {
+  const db = database();
+  const runtime = env(db);
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  assert.match(studio,/\["closing_reception","Closing Reception"\]/);
+  assert.match(studio,/opening, closing reception, talks/);
+  for (const table of ["calendar_candidate_occurrences","calendar_entry_occurrences"]) {
+    assert.match(db.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name=?").get(table).sql,/closing_reception/);
+  }
+
+  const created = await admin(db,"/candidates",{
+    method:"POST",
+    body:{
+      title:"Closing Reception Test Exhibition", organizer:"Atlanta Test Gallery",
+      factualDescription:"A temporary exhibition with a separately scheduled closing reception.",
+      sourceUrl:"https://gallery.example/events/closing-reception-test", organizerUrl:"https://gallery.example/",
+      sourceAuthority:"organizer_event", eventStructure:"exhibition", dateKind:"date_range",
+      startsAt:"2026-10-01", endsAt:"2026-10-31", timezone:"America/New_York",
+      venueName:"Atlanta Test Gallery", venueAddress:"100 Test Street, Atlanta, GA", city:"Atlanta", region:"GA",
+      accessStatus:"public", audiences:["Public"], subjects:["art"], formats:["exhibition"], verificationState:"verified",
+      occurrences:[{
+        occurrenceType:"closing_reception", title:"", factualDescription:"The exhibition concludes with a public closing reception.",
+        dateKind:"timed", startsAt:"2026-10-31T18:00:00-04:00", endsAt:"2026-10-31T21:00:00-04:00",
+        timezone:"America/New_York", accessStatus:"public", audiences:["Public"], status:"scheduled", verificationState:"verified",
+      }],
+    },
+  });
+  assert.equal(created.status,201,await created.clone().text());
+  const candidate=(await created.json()).candidate;
+  assert.equal(candidate.occurrences[0].occurrenceType,"closing_reception");
+  assert.equal(candidate.occurrences[0].title,"Closing Reception");
+  assert.equal((await admin(db,`/candidates/${candidate.id}/approve`,{method:"POST",body:{}})).status,200);
+
+  const payload=await (await handleCalendarPublicApi(request("/api/calendar/events"),runtime)).json();
+  const occurrence=payload.events.find((event)=>event.parentTitle===candidate.title&&event.occurrenceType==="closing_reception");
+  assert.ok(occurrence);
+  assert.equal(occurrence.occurrenceLabel,"Closing Reception");
+  assert.equal(occurrence.title,`${candidate.title} — Closing Reception`);
+  const feed=await (await handleCalendarFeed(request("/calendars/atlanta.ics"),runtime)).text();
+  assert.match(feed,/SUMMARY:Closing Reception Test Exhibition — Closing Reception/);
+});
+
 test("We Hold These Truths publishes eight official conversations as one series, including simultaneous events", async () => {
   const db = database();
   const runtime = env(db);
@@ -3592,6 +3634,20 @@ test("per-event source rechecks hold published changes for approval and retain f
     assert.equal(publicEvent.scheduleStatus, "postponed");
     assert.equal(publicEvent.ticketStatus, "on_sale");
 
+    const unchangedRecheck = await (await admin(db, `/candidates/${candidate.id}/recheck`, { method:"POST", body:{} })).json();
+    assert.equal(unchangedRecheck.checkStatus, "changes_detected");
+    assert.ok(unchangedRecheck.candidate.pendingRevisionId);
+    const kept = await admin(db, `/candidates/${candidate.id}/revisions/${unchangedRecheck.candidate.pendingRevisionId}/dismiss`, { method:"POST", body:{} });
+    assert.equal(kept.status, 200, await kept.clone().text());
+    const keptCandidate = (await kept.json()).candidate;
+    assert.equal(keptCandidate.pendingRevisionId, "");
+    assert.match(keptCandidate.lastCheckSummary,/current candidate and public calendar were kept unchanged/i);
+    assert.equal(keptCandidate.venueAddress, "12 Source Way, Atlanta, GA");
+    assert.deepEqual(
+      { ...db.prepare("SELECT starts_at,schedule_status,ticket_status,venue_address,sequence FROM calendar_entries WHERE candidate_id=?").get(candidate.id) },
+      { starts_at:"2026-11-19T18:00:00-05:00", schedule_status:"postponed", ticket_status:"on_sale", venue_address:"12 Source Way, Atlanta, GA", sequence:1 },
+    );
+
     globalThis.fetch = async () => new Response("temporarily unavailable", { status:503 });
     const unavailable = await (await admin(db, `/candidates/${candidate.id}/recheck`, { method:"POST", body:{} })).json();
     assert.equal(unavailable.checkStatus, "source_unavailable");
@@ -3812,6 +3868,15 @@ test("Studio verification links and the public expandable flyer stay inline with
   assert.match(publicCalendar,/MODE_LABELS = \{ virtual:"Virtual" \}/);
   assert.match(publicCalendar,/modes\.includes\("virtual"\)/);
   assert.match(readFileSync(join(ROOT,"calendar","index.html"),"utf8"),/id="modeFilters"/);
+  assert.match(publicCalendar,/ADMISSION_LABELS = \{ free:"Free", rsvp:"RSVP Required", ticketed:"Ticketed" \}/);
+  assert.match(publicCalendar,/status === "not_required"\) return "free"/);
+  assert.match(publicCalendar,/\["registration_open","registration_closed"\]\.includes\(status\)\) return "rsvp"/);
+  assert.match(publicCalendar,/\["not_yet_on_sale","on_sale","sold_out"\]\.includes\(status\)\) return "ticketed"/);
+  assert.match(publicCalendar,/admissions\.length && !admissions\.includes\(admissionCategory\(event\)\)/);
+  assert.match(readFileSync(join(ROOT,"calendar","index.html"),"utf8"),/id="admissionFilters"/);
+  assert.match(publicCalendar,/admissions:checkedValues\(admissionRoot\)/);
+  assert.match(publicCalendar,/state\.admissions \|\| \[\]/);
+  assert.match(publicCalendar,/checkedValues\(admissionRoot\)\.length/);
   assert.match(publicCalendar,/anthropology:"Anthropology"/);
   assert.match(publicCalendar,/View media/);
   assert.match(publicCalendar,/calendarMediaDialog/);
@@ -4135,7 +4200,7 @@ test("pasting an Instagram post refreshes its caption, flyer evidence, and relat
     assert.equal(appliedCandidate.accessNotes, "Children are welcome.");
     assert.deepEqual(appliedCandidate.occurrences.map((item) => ({ title:item.title, type:item.occurrenceType, startsAt:item.startsAt, endsAt:item.endsAt })), [
       { title:"Artist Talk", type:"artist_talk", startsAt:"2026-08-22T17:00:00-04:00", endsAt:"2026-08-22T19:00:00-04:00" },
-      { title:"Closing Reception", type:"other", startsAt:"2026-08-22T19:00:00-04:00", endsAt:"2026-08-22T22:00:00-04:00" },
+      { title:"Closing Reception", type:"closing_reception", startsAt:"2026-08-22T19:00:00-04:00", endsAt:"2026-08-22T22:00:00-04:00" },
     ]);
     const evidence = db.prepare("SELECT platform,post_id,author_handle,author_display_name,author_is_verified,caption_excerpt,media_url FROM calendar_candidate_social_evidence WHERE candidate_id=?").get(payload.candidate.id);
     assert.deepEqual({ ...evidence }, {
@@ -4826,13 +4891,29 @@ test("Calendar Studio shows publication blockers and defaults events and occurre
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
   const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
   assert.match(studio,/planningEligible:true/);
-  assert.match(studio,/function publicationBlockers\(candidate,pendingRevision,pendingNeedsSelection,pendingHasAppliedChange\)/);
+  assert.match(studio,/function publicationBlockers\(candidate\)/);
   assert.match(studio,/function publicCopyNarratesSource\(record\)/);
   assert.match(studio,/Rewrite public descriptions and notes as direct event facts/);
   assert.match(studio,/Not ready to publish/);
   assert.match(studio,/data-action="approve"' \+ \(canPublish\?'':' disabled'\)/);
   assert.match(studio,/Every event and related schedule item is eligible by default/);
   assert.match(studioCss,/\.publication-readiness\.is-blocked \{ border-color:var\(--danger\); \}/);
+});
+
+test("Calendar Studio can keep a verified record unchanged and previews proposed image changes", () => {
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studio,/Keep current record/);
+  assert.match(studio,/Public record current/);
+  assert.match(studio,/There is no pending update to publish/);
+  assert.doesNotMatch(studio,/Apply at least one proposed update before approving the published event again/);
+  assert.match(studio,/function isMediaChange\(change\)/);
+  assert.match(studio,/data-change-media-preview/);
+  assert.match(studio,/Current image/);
+  assert.match(studio,/Proposed image/);
+  assert.match(studio,/hydrateChangeMediaPreviews\(root\)/);
+  assert.match(studioCss,/\.change-media-comparison \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.change-media-comparison \{ grid-template-columns:minmax\(0,1fr\)!important; \}/);
 });
 
 test("reviewed known venues supply reusable coordinates at publication", async () => {
@@ -5080,4 +5161,75 @@ test("Calendar Studio day view is date-addressable and opens occurrences in the 
   assert.match(studioCss,/\.occurrence-row\.is-day-selected \{[^}]*border-color:var\(--accent\);/);
   assert.match(studioCss,/\.day-agenda-controls \.day-on-view-toggle \{[^}]*border:5px solid var\(--line\);/);
   assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.day-agenda-controls \{ grid-template-columns:1fr 1fr; \}/);
+});
+
+test("open-ended exhibitions publish a bounded horizon and become date-specific gallery-hour planner windows", async () => {
+  const db = database();
+  const hours = [1,2,3,4,5].map((day) => ({ day, opens:"10:00", closes:"18:00" }));
+  const saved = await admin(db, "/candidates/cal_candidate_sound_vision", {
+    method:"PATCH",
+    body:{
+      eventStructure:"exhibition", dateKind:"date_range", startsAt:"2026-10-01", endsAt:"",
+      confirmedThrough:"2026-10-15", visitingHours:hours,
+      visitingHoursNote:"Closed weekends.", visitingHoursSourceUrl:"https://www.atlantafilmsociety.org/upcoming-events/sound-vision",
+      visitingHoursVerifiedAt:"2026-08-23T12:00:00Z", formats:["exhibition"],
+      attendanceMode:"flexible_window", minimumVisitMinutes:30, recommendedVisitMinutes:45,
+    },
+  });
+  assert.equal(saved.status, 200);
+  const candidate = (await saved.json()).candidate;
+  assert.equal(candidate.endsAt, null);
+  assert.equal(candidate.confirmedThrough, "2026-10-15");
+  assert.deepEqual(candidate.visitingHours, hours);
+
+  const approval = await admin(db, "/candidates/cal_candidate_sound_vision/approve", { method:"POST", body:{} });
+  assert.equal(approval.status, 200, await approval.clone().text());
+  const publicEvent = (await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json()).events.find((event) => event.title.includes("SOUND + VISION"));
+  assert.equal(publicEvent.endsAt, null);
+  assert.equal(publicEvent.confirmedThrough, "2026-10-15");
+  assert.equal(publicEvent.visitingHoursLabel, "Mon–Fri, 10 AM–6 PM");
+  assert.equal(publicEvent.planning.availabilityMode, "weekly_hours");
+
+  const mondayEvent = (await (await admin(db, "/planner?date=2026-10-12")).json()).events.find((event) => event.candidateId === candidate.id);
+  assert.equal(mondayEvent.sourceDateKind, "date_range");
+  assert.equal(mondayEvent.startsAt, "2026-10-12T10:00:00-04:00");
+  assert.equal(mondayEvent.endsAt, "2026-10-12T18:00:00-04:00");
+  assert.equal(mondayEvent.pilotEligible, true);
+  const saturday = await admin(db, "/planner?date=2026-10-10");
+  assert.equal((await saturday.json()).events.some((event) => event.candidateId === candidate.id), false);
+
+  const onView = (await (await admin(db, "/day?date=2026-10-10")).json()).items.find((item) => item.candidateId === candidate.id);
+  assert.equal(onView.openOnSelectedDay, false);
+  const ics = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEvent.id)}.ics`), env(db))).text();
+  assert.match(ics, /X-SIXWELL-CONFIRMED-THROUGH:20261015/);
+  assert.match(ics, /Visiting hours: Mon–Fri\\\, 10 AM–6 PM/);
+});
+
+test("public and Studio exhibition interfaces distinguish closing dates, confirmed horizons, and visiting hours", () => {
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const publicRecord = readFileSync(join(ROOT,"js","atlanta-calendar-record.js"),"utf8");
+  assert.match(studio,/candidateConfirmedThrough/);
+  assert.match(studio,/Exhibition visiting hours/);
+  assert.match(studio,/Gallery availability/);
+  assert.match(publicRecord,/closing date TBA/);
+  assert.match(publicRecord,/Gallery hours/);
+});
+
+test("migration 0169 consolidates duplicate Where Being Takes Root public records without inventing a closing date", async () => {
+  const db = databaseThrough("0168_calendar_closing_reception_occurrences.sql");
+  for (const id of ["cal_candidate_sound_vision","cal_candidate_lost_shadows"]) {
+    const approval = await admin(db, `/candidates/${id}/approve`, { method:"POST", body:{} });
+    assert.equal(approval.status, 200, await approval.clone().text());
+    db.prepare("UPDATE calendar_candidates SET title='Where Being Takes Root' WHERE id=?").run(id);
+    db.prepare("UPDATE calendar_entries SET title='Where Being Takes Root' WHERE candidate_id=?").run(id);
+  }
+  db.exec(readFileSync(join(ROOT,"migrations","0169_calendar_exhibition_visiting_hours.sql"),"utf8"));
+  const survivor = db.prepare("SELECT id,ends_at,confirmed_through,visiting_hours_json FROM calendar_candidates WHERE lower(title)='where being takes root' AND status='published'").get();
+  assert.ok(survivor);
+  assert.equal(survivor.ends_at, null);
+  assert.equal(survivor.confirmed_through, "2026-10-15");
+  assert.equal(JSON.parse(survivor.visiting_hours_json).length, 5);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE lower(title)='where being takes root'").get().count, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE lower(title)='where being takes root' AND status='duplicate' AND duplicate_of=?").get(survivor.id).count, 1);
+  assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
 });
