@@ -123,6 +123,8 @@ test("page shells, discovery bands, Studio controls, and media files preserve th
   const pageCss = source("css", "archive-practice.css");
   const pageJs = source("js", "archive-practice.js");
   const room = source("archive", "art", "index.html");
+  const archiveIndex = source("archive", "index.html");
+  const archivePublic = source("js", "archive-public.js");
   const artIndex = source("art", "index.html");
   const studio = source("studio", "construct-manager.js");
 
@@ -138,6 +140,10 @@ test("page shells, discovery bands, Studio controls, and media files preserve th
   assert.doesNotMatch(pageJs, /autoplay/i);
   assert.ok(artIndex.indexOf("data-practice-feature") < artIndex.indexOf('id="filters"'));
   assert.match(room, /data-practice-feature/);
+  assert.match(archiveIndex, /archive-practice-feature\.js/);
+  assert.match(archivePublic, /archive-index-practice/);
+  assert.match(archivePublic, /data-practice-feature/);
+  assert.ok(archivePublic.indexOf("archive-index-practice") < archivePublic.indexOf("archive-search-panel"));
   assert.doesNotMatch(room, /archive-room-records\.js/);
   assert.match(studio, /data-practice-sections-panel/);
   assert.match(studio, /data-practice-media-panel/);

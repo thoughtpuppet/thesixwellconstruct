@@ -89,8 +89,13 @@ test("Legend component CSS consumes shared tokens and uses complete 5px frames",
   const css = source("about/legend/legend.css");
 
   assert.match(css, /html,\s*body,\s*\.legend-page\s*\{\s*background:\s*var\(--color-bg\)/);
+  assert.match(css, /--venture-color:\s*var\(--color-archive-bright\)/);
+  assert.match(css, /--venture-accent:\s*var\(--color-archive-bright\)/);
+  assert.match(css, /--type-hero-color:\s*var\(--color-archive-bright\)/);
+  assert.match(css, /--type-eyebrow-color:\s*var\(--color-archive-bright\)/);
   assert.match(css, /--legend-rule:\s*var\(--color-archive-dim\)/);
   assert.match(css, /--legend-symbol:\s*var\(--color-archive\)/);
+  assert.match(css, /--legend-signal:\s*var\(--color-archive-bright\)/);
   assert.match(css, /\.legend-grid\s*\{[\s\S]*gap:\s*var\(--grid-gap\)/);
   assert.match(css, /\.legend-record-hero\s*\{[^}]*grid-template-columns:[^;]*1\.2fr[^;]*0\.8fr/s);
 

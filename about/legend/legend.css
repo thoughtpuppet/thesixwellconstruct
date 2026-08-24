@@ -5,9 +5,14 @@ body,
 }
 
 .legend-page {
+  --venture-color: var(--color-archive-bright);
+  --venture-accent: var(--color-archive-bright);
+  --about-accent: var(--color-archive-bright);
+  --type-hero-color: var(--color-archive-bright);
+  --type-eyebrow-color: var(--color-archive-bright);
   --legend-rule: var(--color-archive-dim);
   --legend-symbol: var(--color-archive);
-  --legend-signal: var(--venture-color);
+  --legend-signal: var(--color-archive-bright);
 }
 
 .legend-page :where(button, a, input):focus-visible {
