@@ -36,6 +36,11 @@ function detailPath(record) {
     if (info) info.textContent = [record.year, record.medium].filter(Boolean).join(" · ") || "Artwork";
     const badge = card.querySelector(".work-badge");
     if (badge) badge.textContent = record.availability || card.dataset.type;
+    const whereabouts = card.querySelector(".work-whereabouts");
+    if (whereabouts) {
+      whereabouts.hidden = record.whereabouts_status !== "unknown";
+      whereabouts.textContent = record.whereabouts_status === "unknown" ? "Whereabouts unknown" : "";
+    }
   }
 
   function createCard(record) {
@@ -44,7 +49,7 @@ function detailPath(record) {
     card.innerHTML = `
       <img src="" alt="" loading="lazy">
       <span class="work-badge"></span>
-      <div class="work-meta"><span class="work-title"></span><span class="work-info"></span></div>
+      <div class="work-meta"><span class="work-title"></span><span class="work-info"></span><span class="work-whereabouts" hidden></span></div>
     `;
     updateCard(card, record);
     card.tabIndex = 0;

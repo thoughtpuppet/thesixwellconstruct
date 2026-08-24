@@ -262,6 +262,56 @@ statement:    —
     border-top:5px solid var(--ring-faint);
     border-bottom:5px solid var(--ring-faint);
   }
+
+  .practice-feature-band {
+    display:grid;
+    grid-template-columns:minmax(0,180px) minmax(0,1fr) auto;
+    gap:var(--s4);
+    align-items:end;
+    margin:0 0 var(--s6);
+    padding:var(--s4);
+    border:5px solid color-mix(in srgb,var(--color-art) 42%,transparent);
+  }
+  .practice-feature-media {
+    display:block;
+    aspect-ratio:4/3;
+    overflow:hidden;
+    border:5px solid color-mix(in srgb,var(--color-art) 28%,transparent);
+  }
+  .practice-feature-media[hidden] { display:none; }
+  .practice-feature-media img { width:100%;height:100%;display:block;object-fit:cover; }
+  .practice-feature-kicker {
+    margin-bottom:var(--s2);
+    color:var(--accent-hot);
+    font-family:var(--sans);
+    font-size:10px;
+    font-weight:900;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+  }
+  .practice-feature-title {
+    margin-bottom:var(--s3);
+    color:var(--body-text);
+    font-family:var(--sans);
+    font-size:clamp(22px,3vw,36px);
+    font-weight:900;
+    line-height:1;
+  }
+  .practice-feature-copy { max-width:620px;color:var(--text-mute);font-size:14px;line-height:1.7; }
+  .practice-feature-link {
+    display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 var(--s5);
+    border:5px solid color-mix(in srgb,var(--color-art) 38%,transparent);
+    color:var(--accent-hot);font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap;
+  }
+  .work-whereabouts {
+    margin-top:var(--s1);
+    color:var(--text-mute);
+    font-family:var(--sans);
+    font-size:9px;
+    font-weight:700;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+  }
   .studio-visit-kicker {
     font-family:var(--sans);
     font-weight:900;
@@ -441,6 +491,9 @@ statement:    —
       gap:var(--s5);
       align-items:start;
     }
+    .practice-feature-band { grid-template-columns:1fr;align-items:start; }
+    .practice-feature-media { max-width:320px; }
+    .practice-feature-link { width:100%;white-space:normal;text-align:center; }
     .studio-visit-link {
       width:100%;
       white-space:normal;
@@ -663,6 +716,16 @@ statement:    —
           <a class="brand-band-link" href="/about/visual-language/" data-copy-id="art-brand-action-about">learn more about thoughtpuppet</a>
         </div>
       </div>
+    </section>
+
+    <section class="practice-feature-band" data-practice-feature aria-labelledby="art-practice-feature-title">
+      <a class="practice-feature-media" data-practice-feature-media href="/archive/art/making-the-canvas/" hidden><img data-practice-feature-image alt="" loading="lazy"></a>
+      <div>
+        <p class="practice-feature-kicker">From the practice</p>
+        <h2 class="practice-feature-title" id="art-practice-feature-title" data-practice-feature-title>Making the Canvas</h2>
+        <p class="practice-feature-copy" data-practice-feature-summary>A painting begins before paint touches its surface.</p>
+      </div>
+      <a class="practice-feature-link" data-practice-feature-link href="/archive/art/making-the-canvas/">Open practice record</a>
     </section>
 
     <!-- filter rows — row 1: medium, row 2: type (scoped to active medium) -->
@@ -1167,6 +1230,7 @@ statement:    —
 
   </script>
   <script src="/js/art-catalog-order.js"></script>
+  <script src="/js/archive-practice-feature.js"></script>
 
 </body>
 </html>

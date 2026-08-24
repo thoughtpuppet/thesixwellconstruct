@@ -1,0 +1,286 @@
+:root {
+  --practice-color: var(--color-art);
+  --practice-bright: var(--color-art-bright);
+  --practice-rule: 5px;
+  --practice-gap: 16px;
+}
+
+html,
+body.archive-practice-page {
+  background: var(--color-bg);
+}
+
+.archive-practice-page .archive-app {
+  max-width: 1280px;
+}
+
+.practice-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+  gap: clamp(32px, 7vw, 96px);
+  align-items: end;
+  padding: clamp(56px, 9vw, 112px) 0 clamp(48px, 8vw, 96px);
+  border-bottom: var(--practice-rule) solid color-mix(in srgb, var(--practice-color) 28%, transparent);
+}
+
+.practice-hero .hero-title {
+  color: var(--practice-color);
+}
+
+.practice-kicker,
+.practice-date,
+.practice-section-eyebrow,
+.practice-origin-kicker,
+.practice-closing > span {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.practice-kicker,
+.practice-section-eyebrow,
+.practice-origin-kicker,
+.practice-closing > span {
+  color: var(--practice-bright);
+}
+
+.practice-date {
+  margin-top: 18px;
+  color: var(--color-text-muted);
+}
+
+.practice-hero .hero-descriptor {
+  margin: 0;
+}
+
+.practice-loading,
+.practice-error {
+  padding: 48px 0;
+  color: var(--color-body);
+}
+
+.practice-error h2 {
+  margin-bottom: 12px;
+  color: var(--practice-color);
+}
+
+.practice-error a {
+  display: inline-block;
+  margin-top: 20px;
+  color: var(--practice-bright);
+  text-decoration: underline;
+  text-decoration-thickness: 5px;
+  text-underline-offset: 6px;
+}
+
+.practice-lead-media {
+  display: grid;
+  grid-template-columns: minmax(0, 0.76fr) minmax(220px, 0.24fr);
+  gap: var(--practice-gap);
+  align-items: end;
+  margin: clamp(48px, 8vw, 96px) 0;
+}
+
+.practice-lead-media img,
+.practice-section-media img,
+.practice-origin-media img,
+.practice-section-media video {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #080808;
+  border: var(--practice-rule) solid color-mix(in srgb, var(--practice-color) 35%, transparent);
+}
+
+.practice-lead-media img {
+  max-height: min(78vh, 900px);
+  object-fit: contain;
+}
+
+.practice-lead-media figcaption,
+.practice-section-media figcaption,
+.practice-origin-meta,
+.practice-video-description {
+  color: var(--color-text-muted);
+  font-family: var(--font-serif);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.practice-sections {
+  display: grid;
+  gap: 0;
+}
+
+.practice-section {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.32fr) minmax(0, 0.68fr);
+  gap: clamp(28px, 6vw, 88px);
+  padding: clamp(48px, 8vw, 96px) 0;
+  border-top: var(--practice-rule) solid color-mix(in srgb, var(--practice-color) 22%, transparent);
+}
+
+.practice-section:first-child {
+  border-top: 0;
+}
+
+.practice-section h2 {
+  max-width: 720px;
+  margin: 10px 0 22px;
+  color: var(--color-body);
+  font-family: var(--font-display);
+  font-size: clamp(30px, 5vw, 64px);
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+}
+
+.practice-section-copy > p {
+  max-width: 720px;
+  color: var(--color-body);
+  font-family: var(--font-serif);
+  font-size: clamp(17px, 2vw, 22px);
+  line-height: 1.75;
+}
+
+.practice-section-media,
+.practice-origin-card {
+  margin-top: clamp(30px, 5vw, 64px);
+}
+
+.practice-section-media video {
+  max-height: 820px;
+  object-fit: contain;
+}
+
+.practice-section-media figcaption,
+.practice-video-description {
+  margin-top: 12px;
+}
+
+.practice-origin-card {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.45fr) minmax(0, 0.55fr);
+  gap: var(--practice-gap);
+  align-items: end;
+  padding: var(--practice-gap);
+  border: var(--practice-rule) solid color-mix(in srgb, var(--practice-color) 42%, transparent);
+}
+
+.practice-origin-title {
+  margin: 10px 0 14px;
+  color: var(--color-body);
+  font-family: var(--font-display);
+  font-size: clamp(24px, 4vw, 44px);
+  font-weight: 900;
+  line-height: 0.98;
+}
+
+.practice-origin-meta {
+  margin-bottom: 18px;
+}
+
+.practice-origin-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.practice-origin-status span {
+  padding: 8px 10px;
+  border: var(--practice-rule) solid color-mix(in srgb, var(--practice-color) 32%, transparent);
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.practice-origin-link,
+.practice-wayfinding a {
+  color: var(--practice-bright);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.practice-origin-link::after {
+  content: " →";
+}
+
+.practice-closing {
+  margin: clamp(24px, 5vw, 64px) 0 clamp(64px, 10vw, 128px);
+  padding: clamp(28px, 5vw, 64px);
+  border: var(--practice-rule) solid var(--practice-color);
+}
+
+.practice-closing p {
+  max-width: 880px;
+  margin-top: 18px;
+  color: var(--color-body);
+  font-family: var(--font-serif);
+  font-size: clamp(22px, 4vw, 46px);
+  line-height: 1.3;
+}
+
+.practice-wayfinding {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  padding: 28px 0;
+  border-top: var(--practice-rule) solid color-mix(in srgb, var(--practice-color) 28%, transparent);
+}
+
+@media (max-width: 800px) {
+  .practice-hero,
+  .practice-section,
+  .practice-lead-media,
+  .practice-origin-card {
+    grid-template-columns: 1fr;
+  }
+
+  .practice-hero {
+    align-items: start;
+  }
+
+  .practice-lead-media {
+    align-items: start;
+  }
+
+  .practice-lead-media img,
+  .practice-section-media video {
+    max-height: none;
+  }
+}
+
+@media (max-width: 390px) {
+  .practice-section {
+    padding: 44px 0;
+  }
+
+  .practice-origin-card,
+  .practice-closing {
+    padding: 14px;
+  }
+
+  .practice-wayfinding {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .archive-practice-page *,
+  .archive-practice-page *::before,
+  .archive-practice-page *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

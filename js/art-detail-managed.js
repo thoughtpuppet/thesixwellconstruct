@@ -118,6 +118,32 @@
       : { action: label, href: "", disabled: true });
   }
 
+  function renderWhereabouts(record) {
+    const rows = document.querySelector(".availability-rows");
+    if (!rows) return;
+    let row = rows.querySelector("[data-art-whereabouts-row]");
+    if (!row) {
+      row = document.createElement("div");
+      row.className = "avail-row";
+      row.dataset.artWhereaboutsRow = "";
+      const left = document.createElement("div");
+      left.className = "avail-left";
+      const label = document.createElement("span");
+      label.className = "avail-label";
+      label.textContent = "whereabouts";
+      const status = document.createElement("span");
+      status.className = "avail-status unknown";
+      status.dataset.artWhereaboutsStatus = "";
+      left.append(label, status);
+      row.append(left);
+      rows.append(row);
+    }
+    const unknown = record.whereabouts_status === "unknown";
+    row.hidden = !unknown;
+    const status = row.querySelector("[data-art-whereabouts-status]");
+    if (status) status.textContent = unknown ? "unknown" : "";
+  }
+
   function renderPrintState(result) {
     const row = document.querySelector("[data-art-print-row]");
     if (!row) return;
@@ -352,6 +378,7 @@
     renderMeta(record);
     renderStatement(record);
     renderOriginalAvailability(record);
+    renderWhereabouts(record);
     mountConnections(record.id);
     setManagedState("");
     await loadPrint(record);

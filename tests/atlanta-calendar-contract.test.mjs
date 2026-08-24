@@ -2164,6 +2164,64 @@ test("migration 0159 consolidates five published creative-music records into fou
   assert.match(angelaFeed, /RELATED-TO;RELTYPE=PARENT:/);
 });
 
+test("Studio renders offset-aware event instants as Atlanta-local datetime controls", () => {
+  const source = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const start = source.indexOf("function calendarControlValue");
+  const end = source.indexOf("function timeZoneOffset", start);
+  assert.ok(start >= 0 && end > start);
+  const calendarControlValue = Function(`${source.slice(start, end)}; return calendarControlValue;`)();
+  assert.equal(calendarControlValue("timed","2026-09-08T00:00:00Z","America/New_York"), "2026-09-07T20:00");
+  assert.equal(calendarControlValue("timed","2026-09-07T20:00:00-04:00","America/New_York"), "2026-09-07T20:00");
+  assert.equal(calendarControlValue("all_day","2026-09-07","America/New_York"), "2026-09-07");
+});
+
+test("migration 0170 restores corrupted Monday Night occurrences and advances public sequences", () => {
+  const db = databaseThrough("0169_calendar_exhibition_visiting_hours.sql");
+  const candidateId = "cal_candidate_eyedrum_anniversary";
+  const occurrenceId = "cal_occurrence_mncm_angela_20260921";
+  db.exec(`
+    UPDATE calendar_candidates
+    SET status='published', public_entry_id='cal_entry_mncm_repair', starts_at='2026-09-14', ends_at='2026-09-22'
+    WHERE id='${candidateId}';
+    UPDATE calendar_candidate_occurrences
+    SET starts_at='2026-09-22T00:00:00-04:00', ends_at='2026-09-22T02:30:00-04:00'
+    WHERE id='${occurrenceId}';
+    INSERT INTO calendar_entries
+      (id,candidate_id,uid,sequence,status,source_url,title,starts_at,ends_at,published_at,last_modified_at)
+    VALUES
+      ('cal_entry_mncm_repair','${candidateId}','uid-mncm-repair',7,'published','https://www.eyedrum.org/calendar-events-performances-art-music',
+       'Monday Night Creative Music','2026-09-14','2026-09-22',datetime('now'),datetime('now'));
+    INSERT INTO calendar_entry_occurrences
+      (id,entry_id,candidate_occurrence_id,uid,sequence,status,occurrence_type,title,factual_description,date_kind,
+       starts_at,ends_at,timezone,venue_name,venue_address,source_url,ticket_url,published_at,last_modified_at)
+    SELECT
+      'cal_entry_occurrence_mncm_repair','cal_entry_mncm_repair',id,'uid-mncm-occurrence-repair',2,'published',occurrence_type,
+      'Monday Night Creative Music — ' || title,factual_description,date_kind,starts_at,ends_at,timezone,venue_name,venue_address,
+      source_url,ticket_url,datetime('now'),datetime('now')
+    FROM calendar_candidate_occurrences
+    WHERE id='${occurrenceId}';
+  `);
+
+  db.exec(readFileSync(join(ROOT,"migrations","0170_calendar_monday_night_local_times.sql"),"utf8"));
+
+  assert.deepEqual(
+    { ...db.prepare("SELECT starts_at,ends_at FROM calendar_candidate_occurrences WHERE id=?").get(occurrenceId) },
+    { starts_at:"2026-09-21T20:00:00-04:00", ends_at:"2026-09-21T22:30:00-04:00" },
+  );
+  assert.deepEqual(
+    { ...db.prepare("SELECT starts_at,ends_at,sequence FROM calendar_entry_occurrences WHERE candidate_occurrence_id=?").get(occurrenceId) },
+    { starts_at:"2026-09-21T20:00:00-04:00", ends_at:"2026-09-21T22:30:00-04:00", sequence:3 },
+  );
+  assert.deepEqual(
+    { ...db.prepare("SELECT starts_at,ends_at FROM calendar_candidates WHERE id=?").get(candidateId) },
+    { starts_at:"2026-09-14", ends_at:"2026-09-21" },
+  );
+  assert.deepEqual(
+    { ...db.prepare("SELECT starts_at,ends_at,sequence FROM calendar_entries WHERE candidate_id=?").get(candidateId) },
+    { starts_at:"2026-09-14", ends_at:"2026-09-21", sequence:8 },
+  );
+});
+
 test("new generic sources can recover rendered event cards through bounded dynamic extraction", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0");

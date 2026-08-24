@@ -44,10 +44,10 @@
     designs:{endpoint:"tattoo-designs",title:"Tattoo Designs",description:"Canonical commissioned and non-Flash designs. Public presentation happens only through a deliberately published Archive dossier; connect a finished tattoo with the controlled Realized as relationship.",fields:["title","slug","description","design_type","state","sort_order"]},
     symbols:{endpoint:"legend",title:"Legend Symbols",description:"One canonical identity with inherited, lived, and reoriented meanings; visual translations; documented appearances; and relationships that supply other Construct systems.",symbolEditor:true,originThreads:true,fields:["name","slug","meaning","category_id","state","themes_json","context_json","applications_json","variants_json","examples_json","build_guidance_json","svg_markup","sort_order"]},
     categories:{endpoint:"legend/categories",title:"Legend Categories",description:"Ordered groupings that organize symbols without limiting where they may be used.",fields:["name","slug","description","state","sort_order"]},
-    works:{endpoint:"art",title:"Art Works",description:"Upload artwork, manage its metadata, control public acquisition eligibility, and declare whether a future print is planned.",mediaUpload:"artwork",originThreads:true,fields:["title","slug","statement","year","medium","dimensions","availability","acquisition_eligible","print_intent","state","legacy_path","sort_order"]},
+    works:{endpoint:"art",title:"Art Works",description:"Upload artwork, manage its metadata, control public acquisition eligibility and physical whereabouts, and declare whether a future print is planned.",mediaUpload:"artwork",originThreads:true,fields:["title","slug","statement","year","medium","dimensions","availability","whereabouts_status","acquisition_eligible","print_intent","state","legacy_path","sort_order"]},
     products:{endpoint:"merch",title:"Merch Products",description:"Studio owns product identity, publication, Coming Soon pages, and launch alerts. Shopify supplies commerce only after connection.",merchEditor:true,fields:["slug","shopify_handle","title","product_type","state","availability_state","source_venture","catalog_number","statement","description","edition_text","shipping_note","price_note","image_url","alt_text","origin_title","origin_path","origin_thumb","origin_meta","options_json","notify_enabled","sort_order"]},
     appearances:{endpoint:"appearances",title:"Exhibitions & Appearances",description:"Edit the public appearance, participation roles, hosts, venue, paintings, merchandise, and reverse connections together. Editorial changes save through Studio with revision history; migrations are reserved for structure.",fields:["title","slug","summary","description","starts_at","ends_at","timezone","lifecycle_status","formats_json","participation_roles_json","ticket_url","source_url","state","sort_order"]},
-    records:{endpoint:"archive",title:"Archive Records",description:"One record layer for public rooms and private drafts.",fields:["title","slug","node_label","record_type","room","date_or_period","timeline_period","summary","body","record_status","state","why_it_matters","sort_order"]},
+    records:{endpoint:"archive",title:"Archive Records",description:"One record layer for public rooms, authored practice pages, and private drafts.",practiceEditor:true,fields:["title","slug","node_label","record_type","room","date_or_period","timeline_period","summary","body","practice_sections_json","record_status","state","why_it_matters","sort_order"]},
     collections:{endpoint:"archive-collections",title:"Archive Collections",description:"Named, ordered groupings of archive records.",fields:["name","slug","description","state","sort_order"]},
     people:{endpoint:"people",title:"People",description:"Privacy-aware identities linked to public records only when approved.",fields:["name","slug","bio","privacy","state"]},
     organizations:{endpoint:"organizations",title:"Organizations",description:"Reusable studios, companies, presenters, collectives, and brands with public website and social links.",fields:["name","slug","organization_type","description","website_url","social_url","state"]},
@@ -203,9 +203,9 @@
   }
 
   function field(name,value){
-    const choices={process_category:[["standard","Standard"],["experimental","Experimental"]],session_category:[["artist_review","Artist review"],["one_session","One session"],["multiple_sessions","Multiple sessions"]],split_policy:[["artist_review","Artist review"],["required","Splitting required"],["client_choice","Client choice after estimate"],["not_available","Splitting unavailable"]],print_intent:[["unavailable","Unavailable"],["planned","Future print planned"]]};
+    const choices={process_category:[["standard","Standard"],["experimental","Experimental"]],session_category:[["artist_review","Artist review"],["one_session","One session"],["multiple_sessions","Multiple sessions"]],split_policy:[["artist_review","Artist review"],["required","Splitting required"],["client_choice","Client choice after estimate"],["not_available","Splitting unavailable"]],print_intent:[["unavailable","Unavailable"],["planned","Future print planned"]],whereabouts_status:[["known","Known"],["unknown","Unknown"]]};
     const long=/description|statement|meaning|body|notes|note|svg|json|bio/.test(name),numeric=/sort_order|claimable|eligible|enabled|estimated_sessions|estimated_total_minutes/.test(name),label=esc(name==="print_intent"?"Print plan":name.replace(/_/g," "));
-    if(choices[name])return `<label>${label}<select name="${name}">${choices[name].map(([option,labelText])=>`<option value="${option}" ${String(value||"unavailable")===option?"selected":""}>${labelText}</option>`).join("")}</select>${name==="print_intent"?'<span class="cm-field-note">This records intent only. A public connected Merch print uses live Shopify availability.</span>':""}</label>`;
+    if(choices[name]){const fallback=name==="whereabouts_status"?"known":"unavailable";return `<label>${label}<select name="${name}">${choices[name].map(([option,labelText])=>`<option value="${option}" ${String(value||fallback)===option?"selected":""}>${labelText}</option>`).join("")}</select>${name==="print_intent"?'<span class="cm-field-note">This records intent only. A public connected Merch print uses live Shopify availability.</span>':name==="whereabouts_status"?'<span class="cm-field-note">Physical location is separate from sale availability.</span>':""}</label>`}
     return `<label class="${long?"wide":""}">${label}${long?`<textarea name="${name}">${esc(value)}</textarea>`:`<input name="${name}" ${numeric?'type="number" min="0" step="1" inputmode="numeric"':''} value="${esc(value)}">`}</label>`
   }
 
@@ -320,15 +320,62 @@
       </div><div class="cm-actions"><button class="button" type="submit">Save symbol</button><span class="cm-upload-status" data-symbol-status aria-live="polite"></span></div></form></section>`
   }
 
+  function practiceSectionRow(section={},index=0){
+    const mediaRole=section.mediaRole||section.media_role||"";
+    return `<article class="cm-layer-row cm-practice-section" data-practice-section>
+      <div class="cm-layer-fields">
+        <label>Section ID<input data-practice-field="id" value="${esc(section.id||`section-${index+1}`)}" required></label>
+        <label>Eyebrow<input data-practice-field="eyebrow" value="${esc(section.eyebrow||"")}" placeholder="01 · Origin"></label>
+        <label class="wide">Title<input data-practice-field="title" value="${esc(section.title||"")}" required></label>
+        <label class="wide">First-person text<textarea data-practice-field="body" required>${esc(section.body||"")}</textarea></label>
+        <label>Media placement<select data-practice-field="mediaRole">${[["","No media"],["origin-work","Connected origin work"],["primary","Primary process photograph"],["process-photo","Process photograph"],["process-video","Process video"]].map(([value,label])=>`<option value="${value}" ${mediaRole===value?"selected":""}>${label}</option>`).join("")}</select></label>
+      </div>
+      <div class="cm-actions"><button class="button" type="button" data-practice-move="up">Move up</button><button class="button" type="button" data-practice-move="down">Move down</button><button class="button danger-button" type="button" data-practice-remove>Remove</button></div>
+    </article>`
+  }
+
+  function practiceSectionsPanel(record={}){
+    const sections=parseList(record.practiceSections||record.practice_sections||record.practice_sections_json);
+    return `<section class="cm-symbol-section wide" data-practice-sections-panel><div class="cm-symbol-section-head"><div><span class="cm-section-index">Practice · Essay</span><h4>Ordered public sections</h4><p>These first-person sections are authoritative. Studio derives the searchable body from their order.</p></div><button class="button" type="button" data-practice-add>Add section</button></div><div class="cm-layer-list" data-practice-sections>${sections.map(practiceSectionRow).join("")}</div></section>`
+  }
+
+  function practiceMediaItem(media,index,total){
+    const video=String(media.mimeType||"").startsWith("video/"),alt=media.alt||media.alt_text_override||"",caption=media.caption||media.caption_override||"";
+    return `<figure class="cm-flash-media-item" data-practice-media="${esc(media.id)}">
+      <div class="cm-flash-media-preview">${video?'<div class="cm-empty">Process video</div>':`<img data-admin-media-preview="${esc(media.id)}" alt="${esc(alt)}">`}</div>
+      <figcaption><span class="cm-pill">${esc(media.role||"gallery")}</span><span>${esc(media.originalFilename||media.id)}</span></figcaption>
+      <label>Role<select data-practice-media-role>${[["primary","Primary photograph"],["process-photo","Process photograph"],["process-video","Process video"]].map(([value,label])=>`<option value="${value}" ${media.role===value?"selected":""}>${label}</option>`).join("")}</select></label>
+      <label>Alt text<input data-practice-media-alt value="${esc(alt)}" required></label>
+      <label>Caption<textarea data-practice-media-caption>${esc(caption)}</textarea></label>
+      <label class="cm-check-field"><input type="checkbox" data-practice-media-public ${media.public_visible?"checked":""}>Public</label>
+      <div class="cm-actions"><button class="button" type="button" data-practice-media-action="save">Save media</button><button class="button" type="button" data-practice-media-action="up" ${index===0?"disabled":""}>Up</button><button class="button" type="button" data-practice-media-action="down" ${index===total-1?"disabled":""}>Down</button><button class="button danger-button" type="button" data-practice-media-action="remove">Remove</button></div>
+    </figure>`
+  }
+
+  function practiceMediaPanel(record={}){
+    const media=Array.isArray(record.media)?record.media:[];
+    return `<section class="cm-flash-media wide" data-practice-media-panel><div class="cm-flash-media-head"><div><strong>Practice media</strong><p>Attach the primary process photograph and ordered process photographs or videos. Connected artwork stays on its canonical Art record.</p></div><span class="cm-pill">${media.length} asset${media.length===1?"":"s"}</span></div>${media.length?`<div class="cm-flash-media-grid">${media.map(practiceMediaItem).join("")}</div>`:'<p class="cm-flash-media-empty">No process media attached. A practice page cannot publish until it has a public primary photograph.</p>'}<label>Add process photographs or video<input type="file" name="practice_files" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" multiple><span class="cm-field-note">Images may be up to 15 MB. MP4 or WebM videos use the resumable uploader up to 2 GiB.</span></label><label>Default alt text<input name="practice_alt" value="${esc(record.title||"")}" placeholder="Describe the process media"></label><label>Default caption<textarea name="practice_caption" placeholder="Optional public process caption"></textarea></label><span class="cm-upload-status" data-practice-upload-status aria-live="polite"></span><button class="button danger-button" type="button" data-media-upload-cancel hidden>Cancel upload</button></section>`
+  }
+
+  function serializePracticeSections(form){
+    const sections=[...form.querySelectorAll("[data-practice-section]")].map((row,index)=>({id:String(row.querySelector('[data-practice-field="id"]')?.value||`section-${index+1}`).trim(),eyebrow:String(row.querySelector('[data-practice-field="eyebrow"]')?.value||"").trim(),title:String(row.querySelector('[data-practice-field="title"]')?.value||"").trim(),body:String(row.querySelector('[data-practice-field="body"]')?.value||"").trim(),mediaRole:String(row.querySelector('[data-practice-field="mediaRole"]')?.value||"").trim()}));
+    if(!sections.length)throw new Error("A practice page needs at least one authored section.");
+    if(sections.some(section=>!section.id||!section.title||!section.body))throw new Error("Every practice section needs an ID, title, and first-person text.");
+    if(new Set(sections.map(section=>section.id)).size!==sections.length)throw new Error("Practice section IDs must be unique.");
+    return sections
+  }
+
   function editor(config,record={},categories=[],styleOptions=[]){
     if(config.symbolEditor)return symbolEditor(record,categories);
+    const practice=Boolean(config.practiceEditor&&record.record_type==="practice");
     const existingMedia=(record.media||[]).map(media=>`<figure><img data-admin-media-preview="${esc(media.id)}" alt="${esc(media.alt||record.title||"")}"><figcaption>${esc(media.alt||"Attached artwork image")}</figcaption></figure>`).join("");
     const mediaFields=config.mediaUpload?`<div class="cm-artwork-media wide"><strong>Artwork images</strong>${existingMedia?`<div class="cm-artwork-previews">${existingMedia}</div>`:"<p>No images attached yet.</p>"}<label>Upload JPEG, PNG, or WebP<input type="file" name="artwork_files" accept="image/jpeg,image/png,image/webp" multiple></label><label>Image alt text<input name="artwork_alt" value="${esc(record.title||"")}" placeholder="Describe the artwork for screen readers"></label><span class="cm-upload-status" data-artwork-upload-status aria-live="polite"></span></div>`:"";
     const styleFields=config===configs.flash?styleSelector(record,styleOptions):"";
-    const fields=config.fields.map(name=>config.flashEditor?flashField(name,record[name]??(name==="state"?"draft":""),!record.id,record):config===configs.works?artworkField(name,record[name]??(name==="state"?"draft":""),record):config===configs.designs?tattooDesignField(name,record[name]??(name==="state"?"draft":"")):field(name,record[name]??(name==="state"?"draft":""))).join("");
+    const fields=config.fields.filter(name=>!(practice&&["body","practice_sections_json"].includes(name))).map(name=>config.flashEditor?flashField(name,record[name]??(name==="state"?"draft":""),!record.id,record):config===configs.works?artworkField(name,record[name]??(name==="state"?"draft":""),record):config===configs.designs?tattooDesignField(name,record[name]??(name==="state"?"draft":"")):field(name,record[name]??(name==="state"?"draft":""))).join("");
     const flashSheet=config.flashEditor?flashSheetPanel(record):"";
     const flashMedia=config.flashEditor?flashMediaPanel(record):"";
-    return `<section class="cm-editor ${config.flashEditor?"cm-flash-editor":""}" aria-label="${record.id?"Edit":"Create"} record"><div class="cm-row"><h3>${record.id?"Edit":"New"} ${esc(config.title)}</h3><button class="button" type="button" data-cancel>Close</button></div><form class="cm-form" data-editor data-id="${esc(record.id||"")}" data-original-state="${esc(record.state||"draft")}" data-original-item-type="${esc(record.item_type||"individual")}" data-media-count="${record.media?.length||0}" data-has-primary="${record.media?.some(media=>media.role==="primary")?"true":"false"}"><div class="cm-form-grid">${fields}${styleFields}${flashSheet}${flashMedia}${mediaFields}</div><div class="cm-actions"><button class="button" type="submit">${config.flashEditor?"Save Flash draft and artwork":config.mediaUpload?"Save artwork":"Save draft"}</button></div></form></section>`
+    const practiceFields=practice?`${practiceSectionsPanel(record)}${practiceMediaPanel(record)}`:"";
+    return `<section class="cm-editor ${config.flashEditor?"cm-flash-editor":""} ${practice?"cm-practice-editor":""}" aria-label="${record.id?"Edit":"Create"} record"><div class="cm-row"><h3>${record.id?"Edit":"New"} ${esc(config.title)}</h3><button class="button" type="button" data-cancel>Close</button></div><form class="cm-form" data-editor data-id="${esc(record.id||"")}" data-original-state="${esc(record.state||"draft")}" data-original-item-type="${esc(record.item_type||"individual")}" data-media-count="${record.media?.length||0}" data-has-primary="${record.media?.some(media=>media.role==="primary")?"true":"false"}" ${practice?'data-practice-editor="true"':""}><div class="cm-form-grid">${fields}${styleFields}${flashSheet}${flashMedia}${mediaFields}${practiceFields}</div><div class="cm-actions"><button class="button" type="submit">${config.flashEditor?"Save Flash draft and artwork":config.mediaUpload?"Save artwork":practice?"Save practice page":"Save draft"}</button></div></form></section>`
   }
 
   function renderFlashSheetRows(form){
@@ -548,6 +595,33 @@
   function validateArtworkImages(files){const allowed=new Set(["image/jpeg","image/png","image/webp"]);for(const file of files){if(!allowed.has(file.type))throw new Error(`${file.name}: use JPEG, PNG, or WebP`);if(file.size>15*1024*1024)throw new Error(`${file.name}: exceeds 15 MB`)}}
   async function uploadEntityImages(entityId,files,altText,existingCount,output){validateArtworkImages(files);for(let index=0;index<files.length;index++){const file=files[index];output.textContent=`Uploading ${index+1} of ${files.length}: ${file.name}`;const upload=new FormData();upload.append("file",file);upload.append("alt_text",altText);upload.append("privacy","public");upload.append("consent_status","granted");upload.append("public_presentation","inline");const uploaded=await api("/api/admin/media",{method:"POST",body:upload});await api(`/api/admin/entities/${encodeURIComponent(entityId)}/media`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({media_id:uploaded.record.id,role:existingCount+index===0?"primary":"gallery",sort_order:existingCount+index+1,public_visible:true,alt_text_override:altText})})}output.textContent=files.length?`${files.length} image${files.length===1?"":"s"} attached.`:""}
 
+  async function uploadPracticeMedia(entityId,files,{altText="",caption="",existing=[]}={},output){
+    const allowed=new Set(["image/jpeg","image/png","image/webp","video/mp4","video/webm"]);let hasPrimary=existing.some(media=>media.role==="primary");
+    for(let index=0;index<files.length;index++){
+      const file=files[index];if(!allowed.has(file.type))throw new Error(`${file.name}: use JPEG, PNG, WebP, MP4, or WebM`);if(file.type.startsWith("image/")&&file.size>15*1024*1024)throw new Error(`${file.name}: exceeds 15 MB`);
+      const video=file.type.startsWith("video/"),resolvedAlt=altText||`${document.querySelector('[data-practice-editor] [name="title"]')?.value||"Practice"} ${video?"process video":"process photograph"}`,role=video?"process-video":hasPrimary?"process-photo":"primary";
+      const mediaId=await uploadArchiveMaterialFile(file,{alt_text:resolvedAlt,public_description:caption,privacy:"public",consent_status:"not-required",transcript:"",transcript_status:"not-requested",transcript_language:"en",public_title:file.name,public_presentation:"inline"},output);
+      await api(`/api/admin/entities/${encodeURIComponent(entityId)}/media`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({media_id:mediaId,role,sort_order:existing.length+index+1,public_visible:true,alt_text_override:resolvedAlt,caption_override:caption})});
+      if(role==="primary")hasPrimary=true
+    }
+    output.textContent=files.length?`${files.length} practice asset${files.length===1?"":"s"} attached.`:""
+  }
+
+  async function handlePracticeMediaAction(button,record){
+    const item=button.closest("[data-practice-media]"),mediaId=item?.dataset.practiceMedia,action=button.dataset.practiceMediaAction;if(!mediaId||!record?.id)return false;
+    const endpoint=`/api/admin/entities/${encodeURIComponent(record.id)}/media/${encodeURIComponent(mediaId)}`;
+    if(action==="save"){
+      const role=item.querySelector("[data-practice-media-role]")?.value||"process-photo";
+      if(role==="primary")for(const media of record.media||[])if(media.id!==mediaId&&media.role==="primary")await api(`/api/admin/entities/${encodeURIComponent(record.id)}/media/${encodeURIComponent(media.id)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({role:"process-photo"})});
+      await api(endpoint,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({role,public_visible:Boolean(item.querySelector("[data-practice-media-public]")?.checked),alt_text_override:item.querySelector("[data-practice-media-alt]")?.value||"",caption_override:item.querySelector("[data-practice-media-caption]")?.value||""})})
+    }else if(action==="remove"){
+      if(!confirm("Remove this asset from the practice record? The stored media remains recoverable."))return false;await api(endpoint,{method:"DELETE"})
+    }else if(action==="up"||action==="down"){
+      const ordered=[...(record.media||[])],from=ordered.findIndex(media=>media.id===mediaId),to=action==="up"?from-1:from+1;if(from<0||to<0||to>=ordered.length)return false;[ordered[from],ordered[to]]=[ordered[to],ordered[from]];for(const [index,media] of ordered.entries())await api(`/api/admin/entities/${encodeURIComponent(record.id)}/media/${encodeURIComponent(media.id)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({sort_order:index+1})})
+    }else return false;
+    return true
+  }
+
   async function uploadLegendVariantImages(form,entityId,output){
     const pending=pendingLegendVariantImages(form);if(!pending.length)return;
     if(!entityId)throw new Error("Save the Legend symbol before attaching variant images.");
@@ -597,6 +671,15 @@
         try{if(await handleFlashMediaAction(mediaAction,record)){status("Flash media updated");return renderResource("flash")}}catch(error){status(error.message);const output=form?.querySelector("[data-flash-upload-status]");if(output)output.textContent=error.message}
         return
       }
+      const practiceMediaAction=event.target.closest("[data-practice-media-action]");
+      if(practiceMediaAction&&config.practiceEditor){
+        const form=practiceMediaAction.closest("[data-editor]"),record=records.find(item=>item.id===form?.dataset.id);
+        try{if(await handlePracticeMediaAction(practiceMediaAction,record)){status("Practice media updated");return renderResource("records")}}catch(error){status(error.message);const output=form?.querySelector("[data-practice-upload-status]");if(output)output.textContent=error.message}
+        return
+      }
+      const practiceAdd=event.target.closest("[data-practice-add]");if(practiceAdd){const list=practiceAdd.closest("[data-practice-sections-panel]")?.querySelector("[data-practice-sections]");if(list){list.insertAdjacentHTML("beforeend",practiceSectionRow({},list.children.length));list.lastElementChild.querySelector("input")?.focus()}return}
+      const practiceRemove=event.target.closest("[data-practice-remove]");if(practiceRemove){practiceRemove.closest("[data-practice-section]")?.remove();return}
+      const practiceMove=event.target.closest("[data-practice-move]");if(practiceMove){const row=practiceMove.closest("[data-practice-section]"),sibling=practiceMove.dataset.practiceMove==="up"?row?.previousElementSibling:row?.nextElementSibling;if(row&&sibling)practiceMove.dataset.practiceMove==="up"?row.parentNode.insertBefore(row,sibling):row.parentNode.insertBefore(sibling,row);return}
       const edit=event.target.closest("[data-edit]"),fresh=event.target.closest("[data-new]");
       if(edit||fresh){
         const selected=edit?records.find(record=>record.id===edit.dataset.edit):{};
@@ -629,11 +712,11 @@
         status("Bulk Flash draft pass complete");return
       }
       const form=event.target.closest("[data-editor]");if(!form)return;event.preventDefault();
-      const formData=new FormData(form),files=[...(form.querySelector('[name="artwork_files"]')?.files||[])],flashFiles=[...(form.querySelector('[name="flash_files"]')?.files||[])],altText=String(formData.get("artwork_alt")||formData.get("flash_alt")||formData.get("title")||"").trim();formData.delete("artwork_files");formData.delete("artwork_alt");formData.delete("flash_files");formData.delete("flash_alt");
+      const formData=new FormData(form),files=[...(form.querySelector('[name="artwork_files"]')?.files||[])],flashFiles=[...(form.querySelector('[name="flash_files"]')?.files||[])],practiceFiles=[...(form.querySelector('[name="practice_files"]')?.files||[])],practiceAlt=String(formData.get("practice_alt")||"").trim(),practiceCaption=String(formData.get("practice_caption")||"").trim(),altText=String(formData.get("artwork_alt")||formData.get("flash_alt")||formData.get("title")||"").trim();formData.delete("artwork_files");formData.delete("artwork_alt");formData.delete("flash_files");formData.delete("flash_alt");formData.delete("practice_files");formData.delete("practice_alt");formData.delete("practice_caption");
       const pendingVariantUploads=config.symbolEditor?pendingLegendVariantImages(form):[];
-      let values,sheetPayload=null;try{pendingVariantUploads.forEach(item=>validateLegendVariantImage(item.file));values=config.symbolEditor?serializeSymbol(form,{allowPendingVariantImages:true}):Object.fromEntries(formData);if(config===configs.flash){values.styles=selectedStyles(form);if(values.item_type==="sheet"){sheetPayload=sheetDesignPayload(form);if((values.state||"draft")!=="draft"&&sheetPayload.designs.some(design=>!design.label))throw new Error("Every sheet design needs a label before publishing.")}}}catch(error){const output=form.querySelector("[data-symbol-status]")||form.querySelector("[data-flash-upload-status]");if(output)output.textContent=error.message;status(error.message);return}
+      let values,sheetPayload=null;try{pendingVariantUploads.forEach(item=>validateLegendVariantImage(item.file));values=config.symbolEditor?serializeSymbol(form,{allowPendingVariantImages:true}):Object.fromEntries(formData);if(form.dataset.practiceEditor==="true"){const sections=serializePracticeSections(form);values.practice_sections_json=sections;values.body=sections.map(section=>section.body).join("\n\n")}if(config===configs.flash){values.styles=selectedStyles(form);if(values.item_type==="sheet"){sheetPayload=sheetDesignPayload(form);if((values.state||"draft")!=="draft"&&sheetPayload.designs.some(design=>!design.label))throw new Error("Every sheet design needs a label before publishing.")}}}catch(error){const output=form.querySelector("[data-symbol-status]")||form.querySelector("[data-flash-upload-status]")||form.querySelector("[data-practice-upload-status]");if(output)output.textContent=error.message;status(error.message);return}
       if("state" in values&&!values.state)values.state="draft";for(const key of ["sort_order","claimable","acquisition_eligible","homepage_enabled"])if(key in values)values[key]=Number(values[key])||0;
-      const recordId=form.dataset.id,submit=form.querySelector('[type="submit"]'),output=form.querySelector("[data-flash-upload-status]")||form.querySelector("[data-artwork-upload-status]")||form.querySelector("[data-symbol-status]");submit.disabled=true;
+      const recordId=form.dataset.id,submit=form.querySelector('[type="submit"]'),output=form.querySelector("[data-flash-upload-status]")||form.querySelector("[data-artwork-upload-status]")||form.querySelector("[data-practice-upload-status]")||form.querySelector("[data-symbol-status]");submit.disabled=true;
       try{
         validateArtworkImages(files);validateFlashImages(flashFiles);
         let entityId=recordId;
@@ -653,6 +736,14 @@
           if(files.length)await uploadEntityImages(entityId,files,altText||values.title||"Artwork",Number(form.dataset.mediaCount)||0,output);
           if((isNew&&desiredState!=="draft")||needsMediaStage)await api(`/api/admin/art/${encodeURIComponent(entityId)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(values)});
           status(files.length?"Artwork and images saved":recordId?"Artwork saved":"Artwork draft created");return renderResource("works")
+        }
+        if(config===configs.records&&form.dataset.practiceEditor==="true"){
+          const desiredState=values.state||"draft",isNew=!entityId,needsMediaStage=desiredState==="published"&&practiceFiles.length>0&&form.dataset.hasPrimary!=="true";
+          const saved=await api(`/api/admin/archive${entityId?`/${encodeURIComponent(entityId)}`:""}`,{method:entityId?"PATCH":"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...values,state:isNew||needsMediaStage?"draft":desiredState})});
+          entityId=entityId||saved.record?.id;if(!entityId)throw new Error("Practice draft was created without an entity ID.");form.dataset.id=entityId;
+          if(practiceFiles.length)await uploadPracticeMedia(entityId,practiceFiles,{altText:practiceAlt,caption:practiceCaption,existing:records.find(item=>item.id===entityId)?.media||[]},output);
+          if((isNew&&desiredState!=="draft")||needsMediaStage)await api(`/api/admin/archive/${encodeURIComponent(entityId)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(values)});
+          status(practiceFiles.length?"Practice page and media saved":recordId?"Practice page saved":"Practice draft created");return renderResource("records")
         }
         if(config.symbolEditor&&pendingVariantUploads.length&&!entityId){
           if(output)output.textContent="Creating a draft before uploading variant images…";

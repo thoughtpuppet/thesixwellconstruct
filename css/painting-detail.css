@@ -590,6 +590,10 @@
   display: none !important;
 }
 
+.painting-detail-page .avail-status.unknown {
+  color: var(--painting-text-muted);
+}
+
 .painting-detail-page .art-detail-state {
   min-height: calc(100vh - 128px);
   display: grid;

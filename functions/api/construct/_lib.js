@@ -168,7 +168,31 @@ function normalizeRecord(config, body, existing = {}) {
   if (out.split_policy && !["artist_review","required","client_choice","not_available"].includes(out.split_policy)) throw new Error("Invalid split policy.");
   if (out.process_category && !["standard","experimental"].includes(out.process_category)) throw new Error("Invalid flash process category.");
   if (out.print_intent && !["unavailable","planned"].includes(out.print_intent)) throw new Error("Invalid print plan.");
+  if (out.whereabouts_status && !["known","unknown"].includes(out.whereabouts_status)) throw new Error("Invalid whereabouts status.");
   const merged = { ...existing, ...out };
+  if (config.entityType === "archive_record" && merged.record_type === "practice") {
+    const rawSections = "practice_sections_json" in out
+      ? legendArray(out.practice_sections_json, "Practice sections")
+      : parseJson(existing.practice_sections_json);
+    const sectionIds = new Set();
+    const sections = rawSections.slice(0, 12).map((entry, index) => {
+      const section = {
+        id: slug(entry?.id || entry?.title || `section-${index + 1}`),
+        eyebrow: text(entry?.eyebrow, 120),
+        title: text(entry?.title, 200),
+        body: text(entry?.body, 8000),
+        mediaRole: text(entry?.mediaRole ?? entry?.media_role, 60),
+      };
+      if (!section.id || sectionIds.has(section.id)) throw new Error("Every practice section needs a unique ID.");
+      if (!section.title || !section.body) throw new Error("Every practice section needs a title and body.");
+      sectionIds.add(section.id);
+      return section;
+    });
+    if ("practice_sections_json" in out) {
+      out.practice_sections_json = JSON.stringify(sections);
+      out.body = sections.map((section) => section.body).join("\n\n");
+    }
+  }
   for (const [minimum,maximum,label] of [["estimated_sessions_min","estimated_sessions_max","session count"],["estimated_total_minutes_min","estimated_total_minutes_max","total time"]]) {
     if (merged[minimum] !== null && merged[maximum] !== null && Number(merged[minimum]) > Number(merged[maximum])) throw new Error(`Minimum ${label} cannot exceed maximum.`);
   }
@@ -235,6 +259,13 @@ function legendCanonicalRoute(value) {
 
 function artCanonicalRoute(row = {}) {
   return row.legacy_path || `/art/${encodeURIComponent(String(row.slug || row.id || ""))}/`;
+}
+
+function archiveCanonicalRoute(row = {}) {
+  if (row.record_type === "practice" && String(row.room || "").toLowerCase() === "art") {
+    return `/archive/art/${encodeURIComponent(String(row.slug || row.id || ""))}/`;
+  }
+  return `/archive/?record=${encodeURIComponent(String(row.slug || row.id || ""))}`;
 }
 
 const ART_RESERVED_SLUGS = new Set(["acquisitioninquiry", "detail", "index"]);
@@ -326,6 +357,18 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
       const canonicalRoute = artCanonicalRoute(row);
       return {
         ...record,
+        canonicalRoute,
+        canonical_route: canonicalRoute,
+      };
+    }
+    if (resource === "archive") {
+      const practiceSections = row.record_type === "practice" ? parseJson(row.practice_sections_json) : [];
+      const canonicalRoute = archiveCanonicalRoute(row);
+      delete record.practice_sections_json;
+      return {
+        ...record,
+        practiceSections,
+        practice_sections: practiceSections,
         canonicalRoute,
         canonical_route: canonicalRoute,
       };
@@ -2144,7 +2187,7 @@ function searchDocument(resource, row) {
     };
   }
   if (resource === "art") return { ...common, node_id: "art", summary: row.statement || "", date_label: row.year || "", route: artCanonicalRoute(row) };
-  if (resource === "archive") return { ...common, node_id: "archive", summary: row.summary || "", body: row.body || "", date_label: row.date_or_period || "", route: `/archive/?record=${encodeURIComponent(row.slug || row.id)}` };
+  if (resource === "archive") return { ...common, node_id: "archive", summary: row.summary || "", body: row.body || "", date_label: row.date_or_period || "", route: archiveCanonicalRoute(row) };
   if (resource === "appearances") return { ...common, node_id: "about", summary: row.summary || "", body: row.description || "", date_label: row.starts_at || "", route: `/about/exhibitions-appearances/${encodeURIComponent(row.slug || row.id)}/` };
   if (resource === "visual-language") {
     const context = parseJson(row.context_json, {});
@@ -2264,7 +2307,7 @@ async function adminList(env, resource) {
     : [];
   const publicationById = new Map(publicationRows.map((row) => [row.id, row.public_at || ""]));
   const [media, tattooStyles, flashSheetDesigns] = await Promise.all([
-    resource === "flash" || resource === "art" ? adminEntityMedia(database, entityIds) : entityMedia(database, entityIds),
+    resource === "flash" || resource === "art" || resource === "archive" ? adminEntityMedia(database, entityIds) : entityMedia(database, entityIds),
     resource === "flash" ? loadTattooStyleAssignments(database, entityIds) : Promise.resolve(new Map()),
     resource === "flash" ? loadFlashSheetDesigns(database, entityIds, { admin: true }) : Promise.resolve(new Map()),
   ]);
@@ -2279,6 +2322,12 @@ async function adminList(env, resource) {
         public_at: publicationById.get(row.id) || "",
         published_once: Boolean(publicationById.get(row.id)),
       } : {}),
+      ...(resource === "archive" ? {
+        practiceSections: row.record_type === "practice" ? parseJson(row.practice_sections_json) : [],
+        practice_sections: row.record_type === "practice" ? parseJson(row.practice_sections_json) : [],
+        canonicalRoute: archiveCanonicalRoute(row),
+        canonical_route: archiveCanonicalRoute(row),
+      } : {}),
       media: media.get(row.id) || [],
     })),
     count: rows.length,
@@ -2292,6 +2341,10 @@ async function adminCreate(request, env, resource) {
   let styleSelection = [];
   if (resource === "art") {
     if ((values.state || "draft") !== "draft") return failure("New artwork must begin as Draft. Attach the primary image before publishing.", 409);
+    values.state = "draft";
+  }
+  if (resource === "archive" && values.record_type === "practice") {
+    if ((values.state || "draft") !== "draft") return failure("New practice pages must begin as drafts. Attach the primary process image before publishing.", 409);
     values.state = "draft";
   }
   if (resource === "flash") {
@@ -2381,6 +2434,15 @@ async function adminUpdate(request, env, resource, recordId, archive = false) {
     }
     if (!await artHasEligiblePrimary(database, recordId)) {
       return failure("Attach an eligible primary artwork image before publishing.", 409);
+    }
+  }
+  if (resource === "archive" && projected.state === "published" && projected.record_type === "practice") {
+    const sections = parseJson(projected.practice_sections_json);
+    if (!text(projected.title, 8000) || !text(projected.slug, 8000) || !text(projected.summary, 8000) || !Array.isArray(sections) || !sections.length) {
+      return failure("A practice page needs a title, slug, descriptor, and authored sections before publishing.", 409);
+    }
+    if (!await artHasEligiblePrimary(database, recordId)) {
+      return failure("Attach an eligible primary practice image before publishing.", 409);
     }
   }
   let managedSheetDesigns = [];
@@ -2901,7 +2963,9 @@ function entityDirectorySql(where="1=1"){
       WHEN 'portfolio_item' THEN '/tattoos/portfolio/?work='||pi.id
       WHEN 'merch_item' THEN mi.route
       WHEN 'visual_symbol' THEN '/about/legend/'||vs.slug||'/'
-      WHEN 'archive_record' THEN '/archive/?record='||ar.slug
+      WHEN 'archive_record' THEN CASE
+        WHEN ar.record_type='practice' AND lower(ar.room)='art' THEN '/archive/art/'||ar.slug||'/'
+        ELSE '/archive/?record='||ar.slug END
       WHEN 'archive_collection' THEN '/archive/?collection='||ac.slug
       WHEN 'archive_failed_experiment' THEN '/archive/failed-experiments/'||afe.slug||'/'
       WHEN 'construct_node' THEN own.route WHEN 'construct_pathway' THEN cp.route
@@ -3114,9 +3178,9 @@ function canonicalResource(resource){return resource==="legend"?"visual-language
 
 async function entityMediaApi(request,env,entityId,mediaId=""){
   const database=db(env);
-  const entity=await database.prepare("SELECT ce.entity_type,fi.state flash_state,afe.state failed_experiment_state FROM content_entities ce LEFT JOIN flash_items fi ON fi.id=ce.id AND ce.entity_type='flash_item' LEFT JOIN archive_failed_experiments afe ON afe.entity_id=ce.id AND ce.entity_type='archive_failed_experiment' WHERE ce.id=?").bind(entityId).first();
+  const entity=await database.prepare("SELECT ce.entity_type,fi.state flash_state,afe.state failed_experiment_state,ar.state archive_state,ar.record_type archive_record_type FROM content_entities ce LEFT JOIN flash_items fi ON fi.id=ce.id AND ce.entity_type='flash_item' LEFT JOIN archive_failed_experiments afe ON afe.entity_id=ce.id AND ce.entity_type='archive_failed_experiment' LEFT JOIN archive_records ar ON ar.id=ce.id AND ce.entity_type='archive_record' WHERE ce.id=?").bind(entityId).first();
   if(!entity)return failure("Entity not found.",404);
-  const isFlash=entity.entity_type==="flash_item",isMerch=entity.entity_type==="merch_item",isFailedExperiment=entity.entity_type==="archive_failed_experiment",managedPrimary=isFlash||isMerch;
+  const isFlash=entity.entity_type==="flash_item",isMerch=entity.entity_type==="merch_item",isFailedExperiment=entity.entity_type==="archive_failed_experiment",isPractice=entity.entity_type==="archive_record"&&entity.archive_record_type==="practice",managedPrimary=isFlash||isMerch;
   if(request.method==="GET"&&!mediaId){
     const rows=(await database.prepare(`SELECT em.*,m.original_filename,m.source_url,m.storage_key,m.mime_type,m.state media_state,
       COALESCE(NULLIF(em.alt_text_override,''),m.alt_text) alt_text,
@@ -3129,14 +3193,17 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
     const b=await readJson(request);if(!b?.media_id)return failure("media_id is required.");
     const role=text(b.role,60)||"gallery",publicVisible=b.public_visible?1:0;
     if(managedPrimary&&!["primary","gallery"].includes(role))return failure(`${isFlash?"Flash":"Merch"} media must be primary or gallery artwork.`);
+    if(isPractice&&!["primary","process-photo","process-video"].includes(role))return failure("Practice media must be a primary photograph, process photograph, or process video.");
     const mediaAsset=await database.prepare("SELECT *,state media_state,privacy media_privacy,consent_status media_consent_status,public_presentation media_presentation FROM media_assets WHERE id=?").bind(b.media_id).first();
     if(!mediaAsset)return failure("Media not found.",404);
+    if(isPractice&&((role==="process-video")!==String(mediaAsset.mime_type||"").startsWith("video/")))return failure(role==="process-video"?"The process-video role requires an MP4 or WebM file.":"Practice photographs require an image file.");
+    if(isPractice&&entity.archive_state==="published"&&role==="primary"&&!eligibleFlashMedia({...mediaAsset,public_visible:publicVisible}))return failure("A published practice page needs an eligible public primary photograph.",409);
     if(isFlash&&role==="primary"&&PUBLIC_FLASH_STATES.has(entity.flash_state)&&!eligibleFlashMedia({...mediaAsset,public_visible:publicVisible}))return failure("A published Flash design needs an eligible public primary image.",409);
     if(isFailedExperiment&&entity.failed_experiment_state==="published"&&publicVisible){const projected={...mediaAsset,public_visible:1,resolved_alt_text:text(b.alt_text_override??mediaAsset.alt_text,1000),resolved_caption:text(b.caption_override??mediaAsset.caption,3000)};if(!failedExperimentMediaEligible(projected)||!failedExperimentMediaAccessible(projected))return failure("Published experiment evidence must be eligible and accessible.",409)}
     const cover=role==="gallery"&&!publicVisible?await database.prepare("SELECT id FROM portfolio_items WHERE id=? AND state='published' AND cover_image_ref=?").bind(entityId,b.media_id).first():null;
     if(cover)return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);
     const statements=[];
-    if(managedPrimary&&role==="primary")statements.push(database.prepare("UPDATE entity_media SET role='gallery' WHERE entity_id=? AND role='primary' AND media_id<>?").bind(entityId,b.media_id));
+    if((managedPrimary||isPractice)&&role==="primary")statements.push(database.prepare(`UPDATE entity_media SET role=CASE WHEN ?=1 THEN 'process-photo' ELSE 'gallery' END WHERE entity_id=? AND role='primary' AND media_id<>?`).bind(isPractice?1:0,entityId,b.media_id));
     statements.push(database.prepare("INSERT OR REPLACE INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at) VALUES(?,?,?,?,?,?,?,datetime('now'))").bind(entityId,b.media_id,role,Number(b.sort_order)||0,publicVisible,text(b.alt_text_override,1000),text(b.caption_override,3000)));
     if(isMerch&&role==="primary")statements.push(database.prepare("UPDATE merch_items SET image_url=?,alt_text=?,updated_at=datetime('now') WHERE id=?")
       .bind(`/api/construct/entity-media/${encodeURIComponent(b.media_id)}`,text(b.alt_text_override||mediaAsset.alt_text,1000),entityId));
@@ -3161,6 +3228,12 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
       caption_override:Object.prototype.hasOwnProperty.call(b,"caption_override")?text(b.caption_override,3000):attachment.caption_override,
     };
     if(managedPrimary&&!["primary","gallery"].includes(next.role))return failure(`${isFlash?"Flash":"Merch"} media must be primary or gallery artwork.`);
+    if(isPractice&&!["primary","process-photo","process-video"].includes(next.role))return failure("Practice media must be a primary photograph, process photograph, or process video.");
+    if(isPractice&&((next.role==="process-video")!==String(next.mime_type||"").startsWith("video/")))return failure(next.role==="process-video"?"The process-video role requires an MP4 or WebM file.":"Practice photographs require an image file.");
+    if(isPractice&&entity.archive_state==="published"&&attachment.role==="primary"&&(next.role!=="primary"||!next.public_visible)){
+      const replacement=await database.prepare(`SELECT 1 ok FROM entity_media em JOIN media_assets m ON m.id=em.media_id WHERE em.entity_id=? AND em.media_id<>? AND em.role='primary' AND em.public_visible=1 AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline' AND m.mime_type LIKE 'image/%' LIMIT 1`).bind(entityId,mediaId).first();
+      if(!replacement)return failure("A published practice page must keep an eligible primary photograph.",409);
+    }
     if(isFailedExperiment&&entity.failed_experiment_state==="published"&&next.public_visible){
       const projected={...next,resolved_alt_text:text(next.alt_text_override||next.alt_text,1000),resolved_caption:text(next.caption_override||next.caption,3000)};
       if(!failedExperimentMediaEligible(projected)||!failedExperimentMediaAccessible(projected))return failure("Published experiment evidence must be eligible and accessible.",409);
@@ -3172,7 +3245,7 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
       if(!projected.some(row=>row.role==="primary"&&eligibleFlashMedia(row)))return failure("A published Flash design must keep an eligible primary image.",409);
     }
     const statements=[];
-    if(managedPrimary&&next.role==="primary")statements.push(database.prepare("UPDATE entity_media SET role='gallery' WHERE entity_id=? AND role='primary' AND media_id<>?").bind(entityId,mediaId));
+    if((managedPrimary||isPractice)&&next.role==="primary")statements.push(database.prepare(`UPDATE entity_media SET role=CASE WHEN ?=1 THEN 'process-photo' ELSE 'gallery' END WHERE entity_id=? AND role='primary' AND media_id<>?`).bind(isPractice?1:0,entityId,mediaId));
     statements.push(database.prepare("UPDATE entity_media SET role=?,sort_order=?,public_visible=?,alt_text_override=?,caption_override=? WHERE entity_id=? AND media_id=?")
       .bind(next.role,next.sort_order,next.public_visible,next.alt_text_override,next.caption_override,entityId,mediaId));
     if(isMerch&&next.role==="primary")statements.push(database.prepare("UPDATE merch_items SET image_url=?,alt_text=?,updated_at=datetime('now') WHERE id=?")
@@ -3182,6 +3255,7 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
     return json({record:await database.prepare("SELECT * FROM entity_media WHERE entity_id=? AND media_id=?").bind(entityId,mediaId).first()});
   }
   if(request.method==="DELETE"){
+    if(isPractice&&entity.archive_state==="published"&&attachment.role==="primary")return failure("Return the practice page to draft before removing its primary photograph.",409);
     const portfolioCover=attachment.role==="gallery"?await database.prepare("SELECT id FROM portfolio_items WHERE id=? AND state='published' AND cover_image_ref=?").bind(entityId,mediaId).first():null;
     if(portfolioCover)return failure("Unpublish this tattoo or choose another permitted result image before removing its cover.",409);
     let promoted=null;

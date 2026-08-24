@@ -1,29 +1,50 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Art Making Archive - the six.well construct</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
-<link rel="stylesheet" href="/css/tokens.css">
-<link rel="stylesheet" href="/css/transitions.css">
-<link rel="stylesheet" href="/css/venture-pages.css">
-<link rel="stylesheet" href="/css/site-typography.css">
-<link rel="stylesheet" href="/css/hero.css">
-<style>:root{--venture-color:var(--color-art);--venture-accent:var(--color-art);--venture-dim:var(--color-art-dim);--venture-wash:rgba(0,113,235,0.12);}</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Paintings, process fragments, support construction, and studio evidence in the Art Making Archive.">
+  <meta name="theme-color" content="#0e0e0e">
+  <title>Art Making Archive · the six.well construct</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/transitions.css">
+  <link rel="stylesheet" href="/css/archive-public.css">
+  <link rel="stylesheet" href="/css/site-typography.css">
+  <link rel="stylesheet" href="/css/hero.css">
+  <style>
+    :root{--archive-art-rule:5px;--archive-art-color:var(--color-art);}
+    html,body{background:var(--color-bg);}
+    .archive-art-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,380px);gap:clamp(32px,7vw,96px);align-items:end;padding:clamp(56px,9vw,112px) 0 clamp(48px,8vw,96px);border-bottom:var(--archive-art-rule) solid color-mix(in srgb,var(--archive-art-color) 28%,transparent);}
+    .archive-art-hero .hero-title{color:var(--archive-art-color);}
+    .archive-art-kicker,.archive-art-feature-kicker,.archive-art-section-kicker{display:block;color:var(--color-art-bright);font-family:var(--font-display);font-size:10px;font-weight:700;letter-spacing:.2em;line-height:1.5;text-transform:uppercase;}
+    .archive-art-feature{display:grid;grid-template-columns:minmax(220px,.38fr) minmax(0,.62fr);gap:16px;align-items:end;margin:clamp(48px,8vw,96px) 0;padding:16px;border:var(--archive-art-rule) solid color-mix(in srgb,var(--archive-art-color) 42%,transparent);}
+    .archive-art-feature-media{display:block;aspect-ratio:4/3;overflow:hidden;border:var(--archive-art-rule) solid color-mix(in srgb,var(--archive-art-color) 28%,transparent);}
+    .archive-art-feature-media[hidden]{display:none}.archive-art-feature-media img{width:100%;height:100%;display:block;object-fit:cover;}
+    .archive-art-feature h2{margin:10px 0 16px;color:var(--color-body);font-family:var(--font-display);font-size:clamp(30px,5vw,58px);font-weight:900;letter-spacing:-.04em;line-height:1;}
+    .archive-art-feature p{max-width:680px;color:var(--color-body);font-family:var(--font-serif);font-size:17px;line-height:1.7;}
+    .archive-art-feature-link{display:inline-flex;margin-top:24px;min-height:48px;align-items:center;padding:0 20px;border:var(--archive-art-rule) solid color-mix(in srgb,var(--archive-art-color) 40%,transparent);color:var(--color-art-bright);font-family:var(--font-display);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;}
+    .archive-art-context{display:grid;grid-template-columns:minmax(180px,.3fr) minmax(0,.7fr);gap:clamp(28px,6vw,80px);padding:clamp(48px,7vw,88px) 0;border-top:var(--archive-art-rule) solid color-mix(in srgb,var(--archive-art-color) 22%,transparent);}
+    .archive-art-context h2{margin-top:10px;color:var(--color-body);font-family:var(--font-display);font-size:clamp(28px,4vw,48px);font-weight:900;}
+    .archive-art-context p{max-width:700px;color:var(--color-body);font-family:var(--font-serif);font-size:17px;line-height:1.75;}
+    .archive-art-links{display:flex;flex-wrap:wrap;gap:12px 28px;margin-top:24px}.archive-art-links a{color:var(--color-art-bright);font-family:var(--font-display);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;}
+    @media(max-width:800px){.archive-art-hero,.archive-art-feature,.archive-art-context{grid-template-columns:1fr;align-items:start;}}
+  </style>
 </head>
-<body class="venture-page" data-venture="archive">
-<div class="venture-grain" aria-hidden="true"></div>
-<main class="venture-shell entrance-fade">
-  <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="page-title">
-    <div><span class="venture-kicker">archive node</span><h1 class="venture-title hero-title" id="page-title">Art Making Archive.</h1></div>
-    <div class="hero-copy"><p class="hero-lede hero-descriptor">Paintings, source studies, symbol systems, process fragments, and studio evidence.</p><p class="hero-note">The art archive preserves how the visual language forms before it becomes a finished public work.</p><div class="hero-actions"><a class="venture-link" href="/art/">art making</a><a class="venture-link" href="/archive/">archive root</a></div></div>
-  </section>
-  <section class="section"><header class="section-head"><div><span class="section-kicker">record</span><h2 class="section-title">Visual Source</h2></div><p class="section-copy">This room can hold studies, work-in-progress states, statements, references, and image traces that feed the wider construct.</p></header></section>
-  <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/home/">return to construct</a><a href="/archive/">archive</a></div></footer>
-</main>
-<script src="/js/archive-room-records.js"></script>
+<body class="archive-public" data-venture="archive" data-archive-medium="art">
+  <a class="archive-skip-link" href="#archive-art-main">Skip to the Art Making Archive</a>
+  <main class="archive-app entrance-fade" id="archive-art-main" tabindex="-1">
+    <nav class="construct-breadcrumb" aria-label="Breadcrumb"><a href="/home/">Construct</a><span class="construct-breadcrumb-sep" aria-hidden="true">/</span><a href="/archive/">Archive</a><span class="construct-breadcrumb-sep" aria-hidden="true">/</span><span class="construct-breadcrumb-current" aria-current="page">Art</span></nav>
+    <header class="archive-art-hero site-hero site-hero--supporting" aria-labelledby="archive-art-title"><div><span class="archive-art-kicker">Archive node</span><h1 class="hero-title" id="archive-art-title">Art Making Archive.</h1></div><p class="hero-descriptor">Paintings, source studies, symbol systems, process fragments, and studio evidence.</p></header>
+    <section class="archive-art-feature" data-practice-feature aria-labelledby="archive-art-practice-title"><a class="archive-art-feature-media" data-practice-feature-media href="/archive/art/making-the-canvas/" hidden><img data-practice-feature-image alt="" loading="lazy"></a><div><span class="archive-art-feature-kicker">Practice record · begun 2016</span><h2 id="archive-art-practice-title" data-practice-feature-title>Making the Canvas</h2><p data-practice-feature-summary>A painting begins before paint touches its surface.</p><a class="archive-art-feature-link" data-practice-feature-link href="/archive/art/making-the-canvas/">Open practice record</a></div></section>
+    <section class="archive-art-context" aria-labelledby="visual-source-title"><div><span class="archive-art-section-kicker">Record</span><h2 id="visual-source-title">Visual Source</h2></div><div><p>This room holds studies, work-in-progress states, statements, references, and image traces that feed the wider Construct. The practice record reveals labor that can disappear once a painting is finished.</p><nav class="archive-art-links" aria-label="Art Archive destinations"><a href="/archive/?medium=art#records">Search Art records</a><a href="/art/">View finished works</a></nav></div></section>
+  </main>
+  <footer class="archive-site-footer construct-wayfinding-footer"><p>© the six.well construct</p><nav aria-label="Footer"><a href="/archive/">Archive</a><a href="/art/">Art Making</a><a href="/home/">Return to construct</a></nav></footer>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+  <script src="/js/archive-practice-feature.js"></script>
 </body>
 </html>
