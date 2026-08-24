@@ -351,10 +351,6 @@
         <div><span class="archive-kicker">Public living archive</span><h1 class="hero-title" id="archive-title">${collectionsView ? "Collections." : "Archive."}</h1></div>
         <div class="archive-hero-copy"><p class="hero-descriptor">${collectionsView ? "Move through records gathered around a shared body of work, period, place, or question." : "A dynamic process documenting this creative ecosystem as its history unfolds."}</p></div>
       </section>
-      ${collectionsView ? "" : `<section class="archive-index-practice" data-practice-feature aria-labelledby="archive-index-practice-title">
-        <a class="archive-index-practice-media" data-practice-feature-media href="/archive/art/making-the-canvas/" hidden><img data-practice-feature-image alt="" loading="lazy"></a>
-        <div class="archive-index-practice-copy"><span class="archive-kicker">From Art Making · Practice record</span><h2 id="archive-index-practice-title" data-practice-feature-title>Making the Canvas</h2><p data-practice-feature-summary>A painting begins before paint touches its surface.</p><a class="archive-button" data-practice-feature-link href="/archive/art/making-the-canvas/">Open practice record</a></div>
-      </section>`}
       <section class="archive-origin-thread" data-origin-thread hidden></section>
       <section class="archive-search-panel" aria-label="Archive search and resources">
         <form class="archive-search-form" role="search" data-archive-search>
@@ -362,7 +358,7 @@
           <input id="archive-query" name="q" type="search" autocomplete="off" placeholder="Try a piece, material, person, symbol, or year">
           <button class="archive-search-button" type="submit">Search</button>
         </form>
-        ${collectionsView ? "" : '<nav class="archive-actions archive-search-actions" aria-label="Archive resources"><a class="archive-button" href="/archive/maze/">Maze Archive</a><a class="archive-button" href="/archive/failed-experiments/">Failed Experiments</a><a class="archive-button" href="/archive/colors-materials/">Colors &amp; Materials</a><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/blackboards/">View blackboards</a><a class="archive-button" href="/archive/compare/">Compare records</a></nav>'}
+        ${collectionsView ? "" : '<nav class="archive-actions archive-search-actions" aria-label="Archive resources"><a class="archive-button" href="/archive/maze/">Maze Archive</a><a class="archive-button" href="/archive/failed-experiments/">Failed Experiments</a><a class="archive-button" href="/archive/colors-materials/">Colors &amp; Materials</a><a class="archive-button" href="/archive/art/making-the-canvas/">Making the Canvas</a><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/blackboards/">View blackboards</a><a class="archive-button" href="/archive/compare/">Compare records</a></nav>'}
       </section>
       <section class="archive-explorer" aria-label="Archive explorer">
         <aside class="archive-filter-panel" aria-labelledby="archive-filter-title">

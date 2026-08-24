@@ -118,7 +118,7 @@ test("Studio derives practice search text and protects the published primary pho
   assert.match((await remove.json()).error, /primary photograph/i);
 });
 
-test("page shells, discovery bands, Studio controls, and media files preserve the public contract", () => {
+test("page shells, Archive discovery, Studio controls, and media files preserve the public contract", () => {
   const page = source("archive", "art", "making-the-canvas", "index.html");
   const pageCss = source("css", "archive-practice.css");
   const pageJs = source("js", "archive-practice.js");
@@ -138,12 +138,11 @@ test("page shells, discovery bands, Studio controls, and media files preserve th
   assert.match(pageJs, /video\.playsInline\s*=\s*true/);
   assert.match(pageJs, /video\.preload\s*=\s*"metadata"/);
   assert.doesNotMatch(pageJs, /autoplay/i);
-  assert.ok(artIndex.indexOf("data-practice-feature") < artIndex.indexOf('id="filters"'));
+  assert.doesNotMatch(artIndex, /data-practice-feature|practice-feature-band|archive-practice-feature\.js/);
   assert.match(room, /data-practice-feature/);
-  assert.match(archiveIndex, /archive-practice-feature\.js/);
-  assert.match(archivePublic, /archive-index-practice/);
-  assert.match(archivePublic, /data-practice-feature/);
-  assert.ok(archivePublic.indexOf("archive-index-practice") < archivePublic.indexOf("archive-search-panel"));
+  assert.doesNotMatch(archiveIndex, /archive-practice-feature\.js/);
+  assert.doesNotMatch(archivePublic, /archive-index-practice|data-practice-feature/);
+  assert.match(archivePublic, /class="archive-button" href="\/archive\/art\/making-the-canvas\/">Making the Canvas<\/a>/);
   assert.doesNotMatch(room, /archive-room-records\.js/);
   assert.match(studio, /data-practice-sections-panel/);
   assert.match(studio, /data-practice-media-panel/);
