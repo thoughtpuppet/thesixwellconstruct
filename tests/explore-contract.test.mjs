@@ -301,8 +301,17 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
     assert.match(css, new RegExp(`data-explore-active-scope="${scope}"[\\s\\S]*?--explore-active-signal:\\s*var\\(${signal}\\)`));
   }
   assert.match(css, /\.explore-portal\s*\{[\s\S]*?border-left:\s*5px solid var\(--explore-active-signal\)[\s\S]*?background:\s*var\(--color-bg\)/);
-  assert.match(css, /\.explore-portal__preview\s*\{[\s\S]*?border:\s*5px solid var\(--explore-active-signal\)[\s\S]*?background:\s*var\(--color-bg\)/);
-  assert.match(css, /\.explore-portal__frame\s*\{[\s\S]*?pointer-events:\s*none/);
+  assert.match(css, /\.explore-portal__preview\s*\{[\s\S]*?border:\s*5px solid var\(--explore-destination-signal\)[\s\S]*?background:\s*var\(--color-bg\)/);
+  for (const [node, signal] of [
+    ["tattoos", "--color-tattooing"], ["art", "--color-art"], ["merch", "--color-merch"],
+    ["events", "--color-events"], ["music", "--color-music"], ["writings", "--color-writings"],
+    ["archive", "--color-archive"], ["film", "--color-film"],
+  ]) {
+    assert.match(css, new RegExp(`data-explore-destination-node="${node}"[\\s\\S]*?--explore-destination-signal:\\s*var\\(${signal}\\)`));
+  }
+  assert.match(css, /\.explore-portal\s*\{[\s\S]*?--explore-destination-signal:\s*var\(--color-about\)/);
+  assert.match(css, /\.explore-portal__frame\s*\{[\s\S]*?inset:\s*0[\s\S]*?width:\s*100%[\s\S]*?height:\s*100%[\s\S]*?pointer-events:\s*none/);
+  assert.doesNotMatch(css, /\.explore-portal__frame\s*\{[^}]*transform:\s*scale/s);
   assert.match(css, /\.explore-portal__action--again\s*\{[\s\S]*?background:\s*var\(--color-bg\)[\s\S]*?color:\s*var\(--explore-active-copy\)/);
   assert.match(css, /\.explore-portal__action--enter\s*\{[\s\S]*?background:\s*var\(--explore-active-signal\)[\s\S]*?color:\s*var\(--explore-active-ink\)/);
   assert.match(css, /\.explore-portal__action,[\s\S]*?min-height:\s*44px/);
@@ -358,11 +367,18 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(room, /const depthTumbleY = reduceMotion\s*\? 0/);
   assert.match(room, /Math\.sin\(elapsed \* 0\.56 \+ item\.floatPhase \* 0\.72\) \* item\.spec\.tumbleX/);
   assert.match(room, /Math\.cos\(elapsed \* 0\.43 \+ item\.floatPhase \* 1\.19\) \* item\.spec\.tumbleY/);
-  assert.match(room, /time \* item\.spec\.rotationSpeed/);
+  assert.match(room, /motionElapsed \* 1000 \* item\.spec\.rotationSpeed/);
   assert.match(room, /Math\.sin\(elapsed \* 0\.31 \+ item\.floatPhase \* 0\.9\) \* item\.spec\.rollSway/);
   assert.match(room, /item\.spec\.rotation\[2\] \+ tiltZ \+ zAxisRoll/);
   assert.match(room, /item\.spec\.rotation\[0\] \+ depthTumbleX/);
   assert.match(room, /item\.spec\.rotation\[1\] \+ depthTumbleY/);
+  assert.match(room, /const portalOpen = Boolean\(portal && !portal\.hidden\)/);
+  assert.match(room, /previewBlend \+= \(targetPreviewBlend - previewBlend\)/);
+  assert.match(room, /const motionFactor = 1 - previewEase/);
+  assert.match(room, /motionElapsed \+= deltaSeconds \* motionFactor/);
+  assert.match(room, /item\.previewPositionX - item\.basePosition\.x\) \* previewEase \+ driftX/);
+  assert.match(room, /const previewCenterX = Math\.min\(previewRightLimit, Math\.max\(/);
+  assert.match(room, /const targetOpacity = portalOpen \? 0\.3/);
   assert.match(room, /reduceMotionQuery\.addEventListener\("change", onMotionChange\)/);
   assert.match(room, /reduceMotionQuery\.removeEventListener\("change", onMotionChange\)/);
   assert.match(room, /function onPageHide\(event\)[\s\S]*if \(!event\.persisted\)[\s\S]*dispose\(\)/);
@@ -413,8 +429,8 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
 });
 
 test("Explore previews and re-dives without navigating until Enter Page", async () => {
-  const first = destination("works", "first-work");
-  const second = destination("works", "second-work");
+  const first = destination("works", "first-work", "merch");
+  const second = destination("works", "second-work", "archive");
   const harness = exploreClientHarness({ responses: [{ destination: first }, { destination: second }] });
 
   harness.buttons[1].dispatch("click");
@@ -425,6 +441,7 @@ test("Explore previews and re-dives without navigating until Enter Page", async 
   assert.equal(harness.previewFrame.getAttribute("src"), first.route);
   assert.equal(harness.previewTitle.textContent, first.title);
   assert.equal(harness.previewMedium.textContent, first.medium.label);
+  assert.equal(harness.portal.dataset.exploreDestinationNode, "merch");
   assert.equal(harness.actionGroup.attributes["aria-hidden"], "true");
   assert.equal(harness.actionGroup.attributes.inert, "");
   assert.equal(harness.window.fadedTo, undefined);
@@ -433,6 +450,7 @@ test("Explore previews and re-dives without navigating until Enter Page", async 
   harness.diveAgain.dispatch("click");
   await flushExploreClient();
   assert.equal(harness.previewFrame.getAttribute("src"), second.route);
+  assert.equal(harness.portal.dataset.exploreDestinationNode, "archive");
   assert.match(harness.fetchCalls[1], /scope=works/);
   assert.match(harness.fetchCalls[1], /exclude=first-work/);
   assert.equal(harness.window.fadedTo, undefined);
@@ -443,6 +461,7 @@ test("Explore previews and re-dives without navigating until Enter Page", async 
 
   harness.backToBoard.dispatch("click");
   assert.equal(harness.portal.hidden, true);
+  assert.equal("exploreDestinationNode" in harness.portal.dataset, false);
   assert.equal(harness.previewFrame.getAttribute("src"), "about:blank");
   assert.equal(harness.room.dataset.exploreState, "idle");
   assert.equal("exploreActiveScope" in harness.room.dataset, false);
@@ -456,6 +475,7 @@ test("Explore restores the current portal after a reload or BFCache return", () 
   const harness = exploreClientHarness({ storedPortal: saved });
 
   assert.equal(harness.portal.hidden, false);
+  assert.equal(harness.portal.dataset.exploreDestinationNode, "art");
   assert.equal(harness.room.dataset.exploreState, "preview");
   assert.equal(harness.room.dataset.exploreActiveScope, "process");
   assert.equal(harness.previewFrame.getAttribute("src"), saved.destination.route);

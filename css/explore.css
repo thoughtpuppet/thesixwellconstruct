@@ -363,6 +363,7 @@ body {
 }
 
 .explore-portal {
+  --explore-destination-signal: var(--color-about);
   position: absolute;
   top: 0;
   right: 0;
@@ -380,26 +381,55 @@ body {
   color: var(--color-body);
 }
 
+.explore-portal[data-explore-destination-node="tattoos"] {
+  --explore-destination-signal: var(--color-tattooing);
+}
+
+.explore-portal[data-explore-destination-node="art"] {
+  --explore-destination-signal: var(--color-art);
+}
+
+.explore-portal[data-explore-destination-node="merch"] {
+  --explore-destination-signal: var(--color-merch);
+}
+
+.explore-portal[data-explore-destination-node="events"] {
+  --explore-destination-signal: var(--color-events);
+}
+
+.explore-portal[data-explore-destination-node="music"] {
+  --explore-destination-signal: var(--color-music);
+}
+
+.explore-portal[data-explore-destination-node="writings"] {
+  --explore-destination-signal: var(--color-writings);
+}
+
+.explore-portal[data-explore-destination-node="archive"] {
+  --explore-destination-signal: var(--color-archive);
+}
+
+.explore-portal[data-explore-destination-node="film"] {
+  --explore-destination-signal: var(--color-film);
+}
+
 .explore-portal__preview {
   position: relative;
   min-height: 230px;
   overflow: hidden;
-  border: 5px solid var(--explore-active-signal);
+  border: 5px solid var(--explore-destination-signal);
   background: var(--color-bg);
 }
 
 .explore-portal__frame {
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;
   display: block;
-  width: 200%;
-  height: 200%;
+  width: 100%;
+  height: 100%;
   border: 0;
   background: var(--color-bg);
   pointer-events: none;
-  transform: scale(0.5);
-  transform-origin: 0 0;
 }
 
 .explore-portal__preview-status {

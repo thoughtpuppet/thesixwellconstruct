@@ -48,6 +48,15 @@
     };
   }
 
+  function destinationNode(value) {
+    var node = String(value || "about").trim().toLowerCase();
+    if (node === "legend") return "about";
+    if (node === "tattoo" || node === "tattooing") return "tattoos";
+    return ["tattoos", "art", "merch", "about", "events", "music", "writings", "archive", "film"].indexOf(node) >= 0
+      ? node
+      : "about";
+  }
+
   function readHistory() {
     try {
       var parsed = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "null");
@@ -157,6 +166,7 @@
       actionGroup.setAttribute("aria-hidden", "true");
       actionGroup.setAttribute("inert", "");
     }
+    portal.dataset.exploreDestinationNode = destinationNode(destination.medium.id);
     previewMedium.textContent = destination.medium.label;
     previewTitle.textContent = destination.title;
     setControlsBusy(false);
@@ -172,6 +182,7 @@
     previewFrame.setAttribute("src", "about:blank");
     previewFrame.title = "Adventure destination preview";
     setPreviewLoadState("idle", "");
+    delete portal.dataset.exploreDestinationNode;
     portal.hidden = true;
     if (actionGroup) {
       actionGroup.removeAttribute("aria-hidden");

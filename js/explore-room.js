@@ -4,6 +4,7 @@ const root = document.querySelector("[data-explore-room]");
 const sceneCanvas = document.querySelector("[data-explore-scene-canvas]");
 const eyesCanvas = document.querySelector("[data-explore-eyes]");
 const particleCanvas = document.querySelector("[data-explore-particles]");
+const portal = document.querySelector("[data-explore-portal]");
 const controls = Array.from(document.querySelectorAll("[data-explore-scope]"));
 
 if (root) {
@@ -35,6 +36,9 @@ if (root) {
   let resizeObserver = null;
   let animationFrame = 0;
   let disposed = false;
+  let lastFrameTime = 0;
+  let motionElapsed = 0;
+  let previewBlend = 0;
 
   function useFallback() {
     root.dataset.exploreRenderer = "fallback";
@@ -219,6 +223,7 @@ if (root) {
         wallShadowMaterial,
         spec,
         basePosition: new THREE.Vector3(),
+        previewPositionX: 0,
         baseScale: 1,
         floatPhase: 0.45 + index * 1.73,
         hovered: false,
@@ -272,6 +277,7 @@ if (root) {
 
       const wallTopLeft = screenToWorld(bounds.left, bounds.top, -1.15);
       const wallBottomRight = screenToWorld(bounds.right, bounds.bottom, -1.15);
+      const previewShiftPixels = Math.min(280, bounds.width * 0.17);
       backWall.position.set(
         (wallTopLeft.x + wallBottomRight.x) / 2,
         (wallTopLeft.y + wallBottomRight.y) / 2,
@@ -288,8 +294,19 @@ if (root) {
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
         const center = screenToWorld(centerX, centerY, 0);
+        const previewLeftLimit = bounds.left + Math.max(28, rect.width * 0.54);
+        const portalLeft = bounds.right - Math.min(bounds.width * 0.42, 560);
+        const previewRightLimit = bounds.width > 700
+          ? portalLeft - Math.max(28, rect.width * 0.54)
+          : bounds.right - Math.max(28, rect.width * 0.54);
+        const previewCenterX = Math.min(previewRightLimit, Math.max(
+          previewLeftLimit,
+          centerX - previewShiftPixels,
+        ));
+        const previewCenter = screenToWorld(previewCenterX, centerY, 0);
         const edge = screenToWorld(centerX + (rect.width * item.spec.diameterRatio) / 2, centerY, 0);
         item.basePosition.copy(center);
+        item.previewPositionX = previewCenter.x;
         item.baseScale = Math.max(0.01, center.distanceTo(edge));
         item.group.position.copy(item.basePosition);
         item.group.scale.setScalar(item.baseScale);
@@ -333,13 +350,25 @@ if (root) {
       if (disposed || !renderer) return;
       const loading = root.dataset.exploreState === "loading";
       const activeScope = root.dataset.exploreActiveScope || "";
-      const elapsed = time * 0.001;
+      const portalOpen = Boolean(portal && !portal.hidden);
+      const deltaSeconds = lastFrameTime ? Math.min(0.05, Math.max(0, (time - lastFrameTime) * 0.001)) : 0;
+      const targetPreviewBlend = portalOpen ? 1 : 0;
+      if (reduceMotion) previewBlend = targetPreviewBlend;
+      else {
+        const blendRate = targetPreviewBlend ? 1.25 : 2.1;
+        previewBlend += (targetPreviewBlend - previewBlend) * Math.min(1, deltaSeconds * blendRate);
+      }
+      const previewEase = previewBlend * previewBlend * (3 - 2 * previewBlend);
+      const motionFactor = 1 - previewEase;
+      motionElapsed += deltaSeconds * motionFactor;
+      lastFrameTime = time;
+      const elapsed = motionElapsed;
 
       objects.forEach((item) => {
         const engaged = item.hovered || item.focused;
         const selected = loading && item.scope === activeScope;
-        const dimmed = loading && !selected;
-        const pulse = selected && !reduceMotion ? 1 + Math.sin(time * 0.009) * 0.035 : 1;
+        const dimmed = portalOpen || (loading && !selected);
+        const pulse = selected && !portalOpen && !reduceMotion ? 1 + Math.sin(time * 0.009) * 0.035 : 1;
         const pressScale = item.pressed ? 0.97 : 1;
         const interactionScale = engaged && !item.pressed ? 1.055 : 1;
         const targetScale = item.baseScale * pulse * pressScale * interactionScale;
@@ -357,11 +386,16 @@ if (root) {
 
         const nextScale = item.group.scale.x + (targetScale - item.group.scale.x) * responsiveness;
         item.group.scale.setScalar(nextScale);
-        item.group.position.x += (item.basePosition.x + driftX - item.group.position.x) * responsiveness;
+        item.group.position.x +=
+          (item.basePosition.x + (item.previewPositionX - item.basePosition.x) * previewEase + driftX -
+            item.group.position.x) *
+          responsiveness;
         item.group.position.y += (item.basePosition.y + driftY + lift - item.group.position.y) * responsiveness;
         item.group.position.z += (item.basePosition.z + driftZ - item.group.position.z) * responsiveness;
         item.wallShadow.position.x +=
-          (item.basePosition.x + item.baseScale * 0.1 + driftX * 0.58 - item.wallShadow.position.x) *
+          (item.basePosition.x + (item.previewPositionX - item.basePosition.x) * previewEase +
+            item.baseScale * 0.1 +
+            driftX * 0.58 - item.wallShadow.position.x) *
           responsiveness;
         item.wallShadow.position.y +=
           (item.basePosition.y - item.baseScale * 0.04 + (driftY + lift) * 0.58 -
@@ -369,10 +403,10 @@ if (root) {
           responsiveness;
         item.wallShadow.position.z = -0.82;
 
-        const targetOpacity = dimmed ? 0.18 : 1;
+        const targetOpacity = portalOpen ? 0.3 : dimmed ? 0.18 : 1;
         item.material.opacity += (targetOpacity - item.material.opacity) * responsiveness;
         const baseWallShadowOpacity = item.scope === "all" ? 0.52 : 0.42;
-        const targetWallShadowOpacity = dimmed ? 0.04 : baseWallShadowOpacity;
+        const targetWallShadowOpacity = portalOpen ? 0.06 : dimmed ? 0.04 : baseWallShadowOpacity;
         item.wallShadowMaterial.opacity +=
           (targetWallShadowOpacity - item.wallShadowMaterial.opacity) * responsiveness;
 
@@ -387,7 +421,7 @@ if (root) {
           : Math.sin(elapsed * 0.23 + item.floatPhase * 1.37) * item.spec.floatTilt * 0.55;
         const zAxisRoll = reduceMotion
           ? 0
-          : time * item.spec.rotationSpeed +
+          : motionElapsed * 1000 * item.spec.rotationSpeed +
             Math.sin(elapsed * 0.31 + item.floatPhase * 0.9) * item.spec.rollSway;
         item.mesh.rotation.set(
           item.spec.rotation[0] + depthTumbleX,
