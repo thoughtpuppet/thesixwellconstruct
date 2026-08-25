@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -8,6 +9,36 @@ const MAX_RESPONSE_BYTES = 64_000;
 
 function text(value) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function windowsUserEnvironmentValue(name) {
+  if (process.platform !== "win32") return "";
+  try {
+    return text(execFileSync("powershell.exe", [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `[Console]::Out.Write([Environment]::GetEnvironmentVariable('${name}', 'User'))`,
+    ], {
+      encoding:"utf8",
+      windowsHide:true,
+      stdio:["ignore", "pipe", "ignore"],
+      timeout:10_000,
+    }));
+  } catch {
+    return "";
+  }
+}
+
+export function calendarScoutHandoffToken(options = {}) {
+  const direct = text(options.token ?? process.env.CALENDAR_SCOUT_INGEST_TOKEN);
+  if (direct) return direct;
+  const persisted = options.userEnvironmentToken === undefined
+    ? windowsUserEnvironmentValue("CALENDAR_SCOUT_INGEST_TOKEN")
+    : text(options.userEnvironmentToken);
+  if (persisted) return persisted;
+  throw new Error("CALENDAR_SCOUT_INGEST_TOKEN is not configured for this scheduled task or the current Windows user.");
 }
 
 function validPublicUrl(value) {
@@ -68,8 +99,7 @@ async function boundedResponseText(response) {
 }
 
 export async function sendCalendarScoutHandoff(value, options = {}) {
-  const token = text(options.token ?? process.env.CALENDAR_SCOUT_INGEST_TOKEN);
-  if (!token) throw new Error("CALENDAR_SCOUT_INGEST_TOKEN is not configured for this scheduled task.");
+  const token = calendarScoutHandoffToken(options);
   const endpoint = calendarScoutHandoffEndpoint(options.endpoint ?? process.env.CALENDAR_SCOUT_INGEST_URL);
   const payload = normalizeCalendarScoutHandoff(value);
   const fetchImpl = options.fetchImpl || globalThis.fetch;

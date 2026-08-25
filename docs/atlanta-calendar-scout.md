@@ -74,8 +74,11 @@ node tools/calendar-scout-handoff.mjs --file output/atlanta-creative-scout-hando
 
 The client refuses to forward the credential to another production host or API
 route and prints only a sanitized result. `CALENDAR_SCOUT_INGEST_TOKEN` must be
-available to the scheduled task as an environment variable; never place it in
-the task prompt, repository, JSON payload, or command arguments.
+available in the scheduled task's process environment or, on Windows, the
+current user's persisted environment. The handoff tool reads the user-scoped
+value directly when the scheduled-task sandbox filters inherited variables.
+Never place it in the task prompt, repository, JSON payload, or command
+arguments.
 
 ## Release gate
 

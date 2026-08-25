@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   calendarScoutHandoffEndpoint,
+  calendarScoutHandoffToken,
   normalizeCalendarScoutHandoff,
   sendCalendarScoutHandoff,
 } from "../tools/calendar-scout-handoff.mjs";
@@ -39,6 +40,15 @@ test("scheduled Scout handoff validates evidence without changing public event f
     verificationNotes:"Confirm the opening date and venue address.",
   }] });
   assert.equal(incomplete.events[0].startsAt, null);
+});
+
+test("scheduled Scout handoff can use the persisted Windows user credential when its process environment is filtered", () => {
+  assert.equal(calendarScoutHandoffToken({ token:"process-token", userEnvironmentToken:"stored-token" }), "process-token");
+  assert.equal(calendarScoutHandoffToken({ token:"", userEnvironmentToken:"stored-token" }), "stored-token");
+  assert.throws(
+    () => calendarScoutHandoffToken({ token:"", userEnvironmentToken:"" }),
+    /not configured for this scheduled task or the current Windows user/,
+  );
 });
 
 test("scheduled Scout handoff sends its scoped token only to the fixed Studio route", async () => {

@@ -3,8 +3,11 @@
 Run this task in the `thesixwellconstruct` project, preferably in an isolated
 worktree. The task requires network access only for public research and the
 fixed Studio Strong Picks handoff. `CALENDAR_SCOUT_INGEST_TOKEN` must already be
-present in the scheduled task's environment. Never print, inspect, copy, or add
-that secret to a prompt, file, command argument, report, or source code.
+present in the scheduled task's process environment or the current Windows
+user environment. The handoff tool checks the persisted Windows user value when
+the scheduled-task sandbox filters inherited variables. Never print, inspect,
+copy, or add that secret to a prompt, file, command argument, report, or source
+code.
 
 ## Durable task prompt
 
