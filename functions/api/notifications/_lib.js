@@ -31,6 +31,7 @@ import { CLIENT_EMAIL_THEMES, renderClientEmail } from "./_email-renderer.js";
 import { defaultEmailDesignProfile, validateEmailDesignProfile } from "./_email-design.js";
 import { tattooPricingSummary } from "../booking/_pricing.js";
 import { bookingTokenFromUrl, createBookingRawToken } from "../booking-links.js";
+import { studioAddress } from "../_shared/studio.js";
 import {
   emailDesignHistory,
   emailDesignRevision,
@@ -1640,6 +1641,7 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: specialSession,
+    studioAddress: studioAddress(env),
     pricingDetails,
     feeText: appointment.isExperimentalProject
       ? `${formatMoney(appointment.depositCents, appointment.currency)} refundable attendance deposit received`
@@ -1698,6 +1700,7 @@ async function sendInPersonConsultationConfirmed(env, request, appointment, opti
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: appointment.bookingTypeLabel,
+    studioAddress: studioAddress(env),
     feeText: appointment.isExperimentalProject
       ? "This prerequisite consultation is free; no payment was collected."
       : appointment.depositCents > 0
@@ -1760,6 +1763,7 @@ async function sendBuildSessionConfirmed(env, request, appointment, options = {}
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: appointment.bookingTypeLabel,
+    studioAddress: studioAddress(env),
     feeText: appointment.depositCents > 0
       ? `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for the build session, not a deposit toward a future tattoo.`
       : "No reservation fee was required for this build session.",
@@ -1795,6 +1799,7 @@ async function sendStudioBookingConfirmed(env, request, appointment, options = {
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: studioBookingName(appointment),
+    studioAddress: studioAddress(env),
     feeText: appointment.depositCents > 0
       ? `${formatMoney(appointment.depositCents, appointment.currency)} received - this holds your date; any balance is settled with the studio.`
       : "No deposit was required for this appointment.",
@@ -3289,6 +3294,7 @@ async function sendAppointmentReminder(env, appointmentRow, options = {}) {
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: isStudio ? studioBookingName(appointment) : tattooSpecialSessionLabel(appointment),
+    studioAddress: isVirtual ? "" : studioAddress(env),
     ...extendedDayEmailFields(appointment),
     zoomUrl: isVirtual ? appointment.meeting?.joinUrl || "" : "",
     zoomStatus: isVirtual && !appointment.meeting?.joinUrl

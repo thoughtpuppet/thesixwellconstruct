@@ -1064,12 +1064,13 @@ test("Original-design tattoo paths disclose the additional-rendering drawing fee
 
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   assert.match(bookingPage, /const ADDITIONAL_SKETCH_DISCLAIMER = "Additional concept sketches are \$50 each, require artist approval, and must be paid before drawing begins\."/);
-  assert.match(bookingPage, /plan\?\.includeAdditionalSketchDisclaimer \? ADDITIONAL_SKETCH_DISCLAIMER : ""/);
-  assert.match(bookingPage, /Your tattoo deposit holds your appointment slot and is applied to the final total\./);
-  assert.match(bookingPage, /One developed design direction is included after your deposit is paid, if applicable\./);
-  assert.match(bookingPage, /pacing\.extended \? " before any optional Extended Day fee" : ""/);
+  assert.match(bookingPage, /const TATTOO_DEPOSIT_SCOPE_COPY = "This amount covers the approved tattoo work\. Your tattoo deposit holds your appointment slot and is applied to the final total\."/);
+  assert.match(bookingPage, /function approvedBudgetDisclosure\(\) \{\s+return TATTOO_DEPOSIT_SCOPE_COPY;\s+\}/);
+  assert.doesNotMatch(bookingPage, /Changes to placement, scale, detail, or session planning may require a revised range before booking\./);
+  assert.doesNotMatch(bookingPage, /One developed design direction is included after your deposit is paid, if applicable\./);
   assert.match(bookingPage, /budgetLabel \? `<label class="form-check"><input class="form-check__input" id="budgetAck"/);
-  assert.match(bookingPage, /Artist-approved additional concept sketches are separate, non-refundable \$50 fees that are not credited toward the tattoo total and must be paid before drawing begins/);
+  assert.match(bookingPage, /I have reviewed the session plan, agreed to the cost of \$\{escapeHtml\(budgetLabel\)\} and agree to the Terms &amp; Conditions linked&nbsp;/);
+  assert.match(bookingPage, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/policies\/" target="_blank" rel="noopener">here<\/a>&nbsp;\./);
 
   const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
   assert.match(studio, /id="includeAdditionalSketchDisclaimer" name="includeAdditionalSketchDisclaimer" type="checkbox"/);
@@ -5642,7 +5643,7 @@ test("Build review UI keeps managed themes, load recovery, readable snapshots, a
   assert.match(studio, /Approved Tattoo-Work Budget/);
   assert.match(studio, /approvedBudgetMinCents/);
   assert.match(studio, /Client-submitted comfort range/);
-  assert.match(bookingPage, /Approved tattoo-work budget/);
+  assert.match(bookingPage, /<span class="approved-budget-label">Cost of your tattoo<\/span>/);
   assert.match(bookingPage, /id="budgetAck"/);
   assert.match(bookingPage, /budgetAcknowledged:planHasReviewedBudget/);
   assert.match(mazeStyles, /grid-template-columns: minmax\(240px, 280px\) minmax\(500px, 1fr\) minmax\(280px, 330px\)/);
@@ -6127,6 +6128,7 @@ test("mixed-session direct links collect one itemized Square checkout and confir
     SUBMISSIONS_ADMIN_TOKEN: adminToken,
     ADMIN_NOTIFICATION_EMAIL: "studio@example.test",
     PUBLIC_SITE_URL: "https://example.test",
+    STUDIO_ADDRESS: "100 Test Studio Avenue, Atlanta, GA 30303",
     SQUARE_ACCESS_TOKEN: "square-token",
     SQUARE_LOCATION_ID: "square-location",
     EMAIL: {
@@ -6317,6 +6319,7 @@ test("mixed-session direct links collect one itemized Square checkout and confir
   const confirmation = await confirmResponse.json();
   assert.equal(confirmation.appointments.length, 3);
   assert.equal(confirmation.checkoutTotalPaidCents, 32500);
+  assert.equal(confirmation.studioAddress, "100 Test Studio Avenue, Atlanta, GA 30303");
   const confirmedRows = database.prepare(
     "SELECT status,hold_state FROM appointments WHERE checkout_group_id=? ORDER BY checkout_group_position",
   ).all(appointmentRows[0].checkout_group_id).map(rowObject);
@@ -6334,6 +6337,8 @@ test("mixed-session direct links collect one itemized Square checkout and confir
   assert.match(clientConfirmationEmail.html, /Quarter Day Session/);
   assert.match(clientConfirmationEmail.html, /Half Day Session/);
   assert.match(clientConfirmationEmail.html, /3\/4 Day Session/);
+  assert.match(clientConfirmationEmail.html, /Studio address/);
+  assert.match(clientConfirmationEmail.text, /Studio address: 100 Test Studio Avenue, Atlanta, GA 30303/);
   checkout.appointmentIds.forEach((appointmentId, index) => {
     assert.match(clientConfirmationEmail.html, new RegExp(
       `booking/reschedule/\\?appointment=${appointmentId}`,
@@ -8530,6 +8535,7 @@ test("paid tattoo confirmations include final-payment, grace-period, and all cli
     assert.match(rendered.text, /3% processing fee applies to all digital transactions/, identity);
     assert.match(rendered.text, /15-minute grace period/, identity);
     assert.match(rendered.text, /Arrival later than 15 minutes may require cancellation, rescheduling, and a new deposit/, identity);
+    assert.match(rendered.text, /Studio address: Studio address supplied by the Worker configuration/, identity);
     assert.match(rendered.html, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/policies\/"/, identity);
     assert.match(rendered.html, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/day-of\/"/, identity);
     assert.match(rendered.html, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/location-parking\/"/, identity);
@@ -8550,12 +8556,25 @@ test("paid tattoo confirmations include final-payment, grace-period, and all cli
       assert.match(rendered.html, /<a href="https:\/\/thesixwellconstruct\.com\/api\/booking\/calendar\?appointment=demo-appointment"[^>]*>Add to calendar<\/a>/, identity);
     }
   }
+  for (const [templateKey, variant] of [
+    ["consultation_confirmed_virtual", "default"],
+    ["appointment_reminder_24h", "virtual"],
+  ]) {
+    const rendered = renderClientEmailPreview(templateKey, variant);
+    assert.doesNotMatch(rendered.text, /Studio address:/, `${templateKey}:${variant}`);
+  }
 });
 
 test("Studio previews expose single and multi-session client booking states", () => {
   const previews = readFileSync(join(ROOT, "studio", "previews", "index.html"), "utf8");
   const booking = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   const confirmation = readFileSync(join(ROOT, "booking", "confirmed", "index.html"), "utf8");
+  const inPersonConfirmationPages = [
+    confirmation,
+    readFileSync(join(ROOT, "booking", "confirmed", "consultation", "index.html"), "utf8"),
+    readFileSync(join(ROOT, "booking", "confirmed", "build", "index.html"), "utf8"),
+    readFileSync(join(ROOT, "booking", "confirmed", "studio", "index.html"), "utf8"),
+  ];
   assert.match(previews, /\/booking\/\?preview=1&amp;multi=0/);
   assert.match(previews, /\/booking\/\?preview=1&amp;multi=1&amp;maxSessions=3&amp;mixed=1/);
   assert.match(previews, /\/booking\/confirmed\/\?preview=1&amp;state=paid&amp;multi=1/);
@@ -8568,6 +8587,12 @@ test("Studio previews expose single and multi-session client booking states", ()
   assert.match(booking, /itemized deposit is applied to its own appointment/);
   assert.equal((booking.match(/bookingTypeId: "tattoo_three_quarter"/g) || []).length, 3);
   assert.match(confirmation, /params\.get\("multi"\) === "1"/);
+  assert.match(confirmation, /payload\.studioAddress/);
+  assert.doesNotMatch(confirmation, /364 Nelson Street SW/);
+  for (const source of inPersonConfirmationPages) {
+    assert.match(source, /payload\.studioAddress/);
+    assert.doesNotMatch(source, /const STUDIO_ADDRESS|364 Nelson Street SW/);
+  }
   assert.match(confirmation, /Reschedule Session \$\{index \+ 1\}/);
   assert.match(confirmation, /Use the Reschedule link beside the session you want to move/);
 });
@@ -9599,6 +9624,7 @@ test("Open Studio Visit cancellations and reminders keep the Art node identity",
   const reminderResult = await sendDueAppointmentReminders({
     SUBMISSIONS_DB: new LocalD1(database),
     PUBLIC_SITE_URL: "https://example.test",
+    STUDIO_ADDRESS: "100 Test Studio Avenue, Atlanta, GA 30303",
     EVENTS_FROM_EMAIL: "events@example.test",
     EVENTS_FROM_NAME: "the six.well construct",
     EVENTS_REPLY_TO: "events@example.test",
@@ -9612,9 +9638,58 @@ test("Open Studio Visit cancellations and reminders keep the Art node identity",
   assert.equal(reminderResult.sent, 1);
   assert.equal(reminderSends[0].from.name, "the six.well construct");
   assert.match(reminderSends[0].html, /ART STUDIO VISIT REMINDER/);
+  assert.match(reminderSends[0].text, /Studio address: 100 Test Studio Avenue, Atlanta, GA 30303/);
   assert.match(reminderSends[0].html, /#0039BD/);
   assert.doesNotMatch(reminderSends[0].html, /art\.pill/i);
   assert.doesNotMatch(reminderSends[0].text, /art\.pill/i);
+});
+
+test("booking confirmation reveals the configured address only for paid in-person appointments", async () => {
+  const database = migratedDatabase();
+  const now = Date.now();
+  const startAt = new Date(now + 48 * 60 * 60 * 1000).toISOString();
+  const endAt = new Date(now + 49 * 60 * 60 * 1000).toISOString();
+  insertAppointmentFixture(database, {
+    id: "address-pending",
+    status: "deposit_pending",
+    holdState: "active",
+    startAt,
+    endAt,
+  });
+  insertAppointmentFixture(database, {
+    id: "address-confirmed",
+    status: "confirmed",
+    startAt,
+    endAt,
+  });
+  insertAppointmentFixture(database, {
+    id: "address-virtual",
+    bookingTypeId: "consult_virtual",
+    status: "confirmed",
+    startAt,
+    endAt,
+  });
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    STUDIO_ADDRESS: "100 Test Studio Avenue, Atlanta, GA 30303",
+  };
+
+  const pending = await (await handleConfirmBooking(
+    new Request("https://example.test/api/booking/confirm?appointment=address-pending"),
+    env,
+  )).json();
+  const confirmed = await (await handleConfirmBooking(
+    new Request("https://example.test/api/booking/confirm?appointment=address-confirmed"),
+    env,
+  )).json();
+  const virtual = await (await handleConfirmBooking(
+    new Request("https://example.test/api/booking/confirm?appointment=address-virtual"),
+    env,
+  )).json();
+
+  assert.equal(Object.hasOwn(pending, "studioAddress"), false);
+  assert.equal(confirmed.studioAddress, "100 Test Studio Avenue, Atlanta, GA 30303");
+  assert.equal(Object.hasOwn(virtual, "studioAddress"), false);
 });
 
 test("expired replacement holds never expose a stale Square checkout URL", async () => {

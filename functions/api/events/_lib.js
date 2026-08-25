@@ -1339,6 +1339,7 @@ function publicEventView(event, stats = {}, occurrences = [], admissionOptions =
     startsAt: primary?.startsAt || event.startsAt,
     endsAt: primary?.endsAt || event.endsAt,
     location: primary?.location || event.location,
+    venueLocation: event.location,
     priceCents: event.priceCents,
     priceFormatted: formatMoney(event.priceCents, event.currency),
     free: event.priceCents <= 0,

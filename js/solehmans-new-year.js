@@ -21,6 +21,7 @@
   var select = document.getElementById("admissionOption");
   var submit = document.getElementById("registerSubmit");
   var status = document.getElementById("registrationStatus");
+  var location = document.getElementById("eventLocation");
   var currentOptions = [];
   var currentPublication = "draft";
 
@@ -66,6 +67,9 @@
       : currentPublication === "announced"
         ? "Announced · registration not open"
         : "Draft · RSVP and sales not public";
+    var publicLocation = String(event.venueLocation || event.location || "").trim();
+    location.hidden = !publicLocation;
+    location.textContent = publicLocation;
 
     currentOptions.forEach(function (option) {
       var card = grid.querySelector(`[data-admission="${option.slug}"]`);
@@ -103,7 +107,11 @@
 
   function previewEvent() {
     var publication = params.get("state") === "published" ? "published" : "draft";
-    return { publicationState:publication, admissionOptions:fallbackOptions };
+    return {
+      publicationState:publication,
+      admissionOptions:fallbackOptions,
+      location:publication === "published" ? "Event location supplied by the published Event record" : "",
+    };
   }
 
   select.addEventListener("change", syncSubmit);

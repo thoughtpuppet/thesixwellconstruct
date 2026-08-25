@@ -18,6 +18,7 @@ import {
   tattooPricingSummary as pricingSummaryForAppointment,
 } from "./_pricing.js";
 import { bookingTokenFromUrl, bookingUrlForToken, createBookingRawToken } from "../booking-links.js";
+import { studioAddress } from "../_shared/studio.js";
 
 const BOOKING_STATUSES = new Set([
   "pending_deposit",
@@ -118,7 +119,6 @@ function confirmationPathForBookingType(bookingTypeId) {
 }
 
 const DEFAULT_SUPPORT_EMAIL = "saisolehman@artpilltattoohouse.com";
-const DEFAULT_STUDIO_CALENDAR_LOCATION = "364 Nelson Street SW, Atlanta, GA 30313";
 const DEFAULT_STUDIO_CONTACT_PHONE = "(770) 820-5800";
 const DEFAULT_CALENDAR_TIME_ZONE = "America/New_York";
 const DEFAULT_SESSION_ESTIMATE_COPY = Object.freeze({
@@ -1174,7 +1174,7 @@ function publicUrl(env, request, path) {
 }
 
 function studioCalendarLocation(env) {
-  return asString(env.STUDIO_CALENDAR_LOCATION) || DEFAULT_STUDIO_CALENDAR_LOCATION;
+  return studioAddress(env);
 }
 
 function studioContactPhone(env) {
@@ -5930,6 +5930,12 @@ export async function handleConfirmBooking(request, env) {
       depositStatus,
       supportEmail: tattooSettings?.support_email || env.NOTIFICATION_REPLY_TO || DEFAULT_SUPPORT_EMAIL,
       hoursUntilStart,
+      ...(depositStatus === "paid"
+        && !isVirtualAppointment(appointment)
+        && !["cancelled", "archived"].includes(appointment.status)
+        && studioAddress(env)
+        ? { studioAddress: studioAddress(env) }
+        : {}),
       ...(depositStatus === "paid" && appointment.replacementForAppointmentId ? {
         replacedAppointmentCalendarUrl: appointmentCalendarUrl(env, request, {
           id: appointment.replacementForAppointmentId,
@@ -11500,7 +11506,10 @@ export async function handleAdminListAppointments(request, env) {
          LIMIT 100`
       )
       .all();
-    return json({ appointments: (result.results || []).map(normalizeAppointment) });
+    return json({
+      appointments: (result.results || []).map(normalizeAppointment),
+      studioAddress: studioAddress(env),
+    });
   } catch (error) {
     return errorResponse("Unable to load appointments.", 500, {
       detail: error.message,

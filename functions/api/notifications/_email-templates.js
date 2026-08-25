@@ -505,6 +505,7 @@ export function buildAppointmentConfirmedEmail(data) {
     headline: data.headline || (grouped ? `Your ${sessions.length} tattoo sessions are confirmed.` : profile.headline),
     greeting: `Hi ${data.clientName || "there"},`,
     details: grouped ? [
+      data.studioAddress ? { id: "studio_address", label: "Studio address", value: data.studioAddress, editableLabel: false } : null,
       ...list(data.pricingDetails),
       ...list(data.balanceDetails),
       data.tipText ? { id: "optional_tip", label: "Optional tip", value: data.tipText } : null,
@@ -512,6 +513,7 @@ export function buildAppointmentConfirmedEmail(data) {
     ] : [
       { id: "when", label: "When", value: data.when },
       { id: "session", label: ["studio_visit", "studio_space"].includes(data.kind) ? "Booking" : "Session", value: data.session },
+      data.studioAddress ? { id: "studio_address", label: "Studio address", value: data.studioAddress, editableLabel: false } : null,
       ...list(data.pricingDetails),
       { id: "deposit", label: profile.feeLabel, value: data.feeText },
       ...list(data.balanceDetails),
@@ -619,6 +621,7 @@ export function buildAppointmentReminderEmail(data) {
     details: [
       { label: "When", value: data.when },
       { label: "Session", value: data.session },
+      data.studioAddress ? { id: "studio_address", label: "Studio address", value: data.studioAddress, editableLabel: false } : null,
       data.sessionFeeText ? { label: "Extended Day fee", value: data.sessionFeeText } : null,
       virtual && data.zoomUrl ? { label: "Zoom link", value: data.zoomUrl } : null,
       virtual && data.zoomStatus ? { label: "Zoom details", value: data.zoomStatus } : null,
@@ -909,6 +912,7 @@ const SAMPLE = Object.freeze({
   when: "Friday, June 12, 2026 at 2:00 PM EDT - Friday, June 12, 2026 at 5:00 PM EDT",
   shortWhen: "Friday, June 12, 2026 at 2:00 PM EDT",
   session: "Half Day Session",
+  studioAddress: "Studio address supplied by the Worker configuration",
   confirmationUrl: "https://thesixwellconstruct.com/booking/confirmed/?appointment=demo-appointment",
   calendarUrl: "https://thesixwellconstruct.com/api/booking/calendar?appointment=demo-appointment",
   bookingUrl: "https://thesixwellconstruct.com/booking/?token=demo-private-token",
@@ -936,6 +940,7 @@ function previewConfirmation(kind, subject, overrides = {}) {
     clientName: SAMPLE.clientName,
     when: overrides.when || SAMPLE.when,
     session: overrides.session || SAMPLE.session,
+    studioAddress: overrides.studioAddress === undefined ? SAMPLE.studioAddress : overrides.studioAddress,
     pricingDetails: overrides.pricingDetails || [],
     feeText: overrides.feeText || "$100 received",
     balanceDetails: overrides.balanceDetails || [],
@@ -1198,6 +1203,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
         session: "Virtual Consultation",
         feeText: "$50 received - this is the full price for your consultation, not a deposit toward future work.",
         zoomUrl: SAMPLE.zoomUrl,
+        studioAddress: "",
         resources: [],
       },
     );
@@ -1309,6 +1315,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       clientName: SAMPLE.clientName,
       when: SAMPLE.when,
       session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : build ? "In-Person Build Session" : virtual ? "Virtual Consultation" : consultation ? "In-Person Consultation" : tattooSpecial ? "Tattoo Special · Hand Sized Tattoo — Standard" : SAMPLE.session,
+      studioAddress: virtual ? "" : SAMPLE.studioAddress,
       zoomUrl: virtual ? SAMPLE.zoomUrl : "",
       calendarUrl: SAMPLE.calendarUrl,
       resources: studio || virtual ? [] : [

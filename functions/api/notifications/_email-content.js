@@ -126,7 +126,9 @@ export function editableEmailContent(semantic, options = {}) {
       ...(section.editableTitle === false ? {} : { title: tokenized(section.title, variables) }),
       ...(section.editableParagraphs === false ? {} : { paragraphs: tokenizedList(section.paragraphs, variables) }),
     }]).filter(([, section]) => Object.keys(section).length)),
-    detailLabels: Object.fromEntries(message.details.map((detail) => [detail.id, tokenized(detail.label, variables)])),
+    detailLabels: Object.fromEntries(message.details
+      .filter((detail) => detail.editableLabel !== false)
+      .map((detail) => [detail.id, tokenized(detail.label, variables)])),
     primaryActionLabel: tokenized(message.primaryAction?.label, variables),
     secondaryActionLabels: Object.fromEntries(message.secondaryActions.map((action) => [action.id, tokenized(action.label, variables)])),
     notice: tokenizedList(message.notice, variables),
@@ -297,7 +299,9 @@ export function applyEmailContent(semantic, content, options = {}) {
   }));
   if (copy.detailLabels) message.details = message.details.map((detail) => ({
     ...detail,
-    label: interpolate(copy.detailLabels[detail.id], variables),
+    label: Object.prototype.hasOwnProperty.call(copy.detailLabels, detail.id)
+      ? interpolate(copy.detailLabels[detail.id], variables)
+      : detail.label,
   }));
   if (Object.prototype.hasOwnProperty.call(copy, "primaryActionLabel") && message.primaryAction) {
     message.primaryAction.label = interpolate(copy.primaryActionLabel, variables);

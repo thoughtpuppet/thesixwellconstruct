@@ -243,6 +243,8 @@ test("0127 creates SOLEHMAN'S NEW YEAR I as one draft event with session-specifi
   assert.equal(context.event.admissionOptions.length, 8);
   assert.equal(context.event.registrationOpen, true);
   assert.equal(context.event.paidSalesOpen, false);
+  assert.equal(context.event.location, "art.pill Tattoo House, Castleberry Hill, Atlanta");
+  assert.match(context.event.venueLocation, /364 Nelson Street SW, Atlanta, GA 30313/);
 
   const revisedAdmissions = context.event.admissionOptions.map((option) => ({
     ...option,
@@ -365,9 +367,9 @@ test("SOLEHMAN'S NEW YEAR I page publishes the confirmed program and draft regis
     "$50 · unlimited",
     "$60 · 10 places",
     "Artist Talk",
-    "364 Nelson Street SW",
   ]) assert.match(page, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.match(page, /class="location-address"/);
+  assert.match(page, /class="location-address" id="eventLocation" hidden/);
+  assert.doesNotMatch(page, /364 Nelson Street SW/);
   assert.match(page, /class="venture-hero site-hero site-hero--supporting"/);
   assert.match(page, /class="hero-descriptor"/);
   assert.match(page, /border:5px solid/);
@@ -375,6 +377,8 @@ test("SOLEHMAN'S NEW YEAR I page publishes the confirmed program and draft regis
   assert.match(page, /Draft · RSVP and sales not public/);
   assert.match(page, /<script src="\/js\/transition\.js"><\/script>/);
   assert.match(behavior, /admissionOptionId/);
+  assert.match(behavior, /event\.venueLocation \|\| event\.location/);
+  assert.match(behavior, /location\.hidden = !publicLocation/);
   assert.match(behavior, /Confirm RSVP/);
   assert.match(behavior, /Paid-session sales are still closed/);
   assert.match(studio, /RSVP \+ ticket options/);

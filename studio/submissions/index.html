@@ -793,7 +793,6 @@
   const subnavEl = document.getElementById("subnav");
   const bookingPreviewKey = "swc_booking_admin_preview";
   const sidebarPreferenceKey = "swc_studio_sidebar_collapsed";
-  const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
   const TAB_TYPES = {
     tattoo: ["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "tattoo_special", "consultation", "in_person_consultation", "build_session"],
     studio: ["studio_booking"],
@@ -897,6 +896,7 @@
   let fileViewerRequestId = 0;
   let submissions = [];
   let appointments = [];
+  let configuredStudioAddress = "";
   let bookingTypes = [];
   let appointmentEditorState = null;
   let appointmentEditorWindows = [];
@@ -5636,7 +5636,7 @@ When: ${escapeHtml(formatDate(appointment.startAt))}
 Ends: ${escapeHtml(formatDate(appointment.endAt))}
 ${holdExpiresAt ? `Checkout hold expires: ${escapeHtml(formatDate(holdExpiresAt))}\n` : ""}${appointment.status === "expiry_attention" ? "Hold reconciliation: needs Studio attention; capacity remains blocked\n" : ""}${completedAt ? `Completed: ${escapeHtml(formatDate(completedAt))}\n` : ""}Reschedules recorded: ${escapeHtml(String(appointment.rescheduleCount ?? appointment.reschedule_count ?? 0))} (client allowance: 1)
 ${replacementFor ? `Replacement for: ${escapeHtml(replacementFor)}\n` : ""}${replacedBy ? `Replaced by: ${escapeHtml(replacedBy)}\n` : ""}
-${appointmentIsConfirmed(appointment) && !isVirtual ? `Location: ${escapeHtml(STUDIO_ADDRESS)}\n` : ""}
+${appointmentIsConfirmed(appointment) && !isVirtual && configuredStudioAddress ? `Location: ${escapeHtml(configuredStudioAddress)}\n` : ""}
 ${sessionFeeCents ? `Extended Day fee due with final balance: ${escapeHtml(money(sessionFeeCents, currency))}\n` : ""}
 ${escapeHtml(appointmentPaymentDetail(appointment))}
 ${meetingLines}
@@ -8329,6 +8329,7 @@ ${meetingLines}
     const appointmentPayload = await api("/api/admin/booking/appointments");
     submissions = payload.submissions || [];
     appointments = appointmentPayload.appointments || [];
+    configuredStudioAddress = appointmentPayload.studioAddress || "";
     try {
       const eventsPayload = await api("/api/admin/events");
       events = eventsPayload.events || [];

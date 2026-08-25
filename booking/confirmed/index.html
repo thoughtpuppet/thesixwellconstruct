@@ -134,7 +134,6 @@
 
   const manage = document.getElementById("manageBlock");
   const DEFAULT_SUPPORT_EMAIL = "saisolehman@artpilltattoohouse.com";
-  const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
   const previewMode = new URLSearchParams(window.location.search).get("preview") === "1";
 
   function renderManageBlock(appointment, payload, paid, appointments) {
@@ -272,6 +271,7 @@
       depositStatus: state === "pending" ? "pending" : "paid",
       supportEmail: DEFAULT_SUPPORT_EMAIL,
       hoursUntilStart,
+      ...(state === "paid" ? { studioAddress: "Studio address supplied after payment confirmation" } : {}),
       pricingSummary: extended ? {
         laborMinimumCents: 160000,
         laborMaximumCents: 200000,
@@ -320,7 +320,7 @@
         : "Square has not returned a paid order yet. If you just paid, refresh this page in a moment. The studio can also see this pending booking.";
     }
     const locationRows = paid && !isCancelled && appointment.bookingTypeId !== "consult_virtual"
-      ? [renderRow("Location", STUDIO_ADDRESS)]
+      ? [payload.studioAddress ? renderRow("Location", payload.studioAddress) : ""]
       : [];
     const pricing = payload.pricingSummary;
     const pricingRows = pricing && Number(pricing.sessionFeeCents || 0) > 0 ? [
