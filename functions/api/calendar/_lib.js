@@ -14,8 +14,8 @@ const SOURCE_CHECK_STATUSES = new Set(["never", "unchanged", "changes_detected",
 const SOURCE_AUTHORITIES = new Set(["organizer_event", "venue_event", "official_calendar", "authorized_ticket_host", "unresolved"]);
 const LINK_ROLES = new Set(["organizer", "venue", "ticket", "artist", "participant", "supporting", "discovery"]);
 const CALENDAR_CREDIT_ROLE_CACHE = new WeakMap();
-const PLATFORM_SOURCE_ADAPTERS = new Set(["eventbrite", "posh", "bigtickets"]);
-const INTERNAL_SOURCE_ADAPTERS = new Set(["beltline", "eyedrum", "high_art_making", "rampant", "squarespace"]);
+const PLATFORM_SOURCE_ADAPTERS = new Set(["eventbrite", "posh", "bigtickets", "partiful"]);
+const INTERNAL_SOURCE_ADAPTERS = new Set(["atlanta_loves_art", "beltline", "eyedrum", "high_art_making", "rampant", "squarespace"]);
 const STORED_SOURCE_ADAPTERS = new Set(["automatic", "wix", "localist", "out_of_hand", "json", "icalendar", "rss"]);
 const SOURCE_ADAPTERS = new Set([...STORED_SOURCE_ADAPTERS, ...PLATFORM_SOURCE_ADAPTERS, ...INTERNAL_SOURCE_ADAPTERS]);
 const SOURCE_RENDER_MODES = new Set(["static", "dynamic-fallback"]);
@@ -4233,6 +4233,65 @@ async function handleCalendarDay(request, env) {
   return json({ day, count: items.length, items });
 }
 
+async function beginPastedLinkRun(db, pastedUrl) {
+  const runId = `cal_run_${crypto.randomUUID()}`;
+  await db.prepare(
+    `INSERT INTO calendar_scout_runs (id,run_kind,status,model,started_at,sources_searched_json,queries_json)
+     VALUES (?,'manual','running','pasted-link',?,?,?)`
+  ).bind(runId, isoNow(), JSON.stringify([pastedUrl]), JSON.stringify(["Pasted event link extraction"])).run();
+  return runId;
+}
+
+async function completePastedLinkRun(db, runId, pastedUrl, result) {
+  const warning = asString(result?.extraction?.scheduleWarning);
+  const sourceResult = {
+    url: pastedUrl,
+    sourceId: "",
+    status: warning ? "warning" : "ok",
+    candidateId: asString(result?.candidate?.id),
+    existing: Boolean(result?.existing),
+    extraction: result?.extraction || {},
+    ...(warning ? { warning } : {}),
+  };
+  const outcome = {
+    channel: "pasted_link",
+    status: warning ? "partial" : "ok",
+    candidates: result?.existing ? 0 : 1,
+    duplicates: 0,
+    warnings: warning ? 1 : 0,
+    failures: 0,
+    sources: [sourceResult],
+  };
+  await db.prepare(
+    `UPDATE calendar_scout_runs SET status=?,completed_at=?,candidate_count=?,duplicate_count=0,failure_count=0,
+       source_results_json=?,openai_usage_json=?,error_message='' WHERE id=?`
+  ).bind(
+    warning ? "partial" : "completed",
+    isoNow(),
+    result?.existing ? 0 : 1,
+    JSON.stringify([outcome]),
+    JSON.stringify(result?.extraction?.openaiUsage || {}),
+    runId,
+  ).run();
+}
+
+async function failPastedLinkRun(db, runId, pastedUrl, error) {
+  const message = asString(error?.message || error || "The Scout could not extract an event from that link.").slice(0, 500);
+  const outcome = [{
+    channel: "pasted_link",
+    status: "failed",
+    candidates: 0,
+    duplicates: 0,
+    warnings: 0,
+    failures: 1,
+    sources: [{ url: pastedUrl, sourceId: "", status: "failed", error: message }],
+  }];
+  await db.prepare(
+    `UPDATE calendar_scout_runs SET status='failed',completed_at=?,candidate_count=0,duplicate_count=0,failure_count=1,
+       source_results_json=?,error_message=? WHERE id=?`
+  ).bind(isoNow(), JSON.stringify(outcome), message, runId).run();
+}
+
 async function handleCandidates(request, env, parts) {
   const db = requireDb(env);
   const method = request.method;
@@ -4244,11 +4303,15 @@ async function handleCandidates(request, env, parts) {
     if (!body) return errorResponse("Invalid JSON body.");
     const pastedUrl = asString(body.url);
     if (!validHttpUrl(pastedUrl)) return errorResponse("Paste a valid public http or https event URL.");
+    const runId = await beginPastedLinkRun(db, pastedUrl);
     try {
       const result = await createCandidateFromUrl(env, db, pastedUrl);
-      return json(result, { status: result.existing ? 200 : 201 });
+      await completePastedLinkRun(db, runId, pastedUrl, result);
+      return json({ ...result, runId }, { status: result.existing ? 200 : 201 });
     } catch (error) {
-      return errorResponse(error.message || "The Scout could not extract an event from that link.", error.httpStatus || 422);
+      await failPastedLinkRun(db, runId, pastedUrl, error);
+      const message = error.message || "The Scout could not extract an event from that link.";
+      return errorResponse(`${message} This attempt is saved in Run History.`, error.httpStatus || 422);
     }
   }
   if (!id) {
@@ -4729,7 +4792,17 @@ async function handleStrongPicks(request, env) {
   let suppressedCount = 0;
   for (const rawEvent of events) {
     try {
-      const proposal = { ...rawEvent, discoveryChannel: "scheduled_chat" };
+      const requestedVerification = asString(rawEvent?.verificationState);
+      const proposal = {
+        ...rawEvent,
+        discoveryChannel: "scheduled_chat",
+        verificationState: ["verified", "needs_verification"].includes(requestedVerification)
+          ? requestedVerification
+          : "needs_verification",
+        verificationNotes: asString(rawEvent?.verificationNotes) || (requestedVerification
+          ? "The scheduled Scout supplied an unsupported verification state; review the event evidence in Studio."
+          : "The scheduled Scout did not explicitly verify this event; review the event evidence in Studio."),
+      };
       const leadUrl = asString(proposal.discoveryUrl) || asString(proposal.announcementUrl);
       if (proposal.announcementUrl && !proposal.discoveryUrl) proposal.discoveryUrl = proposal.announcementUrl;
       const needsSourceResolution = Boolean(leadUrl && sourceAuthorityErrors(proposalFromBody(proposal)).length);
@@ -4742,7 +4815,7 @@ async function handleStrongPicks(request, env) {
       ];
       const stored = await upsertScoutProposal(
         env, db, resolved.proposal, "openai_web_search", provenance, profile,
-        { refreshPrivateIntelligence: true },
+        { refreshPrivateIntelligence: true, allowIncompleteCandidate: true },
       );
       await recordSourceResolutionAttempt(db, resolved.audit, stored.candidate?.id || "", runId);
       const pick = await recordStrongPick(db, runId, stored, startedAt);
@@ -5810,6 +5883,8 @@ function sourceAdapterKey(source) {
   const host = sourceHost(source.url);
   if (host === "eventbrite.com" || host.endsWith(".eventbrite.com")) return "eventbrite";
   if (host === "posh.vip" || host.endsWith(".posh.vip")) return "posh";
+  if (host === "partiful.com" || host.endsWith(".partiful.com")) return "partiful";
+  if (host === "atlantalovesart.com" || host.endsWith(".atlantalovesart.com")) return "atlanta_loves_art";
   if (host === "eyedrum.org") return "eyedrum";
   if (host === "beltline.org" && /^\/events(?:\/|$)/i.test(new URL(source.url).pathname)) return "beltline";
   if (host === "rampantgallery.com" || host.endsWith(".rampantgallery.com")) return "rampant";
@@ -6158,6 +6233,220 @@ function extractSquarespaceEvents(html, source) {
   return parseJson(source.adapter_config_json, {}).groupOverlappingExhibitions
     ? groupSquarespaceExhibitions(events, source)
     : events;
+}
+
+function atlantaLovesArtIdentityFields(source, sourceUrl) {
+  const organizerUrl = "https://www.atlantalovesart.com/";
+  return {
+    sourceId: source.id,
+    sourceUrl,
+    discoveryUrl: "",
+    organizerUrl,
+    venueUrl: "",
+    sourceAuthority: "organizer_event",
+    sourceResolutionNotes: "Atlanta Loves Art published this schedule on its official website.",
+  };
+}
+
+function atlantaLovesArtContextItems(html) {
+  const items = [];
+  const pattern = /data-current-context=(?:"([^"]*)"|'([^']*)')/gi;
+  let match;
+  while ((match = pattern.exec(asString(html))) && items.length < 100) {
+    const context = parseJson(sourceHtmlEntities(match[1] || match[2]), {});
+    if (!Array.isArray(context.userItems)) continue;
+    items.push(...context.userItems.filter((item) => item && typeof item === "object"));
+  }
+  return items;
+}
+
+function atlantaLovesArtRsvpUrl(html, sourceUrl) {
+  const match = asString(html).match(/<a\b[^>]*href=["']([^"']*\/rsvp(?:[?#][^"']*)?)["']/i);
+  if (!match) return "";
+  try {
+    const url = new URL(sourceHtmlEntities(match[1]), sourceUrl).toString();
+    return sameOriginUrl(url, sourceUrl) ? url : "";
+  } catch {
+    return "";
+  }
+}
+
+function atlantaLovesArtAddress(value) {
+  const match = asString(value).match(/\b\d{1,6}\s+[A-Za-z0-9.' -]{2,100}(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Parkway|Pkwy|Way|Lane|Ln)(?:\s+(?:NE|NW|SE|SW|N|S|E|W))?\b/i);
+  return asString(match?.[0]).replace(/\s+/g, " ");
+}
+
+function atlantaLovesArtTimedOccurrence(dayKey, timeLabel) {
+  const match = asString(timeLabel).match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey) || !match) return null;
+  const hour = (value, meridiem) => (Number(value) % 12) + (/p/i.test(meridiem) ? 12 : 0);
+  const startMeridiem = match[3] || match[6];
+  const offset = nyOffsetForDate(new Date(`${dayKey}T12:00:00Z`));
+  return {
+    dateKind: "timed",
+    startsAt: `${dayKey}T${String(hour(match[1], startMeridiem)).padStart(2, "0")}:${match[2] || "00"}:00${offset}`,
+    endsAt: `${dayKey}T${String(hour(match[4], match[6])).padStart(2, "0")}:${match[5] || "00"}:00${offset}`,
+  };
+}
+
+function atlantaLovesArtUpcomingEvents(html, source) {
+  const sourceUrl = source.url;
+  const rsvpUrl = atlantaLovesArtRsvpUrl(html, sourceUrl);
+  const seen = new Set();
+  const items = atlantaLovesArtContextItems(html).filter((item) => {
+    const title = cleanSourceText(item.title).replace(/[.\s]+$/, "");
+    const identity = normalizeText(title);
+    if (!/\bexhibit\b/.test(identity) || seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+  const occurrences = items.map((item, index) => {
+    const title = cleanSourceText(item.title).replace(/[.\s]+$/, "");
+    const occurrenceTitle = title.replace(/^([A-Za-z]+)\s+exhibit$/i, (_, month) => `${month.charAt(0).toUpperCase()}${month.slice(1).toLowerCase()} Exhibit`);
+    const description = cleanSourceText(item.description);
+    const timedRange = humanTimedRange(description);
+    const range = timedRange ? { dateKind: "timed", ...timedRange } : highArchiveRange(description);
+    const address = atlantaLovesArtAddress(description);
+    const venueName = "BeltLine East — Krog District";
+    const scheduled = Boolean(range?.startsAt);
+    return {
+      sourceEventId: `atlanta-loves-art-${normalizeText(title).replace(/\s+/g, "-")}`,
+      occurrenceType: "other",
+      title: occurrenceTitle,
+      factualDescription: scheduled
+        ? `${occurrenceTitle} is announced at ${venueName}.`
+        : `${occurrenceTitle} is announced; its date and time are still to be confirmed.`,
+      accessStatus: "unknown",
+      accessNotes: "Public attendance details have not been confirmed.",
+      audiences: [],
+      dateKind: range?.dateKind || "timed",
+      startsAt: range?.startsAt || null,
+      endsAt: range?.endsAt || null,
+      timezone: TIME_ZONE,
+      venueName,
+      venueAddress: address ? `${address}, Atlanta, GA` : "",
+      sourceUrl,
+      ticketUrl: rsvpUrl,
+      status: scheduled ? "scheduled" : "tbd",
+      verificationState: scheduled ? "verified" : "needs_verification",
+      verificationNotes: scheduled
+        ? "The date, time, and location were retrieved from Atlanta Loves Art's official Upcoming Events carousel."
+        : "Atlanta Loves Art announced this exhibit without a confirmed date or time. Keep it as TBD until the official page supplies them.",
+      sortOrder: index,
+    };
+  });
+  const scheduled = occurrences.filter((item) => item.status === "scheduled" && item.startsAt);
+  if (!scheduled.length) return [];
+  const first = scheduled[0];
+  const last = scheduled.at(-1);
+  const firstItem = items[occurrences.indexOf(first)] || items[0] || {};
+  const flyerUrl = validHttpUrl(firstItem.image?.assetUrl) ? asString(firstItem.image.assetUrl) : "";
+  return [{
+    ...atlantaLovesArtIdentityFields(source, sourceUrl),
+    sourceEventId: "atlanta-loves-art-upcoming-exhibits",
+    ticketUrl: rsvpUrl,
+    relatedLinks: [],
+    flyerUrl,
+    flyerProvenanceUrl: flyerUrl ? sourceUrl : "",
+    flyerAltText: flyerUrl ? "Atlanta Loves Art exhibit image" : "",
+    title: "Atlanta Loves Art Exhibits",
+    organizer: "Atlanta Loves Art",
+    factualDescription: "Atlanta Loves Art announces monthly exhibits in the BeltLine East Krog District.",
+    eventStructure: "series",
+    accessStatus: "unknown",
+    accessNotes: "Public attendance details have not been confirmed.",
+    audiences: [],
+    dateKind: "date_range",
+    startsAt: dateKey(first.startsAt),
+    endsAt: dateKey(last.endsAt || last.startsAt),
+    timezone: TIME_ZONE,
+    venueName: first.venueName,
+    venueAddress: first.venueAddress,
+    city: "Atlanta",
+    region: "GA",
+    subjects: ["art"],
+    formats: ["exhibition"],
+    experimental: false,
+    verificationState: "needs_verification",
+    verificationNotes: `${scheduled.length} dated exhibit and ${occurrences.length - scheduled.length} undated announcement${occurrences.length - scheduled.length === 1 ? "" : "s"} were recovered from Atlanta Loves Art's custom Squarespace carousel. Undated months remain TBD.`,
+    confidence: 0.94,
+    occurrences,
+  }];
+}
+
+function atlantaLovesArtCreativeExchangeEvents(html, source) {
+  const sourceUrl = source.url;
+  const scheduleMatch = asString(html).match(/"options"\s*:\s*(\[[^\]]+\])\s*,\s*"title"\s*:\s*"Which date would you like to participate in\?"/i);
+  const dateValues = parseJson(scheduleMatch?.[1] || "[]", []);
+  const dates = [...new Set(dateValues.map(asString).map((value) => {
+    const match = value.match(/^(\d{1,2})\/(\d{1,2})\/(20\d{2})$/);
+    if (!match) return "";
+    return `${match[3]}-${String(Number(match[1])).padStart(2, "0")}-${String(Number(match[2])).padStart(2, "0")}`;
+  }).filter(Boolean))].sort();
+  const pageText = cleanSourceText(html);
+  const timeLabel = asString(pageText.match(/\bEvery Sunday\s+([^.;|]{3,40})/i)?.[1]);
+  const address = atlantaLovesArtAddress(asString(pageText.match(/\bLocation\s*:\s*([^.;|]{3,120})/i)?.[1]) || pageText);
+  const occurrences = dates.map((dayKey, index) => {
+    const range = atlantaLovesArtTimedOccurrence(dayKey, timeLabel);
+    if (!range) return null;
+    const displayDate = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", day: "numeric" }).format(new Date(`${dayKey}T12:00:00Z`));
+    return {
+      sourceEventId: `atlanta-loves-art-creative-exchange-${dayKey}`,
+      occurrenceType: "other",
+      title: displayDate,
+      factualDescription: `Creative Exchange ATL is scheduled for ${displayDate} at 116 Krog St NE.`,
+      accessStatus: "unknown",
+      accessNotes: "The vendor application does not confirm public attendance eligibility.",
+      audiences: [],
+      ...range,
+      timezone: TIME_ZONE,
+      venueName: "Creative Exchange ATL",
+      venueAddress: address ? `${address}, Atlanta, GA` : "116 Krog St NE, Atlanta, GA",
+      sourceUrl,
+      ticketUrl: "",
+      status: "scheduled",
+      verificationState: "verified",
+      verificationNotes: "The occurrence date and recurring Sunday hours were retrieved from Atlanta Loves Art's official vendor application page.",
+      sortOrder: index,
+    };
+  }).filter(Boolean);
+  if (!occurrences.length) return [];
+  return [{
+    ...atlantaLovesArtIdentityFields(source, sourceUrl),
+    sourceEventId: "atlanta-loves-art-creative-exchange",
+    ticketUrl: "",
+    relatedLinks: [],
+    title: "Creative Exchange ATL",
+    organizer: "Atlanta Loves Art",
+    factualDescription: "Creative Exchange ATL is scheduled on selected Sundays at 116 Krog St NE.",
+    eventStructure: "series",
+    accessStatus: "unknown",
+    accessNotes: "The vendor application does not confirm public attendance eligibility.",
+    audiences: [],
+    dateKind: "date_range",
+    startsAt: dates[0],
+    endsAt: dates.at(-1),
+    timezone: TIME_ZONE,
+    venueName: "Creative Exchange ATL",
+    venueAddress: occurrences[0].venueAddress,
+    city: "Atlanta",
+    region: "GA",
+    subjects: ["art"],
+    formats: ["exhibition"],
+    experimental: false,
+    verificationState: "needs_verification",
+    verificationNotes: `${occurrences.length} dated Sunday occurrences were recovered from Atlanta Loves Art's official vendor application. Vendor participation requirements remain private and do not establish public attendance eligibility.`,
+    confidence: 0.92,
+    occurrences,
+  }];
+}
+
+function extractAtlantaLovesArtEvents(html, source) {
+  let pathname = "";
+  try { pathname = new URL(source.url).pathname.replace(/\/+$/, "") || "/"; } catch { /* Invalid source URLs are rejected before extraction. */ }
+  if (/\/creative-exchange-atl$/i.test(pathname)) return atlantaLovesArtCreativeExchangeEvents(html, source);
+  if (/\/upcoming-events$/i.test(pathname)) return atlantaLovesArtUpcomingEvents(html, source);
+  return [...atlantaLovesArtUpcomingEvents(html, source), ...atlantaLovesArtCreativeExchangeEvents(html, source)];
 }
 
 function highDateParts(monthName, dayValue, yearValue) {
@@ -6823,6 +7112,11 @@ function platformEventIdentity(adapterKey, value, baseUrl = "") {
         url: `https://www.bigtickets.com/event/widget_render.cfm?id=${encodeURIComponent(token)}&type=purchase`,
       };
     }
+    if (adapterKey === "partiful" && (host === "partiful.com" || host.endsWith(".partiful.com"))) {
+      const token = path.match(/^\/e\/([a-z0-9_-]+)$/i)?.[1];
+      if (!token) return null;
+      return { id: `partiful-${token}`, url: `https://partiful.com/e/${token}` };
+    }
   } catch {
     // Untrusted malformed platform URLs are ignored.
   }
@@ -6833,7 +7127,103 @@ function ticketPlatformName(adapterKey) {
   if (adapterKey === "eventbrite") return "Eventbrite";
   if (adapterKey === "posh") return "Posh";
   if (adapterKey === "bigtickets") return "BigTickets";
+  if (adapterKey === "partiful") return "Partiful";
   return "ticket platform";
+}
+
+function zonedCalendarDateTime(value, timezone = TIME_ZONE) {
+  const date = new Date(asString(value));
+  if (!Number.isFinite(date.getTime())) return "";
+  const zone = validTimeZone(timezone) ? timezone : TIME_ZONE;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+    }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+    const zoneName = new Intl.DateTimeFormat("en-US", { timeZone:zone, timeZoneName:"longOffset" })
+      .formatToParts(date).find((part) => part.type === "timeZoneName")?.value || "GMT-04:00";
+    const offset = zoneName === "GMT" ? "+00:00" : zoneName.replace(/^GMT/, "");
+    if (![parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second, offset].every(Boolean)) return "";
+    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${offset}`;
+  } catch {
+    return "";
+  }
+}
+
+function partifulDisplayedHosts(html) {
+  const marker = asString(html).search(/>\s*Hosted by\s*</i);
+  if (marker < 0) return "";
+  const text = cleanSourceText(asString(html).slice(marker + 1, marker + 5000));
+  return asString(text.match(/^Hosted by\s+(.+?)\s+(?:(?:US)?\$\s*\d+(?:\.\d{1,2})?|Free|RSVP)\b/i)?.[1]).slice(0, 300);
+}
+
+function partifulEventFromNextData(html, source, detail) {
+  const script = asString(html).match(/<script\b(?=[^>]*\bid=["']__NEXT_DATA__["'])(?=[^>]*\btype=["']application\/json["'])[^>]*>([\s\S]*?)<\/script>/i)?.[1];
+  if (!script) return null;
+  const pageProps = parseJson(script, {})?.props?.pageProps || {};
+  const item = pageProps.event;
+  if (!item || typeof item !== "object") return null;
+  const eventIdentity = platformEventIdentity("partiful", detail.url || item.id, source.url);
+  const title = cleanSourceText(item.title);
+  const timezone = validTimeZone(item.timezone) ? asString(item.timezone) : TIME_ZONE;
+  const startsAt = zonedCalendarDateTime(item.startDate, timezone);
+  const endsAt = zonedCalendarDateTime(item.endDate, timezone) || null;
+  if (!eventIdentity || !title || !validDate(startsAt)) return null;
+  const description = directPublicCopy(item.description);
+  const maps = item.locationInfo?.mapsInfo || {};
+  const addressLines = Array.isArray(maps.addressLines) ? maps.addressLines.map(cleanSourceText).filter(Boolean) : [];
+  const approximateLocation = cleanSourceText(maps.approximateLocation);
+  const venueAddress = addressLines.join(", ") || approximateLocation;
+  const locationParts = approximateLocation.split(",").map((value) => value.trim()).filter(Boolean);
+  const hosts = Array.isArray(pageProps.hosts)
+    ? pageProps.hosts.map((host) => cleanSourceText(host?.displayName || host?.name || host?.username)).filter(Boolean)
+    : [];
+  const organizer = hosts.join("; ") || partifulDisplayedHosts(html);
+  const publicAttendance = item.visibility === "public" && /\b(?:no one will be denied entry|open to (?:the )?public|open to all|all (?:are )?welcome)\b/i.test(description);
+  const rsvpOpen = Boolean(item.rsvpsEnabled) && item.status === "PUBLISHED" && !item.atCapacity;
+  const contribution = item.ticketing?.type === "chip_in" && Number.isFinite(Number(item.ticketing?.price))
+    ? `${new Intl.NumberFormat("en-US", { style:"currency", currency:asString(item.ticketing?.currency) || "USD", maximumFractionDigits:2 }).format(Number(item.ticketing.price))} suggested contribution`
+    : "";
+  const ticketNotes = [item.rsvpsEnabled ? "RSVP through Partiful." : "", contribution ? `${contribution}.` : ""].filter(Boolean).join(" ");
+  const pageImage = staticPageMediaCandidates(html, eventIdentity.url, 10)
+    .find((candidate) => /^(?:og:image(?::url)?|twitter:image(?::src)?)$/i.test(candidate.evidence))?.mediaUrl || "";
+  const embeddedImage = asString(item.image?.url || item.image?.upload?.url);
+  const imageUrl = pageImage || (validHttpUrl(embeddedImage) ? embeddedImage : "");
+  return {
+    sourceId: source.id,
+    sourceEventId: eventIdentity.id,
+    sourceUrl: eventIdentity.url,
+    ticketUrl: item.rsvpsEnabled ? eventIdentity.url : "",
+    scheduleStatus: item.status === "CANCELLED" ? "cancelled" : "scheduled",
+    ...ticketDetails(rsvpOpen ? "registration_open" : item.rsvpsEnabled ? "registration_closed" : "not_required", "", ticketNotes),
+    organizerUrl: "",
+    venueUrl: "",
+    relatedLinks: [],
+    flyerUrl: imageUrl,
+    flyerProvenanceUrl: eventIdentity.url,
+    flyerAltText: `${title} event image`,
+    title,
+    organizer,
+    factualDescription: description,
+    accessStatus: publicAttendance ? "public" : "unknown",
+    accessNotes: publicAttendance ? "No one will be denied entry." : "",
+    audiences: publicAttendance ? ["Public"] : [],
+    eventStructure: "single",
+    dateKind: "timed",
+    startsAt,
+    endsAt,
+    timezone,
+    venueName: cleanSourceText(item.locationInfo?.name || maps.name),
+    venueAddress,
+    city: locationParts[0] || "Atlanta",
+    region: locationParts[1] || "GA",
+    subjects: [],
+    formats: /\bart (?:show|showcase)\b/i.test(`${title} ${description}`) ? ["exhibition"] : [],
+    experimental: false,
+    verificationState: "verified",
+    verificationNotes: "Event facts were retrieved from Partiful's embedded public event data.",
+    confidence: 0.9,
+  };
 }
 
 function platformEventLinks(html, source, adapterKey, maximum) {
@@ -7683,6 +8073,14 @@ async function ticketPlatformDetail(env, source, adapterKey, detail, staticText 
       // Dynamic extraction below is the bounded fallback for blocked ticket pages.
     }
   }
+  if (adapterKey === "partiful" && text) {
+    const event = partifulEventFromNextData(text, source, detail);
+    if (event) return {
+      proposal: inferSubjectsAndFormats(ticketPlatformProposal(event, source, adapterKey, detail)),
+      browserMs: 0,
+      retrieval: "static",
+    };
+  }
   const structured = text ? extractJsonLdEvents(text, source) : [];
   const matching = structured.find((event) => platformEventIdentity(adapterKey, event.sourceUrl, detail.url)?.id === detail.id) || structured[0];
   if (matching) return { proposal: ticketPlatformProposal(matching, source, adapterKey, detail), browserMs: 0, retrieval: "static" };
@@ -7703,7 +8101,9 @@ function pastedLinkSource(pastedUrl) {
     ? "eventbrite"
     : host === "posh.vip" || host.endsWith(".posh.vip")
       ? "posh"
-      : host === "bigtickets.com" || host.endsWith(".bigtickets.com") ? "bigtickets" : "";
+      : host === "bigtickets.com" || host.endsWith(".bigtickets.com")
+        ? "bigtickets"
+        : host === "partiful.com" || host.endsWith(".partiful.com") ? "partiful" : "";
   return {
     id: "",
     name: host || "Pasted event link",
@@ -7770,7 +8170,7 @@ async function extractPastedLinkProposal(env, pastedUrl) {
   if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) {
     const detail = platformEventIdentity(adapterKey, pastedUrl, pastedUrl);
     if (!detail) {
-      const error = new Error("Paste an exact Eventbrite, Posh, or BigTickets event page, not a platform index or profile.");
+      const error = new Error("Paste an exact Eventbrite, Posh, BigTickets, or Partiful event page, not a platform index or profile.");
       error.httpStatus = 422;
       throw error;
     }
@@ -8097,6 +8497,7 @@ async function extractOutOfHandSeries(env, staticText, source) {
 
 export function extractCalendarSourceEvents(text, source) {
   const adapterKey = sourceAdapterKey(source);
+  if (adapterKey === "atlanta_loves_art") return extractAtlantaLovesArtEvents(text, source);
   if (adapterKey === "beltline") return extractBeltlineRenderedEvents(text, source);
   if (adapterKey === "eyedrum") return extractEyedrumEvents(text, source);
   if (adapterKey === "squarespace") return extractSquarespaceEvents(text, source);
@@ -8430,11 +8831,13 @@ function scoutRelevance(event, profile) {
   };
 }
 
-async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenance, profile, { targetCandidateId = "", bypassEligibility = false, refreshPrivateIntelligence = false } = {}) {
+async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenance, profile, { targetCandidateId = "", bypassEligibility = false, refreshPrivateIntelligence = false, allowIncompleteCandidate = false } = {}) {
   let proposal = inferSubjectsAndFormats(proposalFromBody(rawProposal));
-  if (!proposal.title || !proposal.startsAt || !validDate(proposal.startsAt) || !validHttpUrl(proposal.sourceUrl)) return { skipped: "invalid" };
+  const incompleteCandidate = allowIncompleteCandidate && proposal.verificationState === "needs_verification";
+  if (!proposal.title || !validHttpUrl(proposal.sourceUrl)) return { skipped: "invalid" };
+  if ((!proposal.startsAt || !validDate(proposal.startsAt)) && !incompleteCandidate) return { skipped: "invalid" };
   if (!targetCandidateId && !bypassEligibility && !geographicMatch(proposal, profile.geographicRules)) return { skipped: "geography" };
-  if (!targetCandidateId && !bypassEligibility && !withinHorizon(proposal, profile.dateHorizonDays)) return { skipped: "date-horizon" };
+  if (!targetCandidateId && !bypassEligibility && proposal.startsAt && !withinHorizon(proposal, profile.dateHorizonDays)) return { skipped: "date-horizon" };
   if (!targetCandidateId && !bypassEligibility && (!proposal.subjects.length || !proposal.formats.length)) return { skipped: "unclassified" };
   const relevance = scoutRelevance(proposal, profile);
   const threshold = Number.isFinite(Number(profile.relevanceThreshold)) ? Number(profile.relevanceThreshold) : 0.68;

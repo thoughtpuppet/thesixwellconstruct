@@ -1217,6 +1217,8 @@ test("Posh Atlanta scouting spans organizers and accepts event-host identity pro
   })}</script>`;
   const secondDetailHtml = "<main>Rendered Posh event shell</main>";
   const originalFetch = globalThis.fetch;
+  const originalDateNow = Date.now;
+  Date.now = () => Date.parse("2026-08-23T12:00:00-04:00");
   globalThis.fetch = async (url) => new Response(
     url === eventUrl ? detailHtml : url === secondEventUrl ? secondDetailHtml : "<main>Atlanta events on Posh</main>",
     { status:200, headers:{ "content-type":"text/html" } },
@@ -1253,6 +1255,7 @@ test("Posh Atlanta scouting spans organizers and accepts event-host identity pro
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id='posh-atlanta-creative-technology-mixer')").get().count, 0);
   } finally {
     globalThis.fetch = originalFetch;
+    Date.now = originalDateNow;
   }
 });
 
@@ -4092,6 +4095,83 @@ test("Calendar Studio reuses a saved credential without showing the unlock contr
   assert.doesNotMatch(studio,/tokenInput\.value = token/);
 });
 
+test("Atlanta Loves Art custom carousel creates one series with dated and TBD exhibit occurrences", async () => {
+  const db = database();
+  const eventUrl = "https://www.atlantalovesart.com/upcoming-events";
+  const context = JSON.stringify({ userItems:[
+    { title:"AUGUST EXHIBIT.", description:"<p>SATURDAY AUG 29TH, 2026</p><p>116 KROG ST NE</p><p>7:00PM - 11:30PM</p><p>BELTLINE EAST - KROG DISTRICT</p>", image:{ assetUrl:"https://images.squarespace-cdn.com/august.jpg" } },
+    { title:"SEPTEMBER EXHIBIT.", description:"<p>BELTLINE EAST - KROG DISTRICT</p>", image:{ assetUrl:"https://images.squarespace-cdn.com/september.jpg" } },
+    { title:"OCTOBER EXHIBIT.", description:"<p>BELTLINE EAST - KROG DISTRICT</p>", image:{ assetUrl:"https://images.squarespace-cdn.com/october.jpg" } },
+    { title:"AUGUST EXHIBIT.", description:"<p>SATURDAY AUG 29TH, 2026</p><p>116 KROG ST NE</p><p>7:00PM - 11:30PM</p><p>BELTLINE EAST - KROG DISTRICT</p>" },
+  ] }).replace(/&/g,"&amp;").replace(/"/g,"&quot;");
+  const sourceHtml = `<main><div data-current-context="${context}"></div><a href="/rsvp">RSVP</a></main>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), eventUrl);
+    return new Response(sourceHtml, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db));
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.equal(payload.extraction.adapter, "atlanta_loves_art");
+    assert.equal(payload.candidate.title, "Atlanta Loves Art Exhibits");
+    assert.equal(payload.candidate.eventStructure, "series");
+    assert.equal(payload.candidate.sourceAuthority, "organizer_event");
+    assert.equal(payload.candidate.ticketUrl, "https://www.atlantalovesart.com/rsvp");
+    assert.deepEqual(payload.candidate.occurrences.map((item) => ({ title:item.title, status:item.status, startsAt:item.startsAt, endsAt:item.endsAt })), [
+      { title:"August Exhibit", status:"scheduled", startsAt:"2026-08-29T19:00:00-04:00", endsAt:"2026-08-29T23:30:00-04:00" },
+      { title:"September Exhibit", status:"tbd", startsAt:null, endsAt:null },
+      { title:"October Exhibit", status:"tbd", startsAt:null, endsAt:null },
+    ]);
+    assert.deepEqual(
+      { ...db.prepare("SELECT status,model,candidate_count,failure_count FROM calendar_scout_runs WHERE id=?").get(payload.runId) },
+      { status:"completed", model:"pasted-link", candidate_count:1, failure_count:0 },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Atlanta Loves Art vendor schedule creates dated Creative Exchange occurrences without publishing application rules", async () => {
+  const db = database();
+  const eventUrl = "https://www.atlantalovesart.com/creative-exchange-atl";
+  const form = JSON.stringify({
+    options:["8/2/2026","8/16/2026","8/23/2026","8/30/2026"],
+    title:"Which date would you like to participate in?",
+  });
+  const sourceHtml = `<main><h1>Creative Exchange ATL</h1><p>Date: Every Sunday 2-7pm</p><p>Location: 116 Krog St NE (Indoor Event)</p><p>Vendor applicants bring a black tablecloth.</p></main><script type="application/json">${form}</script>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), eventUrl);
+    return new Response(sourceHtml, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const response = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }), env(db));
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.equal(payload.extraction.adapter, "atlanta_loves_art");
+    assert.equal(payload.candidate.title, "Creative Exchange ATL");
+    assert.equal(payload.candidate.eventStructure, "series");
+    assert.equal(payload.candidate.startsAt, "2026-08-02");
+    assert.equal(payload.candidate.endsAt, "2026-08-30");
+    assert.equal(payload.candidate.occurrences.length, 4);
+    assert.deepEqual(
+      payload.candidate.occurrences.map((item) => [item.title,item.startsAt,item.endsAt]),
+      [
+        ["August 2","2026-08-02T14:00:00-04:00","2026-08-02T19:00:00-04:00"],
+        ["August 16","2026-08-16T14:00:00-04:00","2026-08-16T19:00:00-04:00"],
+        ["August 23","2026-08-23T14:00:00-04:00","2026-08-23T19:00:00-04:00"],
+        ["August 30","2026-08-30T14:00:00-04:00","2026-08-30T19:00:00-04:00"],
+      ],
+    );
+    assert.doesNotMatch(`${payload.candidate.factualDescription} ${payload.candidate.occurrences.map((item) => item.factualDescription).join(" ")}`, /black tablecloth/i);
+    assert.match(payload.candidate.verificationNotes, /Vendor participation requirements remain private/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("a pasted event link creates or refreshes one private candidate from structured facts", async () => {
   const db = database();
   const eventUrl = "https://paste-intake.example/events/one-night-exhibition";
@@ -4128,6 +4208,70 @@ test("a pasted event link creates or refreshes one private candidate from struct
     assert.equal(secondPayload.existing, true);
     assert.equal(secondPayload.candidate.id, candidate.id);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE source_url=?").get(eventUrl).count, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a pasted Partiful event uses embedded public data and captures its image without Browser extraction", async () => {
+  const db = database();
+  const bucket = new MemoryBucket();
+  const pastedUrl = "https://partiful.com/e/WwarsPnvQUBXgOEdRFuE?";
+  const canonicalUrl = "https://partiful.com/e/WwarsPnvQUBXgOEdRFuE";
+  const embeddedImageUrl = "https://partiful.example/nook-and-kranny-original.png?alt=media&token=private-file-token";
+  const imageUrl = "https://partiful.example/nook-and-kranny.png?w=1000&h=1250&fit=clip";
+  const partifulEvent = {
+    id:"WwarsPnvQUBXgOEdRFuE",
+    title:"NOOK & KRANNY Art Showcase",
+    startDate:"2026-09-05T19:00:00.000Z",
+    endDate:"2026-09-06T01:00:00.000Z",
+    timezone:"America/New_York",
+    visibility:"public",
+    rsvpsEnabled:true,
+    status:"PUBLISHED",
+    atCapacity:false,
+    description:"This DIY art, music, and food event displays work from more than 80 Atlanta artists. Short films, ceramics, clothing, DJs, paintings, drawings, and mixed media fill the property. A $10 contribution is suggested; however no one will be denied entry.",
+    locationInfo:{ type:"structured", mapsInfo:{ approximateLocation:"Atlanta, GA", addressLines:[] } },
+    ticketing:{ mode:"optional", price:10, currency:"USD", type:"chip_in", payment:{ venmoUsername:"private-payment-handle" } },
+    image:{ url:embeddedImageUrl },
+  };
+  const sourceHtml = `<html><head><meta property="og:image" content="${imageUrl.replaceAll("&", "&amp;")}"></head><body><div>Hosted by <span>Nook Host</span> $10 suggested</div><script id="__NEXT_DATA__" type="application/json">${JSON.stringify({ props:{ pageProps:{ event:partifulEvent, hosts:null, guest:{ private:"must-not-import" } } } }).replaceAll("&", "\\u0026")}</script></body></html>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const requested = String(url);
+    if (requested === pastedUrl || requested === canonicalUrl) return new Response(sourceHtml, { status:200, headers:{ "content-type":"text/html" } });
+    if (requested === imageUrl) return new Response(new Uint8Array([137,80,78,71,13,10,26,10]), { status:200, headers:{ "content-type":"image/png" } });
+    throw new Error(`Unexpected fetch ${requested}`);
+  };
+  try {
+    const response = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:pastedUrl }, admin:true }),
+      env(db, { SUBMISSION_FILES:bucket }),
+    );
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.deepEqual(payload.extraction, { retrieval:"static", browserMs:0, adapter:"partiful" });
+    const candidate = db.prepare(
+      `SELECT source_event_id,source_url,ticket_url,title,organizer,factual_description,event_structure,date_kind,
+              starts_at,ends_at,timezone,venue_name,venue_address,city,region,access_status,access_notes,audiences_json,
+              ticket_status,ticket_notes,formats_json,status,verification_state,source_authority,flyer_source_url,flyer_provenance_url
+       FROM calendar_candidates WHERE id=?`
+    ).get(payload.candidate.id);
+    assert.deepEqual({ ...candidate }, {
+      source_event_id:"partiful-WwarsPnvQUBXgOEdRFuE", source_url:canonicalUrl, ticket_url:canonicalUrl,
+      title:"NOOK & KRANNY Art Showcase", organizer:"Nook Host",
+      factual_description:partifulEvent.description, event_structure:"single", date_kind:"timed",
+      starts_at:"2026-09-05T15:00:00-04:00", ends_at:"2026-09-05T21:00:00-04:00", timezone:"America/New_York",
+      venue_name:"", venue_address:"Atlanta, GA", city:"Atlanta", region:"GA",
+      access_status:"public", access_notes:"No one will be denied entry.", audiences_json:'["Public"]',
+      ticket_status:"registration_open", ticket_notes:"RSVP through Partiful. $10.00 suggested contribution.", formats_json:'["exhibition"]',
+      status:"needs_verification", verification_state:"needs_verification", source_authority:"authorized_ticket_host",
+      flyer_source_url:imageUrl, flyer_provenance_url:canonicalUrl,
+    });
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payload.candidate.id).count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM media_assets WHERE id=(SELECT flyer_media_id FROM calendar_candidates WHERE id=?)").get(payload.candidate.id).count, 1);
+    assert.equal(JSON.stringify(payload.candidate).includes("private-payment-handle"), false);
+    assert.equal(JSON.stringify(payload.candidate).includes("must-not-import"), false);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -4606,6 +4750,12 @@ test("Instagram intake returns Browser's actual 422 detail when both extraction 
     assert.equal(response.status, 422);
     const payload = await response.json();
     assert.match(payload.error, /Instagram page could not be rendered/);
+    assert.match(payload.error, /saved in Run History/i);
+    const run = db.prepare("SELECT status,model,failure_count,error_message,source_results_json FROM calendar_scout_runs WHERE model='pasted-link' ORDER BY started_at DESC LIMIT 1").get();
+    assert.equal(run.status, "failed");
+    assert.equal(run.failure_count, 1);
+    assert.match(run.error_message, /Instagram page could not be rendered/);
+    assert.equal(JSON.parse(run.source_results_json)[0].sources[0].status, "failed");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -4699,6 +4849,89 @@ test("scheduled Creative Scout handoffs create dated strong picks without repeat
   const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
   assert.equal(publicPayload.events.some((item) => item.title === event.title), false);
   assert.doesNotMatch(JSON.stringify(publicPayload), /privateRationale|attendanceUse|programmingIdeas|potentialCollaborators/);
+});
+
+test("Strong Picks preserves a qualifying undated event as a private needs-verification candidate", async () => {
+  const db = database();
+  const scoutToken = "scoped-calendar-scout-token";
+  const event = {
+    sourceUrl:"https://artist-led.example/announcements/forthcoming-atlanta-exhibition",
+    sourceAuthority:"unresolved",
+    sourceResolutionNotes:"The announcement establishes the event, but its original event page and opening date still need confirmation.",
+    title:"Forthcoming Atlanta Experimental Exhibition",
+    organizer:"Artist-Led Atlanta",
+    factualDescription:"A forthcoming Atlanta exhibition combining moving image, sound, installation, and live poetry.",
+    eventStructure:"exhibition",
+    dateKind:"date_range",
+    startsAt:null,
+    endsAt:null,
+    timezone:"America/New_York",
+    venueName:"Atlanta venue to be confirmed",
+    venueAddress:"Atlanta, GA",
+    city:"Atlanta",
+    region:"GA",
+    subjects:["art","film","poetry-music"],
+    formats:["exhibition","screening","performance"],
+    experimental:true,
+    verificationState:"needs_verification",
+    verificationNotes:"Confirm the opening date, closing date, exact venue address, and original event source.",
+    privateRationale:"A strong interdisciplinary match despite the incomplete announcement.",
+  };
+  const response = await handleCalendarAdminApi(
+    request("/api/admin/calendar/strong-picks", { method:"POST", token:scoutToken, body:{ events:[event] } }),
+    env(db, { CALENDAR_SCOUT_INGEST_TOKEN:scoutToken }),
+  );
+  assert.equal(response.status, 200, await response.clone().text());
+  const payload = await response.json();
+  assert.equal(payload.candidates, 1);
+  assert.equal(payload.failures, 0);
+  assert.equal(payload.strongPicks.length, 1);
+  assert.equal(payload.strongPicks[0].verificationState, "needs_verification");
+  const candidate = db.prepare(
+    "SELECT status,verification_state,starts_at,ends_at,verification_notes,public_entry_id FROM calendar_candidates WHERE id=?"
+  ).get(payload.strongPicks[0].candidateId);
+  assert.deepEqual({
+    status:candidate.status,
+    verification_state:candidate.verification_state,
+    starts_at:candidate.starts_at,
+    ends_at:candidate.ends_at,
+    public_entry_id:candidate.public_entry_id,
+  }, {
+    status:"needs_verification",
+    verification_state:"needs_verification",
+    starts_at:null,
+    ends_at:null,
+    public_entry_id:"",
+  });
+  assert.match(candidate.verification_notes, /Confirm the opening date, closing date, exact venue address, and original event source/);
+  assert.match(candidate.verification_notes, /Resolve the discovery lead/);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payload.strongPicks[0].candidateId).count, 0);
+
+  const omittedStateResponse = await handleCalendarAdminApi(
+    request("/api/admin/calendar/strong-picks", {
+      method:"POST",
+      token:scoutToken,
+      body:{ events:[{
+        ...event,
+        sourceUrl:"https://artist-led.example/announcements/dated-without-verification-state",
+        title:"Dated Atlanta Event Without Verification State",
+        eventStructure:"single",
+        dateKind:"timed",
+        startsAt:"2026-09-20T19:00:00-04:00",
+        endsAt:"2026-09-20T21:00:00-04:00",
+        verificationState:undefined,
+        verificationNotes:undefined,
+      }] },
+    }),
+    env(db, { CALENDAR_SCOUT_INGEST_TOKEN:scoutToken }),
+  );
+  assert.equal(omittedStateResponse.status, 200, await omittedStateResponse.clone().text());
+  const omittedState = await omittedStateResponse.json();
+  assert.equal(omittedState.strongPicks[0].verificationState, "needs_verification");
+  assert.equal(
+    db.prepare("SELECT status FROM calendar_candidates WHERE id=?").get(omittedState.strongPicks[0].candidateId).status,
+    "needs_verification",
+  );
 });
 
 test("Calendar Studio renders a private scrollable Strong Picks dashboard linked to candidates", () => {

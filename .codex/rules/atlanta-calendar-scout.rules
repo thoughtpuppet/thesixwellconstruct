@@ -1,0 +1,13 @@
+# Allow the repository-backed Atlanta Creative Scout to invoke only its fixed,
+# credential-scoped Studio handoff client during unattended scheduled runs.
+prefix_rule(
+    pattern = ["node", "tools/calendar-scout-handoff.mjs"],
+    decision = "allow",
+    justification = "Send structured Atlanta Creative Scout matches to the fixed private Studio Strong Picks endpoint.",
+    match = [
+        "node tools/calendar-scout-handoff.mjs --file output/atlanta-creative-scout-handoff.json",
+    ],
+    not_match = [
+        "node tools/another-script.mjs",
+    ],
+)

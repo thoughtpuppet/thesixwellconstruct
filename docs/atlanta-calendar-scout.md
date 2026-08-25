@@ -57,13 +57,30 @@ counts, failures, and OpenAI usage. Source Registry cards expose retrieval error
 and acceptance rates. Sources can be lowered, paused, or removed without changing
 already approved public snapshots.
 
-The prior ChatGPT alert should remain active during the planned two-week shadow
-comparison. It is external to this Worker and was intentionally not altered by
-this implementation.
+The repository-backed Atlanta Creative Event Alerts scheduled task may submit
+its qualified matches to `POST /api/admin/calendar/strong-picks`. The endpoint
+accepts the dedicated `CALENDAR_SCOUT_INGEST_TOKEN`, creates or refreshes only
+private candidates, records Strong Picks and run diagnostics, and cannot read
+the rest of Studio with that credential. Duplicate, unchanged, suppressed, and
+failed results remain explicit in the handoff response.
+
+The scheduled task must run against this project and follow the durable prompt
+in `docs/atlanta-creative-scout-scheduled-task.md`. It writes its temporary JSON
+batch under the ignored `output/` directory and invokes:
+
+```powershell
+node tools/calendar-scout-handoff.mjs --file output/atlanta-creative-scout-handoff.json
+```
+
+The client refuses to forward the credential to another production host or API
+route and prints only a sanitized result. `CALENDAR_SCOUT_INGEST_TOKEN` must be
+available to the scheduled task as an environment variable; never place it in
+the task prompt, repository, JSON payload, or command arguments.
 
 ## Release gate
 
-Migration `0129_atlanta_calendar.sql`, the `OPENAI_API_KEY` Worker secret, and the
-Worker/static deployment must be released only after explicit production
-approval. The key must be configured as a Worker secret and must never be added
-to `wrangler.jsonc`, source code, logs, or Studio responses.
+Migration `0129_atlanta_calendar.sql`, the `OPENAI_API_KEY` Worker secret, the
+dedicated `CALENDAR_SCOUT_INGEST_TOKEN`, and the Worker/static deployment must be
+released only after explicit production approval. Keys must be configured as
+Worker secrets and must never be added to `wrangler.jsonc`, source code, logs,
+Studio responses, or scheduled-task prompts.

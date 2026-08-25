@@ -28,6 +28,10 @@ OUTREACH_PREFERENCES_ENABLED=false
 OUTREACH_INDIVIDUAL_EMAIL_ENABLED=false
 OUTREACH_EMAIL_CAMPAIGNS_ENABLED=false
 SUBMISSIONS_ADMIN_TOKEN=replace-with-a-long-private-token
+# Dedicated write-only credential for repository-backed Atlanta Creative Scout
+# scheduled handoffs. Never reuse the full Studio admin token here.
+CALENDAR_SCOUT_INGEST_TOKEN=replace-with-a-different-long-random-token
+CALENDAR_SCOUT_INGEST_URL=https://thesixwellconstruct.com/api/admin/calendar/strong-picks
 # Studio site analytics reads the existing Cloudflare Web Analytics RUM data
 # and the custom swc_site_analytics Analytics Engine dataset with one narrowly
 # scoped Account Analytics Read token. The site tag is the public token already
