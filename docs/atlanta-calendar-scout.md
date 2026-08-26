@@ -50,6 +50,13 @@ snapshot remains live. A confirmed date, organizer, factual description, venue,
 Atlanta-metro location, official URL, subject, format, and valid time zone are
 required before publication.
 
+Attendance defaults to public when no source states a restriction. A named
+limited audience is stored as restricted, and only genuinely conflicting access
+evidence remains unknown for Studio verification. Source-style narration in a
+public field is an editorial cleanup signal, not an approval blocker.
+Performer, vendor, applicant, workshop, or competition eligibility does not
+restrict audience attendance unless the source also limits attendees.
+
 ## Discovery and tuning audit
 
 Run History records sources, web queries, citations, candidate and duplicate

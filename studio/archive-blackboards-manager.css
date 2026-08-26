@@ -1,0 +1,55 @@
+.bb-manager > section,
+.bb-workspace > section {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 5px solid currentColor;
+}
+
+.bb-surface-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.bb-surface-tabs button {
+  padding: 10px 12px;
+  border: 5px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.bb-surface-tabs button[aria-current="page"] {
+  background: currentColor;
+  color: var(--color-bg, #0e0e0e);
+}
+
+.bb-upload,
+.bb-fragment-links,
+.bb-search-result {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 5px solid currentColor;
+}
+
+.bb-fragment-links fieldset {
+  display: grid;
+  gap: 8px;
+  border: 5px solid currentColor;
+  padding: 12px;
+}
+
+.bb-search-result {
+  grid-template-columns: minmax(0, 1fr) minmax(140px, auto) auto auto;
+  align-items: center;
+}
+
+@media (max-width: 720px) {
+  .bb-search-result {
+    grid-template-columns: 1fr;
+  }
+}

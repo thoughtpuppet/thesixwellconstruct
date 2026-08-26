@@ -115,7 +115,7 @@
       monitoringEnabled:Boolean(document.getElementById("candidateMonitoringEnabled") && document.getElementById("candidateMonitoringEnabled").checked), monitoringCadenceHours:Number(value("candidateMonitoringCadenceHours")) || 24
     };
   }
-  function blankCandidate() { return { id:"", title:"", status:"needs_verification", scheduleStatus:"scheduled", ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"", verificationState:"needs_verification", sourceAuthority:"unresolved", accessStatus:"unknown", accessNotes:"Attendance eligibility has not been confirmed.", audiences:[], eventStructure:"single", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[], relatedLinks:[], occurrences:[], media:[], attendanceMode:"inferred", recommendedArrivalMinutes:10, minimumVisitMinutes:null, recommendedVisitMinutes:null, lateArrivalAllowed:false, planningEligible:true, latitude:null, longitude:null, planningNotes:"", flyerPublicApproved:false, monitoringEnabled:false, monitoringCadenceHours:24, lastCheckStatus:"never" }; }
+  function blankCandidate() { return { id:"", title:"", status:"needs_verification", scheduleStatus:"scheduled", ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"", verificationState:"needs_verification", sourceAuthority:"unresolved", accessStatus:"public", accessNotes:"", audiences:["Public"], eventStructure:"single", dateKind:"timed", timezone:"America/New_York", city:"Atlanta", region:"GA", subjects:[], formats:[], revisions:[], relatedLinks:[], occurrences:[], media:[], attendanceMode:"inferred", recommendedArrivalMinutes:10, minimumVisitMinutes:null, recommendedVisitMinutes:null, lateArrivalAllowed:false, planningEligible:true, latitude:null, longitude:null, planningNotes:"", flyerPublicApproved:false, monitoringEnabled:false, monitoringCadenceHours:24, lastCheckStatus:"never" }; }
 
   function strongPickWhen(pick) {
     var start=displayDate(pick.startsAt);
@@ -246,7 +246,7 @@
       '<label class="check-option"><input type="checkbox" data-occurrence-late-arrival'+(occurrence.lateArrivalAllowed?' checked':'')+'><span>Late arrival allowed</span></label>' +
       '<label class="field is-wide"><span>Public planning note</span><textarea data-occurrence-planning-notes>'+escapeHtml(occurrence.planningNotes||"")+'</textarea></label>' +
       '<label class="field is-wide"><span>Factual description</span><textarea data-occurrence-description>'+escapeHtml(occurrence.factualDescription||"")+'</textarea></label>' +
-      '<label class="field"><span>Attendance access</span><select data-occurrence-access-status>'+occurrenceOptions([["public","Open to the public"],["restricted","Restricted audience"],["unknown","Needs access verification"]],occurrence.accessStatus||"unknown")+'</select></label>' +
+      '<label class="field"><span>Attendance access</span><select data-occurrence-access-status>'+occurrenceOptions([["public","Open to the public"],["restricted","Restricted audience"],["unknown","Conflicting access information"]],occurrence.accessStatus||"public")+'</select></label>' +
       '<label class="field"><span>Eligible audiences (comma-separated)</span><input data-occurrence-audiences value="'+escapeHtml((occurrence.audiences||[]).join(", "))+'"></label>' +
       '<label class="field is-wide"><span>Public access note</span><textarea data-occurrence-access-notes>'+escapeHtml(occurrence.accessNotes||"")+'</textarea></label>' +
       '<label class="field is-wide"><span>Official occurrence URL</span><input type="url" data-occurrence-source value="'+escapeHtml(occurrence.sourceUrl||"")+'"></label>' +
@@ -307,6 +307,100 @@
     if (!trimmed || !["{","["].includes(trimmed.charAt(0))) return value;
     try { return JSON.parse(trimmed); } catch (error) { return value; }
   }
+  function isScheduleChange(change) {
+    return String(change&&((change.field||change.path))||"").toLowerCase()==="occurrences";
+  }
+  function occurrenceTypeLabel(value) {
+    var match=OCCURRENCE_TYPES.find(function(option){return option[0]===value;});
+    return match?match[1]:String(value||"Related program").replace(/_/g," ");
+  }
+  function occurrenceVerificationLabel(occurrence) {
+    if(occurrence.status==="cancelled")return "Cancelled";
+    if(occurrence.status==="tbd"||!occurrence.startsAt)return "Date needs confirmation";
+    return occurrence.verificationState==="verified"?"Verified date":"Needs verification";
+  }
+  function occurrenceWhen(occurrence) {
+    occurrence=occurrence||{};
+    if(occurrence.status==="tbd"||!occurrence.startsAt)return "Date not confirmed";
+    var zone=occurrence.timezone||"America/New_York";
+    if(occurrence.dateKind!=="timed"){
+      var day=String(occurrence.startsAt).slice(0,10);
+      var parts=day.split("-").map(Number);
+      if(parts.length!==3||parts.some(Number.isNaN))return "Date not confirmed";
+      return new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric",timeZone:"UTC"}).format(new Date(Date.UTC(parts[0],parts[1]-1,parts[2],12)));
+    }
+    var start=new Date(occurrence.startsAt);
+    var end=occurrence.endsAt?new Date(occurrence.endsAt):null;
+    if(Number.isNaN(start.getTime()))return "Date not confirmed";
+    var dateFormatter=new Intl.DateTimeFormat("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric",timeZone:zone});
+    var dayFormatter=new Intl.DateTimeFormat("en-CA",{year:"numeric",month:"2-digit",day:"2-digit",timeZone:zone});
+    var timeFormatter=new Intl.DateTimeFormat("en-US",{hour:"numeric",minute:"2-digit",timeZone:zone});
+    var label=dateFormatter.format(start)+" · "+timeFormatter.format(start);
+    if(end&&!Number.isNaN(end.getTime()))label+=dayFormatter.format(start)===dayFormatter.format(end)?" – "+timeFormatter.format(end):" → "+dateFormatter.format(end)+" · "+timeFormatter.format(end);
+    return label;
+  }
+  function occurrenceComparable(occurrence) {
+    var copy={};
+    Object.keys(occurrence||{}).sort().forEach(function(key){if(!["id","sortOrder"].includes(key))copy[key]=occurrence[key];});
+    return JSON.stringify(copy);
+  }
+  function occurrenceChangedLabels(before,after) {
+    var groups=[
+      ["Title",["title"]],["Program type",["occurrenceType"]],["Date or start time",["startsAt","dateKind","timezone"]],["End time",["endsAt"]],
+      ["Status",["status"]],["Venue",["venueName"]],["Address",["venueAddress"]],["Description",["factualDescription"]],
+      ["Attendance",["accessStatus","accessNotes","audiences"]],["Tickets",["ticketUrl","ticketStatus","ticketOnSaleAt","ticketNotes"]],
+      ["Verification",["verificationState","verificationNotes"]],["Source",["sourceUrl","sourceEventId"]],
+      ["Night planning",["attendanceMode","recommendedArrivalMinutes","minimumVisitMinutes","recommendedVisitMinutes","lateArrivalAllowed","planningEligible","planningNotes","latitude","longitude"]]
+    ];
+    return groups.filter(function(group){return group[1].some(function(key){return JSON.stringify((before||{})[key]??null)!==JSON.stringify((after||{})[key]??null);});}).map(function(group){return group[0];});
+  }
+  function occurrenceMatchIndex(current,proposed,used) {
+    function available(predicate){for(var index=0;index<current.length;index+=1)if(!used.has(index)&&predicate(current[index]||{}))return index;return -1;}
+    var id=String(proposed.id||"").trim();
+    if(id){var byId=available(function(item){return String(item.id||"").trim()===id;});if(byId>=0)return byId;}
+    var sourceId=String(proposed.sourceEventId||"").trim();
+    if(sourceId){var bySource=available(function(item){return String(item.sourceEventId||"").trim()===sourceId;});if(bySource>=0)return bySource;}
+    var exact=available(function(item){return [item.title,item.occurrenceType,item.startsAt].join("|") === [proposed.title,proposed.occurrenceType,proposed.startsAt].join("|");});
+    if(exact>=0)return exact;
+    return available(function(item){return [item.title,item.occurrenceType,item.venueName].join("|") === [proposed.title,proposed.occurrenceType,proposed.venueName].join("|");});
+  }
+  function occurrenceDiff(before,after) {
+    var current=Array.isArray(parsedChangeValue(before))?parsedChangeValue(before):[];
+    var proposed=Array.isArray(parsedChangeValue(after))?parsedChangeValue(after):[];
+    var used=new Set();
+    var rows=proposed.map(function(item){
+      var currentIndex=occurrenceMatchIndex(current,item||{},used);
+      if(currentIndex<0)return {kind:"added",before:null,after:item||{}};
+      used.add(currentIndex);
+      var prior=current[currentIndex]||{};
+      return {kind:occurrenceComparable(prior)===occurrenceComparable(item||{})?"unchanged":"changed",before:prior,after:item||{}};
+    });
+    current.forEach(function(item,index){if(!used.has(index))rows.push({kind:"removed",before:item||{},after:null});});
+    return {current:current,proposed:proposed,rows:rows};
+  }
+  function occurrenceCardMarkup(occurrence,sideLabel,kind) {
+    occurrence=occurrence||{};
+    var description=String(occurrence.factualDescription||"").trim();
+    var source=occurrence.sourceUrl||occurrence.ticketUrl||"";
+    return '<article class="schedule-diff-card is-'+escapeHtml(kind)+'"><div class="schedule-diff-card-head"><span>'+escapeHtml(sideLabel)+'</span><strong>'+escapeHtml(occurrence.title||"Untitled related program")+'</strong></div><p class="schedule-diff-when">'+escapeHtml(occurrenceWhen(occurrence))+'</p><div class="schedule-diff-meta"><span>'+escapeHtml(occurrenceTypeLabel(occurrence.occurrenceType))+'</span><span>'+escapeHtml(occurrence.venueName||"Parent event venue")+'</span><span class="is-'+escapeHtml(occurrence.verificationState==="verified"?"verified":"unverified")+'">'+escapeHtml(occurrenceVerificationLabel(occurrence))+'</span></div>'+(description||source?'<details class="schedule-event-details"><summary>Event details</summary>'+(description?'<p>'+escapeHtml(description)+'</p>':'')+externalLink(source,"Open event source")+'</details>':'')+'</article>';
+  }
+  function scheduleRowMarkup(row) {
+    if(row.kind==="changed"){
+      var labels=occurrenceChangedLabels(row.before,row.after);
+      return '<div class="schedule-diff-row is-changed"><div class="schedule-diff-row-label"><strong>Changed</strong><span>'+escapeHtml(labels.join(" · ")||"Schedule details")+'</span></div><div class="schedule-diff-sides">'+occurrenceCardMarkup(row.before,"Current","current")+occurrenceCardMarkup(row.after,"Proposed","proposed")+'</div></div>';
+    }
+    var item=row.kind==="removed"?row.before:row.after;
+    var label=row.kind==="added"?"Added":row.kind==="removed"?"Removed":"Unchanged";
+    return '<div class="schedule-diff-row is-'+escapeHtml(row.kind)+'"><div class="schedule-diff-row-label"><strong>'+label+'</strong><span>'+(row.kind==="added"?"New proposed program":row.kind==="removed"?"Would leave the related schedule":"Already saved and preserved")+'</span></div>'+occurrenceCardMarkup(item,row.kind==="removed"?"Current":"Proposed",row.kind)+'</div>';
+  }
+  function scheduleChangeComparisonMarkup(before,after,wrapperTag) {
+    var diff=occurrenceDiff(before,after);
+    var order=["changed","added","removed","unchanged"];
+    var rows=order.flatMap(function(kind){return diff.rows.filter(function(row){return row.kind===kind;});});
+    var counts=order.map(function(kind){return [kind,diff.rows.filter(function(row){return row.kind===kind;}).length];}).filter(function(item){return item[1]>0;});
+    var tag=wrapperTag==="div"?"div":"dd";
+    return '<'+tag+' class="schedule-change-comparison"><div class="schedule-diff-summary"><div><strong>Proposed related schedule</strong><p>Dates and times are shown in Atlanta local time. Nothing changes until you select and apply this field.</p></div><span>'+diff.current.length+' current · '+diff.proposed.length+' proposed</span></div><div class="schedule-diff-counts">'+(counts.map(function(item){return '<span class="is-'+item[0]+'">'+item[1]+' '+item[0]+'</span>';}).join("")||'<span>No schedule items</span>')+'</div><div class="schedule-diff-list">'+(rows.map(scheduleRowMarkup).join("")||'<p class="empty-state">No related schedule items.</p>')+'</div><details class="schedule-technical-details"><summary>Show technical details</summary><div><section><strong>Current data</strong><pre>'+escapeHtml(JSON.stringify(diff.current,null,2))+'</pre></section><section><strong>Proposed data</strong><pre>'+escapeHtml(JSON.stringify(diff.proposed,null,2))+'</pre></section></div></details></'+tag+'>';
+  }
   function mediaPreviewItems(value,changeKey) {
     var items=[];
     function add(url,label) {
@@ -341,6 +435,7 @@
     return '<div class="change-media-side"><strong>'+escapeHtml(label)+'</strong><div class="change-media-items">'+items.map(function(item){return '<figure class="change-media-preview"><div class="change-media-frame"><img data-change-media-preview data-media-url="'+escapeHtml(item.url)+'" alt="'+escapeHtml(label+': '+item.label)+'" loading="lazy"><span data-change-media-fallback hidden>Preview unavailable</span></div><figcaption><span>'+escapeHtml(item.label)+'</span><a class="verify-link" data-change-media-open href="'+escapeHtml(item.url)+'" target="_blank" rel="noopener noreferrer">Open image</a></figcaption></figure>';}).join("")+'</div></div>';
   }
   function changeComparisonMarkup(change,before,after) {
+    if(isScheduleChange(change))return scheduleChangeComparisonMarkup(before,after);
     if(!isMediaChange(change))return '<dd><span>'+escapeHtml(changeValue(before))+'</span><strong>to</strong><span>'+escapeHtml(changeValue(after))+'</span></dd>';
     var key=change.field||change.path||"";
     return '<dd class="change-media-comparison">'+mediaChangeSide("Current image",before,key)+mediaChangeSide("Proposed image",after,key)+'</dd>';
@@ -381,7 +476,7 @@
   }
 
   var RESEARCH_SHORTCUTS=[
-    "Verify the date, time, and time zone.","Confirm exactly who may attend and whether this is public.","Find the original organizer or venue event source.","Find tickets or registration and confirm availability.","Find related openings, talks, screenings, performances, panels, or workshops with their own links.","Find official flyers and related event images with provenance.","Find useful organizer, venue, artist, and speaker links.","Improve the factual description using only sourced facts.","Regenerate the private review and programming intelligence.","Inspect every missing or conflicting field and propose corrections."
+    "Verify the date, time, and time zone.","Check for explicit attendance restrictions or conflicting access information.","Find the original organizer or venue event source.","Find tickets or registration and confirm availability.","Find related openings, talks, screenings, performances, panels, or workshops with their own links.","Find official flyers and related event images with provenance.","Find useful organizer, venue, artist, and speaker links.","Improve the factual description using only sourced facts.","Regenerate the private review and programming intelligence.","Inspect every missing or conflicting field and propose corrections."
   ];
   function researchSection(candidate,isNew){return '<div class="editor-section research-section"><div class="section-title-row"><div><h3>Research with Scout</h3><p class="section-guidance">This private conversation researches only this event. Findings remain inert until you apply selected changes, and publication still requires approval.</p></div></div>'+(isNew?'<p class="empty-state">Save the candidate before starting its research conversation.</p>':'<div id="candidateResearch"><p class="empty-state">Loading this event\'s Scout conversation…</p></div>')+'</div>';}
   function researchCitations(citations){return (citations||[]).map(function(item){var url=typeof item==="string"?item:item.url;var label=typeof item==="string"?"Open source":item.title||"Open source";return externalLink(url,label);}).join("");}
@@ -389,7 +484,7 @@
     var applied=proposal.appliedChangeIds||[];
     var open=["pending","partially_applied"].includes(proposal.state);
     var findings=(proposal.findings||[]).map(function(finding){return '<div class="research-finding is-'+escapeHtml(finding.status)+'"><strong>'+escapeHtml(finding.status)+'</strong><p>'+escapeHtml(finding.text)+'</p>'+researchCitations(finding.citations)+'</div>';}).join("");
-    var changes=(proposal.changes||[]).map(function(change,index){var done=applied.includes(change.id);var inputId='research-change-'+proposal.id+'-'+index;var mediaComparison=isMediaChange(change)?'<div class="change-media-comparison">'+mediaChangeSide("Current image",change.before,change.path)+mediaChangeSide("Proposed image",change.value,change.path)+'</div>':'';var textComparison=mediaComparison?'':'<small>'+escapeHtml(changeValue(change.before))+' → '+escapeHtml(changeValue(change.value))+'</small>';return '<div class="research-change'+(done?' is-applied':'')+'"><input id="'+escapeHtml(inputId)+'" type="checkbox" data-research-change="'+escapeHtml(change.id)+'" aria-label="Select '+escapeHtml(change.label||change.path)+'"'+(!open||done?' disabled':'')+'><div class="research-change-body"><label class="research-change-copy" for="'+escapeHtml(inputId)+'"><strong>'+escapeHtml(change.label||change.path)+'</strong>'+textComparison+'<em>'+escapeHtml(change.rationale||"")+'</em><span class="research-confidence">Confidence '+Math.round((Number(change.confidence)||0)*100)+'%</span></label>'+mediaComparison+'<div class="research-change-citations">'+researchCitations(change.citations)+'</div></div></div>';}).join("")||'<p class="section-guidance">The Scout answered without proposing record changes.</p>';
+    var changes=(proposal.changes||[]).map(function(change,index){var done=applied.includes(change.id);var inputId='research-change-'+proposal.id+'-'+index;var mediaComparison=isMediaChange(change)?'<div class="change-media-comparison">'+mediaChangeSide("Current image",change.before,change.path)+mediaChangeSide("Proposed image",change.value,change.path)+'</div>':'';var scheduleComparison=isScheduleChange(change)?scheduleChangeComparisonMarkup(change.before,change.value,"div"):'';var richComparison=mediaComparison||scheduleComparison;var textComparison=richComparison?'':'<small>'+escapeHtml(changeValue(change.before))+' → '+escapeHtml(changeValue(change.value))+'</small>';return '<div class="research-change'+(done?' is-applied':'')+'"><input id="'+escapeHtml(inputId)+'" type="checkbox" data-research-change="'+escapeHtml(change.id)+'" aria-label="Select '+escapeHtml(change.label||change.path)+'"'+(!open||done?' disabled':'')+'><div class="research-change-body"><label class="research-change-copy" for="'+escapeHtml(inputId)+'"><strong>'+escapeHtml(change.label||change.path)+'</strong>'+textComparison+'<em>'+escapeHtml(change.rationale||"")+'</em><span class="research-confidence">Confidence '+Math.round((Number(change.confidence)||0)*100)+'%</span></label>'+mediaComparison+scheduleComparison+'<div class="research-change-citations">'+researchCitations(change.citations)+'</div></div></div>';}).join("")||'<p class="section-guidance">The Scout answered without proposing record changes.</p>';
     return '<article class="research-proposal is-'+escapeHtml(proposal.state)+'"><div class="research-proposal-head"><strong>Proposed changes</strong><span>'+escapeHtml(proposal.state.replace(/_/g," "))+'</span></div>'+findings+'<div class="research-change-list">'+changes+'</div>'+(open?'<div class="research-proposal-actions"><span class="research-selection-status" aria-live="polite">0 changes selected</span><button type="button" data-select-research="all">Select all remaining</button><button type="button" data-apply-research="'+escapeHtml(proposal.id)+'" disabled>Apply selected changes</button><button type="button" data-dismiss-research="'+escapeHtml(proposal.id)+'">Keep current record</button></div>':'')+'</article>';
   }
   function syncResearchSelection(proposal){if(!proposal)return;var selected=proposal.querySelectorAll("[data-research-change]:checked").length;var status=proposal.querySelector(".research-selection-status");var apply=proposal.querySelector("[data-apply-research]");if(status)status.textContent=selected+(selected===1?" change selected":" changes selected");if(apply)apply.disabled=selected===0;}
@@ -408,17 +503,7 @@
     return verifiedInstagramSource(record) || (record.sourceAuthority !== "unresolved" && !isSocialUrl(record.sourceUrl));
   }
   function occurrenceAccessReady(occurrence,parent) {
-    return accessReady(occurrence) || (occurrence.accessStatus === "unknown" && accessReady(parent));
-  }
-  function publicCopyNarratesSource(record) {
-    return [record&&record.factualDescription,record&&record.accessNotes,record&&record.ticketNotes,record&&record.planningNotes].some(function(value){
-      var text=String(value||"").trim();
-      return /\baccording to\s+(?:the|an?)\b/i.test(text)
-        || /\b(?:caption|flyer|social post|post|webpage|website|event page|official page|page|listing|calendar listing|official calendar|source page|official source|sources|official site|site|faq)\b.{0,90}\b(?:says?|states?|lists?|labels?|notes?|confirms?|reports?|indicates?|mentions?|shows?|describes?|identifies?|provides?|directs?|links?|asks?|does not|do not|did not|was not|were not|has not|have not)\b/i.test(text)
-        || /\b(?:from|on|in|via)\s+(?:the\s+)?(?:official\s+|authorized\s+)?(?:event\s+|organizer\s+|venue\s+|ticket\s+|museum\s+|gallery\s+|conference\s+|conversation\s+)?(?:page|listing|source|website|site|caption|flyer|post|calendar)\b/i.test(text)
-        || /\b(?:listed|described|announced|confirmed|reported|identified|verified|retrieved|extracted)\s+(?:on|in|by|from|against|via)\s+(?:the\s+)?(?:official\s+|authorized\s+)?(?:event\s+|organizer\s+|venue\s+|ticket\s+|museum\s+|gallery\s+|conference\s+|conversation\s+)?(?:page|listing|source|website|site|caption|flyer|post|calendar|faq)\b/i.test(text)
-        || /\b(?:retrieved|extracted|verified|confirmed)\s+(?:from|against|on|by)\b/i.test(text);
-    });
+    return accessReady(occurrence);
   }
   function publicationBlockers(candidate) {
     var blockers=[];
@@ -432,14 +517,11 @@
     if(candidate.verificationState!=="verified")blockers.push("Set Verification to Verified.");
     if(!sourceReady(candidate))blockers.push("Confirm a publishable event source.");
     if(!accessReady(candidate))blockers.push("Confirm attendance access.");
-    if(publicCopyNarratesSource(candidate))blockers.push("Rewrite public descriptions and notes as direct event facts; remove references to captions, flyers, posts, pages, listings, or sources.");
     if(isInstagramUrl(candidate.ticketUrl))blockers.push("Remove Instagram from the public ticket URL.");
     if(!(candidate.subjects||[]).length)blockers.push("Select at least one subject.");
     if(!(candidate.formats||[]).length)blockers.push("Select at least one format.");
     var blockedOccurrences=(candidate.occurrences||[]).filter(function(occurrence){var occurrenceSource=occurrence.sourceUrl||candidate.sourceUrl;var occurrenceSourceReady=!isSocialUrl(occurrenceSource)||(isInstagramUrl(occurrenceSource)&&occurrence.verificationState==="verified");return occurrence.status!=="tbd"&&(occurrence.verificationState!=="verified"||!occurrenceAccessReady(occurrence,candidate)||!occurrence.startsAt||!occurrenceSourceReady);});
     if(blockedOccurrences.length)blockers.push(blockedOccurrences.length+" related schedule item"+(blockedOccurrences.length===1?" needs":"s need")+" verification, access, timing, or source review.");
-    var sourceNarratingOccurrences=(candidate.occurrences||[]).filter(publicCopyNarratesSource);
-    if(sourceNarratingOccurrences.length)blockers.push(sourceNarratingOccurrences.length+" related schedule item"+(sourceNarratingOccurrences.length===1?" contains":"s contain")+" source narration in public copy; rewrite the facts directly.");
     if(["rejected","cancelled","duplicate"].includes(candidate.status))blockers.push("This record is marked "+candidate.status.replace(/_/g," ")+".");
     return blockers;
   }
@@ -583,7 +665,7 @@
       field("candidateTitle","Title",candidate.title,{wide:true}) + field("candidateOrganizer","Organizer",candidate.organizer) + field("candidateEventStructure","Event structure",candidate.eventStructure||"single",{type:"select",choices:[["single","Single event / one continuous run"],["series","Series / separate dated programs"],["exhibition","Exhibition / on-view period"]]}) + field("candidateDateKind","Schedule",candidate.dateKind,{type:"select",choices:[["timed","Has a date and time"],["all_day","All day on one date"],["date_range","Runs across multiple dates"]]}) +
       field("candidateStartsAt",candidate.dateKind==="date_range"?"First date":candidate.dateKind==="all_day"?"Event date":"Starts",calendarControlValue(candidate.dateKind,candidate.startsAt,candidate.timezone||"America/New_York"),{type:candidate.dateKind==="timed"?"datetime-local":"date"}) + field("candidateEndsAt",candidate.dateKind==="date_range"?"Closing / final date (optional for exhibitions)":"Ends (optional)",calendarControlValue(candidate.dateKind,candidate.endsAt,candidate.timezone||"America/New_York"),{type:candidate.dateKind==="timed"?"datetime-local":"date"}) + field("candidateConfirmedThrough","Confirmed through (when closing date is unknown)",candidate.confirmedThrough,{type:"date"}) + field("candidateTimezone","Time zone",candidate.timezone) + '<div class="candidate-schedule-guidance is-wide" id="candidateScheduleGuidance"></div>' + field("candidateVenueName","Venue",candidate.venueName) +
       field("candidateVenueAddress","Venue address",candidate.venueAddress,{wide:true}) + field("candidateCity","City",candidate.city) + field("candidateRegion","State / region",candidate.region) + field("candidateDescription","Factual description",candidate.factualDescription,{type:"textarea",wide:true}) +
-      field("candidateAccessStatus","Attendance access",candidate.accessStatus||"unknown",{type:"select",choices:[["public","Open to the public"],["restricted","Restricted audience"],["unknown","Needs access verification"]]}) + field("candidateAudiences","Eligible audiences (comma-separated)",(candidate.audiences||[]).join(", ")) + field("candidateAccessNotes","Public access note",candidate.accessNotes,{type:"textarea",wide:true}) +
+      field("candidateAccessStatus","Attendance access",candidate.accessStatus||"public",{type:"select",choices:[["public","Open to the public"],["restricted","Restricted audience"],["unknown","Conflicting access information"]]}) + field("candidateAudiences","Eligible audiences (comma-separated)",(candidate.audiences||[]).join(", ")) + field("candidateAccessNotes","Public access note",candidate.accessNotes,{type:"textarea",wide:true}) +
       '<p class="section-guidance is-wide">Restricted access is published on the event card, API, and calendar feeds. Verification notes below remain private.</p>' +
       '</div><p class="field-label">Subjects</p>' + checkboxes("subjects",SUBJECTS,candidate.subjects) + '<p class="field-label">Formats</p>' + checkboxes("formats",FORMATS,candidate.formats) +
       '<label class="check-option"><input id="candidateExperimental" type="checkbox"' + (candidate.experimental ? ' checked' : '') + '><span>Experimental attribute</span></label></div>' +
@@ -1007,7 +1089,7 @@
   listRoot.addEventListener("click",function(event){var button=event.target.closest("[data-candidate-id]");if(button)selectCandidate(button.dataset.candidateId,button.dataset.occurrenceId||"");});
   editorRoot.addEventListener("click",function(event){
     var actionButton=event.target.closest("button[data-action]");if(actionButton){editorAction(actionButton.dataset.action);return;}
-    if(event.target.closest("[data-add-occurrence]")){var occurrenceList=document.getElementById("candidateOccurrences");var occurrenceEmpty=occurrenceList.querySelector(".occurrences-empty");if(occurrenceEmpty)occurrenceEmpty.remove();occurrenceList.insertAdjacentHTML("beforeend",occurrenceRow({occurrenceType:"other",status:"scheduled",ticketStatus:"unknown",dateKind:"timed",timezone:value("candidateTimezone")||"America/New_York",accessStatus:value("candidateAccessStatus")||"unknown",accessNotes:value("candidateAccessNotes"),audiences:value("candidateAudiences").split(",").map(function(item){return item.trim();}).filter(Boolean),verificationState:"needs_verification",planningEligible:true}));return;}
+    if(event.target.closest("[data-add-occurrence]")){var occurrenceList=document.getElementById("candidateOccurrences");var occurrenceEmpty=occurrenceList.querySelector(".occurrences-empty");if(occurrenceEmpty)occurrenceEmpty.remove();occurrenceList.insertAdjacentHTML("beforeend",occurrenceRow({occurrenceType:"other",status:"scheduled",ticketStatus:"unknown",dateKind:"timed",timezone:value("candidateTimezone")||"America/New_York",accessStatus:value("candidateAccessStatus")||"public",accessNotes:value("candidateAccessNotes"),audiences:value("candidateAudiences").split(",").map(function(item){return item.trim();}).filter(Boolean),verificationState:"needs_verification",planningEligible:true}));return;}
     var removeOccurrence=event.target.closest("[data-remove-occurrence]");if(removeOccurrence){removeOccurrence.closest("[data-occurrence]").remove();var occurrences=document.getElementById("candidateOccurrences");if(!occurrences.querySelector("[data-occurrence]"))occurrences.innerHTML='<p class="occurrences-empty">No related schedule items.</p>';return;}
     if(event.target.closest("[data-add-related-link]")){var list=document.getElementById("candidateRelatedLinks");var empty=list.querySelector(".related-links-empty");if(empty)empty.remove();list.insertAdjacentHTML("beforeend",relatedLinkRow({ provenanceUrl:value("candidateSourceUrl") }));return;}
     var removeLink=event.target.closest("[data-remove-related-link]");if(removeLink){removeLink.closest("[data-related-link]").remove();var related=document.getElementById("candidateRelatedLinks");if(!related.querySelector("[data-related-link]"))related.innerHTML='<p class="related-links-empty">No related links captured.</p>';return;}

@@ -70,10 +70,127 @@
 }
 
 .blackboard-card,
-.blackboard-fragment {
+.blackboard-fragment,
+.blackboard-surface-card {
   min-width: 0;
   border: 5px solid currentColor;
   background: var(--color-bg);
+}
+
+.blackboard-surface-card h2 {
+  margin: 0 0 12px;
+  font-size: clamp(28px, 4vw, 52px);
+}
+
+.blackboard-surface-card a,
+.blackboard-fragment-links a {
+  color: inherit;
+  text-underline-offset: 4px;
+}
+
+.blackboard-surface-intro {
+  margin-top: 32px;
+  border: 5px solid currentColor;
+}
+
+.blackboard-surface-intro dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.blackboard-surface-intro dl > div {
+  min-width: 0;
+  padding: 16px;
+}
+
+.blackboard-surface-intro dl > div + div {
+  border-left: 5px solid currentColor;
+}
+
+.blackboard-surface-intro dt,
+.blackboard-fragment-links h4 {
+  margin: 0 0 8px;
+  color: var(--color-archive, #fcb867);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.blackboard-surface-intro dd {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.blackboard-latest .blackboard-scan-button img {
+  max-height: none;
+}
+
+.blackboard-timeline {
+  position: relative;
+  display: grid;
+  gap: 0;
+  padding-left: clamp(24px, 5vw, 72px);
+}
+
+.blackboard-timeline::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--color-archive, #fcb867);
+  content: "";
+}
+
+.blackboard-timeline-card {
+  position: relative;
+}
+
+.blackboard-timeline-card::before {
+  position: absolute;
+  top: 28px;
+  right: 100%;
+  width: clamp(24px, 5vw, 72px);
+  height: 5px;
+  background: var(--color-archive, #fcb867);
+  content: "";
+}
+
+.blackboard-interval {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+}
+
+.blackboard-interval span {
+  padding: 8px 12px;
+  background: var(--color-archive, #fcb867);
+  color: var(--color-bg);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.blackboard-context-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.blackboard-fragment-links {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 5px solid currentColor;
+}
+
+.blackboard-fragment-links ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.blackboard-fragment-links li + li {
+  margin-top: 8px;
 }
 
 .blackboard-scan-button {
@@ -147,6 +264,22 @@
   border: 5px solid currentColor;
 }
 
+.blackboard-history {
+  display: grid;
+  gap: 16px;
+}
+
+.blackboard-history-entry {
+  padding: 18px;
+  border: 5px solid currentColor;
+  background: var(--color-bg);
+}
+
+.blackboard-history-entry h3,
+.blackboard-history-entry p {
+  margin-top: 0;
+}
+
 .blackboard-zoom {
   width: min(96vw, 1500px);
   max-width: none;
@@ -201,8 +334,15 @@
 @media (max-width: 720px) {
   .blackboards-section-heading,
   .blackboard-grid,
-  .blackboard-fragment-grid {
+  .blackboard-fragment-grid,
+  .blackboard-context-grid,
+  .blackboard-surface-intro dl {
     grid-template-columns: 1fr;
+  }
+
+  .blackboard-surface-intro dl > div + div {
+    border-top: 5px solid currentColor;
+    border-left: 0;
   }
 
   .archive-blackboards-hero {

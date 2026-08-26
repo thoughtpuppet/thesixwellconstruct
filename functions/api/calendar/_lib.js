@@ -115,18 +115,71 @@ function audienceStrings(values) {
   }).slice(0, 24);
 }
 
+function statedRestrictionEvidence(...values) {
+  const text = values.map(cleanSourceText).filter(Boolean).join(" ");
+  if (!text) return null;
+  const restrictedVisibility = values.some((value) => /^(?:private|invite[-_ ]only|members?[-_ ]only|members?[-_ ]exclusive)$/i.test(cleanSourceText(value)));
+  const restricted = restrictedVisibility
+    || /\b(?:invite[- ]only|private event|members? (?:only|exclusive)|students? only|faculty only|staff only|alumni only|restricted to|attendance (?:is )?limited to|not open to the (?:general )?public|adults? only|must be accompanied by an adult)\b/i.test(text)
+    || /\b(?:18|21)\s*\+/.test(text);
+  if (!restricted) return null;
+  const age = text.match(/\b(18|21)\s*\+/);
+  const audiences = [
+    /\bstudents?\b/i.test(text) ? "Students" : "",
+    /\bfaculty\b/i.test(text) ? "Faculty" : "",
+    /\bstaff\b/i.test(text) ? "Staff" : "",
+    /\balumni\b/i.test(text) ? "Alumni" : "",
+    /\bmembers?\b/i.test(text) ? "Members" : "",
+    /\binvite(?:es?|[- ]only)\b|\bprivate event\b/i.test(text) ? "Invitees" : "",
+    age ? `Ages ${age[1]}+` : "",
+  ].filter(Boolean);
+  const eligible = audiences.length ? audiences : ["Eligible attendees"];
+  return { audiences: eligible, accessNotes: `Attendance is restricted to: ${eligible.join(", ")}.` };
+}
+
+function accessConflictEvidence(...values) {
+  const text = values.map(cleanSourceText).filter(Boolean).join(" ");
+  if (!text) return false;
+  const accessTopic = "(?:access|attendance|admission|eligibility|entry|audience)";
+  const conflictTopic = "(?:conflict(?:ing)?|contradict(?:s|ed|ory|ion)?|disagree(?:s|d|ment)?|inconsisten(?:t|cy)|ambiguous|unclear)";
+  if (new RegExp(`${accessTopic}.{0,160}${conflictTopic}|${conflictTopic}.{0,160}${accessTopic}`, "i").test(text)) return true;
+  const publicClaim = /\b(?:open to (?:the )?public|open to all|all (?:are )?welcome|public event)\b/i.test(text);
+  return publicClaim && Boolean(statedRestrictionEvidence(...values));
+}
+
+function unstatedAccessNote(value) {
+  const text = cleanSourceText(value);
+  if (!text) return false;
+  return /\b(?:access|attendance|admission|eligibility|entry)\b.{0,100}\b(?:has not|have not|was not|were not|is not|are not|isn't|aren't|does not|do not|did not|still needs?|needs?)\b.{0,100}\b(?:announce|announced|confirm|confirmed|confirmation|state|stated|list|listed|establish|established|provide|provided|verify|verified|verification)\b/i.test(text)
+    || /\b(?:has not|have not|was not|were not|is not|are not|isn't|aren't|does not|do not|did not|still needs?|needs?)\b.{0,100}\b(?:announce|announced|confirm|confirmed|confirmation|state|stated|list|listed|establish|established|provide|provided|verify|verified|verification)\b.{0,100}\b(?:access|attendance|admission|eligibility|entry)\b/i.test(text);
+}
+
 function accessDetails(statusValue, notesValue, audienceValue, fallback = {}) {
-  const audiences = audienceStrings(audienceValue === undefined ? fallback.audiences : audienceValue);
+  let audiences = audienceStrings(audienceValue === undefined ? fallback.audiences : audienceValue);
   const requested = asString(statusValue === undefined ? fallback.accessStatus : statusValue);
-  const accessStatus = ACCESS_STATUSES.has(requested) ? requested : "public";
-  let accessNotes = directPublicCopy(notesValue === undefined ? fallback.accessNotes : notesValue);
-  if (accessStatus === "public" && accessNotes === "Attendance eligibility has not been confirmed.") {
-    accessNotes = "";
+  let accessStatus = ACCESS_STATUSES.has(requested) ? requested : "public";
+  const rawAccessNotes = notesValue === undefined ? fallback.accessNotes : notesValue;
+  const accessEvidence = [
+    rawAccessNotes,
+    fallback.verificationNotes,
+    fallback.sourceResolutionNotes,
+    fallback.title,
+  ];
+  const conflict = accessStatus === "unknown" && accessConflictEvidence(...accessEvidence);
+  const restriction = accessStatus === "unknown" && !conflict ? statedRestrictionEvidence(...accessEvidence) : null;
+  if (accessStatus === "unknown" && !conflict) {
+    accessStatus = restriction ? "restricted" : "public";
+    if (restriction && !audiences.length) audiences = restriction.audiences;
   }
-  if (accessStatus === "restricted" && !accessNotes) {
-    accessNotes = audiences.length
+  let accessNotes = directPublicCopy(notesValue === undefined ? fallback.accessNotes : notesValue);
+  if (accessStatus === "public") {
+    if (unstatedAccessNote(accessNotes)) accessNotes = "";
+    if (!audiences.some((audience) => /\bpublic\b/i.test(audience))) audiences = ["Public", ...audiences];
+  }
+  if (accessStatus === "restricted" && (!accessNotes || unstatedAccessNote(accessNotes))) {
+    accessNotes = restriction?.accessNotes || (audiences.length
       ? `Attendance restricted to: ${audiences.join(", ")}.`
-      : "Attendance is restricted. Check the official event details for eligibility.";
+      : "Attendance is restricted. Check the official event details for eligibility.");
   }
   if (accessStatus === "unknown" && !accessNotes) {
     accessNotes = "Attendance eligibility has not been confirmed.";
@@ -135,14 +188,24 @@ function accessDetails(statusValue, notesValue, audienceValue, fallback = {}) {
 }
 
 function occurrenceAccessDetails(value = {}, parent = {}) {
-  const own = accessDetails(value.access_status ?? value.accessStatus, value.access_notes ?? value.accessNotes, value.audiences_json ?? value.audiences);
-  if (own.accessStatus !== "unknown" || !["public", "restricted"].includes(asString(parent.accessStatus))) return own;
-  const ownNote = own.accessNotes === "Attendance eligibility has not been confirmed." ? undefined : own.accessNotes;
-  return accessDetails(
-    parent.accessStatus,
-    ownNote === undefined ? parent.accessNotes : ownNote,
-    own.audiences.length ? own.audiences : parent.audiences,
+  const requested = asString(value.access_status ?? value.accessStatus);
+  const notes = value.access_notes ?? value.accessNotes;
+  const audiences = audienceStrings(value.audiences_json ?? value.audiences);
+  const conflict = requested === "unknown" && accessConflictEvidence(
+    notes,
+    value.verification_notes ?? value.verificationNotes,
   );
+  if ((!requested || requested === "unknown") && !conflict && ["public", "restricted"].includes(asString(parent.accessStatus))) {
+    return accessDetails(
+      parent.accessStatus,
+      unstatedAccessNote(notes) || notes === undefined ? parent.accessNotes : notes,
+      audiences.length ? audiences : parent.audiences,
+    );
+  }
+  return accessDetails(value.access_status ?? value.accessStatus, notes, value.audiences_json ?? value.audiences, {
+    verificationNotes: value.verification_notes ?? value.verificationNotes,
+    title: value.title,
+  });
 }
 
 function scheduleStatus(value, fallback = "scheduled") {
@@ -667,7 +730,11 @@ async function persistEntryVisitingDetails(db, entryId, value) {
 
 function normalizeCandidate(row) {
   if (!row) return null;
-  const access = accessDetails(row.access_status, row.access_notes, row.audiences_json);
+  const access = accessDetails(row.access_status, row.access_notes, row.audiences_json, {
+    verificationNotes: row.verification_notes,
+    sourceResolutionNotes: row.source_resolution_notes,
+    title: row.title,
+  });
   return {
     id: row.id,
     sourceId: row.source_id || "",
@@ -1171,6 +1238,7 @@ function strongPickSnapshot(candidate) {
 function normalizeStrongPick(row) {
   const snapshot = parseJson(row.snapshot_json, {});
   return {
+    ...snapshot,
     id: row.id,
     runId: row.run_id || "",
     candidateId: row.candidate_id,
@@ -1182,7 +1250,6 @@ function normalizeStrongPick(row) {
     candidateStatus: row.candidate_status || "candidate",
     verificationState: row.verification_state || "needs_verification",
     publicEntryId: row.public_entry_id || "",
-    ...snapshot,
   };
 }
 
@@ -1455,7 +1522,12 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
   const inferredStructure = dateKind === "date_range" && formats.includes("exhibition") ? "exhibition" : "single";
   const requestedStructure = asString(value("eventStructure", inferredStructure));
   const eventStructure = EVENT_STRUCTURES.has(requestedStructure) ? requestedStructure : "single";
-  const access = accessDetails(value("accessStatus", "public"), value("accessNotes"), value("audiences", ["Public"]), current);
+  const access = accessDetails(value("accessStatus", "public"), value("accessNotes"), value("audiences", ["Public"]), {
+    ...current,
+    verificationNotes: value("verificationNotes"),
+    sourceResolutionNotes: value("sourceResolutionNotes"),
+    title: value("title"),
+  });
   const planningInput = {
     attendanceMode: value("attendanceMode", "inferred"),
     recommendedArrivalMinutes: value("recommendedArrivalMinutes", 10),
@@ -1544,7 +1616,6 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
 
 function publicationErrors(proposal) {
   const errors = [];
-  errors.push(...publicCopyErrors(proposal));
   const virtual = onlineOnlyEvent(proposal);
   const scheduledOccurrences = (proposal.occurrences || []).filter((occurrence) => occurrence.status !== "tbd");
   const seriesUsesOccurrenceVenues = proposal.eventStructure === "series"
@@ -1611,7 +1682,6 @@ function occurrencePublicationErrors(occurrence, parent) {
   if (occurrence.status === "tbd") return [];
   const label = occurrence.title || occurrenceTypeLabel(occurrence.occurrenceType);
   const errors = [];
-  errors.push(...publicCopyErrors(occurrence, label));
   if (!occurrence.startsAt || !validDate(occurrence.startsAt)) errors.push(`${label} requires a confirmed valid start date.`);
   if (occurrence.dateKind === "timed" && occurrence.startsAt && !hasExplicitUtcOffset(occurrence.startsAt)) errors.push(`${label} requires an explicit UTC offset.`);
   if (occurrence.dateKind === "all_day" && occurrence.startsAt && !/^\d{4}-\d{2}-\d{2}$/.test(occurrence.startsAt)) errors.push(`${label} requires a YYYY-MM-DD date.`);
@@ -3523,7 +3593,7 @@ async function requestCandidateResearch(env, db, candidate, thread, instruction)
       "Answer the Studio user's request conversationally, but keep factual findings separate from proposed record changes. Never publish, approve, contact anyone, or claim that you changed the record.",
       "Prefer the exact organizer or venue event page, official calendar item, or authorized ticket page. Cite every public factual change. Say unknown when evidence is insufficient and expose disagreements as conflicts.",
       "Compare every confirmed fact with the current candidate snapshot. When the evidence supplies a missing, corrected, or more precise record value, you must include the corresponding field-level change; a confirmed finding by itself is not a proposed correction. Do not propose a change when the stored value already matches.",
-      "Use explicit UTC offsets for timed dates. Confirm public eligibility instead of assuming a public webpage means a public event. Keep exhibition ranges distinct from dated openings, talks, performances, screenings, panels, and workshops.",
+      "Use explicit UTC offsets for timed dates. Unless a source explicitly restricts attendance, treat the event as open to the public; use unknown access only when sources genuinely conflict about who may attend. Performer, vendor, applicant, workshop, or competition eligibility is separate from audience attendance unless the source also limits spectators or attendees. Keep exhibition ranges distinct from dated openings, talks, performances, screenings, panels, and workshops.",
       "For every public-facing field, including factualDescription, accessNotes, ticketNotes, planningNotes, and occurrence equivalents, state the event fact directly. Never mention what a caption, flyer, post, page, listing, source, extraction, verification, or research process says. Keep evidence narration only in private findings, sourceResolutionNotes, verificationNotes, citations, or private Studio notes.",
       "For an exhibition, identify every credited artist and research each artist's official website and official Instagram profile. Propose relatedLinks with role artist for both verified destinations. If neither can be verified, propose a Google search link labeled Search for followed by the artist's name. Artist links may be public, but Instagram posts, reels, galleries, articles, fan accounts, and similarly named people are not artist identity links.",
       "When evidence establishes a parent exhibition or series plus dated related programs, propose one coordinated structure update: correct the parent title, eventStructure, dateKind, startsAt, endsAt, factualDescription, and strongest exact source fields as needed, and propose one occurrences value containing every already-saved occurrence plus every confirmed opening reception, closing reception, artist talk, screening, performance, panel, workshop, lecture, mixer, or other dated program. Preserve existing occurrence IDs and confirmed facts. Give each occurrence its own exact sourceUrl or ticketUrl when available. Gallery or venue hours describe when the parent is viewable; do not turn routine hours into separate occurrences unless the source presents them as distinct public programs.",
@@ -5192,13 +5262,20 @@ function structuredAudienceNames(value) {
   }));
 }
 
-function audienceAccess(audiences, { assumePublic = false } = {}) {
+function audienceAccess(audiences, { assumePublic = true } = {}) {
   const values = audienceStrings(audiences);
   if (values.some((name) => /\bpublic\b|open to all|general public/i.test(name))) {
     return accessDetails("public", "", values.length ? values : ["Public"]);
   }
   if (values.length) return accessDetails("restricted", "", values);
   return accessDetails(assumePublic ? "public" : "unknown", "", assumePublic ? ["Public"] : []);
+}
+
+function statedTextAccess(...values) {
+  const restriction = statedRestrictionEvidence(...values);
+  return restriction
+    ? accessDetails("restricted", restriction.accessNotes, restriction.audiences)
+    : accessDetails("public", "", ["Public"]);
 }
 
 function structuredAddress(value) {
@@ -5362,6 +5439,7 @@ function extractBeltlineRenderedEvents(html, source) {
   const description = beltlineDescription(lines) || structured.factualDescription || topics;
   const ticketUrl = beltlineTicketUrl(html, identity.url);
   const explicitlyFree = /\b(?:free admission|free event|no cost)\b/i.test(`${description} ${topics}`);
+  const access = statedTextAccess(description, topics);
   return [inferSubjectsAndFormats({
     ...structured,
     sourceId: source.id,
@@ -5373,13 +5451,8 @@ function extractBeltlineRenderedEvents(html, source) {
     title: structured.title,
     organizer,
     factualDescription: [description, topics ? `Topic: ${topics}.` : ""].filter(Boolean).join(" "),
-    accessStatus: explicitlyFree ? "public" : "unknown",
-    accessNotes: explicitlyFree
-      ? "Free admission; registration requirements have not been confirmed."
-      : ticketUrl
-        ? "Registration or ticketing is available; admission details have not been confirmed."
-        : "Admission and registration requirements have not been confirmed.",
-    audiences: explicitlyFree ? ["Public"] : [],
+    ...access,
+    accessNotes: access.accessStatus === "public" && explicitlyFree ? "Free admission." : access.accessNotes,
     venueName,
     venueAddress,
     city: "Atlanta",
@@ -5651,29 +5724,6 @@ function directPublicCopy(value) {
   text = text.replace(/^to (?=(?:contact|register|attend|visit|purchase|buy|rsvp|reserve)\b)/i, "");
   if (!text) return "";
   return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-function publicCopyNarratesSource(value) {
-  const text = cleanSourceText(value);
-  if (!text) return false;
-  return /\baccording to\s+(?:the|an?)\b/i.test(text)
-    || /\b(?:caption|flyer|social post|post|webpage|website|event page|official page|page|listing|calendar listing|official calendar|source page|official source|sources|official site|site|faq)\b.{0,90}\b(?:says?|states?|lists?|labels?|notes?|confirms?|reports?|indicates?|mentions?|shows?|describes?|identifies?|provides?|directs?|links?|asks?|does not|do not|did not|was not|were not|has not|have not)\b/i.test(text)
-    || /\b(?:says?|states?|lists?|notes?|confirms?|reports?|indicates?|mentions?|shows?|describes?|identifies?|provides?|directs?|links?|asks?)\b.{0,70}\b(?:caption|flyer|social post|post|webpage|website|event page|official page|page|listing|calendar|source|site|faq)\b/i.test(text)
-    || /\b(?:from|on|in|via)\s+(?:the\s+)?(?:official\s+|authorized\s+)?(?:event\s+|organizer\s+|venue\s+|ticket\s+|museum\s+|gallery\s+|conference\s+|conversation\s+)?(?:page|listing|source|website|site|caption|flyer|post|calendar)\b/i.test(text)
-    || /\b(?:listed|described|announced|confirmed|reported|identified|verified|retrieved|extracted)\s+(?:on|in|by|from|against|via)\s+(?:the\s+)?(?:official\s+|authorized\s+)?(?:event\s+|organizer\s+|venue\s+|ticket\s+|museum\s+|gallery\s+|conference\s+|conversation\s+)?(?:page|listing|source|website|site|caption|flyer|post|calendar|faq)\b/i.test(text)
-    || /\b(?:retrieved|extracted|verified|confirmed)\s+(?:from|against|on|by)\b/i.test(text);
-}
-
-function publicCopyErrors(record, label = "Event") {
-  const fields = [
-    ["factualDescription", "description"],
-    ["accessNotes", "access note"],
-    ["ticketNotes", "ticket note"],
-    ["planningNotes", "planning note"],
-  ];
-  return fields
-    .filter(([field]) => publicCopyNarratesSource(record?.[field]))
-    .map(([, fieldLabel]) => `${label} ${fieldLabel} must state the fact directly and cannot describe what a caption, flyer, post, page, listing, or source says.`);
 }
 
 function localistNames(value) {
@@ -6316,9 +6366,9 @@ function atlantaLovesArtUpcomingEvents(html, source) {
       factualDescription: scheduled
         ? `${occurrenceTitle} is announced at ${venueName}.`
         : `${occurrenceTitle} is announced; its date and time are still to be confirmed.`,
-      accessStatus: "unknown",
-      accessNotes: "Public attendance details have not been confirmed.",
-      audiences: [],
+      accessStatus: "public",
+      accessNotes: "",
+      audiences: ["Public"],
       dateKind: range?.dateKind || "timed",
       startsAt: range?.startsAt || null,
       endsAt: range?.endsAt || null,
@@ -6353,9 +6403,9 @@ function atlantaLovesArtUpcomingEvents(html, source) {
     organizer: "Atlanta Loves Art",
     factualDescription: "Atlanta Loves Art announces monthly exhibits in the BeltLine East Krog District.",
     eventStructure: "series",
-    accessStatus: "unknown",
-    accessNotes: "Public attendance details have not been confirmed.",
-    audiences: [],
+    accessStatus: "public",
+    accessNotes: "",
+    audiences: ["Public"],
     dateKind: "date_range",
     startsAt: dateKey(first.startsAt),
     endsAt: dateKey(last.endsAt || last.startsAt),
@@ -6395,9 +6445,9 @@ function atlantaLovesArtCreativeExchangeEvents(html, source) {
       occurrenceType: "other",
       title: displayDate,
       factualDescription: `Creative Exchange ATL is scheduled for ${displayDate} at 116 Krog St NE.`,
-      accessStatus: "unknown",
-      accessNotes: "The vendor application does not confirm public attendance eligibility.",
-      audiences: [],
+      accessStatus: "public",
+      accessNotes: "",
+      audiences: ["Public"],
       ...range,
       timezone: TIME_ZONE,
       venueName: "Creative Exchange ATL",
@@ -6420,9 +6470,9 @@ function atlantaLovesArtCreativeExchangeEvents(html, source) {
     organizer: "Atlanta Loves Art",
     factualDescription: "Creative Exchange ATL is scheduled on selected Sundays at 116 Krog St NE.",
     eventStructure: "series",
-    accessStatus: "unknown",
-    accessNotes: "The vendor application does not confirm public attendance eligibility.",
-    audiences: [],
+    accessStatus: "public",
+    accessNotes: "",
+    audiences: ["Public"],
     dateKind: "date_range",
     startsAt: dates[0],
     endsAt: dates.at(-1),
@@ -6434,8 +6484,8 @@ function atlantaLovesArtCreativeExchangeEvents(html, source) {
     subjects: ["art"],
     formats: ["exhibition"],
     experimental: false,
-    verificationState: "needs_verification",
-    verificationNotes: `${occurrences.length} dated Sunday occurrences were recovered from Atlanta Loves Art's official vendor application. Vendor participation requirements remain private and do not establish public attendance eligibility.`,
+    verificationState: "verified",
+    verificationNotes: `${occurrences.length} dated Sunday occurrences were recovered from Atlanta Loves Art's official vendor application.`,
     confidence: 0.92,
     occurrences,
   }];
@@ -6565,6 +6615,7 @@ function extractOfficialListingEvents(html, source, pageUrl = source.url) {
       && href !== pageUrl;
     const sourceUrl = dedicatedSameOrigin ? href : pageUrl;
     const classifications = officialListingClassifications(title, pageContext);
+    const access = statedTextAccess(title, pageContext);
     events.push({
       sourceId: source.id,
       sourceEventId: `official-listing-${normalizeText(title).replace(/\s+/g, "-").slice(0, 120)}-${range.startsAt}`,
@@ -6582,9 +6633,7 @@ function extractOfficialListingEvents(html, source, pageUrl = source.url) {
       organizer: source.name,
       factualDescription: `${title} is scheduled for ${dateLabel}.`,
       eventStructure: "single",
-      accessStatus: "unknown",
-      accessNotes: "Attendance eligibility has not been confirmed.",
-      audiences: [],
+      ...access,
       ...range,
       timezone: TIME_ZONE,
       venueName: asString(config.venueName),
@@ -6595,7 +6644,7 @@ function extractOfficialListingEvents(html, source, pageUrl = source.url) {
       formats: classifications.formats,
       experimental: false,
       verificationState: "needs_verification",
-      verificationNotes: "The official site supplied the event title and date. Studio must confirm venue, address, attendance eligibility, and any missing daily hours before publication.",
+      verificationNotes: "The official site supplied the event title and date. Studio must confirm the venue, address, and any missing daily hours before publication.",
       confidence: 0.78,
     });
   }
@@ -6621,6 +6670,7 @@ function highArtMakingProposal(block, source) {
   const flyerUrl = sourceHtmlEntities(imageTag.match(/\b(?:data-src|src)=["']([^"']+)["']/i)?.[1] || "");
   const path = new URL(sourceUrl).pathname;
   const explicitlyPublic = /\bfree admission\b|\bopen to (?:all|the public)\b|\bdrop-in\b|\bcome as you are\b/i.test(factualDescription);
+  const access = statedTextAccess(factualDescription);
   return {
     sourceId: source.id,
     sourceEventId: path.split("/").filter(Boolean).at(-1) || path,
@@ -6633,9 +6683,8 @@ function highArtMakingProposal(block, source) {
     title,
     organizer: "High Museum of Art",
     factualDescription,
-    accessStatus: explicitlyPublic ? "public" : "unknown",
-    accessNotes: explicitlyPublic ? "Open to the public; admission or registration requirements may apply." : "Attendance and admission details have not been confirmed.",
-    audiences: explicitlyPublic ? ["Public"] : [],
+    ...access,
+    accessNotes: access.accessStatus === "public" && explicitlyPublic ? "Open to the public; admission or registration requirements may apply." : access.accessNotes,
     ...range,
     timezone: TIME_ZONE,
     venueName: "High Museum of Art",
@@ -7180,6 +7229,7 @@ function partifulEventFromNextData(html, source, detail) {
     : [];
   const organizer = hosts.join("; ") || partifulDisplayedHosts(html);
   const publicAttendance = item.visibility === "public" && /\b(?:no one will be denied entry|open to (?:the )?public|open to all|all (?:are )?welcome)\b/i.test(description);
+  const access = statedTextAccess(item.visibility, description);
   const rsvpOpen = Boolean(item.rsvpsEnabled) && item.status === "PUBLISHED" && !item.atCapacity;
   const contribution = item.ticketing?.type === "chip_in" && Number.isFinite(Number(item.ticketing?.price))
     ? `${new Intl.NumberFormat("en-US", { style:"currency", currency:asString(item.ticketing?.currency) || "USD", maximumFractionDigits:2 }).format(Number(item.ticketing.price))} suggested contribution`
@@ -7205,9 +7255,8 @@ function partifulEventFromNextData(html, source, detail) {
     title,
     organizer,
     factualDescription: description,
-    accessStatus: publicAttendance ? "public" : "unknown",
-    accessNotes: publicAttendance ? "No one will be denied entry." : "",
-    audiences: publicAttendance ? ["Public"] : [],
+    ...access,
+    accessNotes: access.accessStatus === "public" && publicAttendance ? "No one will be denied entry." : access.accessNotes,
     eventStructure: "single",
     dateKind: "timed",
     startsAt,
@@ -7327,7 +7376,7 @@ function browserPlatformProposal(item, source, adapterKey) {
     title: asString(item.title),
     organizer: asString(item.organizer) || source.name,
     factualDescription: cleanSourceText(item.description),
-    accessStatus: ["public", "restricted"].includes(asString(item.accessStatus)) ? asString(item.accessStatus) : "unknown",
+    accessStatus: ["public", "restricted", "unknown"].includes(asString(item.accessStatus)) ? asString(item.accessStatus) : "public",
     accessNotes: asString(item.accessNotes),
     audiences: audienceStrings(item.audiences),
     dateKind: startsAt.length === 10 ? "all_day" : "timed",
@@ -7445,7 +7494,7 @@ function browserPastedLinkProposal(item, source) {
   const sourceUrl = source.url;
   const socialPlatform = socialPlatformFromUrl(sourceUrl);
   const timezone = validTimeZone(item.timezone) ? asString(item.timezone) : TIME_ZONE;
-  const occurrenceAccessStatus = ["public", "restricted"].includes(asString(item.accessStatus)) ? asString(item.accessStatus) : "unknown";
+  const occurrenceAccessStatus = ["public", "restricted", "unknown"].includes(asString(item.accessStatus)) ? asString(item.accessStatus) : "public";
   const occurrenceAccessNotes = directPublicCopy(item.accessNotes);
   const occurrenceAudiences = audienceStrings(item.audiences);
   const occurrenceItems = [
@@ -7699,6 +7748,7 @@ async function openAiPastedSocialEvents(env, sourceUrl, renderedHtml, maximum = 
       "For an exhibition, keep its on-view date range on the parent using YYYY-MM-DD values and dateKind date_range. If the actual closing date is unknown, leave endsAt empty and place the last explicitly guaranteed on-view date in confirmedThrough; never turn that guarantee into a closing date. Capture recurring visitor or gallery hours in visitingHours using weekday numbers 0 Sunday through 6 Saturday and 24-hour HH:MM times. Gallery hours are availability, not occurrences. Put separately dated programs in occurrences. Put repeated weekly event programs in recurringOccurrences so the application can expand every actual program date deterministically.",
       "A street address is not a venue name. Leave venueName empty when the post names only an address. Keep curator credits in the factual description; do not replace the named exhibiting artist with the curator or social account.",
       "Use only supplied image URLs for imageUrl and carouselImages. Choose the event flyer as imageUrl when one is present. Return empty values rather than guesses and put genuine source disagreements in conflicts.",
+      "Default accessStatus to public with a Public audience when no attendance restriction is stated. Use restricted only for an explicit limitation and unknown only when the caption, flyer, or other supplied evidence genuinely conflicts about who may attend. Performer, vendor, applicant, workshop, or competition eligibility is separate from audience attendance unless spectators or attendees are also limited.",
       "Write every public-facing description and note as a direct event fact. Never say that a caption, flyer, post, page, listing, source, extraction, or verification says, lists, confirms, or shows something. Evidence narration belongs only in private evidence or conflicts.",
     ].join(" "),
     input: [{ role: "user", content }],
@@ -7780,10 +7830,10 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
   const browserOptions = {
     url,
     prompt: socialDetail
-      ? `Extract the one primary event announced by this social post. Read the complete visible caption, inspect every carousel slide, and perform OCR on visible flyer text instead of relying only on platform-generated accessibility text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. Use the post or flyer publication date to supply the event year only when the visible month and day make that year unambiguous. Return explicit UTC offsets for every one-time timed value. If the post describes an exhibition with an on-view date range plus openings, talks, mixers, workshops, visits, or other programs, return the exhibition as the parent event with eventStructure exhibition and dateKind date_range. If its closing date is unknown, leave endsAt empty and put only the last explicitly guaranteed on-view date in confirmedThrough. Capture recurring gallery or visitor availability in visitingHours using day 0 Sunday through 6 Saturday and HH:MM local times; do not turn gallery hours into occurrences. Return each one-time program in occurrences. For a repeated event program such as every Tuesday and Thursday during the exhibition, return a bounded recurringOccurrences rule so every actual program date can be created deterministically. Do not collapse an exhibition into a series or replace its date range with related program dates. Reconcile caption and flyer facts using the most specific visibly supported detail. Put any genuine disagreement in conflicts instead of silently choosing or deleting a fact. Preserve factual caption details such as accessibility, audience, admission, and whether children are welcome. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Return carouselImages for every slide with its URL when exposed, accessibility text, OCR text, and a role of flyer, installation, artwork, or other. Choose the primary event flyer for imageUrl and imageAlt when possible. Return empty strings for genuinely missing facts.`
+      ? `Extract the one primary event announced by this social post. Read the complete visible caption, inspect every carousel slide, and perform OCR on visible flyer text instead of relying only on platform-generated accessibility text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. Use the post or flyer publication date to supply the event year only when the visible month and day make that year unambiguous. Return explicit UTC offsets for every one-time timed value. If the post describes an exhibition with an on-view date range plus openings, talks, mixers, workshops, visits, or other programs, return the exhibition as the parent event with eventStructure exhibition and dateKind date_range. If its closing date is unknown, leave endsAt empty and put only the last explicitly guaranteed on-view date in confirmedThrough. Capture recurring gallery or visitor availability in visitingHours using day 0 Sunday through 6 Saturday and HH:MM local times; do not turn gallery hours into occurrences. Return each one-time program in occurrences. For a repeated event program such as every Tuesday and Thursday during the exhibition, return a bounded recurringOccurrences rule so every actual program date can be created deterministically. Do not collapse an exhibition into a series or replace its date range with related program dates. Reconcile caption and flyer facts using the most specific visibly supported detail. Put any genuine disagreement in conflicts instead of silently choosing or deleting a fact. Preserve factual caption details such as accessibility, audience, admission, and whether children are welcome. Default accessStatus to public with a Public audience when no restriction is stated; use restricted for an explicit limitation and unknown only for genuinely conflicting access evidence. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Return carouselImages for every slide with its URL when exposed, accessibility text, OCR text, and a role of flyer, installation, artwork, or other. Choose the primary event flyer for imageUrl and imageAlt when possible. Return empty strings for genuinely missing facts.`
       : mode === "detail"
-      ? "Extract the one primary event on this event or ticket page. Use ISO 8601 start and end timestamps exactly as shown. Return empty strings for missing facts. Return organizerUrl or venueUrl only when the page exposes a website, official profile, platform identity, or partner page. Return the primary event flyer image URL and accessibility text when the rendered page exposes them. Never infer an end time, identity link, or event URL."
-      : `Extract up to ${maximum} upcoming event cards currently shown for ${configuredCity}, ${configuredRegion}. Do not include featured or nearby events outside that location section. Use ISO 8601 dates or timestamps only when the page supplies them. Include an event URL only when the page exposes the exact ticket-page URL. Return empty strings for facts the page does not supply.`,
+      ? "Extract the one primary event on this event or ticket page. Use ISO 8601 start and end timestamps exactly as shown. Default accessStatus to public with a Public audience when no attendance restriction is stated; use restricted for an explicit limitation and unknown only for genuinely conflicting access evidence. Return empty strings for other missing facts. Return organizerUrl or venueUrl only when the page exposes a website, official profile, platform identity, or partner page. Return the primary event flyer image URL and accessibility text when the rendered page exposes them. Never infer an end time, identity link, or event URL."
+      : `Extract up to ${maximum} upcoming event cards currently shown for ${configuredCity}, ${configuredRegion}. Do not include featured or nearby events outside that location section. Use ISO 8601 dates or timestamps only when the page supplies them. Default accessStatus to public with a Public audience when no attendance restriction is stated; use restricted for an explicit limitation and unknown only for genuinely conflicting access evidence. Include an event URL only when the page exposes the exact ticket-page URL. Return empty strings for other facts the page does not supply.`,
     response_format: {
       type: "json_schema",
       json_schema: {
@@ -7875,7 +7925,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
     fallbackUsed = true;
     response = await env.BROWSER.quickAction("json", {
       url,
-      prompt: `Extract the one primary event announced by this social post. Read the complete caption and visible flyer text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. If this is an exhibition, keep its full on-view range on the parent event. Enumerate every dated opening, talk, mixer, workshop, visit, closing, and every actual date in any repeated weekly schedule as a separate occurrence. Use explicit UTC offsets for timed values. Do not omit repeated dates, merge programs, or replace the exhibition range with a program date. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Return empty strings for genuinely missing optional facts.`,
+      prompt: `Extract the one primary event announced by this social post. Read the complete caption and visible flyer text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. If this is an exhibition, keep its full on-view range on the parent event. Enumerate every dated opening, talk, mixer, workshop, visit, closing, and every actual date in any repeated weekly schedule as a separate occurrence. Use explicit UTC offsets for timed values. Do not omit repeated dates, merge programs, or replace the exhibition range with a program date. Default accessStatus to public with a Public audience when no restriction is stated; use restricted for an explicit limitation and unknown only for genuinely conflicting access evidence. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Return empty strings for genuinely missing optional facts.`,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -7966,7 +8016,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
     scheduleScanUsed = true;
     const scheduleResponse = await env.BROWSER.quickAction("json", {
       url,
-      prompt: `Extract only the related schedule announced by this social post. Read the complete caption and visible flyer text. The parent event is ${asString(primaryEvent.title)} and runs from ${asString(primaryEvent.startsAt)} through ${asString(primaryEvent.endsAt)} in ${TIME_ZONE}. Return every one-time opening, reception, talk, tournament, mixer, screening, performance, workshop, visit, closing, or other dated program in occurrences. Return repeated weekly schedules in recurringOccurrences with every stated weekday, the schedule start and end dates, and local start and end times. Do not return the parent exhibition itself as an occurrence. Do not summarize, omit, or merge separately named programs. Use explicit UTC offsets for one-time timed values. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Use an empty array only when the post genuinely announces no related schedule.`,
+      prompt: `Extract only the related schedule announced by this social post. Read the complete caption and visible flyer text. The parent event is ${asString(primaryEvent.title)} and runs from ${asString(primaryEvent.startsAt)} through ${asString(primaryEvent.endsAt)} in ${TIME_ZONE}. Return every one-time opening, reception, talk, tournament, mixer, screening, performance, workshop, visit, closing, or other dated program in occurrences. Return repeated weekly schedules in recurringOccurrences with every stated weekday, the schedule start and end dates, and local start and end times. Do not return the parent exhibition itself as an occurrence. Do not summarize, omit, or merge separately named programs. Use explicit UTC offsets for one-time timed values. Default accessStatus to public with a Public audience when no restriction is stated; use restricted for an explicit limitation and unknown only for genuinely conflicting access evidence. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Use an empty array only when the post genuinely announces no related schedule.`,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -9468,7 +9518,7 @@ async function requestOpenAiEvents(env, profile, { query, domains = [], sourceDa
       organizationGuidance,
       "A social verification badge is informational and never establishes trust. Preserve the original post identity and a short factual caption excerpt as private evidence.",
       "Use explicit UTC offsets for timed dates and YYYY-MM-DD for all-day dates. Omit anything without a confirmable date.",
-      "Capture attendance eligibility as a public fact. Set accessStatus to public only when the source explicitly says Public, open to all, or equivalent; restricted when attendance is limited to students, alumni, faculty, staff, members, registrants, or invitees; and unknown when the source does not establish eligibility. Copy the named eligible groups into audiences and write a concise factual accessNotes sentence for restricted events. Never assume a public webpage means a public event.",
+      "Capture any stated attendance restriction as a public fact. Default accessStatus to public with a Public audience when no restriction is stated. Use restricted when attendance is explicitly limited to students, alumni, faculty, staff, members, registrants, invitees, or another named group; use unknown only when sources genuinely conflict about eligibility. Performer, vendor, applicant, workshop, or competition eligibility is separate from audience attendance unless spectators or attendees are also limited. Copy named eligible groups into audiences and write a concise factual accessNotes sentence for restricted or conflicting access.",
       "Every public-facing string, including factualDescription, accessNotes, ticketNotes, planningNotes, and occurrence equivalents, must state the event fact directly. Never write that a caption, flyer, post, page, listing, source, extraction, verification, or research process says, lists, confirms, or shows something. Keep that evidence narration only in private evidence, sourceResolutionNotes, verificationNotes, citations, or private Studio intelligence.",
       "Classify eventStructure as single, series, or exhibition. Keep one exhibition or multi-program series as the parent proposal. Put its opening receptions, artist talks, mixers, screenings, performances, workshops, panels, and lectures in occurrences instead of returning duplicate top-level events. A date marked TBD may be retained only as an occurrence with status tbd and empty startsAt. A series parent range is metadata, never a continuous public event.",
       "For an exhibition whose closing date has not been announced, leave endsAt empty and put only the last explicitly guaranteed on-view date in confirmedThrough. Never represent a confirmed-through horizon as a closing date. Capture recurring gallery or visitor availability in visitingHours using weekday numbers 0 Sunday through 6 Saturday and HH:MM local opening and closing times; these hours are not related-program occurrences.",

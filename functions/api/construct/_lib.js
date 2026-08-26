@@ -693,7 +693,7 @@ const MEDIA_TRANSCRIPT_STATUSES = new Set(["not-requested","pending","ready","fa
 const MEDIA_PRESENTATIONS = new Set(["inline","hidden"]);
 const RESUMABLE_UPLOAD_MIMES = {
   video:new Set(["video/mp4","video/webm"]),
-  "archive-master":new Set(["image/tiff","image/jpeg","image/png","image/webp"]),
+  "archive-master":new Set(["image/tiff","image/jpeg","image/png","image/webp","image/heic","image/heif"]),
 };
 const RESUMABLE_MEDIA_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const RESUMABLE_MEDIA_PART_BYTES = 32 * 1024 * 1024;
@@ -1569,7 +1569,8 @@ async function publicArchiveDetail(request,env,archiveSlug){
       WHERE am.dossier_entity_id=? AND am.state='published' AND am.visibility='public'
         AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'))
         AND (
-          NOT EXISTS(SELECT 1 FROM archive_catalogue_entries ace WHERE ace.entity_id=am.dossier_entity_id)
+          am.state_id IS NULL
+          OR NOT EXISTS(SELECT 1 FROM archive_catalogue_entries ace WHERE ace.entity_id=am.dossier_entity_id)
           OR EXISTS(
             SELECT 1 FROM archive_object_states public_state
             JOIN archive_object_versions public_version ON public_version.id=public_state.version_id
@@ -2706,6 +2707,17 @@ async function publicMediaApi(request,env,mediaId){
           WHERE calendar_entry.flyer_media_id=m.id
             AND calendar_entry.status IN ('published','cancelled')
         )
+        OR EXISTS(
+          SELECT 1 FROM archive_blackboard_fragments fragment
+          JOIN archive_blackboard_records blackboard ON blackboard.record_entity_id=fragment.record_entity_id
+          JOIN archive_dossiers dossier ON dossier.entity_id=blackboard.record_entity_id
+          JOIN content_entities owner ON owner.id=dossier.entity_id
+          JOIN content_entities fragment_entity ON fragment_entity.id=fragment.id
+          WHERE fragment.derivative_media_id=m.id
+            AND fragment.state='published' AND fragment.public_visible=1
+            AND fragment_entity.visibility='public'
+            AND dossier.state='published' AND dossier.public_visible=1 AND owner.visibility='public'
+        )
       )`).bind(mediaId).first();
   if(!row)return failure("Not found.",404);
   return servePublicMedia(row,request,env);
@@ -2779,7 +2791,7 @@ async function mediaUploadsApi(request,env,sessionId="",action="",partNumber=0){
     const mime=text(body.mimeType??body.mime_type,100).toLowerCase(),byteSize=Number(body.byteSize??body.byte_size)||0;
     const allowed=RESUMABLE_UPLOAD_MIMES[uploadKind];
     if(!allowed)return failure("Invalid resumable upload kind.");
-    if(!allowed.has(mime))return failure(uploadKind==="archive-master"?"Use a TIFF, JPEG, PNG, or WebP archival master.":"Use an MP4 or WebM video.",415);
+    if(!allowed.has(mime))return failure(uploadKind==="archive-master"?"Use a TIFF, JPEG, PNG, WebP, HEIC, or HEIF archival master.":"Use an MP4 or WebM video.",415);
     if(!Number.isSafeInteger(byteSize)||byteSize<=0)return failure("A valid media size is required.");
     if(byteSize>RESUMABLE_MEDIA_MAX_BYTES)return failure("Resumable media must be 2 GiB or smaller.",413);
     const privacy=uploadKind==="archive-master"?"internal":text(body.privacy,30)||"internal";
@@ -2973,12 +2985,14 @@ function entityDirectorySql(where="1=1"){
       WHEN 'flash_item' THEN fi.title WHEN 'flash_series' THEN fs.name WHEN 'special_project' THEN spc.title WHEN 'special_project_series' THEN sps.name WHEN 'art_work' THEN aw.title WHEN 'portfolio_item' THEN pi.title WHEN 'merch_item' THEN mi.title
       WHEN 'visual_symbol' THEN vs.name WHEN 'archive_record' THEN ar.title WHEN 'archive_collection' THEN ac.name
       WHEN 'archive_failed_experiment' THEN afe.title
+      WHEN 'archive_blackboard_fragment' THEN abf.title
       WHEN 'construct_node' THEN own.name WHEN 'construct_pathway' THEN cp.name WHEN 'person' THEN pe.name
       WHEN 'organization' THEN org.name WHEN 'place' THEN pl.name WHEN 'event' THEN ev.title WHEN 'appearance' THEN app.title ELSE ce.id END title,
     CASE ce.entity_type
       WHEN 'flash_item' THEN fi.state WHEN 'flash_series' THEN fs.state WHEN 'special_project' THEN spc.publication_state WHEN 'special_project_series' THEN sps.state WHEN 'art_work' THEN aw.state WHEN 'portfolio_item' THEN pi.state WHEN 'merch_item' THEN mi.state
       WHEN 'visual_symbol' THEN vs.state WHEN 'archive_record' THEN ar.state WHEN 'archive_collection' THEN ac.state
       WHEN 'archive_failed_experiment' THEN afe.state
+      WHEN 'archive_blackboard_fragment' THEN abf.state
       WHEN 'construct_node' THEN own.state WHEN 'construct_pathway' THEN cp.state WHEN 'person' THEN pe.state
       WHEN 'organization' THEN org.state WHEN 'place' THEN pl.state WHEN 'event' THEN ev.status WHEN 'appearance' THEN app.state ELSE ce.visibility END state,
     CASE ce.entity_type
@@ -2995,9 +3009,12 @@ function entityDirectorySql(where="1=1"){
         ELSE '/archive/?record='||ar.slug END
       WHEN 'archive_collection' THEN '/archive/?collection='||ac.slug
       WHEN 'archive_failed_experiment' THEN '/archive/failed-experiments/'||afe.slug||'/'
+      WHEN 'archive_blackboard_fragment' THEN '/archive/blackboards/'||abfd.archive_slug||'/#fragment-'||abf.slug
       WHEN 'construct_node' THEN own.route WHEN 'construct_pathway' THEN cp.route
       WHEN 'event' THEN '/events/'||ev.slug||'/' WHEN 'appearance' THEN '/about/exhibitions-appearances/'||app.slug||'/' ELSE '' END route,
     COALESCE(NULLIF(mi.image_url,''),NULLIF(pi.source_url,''),
+      CASE WHEN ce.entity_type='archive_blackboard_fragment' AND abf.derivative_media_id IS NOT NULL
+        THEN '/api/construct/media/'||abf.derivative_media_id ELSE NULL END,
       CASE WHEN ce.entity_type='visual_symbol' THEN NULLIF(vs.image_url,'') ELSE NULL END,
       (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id)
        FROM special_project_call_media spm JOIN media_assets m ON m.id=spm.media_id
@@ -3019,6 +3036,7 @@ function entityDirectorySql(where="1=1"){
       WHEN 'merch_item' THEN COALESCE(NULLIF(mi.product_type,''),'Product') WHEN 'visual_symbol' THEN 'Legend symbol'
       WHEN 'archive_record' THEN COALESCE(NULLIF(ar.record_type,''),'Archive record') WHEN 'archive_collection' THEN 'Archive collection'
       WHEN 'archive_failed_experiment' THEN 'Failed experiment'
+      WHEN 'archive_blackboard_fragment' THEN 'Blackboard fragment'
       WHEN 'construct_node' THEN 'Construct node' WHEN 'construct_pathway' THEN 'Pathway'
       WHEN 'person' THEN 'Person' WHEN 'organization' THEN 'Organization' WHEN 'place' THEN 'Place' WHEN 'event' THEN 'Event' WHEN 'appearance' THEN 'Appearance' ELSE ce.entity_type END kind_label,
     CASE ce.entity_type
@@ -3029,6 +3047,7 @@ function entityDirectorySql(where="1=1"){
       WHEN 'archive_record' THEN trim(COALESCE(ar.date_or_period,'')||CASE WHEN ar.date_or_period<>'' AND ar.room<>'' THEN ' · ' ELSE '' END||COALESCE(ar.room,''))
       WHEN 'event' THEN trim(COALESCE(ev.starts_at,'')||CASE WHEN ev.starts_at IS NOT NULL AND ev.starts_at<>'' AND ev.location<>'' THEN ' · ' ELSE '' END||COALESCE(ev.location,''))
       WHEN 'archive_failed_experiment' THEN trim(COALESCE(afe.result,'')||CASE WHEN afe.result<>'' AND afe.process_phase<>'' THEN ' / ' ELSE '' END||COALESCE(afe.process_phase,''))
+      WHEN 'archive_blackboard_fragment' THEN COALESCE(NULLIF(abf.date_label,''),abf.occurred_at,'')
       WHEN 'place' THEN COALESCE(pl.public_location,'') ELSE '' END detail_label,
     COALESCE(cn.id,'') node_resolved_id,COALESCE(cn.name,'') node_name,COALESCE(cn.slug,'') node_slug,COALESCE(cn.color,'') node_color,
     COALESCE(fi.claimable,0) claimable,COALESCE(mi.shopify_handle,'') shopify_handle
@@ -3044,6 +3063,8 @@ function entityDirectorySql(where="1=1"){
   LEFT JOIN archive_records ar ON ce.entity_type='archive_record' AND ar.id=ce.id
   LEFT JOIN archive_collections ac ON ce.entity_type='archive_collection' AND ac.id=ce.id
   LEFT JOIN archive_failed_experiments afe ON ce.entity_type='archive_failed_experiment' AND afe.entity_id=ce.id
+  LEFT JOIN archive_blackboard_fragments abf ON ce.entity_type='archive_blackboard_fragment' AND abf.id=ce.id
+  LEFT JOIN archive_dossiers abfd ON abfd.entity_id=abf.record_entity_id
   LEFT JOIN construct_nodes own ON ce.entity_type='construct_node' AND own.id=ce.id
   LEFT JOIN construct_pathways cp ON ce.entity_type='construct_pathway' AND cp.id=ce.id
   LEFT JOIN people pe ON ce.entity_type='person' AND pe.id=ce.id
@@ -4218,6 +4239,10 @@ function presentBlackboardBoard(row,admin=false){
     },
     fragment_count:Number(row.fragment_count||0),
     fragmentCount:Number(row.fragment_count||0),
+    surface_id:row.surface_id||null,
+    surfaceId:row.surface_id||null,
+    surface_slug:row.surface_slug||"",
+    surfaceSlug:row.surface_slug||"",
   };
   if(admin)Object.assign(record,{
     state:row.record_state||"draft",
@@ -4253,7 +4278,7 @@ function blackboardBoardSql(publicOnly=false){
       ace.catalogue_id,ace.catalogue_prefix,ace.catalogue_number,ace.current_state_id,
       aov.id version_id,aov.version_number current_version,
       aos.id state_id,aos.state_roman current_state,aos.variant_label catalogue_variant,aos.date_label,aos.occurred_at,
-      am.id material_id,amsc.board_entity_id,
+      am.id material_id,amsc.board_entity_id,abcs.surface_id,abs.slug surface_slug,
       derivative.id derivative_media_id,derivative.source_url derivative_source_url,
       derivative.mime_type derivative_mime_type,derivative.alt_text derivative_alt_text,
       derivative.width derivative_width,derivative.height derivative_height,
@@ -4285,6 +4310,8 @@ function blackboardBoardSql(publicOnly=false){
     JOIN archive_object_versions aov ON aov.id=aos.version_id
     LEFT JOIN archive_materials am ON am.id=aos.lead_material_id
     LEFT JOIN archive_material_source_contexts amsc ON amsc.material_id=am.id AND amsc.capture_scope='whole'
+    LEFT JOIN archive_blackboard_capture_surfaces abcs ON abcs.capture_entity_id=ar.id
+    LEFT JOIN archive_blackboard_surfaces abs ON abs.id=abcs.surface_id
     LEFT JOIN media_assets derivative ON derivative.id=am.media_id
     LEFT JOIN media_asset_variants mav ON mav.derivative_media_id=derivative.id AND mav.purpose='public-display'
     LEFT JOIN media_assets master ON master.id=mav.master_media_id
@@ -4302,9 +4329,100 @@ async function archiveBlackboardContextMap(database,entityIds,publicOnly=true){
   }));
 }
 
-async function publicArchiveBlackboards(request,env){
+const BLACKBOARD_RELATIONSHIP_IDS=new Set(["rel-source-for","rel-study-for","rel-informed","rel-planning-for"]);
+
+function presentBlackboardSurface(row){
+  if(!row)return null;
+  return {id:row.id,slug:row.slug,title:row.title,studio_location:row.studio_location,studioLocation:row.studio_location,
+    wall_designation:row.wall_designation,wallDesignation:row.wall_designation,orientation_note:row.orientation_note,orientationNote:row.orientation_note,
+    summary:row.summary||"",state:row.state,public_visible:Number(row.public_visible||0),publicVisible:Boolean(row.public_visible),
+    route:`/archive/blackboards/${encodeURIComponent(row.slug)}/`,capture_count:Number(row.capture_count||0),captureCount:Number(row.capture_count||0),
+    fragment_count:Number(row.fragment_count||0),fragmentCount:Number(row.fragment_count||0),updated_at:row.updated_at};
+}
+
+function blackboardSurfaceSql(publicOnly=false){
+  const gates=publicOnly?"WHERE surface.state='published' AND surface.public_visible=1 AND ce.visibility='public'":"";
+  return `SELECT surface.*,
+    (SELECT COUNT(*) FROM archive_blackboard_capture_surfaces link WHERE link.surface_id=surface.id) capture_count,
+    (SELECT COUNT(*) FROM archive_blackboard_fragments fragment WHERE fragment.surface_id=surface.id AND fragment.state<>'archived') fragment_count
+    FROM archive_blackboard_surfaces surface JOIN content_entities ce ON ce.id=surface.id ${gates}`;
+}
+
+function publicBlackboardMedia(row){
+  if(!row?.derivative_media_id)return null;
+  return {id:row.derivative_media_id,url:blackboardMediaUrl({media_id:row.derivative_media_id,source_url:row.derivative_source_url}),
+    alt_text:row.derivative_alt_text||row.title||"Blackboard image",mime_type:row.derivative_mime_type||"",
+    width:Number(row.derivative_width||0)||null,height:Number(row.derivative_height||0)||null};
+}
+
+function blackboardElapsedDays(earlier,later){
+  const a=Date.parse(earlier||""),b=Date.parse(later||"");
+  return Number.isFinite(a)&&Number.isFinite(b)?Math.round((b-a)/86400000):null;
+}
+
+async function publicBlackboardSurfaceDetail(database,slugValue){
+  const surfaceRow=await database.prepare(`${blackboardSurfaceSql(true)} AND surface.slug=?`).bind(slugValue).first();
+  if(!surfaceRow)return null;
+  const surface=presentBlackboardSurface(surfaceRow);
+  const captureRows=(await database.prepare(`${blackboardBoardSql(true)} AND abcs.surface_id=?
+    ORDER BY COALESCE(aos.occurred_at,ar.date_or_period,ar.created_at),ar.created_at`).bind(surface.id).all()).results||[];
+  const captures=captureRows.map(row=>presentBlackboardBoard(row));
+  for(let index=0;index<captures.length;index++)captures[index].elapsed_days=index?blackboardElapsedDays(captureRows[index-1].occurred_at,captureRows[index].occurred_at):null;
+  const contextRows=(await database.prepare(`SELECT item.*,derivative.source_url derivative_source_url,derivative.mime_type derivative_mime_type,
+      derivative.alt_text derivative_alt_text,derivative.width derivative_width,derivative.height derivative_height
+    FROM archive_blackboard_surface_media item
+    JOIN media_assets derivative ON derivative.id=item.derivative_media_id
+    JOIN media_assets master ON master.id=item.master_media_id
+    WHERE item.surface_id=? AND item.state='published' AND item.public_visible=1
+      AND derivative.state='active' AND derivative.privacy='public' AND derivative.consent_status IN ('not-required','granted') AND derivative.public_presentation='inline'
+      AND master.state='active' AND master.privacy IN ('internal','private') AND master.public_presentation='hidden'
+    ORDER BY item.sort_order,item.occurred_at,item.created_at`).bind(surface.id).all()).results||[];
+  const fragmentRows=(await database.prepare(`SELECT fragment.*,derivative.source_url derivative_source_url,derivative.mime_type derivative_mime_type,
+      derivative.alt_text derivative_alt_text,derivative.width derivative_width,derivative.height derivative_height
+    FROM archive_blackboard_fragments fragment
+    JOIN content_entities ce ON ce.id=fragment.id
+    JOIN media_assets derivative ON derivative.id=fragment.derivative_media_id
+    LEFT JOIN media_assets master ON master.id=fragment.master_media_id
+    WHERE fragment.surface_id=? AND fragment.state='published' AND fragment.public_visible=1 AND ce.visibility='public'
+      AND derivative.state='active' AND derivative.privacy='public' AND derivative.consent_status IN ('not-required','granted') AND derivative.public_presentation='inline'
+      AND (fragment.master_media_id IS NULL OR (master.state='active' AND master.privacy IN ('internal','private') AND master.public_presentation='hidden'))
+    ORDER BY CASE WHEN fragment.occurred_at IS NULL THEN 1 ELSE 0 END,fragment.occurred_at,fragment.sort_order,fragment.created_at`).bind(surface.id).all()).results||[];
+  const fragments=[];
+  for(const row of fragmentRows){
+    const matches=(await database.prepare(`SELECT board.entity_id,board.title,board.date_label,board.occurred_at,board.archive_slug,board.catalogue_id,board.catalogue_prefix,board.catalogue_number
+      FROM archive_blackboard_fragment_captures match
+      JOIN (${blackboardBoardSql(true)}) board ON board.entity_id=match.capture_entity_id
+      WHERE match.fragment_id=? ORDER BY match.sort_order,board.occurred_at`).bind(row.id).all()).results||[];
+    const relationRows=(await database.prepare(`SELECT er.target_entity_id,rt.forward_label,rt.slug
+      FROM entity_relationships er JOIN relationship_types rt ON rt.id=er.relationship_type_id
+      JOIN content_entities target ON target.id=er.target_entity_id
+      WHERE er.source_entity_id=? AND er.public_visible=1 AND rt.public_visible=1
+        AND er.relationship_type_id IN ('rel-source-for','rel-study-for','rel-informed','rel-planning-for')
+        AND target.visibility='public' ORDER BY er.sort_order,er.created_at`).bind(row.id).all()).results||[];
+    const targets=await entityRecords(database,relationRows.map(item=>item.target_entity_id));
+    const manifestations=relationRows.map(item=>({relationship:item.forward_label,relationshipSlug:item.slug,target:targets.get(item.target_entity_id)})).filter(item=>item.target?.route);
+    const threads=(await database.prepare(`SELECT thread.id,thread.slug,thread.title,thread.summary
+      FROM archive_origin_thread_entities member JOIN archive_origin_threads thread ON thread.id=member.thread_id
+      WHERE member.entity_id=? AND thread.state='published' AND thread.public_visible=1
+      ORDER BY member.is_primary DESC,member.sort_order,thread.sort_order`).bind(row.id).all()).results||[];
+    fragments.push({id:row.id,slug:row.slug,title:row.title,caption:row.caption||"",body:row.body||"",date:row.date_label||row.occurred_at||"",
+      occurred_at:row.occurred_at,image:publicBlackboardMedia(row),visible_in:matches.map(match=>presentBlackboardBoard(match)),visibleIn:matches.map(match=>presentBlackboardBoard(match)),manifestations,origin_threads:threads,originThreads:threads});
+  }
+  const contextMedia=contextRows.map(row=>({id:row.id,title:row.title||"Studio context",caption:row.caption||"",date:row.date_label||row.occurred_at||"",image:publicBlackboardMedia(row)}));
+  return {surface,latest_capture:captures.at(-1)||null,latestCapture:captures.at(-1)||null,captures,context_media:contextMedia,contextMedia,fragments};
+}
+
+async function publicArchiveBlackboards(request,env,surfaceSlug=""){
   if(request.method!=="GET")return failure("Method not allowed.",405);
   const database=db(env);
+  if(surfaceSlug){const detail=await publicBlackboardSurfaceDetail(database,surfaceSlug);return detail?json(detail):failure("Blackboard surface not found.",404)}
+  const surfaceRows=(await database.prepare(`${blackboardSurfaceSql(true)} ORDER BY surface.sort_order,surface.title`).all()).results||[];
+  const surfaces=[];
+  for(const row of surfaceRows){
+    const surface=presentBlackboardSurface(row);
+    const latest=await database.prepare(`${blackboardBoardSql(true)} AND abcs.surface_id=? ORDER BY COALESCE(aos.occurred_at,ar.date_or_period,ar.created_at) DESC LIMIT 1`).bind(surface.id).first();
+    surface.latest_capture=presentBlackboardBoard(latest);surface.latestCapture=surface.latest_capture;surfaces.push(surface);
+  }
   const boardRows=(await database.prepare(`${blackboardBoardSql(true)}
     ORDER BY COALESCE(aos.occurred_at,ar.date_or_period,ad.published_at,ar.created_at) DESC,ar.created_at DESC`).all()).results||[];
   const boards=boardRows.map(row=>presentBlackboardBoard(row));
@@ -4360,12 +4478,130 @@ async function publicArchiveBlackboards(request,env){
     if(row.board_entity_id&&boardMap.has(row.board_entity_id))fragment.board=boardMap.get(row.board_entity_id);
     if(!fragment.contexts.some(item=>item.entity_id===context.entity_id))fragment.contexts.push(context);
   }
-  return json({boards,fragments:[...grouped.values()],count:{boards:boards.length,fragments:grouped.size}});
+  return json({surfaces,boards,fragments:[...grouped.values()],count:{surfaces:surfaces.length,boards:boards.length,fragments:grouped.size}});
 }
 
 async function archiveBlackboardsAdminRecord(database,entityId){
   const row=await database.prepare(`${blackboardBoardSql(false)} AND ar.id=?`).bind(entityId).first();
   return presentBlackboardBoard(row,true);
+}
+
+async function blackboardMediaPair(database,masterId,derivativeId,{derivativeRequired=true}={}){
+  if(!masterId)return failure("Choose an archival master.",409);
+  if(derivativeRequired&&!derivativeId)return failure("Choose a public derivative.",409);
+  if(derivativeId&&masterId===derivativeId)return failure("The master and derivative must be separate Digital assets.",409);
+  const master=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(masterId).first();
+  const derivative=derivativeId?await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(derivativeId).first():null;
+  if(!master||(derivativeId&&!derivative))return failure("One of the selected Digital assets does not exist.",404);
+  if(!RESUMABLE_UPLOAD_MIMES["archive-master"].has(String(master.mime_type||"").toLowerCase()))return failure("The archival master must be TIFF, JPEG, PNG, WebP, HEIC, or HEIF.",409);
+  if(derivative&&!['image/jpeg','image/png','image/webp'].includes(String(derivative.mime_type||"").toLowerCase()))return failure("The public derivative must be JPEG, PNG, or WebP.",409);
+  return {master,derivative};
+}
+
+async function prepareBlackboardMediaPair(database,masterId,derivativeId){
+  const statements=[database.prepare("UPDATE media_assets SET state='active',privacy='internal',consent_status='not-required',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(masterId)];
+  if(derivativeId)statements.push(
+    database.prepare(`INSERT OR IGNORE INTO media_asset_variants(master_media_id,derivative_media_id,purpose,created_by,created_at,updated_at) VALUES(?,?,'public-display','studio',datetime('now'),datetime('now'))`).bind(masterId,derivativeId),
+    database.prepare("UPDATE media_assets SET state='active',privacy='public',consent_status=CASE WHEN consent_status='granted' THEN 'granted' ELSE 'not-required' END,public_presentation='inline',updated_at=datetime('now') WHERE id=?").bind(derivativeId),
+  );
+  await database.batch(statements);
+}
+
+async function blackboardSurfaceAdminPayload(database,surfaceId=""){
+  const where=surfaceId?" AND surface.id=?":"";
+  const statement=database.prepare(`${blackboardSurfaceSql(false)} WHERE 1=1${where} ORDER BY surface.sort_order,surface.title`);
+  const rows=(surfaceId?await statement.bind(surfaceId).all():await statement.all()).results||[];
+  const records=[];
+  for(const row of rows){
+    const surface=presentBlackboardSurface(row);
+    const captures=(await database.prepare(`${blackboardBoardSql(false)} AND abcs.surface_id=? ORDER BY COALESCE(aos.occurred_at,ar.date_or_period,ar.created_at),ar.created_at`).bind(surface.id).all()).results.map(item=>presentBlackboardBoard(item,true));
+    const context=(await database.prepare(`SELECT item.*,master.original_filename master_filename,master.mime_type master_mime_type,
+      derivative.original_filename derivative_filename,derivative.mime_type derivative_mime_type
+      FROM archive_blackboard_surface_media item JOIN media_assets master ON master.id=item.master_media_id
+      LEFT JOIN media_assets derivative ON derivative.id=item.derivative_media_id WHERE item.surface_id=? ORDER BY item.sort_order,item.created_at`).bind(surface.id).all()).results||[];
+    const fragments=(await database.prepare(`SELECT fragment.*,master.original_filename master_filename,derivative.original_filename derivative_filename,
+      (SELECT COUNT(*) FROM archive_blackboard_fragment_captures match WHERE match.fragment_id=fragment.id) capture_match_count,
+      (SELECT COUNT(*) FROM entity_relationships rel WHERE rel.source_entity_id=fragment.id AND rel.relationship_type_id IN ('rel-source-for','rel-study-for','rel-informed','rel-planning-for')) manifestation_count
+      FROM archive_blackboard_fragments fragment LEFT JOIN media_assets master ON master.id=fragment.master_media_id
+      LEFT JOIN media_assets derivative ON derivative.id=fragment.derivative_media_id WHERE fragment.surface_id=? AND fragment.state<>'archived'
+      ORDER BY CASE WHEN fragment.occurred_at IS NULL THEN 1 ELSE 0 END,fragment.occurred_at,fragment.sort_order,fragment.created_at`).bind(surface.id).all()).results||[];
+    for(const fragment of fragments){fragment.capture_ids=((await database.prepare("SELECT capture_entity_id FROM archive_blackboard_fragment_captures WHERE fragment_id=? ORDER BY sort_order").bind(fragment.id).all()).results||[]).map(item=>item.capture_entity_id)}
+    records.push({...surface,captures,context_media:context,contextMedia:context,fragments});
+  }
+  return surfaceId?records[0]||null:records;
+}
+
+async function archiveBlackboardSurfacesAdminApi(request,env,surfaceId=""){
+  const database=db(env);
+  if(request.method==="GET"){const records=await blackboardSurfaceAdminPayload(database,surfaceId);if(surfaceId&&!records)return failure("Blackboard surface not found.",404);return json(surfaceId?{record:records,surface:records}:{records,surfaces:records,count:records.length})}
+  if(request.method==="POST"&&!surfaceId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+    const title=text(body.title,300),surfaceSlug=slug(body.slug||title);if(!title||!surfaceSlug)return failure("A surface title and slug are required.",409);
+    const newId=text(body.id,200)||id("blackboard-surface"),state=text(body.state,30)||"draft",publicVisible=state==="published"&&truthy(body.public_visible??body.publicVisible)?1:0;
+    try{await database.batch([
+      database.prepare(`INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_blackboard_surface','archive',?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,publicVisible?"public":"internal",publicVisible),
+      database.prepare(`INSERT INTO archive_blackboard_surfaces(id,slug,title,studio_location,wall_designation,orientation_note,summary,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at,published_at) VALUES(?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'),CASE WHEN ?=1 THEN datetime('now') END)`).bind(newId,surfaceSlug,title,text(body.studio_location??body.studioLocation,200),text(body.wall_designation??body.wallDesignation,120),text(body.orientation_note??body.orientationNote,1000),text(body.summary,8000),state,publicVisible,Number(body.sort_order??body.sortOrder)||0,publicVisible),
+    ])}catch(error){return failure(error.message,409)}
+    return json({record:await blackboardSurfaceAdminPayload(database,newId)},{status:201});
+  }
+  if(request.method==="PATCH"&&surfaceId){
+    const body=await readJson(request),before=await database.prepare("SELECT * FROM archive_blackboard_surfaces WHERE id=?").bind(surfaceId).first();if(!body)return failure("Send a JSON object.");if(!before)return failure("Blackboard surface not found.",404);
+    const state=text(body.state??before.state,30),publicVisible=state==="published"&&(body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible))?1:0;
+    await database.batch([
+      database.prepare(`UPDATE archive_blackboard_surfaces SET slug=?,title=?,studio_location=?,wall_designation=?,orientation_note=?,summary=?,state=?,public_visible=?,sort_order=?,published_at=CASE WHEN ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(slug(body.slug??before.slug),text(body.title??before.title,300),text(body.studio_location??body.studioLocation??before.studio_location,200),text(body.wall_designation??body.wallDesignation??before.wall_designation,120),text(body.orientation_note??body.orientationNote??before.orientation_note,1000),text(body.summary??before.summary,8000),state,publicVisible,Number(body.sort_order??body.sortOrder??before.sort_order)||0,publicVisible,surfaceId),
+      database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,public_at=CASE WHEN ?=1 THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(publicVisible?"public":"internal",publicVisible,publicVisible,surfaceId),
+    ]);
+    return json({record:await blackboardSurfaceAdminPayload(database,surfaceId)});
+  }
+  return failure("Method not allowed.",405);
+}
+
+async function archiveBlackboardContextAdminApi(request,env,surfaceId,contextId=""){
+  const database=db(env),surface=await database.prepare("SELECT * FROM archive_blackboard_surfaces WHERE id=?").bind(surfaceId).first();if(!surface)return failure("Blackboard surface not found.",404);
+  const before=contextId?await database.prepare("SELECT * FROM archive_blackboard_surface_media WHERE id=? AND surface_id=?").bind(contextId,surfaceId).first():null;
+  if(request.method==="POST"&&!contextId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const masterId=text(body.master_media_id??body.masterMediaId,200),derivativeId=text(body.derivative_media_id??body.derivativeMediaId,200)||null;
+    const pair=await blackboardMediaPair(database,masterId,derivativeId,{derivativeRequired:false});if(pair instanceof Response)return pair;
+    const state=text(body.state,30)||"draft",publicVisible=state==="published"&&truthy(body.public_visible??body.publicVisible)&&derivativeId?1:0,newId=text(body.id,200)||id("blackboard-context");
+    await prepareBlackboardMediaPair(database,masterId,derivativeId);
+    await database.prepare(`INSERT INTO archive_blackboard_surface_media(id,surface_id,role,master_media_id,derivative_media_id,title,caption,occurred_at,date_precision,date_label,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,'context',?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,surfaceId,masterId,derivativeId,text(body.title,300),text(body.caption,5000),text(body.occurred_at??body.occurredAt,80)||null,text(body.date_precision??body.datePrecision,30)||(body.occurred_at||body.occurredAt?"exact":"undated"),text(body.date_label??body.dateLabel,160),state,publicVisible,Number(body.sort_order??body.sortOrder)||0).run();
+    return json({record:await database.prepare("SELECT * FROM archive_blackboard_surface_media WHERE id=?").bind(newId).first()},{status:201});
+  }
+  if(request.method==="PATCH"&&before){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const masterId=text(body.master_media_id??body.masterMediaId??before.master_media_id,200),derivativeId=text(body.derivative_media_id??body.derivativeMediaId??before.derivative_media_id,200)||null;
+    const pair=await blackboardMediaPair(database,masterId,derivativeId,{derivativeRequired:false});if(pair instanceof Response)return pair;const state=text(body.state??before.state,30),publicVisible=state==="published"&&(body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible))&&derivativeId?1:0;
+    await prepareBlackboardMediaPair(database,masterId,derivativeId);await database.prepare(`UPDATE archive_blackboard_surface_media SET master_media_id=?,derivative_media_id=?,title=?,caption=?,occurred_at=?,date_precision=?,date_label=?,state=?,public_visible=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(masterId,derivativeId,text(body.title??before.title,300),text(body.caption??before.caption,5000),text(body.occurred_at??body.occurredAt??before.occurred_at,80)||null,text(body.date_precision??body.datePrecision??before.date_precision,30),text(body.date_label??body.dateLabel??before.date_label,160),state,publicVisible,Number(body.sort_order??body.sortOrder??before.sort_order)||0,contextId).run();
+    return json({record:await database.prepare("SELECT * FROM archive_blackboard_surface_media WHERE id=?").bind(contextId).first()});
+  }
+  return failure("Method not allowed.",405);
+}
+
+async function archiveBlackboardFragmentsAdminApi(request,env,surfaceId,fragmentId="",action=""){
+  const database=db(env),surface=await database.prepare("SELECT * FROM archive_blackboard_surfaces WHERE id=?").bind(surfaceId).first();if(!surface)return failure("Blackboard surface not found.",404);
+  const before=fragmentId?await database.prepare("SELECT * FROM archive_blackboard_fragments WHERE id=? AND surface_id=?").bind(fragmentId,surfaceId).first():null;
+  if(request.method==="POST"&&!fragmentId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const title=text(body.title,300),fragmentSlug=slug(body.slug||title);if(!title||!fragmentSlug)return failure("A fragment title and slug are required.",409);
+    const masterId=text(body.master_media_id??body.masterMediaId,200)||null,derivativeId=text(body.derivative_media_id??body.derivativeMediaId,200)||null;if(masterId||derivativeId){const pair=await blackboardMediaPair(database,masterId,derivativeId,{derivativeRequired:true});if(pair instanceof Response)return pair;await prepareBlackboardMediaPair(database,masterId,derivativeId)}
+    const state=text(body.state,30)||"draft",publicVisible=state==="published"&&truthy(body.public_visible??body.publicVisible)&&derivativeId?1:0,newId=text(body.id,200)||id("blackboard-fragment");
+    try{await database.batch([
+      database.prepare(`INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_blackboard_fragment','archive',?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,publicVisible?"public":"internal",publicVisible),
+      database.prepare(`INSERT INTO archive_blackboard_fragments(id,surface_id,slug,title,caption,body,master_media_id,derivative_media_id,occurred_at,date_precision,date_label,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at,published_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'),CASE WHEN ?=1 THEN datetime('now') END)`).bind(newId,surfaceId,fragmentSlug,title,text(body.caption,5000),text(body.body,20000),masterId,derivativeId,text(body.occurred_at??body.occurredAt,80)||null,text(body.date_precision??body.datePrecision,30)||(body.occurred_at||body.occurredAt?"exact":"undated"),text(body.date_label??body.dateLabel,160),state,publicVisible,Number(body.sort_order??body.sortOrder)||0,publicVisible),
+    ])}catch(error){return failure(error.message,409)}return json({record:await database.prepare("SELECT * FROM archive_blackboard_fragments WHERE id=?").bind(newId).first()},{status:201});
+  }
+  if(request.method==="PUT"&&before&&action==="captures"){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const captureIds=[...new Set((body.capture_ids??body.captureIds??[]).map(value=>text(value,200)).filter(Boolean))];
+    if(captureIds.length){const valid=(await database.prepare(`SELECT capture_entity_id id FROM archive_blackboard_capture_surfaces WHERE surface_id=? AND capture_entity_id IN (${captureIds.map(()=>"?").join(",")})`).bind(surfaceId,...captureIds).all()).results||[];if(valid.length!==captureIds.length)return failure("Every Visible in capture must belong to this surface.",409)}
+    await database.batch([database.prepare("DELETE FROM archive_blackboard_fragment_captures WHERE fragment_id=?").bind(fragmentId),...captureIds.map((captureId,index)=>database.prepare("INSERT INTO archive_blackboard_fragment_captures(fragment_id,capture_entity_id,sort_order,created_by,created_at) VALUES(?,?,?,'studio',datetime('now'))").bind(fragmentId,captureId,index+1))]);return json({ok:true,capture_ids:captureIds});
+  }
+  if(request.method==="PATCH"&&before){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const masterId=text(body.master_media_id??body.masterMediaId??before.master_media_id,200)||null,derivativeId=text(body.derivative_media_id??body.derivativeMediaId??before.derivative_media_id,200)||null;if(masterId||derivativeId){const pair=await blackboardMediaPair(database,masterId,derivativeId,{derivativeRequired:true});if(pair instanceof Response)return pair;await prepareBlackboardMediaPair(database,masterId,derivativeId)}
+    const state=text(body.state??before.state,30),requestedPublic=body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible),publicVisible=state==="published"&&requestedPublic&&derivativeId?1:0;
+    await database.batch([
+      database.prepare(`UPDATE archive_blackboard_fragments SET slug=?,title=?,caption=?,body=?,master_media_id=?,derivative_media_id=?,occurred_at=?,date_precision=?,date_label=?,state=?,public_visible=?,sort_order=?,published_at=CASE WHEN ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(slug(body.slug??before.slug),text(body.title??before.title,300),text(body.caption??before.caption,5000),text(body.body??before.body,20000),masterId,derivativeId,text(body.occurred_at??body.occurredAt??before.occurred_at,80)||null,text(body.date_precision??body.datePrecision??before.date_precision,30),text(body.date_label??body.dateLabel??before.date_label,160),state,publicVisible,Number(body.sort_order??body.sortOrder??before.sort_order)||0,publicVisible,fragmentId),
+      database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,public_at=CASE WHEN ?=1 THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(publicVisible?"public":"internal",publicVisible,publicVisible,fragmentId),
+    ]);return json({record:await database.prepare("SELECT * FROM archive_blackboard_fragments WHERE id=?").bind(fragmentId).first()});
+  }
+  return failure("Method not allowed.",405);
 }
 
 async function archiveBlackboardsAdminApi(request,env,entityId="",action=""){
@@ -4406,6 +4642,8 @@ async function archiveBlackboardsAdminApi(request,env,entityId="",action=""){
   }
   if(request.method==="POST"&&!entityId){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+    const surfaceId=text(body.surface_id??body.surfaceId,200);if(!surfaceId)return failure("surface_id is required for every Blackboard capture.",409);
+    if(!await database.prepare("SELECT id FROM archive_blackboard_surfaces WHERE id=? AND state<>'archived'").bind(surfaceId).first())return failure("Choose an active Blackboard surface.",409);
     const title=text(body.title,300);if(!title)return failure("A Blackboard title is required.",409);
     let archiveSlug=slug(body.archive_slug??body.archiveSlug??body.slug??title);
     if(!archiveSlug)return failure("A Blackboard slug is required.",409);
@@ -4440,6 +4678,8 @@ async function archiveBlackboardsAdminApi(request,env,entityId="",action=""){
           .bind(setId,recordId,recordId,occurredAt,datePrecision,dateLabel),
         database.prepare(`INSERT INTO archive_source_material_states(source_material_set_id,state_id,document_reference,sort_order,created_at)
           VALUES(?,?,'D01',1,datetime('now'))`).bind(setId,stateId),
+        database.prepare(`INSERT INTO archive_blackboard_capture_surfaces(capture_entity_id,surface_id,sort_order,created_by,created_at,updated_at)
+          VALUES(?,?,?,'studio',datetime('now'),datetime('now'))`).bind(recordId,surfaceId,Number(body.sort_order??body.sortOrder)||0),
       ]);
     }catch(error){return failure(error.message,409)}
     return json({record:await archiveBlackboardsAdminRecord(database,recordId)},{status:201});
@@ -4455,7 +4695,7 @@ async function archiveBlackboardsAdminApi(request,env,entityId="",action=""){
       database.prepare("SELECT * FROM media_assets WHERE id=?").bind(derivativeId).first(),
     ]);
     if(!master||!derivative)return failure("One of the selected Digital assets does not exist.",404);
-    if(!RESUMABLE_UPLOAD_MIMES["archive-master"].has(String(master.mime_type||"").toLowerCase()))return failure("The archival master must be TIFF, JPEG, PNG, or WebP.",409);
+    if(!RESUMABLE_UPLOAD_MIMES["archive-master"].has(String(master.mime_type||"").toLowerCase()))return failure("The archival master must be TIFF, JPEG, PNG, WebP, HEIC, or HEIF.",409);
     if(master.privacy!=="internal"||master.public_presentation!=="hidden")return failure("The archival master must remain internal and hidden.",409);
     if(!["image/jpeg","image/png","image/webp"].includes(String(derivative.mime_type||"").toLowerCase()))return failure("The public derivative must be JPEG, PNG, or WebP.",409);
     const materialId=board.material_id||id("archive-material"),entryId=id("archive-source-entry");
@@ -4521,6 +4761,336 @@ async function archiveBlackboardsAdminApi(request,env,entityId="",action=""){
       database.prepare("UPDATE search_documents SET title=?,summary=?,date_label=?,updated_at=datetime('now') WHERE entity_id=?").bind(title,summary,dateLabel||occurredAt||"",entityId),
     ]);
     return json({record:await archiveBlackboardsAdminRecord(database,entityId)});
+  }
+  return failure("Method not allowed.",405);
+}
+
+// Blackboard record/state model. The earlier surface/capture implementation is
+// retained above only so migration 0176 can interpret already-created local
+// data; all current routes use the record model below.
+function blackboardStateRoman(order){
+  const values=["","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"];
+  return values[order]||String(order);
+}
+
+function blackboardRecordSqlV2(publicOnly=false){
+  const gates=publicOnly?` AND ce.visibility='public' AND ar.state='published' AND ad.state='published' AND ad.public_visible=1
+    AND current_version.publication_state='published' AND current_version.public_visible=1
+    AND current_state.publication_state='published' AND current_state.public_visible=1`:"";
+  return `SELECT profile.record_entity_id entity_id,profile.studio_location,profile.wall_designation,profile.orientation_note,profile.sort_order,
+      ar.title,ar.summary,ar.body,ar.date_or_period,ar.state record_state,ar.updated_at,
+      ad.archive_slug,ad.orientation,ad.story,ad.state dossier_state,ad.public_visible dossier_public_visible,
+      catalogue.catalogue_id,catalogue.catalogue_prefix,catalogue.catalogue_number,catalogue.current_version,catalogue.current_state,catalogue.current_state_id,
+      current_version.id current_version_id,current_state.title current_state_title,current_state.occurred_at current_occurred_at,
+      current_state.date_label current_date_label,current_state.lead_material_id current_lead_material_id,
+      lead.media_id derivative_media_id,derivative.source_url derivative_source_url,derivative.mime_type derivative_mime_type,
+      derivative.alt_text derivative_alt_text,derivative.width derivative_width,derivative.height derivative_height,
+      pair.master_media_id,master.privacy master_privacy,master.public_presentation master_presentation,
+      (SELECT COUNT(*) FROM archive_object_states state_count JOIN archive_object_versions version_count ON version_count.id=state_count.version_id
+        WHERE version_count.entity_id=profile.record_entity_id AND state_count.publication_state<>'archived') state_count,
+      (SELECT COUNT(*) FROM archive_blackboard_fragments fragment WHERE fragment.record_entity_id=profile.record_entity_id AND fragment.state<>'archived') fragment_count
+    FROM archive_blackboard_records profile
+    JOIN archive_records ar ON ar.id=profile.record_entity_id AND ar.record_type='blackboard'
+    JOIN content_entities ce ON ce.id=ar.id
+    JOIN archive_dossiers ad ON ad.entity_id=ar.id AND ad.record_type='blackboard'
+    JOIN archive_catalogue_entries catalogue ON catalogue.entity_id=ar.id AND catalogue.object_type_id='other-blackboard'
+    JOIN archive_object_states current_state ON current_state.id=catalogue.current_state_id
+    JOIN archive_object_versions current_version ON current_version.id=current_state.version_id
+    LEFT JOIN archive_materials lead ON lead.id=current_state.lead_material_id
+    LEFT JOIN media_assets derivative ON derivative.id=lead.media_id
+    LEFT JOIN media_asset_variants pair ON pair.derivative_media_id=derivative.id AND pair.purpose='public-display'
+    LEFT JOIN media_assets master ON master.id=pair.master_media_id
+    WHERE 1=1${gates}`;
+}
+
+function presentBlackboardRecordV2(row,admin=false){
+  if(!row)return null;
+  const record={id:row.entity_id,entity_id:row.entity_id,entityId:row.entity_id,slug:row.archive_slug,title:row.title,
+    summary:row.summary||row.orientation||"",studio_location:row.studio_location,studioLocation:row.studio_location,
+    wall_designation:row.wall_designation,wallDesignation:row.wall_designation,orientation_note:row.orientation_note,orientationNote:row.orientation_note,
+    catalogue_id:row.catalogue_id,catalogueId:row.catalogue_id,catalogue_label:`${row.catalogue_id}.${row.current_version}/${row.current_state}`,
+    catalogueLabel:`${row.catalogue_id}.${row.current_version}/${row.current_state}`,current_version:Number(row.current_version)||1,currentVersion:Number(row.current_version)||1,
+    current_state:row.current_state,currentState:row.current_state,current_state_id:row.current_state_id,currentStateId:row.current_state_id,
+    state_count:Number(row.state_count||0),stateCount:Number(row.state_count||0),fragment_count:Number(row.fragment_count||0),fragmentCount:Number(row.fragment_count||0),
+    route:`/archive/blackboards/${encodeURIComponent(row.archive_slug)}/`,record_route:`/archive/records/${encodeURIComponent(row.archive_slug)}/`,
+    recordRoute:`/archive/records/${encodeURIComponent(row.archive_slug)}/`,updated_at:row.updated_at};
+  if(admin)Object.assign(record,{state:row.record_state,dossier_state:row.dossier_state,public_visible:Number(row.dossier_public_visible||0),
+    publicVisible:Boolean(row.dossier_public_visible),sort_order:Number(row.sort_order||0)});
+  return record;
+}
+
+async function blackboardStateRowsV2(database,recordId,publicOnly=false){
+  const gates=publicOnly?` AND version.publication_state='published' AND version.public_visible=1
+    AND object_state.publication_state='published' AND object_state.public_visible=1
+    AND material.state='published' AND material.visibility='public'
+    AND derivative.state='active' AND derivative.privacy='public' AND derivative.consent_status IN ('not-required','granted') AND derivative.public_presentation='inline'
+    AND master.state='active' AND master.privacy IN ('internal','private') AND master.public_presentation='hidden'`:"";
+  const rows=(await database.prepare(`SELECT object_state.*,version.entity_id,version.version_number,version.title version_title,
+      version.publication_state version_publication_state,version.public_visible version_public_visible,
+      material.id material_id,material.title material_title,material.caption material_caption,
+      derivative.id derivative_media_id,derivative.source_url derivative_source_url,derivative.mime_type derivative_mime_type,
+      derivative.alt_text derivative_alt_text,derivative.width derivative_width,derivative.height derivative_height,
+      pair.master_media_id,master.original_filename master_filename,derivative.original_filename derivative_filename
+    FROM archive_object_versions version
+    JOIN archive_object_states object_state ON object_state.version_id=version.id
+    LEFT JOIN archive_materials material ON material.id=object_state.lead_material_id
+    LEFT JOIN media_assets derivative ON derivative.id=material.media_id
+    LEFT JOIN media_asset_variants pair ON pair.derivative_media_id=derivative.id AND pair.purpose='public-display'
+    LEFT JOIN media_assets master ON master.id=pair.master_media_id
+    WHERE version.entity_id=? AND object_state.publication_state<>'archived'${gates}
+    ORDER BY version.sort_order,version.version_number,object_state.sort_order,object_state.state_order`).bind(recordId).all()).results||[];
+  const states=rows.map(row=>{
+    const state={id:row.id,state_id:row.id,stateId:row.id,version_id:row.version_id,versionId:row.version_id,
+      version_number:Number(row.version_number)||1,versionNumber:Number(row.version_number)||1,state_roman:row.state_roman,stateRoman:row.state_roman,
+      state_order:Number(row.state_order)||0,title:row.title||`State ${row.state_roman}`,description:row.description||"",
+      occurred_at:row.occurred_at,occurredAt:row.occurred_at,date_label:row.date_label||row.occurred_at||"",dateLabel:row.date_label||row.occurred_at||"",
+      catalogue_label:"",catalogueLabel:"",scan:publicBlackboardMedia(row),publication_state:row.publication_state,public_visible:Number(row.public_visible||0)};
+    if(!publicOnly)Object.assign(state,{material_id:row.material_id||null,master_media_id:row.master_media_id||null,derivative_media_id:row.derivative_media_id||null,
+      master_filename:row.master_filename||"",derivative_filename:row.derivative_filename||""});
+    return state;
+  });
+  const catalogue=await database.prepare("SELECT catalogue_id FROM archive_catalogue_entries WHERE entity_id=?").bind(recordId).first();
+  for(let index=0;index<states.length;index++){
+    const state=states[index];state.catalogue_label=`${catalogue?.catalogue_id||"OBJ"}.${state.version_number}/${state.state_roman}`;state.catalogueLabel=state.catalogue_label;
+    state.elapsed_days=index?blackboardElapsedDays(states[index-1].occurred_at,state.occurred_at):null;state.elapsedDays=state.elapsed_days;
+  }
+  return states;
+}
+
+async function blackboardNotebookRowsV2(database,recordId,publicOnly=false){
+  const gates=publicOnly?` AND material.state='published' AND material.visibility='public'
+    AND derivative.state='active' AND derivative.privacy='public' AND derivative.consent_status IN ('not-required','granted') AND derivative.public_presentation='inline'
+    AND master.state='active' AND master.privacy IN ('internal','private') AND master.public_presentation='hidden'`:"";
+  const rows=(await database.prepare(`SELECT material.*,derivative.id derivative_media_id,derivative.source_url derivative_source_url,
+      derivative.mime_type derivative_mime_type,derivative.alt_text derivative_alt_text,derivative.width derivative_width,derivative.height derivative_height,
+      pair.master_media_id,master.original_filename master_filename,derivative.original_filename derivative_filename
+    FROM archive_materials material
+    JOIN media_assets derivative ON derivative.id=material.media_id
+    JOIN media_asset_variants pair ON pair.derivative_media_id=derivative.id AND pair.purpose='public-display'
+    JOIN media_assets master ON master.id=pair.master_media_id
+    WHERE material.dossier_entity_id=? AND material.state_id IS NULL AND material.role='notebook'${gates}
+    ORDER BY CASE WHEN material.occurred_at IS NULL THEN 1 ELSE 0 END,material.occurred_at,material.sort_order,material.created_at`).bind(recordId).all()).results||[];
+  return rows.map(row=>{
+    const item={id:row.id,title:row.title||"Notebook entry",caption:row.caption||"",body:row.body||"",date:row.date_label||row.occurred_at||"",
+      occurred_at:row.occurred_at,occurredAt:row.occurred_at,image:publicBlackboardMedia(row),state:row.state,visibility:row.visibility};
+    if(!publicOnly)Object.assign(item,{master_media_id:row.master_media_id,derivative_media_id:row.derivative_media_id,master_filename:row.master_filename,derivative_filename:row.derivative_filename});
+    return item;
+  });
+}
+
+async function blackboardFragmentsV2(database,recordId,states,publicOnly=false){
+  const gates=publicOnly?` AND fragment.state='published' AND fragment.public_visible=1 AND ce.visibility='public'
+    AND derivative.state='active' AND derivative.privacy='public' AND derivative.consent_status IN ('not-required','granted') AND derivative.public_presentation='inline'
+    AND (fragment.master_media_id IS NULL OR (master.state='active' AND master.privacy IN ('internal','private') AND master.public_presentation='hidden'))`:" AND fragment.state<>'archived'";
+  const rows=(await database.prepare(`SELECT fragment.*,derivative.source_url derivative_source_url,derivative.mime_type derivative_mime_type,
+      derivative.alt_text derivative_alt_text,derivative.width derivative_width,derivative.height derivative_height,
+      master.original_filename master_filename,derivative.original_filename derivative_filename
+    FROM archive_blackboard_fragments fragment JOIN content_entities ce ON ce.id=fragment.id
+    LEFT JOIN media_assets derivative ON derivative.id=fragment.derivative_media_id
+    LEFT JOIN media_assets master ON master.id=fragment.master_media_id
+    WHERE fragment.record_entity_id=?${gates}
+    ORDER BY CASE WHEN fragment.occurred_at IS NULL THEN 1 ELSE 0 END,fragment.occurred_at,fragment.sort_order,fragment.created_at`).bind(recordId).all()).results||[];
+  const stateMap=new Map(states.map(state=>[state.id,state])),fragments=[];
+  for(const row of rows){
+    const stateLinks=(await database.prepare("SELECT state_id FROM archive_blackboard_fragment_states WHERE fragment_id=? ORDER BY sort_order,created_at").bind(row.id).all()).results||[];
+    let manifestations=[],threads=[];
+    if(publicOnly){
+      const relationRows=(await database.prepare(`SELECT er.target_entity_id,rt.forward_label,rt.slug FROM entity_relationships er
+        JOIN relationship_types rt ON rt.id=er.relationship_type_id JOIN content_entities target ON target.id=er.target_entity_id
+        WHERE er.source_entity_id=? AND er.public_visible=1 AND rt.public_visible=1
+          AND er.relationship_type_id IN ('rel-source-for','rel-study-for','rel-informed','rel-planning-for') AND target.visibility='public'
+        ORDER BY er.sort_order,er.created_at`).bind(row.id).all()).results||[];
+      const targets=await entityRecords(database,relationRows.map(item=>item.target_entity_id));
+      manifestations=relationRows.map(item=>({relationship:item.forward_label,relationshipSlug:item.slug,target:targets.get(item.target_entity_id)})).filter(item=>item.target?.route);
+      threads=(await database.prepare(`SELECT thread.id,thread.slug,thread.title,thread.summary FROM archive_origin_thread_entities member
+        JOIN archive_origin_threads thread ON thread.id=member.thread_id WHERE member.entity_id=? AND thread.state='published' AND thread.public_visible=1
+        ORDER BY member.is_primary DESC,member.sort_order,thread.sort_order`).bind(row.id).all()).results||[];
+    }
+    const visible=stateLinks.map(link=>stateMap.get(link.state_id)).filter(Boolean);
+    fragments.push({id:row.id,slug:row.slug,title:row.title,caption:row.caption||"",body:row.body||"",date:row.date_label||row.occurred_at||"",
+      occurred_at:row.occurred_at,image:publicBlackboardMedia(row),visible_in:visible,visibleIn:visible,state_ids:stateLinks.map(item=>item.state_id),
+      stateIds:stateLinks.map(item=>item.state_id),manifestations,origin_threads:threads,originThreads:threads,state:row.state,public_visible:Number(row.public_visible||0)});
+    if(!publicOnly)Object.assign(fragments.at(-1),{master_media_id:row.master_media_id,derivative_media_id:row.derivative_media_id,master_filename:row.master_filename,derivative_filename:row.derivative_filename});
+  }
+  return fragments;
+}
+
+async function publicBlackboardRecordDetailV2(database,slugValue){
+  const row=await database.prepare(`${blackboardRecordSqlV2(true)} AND ad.archive_slug=?`).bind(slugValue).first();
+  if(!row)return null;
+  const record=presentBlackboardRecordV2(row),states=await blackboardStateRowsV2(database,record.id,true),notebook=await blackboardNotebookRowsV2(database,record.id,true);
+  const fragments=await blackboardFragmentsV2(database,record.id,states,true);
+  const activities=(await database.prepare(`SELECT activity.*,('history-'||activity.id) anchor FROM entity_activity activity
+    WHERE activity.entity_id=? AND activity.public_visible=1 ORDER BY CASE WHEN activity.occurred_at IS NULL THEN 1 ELSE 0 END,activity.occurred_at,activity.sort_order,activity.created_at`).bind(record.id).all()).results||[];
+  const versions=[];
+  for(const state of states){let version=versions.find(item=>item.version_number===state.version_number);if(!version){version={version_number:state.version_number,versionNumber:state.version_number,title:`Version ${state.version_number}`,states:[]};versions.push(version)}version.states.push(state)}
+  const latest=states.at(-1)||null;
+  return {record,surface:record,versions,states,captures:states,latest_state:latest,latestState:latest,latest_capture:latest,latestCapture:latest,
+    notebook,context_media:notebook,contextMedia:notebook,fragments,activities,item_history:activities,itemHistory:activities};
+}
+
+async function publicArchiveBlackboardsV2(request,env,recordSlug=""){
+  if(request.method!=="GET")return failure("Method not allowed.",405);
+  const database=db(env);
+  if(recordSlug){const detail=await publicBlackboardRecordDetailV2(database,recordSlug);return detail?json(detail):failure("Blackboard record not found.",404)}
+  const rows=(await database.prepare(`${blackboardRecordSqlV2(true)} ORDER BY profile.sort_order,ar.title`).all()).results||[],records=[];
+  for(const row of rows){const record=presentBlackboardRecordV2(row),states=await blackboardStateRowsV2(database,record.id,true);record.latest_state=states.at(-1)||null;record.latestState=record.latest_state;record.latest_capture=record.latest_state;record.latestCapture=record.latest_state;records.push(record)}
+  return json({records,surfaces:records,boards:records,fragments:[],count:{records:records.length,surfaces:records.length,boards:records.length,fragments:0}});
+}
+
+async function blackboardRecordAdminPayloadV2(database,recordId=""){
+  const where=recordId?" AND profile.record_entity_id=?":"",statement=database.prepare(`${blackboardRecordSqlV2(false)}${where} ORDER BY profile.sort_order,ar.title`);
+  const rows=(recordId?await statement.bind(recordId).all():await statement.all()).results||[],records=[];
+  for(const row of rows){const record=presentBlackboardRecordV2(row,true),states=await blackboardStateRowsV2(database,record.id,false),notebook=await blackboardNotebookRowsV2(database,record.id,false),fragments=await blackboardFragmentsV2(database,record.id,states,false);records.push({...record,states,captures:states,notebook,context_media:notebook,contextMedia:notebook,fragments})}
+  return recordId?records[0]||null:records;
+}
+
+async function attachBlackboardStateMediaV2(database,recordId,stateId,body){
+  const state=await database.prepare(`SELECT object_state.*,version.entity_id FROM archive_object_states object_state JOIN archive_object_versions version ON version.id=object_state.version_id WHERE object_state.id=? AND version.entity_id=?`).bind(stateId,recordId).first();
+  if(!state)return failure("Blackboard state not found.",404);
+  const masterId=text(body.master_media_id??body.masterMediaId,200),derivativeId=text(body.derivative_media_id??body.derivativeMediaId,200);
+  const pair=await blackboardMediaPair(database,masterId,derivativeId,{derivativeRequired:true});if(pair instanceof Response)return pair;
+  await prepareBlackboardMediaPair(database,masterId,derivativeId);
+  const materialId=state.lead_material_id||id("archive-material"),reference=`M${String(Number(state.state_order)||1).padStart(2,"0")}`;
+  const existing=state.lead_material_id?await database.prepare("SELECT id FROM archive_materials WHERE id=?").bind(state.lead_material_id).first():null;
+  if(existing)await database.prepare(`UPDATE archive_materials SET media_id=?,role='blackboard-whole',material_type='artifact',title=?,caption=?,process_phase='captured state',occurred_at=?,date_precision=?,date_label=?,state='draft',visibility='internal',state_id=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`)
+    .bind(derivativeId,state.title||`State ${state.state_roman}`,text(body.caption,5000),state.occurred_at,state.date_precision,state.date_label,stateId,materialId).run();
+  else await database.prepare(`INSERT INTO archive_materials(id,dossier_entity_id,media_id,role,material_type,title,caption,body,process_phase,occurred_at,date_precision,date_label,visibility,state,sort_order,state_id,material_reference,is_sample,created_by,updated_by,created_at,updated_at)
+    VALUES(?,?,?,'blackboard-whole','artifact',?,?,'','captured state',?,?,?,'internal','draft',?,?,?,0,'studio','studio',datetime('now'),datetime('now'))`)
+    .bind(materialId,recordId,derivativeId,state.title||`State ${state.state_roman}`,text(body.caption,5000),state.occurred_at,state.date_precision,state.date_label,Number(state.state_order)||1,stateId,reference).run();
+  await database.batch([
+    database.prepare("UPDATE archive_object_states SET lead_material_id=?,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(materialId,stateId),
+    database.prepare(`INSERT INTO archive_material_source_contexts(material_id,source_kind,capture_scope,board_entity_id,created_by,updated_by,created_at,updated_at)
+      VALUES(?,'blackboard','whole',?,'studio','studio',datetime('now'),datetime('now'))
+      ON CONFLICT(material_id) DO UPDATE SET board_entity_id=excluded.board_entity_id,updated_by='studio',updated_at=datetime('now')`).bind(materialId,recordId),
+  ]);
+  return {materialId,masterId,derivativeId};
+}
+
+async function archiveBlackboardStatesAdminApiV2(request,env,recordId,stateId=""){
+  const database=db(env),record=await database.prepare("SELECT record_entity_id FROM archive_blackboard_records WHERE record_entity_id=?").bind(recordId).first();
+  if(!record)return failure("Blackboard record not found.",404);
+  if(request.method==="POST"&&!stateId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+    const version=await database.prepare("SELECT * FROM archive_object_versions WHERE entity_id=? ORDER BY version_number LIMIT 1").bind(recordId).first();
+    const max=await database.prepare("SELECT COALESCE(MAX(state_order),0) state_order FROM archive_object_states WHERE version_id=?").bind(version.id).first(),order=Number(max?.state_order||0)+1,roman=blackboardStateRoman(order),newId=text(body.id,200)||id("archive-state");
+    const occurredAt=text(body.occurred_at??body.occurredAt,80)||null,dateLabel=text(body.date_label??body.dateLabel,160),datePrecision=text(body.date_precision??body.datePrecision,30)||(occurredAt?"exact":"undated");
+    if(!ARCHIVE_DATE_PRECISIONS.has(datePrecision))return failure("Invalid date precision.",409);
+    await database.prepare(`INSERT INTO archive_object_states(id,version_id,state_roman,state_order,title,description,variant_label,occurred_at,date_precision,date_label,sort_order,publication_state,public_visible,created_by,updated_by,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,'',?,?,?,?, 'draft',0,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,version.id,roman,order,text(body.title,300)||`State ${roman}`,text(body.description,5000)||`Complete Blackboard state documented on ${dateLabel||"an undated capture"}`,occurredAt,datePrecision,dateLabel,order).run();
+    if(body.master_media_id||body.masterMediaId){const attached=await attachBlackboardStateMediaV2(database,recordId,newId,body);if(attached instanceof Response)return attached}
+    await database.prepare("UPDATE archive_catalogue_entries SET current_state=?,current_state_id=?,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(roman,newId,recordId).run();
+    return json({record:(await blackboardStateRowsV2(database,recordId,false)).find(item=>item.id===newId)},{status:201});
+  }
+  const before=stateId?await database.prepare(`SELECT object_state.*,version.entity_id FROM archive_object_states object_state JOIN archive_object_versions version ON version.id=object_state.version_id WHERE object_state.id=? AND version.entity_id=?`).bind(stateId,recordId).first():null;
+  if(!before)return failure("Blackboard state not found.",404);
+  if(request.method==="POST"){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const attached=await attachBlackboardStateMediaV2(database,recordId,stateId,body);if(attached instanceof Response)return attached;
+    return json({record:(await blackboardStateRowsV2(database,recordId,false)).find(item=>item.id===stateId)});
+  }
+  if(request.method==="PATCH"){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const occurredAt=text(body.occurred_at??body.occurredAt??before.occurred_at,80)||null,dateLabel=text(body.date_label??body.dateLabel??before.date_label,160),datePrecision=text(body.date_precision??body.datePrecision??before.date_precision,30);
+    const publication=text(body.publication_state??body.publicationState??before.publication_state,30),requested=body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible),publicVisible=publication==="published"&&requested?1:0;
+    if(publicVisible&&!before.lead_material_id)return failure("Attach a complete scan before publishing this state.",409);
+    await database.batch([
+      database.prepare("UPDATE archive_object_states SET title=?,description=?,occurred_at=?,date_precision=?,date_label=?,publication_state=?,public_visible=?,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(text(body.title??before.title,300),text(body.description??before.description,5000),occurredAt,datePrecision,dateLabel,publication,publicVisible,stateId),
+      ...(before.lead_material_id?[database.prepare("UPDATE archive_materials SET state=?,visibility=?,occurred_at=?,date_precision=?,date_label=?,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(publicVisible?"published":"draft",publicVisible?"public":"internal",occurredAt,datePrecision,dateLabel,before.lead_material_id)]:[]),
+    ]);
+    return json({record:(await blackboardStateRowsV2(database,recordId,false)).find(item=>item.id===stateId)});
+  }
+  return failure("Method not allowed.",405);
+}
+
+async function archiveBlackboardNotebookAdminApiV2(request,env,recordId,materialId=""){
+  const database=db(env),owner=await database.prepare("SELECT record_entity_id FROM archive_blackboard_records WHERE record_entity_id=?").bind(recordId).first();if(!owner)return failure("Blackboard record not found.",404);
+  const before=materialId?await database.prepare("SELECT * FROM archive_materials WHERE id=? AND dossier_entity_id=? AND role='notebook'").bind(materialId,recordId).first():null;
+  if(request.method==="POST"&&!materialId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const masterId=text(body.master_media_id??body.masterMediaId,200),derivativeId=text(body.derivative_media_id??body.derivativeMediaId,200);
+    const pair=await blackboardMediaPair(database,masterId,derivativeId,{derivativeRequired:true});if(pair instanceof Response)return pair;await prepareBlackboardMediaPair(database,masterId,derivativeId);
+    const state=text(body.state,30)||"draft",visibility=state==="published"&&truthy(body.public_visible??body.publicVisible)?"public":"internal",newId=text(body.id,200)||id("archive-material-notebook"),occurredAt=text(body.occurred_at??body.occurredAt,80)||null,dateLabel=text(body.date_label??body.dateLabel,160);
+    await database.prepare(`INSERT INTO archive_materials(id,dossier_entity_id,media_id,role,material_type,title,caption,body,process_phase,occurred_at,date_precision,date_label,visibility,state,sort_order,state_id,material_reference,is_sample,created_by,updated_by,created_at,updated_at)
+      VALUES(?,?,?,'notebook','process-photo',?,?,'','studio context',?,?,?, ?,?, ?,NULL,'',0,'studio','studio',datetime('now'),datetime('now'))`)
+      .bind(newId,recordId,derivativeId,text(body.title,300)||"Blackboard in the studio",text(body.caption,5000),occurredAt,occurredAt?"exact":"undated",dateLabel,visibility,state,Number(body.sort_order??body.sortOrder)||0).run();
+    return json({record:(await blackboardNotebookRowsV2(database,recordId,false)).find(item=>item.id===newId)},{status:201});
+  }
+  if(request.method==="PATCH"&&before){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const state=text(body.state??before.state,30),requested=body.public_visible===undefined&&body.publicVisible===undefined?before.visibility==="public":truthy(body.public_visible??body.publicVisible),visibility=state==="published"&&requested?"public":"internal";
+    await database.prepare("UPDATE archive_materials SET title=?,caption=?,occurred_at=?,date_precision=?,date_label=?,state=?,visibility=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?")
+      .bind(text(body.title??before.title,300),text(body.caption??before.caption,5000),text(body.occurred_at??body.occurredAt??before.occurred_at,80)||null,text(body.date_precision??body.datePrecision??before.date_precision,30),text(body.date_label??body.dateLabel??before.date_label,160),state,visibility,Number(body.sort_order??body.sortOrder??before.sort_order)||0,materialId).run();
+    return json({record:(await blackboardNotebookRowsV2(database,recordId,false)).find(item=>item.id===materialId)});
+  }
+  return failure("Method not allowed.",405);
+}
+
+async function archiveBlackboardFragmentsAdminApiV2(request,env,recordId,fragmentId="",action=""){
+  const database=db(env),owner=await database.prepare("SELECT record_entity_id FROM archive_blackboard_records WHERE record_entity_id=?").bind(recordId).first();if(!owner)return failure("Blackboard record not found.",404);
+  const before=fragmentId?await database.prepare("SELECT * FROM archive_blackboard_fragments WHERE id=? AND record_entity_id=?").bind(fragmentId,recordId).first():null;
+  if(request.method==="POST"&&!fragmentId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const title=text(body.title,300),fragmentSlug=slug(body.slug||title);if(!title||!fragmentSlug)return failure("A fragment title and slug are required.",409);
+    const masterId=text(body.master_media_id??body.masterMediaId,200)||null,derivativeId=text(body.derivative_media_id??body.derivativeMediaId,200)||null;if(masterId||derivativeId){const pair=await blackboardMediaPair(database,masterId,derivativeId,{derivativeRequired:true});if(pair instanceof Response)return pair;await prepareBlackboardMediaPair(database,masterId,derivativeId)}
+    const state=text(body.state,30)||"draft",publicVisible=state==="published"&&truthy(body.public_visible??body.publicVisible)&&derivativeId?1:0,newId=text(body.id,200)||id("blackboard-fragment");
+    await database.batch([
+      database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_blackboard_fragment','archive',?,?,'studio','studio',datetime('now'),datetime('now'))").bind(newId,publicVisible?"public":"internal",publicVisible),
+      database.prepare(`INSERT INTO archive_blackboard_fragments(id,record_entity_id,slug,title,caption,body,master_media_id,derivative_media_id,occurred_at,date_precision,date_label,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at,published_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'),CASE WHEN ?=1 THEN datetime('now') END)`).bind(newId,recordId,fragmentSlug,title,text(body.caption,5000),text(body.body,20000),masterId,derivativeId,text(body.occurred_at??body.occurredAt,80)||null,text(body.date_precision??body.datePrecision,30)||(body.occurred_at||body.occurredAt?"exact":"undated"),text(body.date_label??body.dateLabel,160),state,publicVisible,Number(body.sort_order??body.sortOrder)||0,publicVisible),
+    ]);return json({record:await database.prepare("SELECT * FROM archive_blackboard_fragments WHERE id=?").bind(newId).first()},{status:201});
+  }
+  if(request.method==="PUT"&&before&&action==="states"){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const stateIds=[...new Set((body.state_ids??body.stateIds??[]).map(value=>text(value,200)).filter(Boolean))];
+    if(stateIds.length){const valid=(await database.prepare(`SELECT object_state.id FROM archive_object_states object_state JOIN archive_object_versions version ON version.id=object_state.version_id WHERE version.entity_id=? AND object_state.id IN (${stateIds.map(()=>"?").join(",")})`).bind(recordId,...stateIds).all()).results||[];if(valid.length!==stateIds.length)return failure("Every Visible in state must belong to this Blackboard record.",409)}
+    await database.batch([database.prepare("DELETE FROM archive_blackboard_fragment_states WHERE fragment_id=?").bind(fragmentId),...stateIds.map((linkedId,index)=>database.prepare("INSERT INTO archive_blackboard_fragment_states(fragment_id,state_id,sort_order,created_by,created_at) VALUES(?,?,?,'studio',datetime('now'))").bind(fragmentId,linkedId,index+1))]);return json({ok:true,state_ids:stateIds});
+  }
+  if(request.method==="PATCH"&&before){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const state=text(body.state??before.state,30),requested=body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible),publicVisible=state==="published"&&requested&&before.derivative_media_id?1:0;
+    await database.batch([
+      database.prepare("UPDATE archive_blackboard_fragments SET slug=?,title=?,caption=?,body=?,occurred_at=?,date_precision=?,date_label=?,state=?,public_visible=?,sort_order=?,published_at=CASE WHEN ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(slug(body.slug??before.slug),text(body.title??before.title,300),text(body.caption??before.caption,5000),text(body.body??before.body,20000),text(body.occurred_at??body.occurredAt??before.occurred_at,80)||null,text(body.date_precision??body.datePrecision??before.date_precision,30),text(body.date_label??body.dateLabel??before.date_label,160),state,publicVisible,Number(body.sort_order??body.sortOrder??before.sort_order)||0,publicVisible,fragmentId),
+      database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(publicVisible?"public":"internal",publicVisible,fragmentId),
+    ]);return json({record:await database.prepare("SELECT * FROM archive_blackboard_fragments WHERE id=?").bind(fragmentId).first()});
+  }
+  return failure("Method not allowed.",405);
+}
+
+async function archiveBlackboardRecordsAdminApiV2(request,env,recordId="",action=""){
+  const database=db(env);
+  if(request.method==="GET"){const records=await blackboardRecordAdminPayloadV2(database,recordId);if(recordId&&!records)return failure("Blackboard record not found.",404);return json(recordId?{record:records}:{records,count:records.length})}
+  if(request.method==="POST"&&!recordId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const title=text(body.title,300),archiveSlug=slug(body.slug??body.archive_slug??body.archiveSlug??title);if(!title||!archiveSlug)return failure("A Blackboard title and slug are required.",409);
+    if(await database.prepare("SELECT entity_id FROM archive_dossiers WHERE archive_slug=?").bind(archiveSlug).first())return failure("That Archive slug is already in use.",409);
+    const newId=text(body.id,200)||id("archive-blackboard"),versionId=id("archive-version"),stateId=id("archive-state"),type=await database.prepare("SELECT medium_id,catalogue_prefix FROM archive_cultural_object_types WHERE id='other-blackboard'").first(),number=await nextArchiveCatalogueNumber(database,type.catalogue_prefix),catalogueId=`${type.catalogue_prefix}-${String(number).padStart(3,"0")}`;
+    const occurredAt=text(body.occurred_at??body.occurredAt,80)||null,dateLabel=text(body.date_label??body.dateLabel,160),datePrecision=occurredAt?"exact":"undated";
+    await database.batch([
+      database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_record','archive','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(newId),
+      database.prepare("INSERT INTO archive_records(id,slug,title,node_label,record_type,room,date_or_period,timeline_period,summary,body,record_status,state,created_at,updated_at) VALUES(?,?,?,'The Six.Well Construct','blackboard','Studio',?,'',?,?,'active evolving Blackboard','draft',datetime('now'),datetime('now'))").bind(newId,archiveSlug,title,dateLabel,text(body.summary,5000),text(body.body,50000)),
+      database.prepare("INSERT INTO archive_dossiers(entity_id,archive_slug,orientation,story,empty_materials_note,record_type,state,public_visible,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,'blackboard','draft',0,'studio','studio',datetime('now'),datetime('now'))").bind(newId,archiveSlug,text(body.summary,8000),text(body.story??body.body,50000),"No Notebook materials are public yet."),
+      database.prepare("INSERT INTO archive_catalogue_entries(entity_id,medium_id,object_type_id,catalogue_prefix,catalogue_number,catalogue_id,current_version,current_state,current_state_id,variant_label,created_by,updated_by,created_at,updated_at) VALUES(?,?,'other-blackboard',?,?,?,1,'I',?,'','studio','studio',datetime('now'),datetime('now'))").bind(newId,type.medium_id,type.catalogue_prefix,number,catalogueId,stateId),
+      database.prepare("INSERT INTO archive_object_versions(id,entity_id,version_number,title,description,occurred_at,date_precision,date_label,sort_order,publication_state,public_visible,created_by,updated_by,created_at,updated_at) VALUES(?,?,1,'Version 1','The first documented physical incarnation of this Blackboard.',?,?,?,1,'draft',0,'studio','studio',datetime('now'),datetime('now'))").bind(versionId,newId,occurredAt,datePrecision,dateLabel),
+      database.prepare("INSERT INTO archive_object_states(id,version_id,state_roman,state_order,title,description,occurred_at,date_precision,date_label,sort_order,publication_state,public_visible,created_by,updated_by,created_at,updated_at) VALUES(?,?,'I',1,'State I','First documented complete Blackboard state',?,?,?,1,'draft',0,'studio','studio',datetime('now'),datetime('now'))").bind(stateId,versionId,occurredAt,datePrecision,dateLabel),
+      database.prepare("INSERT INTO archive_blackboard_records(record_entity_id,studio_location,wall_designation,orientation_note,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))").bind(newId,text(body.studio_location??body.studioLocation,200),text(body.wall_designation??body.wallDesignation,120),text(body.orientation_note??body.orientationNote,1000),Number(body.sort_order??body.sortOrder)||0),
+    ]);return json({record:await blackboardRecordAdminPayloadV2(database,newId)},{status:201});
+  }
+  const record=recordId?await blackboardRecordAdminPayloadV2(database,recordId):null;if(recordId&&!record)return failure("Blackboard record not found.",404);
+  if(request.method==="POST"&&action==="publish"){
+    const states=await blackboardStateRowsV2(database,recordId,false),ready=states.filter(state=>state.material_id&&state.master_media_id&&state.derivative_media_id);if(!ready.length)return failure("Attach a private master and public derivative to at least one state before publishing.",409);
+    const statements=[
+      database.prepare("UPDATE content_entities SET visibility='public',search_visibility=1,public_at=COALESCE(public_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(recordId),
+      database.prepare("UPDATE archive_records SET state='published',record_status='active evolving Blackboard',updated_at=datetime('now') WHERE id=?").bind(recordId),
+      database.prepare("UPDATE archive_dossiers SET state='published',public_visible=1,published_at=COALESCE(published_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(recordId),
+    ];
+    const versions=[...new Set(ready.map(state=>state.version_id))];for(const versionId of versions)statements.push(database.prepare("UPDATE archive_object_versions SET publication_state='published',public_visible=1,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(versionId));
+    for(const state of ready)statements.push(database.prepare("UPDATE archive_object_states SET publication_state='published',public_visible=1,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(state.id),database.prepare("UPDATE archive_materials SET state='published',visibility='public',updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(state.material_id));
+    await database.batch(statements);return json({record:await blackboardRecordAdminPayloadV2(database,recordId)});
+  }
+  if(request.method==="POST"&&action==="scan"){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const attached=await attachBlackboardStateMediaV2(database,recordId,record.current_state_id,body);if(attached instanceof Response)return attached;return json({record:await blackboardRecordAdminPayloadV2(database,recordId)});
+  }
+  if(request.method==="PATCH"){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const title=text(body.title??record.title,300),archiveSlug=slug(body.slug??record.slug),summary=text(body.summary??record.summary,8000),state=text(body.state??record.state,30),requested=body.public_visible===undefined&&body.publicVisible===undefined?Number(record.public_visible):truthy(body.public_visible??body.publicVisible),publicVisible=state==="published"&&requested?1:0;
+    await database.batch([
+      database.prepare("UPDATE archive_records SET slug=?,title=?,summary=?,state=?,updated_at=datetime('now') WHERE id=?").bind(archiveSlug,title,summary,state,recordId),
+      database.prepare("UPDATE archive_dossiers SET archive_slug=?,orientation=?,state=?,public_visible=?,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(archiveSlug,summary,state,publicVisible,recordId),
+      database.prepare("UPDATE archive_blackboard_records SET studio_location=?,wall_designation=?,orientation_note=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE record_entity_id=?").bind(text(body.studio_location??body.studioLocation??record.studio_location,200),text(body.wall_designation??body.wallDesignation??record.wall_designation,120),text(body.orientation_note??body.orientationNote??record.orientation_note,1000),Number(body.sort_order??body.sortOrder??record.sort_order)||0,recordId),
+      database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(publicVisible?"public":"internal",publicVisible,recordId),
+    ]);return json({record:await blackboardRecordAdminPayloadV2(database,recordId)});
   }
   return failure("Method not allowed.",405);
 }
@@ -5001,7 +5571,8 @@ export async function handleConstructApi(request,env){
   if(path==="/api/search")return publicSearch(request,env);
   if(path==="/api/archive/failed-experiments")return publicFailedExperimentsApi(request,env);
   const failedExperimentPublicMatch=path.match(/^\/api\/archive\/failed-experiments\/([^/]+)$/);if(failedExperimentPublicMatch)return publicFailedExperimentsApi(request,env,decodeURIComponent(failedExperimentPublicMatch[1]));
-  if(path==="/api/archive/blackboards")return publicArchiveBlackboards(request,env);
+  if(path==="/api/archive/blackboards")return publicArchiveBlackboardsV2(request,env);
+  const blackboardSurfacePublicMatch=path.match(/^\/api\/archive\/blackboards\/([^/]+)$/);if(blackboardSurfacePublicMatch)return publicArchiveBlackboardsV2(request,env,decodeURIComponent(blackboardSurfacePublicMatch[1]));
   if(path==="/api/archive/origin-threads")return publicArchiveOriginThreads(request,env);
   if(path==="/api/archive/items")return publicArchiveItems(request,env);
   if(path==="/api/archive/compare")return publicArchiveCompare(request,env);
@@ -5035,9 +5606,14 @@ export async function handleConstructApi(request,env){
   const versionMatch=path.match(/^\/api\/admin\/archive-versions(?:\/([^/]+))?$/);if(versionMatch)return archiveVersionsAdminApi(request,env,versionMatch[1]?decodeURIComponent(versionMatch[1]):"");
   const stateMatch=path.match(/^\/api\/admin\/archive-states(?:\/([^/]+))?$/);if(stateMatch)return archiveStatesAdminApi(request,env,stateMatch[1]?decodeURIComponent(stateMatch[1]):"");
   const dossierMatch=path.match(/^\/api\/admin\/archive-dossiers(?:\/([^/]+))?$/);if(dossierMatch)return archiveDossiersAdminApi(request,env,dossierMatch[1]?decodeURIComponent(dossierMatch[1]):"");
+  const blackboardFragmentStatesMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/fragments\/([^/]+)\/(?:states|captures)$/);if(blackboardFragmentStatesMatch)return archiveBlackboardFragmentsAdminApiV2(request,env,decodeURIComponent(blackboardFragmentStatesMatch[1]),decodeURIComponent(blackboardFragmentStatesMatch[2]),"states");
+  const blackboardFragmentMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/fragments(?:\/([^/]+))?$/);if(blackboardFragmentMatch)return archiveBlackboardFragmentsAdminApiV2(request,env,decodeURIComponent(blackboardFragmentMatch[1]),blackboardFragmentMatch[2]?decodeURIComponent(blackboardFragmentMatch[2]):"");
+  const blackboardNotebookMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/(?:notebook|context)(?:\/([^/]+))?$/);if(blackboardNotebookMatch)return archiveBlackboardNotebookAdminApiV2(request,env,decodeURIComponent(blackboardNotebookMatch[1]),blackboardNotebookMatch[2]?decodeURIComponent(blackboardNotebookMatch[2]):"");
+  const blackboardStateMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/states(?:\/([^/]+))?$/);if(blackboardStateMatch)return archiveBlackboardStatesAdminApiV2(request,env,decodeURIComponent(blackboardStateMatch[1]),blackboardStateMatch[2]?decodeURIComponent(blackboardStateMatch[2]):"");
+  const blackboardRecordAdminMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)(?:\/([^/]+))?$/);if(blackboardRecordAdminMatch)return archiveBlackboardRecordsAdminApiV2(request,env,blackboardRecordAdminMatch[1]?decodeURIComponent(blackboardRecordAdminMatch[1]):"");
   const blackboardContextMatch=path.match(/^\/api\/admin\/archive-blackboards\/materials\/([^/]+)$/);if(blackboardContextMatch)return archiveBlackboardMaterialContextApi(request,env,decodeURIComponent(blackboardContextMatch[1]));
-  const blackboardActionMatch=path.match(/^\/api\/admin\/archive-blackboards\/([^/]+)\/(scan|publish)$/);if(blackboardActionMatch)return archiveBlackboardsAdminApi(request,env,decodeURIComponent(blackboardActionMatch[1]),blackboardActionMatch[2]);
-  const blackboardMatch=path.match(/^\/api\/admin\/archive-blackboards(?:\/([^/]+))?$/);if(blackboardMatch)return archiveBlackboardsAdminApi(request,env,blackboardMatch[1]?decodeURIComponent(blackboardMatch[1]):"");
+  const blackboardActionMatch=path.match(/^\/api\/admin\/archive-blackboards\/([^/]+)\/(scan|publish)$/);if(blackboardActionMatch)return archiveBlackboardRecordsAdminApiV2(request,env,decodeURIComponent(blackboardActionMatch[1]),blackboardActionMatch[2]);
+  const blackboardMatch=path.match(/^\/api\/admin\/archive-blackboards(?:\/([^/]+))?$/);if(blackboardMatch)return archiveBlackboardRecordsAdminApiV2(request,env,blackboardMatch[1]?decodeURIComponent(blackboardMatch[1]):"");
   const materialMatch=path.match(/^\/api\/admin\/archive-materials(?:\/([^/]+))?$/);if(materialMatch)return archiveMaterialsAdminApi(request,env,materialMatch[1]?decodeURIComponent(materialMatch[1]):"");
   const sourceMaterialEntryMatch=path.match(/^\/api\/admin\/archive-source-materials\/([^/]+)\/entries\/([^/]+)$/);if(sourceMaterialEntryMatch)return archiveSourceMaterialsAdminApi(request,env,decodeURIComponent(sourceMaterialEntryMatch[1]),decodeURIComponent(sourceMaterialEntryMatch[2]),"entries");
   const sourceMaterialEntriesMatch=path.match(/^\/api\/admin\/archive-source-materials\/([^/]+)\/entries$/);if(sourceMaterialEntriesMatch)return archiveSourceMaterialsAdminApi(request,env,decodeURIComponent(sourceMaterialEntriesMatch[1]),"","entries");

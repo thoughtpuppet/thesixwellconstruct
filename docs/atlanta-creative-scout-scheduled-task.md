@@ -30,12 +30,21 @@ available. A documented event listing or official social profile may establish
 identity when an organizer or venue has no standalone website. Never invent a
 source, date, time, address, access condition, or occurrence.
 
+Unless a source explicitly limits attendance, assume the event is open to the
+public and use `accessStatus: "public"` with `audiences: ["Public"]`. Silence
+about attendance is not an unresolved fact and does not require access
+verification. Use `accessStatus: "restricted"` when a source names a limited
+audience. Use `accessStatus: "unknown"` and request verification only when
+credible sources genuinely conflict about who may attend.
+Performer, vendor, applicant, workshop, or competition eligibility is separate
+from audience attendance unless the source also limits spectators or attendees.
+
 Do not discard a strong, clearly identifiable Atlanta event merely because one
 or more facts still need human confirmation. Submit it with
 `verificationState: "needs_verification"` and private `verificationNotes` that
 name every unresolved or conflicting fact. This includes strong events with an
 unresolved original source, organizer or venue identity, exact address, end
-time, access or ticket condition, occurrence schedule, or start date. Use null
+time, a stated or conflicting access restriction, ticket condition, occurrence schedule, or start date. Use null
 or an empty value for an unknown fact; never guess. An event with no confirmed
 start date may still be submitted only when a public evidence URL clearly
 establishes that it is a real, forthcoming Atlanta event. Weak matches, vague
@@ -47,7 +56,9 @@ closing reception, artist talk, screening, performance, panel, workshop, or
 other confirmed program in `occurrences`. Routine gallery hours are visiting
 hours, not separate occurrences. Public-facing descriptions and notes must state
 event facts directly and must never say “the caption says,” “the flyer says,”
-“the listing says,” or otherwise narrate the research process.
+“the listing says,” or otherwise narrate the research process. Treat this as an
+editorial-quality rule: source narration may be cleaned up, but it must never by
+itself prevent an otherwise complete candidate or occurrence from approval.
 
 For every qualifying event, prepare one JSON object with the strongest available
 values for:

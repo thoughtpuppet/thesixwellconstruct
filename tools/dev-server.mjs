@@ -600,6 +600,9 @@ async function resolveFile(urlPath) {
   const decodedPath = requestPathname(urlPath);
   const normalizedPath = normalizeRoute(decodedPath);
   const artParts = normalizedPath.split("/").filter(Boolean);
+  if (artParts.length === 3 && artParts[0] === "archive" && artParts[1] === "blackboards" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(artParts[2])) {
+    return path.join(root, "archive", "blackboards", "index.html");
+  }
   const legacyArtPages = new Set([
     "homelandsecuritypainting",
     "lostmarblespainting",

@@ -401,6 +401,7 @@ function archiveDynamicAssetPath(pathname) {
   if (parts[1] === "timelines") return "/archive/timelines/index.html";
   if (parts[1] === "colors") return "/archive/colors/index.html";
   if (parts[1] === "materials") return "/archive/materials/index.html";
+  if (parts[1] === "blackboards") return "/archive/blackboards/index.html";
   if (parts[1] === "failed-experiments") return "/archive/failed-experiments/index.html";
   return "";
 }

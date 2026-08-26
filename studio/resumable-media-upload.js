@@ -2,7 +2,7 @@
   const storageKey="swc_resumable_media_uploads_v1";
   const allowedByKind={
     video:new Set(["video/mp4","video/webm"]),
-    "archive-master":new Set(["image/tiff","image/jpeg","image/png","image/webp"]),
+    "archive-master":new Set(["image/tiff","image/jpeg","image/png","image/webp","image/heic","image/heif"]),
   };
   const maxBytes=2*1024*1024*1024;
   const wait=(milliseconds)=>new Promise(resolve=>setTimeout(resolve,milliseconds));
@@ -43,7 +43,7 @@
     const uploadKind=options.uploadKind||"video",allowed=allowedByKind[uploadKind];
     if(!token)throw new Error("Unlock Studio before uploading media.");
     if(!allowed)throw new Error("Unknown resumable upload kind.");
-    if(!allowed.has(file.type))throw new Error(uploadKind==="archive-master"?"Use a TIFF, JPEG, PNG, or WebP archival master.":"Use an MP4 or WebM video. MP4 with H.264/AAC is recommended.");
+    if(!allowed.has(file.type))throw new Error(uploadKind==="archive-master"?"Use a TIFF, JPEG, PNG, WebP, HEIC, or HEIF archival master.":"Use an MP4 or WebM video. MP4 with H.264/AAC is recommended.");
     if(file.size<=0||file.size>maxBytes)throw new Error("Resumable media must be 2 GiB or smaller.");
     const key=fingerprint(file,uploadKind),records=saved();
     let session=await matchingSession(file,token,uploadKind);

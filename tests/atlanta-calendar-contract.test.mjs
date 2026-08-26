@@ -637,19 +637,12 @@ test("a documented Studio review can verify an exact ticket listing without requ
   assert.equal(verified.verificationState,"verified");
   assert.equal(verified.organizerUrl,"");
   assert.equal(verified.venueUrl,"");
-  const narratedApproval=await admin(db,`/candidates/${candidate.id}/approve`,{method:"POST",body:{}});
-  assert.equal(narratedApproval.status,409);
-  assert.match((await narratedApproval.json()).errors.join(" "),/must state the fact directly/i);
-  const directCopy=await admin(db,`/candidates/${candidate.id}`,{
-    method:"PATCH",body:{accessNotes:"Tickets are available."},
-  });
-  assert.equal(directCopy.status,200,await directCopy.clone().text());
-  assert.equal((await directCopy.json()).candidate.accessNotes,"Tickets are available.");
   const approved=await admin(db,`/candidates/${candidate.id}/approve`,{method:"POST",body:{}});
   assert.equal(approved.status,200,await approved.clone().text());
   const publicEvent=(await (await handleCalendarPublicApi(request("/api/calendar/events"),env(db))).json()).events.find((event)=>event.title===candidate.title);
   assert.equal(publicEvent.sourceUrl,ticketUrl);
   assert.equal(publicEvent.ticketUrl,ticketUrl);
+  assert.equal(publicEvent.accessNotes,"Tickets are available from the event listing.");
 });
 
 test("approval, filters, single-event ICS, subscription feeds, rejection, and cancellation preserve lifecycle isolation", async () => {
@@ -724,17 +717,57 @@ test("approved GSU events expose deterministic affiliation and public filtering"
   assert.equal(nonGsu.events.length, 0);
 });
 
-test("unknown attendance eligibility blocks publication until Studio confirms access", async () => {
+test("unstated attendance defaults public while genuinely conflicting access still blocks publication", async () => {
   const db = database();
   const saved = await admin(db, "/candidates/cal_candidate_sound_vision", {
     method:"PATCH",
     body:{ accessStatus:"unknown", accessNotes:"Attendance eligibility has not been confirmed.", audiences:[] },
   });
   assert.equal(saved.status, 200, await saved.clone().text());
+  const candidate = (await saved.json()).candidate;
+  assert.equal(candidate.accessStatus, "public");
+  assert.equal(candidate.accessNotes, "");
+  assert.deepEqual(candidate.audiences, ["Public"]);
   const approval = await admin(db, "/candidates/cal_candidate_sound_vision/approve", { method:"POST", body:{} });
-  assert.equal(approval.status, 409);
-  assert.match((await approval.json()).errors.join(" "), /Attendance eligibility must be confirmed/i);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_sound_vision'").get().count, 0);
+  assert.equal(approval.status, 200, await approval.clone().text());
+
+  const restrictedDb = database();
+  const restricted = await admin(restrictedDb, "/candidates/cal_candidate_sound_vision", {
+    method:"PATCH",
+    body:{ accessStatus:"unknown", accessNotes:"Members only.", audiences:[] },
+  });
+  assert.equal(restricted.status, 200, await restricted.clone().text());
+  const restrictedCandidate = (await restricted.json()).candidate;
+  assert.equal(restrictedCandidate.accessStatus, "restricted");
+  assert.equal(restrictedCandidate.accessNotes, "Members only.");
+  assert.deepEqual(restrictedCandidate.audiences, ["Members"]);
+
+  const unannouncedDb = database();
+  const unannounced = await admin(unannouncedDb, "/candidates/cal_candidate_sound_vision", {
+    method:"PATCH",
+    body:{ accessStatus:"unknown", accessNotes:"Date, access, and the opening program are not announced.", audiences:[] },
+  });
+  assert.equal(unannounced.status, 200, await unannounced.clone().text());
+  const unannouncedCandidate = (await unannounced.json()).candidate;
+  assert.equal(unannouncedCandidate.accessStatus, "public");
+  assert.equal(unannouncedCandidate.accessNotes, "");
+  assert.deepEqual(unannouncedCandidate.audiences, ["Public"]);
+
+  const conflictDb = database();
+  const conflicting = await admin(conflictDb, "/candidates/cal_candidate_sound_vision", {
+    method:"PATCH",
+    body:{
+      accessStatus:"unknown",
+      accessNotes:"The organizer page says this is open to the public, but the ticket page says members only; attendance access is conflicting.",
+      audiences:[],
+    },
+  });
+  assert.equal(conflicting.status, 200, await conflicting.clone().text());
+  assert.equal((await conflicting.json()).candidate.accessStatus, "unknown");
+  const blocked = await admin(conflictDb, "/candidates/cal_candidate_sound_vision/approve", { method:"POST", body:{} });
+  assert.equal(blocked.status, 409);
+  assert.match((await blocked.json()).errors.join(" "), /Attendance eligibility must be confirmed/i);
+  assert.equal(conflictDb.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_sound_vision'").get().count, 0);
 });
 
 test("unconfirmed dates cannot publish and an approved material change stays pending until reapproved", async () => {
@@ -1570,9 +1603,9 @@ test("Eyedrum's Squarespace calendar groups weekly drawing listings into one pri
     </div>
   </article>`;
   const html = `<html><body>${article({
-    slug:"high-contrast-drawing-group-3-j57m2", day:"2026-08-18", start:"20260818T230000Z", end:"20260819T033000Z",
+    slug:"high-contrast-drawing-group-3-j57m2", day:"2026-08-26", start:"20260826T230000Z", end:"20260827T033000Z",
   })}${article({
-    slug:"high-contrast-drawing-group-3-j57m2-wgjln", day:"2026-08-25", start:"20260825T230000Z", end:"20260826T033000Z",
+    slug:"high-contrast-drawing-group-3-j57m2-wgjln", day:"2026-09-02", start:"20260902T230000Z", end:"20260903T033000Z",
   })}<article class="eventlist-event eventlist-event--past"><h1><a class="eventlist-title-link">High Contrast Drawing Group</a></h1></article></body></html>`;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
@@ -1582,7 +1615,7 @@ test("Eyedrum's Squarespace calendar groups weekly drawing listings into one pri
   try {
     const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_eyedrum" });
     assert.equal(run.status, "completed");
-    assert.equal(run.candidates, 1);
+    assert.equal(run.candidates, 1, JSON.stringify(run));
     assert.equal(run.warnings, 0);
     const candidate = db.prepare(`SELECT id,source_event_id,source_url,organizer_url,venue_url,source_authority,title,event_structure,date_kind,
       starts_at,ends_at,venue_name,venue_address,subjects_json,formats_json,status,verification_state
@@ -1597,7 +1630,7 @@ test("Eyedrum's Squarespace calendar groups weekly drawing listings into one pri
     }, {
       source_event_id:"eyedrum-series-high-contrast-drawing-group", source_url:sourceUrl, organizer_url:sourceUrl,
       venue_url:sourceUrl, source_authority:"official_calendar", title:"High Contrast Drawing Group",
-      event_structure:"series", date_kind:"date_range", starts_at:"2026-08-18", ends_at:"2026-08-25",
+      event_structure:"series", date_kind:"date_range", starts_at:"2026-08-26", ends_at:"2026-09-02",
       venue_name:"eyedrum", venue_address:"515 Ralph David Abernathy Boulevard Southwest Atlanta, GA, 30312 United States",
       subjects:["art","art-making"], formats:["workshop"], status:"candidate", verification_state:"verified",
     });
@@ -1605,8 +1638,8 @@ test("Eyedrum's Squarespace calendar groups weekly drawing listings into one pri
       db.prepare(`SELECT source_event_id,title,starts_at,ends_at,source_url,status,verification_state
         FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at`).all(candidate.id).map((row) => ({ ...row })),
       [
-        { source_event_id:"high-contrast-drawing-group-3-j57m2", title:"August 18 Session", starts_at:"2026-08-18T23:00:00Z", ends_at:"2026-08-19T03:30:00Z", source_url:`${sourceUrl}/high-contrast-drawing-group-3-j57m2`, status:"scheduled", verification_state:"verified" },
-        { source_event_id:"high-contrast-drawing-group-3-j57m2-wgjln", title:"August 25 Session", starts_at:"2026-08-25T23:00:00Z", ends_at:"2026-08-26T03:30:00Z", source_url:`${sourceUrl}/high-contrast-drawing-group-3-j57m2-wgjln`, status:"scheduled", verification_state:"verified" },
+        { source_event_id:"high-contrast-drawing-group-3-j57m2", title:"August 26 Session", starts_at:"2026-08-26T23:00:00Z", ends_at:"2026-08-27T03:30:00Z", source_url:`${sourceUrl}/high-contrast-drawing-group-3-j57m2`, status:"scheduled", verification_state:"verified" },
+        { source_event_id:"high-contrast-drawing-group-3-j57m2-wgjln", title:"September 2 Session", starts_at:"2026-09-02T23:00:00Z", ends_at:"2026-09-03T03:30:00Z", source_url:`${sourceUrl}/high-contrast-drawing-group-3-j57m2-wgjln`, status:"scheduled", verification_state:"verified" },
       ],
     );
     const notes = db.prepare("SELECT private_rationale,attendance_use,programming_ideas FROM calendar_candidate_notes WHERE candidate_id=?").get(candidate.id);
@@ -1622,16 +1655,16 @@ test("Eyedrum's Squarespace calendar groups weekly drawing listings into one pri
     assert.deepEqual(
       publicPayload.events.filter((event) => event.parentTitle === "High Contrast Drawing Group").map((event) => [event.occurrenceLabel,event.startsAt]),
       [
-        ["August 18 Session","2026-08-18T23:00:00Z"],
-        ["August 25 Session","2026-08-25T23:00:00Z"],
+        ["August 26 Session","2026-08-26T23:00:00Z"],
+        ["September 2 Session","2026-09-02T23:00:00Z"],
       ],
     );
     assert.equal(publicPayload.events.some((event) => event.title === "High Contrast Drawing Group"), false);
     const feed = await (await handleCalendarFeed(request("/calendars/atlanta.ics"), env(db))).text();
     assert.equal((feed.match(/SUMMARY:High Contrast Drawing Group/g) || []).length, 2);
-    assert.doesNotMatch(feed, /DTSTART;VALUE=DATE:20260818/);
-    assert.match(feed, /DTSTART:20260818T230000Z/);
-    assert.match(feed, /DTSTART:20260825T230000Z/);
+    assert.doesNotMatch(feed, /DTSTART;VALUE=DATE:20260826/);
+    assert.match(feed, /DTSTART:20260826T230000Z/);
+    assert.match(feed, /DTSTART:20260902T230000Z/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2505,6 +2538,8 @@ test("OpenAI discovery uses web_search structured output, stores citations, and 
     assert.match(openAiBody.instructions, /verification badge.*never establishes trust/i);
     assert.match(openAiBody.instructions, /private Studio intelligence/i);
     assert.match(openAiBody.instructions, /only as discovery leads/i);
+    assert.match(openAiBody.instructions, /Default accessStatus to public with a Public audience when no restriction is stated/i);
+    assert.match(openAiBody.instructions, /competition eligibility is separate from audience attendance/i);
     assert.ok(openAiBody.text.format.schema.properties.events.items.properties.sourceAuthority);
     assert.match(openAiBody.instructions, /Keep this intelligence out of factualDescription/i);
     assert.equal(run.candidates, 1);
@@ -3131,6 +3166,8 @@ test("candidate research stores citations and memories, then applies only select
     assert.equal(requestBody.tool_choice, "required");
     assert.equal(requestBody.text.format.type, "json_schema");
     assert.match(requestBody.instructions, /untrusted data/i);
+    assert.match(requestBody.instructions, /Unless a source explicitly restricts attendance, treat the event as open to the public/i);
+    assert.match(requestBody.instructions, /competition eligibility is separate from audience attendance/i);
     const result = await response.json();
     const proposal = result.research.proposals[0];
     assert.deepEqual(proposal.changes.map((change) => change.id), ["description-change","venue-change"]);
@@ -4156,6 +4193,8 @@ test("Atlanta Loves Art vendor schedule creates dated Creative Exchange occurren
     assert.equal(payload.candidate.startsAt, "2026-08-02");
     assert.equal(payload.candidate.endsAt, "2026-08-30");
     assert.equal(payload.candidate.occurrences.length, 4);
+    assert.equal(payload.candidate.accessStatus, "public");
+    assert.deepEqual(payload.candidate.audiences, ["Public"]);
     assert.deepEqual(
       payload.candidate.occurrences.map((item) => [item.title,item.startsAt,item.endsAt]),
       [
@@ -4166,7 +4205,7 @@ test("Atlanta Loves Art vendor schedule creates dated Creative Exchange occurren
       ],
     );
     assert.doesNotMatch(`${payload.candidate.factualDescription} ${payload.candidate.occurrences.map((item) => item.factualDescription).join(" ")}`, /black tablecloth/i);
-    assert.match(payload.candidate.verificationNotes, /Vendor participation requirements remain private/);
+    assert.doesNotMatch(payload.candidate.verificationNotes, /attendance eligibility|public access/i);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -4610,6 +4649,7 @@ test("PHOSPHENES intake sends rendered caption and carousel assets to vision ext
     assert.deepEqual(visionContent.filter((item) => item.type === "input_image").map((item) => item.image_url), [flyerUrl, artworkUrl]);
     assert.equal(visionRequest.text.format.strict, true);
     assert.match(visionRequest.instructions, /public-facing description and note as a direct event fact/i);
+    assert.match(visionRequest.instructions, /Default accessStatus to public with a Public audience when no attendance restriction is stated/i);
 
     const candidate = payload.candidate;
     assert.equal(candidate.title, "PHOSPHENES");
@@ -4819,6 +4859,10 @@ test("scheduled Creative Scout handoffs create dated strong picks without repeat
   assert.equal(first.strongPicks[0].kind, "new");
   const candidateId = first.strongPicks[0].candidateId;
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE id=?").get(candidateId).count, 1);
+  assert.deepEqual(
+    { ...db.prepare("SELECT access_status,access_notes,audiences_json FROM calendar_candidates WHERE id=?").get(candidateId) },
+    { access_status:"public", access_notes:"", audiences_json:'["Public"]' },
+  );
   const scoutCannotReadStudio = await handleCalendarAdminApi(
     request("/api/admin/calendar/strong-picks", { token:scoutToken }),
     env(db, { CALENDAR_SCOUT_INGEST_TOKEN:scoutToken })
@@ -4846,6 +4890,14 @@ test("scheduled Creative Scout handoffs create dated strong picks without repeat
   const eventPicks = list.strongPicks.filter((pick) => pick.candidateId === candidateId);
   assert.equal(eventPicks.length, 3);
   assert.equal(eventPicks[0].detectedAt, "2026-08-22T18:00:00.000Z");
+  db.prepare("UPDATE calendar_candidates SET status='candidate',verification_state='verified' WHERE id=?").run(candidateId);
+  db.prepare(`UPDATE calendar_scout_strong_picks
+    SET snapshot_json=json_set(snapshot_json,'$.candidateStatus','needs_verification','$.verificationState','needs_verification','$.publicEntryId','stale-public-id')
+    WHERE candidate_id=?`).run(candidateId);
+  const refreshedPicks = (await (await admin(db, "/strong-picks")).json()).strongPicks.filter((pick) => pick.candidateId === candidateId);
+  assert.ok(refreshedPicks.every((pick) => pick.candidateStatus === "candidate"));
+  assert.ok(refreshedPicks.every((pick) => pick.verificationState === "verified"));
+  assert.ok(refreshedPicks.every((pick) => pick.publicEntryId === ""));
   const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
   assert.equal(publicPayload.events.some((item) => item.title === event.title), false);
   assert.doesNotMatch(JSON.stringify(publicPayload), /privateRationale|attendanceUse|programmingIdeas|potentialCollaborators/);
@@ -4974,6 +5026,24 @@ test("Calendar Studio renders a private scrollable Strong Picks dashboard linked
   assert.match(studioCss,/\.strong-picks-refresh-status\.is-success \{[^}]*border-color:var\(--ok\);/);
   assert.match(studioCss,/\.strong-picks-refresh-status\.is-error \{[^}]*border-color:var\(--danger\);/);
   assert.match(studioCss,/\.strong-pick-card \{[^}]*border:5px solid var\(--line\);/);
+});
+
+test("Calendar Studio renders related schedule proposals as readable local-time cards instead of raw JSON", () => {
+  const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  assert.match(studioHtml,/readable-schedule-diffs/);
+  assert.match(studio,/function scheduleChangeComparisonMarkup\(before,after,wrapperTag\)/);
+  assert.match(studio,/function occurrenceDiff\(before,after\)/);
+  assert.match(studio,/function occurrenceWhen\(occurrence\)/);
+  assert.match(studio,/Proposed related schedule/);
+  assert.match(studio,/Dates and times are shown in Atlanta local time/);
+  assert.match(studio,/Show technical details/);
+  assert.match(studio,/scheduleComparison=isScheduleChange\(change\)\?scheduleChangeComparisonMarkup/);
+  assert.match(studio,/scheduleChangeComparisonMarkup\(change\.before,change\.value,"div"\)/);
+  assert.match(studioCss,/\.schedule-diff-sides \{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(studioCss,/\.schedule-diff-when \{[^}]*font-family:Georgia,serif;[^}]*font-size:16px/);
+  assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.schedule-diff-sides,\.schedule-technical-details>div \{ grid-template-columns:minmax\(0,1fr\); \}/);
 });
 
 test("Calendar Studio can skip an event without mutating it and advance within the active queue", () => {
@@ -5158,7 +5228,7 @@ test("related occurrences inherit reviewed parent access and publish without sto
         title:"Artist Talk", occurrenceType:"artist_talk", factualDescription:"A related artist talk.", dateKind:"timed",
         startsAt:"2026-10-04T18:00:00-04:00", endsAt:"2026-10-04T19:00:00-04:00", timezone:"America/New_York",
         venueName:"", venueAddress:"", accessStatus:"unknown", accessNotes:"Attendance eligibility has not been confirmed.", audiences:[],
-        verificationState:"verified", sourceUrl,
+        ticketNotes:"An RSVP prompt appears on the official listing.", verificationState:"verified", sourceUrl,
       }],
     },
   });
@@ -5169,6 +5239,7 @@ test("related occurrences inherit reviewed parent access and publish without sto
   assert.equal(candidate.occurrences[0].planningEligible, true);
   assert.equal(candidate.occurrences[0].accessStatus, "public");
   assert.equal(candidate.occurrences[0].accessNotes, "");
+  assert.equal(candidate.occurrences[0].ticketNotes, "An RSVP prompt appears on the official listing.");
 
   const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
   assert.equal(approved.status, 200, await approved.clone().text());
@@ -5181,10 +5252,15 @@ test("related occurrences inherit reviewed parent access and publish without sto
 test("Calendar Studio shows publication blockers and defaults events and occurrences into Night Planning", () => {
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
   const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  const calendarLib = readFileSync(join(ROOT,"functions","api","calendar","_lib.js"),"utf8");
   assert.match(studio,/planningEligible:true/);
   assert.match(studio,/function publicationBlockers\(candidate\)/);
-  assert.match(studio,/function publicCopyNarratesSource\(record\)/);
-  assert.match(studio,/Rewrite public descriptions and notes as direct event facts/);
+  assert.doesNotMatch(studio,/function publicCopyNarratesSource\(record\)/);
+  assert.doesNotMatch(studio,/source narration in public copy/);
+  assert.doesNotMatch(calendarLib,/function publicCopyErrors\(record/);
+  assert.doesNotMatch(calendarLib,/errors\.push\(\.\.\.publicCopyErrors/);
+  assert.match(studio,/accessStatus:"public", accessNotes:"", audiences:\["Public"\]/);
+  assert.match(studio,/Conflicting access information/);
   assert.match(studio,/Not ready to publish/);
   assert.match(studio,/data-action="approve"' \+ \(canPublish\?'':' disabled'\)/);
   assert.match(studio,/Every event and related schedule item is eligible by default/);
