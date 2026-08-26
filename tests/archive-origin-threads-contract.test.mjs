@@ -61,11 +61,12 @@ function request(path, { method = "GET", body, admin = false } = {}) {
   });
 }
 
-test("homepage Archive pathways use seven Archive lenses with real destinations", async () => {
+test("homepage Archive pathways use eight Archive lenses with real destinations", async () => {
   const expected = [
     ["Records", "/archive/"],
     ["Collections", "/archive/collections/"],
     ["Origin Threads", "/archive/origin-threads/"],
+    ["Notes", "/archive/notes/"],
     ["Making Practices", "/archive/?record_type=practice"],
     ["Colors & Materials", "/archive/colors-materials/"],
     ["Blackboards", "/archive/blackboards/"],

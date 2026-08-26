@@ -438,8 +438,10 @@
         return;
       }
       const evidence = list(payload.evidence);
+      const notes = list(payload.notes);
       originHost.hidden = false;
-      originHost.innerHTML = `<header class="archive-origin-thread-header"><div><span class="archive-kicker">Origin thread</span><h2>${escapeHtml(text(thread.title, thread.slug))}</h2></div><div><p>${escapeHtml(text(thread.summary, "A curated record of the evidence and works that share this inception."))}</p><a class="archive-button" href="/archive/">Leave this thread</a></div></header><section class="archive-origin-evidence" aria-labelledby="origin-evidence-title"><div class="archive-section-heading"><span class="archive-section-index">Inception evidence</span><h2 class="archive-section-title" id="origin-evidence-title">Notes, references, and process</h2></div>${evidence.length?`<div class="archive-notebook">${evidence.map(materialMarkup).join("")}</div>`:`<div class="archive-note-empty"><p>No public inception evidence has been released for this thread yet.</p></div>`}</section>`;
+      originHost.innerHTML = `<header class="archive-origin-thread-header"><div><span class="archive-kicker">Origin thread</span><h2>${escapeHtml(text(thread.title, thread.slug))}</h2></div><div><p>${escapeHtml(text(thread.summary, "A curated record of the evidence and works that share this inception."))}</p><a class="archive-button" href="/archive/">Leave this thread</a></div></header><section class="archive-origin-evidence" aria-labelledby="origin-evidence-title"><div class="archive-section-heading"><span class="archive-section-index">Inception evidence</span><h2 class="archive-section-title" id="origin-evidence-title">Notes, references, and process</h2></div>${notes.length?`<div class="archive-notebook-grid">${notes.map(archiveNoteThumbnailMarkup).join("")}</div>`:""}${evidence.length?`<div class="archive-notebook">${evidence.map(materialMarkup).join("")}</div>`:notes.length?"":`<div class="archive-note-empty"><p>No public inception evidence has been released for this thread yet.</p></div>`}</section>${notes.length?archiveNoteDialogShellMarkup():""}`;
+      setupArchiveNoteQuickView(notes);
     }
 
     function renderPagination(payload, total) {
@@ -541,6 +543,7 @@
       item,
       dossier,
       materials: list(first(payload && payload.materials, dossier.materials, item.materials, [])),
+      notes: list(first(payload && payload.notes, dossier.notes, item.notes, [])),
       activities: list(first(payload && payload.activities, payload && payload.history, dossier.activities, item.activities, [])),
       relationships: list(first(payload && payload.relationships, payload && payload.connections, dossier.relationships, item.relationships, [])),
       originThreads: list(first(payload && payload.origin_threads, payload && payload.originThreads, dossier.origin_threads, item.origin_threads, [])),
@@ -743,6 +746,19 @@
         <span class="archive-notebook-meta"><span class="archive-date">${escapeHtml(presentation.date)}</span><strong>${escapeHtml(presentation.title)}</strong></span>
       </button>
     </article>`;
+  }
+
+  function archiveNoteThumbnailMarkup(note,index){
+    const title=text(note.title,"Archive Note"),preview=safeUrl(first(note.preview_url,note.previewUrl));
+    return `<article class="archive-note-quick-card"><button type="button" data-archive-note-trigger data-note-index="${index}" aria-haspopup="dialog" aria-controls="archive-note-dialog" aria-label="Open ${escapeHtml(title)}"><span class="archive-notebook-preview">${preview?`<img src="${escapeHtml(preview)}" alt="" loading="lazy" decoding="async">`:`<span class="archive-notebook-placeholder" aria-hidden="true">Note</span>`}</span><span class="archive-note-quick-card-copy"><span class="archive-date">${escapeHtml(text(note.date_label,note.dateLabel,"Archive Note"))}</span><strong>${escapeHtml(title)}</strong></span></button></article>`;
+  }
+
+  function archiveNoteDialogShellMarkup(){return `<dialog class="archive-note-dialog" id="archive-note-dialog" aria-labelledby="archive-note-dialog-title"><div class="archive-note-dialog-shell"><header class="archive-note-dialog-header"><span class="archive-kicker">Complete Archive Note</span><button type="button" data-archive-note-close>Close</button></header><div class="archive-note-dialog-content" data-archive-note-dialog-content><div class="archive-loading" role="status"><p>Opening the Note…</p></div></div></div></dialog>`}
+
+  function setupArchiveNoteQuickView(notes){
+    const dialog=app.querySelector("#archive-note-dialog");if(!dialog||!window.ArchiveNoteMarkdown)return;const content=dialog.querySelector("[data-archive-note-dialog-content]"),close=dialog.querySelector("[data-archive-note-close]");let lastTrigger=null,controller=null;
+    async function openNote(index,trigger){const note=notes[index];if(!note)return;lastTrigger=trigger;controller?.abort();controller=new AbortController();content.innerHTML='<div class="archive-loading" role="status"><p>Opening the Note…</p></div>';if(!dialog.open)dialog.showModal();document.body.classList.add("archive-note-dialog-open");close.focus();try{const payload=await getJson(`/api/archive/notes/${encodeURIComponent(text(note.slug,note.id))}`,controller.signal),record=first(payload.note,payload.record,note),assets=list(payload.assets);content.innerHTML=`<div class="archive-note-reader" tabindex="0" role="region" aria-label="Complete ${escapeHtml(text(record.title,"Archive Note"))}"><h2 id="archive-note-dialog-title">${escapeHtml(text(record.title,"Archive Note"))}</h2>${window.ArchiveNoteMarkdown.render(first(record.body_markdown,record.bodyMarkdown),assets)}<p><a class="archive-button" href="${escapeHtml(safeUrl(record.route)||`/archive/notes/${encodeURIComponent(text(record.slug))}/`)}">Open permanent Note record</a></p></div>`;content.querySelector(".archive-note-reader")?.focus()}catch(error){if(error.name!=="AbortError")content.innerHTML='<div class="archive-note-empty"><p>This Note could not be opened.</p></div>'}}
+    app.querySelectorAll("[data-archive-note-trigger]").forEach(trigger=>trigger.addEventListener("click",()=>openNote(Number(trigger.dataset.noteIndex),trigger)));close.addEventListener("click",()=>dialog.close());dialog.addEventListener("click",event=>{if(event.target===dialog)dialog.close()});dialog.addEventListener("close",()=>{controller?.abort();document.body.classList.remove("archive-note-dialog-open");lastTrigger?.focus()});
   }
 
   function materialDialogContentMarkup(material, index, posterFallback = "") {
@@ -1102,8 +1118,9 @@
       }).sort((a, b) => Number(first(a.sort_order, 9999)) - Number(first(b.sort_order, 9999)) || text(a.sort_date, a.occurred_at, a.date).localeCompare(text(b.sort_date, b.occurred_at, b.date)));
       const primaryMaterial = materials.find((material) => slugify(first(material.material_type, material.type, material.kind)) === "final-image");
       const notebookMaterials = materials.filter((material) => slugify(first(material.material_type, material.type, material.kind)) !== "final-image");
+      const notes = data.notes.slice().sort((a,b)=>Number(first(a.sort_order,a.sortOrder,9999))-Number(first(b.sort_order,b.sortOrder,9999)));
       const sourceMaterials = data.sourceMaterials.slice().sort((a, b) => Number(first(a.sort_order, a.sortOrder, 9999)) - Number(first(b.sort_order, b.sortOrder, 9999)) || text(a.occurred_at, a.occurredAt, a.id).localeCompare(text(b.occurred_at, b.occurredAt, b.id)));
-      const hasNotebookEvidence = notebookMaterials.length > 0 || sourceMaterials.length > 0;
+      const hasNotebookEvidence = notebookMaterials.length > 0 || sourceMaterials.length > 0 || notes.length > 0;
       const media = first(payload.primary_media, data.dossier.primary_media, mediaObject(primaryMaterial), mediaObject(item));
       const image = mediaObject({ primary_media: media });
       const imageUrl = mediaUrl(image);
@@ -1133,14 +1150,16 @@
           ${data.documentation.length ? `<section class="archive-document-section" id="documentation"><header class="archive-section-heading"><span class="archive-section-index">02 / Catalogue</span><h2 class="archive-section-title">Documentation</h2></header><div>${documentationMarkup(data.documentation)}</div></section>` : ""}
           ${data.versions.length ? `<section class="archive-document-section" id="evolution"><header class="archive-section-heading"><span class="archive-section-index">03 / Evolution</span><h2 class="archive-section-title">Versions and states</h2></header><div>${evolutionMarkup(data, materials, item)}</div></section>` : ""}
           ${data.colorUsages.length||data.materialUsages.length||data.paletteMaps.length?`<section class="archive-document-section" id="palette-materials"><header class="archive-section-heading"><span class="archive-section-index">04 / Material record</span><h2 class="archive-section-title">Palette &amp; Materials</h2></header><div class="archive-palette-document">${data.colorUsages.length?`<section><h3>Documented colors</h3><ol class="archive-palette-region-list archive-palette-usage-list">${data.colorUsages.map(paletteUsageMarkup).join("")}</ol></section>`:""}${data.materialUsages.length?`<section><h3>Materials, tools &amp; equipment</h3><ul class="archive-material-usage-list">${data.materialUsages.map(paletteMaterialMarkup).join("")}</ul></section>`:""}${data.paletteMaps.map(paletteMapShellMarkup).join("")}</div></section>`:""}
-          <section class="archive-document-section" id="notebook"><header class="archive-section-heading"><span class="archive-section-index">04 / Evidence</span><h2 class="archive-section-title">Open notebook</h2></header><div>${hasNotebookEvidence ? `<div class="archive-notebook-grid">${notebookMaterials.map((material,index)=>materialThumbnailMarkup(material,index,imageUrl)).join("")}${sourceMaterials.map(sourceMaterialThumbnailMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>${escapeHtml(text(data.dossier.empty_materials_note, "No process materials are public yet. The completed work and known history remain available here while sketches, notes, audio, and process images are reviewed."))}</p></div>`}</div></section>
+          <section class="archive-document-section" id="notebook"><header class="archive-section-heading"><span class="archive-section-index">04 / Evidence</span><h2 class="archive-section-title">Open notebook</h2></header><div>${hasNotebookEvidence ? `<div class="archive-notebook-grid">${notes.map(archiveNoteThumbnailMarkup).join("")}${notebookMaterials.map((material,index)=>materialThumbnailMarkup(material,index,imageUrl)).join("")}${sourceMaterials.map(sourceMaterialThumbnailMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>${escapeHtml(text(data.dossier.empty_materials_note, "No process materials are public yet. The completed work and known history remain available here while sketches, notes, audio, and process images are reviewed."))}</p></div>`}</div></section>
           <section class="archive-document-section" id="history"><header class="archive-section-heading"><span class="archive-section-index">05 / Time</span><h2 class="archive-section-title">Item history</h2></header><div>${activities.length ? `<div class="archive-history">${activities.map(historyMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>No dated history entries are public yet.</p></div>`}</div></section>
           <section class="archive-document-section" id="connections"><header class="archive-section-heading"><span class="archive-section-index">06 / Field</span><h2 class="archive-section-title">Connections</h2></header><div>${relationships.length || data.originThreads.length ? `${groupedConnectionsMarkup(item, relationships, data.originThreads)}${relationshipGraph(title, relationships)}` : `<div class="archive-note-empty"><p>No public relationships have been attached to this dossier yet.</p></div>`}</div></section>
         </article>
         ${notebookMaterials.length ? materialDialogShellMarkup() : ""}
-        ${sourceMaterials.length ? sourceMaterialDialogShellMarkup() : ""}`;
+        ${sourceMaterials.length ? sourceMaterialDialogShellMarkup() : ""}
+        ${notes.length ? archiveNoteDialogShellMarkup() : ""}`;
       setupMaterialQuickView(notebookMaterials, imageUrl);
       setupSourceMaterialQuickView(sourceMaterials);
+      setupArchiveNoteQuickView(notes);
       setupPaletteMaps();
     } catch (error) {
       app.innerHTML = error.status === 404

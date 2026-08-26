@@ -83,7 +83,7 @@
     ],
     archive: [
       ['Records', '/archive/'], ['Collections', '/archive/collections/'],
-      ['Origin Threads', '/archive/origin-threads/'], ['Making Practices', '/archive/?record_type=practice'],
+      ['Origin Threads', '/archive/origin-threads/'], ['Notes', '/archive/notes/'], ['Making Practices', '/archive/?record_type=practice'],
       ['Colors & Materials', '/archive/colors-materials/'], ['Blackboards', '/archive/blackboards/'],
       ['Timelines', '/archive/timelines/'],
     ],

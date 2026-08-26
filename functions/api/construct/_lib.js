@@ -1522,7 +1522,7 @@ async function publicArchiveItems(request, env) {
   let items=(itemsResult.results||[]).map(presentArchiveItem);const total=Number(countResult.results?.[0]?.total||0);
   const usageMatches=await archiveUsageMatchProvenance(database,items,url);
   items=items.map(item=>({...item,matches:usageMatches.get(item.entity_id)||[]}));
-  let evidence=[],currentRecordPosition=null;
+  let evidence=[],notes=[],currentRecordPosition=null;
   if(originThread){
     const assignments=items.length?(await database.prepare(`SELECT entity_id,is_primary,sort_order FROM archive_origin_thread_entities WHERE thread_id=? AND entity_id IN (${items.map(()=>"?").join(",")})`).bind(originThread.id,...items.map(item=>item.entity_id)).all()).results||[]:[];
     const assignmentMap=new Map(assignments.map(row=>[row.entity_id,row]));
@@ -1541,6 +1541,7 @@ async function publicArchiveItems(request, env) {
       WHERE otm.thread_id=? AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'))
       ORDER BY CASE WHEN am.occurred_at IS NULL THEN 1 ELSE 0 END,am.occurred_at,otm.sort_order,am.sort_order,am.created_at`).bind(originThread.id).all()).results||[];
     evidence=evidenceRows.map((row,index)=>presentArchiveMaterial({...row,url:row.media_url||"",archive_route:`/archive/records/${encodeURIComponent(row.archive_slug)}/#material-${encodeURIComponent(row.id)}`,origin_position:index+1}));
+    notes=await publicNotesForOriginThread(database,originThread.id);
   }
   const facets={medium:[],brand:[],person:[],era:[],collection:collectionFacetResult.results||[],record_type:[],material_type:materialFacetResult.results||[]};
   facets.medium=(catalogueMediumFacetResult.results||[]).map(facet=>({name:facet.label,slug:facet.slug,count:Number(facet.count||0)}));
@@ -1552,7 +1553,7 @@ async function publicArchiveItems(request, env) {
     tattoo_executions:items.filter(item=>item.catalogue_prefix==="TAT-EXE"),
     other:items.filter(item=>item.catalogue_medium!=="art"&&!['TAT-DES','TAT-EXE'].includes(item.catalogue_prefix)),
   };
-  return json({items,records:items,groups,facets,pagination,count:items.length,query:q,origin_thread:originThread,originThread,evidence,current_record_position:currentRecordPosition,currentRecordPosition},{cache:"public, max-age=30"});
+  return json({items,records:items,groups,facets,pagination,count:items.length,query:q,origin_thread:originThread,originThread,evidence,notes,current_record_position:currentRecordPosition,currentRecordPosition},{cache:"public, max-age=30"});
 }
 
 async function publicArchiveDetail(request,env,archiveSlug){
@@ -1805,8 +1806,9 @@ async function publicArchiveDetail(request,env,archiveSlug){
   const materialUsages=paletteProjection.material_usages;
   const paletteMaps=paletteProjection.palette_maps;
   const activities=activitiesResult.results||[];
+  const notes=await publicNotesForTarget(database,entityId);
   const originThreads=originThreadsResult.results||[],primaryOriginThread=originThreads.find(thread=>Number(thread.is_primary))||null;
-  return json({item,dossier:item,materials,color_usages:colorUsages,colorUsages,material_usages:materialUsages,materialUsages,palette_maps:paletteMaps,paletteMaps,source_materials:sourceMaterials,sourceMaterials,evidence_sets:sourceMaterials,evidenceSets:sourceMaterials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states,documentation,terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
+  return json({item,dossier:item,materials,notes,color_usages:colorUsages,colorUsages,material_usages:materialUsages,materialUsages,palette_maps:paletteMaps,paletteMaps,source_materials:sourceMaterials,sourceMaterials,evidence_sets:sourceMaterials,evidenceSets:sourceMaterials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states,documentation,terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
 }
 
 function archiveComparisonSubject(payload,stateId=""){
@@ -2654,6 +2656,15 @@ async function publishedSourceMaterialUsingMedia(database,mediaId){
     LIMIT 1`).bind(mediaId).first();
 }
 
+async function publishedArchiveNoteUsingMedia(database,mediaId){
+  return database.prepare(`SELECT an.entity_id,an.title
+    FROM archive_note_assets ana JOIN archive_notes an ON an.entity_id=ana.note_entity_id
+    JOIN content_entities ce ON ce.id=an.entity_id
+    WHERE ana.media_id=? AND ana.public_visible=1
+      AND an.state='published' AND an.public_visible=1 AND ce.visibility='public'
+    LIMIT 1`).bind(mediaId).first();
+}
+
 async function publicMediaApi(request,env,mediaId){
   if(!["GET","HEAD"].includes(request.method))return failure("Method not allowed.",405);
   const database=db(env);
@@ -2706,6 +2717,13 @@ async function publicMediaApi(request,env,mediaId){
           SELECT 1 FROM calendar_entries calendar_entry
           WHERE calendar_entry.flyer_media_id=m.id
             AND calendar_entry.status IN ('published','cancelled')
+        )
+        OR EXISTS(
+          SELECT 1 FROM archive_note_assets note_asset
+          JOIN archive_notes note ON note.entity_id=note_asset.note_entity_id
+          JOIN content_entities note_entity ON note_entity.id=note.entity_id
+          WHERE note_asset.media_id=m.id AND note_asset.public_visible=1
+            AND note.state='published' AND note.public_visible=1 AND note_entity.visibility='public'
         )
         OR EXISTS(
           SELECT 1 FROM archive_blackboard_fragments fragment
@@ -2932,6 +2950,8 @@ async function mediaApi(request, env, mediaId="") {
       if(cover)return failure("Unpublish this tattoo or choose another permitted result image as its cover before making this media private.",409);
       const sourceMaterial=await publishedSourceMaterialUsingMedia(database,mediaId);
       if(sourceMaterial)return failure("Return the client source material to an internal draft before making one of its public files ineligible.",409);
+      const note=await publishedArchiveNoteUsingMedia(database,mediaId);
+      if(note)return failure("Unpublish the Archive Note or remove this asset token before making its media private.",409);
     }
     try{
       await database.prepare("UPDATE media_assets SET state=?,alt_text=?,caption=?,privacy=?,consent_status=?,transcript=?,transcript_status=?,transcript_language=?,public_title=?,public_description=?,public_presentation=?,updated_at=datetime('now') WHERE id=?")
@@ -5561,6 +5581,309 @@ async function archiveFailedExperimentMediaPairAdminApi(request,env,entityId){
   return json({ok:true,record:attachment},{status:201});
 }
 
+const ARCHIVE_NOTE_STATES=new Set(["draft","published","archived"]);
+const ARCHIVE_NOTE_ROLES=new Set(["inline-image","inline-document","source-provenance"]);
+const ARCHIVE_NOTE_LINK_ROLES=new Set(["inception","development","reference","context"]);
+const ARCHIVE_NOTE_TOKEN=/^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function archiveNotePlainText(markdown=""){
+  return String(markdown||"")
+    .replace(/\{\{asset:[a-z0-9-]+\}\}/gi," ")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g,"$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g,"$1")
+    .replace(/^#{1,6}\s+/gm,"")
+    .replace(/^\s*[-*+]\s+/gm,"")
+    .replace(/[*_`~>]/g,"")
+    .replace(/\s+/g," ").trim();
+}
+
+function archiveNoteTokens(markdown=""){
+  return [...new Set([...String(markdown||"").matchAll(/\{\{asset:([a-z0-9-]+)\}\}/gi)].map(match=>match[1].toLowerCase()))];
+}
+
+function archiveNoteMediaEligible(row){
+  return row&&row.state==="active"&&row.privacy==="public"&&["not-required","granted"].includes(row.consent_status)&&row.public_presentation==="inline";
+}
+
+function archiveNoteRoute(slugValue){return `/archive/notes/${encodeURIComponent(slugValue)}/`}
+
+function presentArchiveNoteAsset(row,{admin=false}={}){
+  const publicUrl=row.source_url||((row.storage_key&&row.public_visible)?`/api/construct/media/${encodeURIComponent(row.media_id)}`:"");
+  return {
+    id:row.id,note_entity_id:row.note_entity_id,noteEntityId:row.note_entity_id,media_id:row.media_id,mediaId:row.media_id,
+    token:row.asset_token,asset_token:row.asset_token,role:row.role,sort_order:Number(row.sort_order||0),sortOrder:Number(row.sort_order||0),
+    public_visible:Number(row.public_visible||0)===1,publicVisible:Number(row.public_visible||0)===1,
+    alt_text:row.alt_text_override||row.alt_text||"",altText:row.alt_text_override||row.alt_text||"",
+    caption:row.caption_override||row.caption||"",mime_type:row.mime_type||"",mimeType:row.mime_type||"",
+    original_filename:row.original_filename||"",originalFilename:row.original_filename||"",byte_size:Number(row.byte_size||0),
+    url:admin?`/api/admin/media/${encodeURIComponent(row.media_id)}/file`:publicUrl,
+  };
+}
+
+async function archiveNoteAssets(database,noteEntityId,{publicOnly=false,admin=false}={}){
+  const rows=(await database.prepare(`SELECT ana.*,m.source_url,m.storage_key,m.original_filename,m.mime_type,m.byte_size,
+      m.alt_text,m.caption,m.privacy,m.consent_status,m.state,m.public_presentation
+    FROM archive_note_assets ana JOIN media_assets m ON m.id=ana.media_id
+    WHERE ana.note_entity_id=? ${publicOnly?"AND ana.public_visible=1 AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'":""}
+    ORDER BY ana.sort_order,ana.created_at,ana.id`).bind(noteEntityId).all()).results||[];
+  return rows.map(row=>presentArchiveNoteAsset(row,{admin}));
+}
+
+async function archiveNoteLinks(database,noteEntityId,{publicOnly=false}={}){
+  const rows=(await database.prepare(`SELECT anl.*,ce.entity_type,ce.visibility,sd.title,sd.route,
+      COALESCE(aw.title,mi.title,ar.title,vs.name,spc.title,sd.title,anl.target_entity_id) target_title
+    FROM archive_note_links anl JOIN content_entities ce ON ce.id=anl.target_entity_id
+    LEFT JOIN search_documents sd ON sd.entity_id=anl.target_entity_id
+    LEFT JOIN art_works aw ON aw.id=anl.target_entity_id
+    LEFT JOIN merch_items mi ON mi.id=anl.target_entity_id
+    LEFT JOIN archive_records ar ON ar.id=anl.target_entity_id
+    LEFT JOIN visual_symbols vs ON vs.id=anl.target_entity_id
+    LEFT JOIN special_project_calls spc ON spc.id=anl.target_entity_id
+    WHERE anl.note_entity_id=? ${publicOnly?"AND anl.public_visible=1 AND ce.visibility='public'":""}
+    ORDER BY anl.is_primary DESC,anl.sort_order,anl.created_at`).bind(noteEntityId).all()).results||[];
+  return rows.map(row=>({
+    target_entity_id:row.target_entity_id,targetEntityId:row.target_entity_id,title:row.target_title,
+    entity_type:row.entity_type,entityType:row.entity_type,relationship_role:row.relationship_role,relationshipRole:row.relationship_role,
+    is_primary:Number(row.is_primary||0)===1,isPrimary:Number(row.is_primary||0)===1,
+    public_visible:Number(row.public_visible||0)===1,publicVisible:Number(row.public_visible||0)===1,
+    sort_order:Number(row.sort_order||0),sortOrder:Number(row.sort_order||0),route:row.route||"",
+  }));
+}
+
+async function archiveNoteOrigins(database,noteEntityId,{publicOnly=false}={}){
+  const rows=(await database.prepare(`SELECT ot.id,ot.slug,ot.title,ot.summary,ote.is_primary,ote.sort_order,ot.state,ot.public_visible
+    FROM archive_origin_thread_entities ote JOIN archive_origin_threads ot ON ot.id=ote.thread_id
+    WHERE ote.entity_id=? ${publicOnly?"AND ot.state='published' AND ot.public_visible=1":""}
+    ORDER BY ote.is_primary DESC,ote.sort_order,ot.sort_order,ot.title`).bind(noteEntityId).all()).results||[];
+  return rows.map(row=>({...row,is_primary:Number(row.is_primary||0)===1,isPrimary:Number(row.is_primary||0)===1,sort_order:Number(row.sort_order||0),route:`/archive/?origin=${encodeURIComponent(row.slug)}`}));
+}
+
+function presentArchiveNote(row){
+  return {
+    ...row,id:row.entity_id,entityId:row.entity_id,noteType:row.note_type,sourceApp:row.source_app,
+    bodyMarkdown:row.body_markdown,sourceCreatedAt:row.source_created_at,sourceModifiedAt:row.source_modified_at,
+    dateLabel:row.date_label,publicVisible:Number(row.public_visible||0)===1,sortOrder:Number(row.sort_order||0),
+    route:archiveNoteRoute(row.slug),preview_url:row.preview_url||"",previewUrl:row.preview_url||"",
+  };
+}
+
+async function archiveNoteByKey(database,key,{publicOnly=false}={}){
+  return database.prepare(`SELECT an.*,
+      (SELECT COALESCE(NULLIF(m.source_url,''),CASE WHEN m.storage_key<>'' THEN '/api/construct/media/'||m.id ELSE '' END)
+       FROM archive_note_assets ana JOIN media_assets m ON m.id=ana.media_id
+       WHERE ana.note_entity_id=an.entity_id AND ana.public_visible=1 AND ana.role='inline-image'
+         AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+       ORDER BY ana.sort_order,ana.created_at LIMIT 1) preview_url
+    FROM archive_notes an JOIN content_entities ce ON ce.id=an.entity_id
+    WHERE (an.entity_id=? OR an.slug=?) ${publicOnly?"AND an.state='published' AND an.public_visible=1 AND ce.visibility='public'":""}`).bind(key,key).first();
+}
+
+async function archiveNotePayload(database,row,{publicOnly=false,admin=false}={}){
+  const [assets,links,originThreads]=await Promise.all([
+    archiveNoteAssets(database,row.entity_id,{publicOnly,admin}),archiveNoteLinks(database,row.entity_id,{publicOnly}),archiveNoteOrigins(database,row.entity_id,{publicOnly}),
+  ]);
+  return {note:presentArchiveNote(row),record:presentArchiveNote(row),assets,links,origin_threads:originThreads,originThreads};
+}
+
+async function validateArchiveNotePublication(database,note,assets=null,links=null){
+  if(note.state!=="published"||!Number(note.public_visible))return;
+  if(!note.title||!note.slug||!note.body_markdown)throw new Error("A public Note needs a title, stable slug, and Markdown body.");
+  if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(note.slug))throw new Error("Use a lowercase, URL-safe Note slug.");
+  if(/!\[[^\]]*\]\(\s*(?:https?:|\/\/|data:)/i.test(note.body_markdown))throw new Error("Public Note images must use managed asset tokens, not external image URLs.");
+  if(/(?:javascript:|<\s*(?:script|iframe|object|embed|style)\b|\son[a-z]+\s*=)/i.test(note.body_markdown))throw new Error("The Note contains executable or unsupported markup.");
+  const rows=assets||await archiveNoteAssets(database,note.entity_id,{admin:true});
+  const byToken=new Map(rows.map(asset=>[asset.token,asset]));
+  for(const token of archiveNoteTokens(note.body_markdown)){
+    const asset=byToken.get(token);if(!asset)throw new Error(`The Note references missing asset token ${token}.`);
+    if(!asset.public_visible)throw new Error(`Asset ${token} must be public before this Note can be published.`);
+    const media=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(asset.media_id).first();
+    if(!archiveNoteMediaEligible(media))throw new Error(`Asset ${token} is not eligible for public inline presentation.`);
+  }
+  const authoredLinks=links||await archiveNoteLinks(database,note.entity_id);
+  for(const link of authoredLinks.filter(item=>item.public_visible)){
+    const target=await database.prepare("SELECT visibility FROM content_entities WHERE id=?").bind(link.target_entity_id).first();
+    if(!target||target.visibility!=="public")throw new Error("Every public Note link must point to a public Construct entity.");
+  }
+}
+
+async function syncArchiveNoteSearch(database,noteEntityId){
+  const row=await archiveNoteByKey(database,noteEntityId);
+  if(!row||row.state!=="published"||!Number(row.public_visible)){
+    await database.batch([
+      database.prepare("DELETE FROM search_documents WHERE entity_id=?").bind(noteEntityId),
+      database.prepare("UPDATE content_entities SET visibility='internal',search_visibility=0,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(noteEntityId),
+    ]);return;
+  }
+  const captions=(await database.prepare(`SELECT COALESCE(NULLIF(ana.caption_override,''),m.caption) caption
+    FROM archive_note_assets ana JOIN media_assets m ON m.id=ana.media_id
+    WHERE ana.note_entity_id=? AND ana.public_visible=1 AND m.state='active' AND m.privacy='public'
+      AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+    ORDER BY ana.sort_order`).bind(noteEntityId).all()).results||[];
+  const body=[archiveNotePlainText(row.body_markdown),...captions.map(item=>item.caption)].filter(Boolean).join("\n");
+  await database.batch([
+    database.prepare("UPDATE content_entities SET visibility='public',search_visibility=1,public_at=COALESCE(public_at,datetime('now')),archived_at=NULL,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(noteEntityId),
+    database.prepare(`INSERT INTO search_documents(entity_id,entity_type,node_id,slug,title,summary,body,state,collection_labels,theme_labels,person_labels,place_labels,date_label,route,updated_at)
+      VALUES(?,'archive_note','archive',?,?,?,?, 'published','','','','',?,?,datetime('now'))
+      ON CONFLICT(entity_id) DO UPDATE SET entity_type=excluded.entity_type,node_id=excluded.node_id,slug=excluded.slug,title=excluded.title,
+        summary=excluded.summary,body=excluded.body,state=excluded.state,date_label=excluded.date_label,route=excluded.route,updated_at=excluded.updated_at`)
+      .bind(row.entity_id,row.slug,row.title,row.excerpt||archiveNotePlainText(row.body_markdown).slice(0,320),body,row.date_label,archiveNoteRoute(row.slug)),
+  ]);
+}
+
+function normalizedArchiveNote(body={},before={}){
+  const next={
+    entity_id:before.entity_id||text(body.entity_id??body.entityId,200),slug:slug(body.slug??before.slug),title:text(body.title??before.title,300),
+    note_type:text(body.note_type??body.noteType??before.note_type??"concept-note",80)||"concept-note",source_app:text(body.source_app??body.sourceApp??before.source_app,120),
+    body_markdown:text(body.body_markdown??body.bodyMarkdown??before.body_markdown,100000),excerpt:text(body.excerpt??before.excerpt,1000),
+    source_created_at:text(body.source_created_at??body.sourceCreatedAt??before.source_created_at,80)||null,
+    source_modified_at:text(body.source_modified_at??body.sourceModifiedAt??before.source_modified_at,80)||null,
+    date_label:text(body.date_label??body.dateLabel??before.date_label,500),state:text(body.state??before.state??"draft",30),
+    public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible||0):(body.public_visible??body.publicVisible)?1:0,
+    sort_order:Number(body.sort_order??body.sortOrder??before.sort_order)||0,
+  };
+  if(!ARCHIVE_NOTE_STATES.has(next.state))throw new Error("Choose draft, published, or archived.");
+  if(!next.slug||!next.title)throw new Error("A Note needs a title and URL-safe slug.");
+  return next;
+}
+
+function normalizedArchiveNoteLinks(value,publicDefault=false){
+  if(value===undefined)return null;if(!Array.isArray(value))throw new Error("Note links must be a list.");
+  const records=value.slice(0,100).map((item,index)=>({
+    target_entity_id:text(item?.target_entity_id??item?.targetEntityId??item,200),relationship_role:text(item?.relationship_role??item?.relationshipRole??"context",40),
+    is_primary:(item?.is_primary??item?.isPrimary)?1:0,public_visible:item&&typeof item==="object"&&(item.public_visible!==undefined||item.publicVisible!==undefined)?(item.public_visible??item.publicVisible?1:0):(publicDefault?1:0),
+    sort_order:Number(item?.sort_order??item?.sortOrder)||index+1,
+  })).filter(item=>item.target_entity_id);
+  if(records.some(item=>!ARCHIVE_NOTE_LINK_ROLES.has(item.relationship_role)))throw new Error("Choose a supported Note relationship role.");
+  if(records.filter(item=>item.is_primary).length>1)throw new Error("A Note can have only one primary linked record.");
+  return records;
+}
+
+async function replaceArchiveNoteLinks(database,noteEntityId,links){
+  if(links===null)return;
+  const ids=[...new Set(links.map(link=>link.target_entity_id))];
+  if(ids.length){const count=await database.prepare(`SELECT COUNT(*) count FROM content_entities WHERE id IN (${ids.map(()=>"?").join(",")})`).bind(...ids).first();if(Number(count?.count||0)!==ids.length)throw new Error("Choose registered Construct entities for every Note link.");}
+  await database.batch([
+    database.prepare("DELETE FROM archive_note_links WHERE note_entity_id=?").bind(noteEntityId),
+    ...links.map(link=>database.prepare(`INSERT INTO archive_note_links(note_entity_id,target_entity_id,relationship_role,is_primary,sort_order,public_visible,created_at)
+      VALUES(?,?,?,?,?,?,datetime('now'))`).bind(noteEntityId,link.target_entity_id,link.relationship_role,link.is_primary,link.sort_order,link.public_visible)),
+  ]);
+}
+
+async function publicArchiveNotesApi(request,env,key=""){
+  if(request.method!=="GET")return failure("Method not allowed.",405);const database=db(env);
+  if(key){const row=await archiveNoteByKey(database,key,{publicOnly:true});if(!row)return failure("Archive Note not found.",404);return json(await archiveNotePayload(database,row,{publicOnly:true}),{cache:"public, max-age=30"});}
+  const rows=(await database.prepare(`SELECT an.*,
+      (SELECT COALESCE(NULLIF(m.source_url,''),CASE WHEN m.storage_key<>'' THEN '/api/construct/media/'||m.id ELSE '' END)
+       FROM archive_note_assets ana JOIN media_assets m ON m.id=ana.media_id
+       WHERE ana.note_entity_id=an.entity_id AND ana.public_visible=1 AND ana.role='inline-image'
+         AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+       ORDER BY ana.sort_order,ana.created_at LIMIT 1) preview_url,
+      (SELECT COUNT(*) FROM archive_note_links anl WHERE anl.note_entity_id=an.entity_id AND anl.public_visible=1) linked_record_count
+    FROM archive_notes an JOIN content_entities ce ON ce.id=an.entity_id
+    WHERE an.state='published' AND an.public_visible=1 AND ce.visibility='public'
+    ORDER BY an.sort_order,COALESCE(an.source_created_at,an.created_at),an.created_at`).all()).results||[];
+  return json({records:rows.map(presentArchiveNote),notes:rows.map(presentArchiveNote),count:rows.length},{cache:"public, max-age=30"});
+}
+
+async function adminArchiveNotesApi(request,env,noteEntityId="",action=""){
+  const database=db(env);
+  if(request.method==="GET"&&!noteEntityId){const rows=(await database.prepare(`SELECT an.*,(SELECT COUNT(*) FROM archive_note_assets WHERE note_entity_id=an.entity_id) asset_count,(SELECT COUNT(*) FROM archive_note_links WHERE note_entity_id=an.entity_id) link_count FROM archive_notes an ORDER BY an.updated_at DESC`).all()).results||[];return json({records:rows.map(presentArchiveNote),count:rows.length});}
+  if(request.method==="POST"&&!noteEntityId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+    try{
+      const note=normalizedArchiveNote(body),newId=note.entity_id||id("archive-note"),links=normalizedArchiveNoteLinks(body.links,note.public_visible);
+      note.entity_id=newId;await validateArchiveNotePublication(database,note,[],links||[]);
+      await database.batch([
+        database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_note','node-archive','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(newId),
+        database.prepare(`INSERT INTO archive_notes(entity_id,slug,title,note_type,source_app,body_markdown,excerpt,source_created_at,source_modified_at,date_label,state,public_visible,sort_order,published_at,created_by,updated_by,created_at,updated_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' AND ?=1 THEN datetime('now') ELSE NULL END,'studio','studio',datetime('now'),datetime('now'))`)
+          .bind(newId,note.slug,note.title,note.note_type,note.source_app,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.state,note.public_visible,note.sort_order,note.state,note.public_visible),
+      ]);
+      await replaceArchiveNoteLinks(database,newId,links||[]);
+      if(Array.isArray(body.origin_thread_ids??body.originThreadIds))await replaceEntityOriginThreads(database,newId,originThreadIds(body.origin_thread_ids??body.originThreadIds),text(body.primary_origin_thread_id??body.primaryOriginThreadId,200));
+      await syncArchiveNoteSearch(database,newId);const row=await archiveNoteByKey(database,newId);await nextRevision(database,newId,"archive-note-create",null,row);
+      return json(await archiveNotePayload(database,row,{admin:true}),{status:201});
+    }catch(error){return failure(error.message,/UNIQUE constraint failed/i.test(error.message)?409:400)}
+  }
+  const before=noteEntityId?await archiveNoteByKey(database,noteEntityId):null;if(!before)return failure("Archive Note not found.",404);
+  if(request.method==="GET")return json(await archiveNotePayload(database,before,{admin:true}));
+  if(request.method==="DELETE"){
+    await database.batch([
+      database.prepare("UPDATE archive_notes SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(before.entity_id),
+      database.prepare("UPDATE content_entities SET visibility='internal',search_visibility=0,archived_at=datetime('now'),updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(before.entity_id),
+      database.prepare("DELETE FROM search_documents WHERE entity_id=?").bind(before.entity_id),
+    ]);return json({ok:true,archived:true});
+  }
+  if(request.method!=="PATCH")return failure("Method not allowed.",405);
+  const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+  try{
+    const note=normalizedArchiveNote(body,before),links=normalizedArchiveNoteLinks(body.links,note.public_visible);
+    if(links!==null)await replaceArchiveNoteLinks(database,before.entity_id,links);
+    if(Array.isArray(body.origin_thread_ids??body.originThreadIds))await replaceEntityOriginThreads(database,before.entity_id,originThreadIds(body.origin_thread_ids??body.originThreadIds),text(body.primary_origin_thread_id??body.primaryOriginThreadId,200));
+    await validateArchiveNotePublication(database,{...note,entity_id:before.entity_id},null,links);
+    await database.prepare(`UPDATE archive_notes SET slug=?,title=?,note_type=?,source_app=?,body_markdown=?,excerpt=?,source_created_at=?,source_modified_at=?,date_label=?,state=?,public_visible=?,sort_order=?,
+      published_at=CASE WHEN ?='published' AND ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`)
+      .bind(note.slug,note.title,note.note_type,note.source_app,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.state,note.public_visible,note.sort_order,note.state,note.public_visible,before.entity_id).run();
+    await syncArchiveNoteSearch(database,before.entity_id);const row=await archiveNoteByKey(database,before.entity_id);await nextRevision(database,before.entity_id,"archive-note-update",before,row);
+    return json(await archiveNotePayload(database,row,{admin:true}));
+  }catch(error){return failure(error.message,/UNIQUE constraint failed/i.test(error.message)?409:400)}
+}
+
+async function adminArchiveNoteAssetsApi(request,env,noteEntityId,assetId=""){
+  const database=db(env),note=await archiveNoteByKey(database,noteEntityId);if(!note)return failure("Archive Note not found.",404);
+  if(request.method==="GET")return json({records:await archiveNoteAssets(database,note.entity_id,{admin:true})});
+  if(request.method==="POST"&&!assetId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+    const mediaId=text(body.media_id??body.mediaId,200),token=text(body.asset_token??body.token,120).toLowerCase(),role=text(body.role??"inline-image",40),publicVisible=(body.public_visible??body.publicVisible)?1:0;
+    if(!mediaId||!ARCHIVE_NOTE_TOKEN.test(token)||!ARCHIVE_NOTE_ROLES.has(role))return failure("Choose media, a lowercase asset token, and a supported role.");
+    const media=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(mediaId).first();if(!media)return failure("Media asset not found.",404);
+    if(note.state==="published"&&Number(note.public_visible)&&publicVisible&&!archiveNoteMediaEligible(media))return failure("Public Note assets must be active, public, permitted, and inline.",409);
+    try{const newId=text(body.id,200)||id("archive-note-asset");await database.prepare(`INSERT INTO archive_note_assets(id,note_entity_id,media_id,asset_token,role,sort_order,alt_text_override,caption_override,public_visible,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`).bind(newId,note.entity_id,mediaId,token,role,Number(body.sort_order??body.sortOrder)||0,text(body.alt_text??body.altText,1000),text(body.caption,3000),publicVisible).run();await syncArchiveNoteSearch(database,note.entity_id);return json({record:(await archiveNoteAssets(database,note.entity_id,{admin:true})).find(item=>item.id===newId)},{status:201})}catch(error){return failure(error.message,/UNIQUE constraint failed/i.test(error.message)?409:400)}
+  }
+  const before=(await archiveNoteAssets(database,note.entity_id,{admin:true})).find(item=>item.id===assetId);if(!before)return failure("Note asset not found.",404);
+  if(request.method==="DELETE"){
+    if(note.state==="published"&&Number(note.public_visible)&&archiveNoteTokens(note.body_markdown).includes(before.token))return failure("Remove this asset token from the public Note or unpublish the Note before detaching it.",409);
+    await database.prepare("DELETE FROM archive_note_assets WHERE id=? AND note_entity_id=?").bind(assetId,note.entity_id).run();await syncArchiveNoteSearch(database,note.entity_id);return json({ok:true,removed:true});
+  }
+  if(request.method!=="PATCH")return failure("Method not allowed.",405);
+  const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+  const token=text(body.asset_token??body.token??before.token,120).toLowerCase(),role=text(body.role??before.role,40),publicVisible=body.public_visible===undefined&&body.publicVisible===undefined?(before.public_visible?1:0):((body.public_visible??body.publicVisible)?1:0);
+  if(!ARCHIVE_NOTE_TOKEN.test(token)||!ARCHIVE_NOTE_ROLES.has(role))return failure("Choose a lowercase asset token and supported role.");
+  const media=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(before.media_id).first();if(note.state==="published"&&Number(note.public_visible)&&publicVisible&&!archiveNoteMediaEligible(media))return failure("Public Note assets must be active, public, permitted, and inline.",409);
+  if(note.state==="published"&&Number(note.public_visible)&&!publicVisible&&archiveNoteTokens(note.body_markdown).includes(before.token))return failure("A referenced asset cannot be hidden while its Note is public.",409);
+  try{await database.prepare("UPDATE archive_note_assets SET asset_token=?,role=?,sort_order=?,alt_text_override=?,caption_override=?,public_visible=?,updated_at=datetime('now') WHERE id=? AND note_entity_id=?")
+    .bind(token,role,Number(body.sort_order??body.sortOrder??before.sort_order)||0,text(body.alt_text??body.altText??before.alt_text,1000),text(body.caption??before.caption,3000),publicVisible,assetId,note.entity_id).run();await syncArchiveNoteSearch(database,note.entity_id);return json({record:(await archiveNoteAssets(database,note.entity_id,{admin:true})).find(item=>item.id===assetId)})}catch(error){return failure(error.message,/UNIQUE constraint failed/i.test(error.message)?409:400)}
+}
+
+async function publicNotesForTarget(database,targetEntityId){
+  const rows=(await database.prepare(`SELECT an.*,anl.relationship_role,anl.is_primary,anl.sort_order link_sort_order,
+      (SELECT COALESCE(NULLIF(m.source_url,''),CASE WHEN m.storage_key<>'' THEN '/api/construct/media/'||m.id ELSE '' END)
+       FROM archive_note_assets ana JOIN media_assets m ON m.id=ana.media_id
+       WHERE ana.note_entity_id=an.entity_id AND ana.public_visible=1 AND ana.role='inline-image'
+         AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+       ORDER BY ana.sort_order,ana.created_at LIMIT 1) preview_url
+    FROM archive_note_links anl JOIN archive_notes an ON an.entity_id=anl.note_entity_id
+    JOIN content_entities ce ON ce.id=an.entity_id
+    WHERE anl.target_entity_id=? AND anl.public_visible=1 AND an.state='published' AND an.public_visible=1 AND ce.visibility='public'
+    ORDER BY anl.is_primary DESC,anl.sort_order,an.sort_order`).bind(targetEntityId).all()).results||[];
+  return rows.map(presentArchiveNote);
+}
+
+async function publicNotesForOriginThread(database,threadId){
+  const rows=(await database.prepare(`SELECT an.*,ote.is_primary origin_is_primary,ote.sort_order origin_sort_order,
+      (SELECT COALESCE(NULLIF(m.source_url,''),CASE WHEN m.storage_key<>'' THEN '/api/construct/media/'||m.id ELSE '' END)
+       FROM archive_note_assets ana JOIN media_assets m ON m.id=ana.media_id
+       WHERE ana.note_entity_id=an.entity_id AND ana.public_visible=1 AND ana.role='inline-image'
+         AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+       ORDER BY ana.sort_order,ana.created_at LIMIT 1) preview_url
+    FROM archive_origin_thread_entities ote JOIN archive_notes an ON an.entity_id=ote.entity_id
+    JOIN content_entities ce ON ce.id=an.entity_id
+    WHERE ote.thread_id=? AND an.state='published' AND an.public_visible=1 AND ce.visibility='public'
+    ORDER BY ote.is_primary DESC,ote.sort_order,an.sort_order`).bind(threadId).all()).results||[];
+  return rows.map(presentArchiveNote);
+}
+
 async function eventArchive(request,env,eventId){const database=db(env);const existing=await database.prepare("SELECT * FROM archive_records WHERE source_event_id=?").bind(eventId).first();if(existing)return json({record:existing,created:false});const event=await database.prepare("SELECT id,slug,title,description,starts_at,ends_at,location,status FROM events WHERE id=?").bind(eventId).first();if(!event)return failure("Event not found.",404);const attendance=await database.prepare("SELECT COALESCE(SUM(seats),0) total FROM event_tickets WHERE event_id=? AND status='paid'").bind(eventId).first();const recordId=`archive-event-${event.id}`;await database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_record','archive','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(recordId).run();await database.prepare("INSERT INTO archive_records(id,slug,source_event_id,title,node_label,record_type,room,date_or_period,timeline_period,summary,body,record_status,state,aggregate_attendance,created_at,updated_at) VALUES(?,?,?,?,?,'event','Events',?,?,?,?,'event handoff','draft',?,datetime('now'),datetime('now'))").bind(recordId,`event-${event.slug}`,event.id,event.title,'The Six.Well Construct',event.starts_at||'',event.starts_at||'',event.description||'',event.description||'',Number(attendance?.total||0)).run();const record=await database.prepare("SELECT * FROM archive_records WHERE id=?").bind(recordId).first();await nextRevision(database,recordId,"event-archive-handoff",null,record);return json({record,created:true},{status:201});}
 
 export async function handleConstructApi(request,env){
@@ -5574,6 +5897,8 @@ export async function handleConstructApi(request,env){
   if(path==="/api/archive/blackboards")return publicArchiveBlackboardsV2(request,env);
   const blackboardSurfacePublicMatch=path.match(/^\/api\/archive\/blackboards\/([^/]+)$/);if(blackboardSurfacePublicMatch)return publicArchiveBlackboardsV2(request,env,decodeURIComponent(blackboardSurfacePublicMatch[1]));
   if(path==="/api/archive/origin-threads")return publicArchiveOriginThreads(request,env);
+  if(path==="/api/archive/notes")return publicArchiveNotesApi(request,env);
+  const archiveNotePublicMatch=path.match(/^\/api\/archive\/notes\/([^/]+)$/);if(archiveNotePublicMatch)return publicArchiveNotesApi(request,env,decodeURIComponent(archiveNotePublicMatch[1]));
   if(path==="/api/archive/items")return publicArchiveItems(request,env);
   if(path==="/api/archive/compare")return publicArchiveCompare(request,env);
   const archiveItemMatch=path.match(/^\/api\/archive\/items\/([^/]+)$/);if(archiveItemMatch)return publicArchiveDetail(request,env,decodeURIComponent(archiveItemMatch[1]));
@@ -5615,6 +5940,8 @@ export async function handleConstructApi(request,env){
   const blackboardActionMatch=path.match(/^\/api\/admin\/archive-blackboards\/([^/]+)\/(scan|publish)$/);if(blackboardActionMatch)return archiveBlackboardRecordsAdminApiV2(request,env,decodeURIComponent(blackboardActionMatch[1]),blackboardActionMatch[2]);
   const blackboardMatch=path.match(/^\/api\/admin\/archive-blackboards(?:\/([^/]+))?$/);if(blackboardMatch)return archiveBlackboardRecordsAdminApiV2(request,env,blackboardMatch[1]?decodeURIComponent(blackboardMatch[1]):"");
   const materialMatch=path.match(/^\/api\/admin\/archive-materials(?:\/([^/]+))?$/);if(materialMatch)return archiveMaterialsAdminApi(request,env,materialMatch[1]?decodeURIComponent(materialMatch[1]):"");
+  const noteAssetMatch=path.match(/^\/api\/admin\/archive-notes\/([^/]+)\/assets(?:\/([^/]+))?$/);if(noteAssetMatch)return adminArchiveNoteAssetsApi(request,env,decodeURIComponent(noteAssetMatch[1]),noteAssetMatch[2]?decodeURIComponent(noteAssetMatch[2]):"");
+  const noteMatch=path.match(/^\/api\/admin\/archive-notes(?:\/([^/]+))?$/);if(noteMatch)return adminArchiveNotesApi(request,env,noteMatch[1]?decodeURIComponent(noteMatch[1]):"");
   const sourceMaterialEntryMatch=path.match(/^\/api\/admin\/archive-source-materials\/([^/]+)\/entries\/([^/]+)$/);if(sourceMaterialEntryMatch)return archiveSourceMaterialsAdminApi(request,env,decodeURIComponent(sourceMaterialEntryMatch[1]),decodeURIComponent(sourceMaterialEntryMatch[2]),"entries");
   const sourceMaterialEntriesMatch=path.match(/^\/api\/admin\/archive-source-materials\/([^/]+)\/entries$/);if(sourceMaterialEntriesMatch)return archiveSourceMaterialsAdminApi(request,env,decodeURIComponent(sourceMaterialEntriesMatch[1]),"","entries");
   const sourceMaterialMatch=path.match(/^\/api\/admin\/archive-source-materials(?:\/([^/]+))?$/);if(sourceMaterialMatch)return archiveSourceMaterialsAdminApi(request,env,sourceMaterialMatch[1]?decodeURIComponent(sourceMaterialMatch[1]):"");

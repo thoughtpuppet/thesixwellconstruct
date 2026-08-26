@@ -113,6 +113,7 @@ const checkRoutes = [
   ["/archive/compare/", 200],
   ["/archive/collections/", 200],
   ["/archive/origin-threads/", 200],
+  ["/archive/notes/", 200],
   ["/archive/timelines/", 200],
   ["/archive/about/", 200],
   ["/archive/art/", 200],
@@ -124,6 +125,7 @@ const checkRoutes = [
   ["/archive/tattoos/", 200],
   ["/archive/writings/", 200],
   ["/archive/records/lostmarbles/", 200],
+  ["/archive/notes/lost-marbles-inception-note/", 200],
   ["/archive/records/made-in-public/", 200],
   ["/archive/timelines/art/", 200],
   ["/tattoos/", 200],
@@ -219,7 +221,7 @@ function eventDetailRouteFile(urlPath) {
 
 function archiveDynamicRouteFile(urlPath) {
   const parts = normalizeRoute(urlPath).split("/").filter(Boolean);
-  if (parts.length !== 3 || parts[0] !== "archive" || !["records", "timelines", "colors", "materials"].includes(parts[1])) return null;
+  if (parts.length !== 3 || parts[0] !== "archive" || !["records", "timelines", "colors", "materials", "notes"].includes(parts[1])) return null;
   return path.resolve(root, "archive", parts[1], "index.html");
 }
 

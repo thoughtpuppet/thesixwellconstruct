@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/css/tokens.css?v=dual-system-contract">
 <link rel="stylesheet" href="/studio/console-system.css?v=dual-system-contract">
 <link rel="stylesheet" href="/studio/construct-manager.css?v=20260821-studio-visibility">
+<link rel="stylesheet" href="/studio/archive-notes-manager.css?v=1">
 <link rel="stylesheet" href="/studio/archive-catalogue.css?v=1">
 <link rel="stylesheet" href="/studio/archive-colors-materials.css?v=4">
 <link rel="stylesheet" href="/studio/archive-failed-experiments.css?v=1">
@@ -2127,7 +2128,7 @@
       }
       html += `<button class="subnav-btn" type="button" data-event-setup style="margin-left:auto;">Manage / New Events</button>`;
     } else if (activeTab === "archive") {
-      html = [["dossiers","Dossiers"],["failed-experiments","Failed Experiments"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["organizations","Organizations"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["dossiers","Dossiers"],["notes","Notes"],["failed-experiments","Failed Experiments"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["organizations","Organizations"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "site") {
       html = [["pathways","Homepage Pathways"],["nodes","Construct Nodes"],["navigation","Navigation"],["search","Search"],["visibility","Public Visibility"],["settings","Site Settings"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "shared") {
@@ -11173,6 +11174,7 @@ ${meetingLines}
 <script src="/studio/connections-manager.js?v=3"></script>
 <script src="/studio/archive-colors-materials.js?v=4"></script>
 <script src="/studio/archive-failed-experiments.js?v=1"></script>
+<script src="/js/archive-note-markdown.js?v=1"></script>
 <script src="/studio/construct-manager.js?v=20260826-blackboard-records"></script>
 <script src="/studio/people-manager.js?v=11"></script>
 </body>
