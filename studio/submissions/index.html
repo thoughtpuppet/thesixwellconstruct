@@ -2119,7 +2119,7 @@
     } else if (activeTab === "legend") {
       html = [["symbols","Symbols"],["categories","Categories"],["composition-rules","Composition Rules"],["themes","Themes"],["examples","Examples"],["usage","Usage and Relationships"],["drafts","Drafts"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "about") {
-      html = `<button class="subnav-btn ${subView === "appearances" ? "is-active" : ""}" type="button" data-subview="appearances">Exhibitions &amp; Appearances</button>`;
+      html = `<button class="subnav-btn ${subView === "current-works" ? "is-active" : ""}" type="button" data-subview="current-works">Current Works</button><button class="subnav-btn ${subView === "appearances" ? "is-active" : ""}" type="button" data-subview="appearances">Exhibitions &amp; Appearances</button>`;
     } else if (activeTab === "events") {
       html = `<button class="subnav-btn ${subView !== "event-archive" && !selectedEventSlug ? "is-active" : ""}" type="button" data-events-home>Current Events</button><button class="subnav-btn ${subView === "event-archive" ? "is-active" : ""}" type="button" data-subview="event-archive">Event Archive</button><a class="subnav-btn" href="/studio/calendar/">Atlanta Calendar</a>`;
       if (selectedEventSlug) {
@@ -4583,7 +4583,7 @@
     activeAppointmentId = "";
     typeValue = "";
     schedulePeriodDraft = null;
-    subView = tab === "analytics" ? (window.StudioAnalytics?.hashState?.().view || "overview") : tab === "tattoo" ? "appointments" : tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "about" ? "appearances" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
+    subView = tab === "analytics" ? (window.StudioAnalytics?.hashState?.().view || "overview") : tab === "tattoo" ? "appointments" : tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "about" ? "current-works" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
     selectedCalendarDay = "";
     selectedEventSlug = "";
     renderActiveTab();

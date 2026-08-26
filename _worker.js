@@ -1406,6 +1406,7 @@ export default {
       url.pathname === "/api/search" ||
       url.pathname === "/api/site/explore" ||
       url.pathname === "/api/site/navigation" ||
+      url.pathname === "/api/current-projects" ||
       url.pathname.startsWith("/api/connections/") ||
       url.pathname.startsWith("/api/construct/media/") ||
       url.pathname.startsWith("/api/construct/entity-media/") ||
@@ -1425,6 +1426,7 @@ export default {
       url.pathname.startsWith("/api/admin/archive") ||
       url.pathname.startsWith("/api/admin/people") ||
       url.pathname.startsWith("/api/admin/appearances") ||
+      url.pathname.startsWith("/api/admin/current-projects") ||
       url.pathname.startsWith("/api/admin/organizations") ||
       url.pathname.startsWith("/api/admin/places") ||
       url.pathname.startsWith("/api/admin/nodes") ||

@@ -154,7 +154,7 @@ function normalizeRecord(config, body, existing = {}) {
   const out = {};
   for (const field of config.fields) {
     if (!(field in body)) continue;
-    if (["sort_order","claimable","acquisition_eligible","homepage_enabled"].includes(field)) out[field] = Number(body[field]) || 0;
+    if (["sort_order","claimable","acquisition_eligible","homepage_enabled","collage_slot","focal_x","focal_y"].includes(field)) out[field] = Number(body[field]) || 0;
     else if (["estimated_sessions_min","estimated_sessions_max","estimated_total_minutes_min","estimated_total_minutes_max"].includes(field)) {
       const value = body[field] === "" || body[field] === null ? null : Number(body[field]);
       out[field] = Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
@@ -170,6 +170,22 @@ function normalizeRecord(config, body, existing = {}) {
   if (out.print_intent && !["unavailable","planned"].includes(out.print_intent)) throw new Error("Invalid print plan.");
   if (out.whereabouts_status && !["known","unknown"].includes(out.whereabouts_status)) throw new Error("Invalid whereabouts status.");
   const merged = { ...existing, ...out };
+  if (config.entityType === "current_project") {
+    if ("links_json" in out) {
+      const rawLinks = parseJson(out.links_json);
+      if (!Array.isArray(rawLinks) || rawLinks.length > 3) throw new Error("Current Works entries can have up to three links.");
+      const links = rawLinks.map((entry) => {
+        const label = text(entry?.label, 100);
+        const url = text(entry?.url, 1000);
+        if (!label || !(url.startsWith("/") || /^https:\/\//i.test(url))) throw new Error("Each Current Works link needs a label and an internal or HTTPS URL.");
+        return { label, url };
+      });
+      out.links_json = JSON.stringify(links);
+    }
+    if (!(Number(merged.collage_slot) >= 0 && Number(merged.collage_slot) <= 5)) throw new Error("Collage slot must be between 0 and 5.");
+    if (!(Number(merged.focal_x) >= 0 && Number(merged.focal_x) <= 100) || !(Number(merged.focal_y) >= 0 && Number(merged.focal_y) <= 100)) throw new Error("Crop focal coordinates must be between 0 and 100.");
+    if (merged.medium_key && !["about","art","merch","tattooing","events","writings","archive","film","music"].includes(merged.medium_key)) throw new Error("Invalid Current Works medium key.");
+  }
   if (config.entityType === "archive_record" && merged.record_type === "practice") {
     const rawSections = "practice_sections_json" in out
       ? legendArray(out.practice_sections_json, "Practice sections")
@@ -2253,7 +2269,63 @@ function searchSyncStatement(database, resource, row) {
 function entityVisibilityStatement(database, resource, row) {
   const stateVisible = resource === "flash" ? ["available","reserved","placed","retired"].includes(row.state) : row.state === "published";
   const visible = stateVisible && (!['people','places'].includes(resource) || row.privacy === 'public');
-  return database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,archived_at=?,public_at=CASE WHEN ?=1 THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(visible ? "public" : "internal", visible ? 1 : 0, row.state === "archived" ? new Date().toISOString() : null, visible ? 1 : 0, row.id);
+  const searchVisible = visible && resource !== "current-projects";
+  return database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,archived_at=?,public_at=CASE WHEN ?=1 THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(visible ? "public" : "internal", searchVisible ? 1 : 0, row.state === "archived" ? new Date().toISOString() : null, visible ? 1 : 0, row.id);
+}
+
+async function currentProjectHasEligibleImage(database, entityId) {
+  const row = await database.prepare(`SELECT 1 ok
+    FROM entity_media em
+    JOIN media_assets m ON m.id=em.media_id
+    WHERE em.entity_id=? AND em.public_visible=1
+      AND m.state='active' AND m.privacy='public'
+      AND m.consent_status IN ('not-required','granted')
+      AND m.public_presentation='inline' AND m.mime_type LIKE 'image/%'
+      AND TRIM(COALESCE(NULLIF(em.alt_text_override,''),m.alt_text))<>''
+    LIMIT 1`).bind(entityId).first();
+  return Boolean(row);
+}
+
+async function publicCurrentProjects(env) {
+  const database = db(env);
+  const rows = (await database.prepare(`SELECT p.* FROM about_current_projects p
+    JOIN content_entities ce ON ce.id=p.id
+    WHERE p.state='published' AND ce.visibility='public'
+    ORDER BY p.sort_order,p.id`).all()).results || [];
+  const mediaByEntity = await entityMedia(database, rows.map((row) => row.id));
+  const projects = rows.map((row) => {
+    const media = (mediaByEntity.get(row.id) || []).filter((item) => item.mimeType?.startsWith("image/") && text(item.alt, 1000));
+    const links = parseJson(row.links_json).slice(0, 3).map((entry) => ({ label: text(entry?.label, 100), url: text(entry?.url, 1000) }))
+      .filter((entry) => entry.label && (entry.url.startsWith("/") || /^https:\/\//i.test(entry.url)));
+    return {
+      id: row.id,
+      slug: row.slug,
+      category: row.category,
+      title: row.title,
+      contextLine: row.context_line,
+      summary: row.summary,
+      status: row.status_label,
+      accent: row.medium_key,
+      links,
+      collageSlot: Number(row.collage_slot) || 0,
+      focal: { x: Number.isFinite(Number(row.focal_x)) ? Number(row.focal_x) : 50, y: Number.isFinite(Number(row.focal_y)) ? Number(row.focal_y) : 50 },
+      media,
+      sortOrder: Number(row.sort_order) || 0,
+    };
+  });
+  const collage = projects
+    .filter((project) => project.collageSlot > 0 && project.media[0])
+    .sort((a, b) => a.collageSlot - b.collageSlot)
+    .map((project) => ({
+      slot: project.collageSlot,
+      projectId: project.id,
+      projectSlug: project.slug,
+      projectTitle: project.title,
+      src: project.media[0].url,
+      alt: project.media[0].alt,
+      focal: project.focal,
+    }));
+  return json({ revision: rows.reduce((value, row) => row.updated_at > value ? row.updated_at : value, ""), projects, collage }, { cache: "public, max-age=60" });
 }
 
 const PUBLIC_FLASH_STATES = new Set(["available","reserved","placed","retired"]);
@@ -2301,7 +2373,8 @@ async function adminEntityMedia(database, entityIds) {
   const result = await database.prepare(`SELECT em.entity_id,em.role,em.sort_order,em.public_visible,
       COALESCE(NULLIF(em.alt_text_override,''),m.alt_text) alt_text,
       COALESCE(NULLIF(em.caption_override,''),m.caption) caption,
-      em.alt_text_override,em.caption_override,m.id,m.original_filename,m.source_url,m.storage_key,m.mime_type
+      em.alt_text_override,em.caption_override,m.id,m.original_filename,m.source_url,m.storage_key,m.mime_type,
+      m.privacy,m.consent_status,m.public_presentation,m.state media_state
     FROM entity_media em
     JOIN media_assets m ON m.id=em.media_id
     WHERE m.state='active' AND em.entity_id IN (${placeholders})
@@ -2322,6 +2395,10 @@ async function adminEntityMedia(database, entityIds) {
       caption_override: row.caption_override,
       mimeType: row.mime_type,
       originalFilename: row.original_filename,
+      privacy: row.privacy,
+      consentStatus: row.consent_status,
+      publicPresentation: row.public_presentation,
+      state: row.media_state,
     });
   }
   return map;
@@ -2337,7 +2414,7 @@ async function adminList(env, resource) {
     : [];
   const publicationById = new Map(publicationRows.map((row) => [row.id, row.public_at || ""]));
   const [media, tattooStyles, flashSheetDesigns] = await Promise.all([
-    resource === "flash" || resource === "art" || resource === "archive" ? adminEntityMedia(database, entityIds) : entityMedia(database, entityIds),
+    resource === "flash" || resource === "art" || resource === "archive" || resource === "current-projects" ? adminEntityMedia(database, entityIds) : entityMedia(database, entityIds),
     resource === "flash" ? loadTattooStyleAssignments(database, entityIds) : Promise.resolve(new Map()),
     resource === "flash" ? loadFlashSheetDesigns(database, entityIds, { admin: true }) : Promise.resolve(new Map()),
   ]);
@@ -2367,7 +2444,9 @@ async function adminList(env, resource) {
 async function adminCreate(request, env, resource) {
   const config = RESOURCE_CONFIG[resource]; const body = await readJson(request); if (!config || !body) return failure("Invalid request.");
   if(resource==="art"&&body.print_intent!==undefined&&!["unavailable","planned"].includes(body.print_intent))return failure("Print plan must be unavailable or planned.");
-  const database = db(env); const recordId = text(body.id, 160) || id(config.entityType); const values = normalizeRecord(config, body);
+  const database = db(env); const recordId = text(body.id, 160) || id(config.entityType); let values;
+  try { values = normalizeRecord(config, body); } catch (error) { return failure(error.message, 400); }
+  if (resource === "current-projects" && Number(values.collage_slot) > 0) return failure("Create the entry, attach an eligible public image with alt text, then assign its collage slot.", 409);
   let styleSelection = [];
   if (resource === "art") {
     if ((values.state || "draft") !== "draft") return failure("New artwork must begin as Draft. Attach the primary image before publishing.", 409);
@@ -2398,7 +2477,7 @@ async function adminCreate(request, env, resource) {
   if (resource === "pathways" && values.homepage_enabled) { const c = await database.prepare("SELECT COUNT(*) c FROM construct_pathways WHERE node_id=? AND homepage_enabled=1").bind(values.node_id).first(); if (Number(c?.c || 0) >= 9) return failure("Pathway capacity is 9 per node.", 409); }
   const keys = Object.keys(values); if (!keys.length) return failure("No editable fields supplied.");
   const createStatements = [
-    database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,0,'studio','studio',datetime('now'),datetime('now'))").bind(recordId,config.entityType,values.node_id || (config.entityType==="visual_symbol"?"node-legend":config.entityType==="appearance"||config.entityType==="organization"?"node-about":null),"internal"),
+    database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,0,'studio','studio',datetime('now'),datetime('now'))").bind(recordId,config.entityType,values.node_id || (config.entityType==="visual_symbol"?"node-legend":config.entityType==="appearance"||config.entityType==="organization"||config.entityType==="current_project"?"node-about":null),"internal"),
     database.prepare(`INSERT INTO ${config.table}(id,${keys.join(",")},created_at,updated_at) VALUES(?,${keys.map(()=>"?").join(",")},datetime('now'),datetime('now'))`).bind(recordId,...keys.map(k=>values[k])),
   ];
   if (resource === "flash") createStatements.push(...replaceTattooStyleAssignmentStatements(database, recordId, styleSelection));
@@ -2448,9 +2527,14 @@ async function adminUpdate(request, env, resource, recordId, archive = false) {
     }
   }
   const before = resource === "flash" ? { ...beforeRow, ...tattooStylePayload(beforeStyleSelection) } : beforeRow;
-  const values = normalizeRecord(config,body,beforeRow); const keys = Object.keys(values); if (!keys.length && !hasStyleUpdate) return failure("No editable fields supplied.");
+  let values; try { values = normalizeRecord(config,body,beforeRow); } catch (error) { return failure(error.message,400); } const keys = Object.keys(values); if (!keys.length && !hasStyleUpdate) return failure("No editable fields supplied.");
   const projectedRow = { ...beforeRow, ...values, id: recordId };
   const projected = resource === "flash" ? { ...projectedRow, ...tattooStylePayload(nextStyleSelection) } : projectedRow;
+  if (resource === "current-projects" && Number(projected.collage_slot) > 0) {
+    if (!await currentProjectHasEligibleImage(database, recordId)) return failure("A collage slot requires a public image with alt text, inline presentation, and appropriate consent.", 409);
+    const conflict = await database.prepare("SELECT id FROM about_current_projects WHERE collage_slot=? AND id<>? AND state<>'archived' LIMIT 1").bind(Number(projected.collage_slot), recordId).first();
+    if (conflict) return failure(`Collage slot ${Number(projected.collage_slot)} is already assigned.`, 409);
+  }
   if (resource === "flash" && PUBLIC_FLASH_STATES.has(projected.state) && !await flashHasEligiblePrimary(database, recordId)) {
     return failure("Attach an eligible primary Flash image before publishing this design.", 409);
   }
@@ -5890,6 +5974,7 @@ export async function handleConstructApi(request,env){
   const url=new URL(request.url);const path=url.pathname;
   const colorMaterialsPublic=await handleArchiveColorMaterialsPublic(request,env,path);if(colorMaterialsPublic)return colorMaterialsPublic;
   if(path==="/api/site/navigation")return publicNavigation(env);
+  if(path==="/api/current-projects"&&request.method==="GET")return publicCurrentProjects(env);
   if(path==="/api/site/explore")return publicExplore(request,env);
   if(path==="/api/search")return publicSearch(request,env);
   if(path==="/api/archive/failed-experiments")return publicFailedExperimentsApi(request,env);
