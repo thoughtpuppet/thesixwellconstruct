@@ -9,6 +9,8 @@ body.archive-public[data-archive-view="notes"]{background:var(--color-bg);color:
 .archive-note-card-copy h2{font-size:clamp(1.25rem,2vw,2rem);line-height:1.02;margin:0;text-transform:uppercase}
 .archive-note-card-copy p{margin:0;color:#B87A32;line-height:1.65;text-transform:uppercase;font-size:.78rem;letter-spacing:.06em}
 .archive-note-dates{display:flex;flex-wrap:wrap;gap:8px 18px;color:#B87A32;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+.archive-note-provenance{margin:16px 0 0;max-width:380px;color:#B87A32;font-family:Georgia,serif;font-size:.78rem;line-height:1.65}
+.archive-note-provenance span{display:block;margin-bottom:5px;font-family:inherit;font-size:.68rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
 .archive-note-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,320px);gap:16px;margin-top:32px;align-items:start}
 .archive-note-reader{border:5px solid var(--color-archive,#6D3D15);max-height:min(72dvh,900px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:var(--color-bg);padding:clamp(18px,3vw,42px);outline:none}
 .archive-note-reader:focus-visible{box-shadow:0 0 0 5px rgba(252,184,103,.7)}

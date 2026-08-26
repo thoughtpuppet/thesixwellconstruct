@@ -5662,7 +5662,7 @@ function presentArchiveNote(row){
   return {
     ...row,id:row.entity_id,entityId:row.entity_id,noteType:row.note_type,sourceApp:row.source_app,
     bodyMarkdown:row.body_markdown,sourceCreatedAt:row.source_created_at,sourceModifiedAt:row.source_modified_at,
-    dateLabel:row.date_label,publicVisible:Number(row.public_visible||0)===1,sortOrder:Number(row.sort_order||0),
+    dateLabel:row.date_label,provenanceNote:row.provenance_note||"",publicVisible:Number(row.public_visible||0)===1,sortOrder:Number(row.sort_order||0),
     route:archiveNoteRoute(row.slug),preview_url:row.preview_url||"",previewUrl:row.preview_url||"",
   };
 }
@@ -5719,7 +5719,7 @@ async function syncArchiveNoteSearch(database,noteEntityId){
     WHERE ana.note_entity_id=? AND ana.public_visible=1 AND m.state='active' AND m.privacy='public'
       AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
     ORDER BY ana.sort_order`).bind(noteEntityId).all()).results||[];
-  const body=[archiveNotePlainText(row.body_markdown),...captions.map(item=>item.caption)].filter(Boolean).join("\n");
+  const body=[archiveNotePlainText(row.body_markdown),row.provenance_note,...captions.map(item=>item.caption)].filter(Boolean).join("\n");
   await database.batch([
     database.prepare("UPDATE content_entities SET visibility='public',search_visibility=1,public_at=COALESCE(public_at,datetime('now')),archived_at=NULL,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(noteEntityId),
     database.prepare(`INSERT INTO search_documents(entity_id,entity_type,node_id,slug,title,summary,body,state,collection_labels,theme_labels,person_labels,place_labels,date_label,route,updated_at)
@@ -5737,7 +5737,7 @@ function normalizedArchiveNote(body={},before={}){
     body_markdown:text(body.body_markdown??body.bodyMarkdown??before.body_markdown,100000),excerpt:text(body.excerpt??before.excerpt,1000),
     source_created_at:text(body.source_created_at??body.sourceCreatedAt??before.source_created_at,80)||null,
     source_modified_at:text(body.source_modified_at??body.sourceModifiedAt??before.source_modified_at,80)||null,
-    date_label:text(body.date_label??body.dateLabel??before.date_label,500),state:text(body.state??before.state??"draft",30),
+    date_label:text(body.date_label??body.dateLabel??before.date_label,500),provenance_note:text(body.provenance_note??body.provenanceNote??before.provenance_note,3000),state:text(body.state??before.state??"draft",30),
     public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible||0):(body.public_visible??body.publicVisible)?1:0,
     sort_order:Number(body.sort_order??body.sortOrder??before.sort_order)||0,
   };
@@ -5795,9 +5795,9 @@ async function adminArchiveNotesApi(request,env,noteEntityId="",action=""){
       note.entity_id=newId;await validateArchiveNotePublication(database,note,[],links||[]);
       await database.batch([
         database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_note','node-archive','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(newId),
-        database.prepare(`INSERT INTO archive_notes(entity_id,slug,title,note_type,source_app,body_markdown,excerpt,source_created_at,source_modified_at,date_label,state,public_visible,sort_order,published_at,created_by,updated_by,created_at,updated_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' AND ?=1 THEN datetime('now') ELSE NULL END,'studio','studio',datetime('now'),datetime('now'))`)
-          .bind(newId,note.slug,note.title,note.note_type,note.source_app,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.state,note.public_visible,note.sort_order,note.state,note.public_visible),
+        database.prepare(`INSERT INTO archive_notes(entity_id,slug,title,note_type,source_app,body_markdown,excerpt,source_created_at,source_modified_at,date_label,provenance_note,state,public_visible,sort_order,published_at,created_by,updated_by,created_at,updated_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' AND ?=1 THEN datetime('now') ELSE NULL END,'studio','studio',datetime('now'),datetime('now'))`)
+          .bind(newId,note.slug,note.title,note.note_type,note.source_app,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.provenance_note,note.state,note.public_visible,note.sort_order,note.state,note.public_visible),
       ]);
       await replaceArchiveNoteLinks(database,newId,links||[]);
       if(Array.isArray(body.origin_thread_ids??body.originThreadIds))await replaceEntityOriginThreads(database,newId,originThreadIds(body.origin_thread_ids??body.originThreadIds),text(body.primary_origin_thread_id??body.primaryOriginThreadId,200));
@@ -5821,9 +5821,9 @@ async function adminArchiveNotesApi(request,env,noteEntityId="",action=""){
     if(links!==null)await replaceArchiveNoteLinks(database,before.entity_id,links);
     if(Array.isArray(body.origin_thread_ids??body.originThreadIds))await replaceEntityOriginThreads(database,before.entity_id,originThreadIds(body.origin_thread_ids??body.originThreadIds),text(body.primary_origin_thread_id??body.primaryOriginThreadId,200));
     await validateArchiveNotePublication(database,{...note,entity_id:before.entity_id},null,links);
-    await database.prepare(`UPDATE archive_notes SET slug=?,title=?,note_type=?,source_app=?,body_markdown=?,excerpt=?,source_created_at=?,source_modified_at=?,date_label=?,state=?,public_visible=?,sort_order=?,
+    await database.prepare(`UPDATE archive_notes SET slug=?,title=?,note_type=?,source_app=?,body_markdown=?,excerpt=?,source_created_at=?,source_modified_at=?,date_label=?,provenance_note=?,state=?,public_visible=?,sort_order=?,
       published_at=CASE WHEN ?='published' AND ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`)
-      .bind(note.slug,note.title,note.note_type,note.source_app,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.state,note.public_visible,note.sort_order,note.state,note.public_visible,before.entity_id).run();
+      .bind(note.slug,note.title,note.note_type,note.source_app,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.provenance_note,note.state,note.public_visible,note.sort_order,note.state,note.public_visible,before.entity_id).run();
     await syncArchiveNoteSearch(database,before.entity_id);const row=await archiveNoteByKey(database,before.entity_id);await nextRevision(database,before.entity_id,"archive-note-update",before,row);
     return json(await archiveNotePayload(database,row,{admin:true}));
   }catch(error){return failure(error.message,/UNIQUE constraint failed/i.test(error.message)?409:400)}
