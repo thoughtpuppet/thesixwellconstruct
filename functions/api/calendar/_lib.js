@@ -445,7 +445,7 @@ function isInstagramProfileUrl(value) {
 const INSTAGRAM_EVENT_RELIABILITY_NOTE = "Instagram is private discovery provenance only. Confirm this event on an event-specific organizer, venue, or ticket-host page before publication.";
 const INSTAGRAM_OCCURRENCE_RELIABILITY_NOTE = "Instagram is private discovery provenance only. Confirm this occurrence on an event-specific official organizer, venue, or ticket-host page before publication.";
 const SOURCE_RESOLUTION_REQUIRED_NOTE = "Resolve the discovery lead to an original organizer, venue, official calendar, or authorized ticket-host page before publication.";
-const SECONDARY_SOURCE_REQUIRED_NOTE = "The public source cannot be the same secondary source that supplied the lead.";
+const OBSOLETE_SECONDARY_SOURCE_NOTE = "The public source cannot be the same secondary source that supplied the lead.";
 
 function withoutAutomatedVerificationNotes(value, notes) {
   const blocked = new Set((Array.isArray(notes) ? notes : [notes]).map(asString));
@@ -470,15 +470,11 @@ function sourceAuthorityErrors(proposal, { allowVerifiedInstagramSource = false 
   const discoveryUrl = asString(proposal.discoveryUrl);
   const verifiedInstagram = allowVerifiedInstagramSource && proposal.verificationState === "verified" && isInstagramUrl(proposal.sourceUrl);
   const pastedSelection = pastedAuthoritySelection(proposal, authority);
-  const pastedConfirmation = pastedAuthorityConfirmation(proposal, authority, discoveryUrl);
   const organizerEvidence = identityEvidenceUrl(proposal, "organizer");
   const venueEvidence = identityEvidenceUrl(proposal, "venue");
   const documentedIdentity = documentedStudioIdentityConfirmation(proposal);
   if (authority === "unresolved" && !verifiedInstagram) errors.push(SOURCE_RESOLUTION_REQUIRED_NOTE);
   if (discoveryUrl && !validHttpUrl(discoveryUrl)) errors.push("Discovery URL must use http or https.");
-  if (discoveryUrl && sameSourceHost(discoveryUrl, proposal.sourceUrl) && authority !== "authorized_ticket_host" && !verifiedInstagram && !pastedConfirmation) {
-    errors.push(SECONDARY_SOURCE_REQUIRED_NOTE);
-  }
   if (proposal.organizerUrl && !validHttpUrl(proposal.organizerUrl)) errors.push("Organizer identity URL must use http or https.");
   if (proposal.venueUrl && !validHttpUrl(proposal.venueUrl)) errors.push("Venue identity URL must use http or https.");
   if (authority === "organizer_event" && !pastedSelection && !documentedIdentity && (!organizerEvidence || !sameSourceHost(proposal.sourceUrl, organizerEvidence))) {
@@ -503,6 +499,7 @@ function applySourceAuthorityPolicy(proposal, options = {}) {
   const discoveryUrl = pastedAuthorityConfirmation(proposal, authority, rawDiscoveryUrl) ? "" : rawDiscoveryUrl;
   const resolutionErrors = sourceAuthorityErrors({ ...proposal, sourceAuthority: authority, discoveryUrl }, options);
   const note = resolutionErrors[0] || "";
+  const verificationNotes = withoutAutomatedVerificationNotes(proposal.verificationNotes, OBSOLETE_SECONDARY_SOURCE_NOTE);
   return {
     ...proposal,
     discoveryUrl,
@@ -511,9 +508,9 @@ function applySourceAuthorityPolicy(proposal, options = {}) {
     sourceAuthority: authority,
     sourceResolutionNotes: asString(proposal.sourceResolutionNotes),
     verificationState: resolutionErrors.length ? "needs_verification" : proposal.verificationState,
-    verificationNotes: note && !asString(proposal.verificationNotes).includes(note)
-      ? [proposal.verificationNotes, note].filter(Boolean).join("\n")
-      : proposal.verificationNotes,
+    verificationNotes: note && !verificationNotes.includes(note)
+      ? [verificationNotes, note].filter(Boolean).join("\n")
+      : verificationNotes,
   };
 }
 
@@ -551,7 +548,7 @@ function applySourceReliabilityPolicy(proposal, current = {}, { allowVerifiedIns
     relatedLinks,
     verificationState: requiresCorroboration ? "needs_verification" : proposal.verificationState,
     verificationNotes: verifiedInstagram
-      ? withoutAutomatedVerificationNotes(proposal.verificationNotes, [INSTAGRAM_EVENT_RELIABILITY_NOTE, SOURCE_RESOLUTION_REQUIRED_NOTE, SECONDARY_SOURCE_REQUIRED_NOTE])
+      ? withoutAutomatedVerificationNotes(proposal.verificationNotes, [INSTAGRAM_EVENT_RELIABILITY_NOTE, SOURCE_RESOLUTION_REQUIRED_NOTE, OBSOLETE_SECONDARY_SOURCE_NOTE])
       : requiresCorroboration && !proposal.verificationNotes.includes(notes)
         ? [proposal.verificationNotes, notes].filter(Boolean).join("\n")
         : proposal.verificationNotes,

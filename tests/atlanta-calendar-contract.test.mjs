@@ -563,7 +563,7 @@ test("a reliable event source keeps an Instagram ticket post private instead of 
   assert.deepEqual(publicEvent.relatedLinks, []);
 });
 
-test("secondary leads remain private until Studio records the original event source", async () => {
+test("secondary leads remain private during scouting but Studio can verify the reviewed source", async () => {
   const db = database();
   const created = await admin(db, "/candidates", {
     method:"POST",
@@ -584,22 +584,25 @@ test("secondary leads remain private until Studio records the original event sou
   const saved = await admin(db, `/candidates/${unresolved.id}`, {
     method:"PATCH",
     body:{
-      sourceUrl:"https://onecontemporarygallery.com/exhibitions/inner-views",
+      sourceUrl:"https://www.artsatl.org/event/attend-inner-views-art-exhibition/2026-07-03/",
       organizerUrl:"https://onecontemporarygallery.com/",
       venueUrl:"https://onecontemporarygallery.com/",
       sourceAuthority:"organizer_event",
-      sourceResolutionNotes:"ArtsATL supplied the lead; facts were confirmed on the gallery's event page.",
+      sourceResolutionNotes:"Studio reviewed the ArtsATL event listing and accepted it as the public source for this record.",
       verificationState:"verified",
     },
   });
   assert.equal(saved.status, 200, await saved.clone().text());
+  const reviewed = (await saved.json()).candidate;
+  assert.equal(reviewed.verificationState, "verified");
+  assert.doesNotMatch(reviewed.verificationNotes, /same secondary source/i);
   assert.equal((await admin(db, `/candidates/${unresolved.id}/approve`, { method:"POST", body:{} })).status, 200);
   const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
   const publicEvent = publicPayload.events.find((event) => event.title === "Inner Views");
-  assert.equal(publicEvent.sourceUrl, "https://onecontemporarygallery.com/exhibitions/inner-views");
+  assert.equal(publicEvent.sourceUrl, "https://www.artsatl.org/event/attend-inner-views-art-exhibition/2026-07-03/");
   assert.equal(publicEvent.organizerUrl, "https://onecontemporarygallery.com/");
   assert.equal(publicEvent.venueUrl, "https://onecontemporarygallery.com/");
-  assert.doesNotMatch(JSON.stringify(publicEvent), /artsatl|discoveryUrl|sourceResolutionNotes|sourceAuthority/i);
+  assert.doesNotMatch(JSON.stringify(publicEvent), /discoveryUrl|sourceResolutionNotes|sourceAuthority/i);
 });
 
 test("a documented Studio review can verify an exact ticket listing without requiring organizer or venue websites", async () => {
