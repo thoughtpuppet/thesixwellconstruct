@@ -4423,6 +4423,7 @@ test("Tattoo aftercare is part of the client resource packet and keeps medical e
   assert.match(aftercare, /health\.clevelandclinic\.org\/tattoo-aftercare/);
   assert.match(aftercare, /aad\.org\/public\/everyday-care\/skin-care-basics\/tattoos\/tattoo-skin-reactions/);
   for (const source of [policies, dayOf, location]) assert.match(source, /href="\/tattoos\/aftercare\/"/);
+  assert.match(location, /You may park on the street alongside the building\. A free gravel parking lot is also available at the very end of Mangum Street, the street adjacent to the building\. Continue to the end of Mangum Street; the lot will be on your left\./);
 });
 
 test("Custom Tattoo Inquiry explains approval and booking before asking for detail", () => {
