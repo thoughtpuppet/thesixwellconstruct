@@ -5691,6 +5691,41 @@ function archiveNoteMediaEligible(row){
 
 function archiveNoteRoute(slugValue){return `/archive/notes/${encodeURIComponent(slugValue)}/`}
 
+function archiveNoteFrontmatterValue(value=""){
+  const source=String(value||"").trim();if(!source)return"";
+  if(/^[\[{\"]/.test(source)){try{return JSON.parse(source)}catch{}}
+  return source.replace(/^'(.*)'$/,"$1");
+}
+
+function archiveNoteImportDocument(markdown=""){
+  const source=String(markdown||"").replace(/\r\n?/g,"\n"),match=source.match(/^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/),frontmatter={};
+  if(match)for(const line of match[1].split("\n")){const field=line.match(/^([a-zA-Z0-9_-]+):[ \t]*(.*)$/);if(field)frontmatter[field[1]]=archiveNoteFrontmatterValue(field[2])}
+  return{frontmatter,body:match?source.slice(match[0].length):source};
+}
+
+function archiveNoteUniqueToken(filename,used){
+  const withoutExtension=String(filename||"").replace(/\.[^.]+$/,""),base=slug(withoutExtension)||`attachment-${used.size+1}`;let token=base,suffix=2;
+  while(used.has(token))token=`${base}-${suffix++}`;used.add(token);return token;
+}
+
+function archiveNoteImportPlan(body={}){
+  const markdown=String(body.markdown??body.body_markdown??body.bodyMarkdown??"");
+  if(!markdown||markdown.length>100000)return{error:"Choose a Markdown file no larger than 100,000 characters."};
+  const document=archiveNoteImportDocument(markdown),front=document.frontmatter,filename=text(body.filename,500)||"archive-note.md",supplied=Array.isArray(body.attachments)?body.attachments.slice(0,100):[];
+  const usedTokens=new Set(),seenNames=new Set(),attachments=supplied.map((item,index)=>{
+    const name=text(item?.name??item?.filename,500),key=name.toLowerCase();if(!name||seenNames.has(key))throw new Error("Every imported attachment needs one unique filename.");seenNames.add(key);
+    return{filename:name,mime_type:text(item?.mime_type??item?.mimeType??item?.type,200)||"application/octet-stream",token:"",referenced:false,alt_text:"",sort_order:index+1};
+  }),byName=new Map(attachments.map(item=>[item.filename.toLowerCase(),item]));
+  const bodyMarkdown=document.body.replace(/!\[([^\]]*)\]\((?:\.\/)?Attachments\/([^)]+)\)/gi,(whole,alt,encodedName)=>{
+    let name=String(encodedName||"").trim();try{name=decodeURIComponent(name)}catch{}
+    const attachment=byName.get(name.split(/[\\/]/).pop().toLowerCase());if(!attachment)return whole;
+    if(!attachment.token)attachment.token=archiveNoteUniqueToken(attachment.filename,usedTokens);attachment.referenced=true;attachment.alt_text=attachment.alt_text||alt;return`{{asset:${attachment.token}}}`;
+  });
+  for(const attachment of attachments){if(!attachment.token)attachment.token=archiveNoteUniqueToken(attachment.filename,usedTokens);const image=attachment.mime_type.startsWith("image/");attachment.role=attachment.referenced&&image?"inline-image":"source-provenance";attachment.public_visible=Boolean(attachment.referenced&&image)}
+  const title=text(body.title??front.title,300)||filename.replace(/\.md$/i,"")||"Imported Archive Note",links=Array.isArray(body.links)?body.links:(Array.isArray(front.links)?front.links:[]),originIds=Array.isArray(body.origin_thread_ids??body.originThreadIds)?(body.origin_thread_ids??body.originThreadIds):(Array.isArray(front.origin_threads)?front.origin_threads:[]);
+  return{note:{title,slug:slug(body.slug??front.slug??title),note_type:text(body.note_type??body.noteType??front.note_type,80)||"concept-note",source_app:text(body.source_app??body.sourceApp??front.source,120)||"Obsidian",body_markdown:bodyMarkdown,excerpt:text(body.excerpt??front.excerpt,1000),source_created_at:text(body.source_created_at??body.sourceCreatedAt??front.source_created_at,80)||null,source_modified_at:text(body.source_modified_at??body.sourceModifiedAt??front.source_modified_at,80)||null,date_label:text(body.date_label??body.dateLabel??front.date_label,500),provenance_note:text(body.provenance_note??body.provenanceNote??front.provenance_note,3000),state:"draft",public_visible:false,links,origin_thread_ids:originIds,primary_origin_thread_id:text(body.primary_origin_thread_id??body.primaryOriginThreadId??front.primary_origin_thread,200)},attachments};
+}
+
 function presentArchiveNoteAsset(row,{admin=false}={}){
   const publicUrl=row.source_url||((row.storage_key&&row.public_visible)?`/api/construct/media/${encodeURIComponent(row.media_id)}`:"");
   return {
@@ -5853,6 +5888,37 @@ async function replaceArchiveNoteLinks(database,noteEntityId,links){
   ]);
 }
 
+function archiveNoteExportFilename(asset,used){
+  const original=String(asset.original_filename||asset.originalFilename||asset.token||"attachment").replace(/[^a-zA-Z0-9._-]/g,"-")||"attachment";let filename=original,suffix=2;
+  while(used.has(filename.toLowerCase())){const dot=original.lastIndexOf(".");filename=dot>0?`${original.slice(0,dot)}-${suffix++}${original.slice(dot)}`:`${original}-${suffix++}`}
+  used.add(filename.toLowerCase());return filename;
+}
+
+async function archiveNoteExportPayload(database,note){
+  const payload=await archiveNotePayload(database,note,{admin:true}),used=new Set(),exported=payload.assets.filter(asset=>asset.public_visible&&asset.role!=="source-provenance").map(asset=>({...asset,export_filename:archiveNoteExportFilename(asset,used)}));
+  let markdown=note.body_markdown;
+  for(const asset of exported){const replacement=asset.mime_type.startsWith("image/")?`![${asset.alt_text||""}](Attachments/${asset.export_filename})`:`[${asset.export_filename}](Attachments/${asset.export_filename})`;markdown=markdown.replaceAll(`{{asset:${asset.token}}}`,replacement)}
+  for(const asset of payload.assets.filter(asset=>!exported.some(item=>item.id===asset.id)))markdown=markdown.replaceAll(`{{asset:${asset.token}}}`,"");
+  const frontmatter=["---",`id: ${JSON.stringify(note.entity_id)}`,`title: ${JSON.stringify(note.title)}`,`slug: ${JSON.stringify(note.slug)}`,`note_type: ${JSON.stringify(note.note_type)}`,`source: ${JSON.stringify(note.source_app||"")}`,`source_created_at: ${JSON.stringify(note.source_created_at||"")}`,`source_modified_at: ${JSON.stringify(note.source_modified_at||"")}`,`date_label: ${JSON.stringify(note.date_label||"")}`,`provenance_note: ${JSON.stringify(note.provenance_note||"")}`,`visibility: ${note.state==="published"&&Number(note.public_visible)?"public":"private"}`,`links: ${JSON.stringify(payload.links.map(link=>({target_entity_id:link.target_entity_id,relationship_role:link.relationship_role,is_primary:link.is_primary,public_visible:link.public_visible,sort_order:link.sort_order})))}`,`origin_threads: ${JSON.stringify(payload.origin_threads.map(origin=>origin.id))}`,`primary_origin_thread: ${JSON.stringify(payload.origin_threads.find(origin=>origin.is_primary)?.id||"")}`,"---",""].join("\n");
+  return{filename:`${note.slug}.zip`,markdown_filename:`${note.slug}.md`,markdown:`${frontmatter}${markdown.trim()}\n`,attachments:exported.map(asset=>({token:asset.token,filename:asset.export_filename,mime_type:asset.mime_type,byte_size:asset.byte_size,download_url:asset.url}))};
+}
+
+async function adminArchiveNoteImportApi(request,env){
+  if(request.method!=="POST")return failure("Method not allowed.",405);const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+  try{const plan=archiveNoteImportPlan(body);if(plan.error)return failure(plan.error);const createRequest=new Request(request.url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(plan.note)}),response=await adminArchiveNotesApi(createRequest,env),payload=await response.json();return json({...payload,import_plan:{attachments:plan.attachments}},{status:response.status})}catch(error){return failure(error.message,400)}
+}
+
+async function adminArchiveNoteExportApi(request,env,noteEntityId){
+  if(request.method!=="GET")return failure("Method not allowed.",405);const database=db(env),note=await archiveNoteByKey(database,noteEntityId);if(!note)return failure("Archive Note not found.",404);return json(await archiveNoteExportPayload(database,note));
+}
+
+async function adminArchiveNoteLinksApi(request,env,noteEntityId){
+  const database=db(env),note=await archiveNoteByKey(database,noteEntityId);if(!note)return failure("Archive Note not found.",404);
+  if(request.method==="GET")return json({records:await archiveNoteLinks(database,note.entity_id)});
+  if(!["PUT","PATCH"].includes(request.method))return failure("Method not allowed.",405);const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+  try{const links=normalizedArchiveNoteLinks(Array.isArray(body)?body:body.links,note.public_visible);if(links===null)return failure("Send a links list.");await validateArchiveNotePublication(database,note,null,links);await replaceArchiveNoteLinks(database,note.entity_id,links);await syncArchiveNoteSearch(database,note.entity_id);return json({records:await archiveNoteLinks(database,note.entity_id)})}catch(error){return failure(error.message,/UNIQUE constraint failed/i.test(error.message)?409:400)}
+}
+
 async function publicArchiveNotesApi(request,env,key=""){
   if(request.method!=="GET")return failure("Method not allowed.",405);const database=db(env);
   if(key){const row=await archiveNoteByKey(database,key,{publicOnly:true});if(!row)return failure("Archive Note not found.",404);return json(await archiveNotePayload(database,row,{publicOnly:true}),{cache:"public, max-age=30"});}
@@ -5902,9 +5968,9 @@ async function adminArchiveNotesApi(request,env,noteEntityId="",action=""){
   const body=await readJson(request);if(!body)return failure("Send a JSON object.");
   try{
     const note=normalizedArchiveNote(body,before),links=normalizedArchiveNoteLinks(body.links,note.public_visible);
+    await validateArchiveNotePublication(database,{...note,entity_id:before.entity_id},null,links);
     if(links!==null)await replaceArchiveNoteLinks(database,before.entity_id,links);
     if(Array.isArray(body.origin_thread_ids??body.originThreadIds))await replaceEntityOriginThreads(database,before.entity_id,originThreadIds(body.origin_thread_ids??body.originThreadIds),text(body.primary_origin_thread_id??body.primaryOriginThreadId,200));
-    await validateArchiveNotePublication(database,{...note,entity_id:before.entity_id},null,links);
     await database.prepare(`UPDATE archive_notes SET slug=?,title=?,note_type=?,source_app=?,body_markdown=?,excerpt=?,source_created_at=?,source_modified_at=?,date_label=?,provenance_note=?,state=?,public_visible=?,sort_order=?,
       published_at=CASE WHEN ?='published' AND ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`)
       .bind(note.slug,note.title,note.note_type,note.source_app,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.provenance_note,note.state,note.public_visible,note.sort_order,note.state,note.public_visible,before.entity_id).run();
@@ -6025,6 +6091,9 @@ export async function handleConstructApi(request,env){
   const blackboardActionMatch=path.match(/^\/api\/admin\/archive-blackboards\/([^/]+)\/(scan|publish)$/);if(blackboardActionMatch)return archiveBlackboardRecordsAdminApiV2(request,env,decodeURIComponent(blackboardActionMatch[1]),blackboardActionMatch[2]);
   const blackboardMatch=path.match(/^\/api\/admin\/archive-blackboards(?:\/([^/]+))?$/);if(blackboardMatch)return archiveBlackboardRecordsAdminApiV2(request,env,blackboardMatch[1]?decodeURIComponent(blackboardMatch[1]):"");
   const materialMatch=path.match(/^\/api\/admin\/archive-materials(?:\/([^/]+))?$/);if(materialMatch)return archiveMaterialsAdminApi(request,env,materialMatch[1]?decodeURIComponent(materialMatch[1]):"");
+  if(path==="/api/admin/archive-notes/import")return adminArchiveNoteImportApi(request,env);
+  const noteExportMatch=path.match(/^\/api\/admin\/archive-notes\/([^/]+)\/export$/);if(noteExportMatch)return adminArchiveNoteExportApi(request,env,decodeURIComponent(noteExportMatch[1]));
+  const noteLinksMatch=path.match(/^\/api\/admin\/archive-notes\/([^/]+)\/links$/);if(noteLinksMatch)return adminArchiveNoteLinksApi(request,env,decodeURIComponent(noteLinksMatch[1]));
   const noteAssetMatch=path.match(/^\/api\/admin\/archive-notes\/([^/]+)\/assets(?:\/([^/]+))?$/);if(noteAssetMatch)return adminArchiveNoteAssetsApi(request,env,decodeURIComponent(noteAssetMatch[1]),noteAssetMatch[2]?decodeURIComponent(noteAssetMatch[2]):"");
   const noteMatch=path.match(/^\/api\/admin\/archive-notes(?:\/([^/]+))?$/);if(noteMatch)return adminArchiveNotesApi(request,env,noteMatch[1]?decodeURIComponent(noteMatch[1]):"");
   const sourceMaterialEntryMatch=path.match(/^\/api\/admin\/archive-source-materials\/([^/]+)\/entries\/([^/]+)$/);if(sourceMaterialEntryMatch)return archiveSourceMaterialsAdminApi(request,env,decodeURIComponent(sourceMaterialEntryMatch[1]),decodeURIComponent(sourceMaterialEntryMatch[2]),"entries");
