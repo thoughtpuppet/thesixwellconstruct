@@ -43,7 +43,8 @@ body.archive-note-image-open{overflow:hidden}
 .archive-note-missing-asset{border:5px solid #6D3D15;padding:18px;color:#B87A32!important}
 .archive-note-quick-card{border:5px solid var(--color-archive,#6D3D15);background:var(--color-bg)}
 .archive-note-quick-card button{appearance:none;border:0;background:transparent;color:inherit;padding:0;width:100%;text-align:left;cursor:pointer}
-.archive-note-quick-card img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
+.archive-note-quick-card-preview{display:block;width:100%;aspect-ratio:4/3;overflow:hidden}
+.archive-note-quick-card-preview img{display:block;width:100%;height:100%;object-fit:cover}
 .archive-note-quick-card-copy{display:block;padding:14px}
 .archive-note-quick-card-copy strong{display:block;text-transform:uppercase;margin-top:7px}
 .archive-note-dialog{width:min(1040px,calc(100vw - 32px));max-height:94dvh;padding:0;border:5px solid var(--color-archive,#6D3D15);background:var(--color-bg);color:var(--color-text)}
