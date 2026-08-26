@@ -15,7 +15,7 @@ const SOURCE_AUTHORITIES = new Set(["organizer_event", "venue_event", "official_
 const LINK_ROLES = new Set(["organizer", "venue", "ticket", "artist", "participant", "supporting", "discovery"]);
 const CALENDAR_CREDIT_ROLE_CACHE = new WeakMap();
 const PLATFORM_SOURCE_ADAPTERS = new Set(["eventbrite", "posh", "bigtickets", "partiful"]);
-const INTERNAL_SOURCE_ADAPTERS = new Set(["atlanta_loves_art", "beltline", "eyedrum", "high_art_making", "rampant", "squarespace"]);
+const INTERNAL_SOURCE_ADAPTERS = new Set(["atlanta_loves_art", "beltline", "eyedrum", "high_art_making", "rampant", "seven_stages", "squarespace"]);
 const STORED_SOURCE_ADAPTERS = new Set(["automatic", "wix", "localist", "out_of_hand", "json", "icalendar", "rss"]);
 const SOURCE_ADAPTERS = new Set([...STORED_SOURCE_ADAPTERS, ...PLATFORM_SOURCE_ADAPTERS, ...INTERNAL_SOURCE_ADAPTERS]);
 const SOURCE_RENDER_MODES = new Set(["static", "dynamic-fallback"]);
@@ -5932,6 +5932,7 @@ function sourceAdapterKey(source) {
   if (host === "posh.vip" || host.endsWith(".posh.vip")) return "posh";
   if (host === "partiful.com" || host.endsWith(".partiful.com")) return "partiful";
   if (host === "atlantalovesart.com" || host.endsWith(".atlantalovesart.com")) return "atlanta_loves_art";
+  if (host === "7stages.org" || host.endsWith(".7stages.org")) return "seven_stages";
   if (host === "eyedrum.org") return "eyedrum";
   if (host === "beltline.org" && /^\/events(?:\/|$)/i.test(new URL(source.url).pathname)) return "beltline";
   if (host === "rampantgallery.com" || host.endsWith(".rampantgallery.com")) return "rampant";
@@ -7491,6 +7492,7 @@ function browserPastedLinkProposal(item, source) {
   const sourceUrl = source.url;
   const socialPlatform = socialPlatformFromUrl(sourceUrl);
   const timezone = validTimeZone(item.timezone) ? asString(item.timezone) : TIME_ZONE;
+  const parentTicketUrl = validHttpUrl(item.ticketUrl) && !socialPlatformFromUrl(item.ticketUrl) ? asString(item.ticketUrl) : "";
   const occurrenceAccessStatus = ["public", "restricted", "unknown"].includes(asString(item.accessStatus)) ? asString(item.accessStatus) : "public";
   const occurrenceAccessNotes = directPublicCopy(item.accessNotes);
   const occurrenceAudiences = audienceStrings(item.audiences);
@@ -7504,7 +7506,7 @@ function browserPastedLinkProposal(item, source) {
     const startsAt = pastedTimedDate(occurrence.startsAt, occurrenceTimezone);
     const occurrenceKey = normalizeText(`${occurrence.title || "occurrence"}-${startsAt}`).replace(/\s+/g, "-").slice(0, 100);
     return {
-      sourceEventId: `pasted-${stableEventKey}-${occurrenceKey || index + 1}`,
+      sourceEventId: asString(occurrence.sourceEventId) || `pasted-${stableEventKey}-${occurrenceKey || index + 1}`,
       occurrenceType: pastedOccurrenceType(occurrence),
       title: asString(occurrence.title),
       factualDescription: directPublicCopy(occurrence.factualDescription),
@@ -7517,9 +7519,10 @@ function browserPastedLinkProposal(item, source) {
       timezone: occurrenceTimezone,
       venueName: asString(occurrence.venueName) || asString(item.venueName),
       venueAddress: asString(occurrence.venueAddress) || asString(item.venueAddress),
-      sourceUrl,
-      ticketUrl: "",
-      status: "scheduled",
+      sourceUrl: validHttpUrl(occurrence.sourceUrl) ? asString(occurrence.sourceUrl) : sourceUrl,
+      ticketUrl: validHttpUrl(occurrence.ticketUrl) && !socialPlatformFromUrl(occurrence.ticketUrl) ? asString(occurrence.ticketUrl) : parentTicketUrl,
+      ...ticketDetails(occurrence.ticketStatus, occurrence.ticketOnSaleAt, occurrence.ticketNotes, item),
+      status: OCCURRENCE_STATUSES.has(asString(occurrence.status)) ? asString(occurrence.status) : "scheduled",
       verificationState: "needs_verification",
       verificationNotes: socialPlatform
         ? "Schedule facts were extracted from the social post caption and flyer and require Studio verification."
@@ -7538,7 +7541,7 @@ function browserPastedLinkProposal(item, source) {
   const confirmedThrough = dateKey(item.confirmedThrough);
   const organizerUrl = validHttpUrl(item.organizerUrl) ? asString(item.organizerUrl) : "";
   const venueUrl = validHttpUrl(item.venueUrl) ? asString(item.venueUrl) : "";
-  const ticketUrl = validHttpUrl(item.ticketUrl) && !socialPlatformFromUrl(item.ticketUrl) ? asString(item.ticketUrl) : "";
+  const ticketUrl = parentTicketUrl;
   const sourceAuthority = pastedLinkAuthority(sourceUrl, organizerUrl, venueUrl);
   const conflicts = (Array.isArray(item.conflicts) ? item.conflicts : []).map(cleanSourceText).filter(Boolean).slice(0, 20);
   const extractionNotes = (Array.isArray(item.extractionNotes) ? item.extractionNotes : []).map(cleanSourceText).filter(Boolean).slice(0, 20);
@@ -7681,9 +7684,11 @@ function renderedSocialMedia(html, sourceUrl) {
 
 function pastedSocialVisionSchema() {
   const occurrenceProperties = {
-    title: { type: "string" }, occurrenceType: { type: "string", enum: [...OCCURRENCE_TYPES] }, factualDescription: { type: "string" },
+    sourceEventId: { type: "string" }, title: { type: "string" }, occurrenceType: { type: "string", enum: [...OCCURRENCE_TYPES] }, factualDescription: { type: "string" },
     startsAt: { type: "string" }, endsAt: { type: "string" }, timezone: { type: "string" }, venueName: { type: "string" }, venueAddress: { type: "string" },
     accessStatus: { type: "string", enum: [...ACCESS_STATUSES] }, accessNotes: { type: "string" }, audiences: { type: "array", items: { type: "string" } },
+    sourceUrl: { type: "string" }, ticketUrl: { type: "string" }, ticketStatus: { type: "string", enum: [...TICKET_STATUSES] },
+    ticketOnSaleAt: { type: "string" }, ticketNotes: { type: "string" }, status: { type: "string", enum: [...OCCURRENCE_STATUSES] },
   };
   const recurringProperties = {
     title: { type: "string" }, occurrenceType: { type: "string", enum: [...OCCURRENCE_TYPES] }, factualDescription: { type: "string" },
@@ -7829,7 +7834,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
     prompt: socialDetail
       ? `Extract the one primary event announced by this social post. Read the complete visible caption, inspect every carousel slide, and perform OCR on visible flyer text instead of relying only on platform-generated accessibility text. Today is ${isoNow().slice(0, 10)} and the event timezone is ${TIME_ZONE}. Use the post or flyer publication date to supply the event year only when the visible month and day make that year unambiguous. Return explicit UTC offsets for every one-time timed value. If the post describes an exhibition with an on-view date range plus openings, talks, mixers, workshops, visits, or other programs, return the exhibition as the parent event with eventStructure exhibition and dateKind date_range. If its closing date is unknown, leave endsAt empty and put only the last explicitly guaranteed on-view date in confirmedThrough. Capture recurring gallery or visitor availability in visitingHours using day 0 Sunday through 6 Saturday and HH:MM local times; do not turn gallery hours into occurrences. Return each one-time program in occurrences. For a repeated event program such as every Tuesday and Thursday during the exhibition, return a bounded recurringOccurrences rule so every actual program date can be created deterministically. Do not collapse an exhibition into a series or replace its date range with related program dates. Reconcile caption and flyer facts using the most specific visibly supported detail. Put any genuine disagreement in conflicts instead of silently choosing or deleting a fact. Preserve factual caption details such as accessibility, audience, admission, and whether children are welcome. Default accessStatus to public with a Public audience when no restriction is stated; use restricted for an explicit limitation and unknown only for genuinely conflicting access evidence. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Return carouselImages for every slide with its URL when exposed, accessibility text, OCR text, and a role of flyer, installation, artwork, or other. Choose the primary event flyer for imageUrl and imageAlt when possible. Return empty strings for genuinely missing facts.`
       : mode === "detail"
-      ? "Extract the one primary event on this event or ticket page. Use ISO 8601 start and end timestamps exactly as shown. Default accessStatus to public with a Public audience when no attendance restriction is stated; use restricted for an explicit limitation and unknown only for genuinely conflicting access evidence. Return empty strings for other missing facts. Return organizerUrl or venueUrl only when the page exposes a website, official profile, platform identity, or partner page. Return the primary event flyer image URL and accessibility text when the rendered page exposes them. Never infer an end time, identity link, or event URL."
+      ? "Extract the one primary event on this event or ticket page. If a production, film, concert, or other program has multiple independently dated or ticketed showings, return one parent with eventStructure series and every showing in occurrences; do not collapse the run into one continuous event or create unrelated top-level events. Give every occurrence its exact sourceEventId, sourceUrl, ticketUrl, ticket status, start, and end when exposed. Keep the parent date range as organizational metadata. Use ISO 8601 start and end timestamps exactly as shown. Default accessStatus to public with a Public audience when no attendance restriction is stated; use restricted for an explicit limitation and unknown only for genuinely conflicting access evidence. Return empty strings for other missing facts. Return organizerUrl or venueUrl only when the page exposes a website, official profile, platform identity, or partner page. Return the primary event flyer image URL and accessibility text when the rendered page exposes them. Never infer an end time, identity link, or event URL."
       : `Extract up to ${maximum} upcoming event cards currently shown for ${configuredCity}, ${configuredRegion}. Do not include featured or nearby events outside that location section. Use ISO 8601 dates or timestamps only when the page supplies them. Default accessStatus to public with a Public audience when no attendance restriction is stated; use restricted for an explicit limitation and unknown only for genuinely conflicting access evidence. Include an event URL only when the page exposes the exact ticket-page URL. Return empty strings for other facts the page does not supply.`,
     response_format: {
       type: "json_schema",
@@ -7872,10 +7877,12 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
                   items: {
                     type: "object",
                     properties: {
-                      title: { type: "string" }, occurrenceType: { type: "string" }, factualDescription: { type: "string" },
+                      sourceEventId: { type: "string" }, title: { type: "string" }, occurrenceType: { type: "string" }, factualDescription: { type: "string" },
                       startsAt: { type: "string" }, endsAt: { type: "string" }, timezone: { type: "string" },
                       venueName: { type: "string" }, venueAddress: { type: "string" }, accessStatus: { type: "string" },
                       accessNotes: { type: "string" }, audiences: { type: "array", items: { type: "string" } },
+                      sourceUrl: { type: "string" }, ticketUrl: { type: "string" }, ticketStatus: { type: "string" },
+                      ticketOnSaleAt: { type: "string" }, ticketNotes: { type: "string" }, status: { type: "string" },
                     },
                     required: ["title", "startsAt"],
                   },
@@ -8008,12 +8015,12 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
   const scheduleSignal = fallbackUsed
     || ["exhibition", "series"].includes(asString(primaryEvent?.eventStructure))
     || asString(primaryEvent?.dateKind) === "date_range"
-    || /\b(?:opening|reception|artist talk|tournament|mixer|screening|performance|workshop|studio visits?)\b/i.test(`${asString(primaryEvent?.caption)} ${asString(primaryEvent?.description)}`);
+    || /\b(?:opening|reception|artist talk|tournament|mixer|screening|performance|showings?|performances?|workshop|studio visits?)\b/i.test(`${asString(primaryEvent?.caption)} ${asString(primaryEvent?.description)}`);
   if (socialDetail && scheduleSignal && primaryEvent?.title && validDate(primaryEvent.startsAt) && currentSchedule.length === 0) {
     scheduleScanUsed = true;
     const scheduleResponse = await env.BROWSER.quickAction("json", {
       url,
-      prompt: `Extract only the related schedule announced by this social post. Read the complete caption and visible flyer text. The parent event is ${asString(primaryEvent.title)} and runs from ${asString(primaryEvent.startsAt)} through ${asString(primaryEvent.endsAt)} in ${TIME_ZONE}. Return every one-time opening, reception, talk, tournament, mixer, screening, performance, workshop, visit, closing, or other dated program in occurrences. Return repeated weekly schedules in recurringOccurrences with every stated weekday, the schedule start and end dates, and local start and end times. Do not return the parent exhibition itself as an occurrence. Do not summarize, omit, or merge separately named programs. Use explicit UTC offsets for one-time timed values. Default accessStatus to public with a Public audience when no restriction is stated; use restricted for an explicit limitation and unknown only for genuinely conflicting access evidence. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Use an empty array only when the post genuinely announces no related schedule.`,
+      prompt: `Extract only the related schedule announced by this social post. Read the complete caption and visible flyer text. The parent event is ${asString(primaryEvent.title)} and runs from ${asString(primaryEvent.startsAt)} through ${asString(primaryEvent.endsAt)} in ${TIME_ZONE}. Return every one-time opening, reception, talk, tournament, mixer, screening, performance, separately ticketed showing, workshop, visit, closing, or other dated program in occurrences. Return repeated weekly schedules in recurringOccurrences with every stated weekday, the schedule start and end dates, and local start and end times. Do not return the parent exhibition itself as an occurrence; likewise, do not return a parent production as one of its showings. Do not summarize, omit, or merge separately named or independently ticketed programs. Use explicit UTC offsets for one-time timed values. Default accessStatus to public with a Public audience when no restriction is stated; use restricted for an explicit limitation and unknown only for genuinely conflicting access evidence. Write public-facing descriptions and notes as direct event facts; never mention what the caption, flyer, post, page, listing, source, extraction, or verification says. Use an empty array only when the post genuinely announces no related schedule.`,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -8024,6 +8031,7 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
               items: {
                 type: "object",
                 properties: {
+                  sourceEventId: { type: "string" },
                   title: { type: "string" },
                   occurrenceType: { type: "string" },
                   factualDescription: { type: "string" },
@@ -8035,6 +8043,12 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
                   accessStatus: { type: "string" },
                   accessNotes: { type: "string" },
                   audiences: { type: "array", items: { type: "string" } },
+                  sourceUrl: { type: "string" },
+                  ticketUrl: { type: "string" },
+                  ticketStatus: { type: "string" },
+                  ticketOnSaleAt: { type: "string" },
+                  ticketNotes: { type: "string" },
+                  status: { type: "string" },
                 },
                 required: ["title", "startsAt"],
               },
@@ -8225,6 +8239,20 @@ async function extractPastedLinkProposal(env, pastedUrl) {
     return { proposal: { ...extracted.proposal, discoveryChannel: "pasted_link" }, diagnostics: { retrieval: extracted.retrieval, browserMs: extracted.browserMs, adapter: adapterKey } };
   }
 
+  if (adapterKey === "seven_stages" && staticText) {
+    const extracted = await extractSevenStagesPerformanceRuns(staticText, source);
+    const proposal = extracted.proposals[0];
+    if (!proposal || extracted.diagnostics.completeness !== "complete") {
+      const error = new Error(extracted.diagnostics.missingChildren?.[0]?.error || "The 7 Stages production schedule could not be recovered completely; no candidate was created or changed.");
+      error.httpStatus = 422;
+      throw error;
+    }
+    return {
+      proposal: { ...proposal, discoveryChannel:"pasted_link" },
+      diagnostics: { ...extracted.diagnostics, adapter:adapterKey },
+    };
+  }
+
   if (staticText) {
     const proposals = extractCalendarSourceEvents(staticText, source).map(inferSubjectsAndFormats);
     const exact = proposals.find((proposal) => proposal.sourceUrl === pastedUrl) || (proposals.length === 1 ? proposals[0] : null);
@@ -8315,6 +8343,305 @@ async function createCandidateFromUrl(env, db, pastedUrl) {
   }
   await recordSourceResolutionAttempt(db, resolved.audit, result.candidate?.id || "");
   return { ...result, extraction: extracted.diagnostics };
+}
+
+function sevenStagesShowTitle(html) {
+  const meta = (asString(html).match(/<meta\b[^>]*(?:property|name)=["']og:title["'][^>]*>/i) || [""])[0];
+  const value = htmlAttribute(meta, "content")
+    || sourceHtmlEntities(asString(html).match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || "");
+  return cleanSourceText(value)
+    .replace(/\s+-\s+7 Stages Theatre\s*$/i, "")
+    .replace(/\s+\d{1,2}\.\d{1,2}(?:-\d{1,2})?\.20\d{2}\s*$/i, "")
+    .trim();
+}
+
+function sevenStagesShowUrls(html, sourceUrl, maximum = 8) {
+  const exact = new URL(sourceUrl);
+  if (/^\/shows\/[^/]+\/?$/i.test(exact.pathname)) return [exact.toString()];
+  const urls = [];
+  const pattern = /<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = pattern.exec(asString(html))) && urls.length < maximum) {
+    const candidate = canonicalSiteCrawlUrl(sourceHtmlEntities(match[1]), sourceUrl);
+    if (!candidate) continue;
+    const parsed = new URL(candidate);
+    if (!/^\/shows\/[^/]+\/?$/i.test(parsed.pathname) || urls.includes(candidate)) continue;
+    urls.push(candidate);
+  }
+  return urls;
+}
+
+function sevenStagesVboSiteId(html) {
+  return asString(html).match(/\bvar\s+SiteID\s*=\s*["']([A-F0-9-]{20,})["']/i)?.[1] || "";
+}
+
+function sevenStagesVboCards(html) {
+  const starts = [...asString(html).matchAll(/<div\b[^>]*\bid=["']EDID\d+["'][^>]*\bclass=["'][^"']*\bEventListWrapper\b[^"']*["'][^>]*>/gi)]
+    .map((match) => match.index);
+  return starts.map((start, index) => asString(html).slice(start, starts[index + 1] ?? asString(html).length));
+}
+
+function sevenStagesVboCard(card) {
+  const openingTag = asString(card).match(/^<div\b[^>]*>/i)?.[0] || "";
+  const title = htmlAttribute(openingTag, "data-event-name") || sourceElementText(card, "HeaderEventName");
+  const eid = asString(card).match(/\bEID(\d+)\b/i)?.[1]
+    || asString(card).match(/[?&]eid=(\d+)/i)?.[1]
+    || "";
+  const dateLabel = sourceElementText(card, "TextEventDate");
+  const dateMatch = dateLabel.match(/(\d{1,2}\/\d{1,2}\/20\d{2})\s*(?:-|–|—|to)\s*(\d{1,2}\/\d{1,2}\/20\d{2})/i);
+  const dateKeyFromNumeric = (value) => {
+    const parts = asString(value).split("/").map(Number);
+    return parts.length === 3 && parts.every(Number.isFinite)
+      ? `${parts[2]}-${String(parts[0]).padStart(2, "0")}-${String(parts[1]).padStart(2, "0")}`
+      : "";
+  };
+  const imageTag = asString(card).match(/<img\b[^>]*\bclass=["'][^"']*\bPosterList\b[^"']*["'][^>]*>/i)?.[0] || "";
+  return {
+    title: cleanSourceText(title),
+    eid,
+    description: sourceElementText(card, "EventIntroText"),
+    venueName: sourceElementText(card, "TextVenueName"),
+    venueAddress: sourceElementText(card, "TextVenueAddress").replace(/\s+/g, " ").trim(),
+    startsOn: dateKeyFromNumeric(dateMatch?.[1]),
+    endsOn: dateKeyFromNumeric(dateMatch?.[2]),
+    imageUrl: htmlAttribute(imageTag, "src"),
+    imageAlt: htmlAttribute(imageTag, "alt"),
+  };
+}
+
+function sevenStagesVboSessionId(html) {
+  return asString(html).match(/showevents\?ViewType=[\s\S]{0,300}?&s=([a-f0-9-]{20,})/i)?.[1]
+    || asString(html).match(/[?&]s=([a-f0-9-]{20,})/i)?.[1]
+    || "";
+}
+
+function sevenStagesVboOccurrenceIds(html) {
+  return [...new Set([...asString(html).matchAll(/\bid=["']edid(\d+)["']/gi)].map((match) => match[1]))];
+}
+
+function vboDateKey(value) {
+  const match = asString(value).match(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2}),?\s+(20\d{2})\b/i);
+  return match ? highDateParts(match[1], match[2], match[3]) : "";
+}
+
+function vboLocalTimestamp(dayKey, value) {
+  const match = asString(value).match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i);
+  if (!dayKey || !match) return "";
+  const hour = (Number(match[1]) % 12) + (/p/i.test(match[3]) ? 12 : 0);
+  const offset = nyOffsetForDate(new Date(`${dayKey}T12:00:00Z`));
+  return `${dayKey}T${String(hour).padStart(2, "0")}:${match[2] || "00"}:00${offset}`;
+}
+
+function vboTicketNotes(text) {
+  const price = (label) => {
+    const match = asString(text).match(new RegExp(`${label}\\s+(\\d+\\.\\d{2})\\s+(\\d+\\.\\d{2})\\s*\\+\\s*(\\d+\\.\\d{2})\\s+Fees`, "i"));
+    return match ? { total:Number(match[1]), base:Number(match[2]), fee:Number(match[3]) } : null;
+  };
+  const regular = price("Regular Price");
+  const accessible = price("Accessible");
+  const forward = price("Pay it Forward");
+  const values = [
+    regular ? `regular $${regular.base.toFixed(2)} plus $${regular.fee.toFixed(2)} fee` : "",
+    accessible ? `accessible $${accessible.base.toFixed(2)} plus $${accessible.fee.toFixed(2)} fee` : "",
+    forward ? `pay-it-forward $${forward.base.toFixed(2)} plus $${forward.fee.toFixed(2)} fee` : "",
+  ].filter(Boolean);
+  return values.length ? `General admission: ${values.join("; ")}.` : "General admission.";
+}
+
+function sevenStagesTicketOccurrence(ticketHtml, parentTitle, eid, edid, sourceUrl, venue) {
+  const text = cleanSourceText(ticketHtml);
+  const dateLabel = text.match(/\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+[A-Za-z]+\s+\d{1,2},\s+20\d{2}\b/i)?.[0] || "";
+  const dayKey = vboDateKey(dateLabel);
+  const lobby = text.match(/Lobby Open:\s*(\d{1,2}(?::\d{2})?\s*[AP]M)/i)?.[1] || "";
+  const startsLabel = text.match(/Starts:\s*(\d{1,2}(?::\d{2})?\s*[AP]M)/i)?.[1] || "";
+  const endsLabel = text.match(/Ends:\s*(\d{1,2}(?::\d{2})?\s*[AP]M)/i)?.[1] || "";
+  const startsAt = vboLocalTimestamp(dayKey, startsLabel);
+  const endsAt = vboLocalTimestamp(dayKey, endsLabel);
+  if (!dayKey || !startsAt || !endsAt) return null;
+  const weekday = dateLabel.split(",")[0];
+  const ticketUrl = `https://www.7stages.org/tickets/?eid=${encodeURIComponent(eid)}&edid=${encodeURIComponent(edid)}`;
+  const soldOut = /\bsold out\b/i.test(text) && !/Buy Tickets Now/i.test(text);
+  return normalizeOccurrenceProposal({
+    sourceEventId: `seven-stages-vbo-edid-${edid}`,
+    occurrenceType: "performance",
+    title: `${parentTitle} — ${weekday} ${startsLabel}`,
+    factualDescription: lobby ? `Lobby opens at ${lobby}.` : "",
+    accessStatus: "public",
+    accessNotes: "General admission.",
+    audiences: ["Public"],
+    dateKind: "timed",
+    startsAt,
+    endsAt,
+    timezone: TIME_ZONE,
+    venueName: venue.venueName,
+    venueAddress: venue.venueAddress,
+    sourceUrl,
+    ticketUrl,
+    ticketStatus: soldOut ? "sold_out" : /Buy Tickets Now/i.test(text) ? "on_sale" : "unknown",
+    ticketNotes: vboTicketNotes(text),
+    status: "scheduled",
+    verificationState: "verified",
+    verificationNotes: "The official venue page and its authorized VBO ticket schedule agree on this performance date and time.",
+  }, {}, 0);
+}
+
+async function sevenStagesVboTicketContext(ticketPageUrl) {
+  const ticketPageResponse = await fetchExternalSource(ticketPageUrl);
+  if (!ticketPageResponse.ok) throw new Error(`The 7 Stages ticket page returned HTTP ${ticketPageResponse.status}.`);
+  const ticketPageHtml = await boundedResponseText(ticketPageResponse);
+  const siteId = sevenStagesVboSiteId(ticketPageHtml);
+  if (!siteId) throw new Error("The 7 Stages ticket page did not expose its VBO site ID.");
+  const loaderUrl = `https://plugin.vbotickets.com/plugin/loadplugin?siteid=${encodeURIComponent(siteId)}&page=ListEvents&w=1280&h=900&parent=www.7stages.org&parenturl=${encodeURIComponent(ticketPageUrl)}`;
+  const loaderResponse = await fetchExternalSource(loaderUrl);
+  if (!loaderResponse.ok) throw new Error(`The VBO loader returned HTTP ${loaderResponse.status}.`);
+  const loaderHtml = await boundedResponseText(loaderResponse);
+  const eventsPageUrl = sourceHtmlEntities(loaderHtml.match(/window\.location\.href\s*=\s*["']([^"']+)["']/i)?.[1] || "");
+  if (!validHttpUrl(eventsPageUrl)) throw new Error("The VBO loader did not expose its anonymous events session.");
+  const eventsPageResponse = await fetchExternalSource(eventsPageUrl);
+  if (!eventsPageResponse.ok) throw new Error(`The VBO events page returned HTTP ${eventsPageResponse.status}.`);
+  const eventsPageHtml = await boundedResponseText(eventsPageResponse);
+  const sessionId = sevenStagesVboSessionId(eventsPageHtml);
+  if (!sessionId) throw new Error("The VBO events page did not expose its anonymous session ID.");
+  const listingUrl = `https://plugin.vbotickets.com/Plugin/events/showevents?ViewType=list&EventType=current&day=&s=${encodeURIComponent(sessionId)}`;
+  const listingResponse = await fetchExternalSource(listingUrl);
+  if (!listingResponse.ok) throw new Error(`The VBO current-events list returned HTTP ${listingResponse.status}.`);
+  return { sessionId, listingHtml:await boundedResponseText(listingResponse) };
+}
+
+async function sevenStagesVboTicketHtml(eid, edid, sessionId) {
+  const stepUrl = `https://plugin.vbotickets.com/v5.0/controls/tickets.asp?a=load_tickets&s=${encodeURIComponent(sessionId)}&type=EDID&eid=${encodeURIComponent(eid)}&edid=${encodeURIComponent(edid)}&time=&CartCount=0&HasActiveGateway=1&subID=`;
+  const stepResponse = await fetchExternalSource(stepUrl);
+  if (!stepResponse.ok) throw new Error(`VBO performance ${edid} returned HTTP ${stepResponse.status}.`);
+  const stepHtml = await boundedResponseText(stepResponse);
+  const ticketUrl = sourceHtmlEntities(stepHtml.match(/url:\s*["']([^"']+\/plugin\/tickets\?[^"']+)["']/i)?.[1] || "");
+  if (!validHttpUrl(ticketUrl)) throw new Error(`VBO performance ${edid} did not expose its ticket details.`);
+  const ticketResponse = await fetchExternalSource(ticketUrl);
+  if (!ticketResponse.ok) throw new Error(`VBO performance ${edid} ticket details returned HTTP ${ticketResponse.status}.`);
+  return boundedResponseText(ticketResponse);
+}
+
+async function sevenStagesPerformanceProposal(showHtml, sourceUrl, source, context) {
+  const title = sevenStagesShowTitle(showHtml);
+  const card = sevenStagesVboCards(context.listingHtml)
+    .map(sevenStagesVboCard)
+    .find((item) => item.eid && normalizeText(item.title) === normalizeText(title));
+  if (!title || !card) throw new Error(`The VBO event list did not contain a current ticketed production matching ${title || sourceUrl}.`);
+  const detailUrl = `https://plugin.vbotickets.com/v5.0/event.asp?eid=${encodeURIComponent(card.eid)}&s=${encodeURIComponent(context.sessionId)}`;
+  const detailResponse = await fetchExternalSource(detailUrl);
+  if (!detailResponse.ok) throw new Error(`The VBO ${title} detail page returned HTTP ${detailResponse.status}.`);
+  const detailHtml = await boundedResponseText(detailResponse);
+  const activeSessionId = sevenStagesVboSessionId(detailHtml) || context.sessionId;
+  const sliderUrl = sourceHtmlEntities(detailHtml.match(/url:\s*["']([^"']+load_eventdate_slider[^"']+)["']/i)?.[1] || "");
+  if (!validHttpUrl(sliderUrl)) throw new Error(`The VBO ${title} detail page did not expose its performance schedule.`);
+  const sliderResponse = await fetchExternalSource(sliderUrl);
+  if (!sliderResponse.ok) throw new Error(`The VBO ${title} performance schedule returned HTTP ${sliderResponse.status}.`);
+  const edids = sevenStagesVboOccurrenceIds(await boundedResponseText(sliderResponse));
+  if (!edids.length) throw new Error(`The VBO ${title} schedule did not contain any performance dates.`);
+  const failures = [];
+  const venue = { venueName:card.venueName || "7 Stages Mainstage", venueAddress:card.venueAddress || "1105 Euclid Avenue NE, Atlanta, GA 30307" };
+  const occurrences = (await mapConcurrent(edids, 2, async (edid, index) => {
+    try {
+      const ticketHtml = await sevenStagesVboTicketHtml(card.eid, edid, activeSessionId);
+      const occurrence = sevenStagesTicketOccurrence(ticketHtml, title, card.eid, edid, sourceUrl, venue);
+      if (!occurrence) throw new Error("The ticket response did not expose a complete start and end time.");
+      return { ...occurrence, sortOrder:index };
+    } catch (error) {
+      failures.push({ id:edid, url:`https://www.7stages.org/tickets/?eid=${card.eid}&edid=${edid}`, error:asString(error.message) });
+      return null;
+    }
+  })).filter(Boolean).sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt))
+    .map((occurrence, index) => ({ ...occurrence, sortOrder:index }));
+  const announcedRange = card.startsOn && card.endsOn && card.startsOn !== card.endsOn;
+  const complete = occurrences.length === edids.length && (!announcedRange || occurrences.length >= 2);
+  if (!complete) {
+    const error = new Error(`${title} announced ${edids.length} ticketed showing${edids.length === 1 ? "" : "s"}, but only ${occurrences.length} complete schedule record${occurrences.length === 1 ? " was" : "s were"} recovered.`);
+    error.missingChildren = failures;
+    throw error;
+  }
+  const starts = occurrences.map((item) => item.startsAt).sort((left, right) => Date.parse(left) - Date.parse(right));
+  const ends = occurrences.map((item) => item.endsAt || item.startsAt).sort((left, right) => Date.parse(left) - Date.parse(right));
+  const ticketUrl = `https://www.7stages.org/tickets/?eid=${encodeURIComponent(card.eid)}`;
+  const description = directPublicCopy(card.description) || htmlBlocks(showHtml).find((block) => /\bperformance\b|\bimmersive\b|\btheatre\b/i.test(block)) || "";
+  const producedBy = (description.match(/\bProduced by\s+([^.;,]{2,100})/i)?.[1] || "").split(/\s+with\s+/i)[0].trim();
+  const proposal = inferSubjectsAndFormats({
+    sourceId: source.id,
+    sourceEventId: `seven-stages-vbo-${card.eid}`,
+    sourceUrl,
+    ticketUrl,
+    scheduleStatus: "scheduled",
+    ticketStatus: occurrences.some((item) => item.ticketStatus === "on_sale") ? "on_sale" : occurrences.every((item) => item.ticketStatus === "sold_out") ? "sold_out" : "unknown",
+    ticketNotes: occurrences[0]?.ticketNotes || "",
+    discoveryUrl: "",
+    organizerUrl: producedBy ? "" : "https://www.7stages.org/",
+    venueUrl: "https://www.7stages.org/",
+    sourceAuthority: "venue_event",
+    sourceResolutionNotes: "The official 7 Stages production page and its authorized VBO ticket schedule supply the parent production and every independently ticketed showing.",
+    relatedLinks: normalizeRelatedLinks([
+      { label:"7 Stages tickets", url:ticketUrl, provenanceUrl:sourceUrl, role:"ticket", includePublic:false },
+    ], sourceUrl),
+    title,
+    organizer: producedBy || source.name || "7 Stages Theatre",
+    factualDescription: description,
+    eventStructure: occurrences.length > 1 ? "series" : "single",
+    accessStatus: "public",
+    accessNotes: "Open to the public with general-admission tickets.",
+    audiences: ["Public"],
+    dateKind: occurrences.length > 1 ? "date_range" : "timed",
+    startsAt: occurrences.length > 1 ? dateKey(starts[0]) : starts[0],
+    endsAt: occurrences.length > 1 ? dateKey(ends.at(-1)) : ends[0],
+    timezone: TIME_ZONE,
+    venueName: venue.venueName,
+    venueAddress: venue.venueAddress,
+    city: "Atlanta",
+    region: "GA",
+    flyerUrl: validHttpUrl(card.imageUrl) ? card.imageUrl : "",
+    flyerProvenanceUrl: validHttpUrl(card.imageUrl) ? ticketUrl : "",
+    flyerAltText: card.imageAlt || `${title} production image`,
+    subjects: ["art"],
+    formats: ["performance"],
+    experimental: /\bimmersive\b|\bexperimental\b|\binterdisciplinary\b|\bmultisensory\b|\bmulti-sensorial\b/i.test(description),
+    verificationState: "verified",
+    verificationNotes: `The official venue page and authorized ticket schedule were reconciled into one production with ${occurrences.length} separately dated performance occurrences.`,
+    confidence: 0.99,
+    occurrences,
+  });
+  return { proposal, expected:edids.length, failures };
+}
+
+export async function extractSevenStagesPerformanceRuns(staticText, source) {
+  const config = parseJson(source.adapter_config_json, {});
+  const maximum = Math.min(Math.max(Number(config.maxChildren) || 8, 1), 12);
+  const urls = sevenStagesShowUrls(staticText, source.url, maximum);
+  if (!urls.length) return { proposals:[], diagnostics:{ hubDetected:false, childLinksDiscovered:0, childrenExtracted:0, missingChildren:[], retrieval:"seven-stages-vbo", browserMs:0, completeness:"needs_verification" } };
+  const context = await sevenStagesVboTicketContext("https://www.7stages.org/tickets/");
+  const failures = [];
+  const proposals = [];
+  for (const url of urls) {
+    try {
+      let showHtml = staticText;
+      if (url !== source.url || !/^\/shows\/[^/]+\/?$/i.test(new URL(source.url).pathname)) {
+        const response = await fetchExternalSource(url);
+        if (!response.ok) throw new Error(`The official show page returned HTTP ${response.status}.`);
+        showHtml = await boundedResponseText(response);
+      }
+      const result = await sevenStagesPerformanceProposal(showHtml, url, source, context);
+      proposals.push(result.proposal);
+    } catch (error) {
+      failures.push({ url, error:asString(error.message), ...(Array.isArray(error.missingChildren) ? { missingChildren:error.missingChildren } : {}) });
+    }
+  }
+  return {
+    proposals,
+    diagnostics: {
+      hubDetected: urls.length > 1,
+      childLinksDiscovered: urls.length,
+      childrenExtracted: proposals.length,
+      missingChildren: failures,
+      retrieval: "seven-stages-vbo",
+      browserMs: 0,
+      completeness: failures.length ? "needs_verification" : "complete",
+    },
+  };
 }
 
 function bigTicketsWidgetId(staticText, source) {
@@ -8966,7 +9293,8 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
     if (index >= 0) occurrenceBaseline[index] = { ...occurrenceBaseline[index], ...pendingOccurrence, id:occurrenceBaseline[index].id || pendingOccurrence.id };
     else occurrenceBaseline.push(pendingOccurrence);
   }
-  const retainMissingSeriesOccurrences = proposal.sourceEventId === "eyedrum-series-monday-night-creative-music";
+  const retainMissingSeriesOccurrences = proposal.sourceEventId === "eyedrum-series-monday-night-creative-music"
+    || asString(proposal.sourceEventId).startsWith("seven-stages-vbo-");
   const matchedBaselineOccurrences = new Set();
   proposal.occurrences = proposal.occurrences.length
     ? proposal.occurrences.map((occurrence) => {
@@ -9166,6 +9494,8 @@ async function extractCandidateCheckProposal(env, candidate, registered) {
   let bundle;
   if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) {
     bundle = await extractTicketPlatformEvents(env, staticText, source, adapterKey, { retrieval: "static", browserMs: 0 });
+  } else if (adapterKey === "seven_stages") {
+    bundle = await extractSevenStagesPerformanceRuns(staticText, source);
   } else if (adapterKey === "out_of_hand" && registered?.url === candidate.sourceUrl) {
     bundle = await extractOutOfHandSeries(env, staticText, source);
   } else {
@@ -9273,6 +9603,8 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
       let bundle;
       if (adapterKey === "beltline") {
         bundle = await extractBeltlineEvents(env, source, sourceLimit);
+      } else if (adapterKey === "seven_stages") {
+        bundle = await extractSevenStagesPerformanceRuns(text, source);
       } else if (adapterKey === "out_of_hand") {
         bundle = await extractOutOfHandSeries(env, text, source);
       } else if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) {
