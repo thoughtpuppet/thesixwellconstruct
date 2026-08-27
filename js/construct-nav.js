@@ -63,7 +63,8 @@
       ['all merch', '/merch/'],
     ],
     about: [
-      ['the construct', '/about/#construct'], ['saiel / founder', '/about/saieldauhnsolehman/'],
+      ['Current Works + Projects', '/currently'], ['the construct', '/about/#construct'],
+      ['Saiel Dauhn Solehman', '/about/saieldauhnsolehman/'],
       ['architecture', '/about/#construct-architecture'], ['nodes', '/about/#access'],
       ['method', '/about/#library'], ['faq', '/about/#faq'], ['Legend', '/about/legend/'],
     ],
@@ -92,9 +93,19 @@
       ['animations', '/film/#forms'], ['sloth99', '/film/#status'],
     ],
   };
+  function normalizedPathway(ventureKey, label, url, color) {
+    if (ventureKey === 'about' && (url === '/currently' || url === '/about/current-state/')) {
+      return { label: 'Current Works + Projects', url: '/currently', color: color };
+    }
+    if (ventureKey === 'about' && (url === '/about/#saiel' || url === '/about/saieldauhnsolehman/')) {
+      return { label: 'Saiel Dauhn Solehman', url: '/about/saieldauhnsolehman/', color: color };
+    }
+    return { label: label, url: url, color: color };
+  }
+
   VENTURES.forEach(function(venture) {
     venture.pathways = (PATHWAYS_BY_KEY[venture.key] || []).map(function(pathway) {
-      return { label: pathway[0], url: pathway[1] };
+      return normalizedPathway(venture.key, pathway[0], pathway[1]);
     });
   });
 
@@ -1604,9 +1615,14 @@
       venture.label = node.name || venture.label;
       venture.url = node.route || venture.url;
       venture.pathways = (node.pathways || []).slice(0, 9).map(function(pathway) {
+        var normalized = normalizedPathway(
+          venture.key,
+          pathway.name,
+          pathway.route
+        );
         return {
-          label: pathway.name,
-          url: pathway.route,
+          label: normalized.label,
+          url: normalized.url,
           color: pathway.color || venture.color,
         };
       });

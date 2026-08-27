@@ -1,4 +1,16 @@
 (function () {
+  const ambientRoot = document.querySelector("[data-current-works-eye-field]");
+  const eyesCanvas = document.querySelector("[data-current-works-eyes]");
+  if (ambientRoot && eyesCanvas && window.ConstructAmbientField) {
+    window.ConstructAmbientField.mount({
+      root: ambientRoot,
+      eyesCanvas,
+      eyeOpacity: 0.10,
+      eyeTint: "#6D3D15",
+      eyeMask: "radial-gradient(ellipse 58% 48% at 50% 42%, black 18%, rgba(0,0,0,0.62) 46%, transparent 86%)"
+    });
+  }
+
   const fallbackProjects = [
     { id:"current-project-academic-study",slug:"academic-study",category:"Academic Study",title:"Philosophy, Politics & Economics",contextLine:"Georgia State University · Ongoing",summary:"A present course of study bringing additional language, historical context, and analytical frameworks into the questions and systems already moving through the practice.",status:"Ongoing",accent:"about",links:[{label:"Academic context",url:"/about/saieldauhnsolehman/"}] },
     { id:"current-project-construct-archive",slug:"construct-archive",category:"Construct System",title:"The Six.Well Construct + Archive",contextLine:"Active",summary:"Building the public creative ecosystem and the record system that preserves its works, relationships, states, and origins.",status:"Active",accent:"archive",links:[{label:"The Construct",url:"/about/"},{label:"Archive",url:"/archive/"}] },
@@ -11,32 +23,40 @@
   const accentTokens = { about:"--color-about",art:"--color-art",merch:"--color-merch",tattooing:"--color-tattooing",events:"--color-events",writings:"--color-writings",archive:"--color-archive",film:"--color-film",music:"--color-music" };
   const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[character]);
   const safeUrl = (value) => { const url=String(value||""); return url.startsWith("/") || /^https:\/\//i.test(url) ? url : ""; };
-  const projectGrid = document.querySelector("[data-current-projects]");
-  const mosaic = document.querySelector("[data-current-mosaic]");
+  const constellation = document.querySelector("[data-current-projects]");
+  const anchorImage = document.querySelector("[data-current-anchor-image]");
+  const anchorCaption = document.querySelector(".current-constellation-photo figcaption");
 
   function renderProjects(projects) {
-    projectGrid.innerHTML = projects.map((project) => {
+    constellation.querySelectorAll(".current-project-node,.current-loading").forEach((element) => element.remove());
+    constellation.insertAdjacentHTML("beforeend", projects.map((project,index) => {
       const links=(project.links||[]).map((link)=>{const url=safeUrl(link.url);return url?`<a href="${escape(url)}">${escape(link.label)}</a>`:""}).join("");
       const token=accentTokens[project.accent]||accentTokens.about;
-      return `<article class="current-project-card" id="current-project-${escape(project.slug)}" style="--project-accent:var(${token})">
+      return `<article class="current-project-node" id="current-project-${escape(project.slug)}" data-position="${index+1}" style="--project-accent:var(${token})">
         <div class="current-project-meta"><span>${escape(project.category)}</span><span class="current-project-status">${escape(project.status)}</span></div>
-        <h3>${escape(project.title)}</h3><p class="current-project-context">${escape(project.contextLine)}</p>
-        <p class="current-project-summary">${escape(project.summary)}</p>
+        <div><h3>${escape(project.title)}</h3><p class="current-project-context">${escape(project.contextLine)}</p>
+        <p class="current-project-summary">${escape(project.summary)}</p></div>
         ${links?`<div class="current-project-links">${links}</div>`:""}</article>`;
-    }).join("");
+    }).join(""));
   }
 
-  function renderMosaic(collage) {
-    const bySlot=new Map((collage||[]).map((item)=>[Number(item.slot),item]));
-    if ([1,2,3,4,5].some((slot)=>!bySlot.has(slot))) return;
-    const tiles=[1,2,3,4,5].map((slot)=>{const item=bySlot.get(slot),x=Number(item.focal?.x),y=Number(item.focal?.y);return `<a class="current-mosaic-tile" data-slot="${slot}" href="#current-project-${escape(item.projectSlug)}" style="--focal-x:${Number.isFinite(x)?x:50}%;--focal-y:${Number.isFinite(y)?y:50}%"><img src="${escape(item.src)}" alt="${escape(item.alt)}"><span class="current-mosaic-label">${escape(item.projectTitle)}</span></a>`;}).join("");
-    mosaic.insertAdjacentHTML("afterbegin",tiles);
-    mosaic.classList.remove("is-awaiting-media"); mosaic.classList.add("is-ready");
+  function renderAnchor(projects,collage) {
+    const candidates=Array.isArray(collage)?collage:[];
+    const item=candidates.find((candidate)=>candidate.projectSlug==="artpill-tattoo-house")||candidates.find((candidate)=>Number(candidate.slot)===1);
+    const src=safeUrl(item?.src);
+    if (!src) return;
+    const project=projects.find((candidate)=>candidate.slug===item.projectSlug);
+    const focalX=Number(item.focal?.x),focalY=Number(item.focal?.y);
+    anchorImage.src=src;
+    anchorImage.alt=String(item.alt||"");
+    anchorImage.style.setProperty("--anchor-focal-x",`${Number.isFinite(focalX)?focalX:50}%`);
+    anchorImage.style.setProperty("--anchor-focal-y",`${Number.isFinite(focalY)?focalY:50}%`);
+    if (project) anchorCaption.textContent=`${project.title} · ${project.status}`;
   }
 
   renderProjects(fallbackProjects);
   fetch("/api/current-projects", { headers:{accept:"application/json"}, cache:"no-store" })
     .then((response)=>{if(!response.ok)throw new Error("Current Works unavailable");return response.json();})
-    .then((payload)=>{if(Array.isArray(payload.projects)&&payload.projects.length)renderProjects(payload.projects);renderMosaic(payload.collage);})
+    .then((payload)=>{const projects=Array.isArray(payload.projects)&&payload.projects.length?payload.projects:fallbackProjects;renderProjects(projects);renderAnchor(projects,payload.collage);})
     .catch(()=>{});
 })();

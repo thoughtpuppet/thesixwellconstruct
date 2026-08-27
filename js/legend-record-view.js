@@ -247,7 +247,7 @@
           <a href="/about/saieldauhnsolehman/">Founder</a>
           <a href="/about/mediums/">Mediums</a>
           <a href="/about/ways-in/">Ways in</a>
-          <a href="/about/current-state/">Current state</a>
+          <a href="/currently">Current state</a>
           <a href="/about/contact-press/">Contact / press</a>
         </nav>
       </header>

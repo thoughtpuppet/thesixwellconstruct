@@ -19,7 +19,7 @@ const routes = [
   { route: "/about/artpilltattoohouse/", file: "about/artpilltattoohouse/index.html", variant: "supporting", descriptor: true },
   { route: "/about/breakdown/", file: "about/breakdown/index.html", variant: "supporting", descriptor: true },
   { route: "/about/contact-press/", file: "about/contact-press/index.html", variant: "supporting", descriptor: true },
-  { route: "/about/current-state/", file: "about/current-state/index.html", variant: "supporting", descriptor: true },
+  { route: "/currently", file: "currently/index.html", variant: "supporting", descriptor: true },
   { route: "/about/founder/", file: "about/founder/index.html", variant: "supporting", descriptor: true },
   { route: "/about/legend/", file: "about/legend/index.html", variant: "supporting", descriptor: true },
   { route: "/about/mediums/", file: "about/mediums/index.html", variant: "supporting", descriptor: true },

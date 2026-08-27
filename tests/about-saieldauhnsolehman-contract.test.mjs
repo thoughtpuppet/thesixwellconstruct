@@ -10,7 +10,6 @@ const tattooIndexPath = new URL("../tattoos/index.html", import.meta.url);
 const aboutNavigationPaths = [
   "../about/breakdown/index.html",
   "../about/contact-press/index.html",
-  "../about/current-state/index.html",
   "../about/exhibitions-appearances/index.html",
   "../about/founder/index.html",
   "../about/legend/index.html",
@@ -58,13 +57,13 @@ test("Tattoo artist band links to the permanent Saiel profile", async () => {
   assert.match(html, /href="\/about\/saieldauhnsolehman\/" data-copy-id="tattoos-artist-action-about"/);
 });
 
-test("About Founder buttons share the permanent Saiel profile destination", async () => {
+test("About profile buttons share the permanent Saiel profile destination", async () => {
   const sources = await Promise.all(
     aboutNavigationPaths.map((relativePath) => readFile(new URL(relativePath, import.meta.url), "utf8")),
   );
 
   for (const source of sources) {
-    assert.match(source, /href="\/about\/saieldauhnsolehman\/">Founder<\/a>/);
-    assert.doesNotMatch(source, /href="\/about\/founder\/">Founder<\/a>/);
+    assert.match(source, /href="\/about\/saieldauhnsolehman\/"/);
+    assert.doesNotMatch(source, /href="\/about\/founder\/"/);
   }
 });

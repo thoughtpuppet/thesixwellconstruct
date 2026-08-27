@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0e0e0e">
+<title>Current Works — six presentation studies</title>
+<link rel="stylesheet" href="/css/tokens.css">
+<style>
+  :root { --font-sans: var(--font-display); }
+  * { box-sizing: border-box; }
+  html { min-width: 320px; scroll-behavior: smooth; background: var(--color-bg); }
+  body { margin: 0; overflow-x: hidden; background: var(--color-bg); color: #fff; font-family: var(--font-serif); }
+  a { color: inherit; }
+  button { color: inherit; font: inherit; }
+  img { max-width: 100%; }
+  :focus-visible { outline: 5px solid var(--color-about); outline-offset: 4px; }
+  .study-shell { width: min(100%, 1440px); margin: 0 auto; padding: 40px; }
+  .study-intro { display: grid; gap: 24px; min-height: 62vh; align-content: end; padding: clamp(48px, 9vw, 132px) 0 48px; }
+  .study-kicker, .concept-number, .micro, .status, .category, .study-note, .concept-tags, .jump-nav a, .project-links, .index-number, .lane-title, .focus-count { font-family: var(--font-sans); font-weight: 800; letter-spacing: .14em; line-height: 1.35; text-transform: uppercase; }
+  .study-kicker { color: var(--color-about); font-size: 11px; }
+  .study-title { max-width: 1050px; margin: 0; color: var(--color-about); font: 900 clamp(54px, 10vw, 148px)/.82 var(--font-sans); letter-spacing: -.075em; text-transform: uppercase; }
+  .study-descriptor { max-width: 620px; margin: 0; color: rgba(252,184,103,.55); font: 400 12px/1.6 Georgia,serif; letter-spacing: .22em; text-transform: uppercase; }
+  .study-note { max-width: 720px; margin: 0; color: rgba(255,255,255,.58); font-size: 10px; }
+  .jump-nav { position: sticky; z-index: 30; top: 0; display: flex; gap: 10px; overflow-x: auto; margin: 0 -40px; padding: 12px 40px; border-block: 5px solid var(--color-about); background: rgba(14,14,14,.96); scrollbar-width: thin; }
+  .jump-nav a { flex: 0 0 auto; padding: 9px 12px; background: var(--color-about); color: var(--color-bg); font-size: 9px; text-decoration: none; }
+  .jump-nav a:hover { background: #fff; }
+  .concept { display: grid; gap: 32px; padding: clamp(70px, 11vw, 150px) 0; border-bottom: 5px solid var(--color-about); scroll-margin-top: 78px; }
+  .concept-heading { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .concept-number { color: var(--color-about); font-size: 12px; }
+  .concept-title { max-width: 820px; margin: 0; color: var(--color-about); font: 900 clamp(40px, 7vw, 96px)/.88 var(--font-sans); letter-spacing: -.06em; text-transform: uppercase; }
+  .concept-thesis { max-width: 700px; margin: 12px 0 0; color: rgba(255,255,255,.72); font-size: 17px; line-height: 1.55; }
+  .concept-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; color: rgba(255,255,255,.5); font-size: 9px; }
+  .concept-tags span { padding: 6px 8px; border: 5px solid rgba(248,180,104,.25); }
+  .photo { width: 100%; height: 100%; object-fit: cover; object-position: 50% 43%; }
+  .photo-caption { position: absolute; inset: auto 12px 12px; z-index: 2; padding: 7px 9px; background: #000; color: #fff; font: 800 9px/1.3 var(--font-sans); letter-spacing: .11em; text-transform: uppercase; }
+  .category, .status, .micro { color: var(--accent, var(--color-about)); font-size: 9px; }
+  .project-links { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 18px; color: var(--accent, var(--color-about)); font-size: 9px; }
+  .project-links a { text-underline-offset: 4px; }
+
+  /* 01 — Editorial index */
+  .editorial-hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); min-height: 580px; border: 5px solid var(--color-about); }
+  .editorial-photo { position: relative; min-height: 520px; overflow: hidden; border-right: 5px solid var(--color-about); }
+  .editorial-copy { display: flex; min-width: 0; flex-direction: column; justify-content: space-between; gap: 32px; padding: clamp(26px, 4vw, 56px); }
+  .editorial-copy h3 { margin: 0; color: var(--color-about); font: 900 clamp(42px, 5vw, 64px)/.86 var(--font-sans); letter-spacing: -.07em; text-transform: uppercase; }
+  .editorial-copy p { margin: 0; color: rgba(255,255,255,.68); font-size: 18px; line-height: 1.55; }
+  .index-list { display: grid; }
+  .index-row { --accent: var(--color-about); display: grid; grid-template-columns: 66px minmax(160px,.65fr) minmax(260px,1.35fr) 110px; gap: 16px; align-items: start; padding: 24px 0; border-top: 5px solid var(--accent); }
+  .index-number { color: var(--accent); font-size: 12px; }
+  .index-row h4 { margin: 0; color: var(--accent); font: 900 clamp(20px,2.2vw,34px)/.95 var(--font-sans); letter-spacing: -.04em; text-transform: uppercase; }
+  .index-row p { margin: 0; color: rgba(255,255,255,.72); font-size: 14px; line-height: 1.6; }
+  .index-row .status { text-align: right; }
+
+  /* 02 — Constellation */
+  .constellation-stage { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); grid-template-rows: repeat(3,minmax(180px,auto)); gap: 16px; padding: 16px; border: 5px solid var(--color-about); }
+  .constellation-photo { position: relative; grid-column: 2; grid-row: 2; min-height: 300px; overflow: hidden; border: 5px solid var(--color-tattooing); }
+  .signal-node { --accent: var(--color-about); display: flex; min-width: 0; flex-direction: column; justify-content: space-between; gap: 18px; padding: 18px; border: 5px solid var(--accent); background: var(--color-bg); }
+  .signal-node h3 { margin: 0; color: var(--accent); font: 900 clamp(19px,2vw,30px)/.95 var(--font-sans); letter-spacing: -.04em; text-transform: uppercase; }
+  .signal-node p { margin: 0; color: rgba(255,255,255,.65); font-size: 12px; line-height: 1.5; }
+  .signal-node:nth-child(2) { grid-column: 1; grid-row: 1; }
+  .signal-node:nth-child(3) { grid-column: 2; grid-row: 1; }
+  .signal-node:nth-child(4) { grid-column: 3; grid-row: 1; }
+  .signal-node:nth-child(5) { grid-column: 1; grid-row: 2; }
+  .signal-node:nth-child(6) { grid-column: 3; grid-row: 2; }
+  .signal-node:nth-child(7) { grid-column: 1 / 3; grid-row: 3; }
+  .signal-node:nth-child(8) { grid-column: 3; grid-row: 3; }
+
+  /* 03 — Status lanes */
+  .status-hero { position: relative; height: clamp(400px,55vw,760px); overflow: hidden; border: 5px solid var(--color-about); }
+  .status-hero::after { content:"CURRENT / IN STUDIO / FORTHCOMING"; position:absolute; inset:auto 18px 18px; color:var(--color-about); font:900 clamp(28px,6vw,82px)/.85 var(--font-sans); letter-spacing:-.055em; text-transform:uppercase; text-shadow:0 3px 18px #000; }
+  .lane-grid { display: grid; grid-template-columns: 1.25fr 1fr .8fr; gap: 16px; align-items: start; }
+  .lane { display: grid; gap: 16px; }
+  .lane-title { margin: 0; padding: 14px; border: 5px solid var(--lane-accent,var(--color-about)); color: var(--lane-accent,var(--color-about)); font-size: 14px; }
+  .lane-card { --accent:var(--color-about); padding: 20px; border: 5px solid var(--accent); }
+  .lane-card h3 { margin: 24px 0 8px; color:var(--accent); font:900 clamp(21px,2.4vw,34px)/.95 var(--font-sans); letter-spacing:-.045em; text-transform:uppercase; }
+  .lane-card p { margin:0; color:rgba(255,255,255,.68); font-size:13px; line-height:1.55; }
+
+  /* 04 — Dossier */
+  .dossier-layout { display:grid; grid-template-columns:minmax(300px,.72fr) minmax(0,1.28fr); gap:16px; align-items:start; }
+  .dossier-aside { position:sticky; top:78px; display:grid; gap:16px; }
+  .dossier-photo { position:relative; height:min(72vh,760px); overflow:hidden; border:5px solid var(--color-about); }
+  .dossier-note { padding:20px; border:5px solid var(--color-about); color:rgba(255,255,255,.66); font-size:14px; line-height:1.6; }
+  .dossier-records { display:grid; }
+  .dossier-record { --accent:var(--color-about); display:grid; grid-template-columns:74px minmax(0,1fr); gap:18px; padding:28px 0; border-top:5px solid var(--accent); }
+  .dossier-record h3 { margin:0; color:var(--accent); font:900 clamp(27px,4vw,54px)/.9 var(--font-sans); letter-spacing:-.055em; text-transform:uppercase; }
+  .dossier-record .context { margin:10px 0 18px; color:rgba(255,255,255,.5); font:800 10px/1.4 var(--font-sans); letter-spacing:.12em; text-transform:uppercase; }
+  .dossier-record .summary { max-width:62ch; margin:0; color:rgba(255,255,255,.78); font-size:16px; line-height:1.65; }
+
+  /* 05 — Project wall */
+  .wall { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); grid-auto-rows:minmax(160px,auto); gap:16px; }
+  .wall-photo { position:relative; grid-column:1 / 6; grid-row:1 / span 2; min-height:560px; overflow:hidden; border:5px solid var(--color-tattooing); }
+  .wall-card { --accent:var(--color-about); display:flex; min-width:0; flex-direction:column; justify-content:space-between; gap:28px; padding:22px; border:5px solid var(--accent); }
+  .wall-card h3 { margin:0; color:var(--accent); font:900 clamp(20px,2.35vw,34px)/.9 var(--font-sans); letter-spacing:-.05em; text-transform:uppercase; overflow-wrap:anywhere; }
+  .wall-card p { margin:0; color:rgba(255,255,255,.68); font-size:13px; line-height:1.5; }
+  .wall-card:nth-child(2) { grid-column:6 / 10; grid-row:1; }
+  .wall-card:nth-child(3) { grid-column:10 / 13; grid-row:1; }
+  .wall-card:nth-child(4) { grid-column:6 / 9; grid-row:2; }
+  .wall-card:nth-child(5) { grid-column:9 / 13; grid-row:2; }
+  .wall-card:nth-child(6) { grid-column:1 / 5; grid-row:3; }
+  .wall-card:nth-child(7) { grid-column:5 / 13; grid-row:3; }
+
+  /* 06 — Focus mode */
+  .focus-layout { display:grid; grid-template-columns:minmax(230px,.42fr) minmax(0,1.58fr); min-height:720px; border:5px solid var(--color-about); }
+  .focus-selector { display:grid; align-content:start; border-right:5px solid var(--color-about); }
+  .focus-button { --accent:var(--color-about); display:grid; grid-template-columns:32px 1fr; gap:10px; width:100%; padding:18px; border:0; border-bottom:5px solid var(--color-about); background:transparent; color:rgba(255,255,255,.58); text-align:left; cursor:pointer; }
+  .focus-button:hover, .focus-button[aria-selected="true"] { background:var(--accent); color:#fff; }
+  .focus-button span:first-child { font:800 10px/1.3 var(--font-sans); letter-spacing:.1em; }
+  .focus-button strong { font:800 11px/1.2 var(--font-sans); letter-spacing:.08em; text-transform:uppercase; }
+  .focus-display { --accent:var(--color-about); display:grid; grid-template-columns:minmax(0,1fr) minmax(280px,.72fr); min-width:0; }
+  .focus-copy { display:flex; flex-direction:column; justify-content:space-between; gap:40px; padding:clamp(28px,5vw,72px); }
+  .focus-count { color:var(--accent); font-size:10px; }
+  .focus-copy h3 { max-width:760px; margin:16px 0 20px; color:var(--accent); font:900 clamp(42px,5.6vw,78px)/.84 var(--font-sans); letter-spacing:-.065em; text-transform:uppercase; }
+  .focus-context { margin:0 0 18px; color:rgba(255,255,255,.52); font:800 10px/1.4 var(--font-sans); letter-spacing:.12em; text-transform:uppercase; }
+  .focus-summary { max-width:62ch; margin:0; color:rgba(255,255,255,.78); font-size:18px; line-height:1.65; }
+  .focus-visual { position:relative; min-height:100%; overflow:hidden; border-left:5px solid var(--accent); background:var(--accent); }
+  .focus-visual img { display:none; }
+  .focus-visual.has-photo img { display:block; width:100%; height:100%; object-fit:cover; object-position:50% 43%; }
+  .focus-letter { position:absolute; inset:auto 18px 10px; color:rgba(0,0,0,.55); font:900 clamp(150px,24vw,360px)/.75 var(--font-sans); letter-spacing:-.12em; text-transform:uppercase; }
+  .focus-visual.has-photo .focus-letter { display:none; }
+
+  .study-footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:16px; padding:40px 0 12px; color:rgba(255,255,255,.5); font:800 9px/1.4 var(--font-sans); letter-spacing:.12em; text-transform:uppercase; }
+  .study-footer a { color:var(--color-about); text-underline-offset:4px; }
+
+  @media (max-width: 900px) {
+    .study-shell { padding:24px; }
+    .jump-nav { margin-inline:-24px; padding-inline:24px; }
+    .concept-heading { grid-template-columns:1fr; }
+    .editorial-hero { grid-template-columns:1fr; }
+    .editorial-photo { min-height:520px; border-right:0; border-bottom:5px solid var(--color-about); }
+    .index-row { grid-template-columns:52px 1fr 100px; }
+    .index-row p { grid-column:2 / -1; }
+    .constellation-stage { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:auto; }
+    .constellation-photo { grid-column:1 / -1; grid-row:1; min-height:520px; }
+    .signal-node, .signal-node:nth-child(n) { grid-column:auto; grid-row:auto; }
+    .lane-grid { grid-template-columns:1fr; }
+    .dossier-layout { grid-template-columns:1fr; }
+    .dossier-aside { position:static; }
+    .dossier-photo { height:620px; }
+    .wall { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .wall-photo, .wall-card:nth-child(n) { grid-column:auto; grid-row:auto; }
+    .wall-photo { grid-column:1 / -1; min-height:620px; }
+    .focus-layout { grid-template-columns:1fr; }
+    .focus-selector { grid-template-columns:repeat(2,minmax(0,1fr)); border-right:0; border-bottom:5px solid var(--color-about); }
+    .focus-button { border-right:5px solid var(--color-about); }
+    .focus-display { min-height:650px; }
+  }
+  @media (max-width: 560px) {
+    .study-shell { padding:16px; }
+    .study-intro { min-height:70vh; padding-top:64px; }
+    .study-title { font-size:clamp(49px,18vw,76px); }
+    .jump-nav { margin-inline:-16px; padding-inline:16px; }
+    .concept { gap:24px; padding:76px 0; }
+    .concept-title { font-size:clamp(36px,11vw,52px); overflow-wrap:anywhere; }
+    #concept-2 .concept-title { font-size:34px; letter-spacing:-.06em; overflow-wrap:normal; }
+    .editorial-photo { min-height:410px; }
+    .editorial-copy { padding:22px; }
+    .index-row { grid-template-columns:42px minmax(0,1fr); }
+    .index-row .status { grid-column:2; text-align:left; }
+    .index-row p { grid-column:2; }
+    .constellation-stage { grid-template-columns:1fr; padding:10px; gap:10px; }
+    .constellation-photo { min-height:440px; }
+    .status-hero { height:480px; }
+    .dossier-photo { height:500px; }
+    .dossier-record { grid-template-columns:44px minmax(0,1fr); gap:10px; }
+    .wall { grid-template-columns:1fr; }
+    .wall-photo { grid-column:auto; min-height:500px; }
+    .focus-selector { grid-template-columns:1fr; }
+    .focus-button { border-right:0; }
+    .focus-display { grid-template-columns:1fr; min-height:0; }
+    .focus-copy { min-height:590px; padding:24px; }
+    .focus-copy h3 { font-size:clamp(42px,14vw,66px); }
+    .focus-visual { min-height:500px; border-left:0; border-top:5px solid var(--accent); }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } }
+</style>
+</head>
+<body>
+<main class="study-shell">
+  <header class="study-intro">
+    <span class="study-kicker">ABOUT / CURRENTLY / PRESENTATION STUDY</span>
+    <h1 class="study-title">Six ways to hold what is moving now.</h1>
+    <p class="study-descriptor">A comparison room for the Current Works + Projects page. Every direction uses the same seven real lines of work and the same Art.Pill studio image; only the editorial logic changes.</p>
+    <p class="study-note">This is a local decision artifact. Nothing on the live Current Works page is changed by this study.</p>
+  </header>
+
+  <nav class="jump-nav" aria-label="Presentation concepts">
+    <a href="#concept-1">01 / Index</a>
+    <a href="#concept-2">02 / Constellation</a>
+    <a href="#concept-3">03 / Status lanes</a>
+    <a href="#concept-4">04 / Dossier</a>
+    <a href="#concept-5">05 / Project wall</a>
+    <a href="#concept-6">06 / Focus mode</a>
+  </nav>
+
+  <section class="concept" id="concept-1">
+    <div class="concept-heading">
+      <span class="concept-number">Direction 01</span>
+      <div><h2 class="concept-title">Editorial index.</h2><p class="concept-thesis">The photo establishes the world, then the seven projects read like a sharp magazine contents page. Best when clarity and quick scanning matter most.</p><div class="concept-tags"><span>Direct</span><span>Editorial</span><span>All seven visible</span></div></div>
+    </div>
+    <div class="editorial-hero">
+      <div class="editorial-photo"><img class="photo" src="/assets/images/current-works/artpill-studio.jpg" alt="Tattooing in progress inside Art.Pill Tattoo House"><span class="photo-caption">Art.Pill Tattoo House / Practice in motion</span></div>
+      <div class="editorial-copy"><span class="micro">Current edition / 2026</span><h3>Current works + projects.</h3><p>A living view of the study, systems, objects, gatherings, and public experiments moving through the Construct now.</p></div>
+    </div>
+    <div class="index-list" data-render="index"></div>
+  </section>
+
+  <section class="concept" id="concept-2">
+    <div class="concept-heading">
+      <span class="concept-number">Direction 02</span>
+      <div><h2 class="concept-title">Living constellation.</h2><p class="concept-thesis">The projects surround a working image as parts of one system. Best when the page should explain that the practices are separate, but never isolated.</p><div class="concept-tags"><span>Relational</span><span>Systemic</span><span>Construct-native</span></div></div>
+    </div>
+    <div class="constellation-stage" data-render="constellation"><div class="constellation-photo"><img class="photo" src="/assets/images/current-works/artpill-studio.jpg" alt="Tattooing in progress inside Art.Pill Tattoo House"><span class="photo-caption">One practice / Seven connected lines</span></div></div>
+  </section>
+
+  <section class="concept" id="concept-3">
+    <div class="concept-heading">
+      <span class="concept-number">Direction 03</span>
+      <div><h2 class="concept-title">Status lanes.</h2><p class="concept-thesis">Organizes the ecosystem by what is active, developing, or forthcoming. Best when “what is happening right now?” is the first question the page should answer.</p><div class="concept-tags"><span>Temporal</span><span>Operational</span><span>Easy to update</span></div></div>
+    </div>
+    <div class="status-hero"><img class="photo" src="/assets/images/current-works/artpill-studio.jpg" alt="Tattooing in progress inside Art.Pill Tattoo House"></div>
+    <div class="lane-grid" data-render="lanes"></div>
+  </section>
+
+  <section class="concept" id="concept-4">
+    <div class="concept-heading">
+      <span class="concept-number">Direction 04</span>
+      <div><h2 class="concept-title">Working dossier.</h2><p class="concept-thesis">The image stays present while each project reads as a numbered record. Best when the page should feel thoughtful, authored, and close to the Archive without becoming archival.</p><div class="concept-tags"><span>Reflective</span><span>Text-led</span><span>Archive-adjacent</span></div></div>
+    </div>
+    <div class="dossier-layout">
+      <aside class="dossier-aside"><div class="dossier-photo"><img class="photo" src="/assets/images/current-works/artpill-studio.jpg" alt="Tattooing in progress inside Art.Pill Tattoo House"><span class="photo-caption">Current field image / Art.Pill</span></div><p class="dossier-note">The Current Works page is not a résumé. It is a live record of what is receiving attention, language, labor, and public form now.</p></aside>
+      <div class="dossier-records" data-render="dossier"></div>
+    </div>
+  </section>
+
+  <section class="concept" id="concept-5">
+    <div class="concept-heading">
+      <span class="concept-number">Direction 05</span>
+      <div><h2 class="concept-title">Project wall.</h2><p class="concept-thesis">One real image and six typographic fields become a constructed wall. Best when you want energy now, without pretending every project already has approved photography.</p><div class="concept-tags"><span>Visual</span><span>Expandable</span><span>Honest with limited media</span></div></div>
+    </div>
+    <div class="wall" data-render="wall"><div class="wall-photo"><img class="photo" src="/assets/images/current-works/artpill-studio.jpg" alt="Tattooing in progress inside Art.Pill Tattoo House"><span class="photo-caption">Art.Pill Tattoo House / Active</span></div></div>
+  </section>
+
+  <section class="concept" id="concept-6">
+    <div class="concept-heading">
+      <span class="concept-number">Direction 06</span>
+      <div><h2 class="concept-title">One work at a time.</h2><p class="concept-thesis">A compact index controls one large, focused project view. Best when the page should feel calm, immersive, and intentional instead of presenting everything at equal volume.</p><div class="concept-tags"><span>Interactive</span><span>Immersive</span><span>Mobile-friendly</span></div></div>
+    </div>
+    <div class="focus-layout">
+      <div class="focus-selector" role="tablist" aria-label="Current projects" data-focus-selector></div>
+      <section class="focus-display" role="tabpanel" tabindex="0" data-focus-display></section>
+    </div>
+  </section>
+
+  <footer class="study-footer"><span>Current Works presentation study / Six.Well Construct</span><a href="/currently">Compare with current page</a></footer>
+</main>
+
+<script>
+(() => {
+  const projects = [
+    { category:"Academic Study", title:"Philosophy, Politics & Economics", context:"Georgia State University · Ongoing", summary:"A present course of study bringing additional language, historical context, and analytical frameworks into the questions and systems already moving through the practice.", status:"Ongoing", accent:"about", links:[{label:"Academic context",url:"/about/saieldauhnsolehman/"}] },
+    { category:"Construct System", title:"The Six.Well Construct + Archive", context:"Active", summary:"Building the public creative ecosystem and the record system that preserves its works, relationships, states, and origins.", status:"Active", accent:"archive", links:[{label:"The Construct",url:"/about/"},{label:"Archive",url:"/archive/"}] },
+    { category:"Visual Art", title:"ThoughtPuppet", context:"In studio", summary:"Paintings, objects, studies, and visual-language research that feed the wider Construct.", status:"In studio", accent:"art", links:[{label:"View visual art",url:"/art/"}] },
+    { category:"Clothing + Objects", title:"Six.Well Clothing", context:"In development", summary:"Garments, editions, and physical artifacts carrying Construct imagery and thought into the world.", status:"In development", accent:"merch", links:[{label:"View Six.Well Clothing",url:"/merch/?filter=six.well"}] },
+    { category:"Tattoo Practice", title:"Art.Pill Tattoo House", context:"Active", summary:"Tattooing, symbolic mark-making, flash, and special projects rooted in care, boundaries, and interpretation.", status:"Active", accent:"tattooing", photo:true, links:[{label:"Tattoo practice",url:"/tattoos/"},{label:"Special projects",url:"/tattoos/special-projects/"}] },
+    { category:"Cultural Research + Discovery", title:"Signal & Symbol + Atlanta Creative Calendar", context:"Active", summary:"Signal & Symbol develops cultural research through guided creative gatherings. The Atlanta Creative Calendar supports discovery and connection through day/night itinerary planning. Mindful Darkness remains the potential platform for writing and discussion around what emerges.", status:"Active", accent:"events", links:[{label:"Signal & Symbol",url:"/events/signal-symbol/"},{label:"Atlanta Creative Calendar",url:"/calendar/"},{label:"Mindful Darkness",url:"/writings/#reading-paths"}] },
+    { category:"Events", title:"Solehman’s New Year + CULT[&SHIFT]", context:"Forthcoming", summary:"Solehman’s New Year is one four-day annual presentation of the ecosystem, anchored by the annual exhibition and extending through fashion, tattooing, conversation, tools, objects, and open-studio viewing. CULT[&SHIFT] holds community shows, performances, and shared experiments.", status:"Forthcoming", accent:"events", links:[{label:"Solehman’s New Year",url:"/events/solehmans-new-year/"},{label:"CULT[&SHIFT]",url:"/events/cultandshift/"}] }
+  ];
+  const tokens = {about:"--color-about",archive:"--color-archive",art:"--color-art",merch:"--color-merch",tattooing:"--color-tattooing",events:"--color-events"};
+  const esc = value => String(value ?? "").replace(/[&<>\"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;","'":"&#39;"})[char]);
+  const style = project => `--accent:var(${tokens[project.accent] || tokens.about})`;
+  const links = project => `<div class="project-links">${project.links.map(link => `<a href="${esc(link.url)}">${esc(link.label)}</a>`).join("")}</div>`;
+  const number = index => String(index + 1).padStart(2,"0");
+
+  document.querySelector('[data-render="index"]').innerHTML = projects.map((project,index) => `<article class="index-row" style="${style(project)}"><span class="index-number">${number(index)}</span><h4>${esc(project.title)}</h4><p>${esc(project.summary)}</p><span class="status">${esc(project.status)}</span></article>`).join("");
+
+  document.querySelector('[data-render="constellation"]').insertAdjacentHTML("beforeend", projects.map(project => `<article class="signal-node" style="${style(project)}"><div><span class="category">${esc(project.category)}</span><h3>${esc(project.title)}</h3></div><p>${esc(project.summary)}</p></article>`).join(""));
+
+  const laneSets = [
+    {title:"Now / Active", accent:"--color-about", items:projects.filter(project => ["Active","Ongoing"].includes(project.status))},
+    {title:"In studio / Development", accent:"--color-art", items:projects.filter(project => ["In studio","In development"].includes(project.status))},
+    {title:"Forthcoming", accent:"--color-events", items:projects.filter(project => project.status === "Forthcoming")}
+  ];
+  document.querySelector('[data-render="lanes"]').innerHTML = laneSets.map(lane => `<section class="lane" style="--lane-accent:var(${lane.accent})"><h3 class="lane-title">${esc(lane.title)} / ${lane.items.length}</h3>${lane.items.map(project => `<article class="lane-card" style="${style(project)}"><span class="category">${esc(project.category)}</span><h3>${esc(project.title)}</h3><p>${esc(project.summary)}</p></article>`).join("")}</section>`).join("");
+
+  document.querySelector('[data-render="dossier"]').innerHTML = projects.map((project,index) => `<article class="dossier-record" style="${style(project)}"><span class="index-number">${number(index)}</span><div><span class="category">${esc(project.category)} / ${esc(project.status)}</span><h3>${esc(project.title)}</h3><p class="context">${esc(project.context)}</p><p class="summary">${esc(project.summary)}</p>${links(project)}</div></article>`).join("");
+
+  document.querySelector('[data-render="wall"]').insertAdjacentHTML("beforeend", projects.filter(project => !project.photo).map(project => `<article class="wall-card" style="${style(project)}"><div><span class="category">${esc(project.category)} / ${esc(project.status)}</span><h3>${esc(project.title)}</h3></div><p>${esc(project.summary)}</p></article>`).join(""));
+
+  const selector = document.querySelector("[data-focus-selector]");
+  const display = document.querySelector("[data-focus-display]");
+  selector.innerHTML = projects.map((project,index) => `<button class="focus-button" type="button" role="tab" id="focus-tab-${index}" aria-controls="focus-panel" aria-selected="${project.photo ? "true" : "false"}" tabindex="${project.photo ? "0" : "-1"}" style="${style(project)}" data-focus-index="${index}"><span>${number(index)}</span><strong>${esc(project.title)}</strong></button>`).join("");
+  display.id = "focus-panel";
+  function renderFocus(index, moveFocus=false) {
+    const project=projects[index];
+    selector.querySelectorAll("button").forEach((button,buttonIndex)=>{const active=buttonIndex===index;button.setAttribute("aria-selected",String(active));button.tabIndex=active?0:-1;});
+    display.style.cssText=style(project);
+    display.innerHTML=`<div class="focus-copy"><div><span class="focus-count">Project ${number(index)} / 07 · ${esc(project.category)}</span><h3>${esc(project.title)}</h3><p class="focus-context">${esc(project.context)} / ${esc(project.status)}</p><p class="focus-summary">${esc(project.summary)}</p></div>${links(project)}</div><div class="focus-visual ${project.photo?"has-photo":""}" aria-hidden="true">${project.photo?'<img src="/assets/images/current-works/artpill-studio.jpg" alt="">':""}<span class="focus-letter">${esc(project.category.charAt(0))}</span></div>`;
+    if (moveFocus) display.focus({preventScroll:true});
+  }
+  selector.addEventListener("click", event => {const button=event.target.closest("[data-focus-index]");if(button)renderFocus(Number(button.dataset.focusIndex));});
+  selector.addEventListener("keydown", event => {if(!["ArrowDown","ArrowRight","ArrowUp","ArrowLeft","Home","End"].includes(event.key))return;event.preventDefault();const current=Number(event.target.closest("[data-focus-index]")?.dataset.focusIndex||0);let next=current;if(["ArrowDown","ArrowRight"].includes(event.key))next=(current+1)%projects.length;if(["ArrowUp","ArrowLeft"].includes(event.key))next=(current-1+projects.length)%projects.length;if(event.key==="Home")next=0;if(event.key==="End")next=projects.length-1;renderFocus(next);selector.querySelector(`[data-focus-index="${next}"]`).focus();});
+  renderFocus(projects.findIndex(project => project.photo));
+})();
+</script>
+</body>
+</html>

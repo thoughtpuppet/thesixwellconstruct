@@ -9,7 +9,6 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PAGES = [
   "breakdown",
   "contact-press",
-  "current-state",
   "founder",
   "mediums",
   "six-well",
@@ -18,14 +17,13 @@ const PAGES = [
 ];
 
 const BASELINE_HASHES = {
-  "breakdown": "8e46d286a209fa6e4ee18c9310c50ba7fd95b966e0df6f28bd764a1cdbfd8261",
-  "contact-press": "596df91ebcd5425526a5c74a1e0af1e8d5cea7fe74ec250252f967cb0ff11253",
-  "current-state": "456d637b57b77b9c2bb8d83c41924c71fef3026401bcd6602788bda264e49897",
-  "founder": "20d82deec13459cbc38f34a6e39ac0dfd8fbe50533461529afa90609974522a2",
-  "mediums": "92d7e41d28a9681765037e3481855b4f0d8b1756533efd9102cb182e58336184",
-  "six-well": "8192d1ea4ac16ed2abaacd66c23ef023fee852badf4d871285f70864b7774e98",
-  "visual-language": "de40dfe0f6c9aed84565b4d6436e14855b67d6af4b131cd4ac5b8a4b58ce539f",
-  "ways-in": "75923a4319d0e26ed3080fab6baa42accb84dde792c868d80fb24a65aa190125",
+  "breakdown": "97d2c2bc2a33a6111ae8f4f46758bbf11f2c6f18a06c5c1551a5730958603e3a",
+  "contact-press": "cd18abae7c031385f5c42203b37505298bb009d4f280df9b1e2f56190902b875",
+  "founder": "252580e269fc64f7216e1547f79caacdc8cd9a0ba506fc7557e3999e2530d6cd",
+  "mediums": "918f240d75785649fff9b314412f78739afc59a1250c6b302093a38e09bc42e4",
+  "six-well": "879c7da538c716089067dd0c668d3765294fcd1b56cb25de63e348c49d97a90b",
+  "visual-language": "422aa04f42ed1f5110a0f7851be30f5757e78ea47016d150a3215062e93b4a0e",
+  "ways-in": "097a93e6f048f0542a173222d2f0090a22cd5ba51543101d6bcb69c1bc5effb9",
 };
 
 function cleanText(value) {
