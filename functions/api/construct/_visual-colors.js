@@ -274,8 +274,17 @@ function responseObject(raw) {
 }
 
 async function analysisImageData(imageUrl, env) {
-  const fetchImage = typeof env.VISUAL_COLOR_FETCH === "function" ? env.VISUAL_COLOR_FETCH : fetch;
-  const response = await fetchImage(imageUrl, { headers: { accept: "image/*" } });
+  const request = new Request(imageUrl, { headers: { accept: "image/*" } });
+  let response;
+  if (typeof env.VISUAL_COLOR_FETCH === "function") {
+    response = await env.VISUAL_COLOR_FETCH(imageUrl, { headers: { accept: "image/*" } });
+  } else {
+    const imageOrigin = new URL(imageUrl).origin;
+    const publicOrigin = new URL(env.PUBLIC_SITE_URL || "https://thesixwellconstruct.com").origin;
+    response = imageOrigin === publicOrigin && env.ASSETS?.fetch
+      ? await env.ASSETS.fetch(request)
+      : await fetch(request);
+  }
   if (!response?.ok) throw new Error(`Eligible image fetch failed (${Number(response?.status || 0)}).`);
   const contentType = String(response.headers?.get?.("content-type") || "").split(";")[0].trim().toLowerCase();
   if (!contentType.startsWith("image/")) throw new Error("Eligible image response was not an image.");
