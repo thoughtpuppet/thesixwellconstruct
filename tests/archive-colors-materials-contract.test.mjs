@@ -133,6 +133,8 @@ test("visual source discovery excludes Tattoo context images and merges only all
   const second=normalizeVisualColorResult({colors:[{family:"blue",strength:"dominant"},{family:"ochre",strength:"accent"}]},families);
   const merged=mergeVisualColorSuggestions([first,second]);
   assert.deepEqual(merged.map(item=>[item.family_slug,item.strength]),[["blue","dominant"],["gold","accent"],["ochre","accent"]]);
+  const trailingPunctuation=normalizeVisualColorResult({response:'{"colors":[{"family":"blue","strength":"dominant"}]}.'},families);
+  assert.deepEqual(trailingPunctuation.map(item=>[item.family_slug,item.strength]),[["blue","dominant"]]);
 
   const calls=[];
   const assetFetches=[];
@@ -149,6 +151,7 @@ test("visual source discovery excludes Tattoo context images and merges only all
   assert.equal(calls.length,1);
   assert.equal(assetFetches.length,1);
   assert.match(calls[0].input.prompt,/Exclude tiny noise, skin, photographic backgrounds/);
+  assert.match(calls[0].input.prompt,/only 2 to 8 families/);
   assert.match(calls[0].input.prompt,/Return only one minified JSON object/);
   assert.equal(calls[0].input.image,"data:image/jpeg;base64,/9j/2Q==");
   assert.equal(calls[0].input.max_tokens,512);

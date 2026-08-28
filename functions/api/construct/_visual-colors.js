@@ -242,7 +242,7 @@ export async function syncVisualColorQueue(env, options = {}) {
 }
 
 function visualPrompt(families) {
-  return `Classify the colors intentionally used in this finished artwork or tattoo result.\n\nAllowed atomic color families only: ${families.map((family) => family.slug).join(", ")}. Never combine names and never invent a family.\n\nReturn dominant colors, supporting colors, and clearly intentional accent colors. Exclude tiny noise, skin, photographic backgrounds, frames, glare, shadows, reflections, and compression artifacts. Judge the created work, not its surroundings.\n\nReturn only one minified JSON object in exactly this shape: {"colors":[{"family":"blue","strength":"dominant"}]}. Use only the allowed family slugs and the strengths dominant, supporting, or accent. Do not use Markdown or explanatory prose.`;
+  return `Classify the colors intentionally used in this finished artwork or tattoo result.\n\nAllowed atomic color families only: ${families.map((family) => family.slug).join(", ")}. Never combine names and never invent a family.\n\nChoose only 2 to 8 families that are visibly meaningful in the created work; do not repeat or echo the full vocabulary. Return dominant colors, supporting colors, and clearly intentional accent colors. Omit a family when its presence is uncertain or incidental. Exclude tiny noise, skin, photographic backgrounds, frames, glare, shadows, reflections, and compression artifacts. Judge the created work, not its surroundings.\n\nReturn only one minified JSON object in exactly this shape: {"colors":[{"family":"blue","strength":"dominant"}]}. Use only the allowed family slugs and the strengths dominant, supporting, or accent. Do not use Markdown, explanatory prose, or punctuation outside the JSON object.`;
 }
 
 function responseObject(raw) {
@@ -250,7 +250,11 @@ function responseObject(raw) {
   if (candidate && typeof candidate === "object") return candidate;
   if (typeof candidate !== "string") return {};
   const stripped = candidate.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  return parseJson(stripped, {});
+  const direct = parseJson(stripped, null);
+  if (direct && typeof direct === "object") return direct;
+  const start = stripped.indexOf("{");
+  const end = stripped.lastIndexOf("}");
+  return start >= 0 && end > start ? parseJson(stripped.slice(start, end + 1), {}) : {};
 }
 
 async function analysisImageData(imageUrl, env) {
