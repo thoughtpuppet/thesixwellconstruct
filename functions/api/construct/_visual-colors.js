@@ -241,28 +241,8 @@ export async function syncVisualColorQueue(env, options = {}) {
   return { eligible: works.size, pending: Number(queued?.count || 0), discovered: statements.length, ...(options.includeWorks ? { works } : {}) };
 }
 
-function colorSchema(familySlugs) {
-  return {
-    type: "object",
-    properties: {
-      colors: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            family: { type: "string", enum: familySlugs },
-            strength: { type: "string", enum: [...STRENGTHS] },
-          },
-          required: ["family", "strength"],
-        },
-      },
-    },
-    required: ["colors"],
-  };
-}
-
 function visualPrompt(families) {
-  return `Classify the colors intentionally used in this finished artwork or tattoo result.\n\nAllowed atomic color families only: ${families.map((family) => family.slug).join(", ")}. Never combine names and never invent a family.\n\nReturn dominant colors, supporting colors, and clearly intentional accent colors. Exclude tiny noise, skin, photographic backgrounds, frames, glare, shadows, reflections, and compression artifacts. Judge the created work, not its surroundings. Return JSON only.`;
+  return `Classify the colors intentionally used in this finished artwork or tattoo result.\n\nAllowed atomic color families only: ${families.map((family) => family.slug).join(", ")}. Never combine names and never invent a family.\n\nReturn dominant colors, supporting colors, and clearly intentional accent colors. Exclude tiny noise, skin, photographic backgrounds, frames, glare, shadows, reflections, and compression artifacts. Judge the created work, not its surroundings.\n\nReturn only one minified JSON object in exactly this shape: {"colors":[{"family":"blue","strength":"dominant"}]}. Use only the allowed family slugs and the strengths dominant, supporting, or accent. Do not use Markdown or explanatory prose.`;
 }
 
 function responseObject(raw) {
@@ -346,12 +326,10 @@ async function runOneAnalysis(database, env, run, families, maxAttempts) {
       if (!imageUrl) throw new Error("An eligible image URL could not be resolved.");
       const imageData = await analysisImageData(imageUrl, env);
       const raw = await env.AI.run(run.model_name, {
-        messages: [
-          { role: "system", content: visualPrompt(families) },
-          { role: "user", content: "Classify the intentional color families in this work." },
-        ],
+        prompt: visualPrompt(families),
         image: imageData,
-        response_format: { type: "json_schema", json_schema: colorSchema(families.map((family) => family.slug)) },
+        max_tokens: 512,
+        temperature: 0,
       });
       rawResults.push({ image_id: image.id, response: raw });
       normalizedSets.push(normalizeVisualColorResult(raw, allowed));

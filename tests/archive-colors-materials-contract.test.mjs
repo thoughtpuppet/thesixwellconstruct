@@ -148,9 +148,11 @@ test("visual source discovery excludes Tattoo context images and merges only all
   assert.equal(pass.processed[0].status,"ready");
   assert.equal(calls.length,1);
   assert.equal(assetFetches.length,1);
-  assert.match(calls[0].input.messages[0].content,/Exclude tiny noise, skin, photographic backgrounds/);
+  assert.match(calls[0].input.prompt,/Exclude tiny noise, skin, photographic backgrounds/);
+  assert.match(calls[0].input.prompt,/Return only one minified JSON object/);
   assert.equal(calls[0].input.image,"data:image/jpeg;base64,/9j/2Q==");
-  assert.equal(calls[0].input.response_format.type,"json_schema");
+  assert.equal(calls[0].input.max_tokens,512);
+  assert.equal(calls[0].input.temperature,0);
   const failingEnv={...runtime,PUBLIC_SITE_URL:"https://example.test",VISUAL_COLOR_WORKS_PER_PASS:"1",VISUAL_COLOR_MAX_ATTEMPTS:"3",ASSETS:analysisAssets,AI:{run:async()=>{throw new Error("vision unavailable")}}};
   await runVisualColorAnalysisPass(failingEnv);
   await runVisualColorAnalysisPass(failingEnv);
