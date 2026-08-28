@@ -139,14 +139,16 @@ test("visual source discovery excludes Tattoo context images and merges only all
     ...runtime,
     PUBLIC_SITE_URL:"https://example.test",
     VISUAL_COLOR_WORKS_PER_PASS:"1",
+    VISUAL_COLOR_FETCH:async()=>new Response(Uint8Array.from([0xff,0xd8,0xff,0xd9]),{headers:{"content-type":"image/jpeg"}}),
     AI:{run:async(model,input)=>{calls.push({model,input});return{response:{colors:[{family:"blue",strength:"accent"}]}}}},
   });
   assert.equal(pass.processed.length,1);
   assert.equal(pass.processed[0].status,"ready");
   assert.equal(calls.length,1);
   assert.match(calls[0].input.messages[0].content,/Exclude tiny noise, skin, photographic backgrounds/);
+  assert.equal(calls[0].input.image,"data:image/jpeg;base64,/9j/2Q==");
   assert.equal(calls[0].input.response_format.type,"json_schema");
-  const failingEnv={...runtime,VISUAL_COLOR_WORKS_PER_PASS:"1",VISUAL_COLOR_MAX_ATTEMPTS:"3",AI:{run:async()=>{throw new Error("vision unavailable")}}};
+  const failingEnv={...runtime,VISUAL_COLOR_WORKS_PER_PASS:"1",VISUAL_COLOR_MAX_ATTEMPTS:"3",VISUAL_COLOR_FETCH:async()=>new Response(Uint8Array.from([0xff,0xd8,0xff,0xd9]),{headers:{"content-type":"image/jpeg"}}),AI:{run:async()=>{throw new Error("vision unavailable")}}};
   await runVisualColorAnalysisPass(failingEnv);
   await runVisualColorAnalysisPass(failingEnv);
   await runVisualColorAnalysisPass(failingEnv);

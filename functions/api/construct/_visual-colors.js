@@ -273,6 +273,22 @@ function responseObject(raw) {
   return parseJson(stripped, {});
 }
 
+async function analysisImageData(imageUrl, env) {
+  const fetchImage = typeof env.VISUAL_COLOR_FETCH === "function" ? env.VISUAL_COLOR_FETCH : fetch;
+  const response = await fetchImage(imageUrl, { headers: { accept: "image/*" } });
+  if (!response?.ok) throw new Error(`Eligible image fetch failed (${Number(response?.status || 0)}).`);
+  const contentType = String(response.headers?.get?.("content-type") || "").split(";")[0].trim().toLowerCase();
+  if (!contentType.startsWith("image/")) throw new Error("Eligible image response was not an image.");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.length) throw new Error("Eligible image response was empty.");
+  if (bytes.length > 12 * 1024 * 1024) throw new Error("Eligible image exceeds the 12 MB analysis limit.");
+  const chunks = [];
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)));
+  }
+  return `data:${contentType};base64,${btoa(chunks.join(""))}`;
+}
+
 export function normalizeVisualColorResult(raw, allowedFamilies) {
   const bySlug = allowedFamilies instanceof Map
     ? allowedFamilies
@@ -319,12 +335,13 @@ async function runOneAnalysis(database, env, run, families, maxAttempts) {
     for (const image of images) {
       const imageUrl = absoluteImageUrl(image.url, env);
       if (!imageUrl) throw new Error("An eligible image URL could not be resolved.");
+      const imageData = await analysisImageData(imageUrl, env);
       const raw = await env.AI.run(run.model_name, {
         messages: [
           { role: "system", content: visualPrompt(families) },
           { role: "user", content: "Classify the intentional color families in this work." },
         ],
-        image: imageUrl,
+        image: imageData,
         response_format: { type: "json_schema", json_schema: colorSchema(families.map((family) => family.slug)) },
       });
       rawResults.push({ image_id: image.id, response: raw });
