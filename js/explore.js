@@ -5,11 +5,18 @@
   var PORTAL_STORAGE_KEY = "sixwell_explore_portal_v1";
   var HISTORY_LIMIT = 12;
   var VALID_SCOPES = ["all", "works", "process", "pages"];
+  var SCOPE_LABELS = {
+    all: "Browsing entire site",
+    works: "Browsing works & objects",
+    process: "Browsing process & evidence",
+    pages: "Browsing pages & pathways",
+  };
   var room = document.querySelector("[data-explore-room]");
   var actionGroup = document.querySelector("[data-explore-actions]");
   var buttons = Array.prototype.slice.call(document.querySelectorAll("[data-explore-scope]"));
   var status = document.querySelector("[data-explore-status]");
   var portal = document.querySelector("[data-explore-portal]");
+  var browsingLabel = document.querySelector("[data-explore-browsing-label]");
   var previewFrame = document.querySelector("[data-explore-preview-frame]");
   var previewStatus = document.querySelector("[data-explore-preview-status]");
   var previewMedium = document.querySelector("[data-explore-preview-medium]");
@@ -20,7 +27,7 @@
   var currentPortal = null;
   var previewTimer = 0;
 
-  if (!room || !buttons.length || !status || !portal || !previewFrame || !previewMedium || !previewTitle || !diveAgainButton || !enterPageButton || !backToBoardButton) return;
+  if (!room || !buttons.length || !status || !portal || !browsingLabel || !previewFrame || !previewMedium || !previewTitle || !diveAgainButton || !enterPageButton || !backToBoardButton) return;
 
   function emptyHistory() {
     return { all: [], works: [], process: [], pages: [] };
@@ -167,6 +174,7 @@
       actionGroup.setAttribute("inert", "");
     }
     portal.dataset.exploreDestinationNode = destinationNode(destination.medium.id);
+    browsingLabel.textContent = SCOPE_LABELS[scope];
     previewMedium.textContent = destination.medium.label;
     previewTitle.textContent = destination.title;
     setControlsBusy(false);

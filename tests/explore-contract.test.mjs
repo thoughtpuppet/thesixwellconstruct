@@ -78,6 +78,7 @@ function exploreClientHarness({ storedPortal = null, responses = [] } = {}) {
   const actionGroup = exploreElement();
   const status = exploreElement({ dataset: { state: "loading" } });
   const portal = exploreElement({ hidden: true });
+  const browsingLabel = exploreElement();
   const preview = exploreElement({ dataset: { explorePreviewState: "idle" } });
   const previewFrame = exploreElement();
   previewFrame.parentElement = preview;
@@ -90,7 +91,8 @@ function exploreClientHarness({ storedPortal = null, responses = [] } = {}) {
   const backToBoard = exploreElement();
   const selectorMap = new Map([
     ["[data-explore-room]", room], ["[data-explore-actions]", actionGroup], ["[data-explore-status]", status],
-    ["[data-explore-portal]", portal], ["[data-explore-preview-frame]", previewFrame],
+    ["[data-explore-portal]", portal], ["[data-explore-browsing-label]", browsingLabel],
+    ["[data-explore-preview-frame]", previewFrame],
     ["[data-explore-preview-status]", previewStatus], ["[data-explore-preview-medium]", previewMedium],
     ["[data-explore-preview-title]", previewTitle], ["[data-explore-dive-again]", diveAgain],
     ["[data-explore-enter-page]", enterPage], ["[data-explore-back-to-board]", backToBoard],
@@ -119,7 +121,7 @@ function exploreClientHarness({ storedPortal = null, responses = [] } = {}) {
   };
   runInNewContext(read("js/explore.js"), { document, window, sessionStorage, URLSearchParams, fetch });
   return {
-    actionGroup, backToBoard, buttons, diveAgain, enterPage, fetchCalls, pageEvents, portal, preview,
+    actionGroup, backToBoard, browsingLabel, buttons, diveAgain, enterPage, fetchCalls, pageEvents, portal, preview,
     previewFrame, previewMedium, previewStatus, previewTitle, room, status, storage, window,
   };
 }
@@ -274,6 +276,7 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(html, /data-explore-scope="all" data-explore-shape="disc" aria-label="Take me anywhere"/);
   assert.match(html, /data-explore-status[^>]*aria-live="polite"/);
   assert.match(html, /<section[^>]+data-explore-portal[^>]+hidden/);
+  assert.match(html, /data-explore-browsing-label>Browsing entire site<\/p>/);
   assert.match(html, /<iframe[\s\S]*?data-explore-preview-frame[\s\S]*?tabindex="-1"[\s\S]*?aria-hidden="true"[\s\S]*?inert[\s\S]*?sandbox="allow-scripts allow-same-origin"/);
   assert.match(html, /data-explore-preview-medium/);
   assert.match(html, /data-explore-preview-title/);
@@ -301,6 +304,7 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
     assert.match(css, new RegExp(`data-explore-active-scope="${scope}"[\\s\\S]*?--explore-active-signal:\\s*var\\(${signal}\\)`));
   }
   assert.match(css, /\.explore-portal\s*\{[\s\S]*?border-left:\s*5px solid var\(--explore-active-signal\)[\s\S]*?background:\s*var\(--color-bg\)/);
+  assert.match(css, /\.explore-portal__browsing\s*\{[\s\S]*?color:\s*var\(--explore-active-copy\)[\s\S]*?text-transform:\s*uppercase/);
   assert.match(css, /\.explore-portal__preview\s*\{[\s\S]*?border:\s*5px solid var\(--explore-destination-signal\)[\s\S]*?background:\s*var\(--color-bg\)/);
   for (const [node, signal] of [
     ["tattoos", "--color-tattooing"], ["art", "--color-art"], ["merch", "--color-merch"],
@@ -441,6 +445,7 @@ test("Explore previews and re-dives without navigating until Enter Page", async 
   assert.equal(harness.previewFrame.getAttribute("src"), first.route);
   assert.equal(harness.previewTitle.textContent, first.title);
   assert.equal(harness.previewMedium.textContent, first.medium.label);
+  assert.equal(harness.browsingLabel.textContent, "Browsing works & objects");
   assert.equal(harness.portal.dataset.exploreDestinationNode, "merch");
   assert.equal(harness.actionGroup.attributes["aria-hidden"], "true");
   assert.equal(harness.actionGroup.attributes.inert, "");
@@ -470,6 +475,21 @@ test("Explore previews and re-dives without navigating until Enter Page", async 
   assert.match(harness.storage.get("sixwell_explore_history_v1"), /second-work/);
 });
 
+test("Explore identifies the selected browsing scope above the portal viewer", async () => {
+  for (const [index, label] of [
+    [0, "Browsing entire site"],
+    [1, "Browsing works & objects"],
+    [2, "Browsing process & evidence"],
+    [3, "Browsing pages & pathways"],
+  ]) {
+    const scope = ["all", "works", "process", "pages"][index];
+    const harness = exploreClientHarness({ responses: [{ destination: destination(scope === "all" ? "works" : scope, "scope-" + scope) }] });
+    harness.buttons[index].dispatch("click");
+    await flushExploreClient();
+    assert.equal(harness.browsingLabel.textContent, label);
+  }
+});
+
 test("Explore restores the current portal after a reload or BFCache return", () => {
   const saved = { scope: "process", destination: destination("process", "saved-process") };
   const harness = exploreClientHarness({ storedPortal: saved });
@@ -478,6 +498,7 @@ test("Explore restores the current portal after a reload or BFCache return", () 
   assert.equal(harness.portal.dataset.exploreDestinationNode, "art");
   assert.equal(harness.room.dataset.exploreState, "preview");
   assert.equal(harness.room.dataset.exploreActiveScope, "process");
+  assert.equal(harness.browsingLabel.textContent, "Browsing process & evidence");
   assert.equal(harness.previewFrame.getAttribute("src"), saved.destination.route);
   assert.equal(typeof harness.pageEvents.pageshow, "function");
 
