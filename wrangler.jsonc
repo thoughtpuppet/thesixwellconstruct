@@ -36,6 +36,9 @@
   "browser": {
     "binding": "BROWSER"
   },
+  "ai": {
+    "binding": "AI"
+  },
   "send_email": [
     {
       "name": "EMAIL"
@@ -71,7 +74,12 @@
     "OUTREACH_PREFERENCES_ENABLED": "false",
     "OUTREACH_INDIVIDUAL_EMAIL_ENABLED": "false",
     "OUTREACH_EMAIL_CAMPAIGNS_ENABLED": "false",
-    "CALENDAR_SCOUT_MODEL": "gpt-5.6-luna"
+    "CALENDAR_SCOUT_MODEL": "gpt-5.6-luna",
+    "VISUAL_COLOR_MODEL": "@cf/meta/llama-3.2-11b-vision-instruct",
+    "VISUAL_COLOR_MODEL_VERSION": "llama-3.2-11b-vision-instruct",
+    "VISUAL_COLOR_PROMPT_VERSION": "visual-colors-v1",
+    "VISUAL_COLOR_WORKS_PER_PASS": "1",
+    "VISUAL_COLOR_MAX_ATTEMPTS": "3"
   },
   "compatibility_flags": [
     "nodejs_compat"

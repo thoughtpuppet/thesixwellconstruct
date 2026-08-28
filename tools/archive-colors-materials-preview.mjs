@@ -338,6 +338,31 @@ async function seed() {
     layer_order: 2,
   });
 
+  await api("/api/admin/archive-color-materials/visual-review/enqueue", {});
+  const visualBlue = sqlite.prepare("SELECT id FROM archive_color_families WHERE slug='blue'").get();
+  const visualGold = sqlite.prepare("SELECT id FROM archive_color_families WHERE slug='gold'").get();
+  const descriptorIds = sqlite.prepare("SELECT id FROM archive_work_descriptor_terms WHERE slug IN ('painting','acrylic-paint','wood-panel') ORDER BY sort_order").all().map((row) => row.id);
+  const marblesRun = sqlite.prepare("SELECT id FROM archive_visual_color_runs WHERE work_type='painting' AND work_id='art-marbles'").get();
+  const lustRun = sqlite.prepare("SELECT id FROM archive_visual_color_runs WHERE work_type='painting' AND work_id='art-lust'").get();
+  sqlite.prepare("UPDATE archive_visual_color_runs SET status='ready',normalized_suggestions_json=?,updated_at=datetime('now') WHERE id=?")
+    .run(JSON.stringify([{ family_id: visualBlue.id, family_slug: "blue", family_name: "Blue", strength: "dominant", display_order: 0 }]), marblesRun.id);
+  sqlite.prepare("UPDATE archive_visual_color_runs SET status='ready',normalized_suggestions_json=?,updated_at=datetime('now') WHERE id=?")
+    .run(JSON.stringify([
+      { family_id: visualGold.id, family_slug: "gold", family_name: "Gold", strength: "dominant", display_order: 0 },
+      { family_id: visualBlue.id, family_slug: "blue", family_name: "Blue", strength: "supporting", display_order: 1 },
+    ]), lustRun.id);
+  await api(`/api/admin/archive-color-materials/visual-review/${marblesRun.id}/approve`, {
+    colors: [{ family_id: visualBlue.id, strength: "dominant", display_order: 0 }],
+    descriptor_term_ids: descriptorIds,
+  });
+  await api(`/api/admin/archive-color-materials/visual-review/${lustRun.id}/approve`, {
+    colors: [
+      { family_id: visualGold.id, strength: "dominant", display_order: 0 },
+      { family_id: visualBlue.id, strength: "supporting", display_order: 1 },
+    ],
+    descriptor_term_ids: descriptorIds,
+  });
+
   return {
     archiveSlug: state.archive_slug,
     stateId: state.state_id,
@@ -406,6 +431,16 @@ function sendResponse(nodeResponse, response) {
 createServer(async (request, response) => {
   const url = new URL(request.url || "/", `http://${host}:${port}`);
   try {
+    if (url.pathname === "/tools/archive-colors-materials-studio-preview/") {
+      const markup = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Colors and Materials Studio preview</title><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/studio/construct-manager.css"><link rel="stylesheet" href="/studio/archive-colors-materials.css"><style>html,body{margin:0;background:#0e0e0e;color:#f5b86d}body{padding:16px}button,input,select,textarea{font:inherit}</style></head><body><div id="status" aria-live="polite"></div><main id="mount"></main><script src="/studio/archive-colors-materials.js"></script><script>
+        const api=async(path,options={})=>{const response=await fetch(path,{...options,headers:{authorization:'Bearer ${token}',...(options.headers||{})}});const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||'Request failed');return payload};
+        const status=(message)=>document.querySelector('#status').textContent=message;
+        window.ArchiveColorMaterialsStudio.mount(document.querySelector('#mount'),api,status);
+      </script></body></html>`;
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      response.end(markup);
+      return;
+    }
     if (url.pathname === "/tools/archive-colors-materials-import-check/") {
       const markup = `<!doctype html><html><head><meta charset="utf-8"><title>Palette import check</title></head>
         <body><h1>Palette import check</h1><textarea id="source" hidden>&lt;svg xmlns="http://www.w3.org/2000/svg" viewBox="10 20 100 50" preserveAspectRatio="xMidYMid meet"&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;style&gt;path{fill:red}&lt;/style&gt;&lt;g transform="translate(5 7) rotate(10)"&gt;&lt;path id="safe-path" d="M10 20 L60 40 Z" onclick="alert(2)" style="fill:url(http://evil.test/a)"/&gt;&lt;/g&gt;&lt;a href="https://evil.test/"&gt;&lt;rect id="linked-shape" x="20" y="25" width="15" height="10"/&gt;&lt;/a&gt;&lt;foreignObject&gt;&lt;div xmlns="http://www.w3.org/1999/xhtml"&gt;unsafe&lt;/div&gt;&lt;/foreignObject&gt;&lt;image href="https://evil.test/pixel.png"/&gt;&lt;/svg&gt;</textarea><pre id="result">Running…</pre>

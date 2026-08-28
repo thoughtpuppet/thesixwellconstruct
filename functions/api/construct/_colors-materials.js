@@ -1,4 +1,10 @@
 import { db, failure, id, json, readJson, text } from "../_shared/construct.js";
+import {
+  handleVisualColorAdmin,
+  handleVisualColorPublic,
+  isAtomicFamilyName,
+  runVisualColorAnalysisPass,
+} from "./_visual-colors.js";
 
 const MATERIAL_KINDS = new Set([
   "raw-pigment","art-paint","tattoo-ink","medium-diluent","additive",
@@ -1216,11 +1222,13 @@ async function adminFamilies(request,database,recordId="") {
   if(request.method==="POST"&&!recordId){
     const values={slug:recordSlug(body),name:text(body.name,240),description:text(body.description,2000),swatch_hex:text(body.swatch_hex,20),publication_state:STATES.has(body.publication_state)?body.publication_state:"draft",public_visible:bool(body.public_visible),sort_order:Math.floor(number(body.sort_order,0))};
     if(!values.slug||!values.name)return failure("Family name and slug are required.");
+    if(!isAtomicFamilyName(values.name))return failure("Color family names must be singular. Use separate families instead of combined labels.",409);
     try{return json({record:await writeRecord(database,"archive_color_families",text(body.id,200)||id("color-family"),values,true)},{status:201})}catch(error){return failure(error.message,409)}
   }
   if(request.method==="PATCH"&&recordId){
     const before=await database.prepare("SELECT * FROM archive_color_families WHERE id=?").bind(recordId).first();if(!before)return failure("Color family not found.",404);
     const values={slug:recordSlug(body,before),name:text(body.name??before.name,240),description:text(body.description??before.description,2000),swatch_hex:text(body.swatch_hex??before.swatch_hex,20),publication_state:STATES.has(body.publication_state)?body.publication_state:before.publication_state,public_visible:bool(body.public_visible??before.public_visible),sort_order:Math.floor(number(body.sort_order,before.sort_order))};
+    if(!isAtomicFamilyName(values.name))return failure("Color family names must be singular. Use separate families instead of combined labels.",409);
     try{return json({record:await writeRecord(database,"archive_color_families",recordId,values)})}catch(error){return failure(error.message,409)}
   }
   return failure("Method not allowed.",405);
@@ -1457,6 +1465,7 @@ async function adminDossierPalette(request,database,stateId="",part="",recordId=
 }
 
 export async function handleArchiveColorMaterialsPublic(request, env, path) {
+  const visual=await handleVisualColorPublic(request,env,path);if(visual)return visual;
   if (path === "/api/archive/colors") return publicColors(request,env);
   const color = path.match(/^\/api\/archive\/colors\/([^/]+)$/);
   if (color) return publicColors(request,env,decodeURIComponent(color[1]));
@@ -1469,6 +1478,7 @@ export async function handleArchiveColorMaterialsPublic(request, env, path) {
 }
 
 export async function handleArchiveColorMaterialsAdmin(request, env, path) {
+  const visual=await handleVisualColorAdmin(request,env,path);if(visual)return visual;
   const database=db(env);
   const product=path.match(/^\/api\/admin\/archive-color-materials\/products(?:\/([^/]+))?$/);
   if(product)return adminProducts(request,database,product[1]?decodeURIComponent(product[1]):"");
@@ -1500,4 +1510,4 @@ export async function handleArchiveColorMaterialsAdmin(request, env, path) {
   return null;
 }
 
-export { ciede2000 };
+export { ciede2000, runVisualColorAnalysisPass };

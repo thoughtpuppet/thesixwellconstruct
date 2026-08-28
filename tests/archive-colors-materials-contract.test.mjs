@@ -7,6 +7,13 @@ import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 
 import { ciede2000 } from "../functions/api/construct/_colors-materials.js";
+import {
+  discoverVisualColorWorkSources,
+  mergeVisualColorSuggestions,
+  normalizeVisualColorResult,
+  runVisualColorAnalysisPass,
+  visualColorFingerprint,
+} from "../functions/api/construct/_visual-colors.js";
 import { handleConstructApi } from "../functions/api/construct/_lib.js";
 
 const ROOT=dirname(dirname(fileURLToPath(import.meta.url)));
@@ -46,6 +53,147 @@ async function addProfile(runtime,sourceType,sourceId,srgbHex="#315A7A"){
 test("CIEDE2000 uses the published reference calculation",()=>{
   const distance=ciede2000([50,2.6772,-79.7751],[50,0,-82.7485]);
   assert.ok(Math.abs(distance-2.0425)<0.0001);
+});
+
+test("visual color migration preserves Black, seeds atomic families, and stays idempotent",()=>{
+  const sql=new DatabaseSync(":memory:");
+  sql.exec("PRAGMA foreign_keys=ON");
+  const migrations=readdirSync(join(ROOT,"migrations")).filter(value=>value.endsWith(".sql")).sort();
+  for(const name of migrations.filter(value=>value<"0181_archive_visual_color_families.sql"))sql.exec(readFileSync(join(ROOT,"migrations",name),"utf8"));
+  sql.prepare(`INSERT INTO archive_color_families(
+    id,slug,name,description,swatch_hex,publication_state,public_visible,sort_order,created_at,updated_at
+  ) VALUES('existing-private-black','black','Black','','#111111','draft',0,99,datetime('now'),datetime('now'))`).run();
+  const migration=readFileSync(join(ROOT,"migrations/0181_archive_visual_color_families.sql"),"utf8");
+  sql.exec(migration);
+  sql.exec(migration);
+  const black=sql.prepare("SELECT * FROM archive_color_families WHERE slug='black'").get();
+  assert.equal(black.id,"existing-private-black");
+  assert.equal(black.swatch_hex,"#000000");
+  assert.equal(black.publication_state,"published");
+  assert.equal(black.public_visible,1);
+  assert.equal(sql.prepare(`SELECT COUNT(*) count FROM archive_color_families WHERE slug IN (
+    'black','gray','white','cream','beige','tan','brown','red','orange','yellow','gold','ochre',
+    'green','teal','turquoise','cyan','blue','indigo','purple','pink','silver')`).get().count,21);
+  assert.throws(()=>sql.prepare(`INSERT INTO archive_color_families(
+    id,slug,name,description,swatch_hex,publication_state,public_visible,sort_order,created_at,updated_at
+  ) VALUES('combined-family','gold-ochre','Gold/Ochre','','#999999','draft',0,0,datetime('now'),datetime('now'))`).run(),/singular and atomic/);
+});
+
+test("visual source discovery excludes Tattoo context images and merges only allowed atomic suggestions",async()=>{
+  const sql=database(),runtime=env(sql);
+  sql.exec(`INSERT INTO portfolio_items(
+    id,source_url,storage_key,original_filename,content_type,title,alt_text,year,placement,
+    primary_style,collection,caption,state,sort_order,created_at,updated_at,primary_consent_status,project_type
+  ) VALUES(
+    'visual-tattoo','https://cdn.example.test/tattoo-primary.jpg','','tattoo-primary.jpg','image/jpeg',
+    'Reviewed tattoo','Reviewed tattoo','2026','arm','abstract','','','published',0,datetime('now'),datetime('now'),'granted','cover_up'
+  );
+  INSERT INTO content_entities(
+    id,entity_type,visibility,search_visibility,featured,created_by,updated_by,created_at,updated_at
+  ) VALUES('visual-tattoo','portfolio_item','public',1,0,'test','test',datetime('now'),datetime('now'));
+  INSERT INTO portfolio_image_details(
+    portfolio_item_id,image_ref,healing_state,timing_note,caption,created_at,updated_at,image_role
+  ) VALUES
+    ('visual-tattoo','primary','fresh','','',datetime('now'),datetime('now'),'result'),
+    ('visual-tattoo','visual-before','unspecified','','',datetime('now'),datetime('now'),'before'),
+    ('visual-tattoo','visual-detail','unspecified','','',datetime('now'),datetime('now'),'detail'),
+    ('visual-tattoo','visual-result','healed','','',datetime('now'),datetime('now'),'result');
+  INSERT INTO media_assets(
+    id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation
+  ) VALUES
+    ('visual-before','https://cdn.example.test/before.jpg','before.jpg','image/jpeg','Before','public','granted','active','test',datetime('now'),datetime('now'),'inline'),
+    ('visual-detail','https://cdn.example.test/detail.jpg','detail.jpg','image/jpeg','Detail','public','granted','active','test',datetime('now'),datetime('now'),'inline'),
+    ('visual-result','https://cdn.example.test/result.jpg','result.jpg','image/jpeg','Result','public','granted','active','test',datetime('now'),datetime('now'),'inline');
+  INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,created_at) VALUES
+    ('visual-tattoo','visual-before','gallery',1,1,datetime('now')),
+    ('visual-tattoo','visual-detail','gallery',2,1,datetime('now')),
+    ('visual-tattoo','visual-result','gallery',3,1,datetime('now'));`);
+  const works=await discoverVisualColorWorkSources(runtime.SUBMISSIONS_DB,runtime);
+  const tattoo=works.get("tattoo:visual-tattoo");
+  assert.ok(tattoo);
+  assert.deepEqual(tattoo.images.map(image=>image.id),["primary","visual-result"]);
+  assert.deepEqual(tattoo.descriptor_suggestions.term_slugs,["tattoo","tattoo-ink"]);
+  const painting=works.get("painting:art-marbles");
+  assert.ok(painting);
+  assert.deepEqual(painting.descriptor_suggestions.term_slugs,["painting","acrylic-paint","wood-panel"]);
+  const firstFingerprint=await visualColorFingerprint(tattoo);
+  sql.prepare("UPDATE portfolio_image_details SET updated_at='2030-01-01T00:00:00Z' WHERE portfolio_item_id='visual-tattoo' AND image_ref='visual-result'").run();
+  const changed=(await discoverVisualColorWorkSources(runtime.SUBMISSIONS_DB,runtime)).get("tattoo:visual-tattoo");
+  assert.notEqual(await visualColorFingerprint(changed),firstFingerprint);
+
+  const families=[
+    {id:"blue-id",slug:"blue",name:"Blue"},
+    {id:"gold-id",slug:"gold",name:"Gold"},
+    {id:"ochre-id",slug:"ochre",name:"Ochre"},
+  ];
+  const first=normalizeVisualColorResult({response:{colors:[
+    {family:"blue",strength:"supporting"},{family:"gold",strength:"accent"},
+    {family:"gold/ochre",strength:"dominant"},{family:"invented",strength:"dominant"},
+  ]}},families);
+  const second=normalizeVisualColorResult({colors:[{family:"blue",strength:"dominant"},{family:"ochre",strength:"accent"}]},families);
+  const merged=mergeVisualColorSuggestions([first,second]);
+  assert.deepEqual(merged.map(item=>[item.family_slug,item.strength]),[["blue","dominant"],["gold","accent"],["ochre","accent"]]);
+
+  const calls=[];
+  const pass=await runVisualColorAnalysisPass({
+    ...runtime,
+    PUBLIC_SITE_URL:"https://example.test",
+    VISUAL_COLOR_WORKS_PER_PASS:"1",
+    AI:{run:async(model,input)=>{calls.push({model,input});return{response:{colors:[{family:"blue",strength:"accent"}]}}}},
+  });
+  assert.equal(pass.processed.length,1);
+  assert.equal(pass.processed[0].status,"ready");
+  assert.equal(calls.length,1);
+  assert.match(calls[0].input.messages[0].content,/Exclude tiny noise, skin, photographic backgrounds/);
+  assert.equal(calls[0].input.response_format.type,"json_schema");
+  const failingEnv={...runtime,VISUAL_COLOR_WORKS_PER_PASS:"1",VISUAL_COLOR_MAX_ATTEMPTS:"3",AI:{run:async()=>{throw new Error("vision unavailable")}}};
+  await runVisualColorAnalysisPass(failingEnv);
+  await runVisualColorAnalysisPass(failingEnv);
+  await runVisualColorAnalysisPass(failingEnv);
+  assert.equal(sql.prepare("SELECT status FROM archive_visual_color_runs WHERE work_id='art-lust'").get().status,"failed");
+});
+
+test("review approval atomically publishes visual families and descriptors without exposing model data",async()=>{
+  const sql=database(),runtime=env(sql);
+  const enqueued=await admin(runtime,"/api/admin/archive-color-materials/visual-review/enqueue",{});
+  assert.equal(enqueued.status,200,enqueued.body.error);
+  const run=sql.prepare("SELECT * FROM archive_visual_color_runs WHERE work_type='painting' AND work_id='art-marbles'").get();
+  assert.ok(run);
+  const blue=sql.prepare("SELECT * FROM archive_color_families WHERE slug='blue'").get();
+  const terms=sql.prepare("SELECT id,slug FROM archive_work_descriptor_terms WHERE slug IN ('painting','acrylic-paint','wood-panel') ORDER BY sort_order").all();
+  sql.prepare(`UPDATE archive_visual_color_runs SET status='ready',raw_result_json='{"private":"model evidence"}',
+    normalized_suggestions_json=?,updated_at=datetime('now') WHERE id=?`).run(JSON.stringify([{family_id:blue.id,family_slug:"blue",family_name:"Blue",strength:"dominant",display_order:0}]),run.id);
+  const approved=await admin(runtime,`/api/admin/archive-color-materials/visual-review/${run.id}/approve`,{
+    colors:[{family_id:blue.id,strength:"dominant",display_order:0}],
+    descriptor_term_ids:terms.map(term=>term.id),
+  });
+  assert.equal(approved.status,200,approved.body.error);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_visual_color_assignments WHERE work_id='art-marbles'").get().count,1);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_work_descriptor_assignments WHERE work_id='art-marbles'").get().count,3);
+
+  const publicFamilies=await payload(await handleConstructApi(request("/api/archive/visual-color-families"),runtime));
+  assert.equal(publicFamilies.status,200,publicFamilies.body.error);
+  assert.equal(publicFamilies.body.families.find(family=>family.slug==="blue").painting_count,1);
+  const publicWorks=await payload(await handleConstructApi(request("/api/archive/visual-color-families/blue/works?type=painting"),runtime));
+  assert.equal(publicWorks.status,200,publicWorks.body.error);
+  assert.equal(publicWorks.body.works[0].id,"art-marbles");
+  assert.equal(publicWorks.body.works[0].strength,"dominant");
+  const publicDescriptors=await payload(await handleConstructApi(request("/api/archive/work-descriptors"),runtime));
+  assert.ok(publicDescriptors.body.descriptors.some(term=>term.slug==="acrylic-paint"&&term.count===1));
+  const serialized=JSON.stringify({publicFamilies:publicFamilies.body,publicWorks:publicWorks.body,publicDescriptors:publicDescriptors.body});
+  for(const privateField of ["model evidence","raw_result_json","source_fingerprint","prompt_version","confidence"])assert.equal(serialized.includes(privateField),false);
+
+  sql.prepare("UPDATE media_assets SET updated_at='2030-01-01T00:00:00Z' WHERE id='media-art-marbles'").run();
+  const stale=await admin(runtime,`/api/admin/archive-color-materials/visual-review/${run.id}/approve`,{
+    colors:[{family_id:blue.id,strength:"supporting",display_order:0}],descriptor_term_ids:[],
+  });
+  assert.equal(stale.status,409);
+  assert.match(stale.body.error,/changed/i);
+  const stillPublic=await payload(await handleConstructApi(request("/api/archive/visual-color-families/blue/works?type=all"),runtime));
+  assert.equal(stillPublic.body.works[0].strength,"dominant");
+
+  const invalidFamily=await admin(runtime,"/api/admin/archive-color-materials/families",{name:"Gold/Ochre",swatch_hex:"#999999"});
+  assert.equal(invalidFamily.status,409);
 });
 
 test("slug-capable color and material records generate stable slugs when blank or omitted",async()=>{
@@ -596,10 +744,21 @@ test("Studio SVG import owns transforms and public map interactions use privacy-
   assert.match(studioSource,/data-edit-declaration/);
   assert.match(studioSource,/data-remove-declaration/);
   assert.match(studioSource,/data-archive-material/);
+  assert.match(studioSource,/Visual color review/);
+  assert.match(studioSource,/data-review-run/);
+  assert.match(studioSource,/Approve complete set/);
+  assert.match(studioSource,/Gold and Ochre are separate families/);
   assert.match(studioSource,/querySelectorAll\("path,polygon,polyline,rect,circle,ellipse"\)/);
   assert.doesNotMatch(studioSource,/innerHTML\s*=\s*await file\.text/);
   assert.doesNotMatch(publicReferenceSource,/material\.formulations/);
   assert.doesNotMatch(publicReferenceSource,/Commercial formulation/);
+  assert.match(publicReferenceSource,/Visual color families/);
+  assert.match(publicReferenceSource,/Mediums &amp; supports/);
+  assert.match(publicReferenceSource,/visual_color/);
+  assert.match(publicReferenceSource,/work_type/);
+  assert.match(publicReferenceSource,/showModal\(\)/);
+  assert.match(publicReferenceSource,/popstate/);
+  assert.match(publicReferenceSource,/data-dialog-filter/);
   assert.match(publicSource,/data-palette-usage=.*aria-pressed="false"/);
   assert.match(publicSource,/node\.setAttribute\("aria-pressed",String\(selected\)\)/);
   for(const action of ["palette-map-open","palette-region","palette-isolate","palette-svg-download","palette-png-download"]){
@@ -609,5 +768,8 @@ test("Studio SVG import owns transforms and public map interactions use privacy-
   const paletteCss=archiveCss.slice(archiveCss.indexOf(".archive-palette-document"));
   assert.doesNotMatch(paletteCss,/var\(--(?:ring-faint|muted|sans|color-text)\b/);
   assert.match(referenceCss,/border:5px solid var\(--archive-faint\)/);
+  assert.match(referenceCss,/\.archive-color-family \{/);
+  assert.match(referenceCss,/\.archive-color-dialog \{/);
+  assert.match(referenceCss,/gap:16px/);
   assert.match(paletteCss,/stroke:var\(--archive-focus\)/);
 });
