@@ -18,19 +18,22 @@ function media(db,{id,entityId,privacy="public",consent="granted",presentation="
 
 test("migration seeds seven ordered projects and puts Current Works first in About",()=>{const db=database(),rows=db.prepare("SELECT title,collage_slot FROM about_current_projects ORDER BY sort_order").all(),paths=db.prepare("SELECT name,route FROM construct_pathways WHERE node_id='node-about' AND state='published' ORDER BY sort_order").all(),saiel=paths.find(path=>path.route==="/about/saieldauhnsolehman/");assert.equal(rows.length,7);assert.equal(rows[0].title,"Philosophy, Politics & Economics");assert.equal(rows.every(row=>row.collage_slot===0),true);assert.equal(paths[0].name,"Current Works + Projects");assert.equal(paths[0].route,"/currently");assert.equal(saiel?.name,"Saiel Dauhn Solehman");assert.equal(new Set(paths.map(path=>path.route)).size,paths.length)});
 
-test("Tattoo Practice presents the three participatory tattoo systems and their purposes",()=>{
-  const db=database();
-  const record=db.prepare("SELECT title,context_line,summary,links_json FROM about_current_projects WHERE id='current-project-artpill'").get();
-  assert.equal(record.title,"Participatory Tattoo Systems");
-  assert.equal(record.context_line,"Active · Maze Builder, Build Your Own + Special Projects");
-  for(const phrase of ["participant-led play","Maze Builder —","Build Your Own —","Special Projects —","conventional commission process"]){
-    assert.match(record.summary,new RegExp(phrase));
+test("Tattoo Practice fallback presents the three participatory tattoo systems and their purposes",()=>{
+  const script=source("currently","current-works.js");
+  for(const phrase of [
+    "Participatory Tattoo Systems",
+    "Active · Maze Builder, Build Your Own + Special Projects",
+    "participant-led play",
+    "Maze Builder —",
+    "Build Your Own —",
+    "Special Projects —",
+    "conventional commission process",
+    "url:\"/tattoos/build/maze/\"",
+    "url:\"/tattoos/build/\"",
+    "url:\"/tattoos/special-projects/\"",
+  ]){
+    assert.ok(script.includes(phrase),`missing Tattoo Practice fallback phrase: ${phrase}`);
   }
-  assert.deepEqual(JSON.parse(record.links_json),[
-    {label:"Maze Builder",url:"/tattoos/build/maze/"},
-    {label:"Build Your Own",url:"/tattoos/build/"},
-    {label:"Special Projects",url:"/tattoos/special-projects/"},
-  ]);
 });
 
 test("public API filters drafts and derives only consent-safe collage media",async()=>{const db=database(),runtime=env(db);let result=await payload(await handleConstructApi(request("/api/current-projects"),runtime));assert.equal(result.status,200);assert.equal(result.body.projects.length,7);assert.deepEqual(result.body.collage,[]);db.prepare("UPDATE about_current_projects SET state='draft' WHERE id='current-project-events'").run();db.prepare("UPDATE content_entities SET visibility='internal' WHERE id='current-project-events'").run();db.prepare("UPDATE about_current_projects SET links_json=? WHERE id='current-project-thoughtpuppet'").run('[{"label":"Unsafe","url":"http://example.test"}]');media(db,{id:"media-academic",entityId:"current-project-academic-study"});result=await payload(await handleConstructApi(request("/api/admin/current-projects/current-project-academic-study",{method:"PATCH",admin:true,body:{collage_slot:2,focal_x:18,focal_y:72}}),runtime));assert.equal(result.status,200);result=await payload(await handleConstructApi(request("/api/current-projects"),runtime));assert.equal(result.body.projects.length,6);assert.equal(result.body.projects.find(project=>project.id==="current-project-thoughtpuppet").links.length,0);assert.equal(result.body.collage.length,1);assert.deepEqual(result.body.collage[0].focal,{x:18,y:72});assert.equal(result.body.collage[0].alt,"A current work artifact")});
