@@ -258,8 +258,9 @@
     global.clearTimeout(searchTimers.get(input));
     searchTimers.set(input, global.setTimeout(function () {
       if (!input.value.trim()) return;
-      var count = Number(input.dataset.analyticsResults || 0);
-      var bucket = count <= 0 ? "unknown" : count < 5 ? "1-4" : count < 20 ? "5-19" : "20-plus";
+      var rawCount = input.dataset.analyticsResults || "";
+      var count = Number(rawCount || 0);
+      var bucket = rawCount === "" ? "unknown" : count <= 0 ? "0" : count < 5 ? "1-4" : count < 20 ? "5-19" : "20-plus";
       track("search", { action: elementId(input, "search"), resultBucket: bucket });
     }, 700));
   }, true);

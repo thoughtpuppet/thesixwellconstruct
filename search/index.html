@@ -3,31 +3,78 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Construct Search</title>
+  <meta name="description" content="Search public works, records, symbols, materials, events, and pathways across the Six.Well Construct.">
+  <meta name="theme-color" content="#0E0E0E">
+  <link rel="canonical" href="https://thesixwellconstruct.com/search/">
+  <title>Search · the six.well construct</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
   <link rel="stylesheet" href="/css/tokens.css">
-  <link rel="stylesheet" href="/css/managed-preview.css">
+  <link rel="stylesheet" href="/css/transitions.css">
   <link rel="stylesheet" href="/css/site-typography.css">
   <link rel="stylesheet" href="/css/hero.css">
+  <link rel="stylesheet" href="/css/search.css">
 </head>
-<body>
-  <header class="site-hero site-hero--supporting">
-    <div>
-      <span class="eyebrow">The Six.Well Construct</span>
-      <h1 class="hero-title">Search</h1>
-    </div>
-    <nav class="preview-nav"><a href="/home/">Home</a><a href="/archive/">Archive</a></nav>
-  </header>
-  <main>
-    <form class="search-form" data-search-form role="search">
-      <input name="q" aria-label="Search the Construct" placeholder="Search works, symbols, flash, and archive">
-      <button class="action">Search</button>
-    </form>
-    <section class="catalog" data-managed-catalog="search" aria-live="polite"></section>
+<body class="construct-search-page">
+  <a class="search-skip-link" href="#search-main">Skip to search</a>
+  <main class="search-shell entrance-fade" id="search-main" tabindex="-1">
+    <nav class="construct-breadcrumb" aria-label="Breadcrumb">
+      <a href="/home/">Construct</a>
+      <span class="construct-breadcrumb-sep" aria-hidden="true">/</span>
+      <span class="construct-breadcrumb-current" aria-current="page">Search</span>
+    </nav>
+
+    <header class="search-hero site-hero site-hero--supporting">
+      <div>
+        <span class="search-kicker">The Six.Well Construct</span>
+        <h1 class="hero-title">Search</h1>
+      </div>
+      <p class="hero-descriptor">Find works, records, symbols, materials, people, events, and the relationships connecting them.</p>
+    </header>
+
+    <section class="search-workspace" aria-labelledby="search-form-label">
+      <h2 class="search-section-title" id="search-form-label">Search the public Construct</h2>
+      <form class="search-form" role="search" data-search-form>
+        <label class="search-label" for="construct-search-query">Search the Construct</label>
+        <div class="search-form-row">
+          <input id="construct-search-query" name="q" type="search" autocomplete="off" spellcheck="false" placeholder="Try a work, symbol, material, person, event, or year" data-search-query>
+          <button type="submit" data-search-submit>Search</button>
+        </div>
+      </form>
+
+      <div class="search-tools" data-search-tools hidden>
+        <div class="search-scopes" aria-label="Filter search results">
+          <button type="button" data-search-scope="all" aria-pressed="true">All</button>
+          <button type="button" data-search-scope="art" aria-pressed="false">Art</button>
+          <button type="button" data-search-scope="archive" aria-pressed="false">Archive</button>
+          <button type="button" data-search-scope="tattoo" aria-pressed="false">Tattoo</button>
+          <button type="button" data-search-scope="merch" aria-pressed="false">Merch</button>
+          <button type="button" data-search-scope="events" aria-pressed="false">Events</button>
+          <button type="button" data-search-scope="symbols" aria-pressed="false">Symbols</button>
+          <button type="button" data-search-scope="pages" aria-pressed="false">Pages</button>
+        </div>
+        <p class="search-count" data-search-count aria-live="polite"></p>
+      </div>
+
+      <section class="search-status" data-search-status aria-live="polite">
+        <span class="search-status-kicker">A way into the ecosystem</span>
+        <h2>Begin with what you remember.</h2>
+        <p>Search by title, medium, material, symbol, person, event, date, or a relationship between records.</p>
+      </section>
+      <section class="search-results" data-search-results aria-label="Search results" aria-live="polite" aria-busy="false"></section>
+    </section>
   </main>
-  <dialog id="managed-detail" aria-labelledby="managed-dialog-title">
-    <div class="dialog-head"><span class="eyebrow">Search result</span><button class="close" data-close aria-label="Close detail">Close</button></div>
-    <div data-dialog-content></div>
-  </dialog>
-  <script src="/js/managed-preview.js"></script>
+
+  <footer class="search-footer construct-wayfinding-footer">
+    <p>© the six.well construct</p>
+    <nav aria-label="Footer"><a href="/archive/">Archive</a><a href="/about/">About</a><a href="/adventure/">Adventure</a><a href="/home/">Return to construct</a></nav>
+  </footer>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+  <script src="/js/search.js"></script>
+  <script src="/js/site-analytics.js?v=2"></script>
 </body>
 </html>

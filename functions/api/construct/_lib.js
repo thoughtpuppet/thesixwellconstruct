@@ -1969,6 +1969,138 @@ async function publicArchiveTimeline(request,env,timelineSlug){
   return json({timeline,chapters,activities,entries:deduped},{cache:"public, max-age=60"});
 }
 
+const SEARCH_ROUTE_BLOCKED_PREFIXES = ["/api", "/admin", "/b", "/studio", "/submissions", "/tools"];
+const SEARCH_ROUTE_BLOCKED_PATHS = [
+  "/booking/confirmed", "/events/confirmed", "/tattoos/approved", "/tattoos/submission-received",
+];
+
+function safePublicSearchRoute(value) {
+  const route = String(value || "").trim();
+  if (!route.startsWith("/") || route.startsWith("//") || route.length > 1200) return "";
+  let parsed;
+  try { parsed = new URL(route, "https://the-six-well-construct.invalid"); } catch { return ""; }
+  if (parsed.origin !== "https://the-six-well-construct.invalid") return "";
+  const pathname = parsed.pathname.toLowerCase();
+  if (SEARCH_ROUTE_BLOCKED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return "";
+  if (SEARCH_ROUTE_BLOCKED_PATHS.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return "";
+  if (pathname.includes("managed-preview")) return "";
+  for (const key of parsed.searchParams.keys()) {
+    if (/^(?:token|preview|preview_token|access_token|cart|cart_id|checkout|session|secret)$/i.test(key)) return "";
+  }
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
+function searchMediumKey(record) {
+  const type = String(record?.entity_type || "").toLowerCase();
+  const node = String(record?.node_id || "").toLowerCase();
+  if (["construct_node", "construct_pathway"].includes(type)) return "pages";
+  if (["art_work"].includes(type) || node === "art" || node === "node-art") return "art";
+  if (["portfolio_item", "flash_item", "flash_series", "tattoo_design"].includes(type) || ["tattooing", "tattoos", "node-tattoos"].includes(node)) return "tattoo";
+  if (type === "merch_item" || node === "merch" || node === "node-merch") return "merch";
+  if (["event", "appearance"].includes(type) || node === "events" || node === "node-events") return "events";
+  if (type === "visual_symbol") return "symbols";
+  if (["archive_record", "archive_note"].includes(type) || node === "archive" || node === "node-archive") return "archive";
+  return "archive";
+}
+
+function searchMatchKind(fragmentType) {
+  const type = String(fragmentType || "").toLowerCase();
+  if (type === "theme") return "Theme";
+  if (type === "material") return "Material";
+  if (type === "relationship" || type === "activity-subject") return "Relationship";
+  if (type === "activity") return "History";
+  if (type === "page") return "Page";
+  if (type === "entity" || type === "dossier") return "Record";
+  return type ? type.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Record";
+}
+
+function primarySearchMatch(record, query) {
+  const q = String(query || "").trim().toLowerCase();
+  const title = String(record?.title || "").trim();
+  const normalizedTitle = title.toLowerCase();
+  if (q && normalizedTitle === q) return { kind: "Title", label: "Exact title", snippet: title };
+  if (q && normalizedTitle.startsWith(q)) return { kind: "Title", label: "Title begins with search", snippet: title };
+  if (q && normalizedTitle.includes(q)) return { kind: "Title", label: "Title contains search", snippet: title };
+  const directText = `${record?.summary || ""} ${record?.body || ""}`.trim();
+  if (q && directText.toLowerCase().includes(q)) return { kind: "Record", label: "Record text", snippet: directText.slice(0, 320) };
+  const matches = Array.isArray(record?.matches) ? record.matches : [];
+  const match = matches.find((entry) => {
+    if (!q) return true;
+    return `${entry?.label || ""} ${entry?.body || ""} ${entry?.snippet || ""}`.toLowerCase().includes(q);
+  }) || matches[0];
+  if (!match) return { kind: "Record", label: title || "Published record", snippet: "" };
+  return {
+    kind: searchMatchKind(match.fragment_type),
+    label: String(match.label || title || "Published record"),
+    snippet: String(match.snippet || match.body || "").slice(0, 320),
+  };
+}
+
+function searchRelevance(record, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return 6;
+  const title = String(record?.title || "").trim().toLowerCase();
+  if (title === q) return 0;
+  if (title.startsWith(q)) return 1;
+  if (title.includes(q)) return 2;
+  if (`${record?.summary || ""} ${record?.body || ""}`.toLowerCase().includes(q)) return 3;
+  return 4;
+}
+
+async function publicSearchPages(database, query) {
+  const pattern = `%${String(query || "").trim().toLowerCase()}%`;
+  const [nodesResult, pathwaysResult] = await database.batch([
+    database.prepare(`SELECT cn.id entity_id,'construct_node' entity_type,cn.id node_id,cn.name title,cn.route,cn.updated_at
+      FROM construct_nodes cn JOIN content_entities ce ON ce.id=cn.id
+      WHERE cn.state='published' AND cn.homepage_enabled=1 AND ce.visibility='public' AND lower(cn.name) LIKE ?
+      ORDER BY cn.sort_order,cn.name`).bind(pattern),
+    database.prepare(`SELECT cp.id entity_id,'construct_pathway' entity_type,cp.node_id,cp.name title,cp.route,cp.updated_at,cn.name node_name
+      FROM construct_pathways cp JOIN construct_nodes cn ON cn.id=cp.node_id AND cn.state='published'
+      JOIN content_entities ce ON ce.id=cp.id
+      WHERE cp.state='published' AND cp.homepage_enabled=1 AND ce.visibility='public' AND lower(cp.name||' '||cn.name) LIKE ?
+      ORDER BY cn.sort_order,cp.sort_order,cp.name`).bind(pattern),
+  ]);
+  return [
+    ...(nodesResult.results || []).map((row) => ({
+      ...row, summary: "Construct node", body: "", state: "published",
+      matches: [{ fragment_type: "page", source_id: row.entity_id, label: row.title, body: "Construct node", snippet: "Construct node", anchor: "", dossier_anchor: row.route }],
+      match_count: 1,
+    })),
+    ...(pathwaysResult.results || []).map((row) => ({
+      ...row, summary: `Pathway in ${row.node_name}`, body: "", state: "published",
+      matches: [{ fragment_type: "page", source_id: row.entity_id, label: row.title, body: `Pathway in ${row.node_name}`, snippet: `Pathway in ${row.node_name}`, anchor: "", dossier_anchor: row.route }],
+      match_count: 1,
+    })),
+  ];
+}
+
+function sitewideSearchRecords(records, query) {
+  const sorted = records.map((record) => {
+    const route = safePublicSearchRoute(record.route);
+    if (!route) return null;
+    const relevance = searchRelevance(record, query);
+    if (String(query || "").trim() && relevance === 4 && !(record.matches || []).length) return null;
+    return {
+      ...record,
+      route,
+      medium_key: searchMediumKey(record),
+      primary_match: primarySearchMatch(record, query),
+      __search_relevance: relevance,
+    };
+  }).filter(Boolean).sort((left, right) => {
+    if (left.__search_relevance !== right.__search_relevance) return left.__search_relevance - right.__search_relevance;
+    return String(right.updated_at || "").localeCompare(String(left.updated_at || "")) || String(left.title || "").localeCompare(String(right.title || ""));
+  });
+  const seen = new Set();
+  return sorted.filter((record) => {
+    const key = String(record.entity_id || "");
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    delete record.__search_relevance;
+    return true;
+  });
+}
+
 async function publicSearch(request, env) {
   if(request.method!=="GET")return failure("Method not allowed.",405);
   const database=db(env),url=new URL(request.url),q=text(url.searchParams.get("q"),200),type=text(url.searchParams.get("type"),80),node=text(url.searchParams.get("node"),80);
@@ -1998,7 +2130,10 @@ async function publicSearch(request, env) {
   const legacyRows=(await database.prepare(legacySql).bind(...legacyArgs).all()).results||[];
   const legacyRecords=legacyRows.map(row=>({...row,matches:[{fragment_type:"entity",source_id:row.entity_id,label:row.title,body:row.summary||row.body||"",snippet:String(row.summary||row.body||"").slice(0,320),anchor:"",dossier_anchor:row.route}],match_count:1}));
   const records=[...archiveRecords,...legacyRecords];
-  return json({records,groups:records,items:records,count:records.length,query:q},{cache:"public, max-age=30"});
+  const includePages=String(url.searchParams.get("include")||"").split(",").map(value=>value.trim().toLowerCase()).includes("pages");
+  if(!includePages)return json({records,groups:records,items:records,count:records.length,query:q},{cache:"public, max-age=30"});
+  const pageRecords=await publicSearchPages(database,q),sitewideRecords=sitewideSearchRecords([...records,...pageRecords],q);
+  return json({records:sitewideRecords,groups:sitewideRecords,items:sitewideRecords,count:sitewideRecords.length,query:q,includes:["pages"]},{cache:"public, max-age=30"});
 }
 
 const EXPLORE_SCOPES = new Set(["all", "works", "process", "pages"]);

@@ -148,6 +148,29 @@
     return svg;
   }
 
+  function createSearchIcon() {
+    var svgNs = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('viewBox', '0 0 64 64');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.style.cssText = 'display:block;width:100%;height:100%;overflow:visible';
+
+    var lens = document.createElementNS(svgNs, 'circle');
+    lens.setAttribute('cx', '27');
+    lens.setAttribute('cy', '27');
+    lens.setAttribute('r', '17');
+    lens.style.cssText = 'fill:none;stroke:currentColor;stroke-width:5';
+
+    var handle = document.createElementNS(svgNs, 'path');
+    handle.setAttribute('d', 'M39 39 L54 54');
+    handle.style.cssText = 'fill:none;stroke:currentColor;stroke-width:5;stroke-linecap:square';
+
+    svg.appendChild(lens);
+    svg.appendChild(handle);
+    return svg;
+  }
+
   function tokenColorsAvailable() {
     return !!getComputedStyle(document.documentElement).getPropertyValue('--color-art').trim();
   }
@@ -439,6 +462,7 @@
   });
 
   var isExplorePage = window.location.pathname === '/adventure' || window.location.pathname.startsWith('/adventure/');
+  var isSearchPage = window.location.pathname === '/search' || window.location.pathname.startsWith('/search/');
   var exploreAction = document.createElement('button');
   exploreAction.type = 'button';
   exploreAction.className = 'cnav-explore';
@@ -464,8 +488,33 @@
   });
   nav.appendChild(exploreAction);
 
+  var searchAction = document.createElement('button');
+  searchAction.type = 'button';
+  searchAction.className = 'cnav-search';
+  searchAction.appendChild(createSearchIcon());
+  searchAction.setAttribute('aria-label', 'Search the Construct');
+  if (isSearchPage) searchAction.setAttribute('aria-current', 'page');
+  searchAction.style.cssText = [
+    'width:32px',
+    'height:32px',
+    'min-width:32px',
+    'min-height:32px',
+    'padding:3px',
+    'border:0',
+    'border-radius:0',
+    'background:transparent',
+    'cursor:' + (isSearchPage ? 'default' : 'pointer'),
+    'pointer-events:auto',
+  ].join(';');
+  searchAction.addEventListener('click', function() {
+    if (isSearchPage) return;
+    if (typeof window._constructFade === 'function') window._constructFade('/search/');
+    else window.location.href = '/search/';
+  });
+  nav.appendChild(searchAction);
+
   var exploreFocusStyle = document.createElement('style');
-  exploreFocusStyle.textContent = '.cnav-retry:focus-visible,.cnav-explore:focus-visible,#cnav-mobile-retry:focus-visible,#cnav-mobile-explore:focus-visible{outline:3px solid #FCB867;outline-offset:3px;}';
+  exploreFocusStyle.textContent = '.cnav-retry:focus-visible,.cnav-explore:focus-visible,.cnav-search:focus-visible,#cnav-mobile-retry:focus-visible,#cnav-mobile-explore:focus-visible,#cnav-mobile-search:focus-visible{outline:3px solid #FCB867;outline-offset:3px;}';
   document.head.appendChild(exploreFocusStyle);
 
   document.body.appendChild(nav);
@@ -691,6 +740,34 @@
   ].join(';');
   mExplore.querySelector('svg').style.cssText = 'display:block;width:36px;height:36px;overflow:visible';
 
+  var mSearch = document.createElement('button');
+  mSearch.id = 'cnav-mobile-search';
+  mSearch.type = 'button';
+  mSearch.appendChild(createSearchIcon());
+  mSearch.setAttribute('aria-label', 'Search the Construct');
+  if (isSearchPage) mSearch.setAttribute('aria-current', 'page');
+  mSearch.style.cssText = [
+    'position:absolute',
+    'top:72px',
+    'left:calc(50% + 78px)',
+    'display:inline-flex',
+    'align-items:center',
+    'justify-content:center',
+    'width:44px',
+    'height:44px',
+    'padding:7px',
+    'border:5px solid ' + PARTICLE_COLOR,
+    'border-radius:0',
+    'background:' + SITE_BG,
+    'color:' + PARTICLE_COLOR,
+    'cursor:' + (isSearchPage ? 'default' : 'pointer'),
+    'opacity:0',
+    'transition:opacity 350ms ease',
+    'pointer-events:none',
+    'z-index:2',
+  ].join(';');
+  mSearch.querySelector('svg').style.cssText = 'display:block;width:100%;height:100%';
+
   mScrim.appendChild(mCanvas);
   mScrim.appendChild(mLabels);
   mScrim.appendChild(mCenterLabel);
@@ -698,6 +775,7 @@
   mScrim.appendChild(mBack);
   mScrim.appendChild(mRetry);
   mScrim.appendChild(mExplore);
+  mScrim.appendChild(mSearch);
 
   /* mRing remains as a compatibility handle for responsive hide/show code. */
   var mRing = mScrim;
@@ -771,6 +849,8 @@
     exploreAction.style.borderLeftColor = PARTICLE_COLOR;
     exploreAction.style.background = isExplorePage ? PARTICLE_COLOR : 'transparent';
     exploreAction.style.color = isExplorePage ? SITE_BG : PARTICLE_COLOR;
+    searchAction.style.background = isSearchPage ? PARTICLE_COLOR : 'transparent';
+    searchAction.style.color = isSearchPage ? SITE_BG : PARTICLE_COLOR;
     retryLabel.style.color = PARTICLE_COLOR;
     retryAction.style.color = PARTICLE_COLOR;
     mRetry.style.borderColor = PARTICLE_COLOR;
@@ -779,6 +859,9 @@
     mExplore.style.borderColor = PARTICLE_COLOR;
     mExplore.style.background = isExplorePage ? PARTICLE_COLOR : SITE_BG;
     mExplore.style.color = isExplorePage ? SITE_BG : PARTICLE_COLOR;
+    mSearch.style.borderColor = PARTICLE_COLOR;
+    mSearch.style.background = isSearchPage ? PARTICLE_COLOR : SITE_BG;
+    mSearch.style.color = isSearchPage ? SITE_BG : PARTICLE_COLOR;
     mobileNodes.forEach(function(nd) {
       nd.el.style.color = nd.venture.color;
     });
@@ -1286,6 +1369,8 @@
       mRetry.style.pointerEvents = 'auto';
       mExplore.style.opacity = '0.82';
       mExplore.style.pointerEvents = 'auto';
+      mSearch.style.opacity = '0.82';
+      mSearch.style.pointerEvents = 'auto';
       mChip.style.zIndex = '1099';
     });
     chipCaret.style.transform = 'rotate(180deg)';
@@ -1307,6 +1392,8 @@
     mRetry.style.pointerEvents = 'none';
     mExplore.style.opacity = '0';
     mExplore.style.pointerEvents = 'none';
+    mSearch.style.opacity = '0';
+    mSearch.style.pointerEvents = 'none';
     mobileNodes.forEach(function(nd) { nd.el.style.opacity = '0'; });
     mCenterLabel.style.opacity = '0';
     chipCaret.style.transform = 'rotate(0deg)';
@@ -1397,6 +1484,13 @@
     if (isExplorePage) return;
     if (typeof window._constructFade === 'function') window._constructFade('/adventure/');
     else window.location.href = '/adventure/';
+  });
+
+  mSearch.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (isSearchPage) return;
+    if (typeof window._constructFade === 'function') window._constructFade('/search/');
+    else window.location.href = '/search/';
   });
 
   mChip.addEventListener('click', function(e) {
@@ -1543,8 +1637,9 @@
       var dotCount = desktopDots.length;
       var retryWidth = Math.max(22, retryAction.getBoundingClientRect().width);
       var exploreWidth = Math.max(76, exploreAction.getBoundingClientRect().width);
+      var searchWidth = Math.max(32, searchAction.getBoundingClientRect().width);
       var minRowWidth = dotCount > 0
-        ? retryWidth + (dotCount * CONFIG.dotSize) + exploreWidth + ((dotCount + 1) * CONFIG.dotGapMin)
+        ? retryWidth + (dotCount * CONFIG.dotSize) + exploreWidth + searchWidth + ((dotCount + 2) * CONFIG.dotGapMin)
         : 0;
       var availableWidth = Math.max(0, bounds.right - bounds.left);
 
@@ -1560,11 +1655,11 @@
       mRing.style.display  = 'none';
 
       var fittedGap = dotCount > 1
-        ? (availableWidth - retryWidth - (dotCount * CONFIG.dotSize) - exploreWidth) / (dotCount + 1)
+        ? (availableWidth - retryWidth - (dotCount * CONFIG.dotSize) - exploreWidth - searchWidth) / (dotCount + 2)
         : CONFIG.dotGap;
       fittedGap = Math.max(CONFIG.dotGapMin, Math.min(CONFIG.dotGap, fittedGap));
 
-      var rowWidth = retryWidth + (dotCount * CONFIG.dotSize) + exploreWidth + ((dotCount + 1) * fittedGap);
+      var rowWidth = retryWidth + (dotCount * CONFIG.dotSize) + exploreWidth + searchWidth + ((dotCount + 2) * fittedGap);
       var minCenter = bounds.left + rowWidth / 2;
       var maxCenter = bounds.right - rowWidth / 2;
       var centerX = Math.max(minCenter, Math.min(maxCenter, w / 2));
@@ -1646,6 +1741,7 @@
       if (item) nav.appendChild(item);
     });
     nav.appendChild(exploreAction);
+    nav.appendChild(searchAction);
     currentVenture = null;
     VENTURES.forEach(function(venture) { if (venture.key === currentKey) currentVenture = venture; });
     if (currentVenture) chipText.textContent = currentVenture.label;
