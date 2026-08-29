@@ -205,7 +205,7 @@ test("client correspondence source sets stay private by default and publish as o
     method: "PATCH",
     admin: true,
     body: {
-      visibility: "public",
+      visibility: "internal",
       publication_state: "published",
     },
   }), runtime);
@@ -274,9 +274,12 @@ test("client correspondence source sets stay private by default and publish as o
   const returnToDraftResponse = await handleConstructApi(request(`/api/admin/archive-source-materials/${encodeURIComponent(created.id)}`, {
     method: "PATCH",
     admin: true,
-    body: { visibility: "internal", publication_state: "draft" },
+    body: { visibility: "public", publication_state: "draft" },
   }), runtime);
   assert.equal(returnToDraftResponse.status, 200);
+  const returnedDraft = (await returnToDraftResponse.json()).record;
+  assert.equal(returnedDraft.publication_state, "draft");
+  assert.equal(returnedDraft.visibility, "internal", "draft source-set state must override a conflicting visibility input");
 
   const archiveResponse = await handleConstructApi(request(`/api/admin/archive-source-materials/${encodeURIComponent(created.id)}`, {
     method: "DELETE",
@@ -303,6 +306,13 @@ test("source-material migration and public UI keep the grouped evidence ontology
   assert.match(migration, /client-correspondence/);
   assert.match(studio, /Source materials/);
   assert.match(studio, /Add client correspondence/);
+  const sourceSetStart = studio.indexOf("function sourceMaterialForm(");
+  const sourceSetEnd = studio.indexOf("function sourceEntryPreview(", sourceSetStart);
+  assert.ok(sourceSetStart >= 0 && sourceSetEnd > sourceSetStart);
+  const sourceSetEditor = studio.slice(sourceSetStart, sourceSetEnd);
+  assert.doesNotMatch(sourceSetEditor, /name="(?:visibility|public_visible)"/);
+  assert.match(sourceSetEditor, /Published automatically makes this source set public\. Draft and Archived keep it internal/);
+  assert.match(studio, /function serializeSourceMaterialForm[\s\S]*?visibility:publicationState==="published"\?"public":"internal",publication_state:publicationState/);
   assert.match(studio, /multiple accept="image\/\*,\.pdf,\.doc,\.docx"/);
   assert.match(studio, /original filenames never appear publicly/);
   assert.match(publicScript, /archive-source-material-dialog/);

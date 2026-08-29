@@ -738,6 +738,8 @@ const ARCHIVE_MATERIAL_TYPES = new Set(["final-image","sketch","process-photo","
 const ARCHIVE_DATE_PRECISIONS = new Set(["exact","approximate","year","range","undated"]);
 const ARCHIVE_VISIBILITIES = new Set(["public","unlisted","internal","private"]);
 const ARCHIVE_STATES = new Set(["draft","published","archived"]);
+function publicationPublicFlag(state){return state==="published"?1:0}
+function publicationVisibility(state){return state==="published"?"public":"internal"}
 const ARCHIVE_TIMELINE_STATES = new Set(["draft","published","archived"]);
 const ARCHIVE_CONTEXT_TYPES = new Set(["person","organization","place","event"]);
 const ARCHIVE_DOCUMENTATION_FIELDS = new Set([
@@ -2374,10 +2376,7 @@ function normalizeIdentityProfile(body={},existing={}){
     for(const key of keys)if(Object.prototype.hasOwnProperty.call(body,key))return text(body[key],200)||null;
     return text(existing[existingKey],200)||null;
   };
-  const visibilityInput=body.visibility;
-  let visibility=existing.visibility||"internal";
-  if(visibilityInput!==undefined){visibility=typeof visibilityInput==="boolean"?(visibilityInput?"public":"internal"):text(visibilityInput,30).toLowerCase()}
-  else if(body.public_visible!==undefined||body.publicVisible!==undefined)visibility=truthy(body.public_visible??body.publicVisible)?"public":"internal";
+  const publicationState=text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft";
   return {
     organization_id:text(body.organization_id??body.organization_entity_id??body.subject_entity_id??body.organizationId??existing.organization_id,200),
     slug:slug(body.slug??existing.slug),
@@ -2392,8 +2391,8 @@ function normalizeIdentityProfile(body={},existing={}){
     current_symbol_id:linkedValue(["current_symbol_id","current_symbol_entity_id","currentSymbolId"],"current_symbol_id"),
     origin_thread_id:linkedValue(["origin_thread_id","originThreadId"],"origin_thread_id"),
     featured_origin_entity_id:linkedValue(["featured_origin_entity_id","featured_origin_record_entity_id","featuredOriginEntityId"],"featured_origin_entity_id"),
-    publication_state:text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft",
-    visibility,
+    publication_state:publicationState,
+    visibility:publicationVisibility(publicationState),
     sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,
   };
 }
@@ -2406,13 +2405,13 @@ async function validateIdentityProfile(database,profile){
   const organization=await database.prepare(`SELECT organization.id,organization.state,owner.visibility
     FROM organizations organization JOIN content_entities owner ON owner.id=organization.id AND owner.entity_type='organization'
     WHERE organization.id=?`).bind(profile.organization_id).first();
-  if(!organization)return "Choose a canonical organization.";
+  if(!organization)return "Choose an organization for this identity.";
   if(profile.timeline_id&&!await database.prepare("SELECT id FROM archive_timelines WHERE id=? AND subject_entity_id=?").bind(profile.timeline_id,profile.organization_id).first())return "Choose a timeline owned by this organization.";
   if(profile.current_symbol_id&&!await database.prepare("SELECT id FROM visual_symbols WHERE id=? AND state<>'archived'").bind(profile.current_symbol_id).first())return "Choose an active Legend symbol.";
   if(profile.origin_thread_id&&!await database.prepare("SELECT id FROM archive_origin_threads WHERE id=? AND state<>'archived'").bind(profile.origin_thread_id).first())return "Choose an active Origin Thread.";
   if(profile.featured_origin_entity_id&&!await database.prepare("SELECT entity_id FROM archive_dossiers WHERE entity_id=?").bind(profile.featured_origin_entity_id).first())return "Choose an Archive record as the featured origin artifact.";
   if(profile.publication_state==="published"&&profile.visibility==="public"){
-    if(organization.state!=="published"||organization.visibility!=="public")return "Publish the canonical organization before publishing its identity profile.";
+    if(organization.state!=="published"||organization.visibility!=="public")return "Publish the organization record before publishing its identity profile.";
     if(!profile.hero_descriptor||!profile.current_role||!profile.origin_body)return "A public identity needs a hero descriptor, current role, and origin account.";
     if(!await database.prepare("SELECT entity_id FROM archive_dossiers WHERE entity_id=? AND state='published' AND public_visible=1").bind(profile.organization_id).first())return "Publish the Creative Identity Archive dossier before publishing its About profile.";
     if(profile.timeline_id&&!await database.prepare("SELECT id FROM archive_timelines WHERE id=? AND subject_entity_id=? AND state='published' AND public_visible=1").bind(profile.timeline_id,profile.organization_id).first())return "Publish the selected identity timeline before publishing its About profile.";
@@ -2431,6 +2430,209 @@ async function adminIdentityProfilePayload(database,key){
     record.current_symbol.archive_appearances=(await database.prepare(`SELECT * FROM visual_symbol_archive_appearances WHERE symbol_entity_id=? ORDER BY sort_order,created_at`).bind(record.current_symbol.id).all()).results||[];
   }
   return record;
+}
+
+function identityPublicationComponent(key,label,id,state,publicVisible,ready=true){
+  return {key,label,id:id||"",entity_id:id||"",state:state||"missing",public_visible:Boolean(publicVisible),ready:Boolean(ready)};
+}
+
+async function identityPublicationReview(database,key){
+  const profile=await database.prepare(identityProfileSql("profile.organization_id=? OR profile.slug=?")).bind(key,key).first();
+  if(!profile)return null;
+  const organizationId=profile.organization_id,featuredId=profile.featured_origin_entity_id||"",timelineId=profile.timeline_id||"",symbolId=profile.current_symbol_id||"",threadId=profile.origin_thread_id||"";
+  const [organizationDossierResult,timelineResult,chaptersResult,symbolResult,threadResult,membersResult,threadSymbolsResult,featuredResult,featuredRecordResult,subjectsResult,currentMarkBrandResult,appearancesResult,relationshipsResult,activitiesResult]=await database.batch([
+    database.prepare("SELECT entity_id,archive_slug,orientation,story,state,public_visible FROM archive_dossiers WHERE entity_id=?").bind(organizationId),
+    database.prepare("SELECT id,subject_entity_id,slug,title,description,state,public_visible FROM archive_timelines WHERE id=?").bind(timelineId),
+    database.prepare("SELECT id,title,summary,body,date_label,state,public_visible FROM archive_timeline_chapters WHERE timeline_id=? AND state<>'archived' ORDER BY sort_order,created_at").bind(timelineId),
+    database.prepare(`SELECT symbol.*,entity.visibility
+      FROM visual_symbols symbol JOIN content_entities entity ON entity.id=symbol.id WHERE symbol.id=?`).bind(symbolId),
+    database.prepare("SELECT id,slug,title,summary,state,public_visible FROM archive_origin_threads WHERE id=?").bind(threadId),
+    database.prepare(`SELECT member.entity_id,entity.entity_type,entity.visibility,symbol.state symbol_state,record.state record_state,dossier.state dossier_state,dossier.public_visible dossier_public
+      FROM archive_origin_thread_entities member JOIN content_entities entity ON entity.id=member.entity_id
+      LEFT JOIN visual_symbols symbol ON symbol.id=member.entity_id
+      LEFT JOIN archive_records record ON record.id=member.entity_id
+      LEFT JOIN archive_dossiers dossier ON dossier.entity_id=member.entity_id
+      WHERE member.thread_id=? ORDER BY member.is_primary DESC,member.sort_order`).bind(threadId),
+    database.prepare(`SELECT symbol.*,entity.visibility
+      FROM archive_origin_thread_entities member
+      JOIN visual_symbols symbol ON symbol.id=member.entity_id
+      JOIN content_entities entity ON entity.id=symbol.id
+      WHERE member.thread_id=? ORDER BY member.sort_order`).bind(threadId),
+    database.prepare(`SELECT record.id,record.title,record.slug,record.state record_state,record.creator_entity_id,record.record_status,
+        entity.visibility entity_visibility,dossier.archive_slug,dossier.state dossier_state,dossier.public_visible dossier_public,
+        catalogue.current_state_id,catalogue.medium_id catalogue_medium_id,catalogue.object_type_id catalogue_object_type_id,
+        state.id state_id,state.publication_state state_publication,state.public_visible state_public,
+        version.id version_id,version.entity_id version_entity_id,version.publication_state version_publication,version.public_visible version_public,
+        material.id lead_material_id,material.dossier_entity_id lead_material_entity_id,material.state material_state,material.visibility material_visibility,
+        media.id derivative_media_id,media.state media_state,media.privacy media_privacy,media.public_presentation media_presentation,
+        media.mime_type,media.alt_text,media.caption,pair.master_media_id,
+        master.state master_state,master.privacy master_privacy,master.public_presentation master_presentation
+      FROM archive_records record
+      JOIN content_entities entity ON entity.id=record.id
+      JOIN archive_dossiers dossier ON dossier.entity_id=record.id
+      LEFT JOIN archive_catalogue_entries catalogue ON catalogue.entity_id=record.id
+      LEFT JOIN archive_object_states state ON state.id=catalogue.current_state_id
+      LEFT JOIN archive_object_versions version ON version.id=state.version_id
+      LEFT JOIN archive_materials material ON material.id=state.lead_material_id AND material.state_id=state.id
+      LEFT JOIN media_assets media ON media.id=material.media_id
+      LEFT JOIN media_asset_variants pair ON pair.derivative_media_id=media.id AND pair.purpose='public-display'
+      LEFT JOIN media_assets master ON master.id=pair.master_media_id
+      WHERE record.id=?`).bind(featuredId),
+    database.prepare("SELECT * FROM archive_records WHERE id=?").bind(featuredId),
+    database.prepare(`SELECT subject.subject_entity_id,subject.role,subject.public_visible,entity.entity_type,entity.visibility,
+        person.state person_state,person.privacy person_privacy,organization.state organization_state,
+        place.state place_state,place.privacy place_privacy,symbol.state symbol_state
+      FROM archive_dossier_subjects subject JOIN content_entities entity ON entity.id=subject.subject_entity_id
+      LEFT JOIN people person ON person.id=entity.id
+      LEFT JOIN organizations organization ON organization.id=entity.id
+      LEFT JOIN places place ON place.id=entity.id
+      LEFT JOIN visual_symbols symbol ON symbol.id=entity.id
+      WHERE subject.dossier_entity_id=? ORDER BY subject.sort_order`).bind(featuredId),
+    database.prepare(`SELECT subject.subject_entity_id,subject.public_visible
+      FROM archive_dossier_subjects subject
+      WHERE subject.dossier_entity_id=? AND subject.subject_entity_id=? AND subject.role='brand'`).bind(symbolId,organizationId),
+    database.prepare(`SELECT appearance.id,appearance.symbol_entity_id,appearance.appearance_role,appearance.title,appearance.caption,appearance.publication_state,appearance.public_visible,
+        symbol.state symbol_state,entity.visibility symbol_visibility
+      FROM visual_symbol_archive_appearances appearance
+      JOIN visual_symbols symbol ON symbol.id=appearance.symbol_entity_id
+      JOIN content_entities entity ON entity.id=symbol.id
+      WHERE appearance.record_entity_id=? ORDER BY appearance.sort_order,appearance.created_at`).bind(featuredId),
+    database.prepare(`SELECT relationship.id,relationship.source_entity_id,relationship.target_entity_id,relationship.relationship_type_id,relationship.public_visible,
+        target.entity_type target_type,target.visibility target_visibility,symbol.state target_symbol_state
+      FROM entity_relationships relationship
+      JOIN content_entities target ON target.id=relationship.target_entity_id
+      LEFT JOIN visual_symbols symbol ON symbol.id=relationship.target_entity_id
+      WHERE relationship.relationship_type_id='rel-uses-symbol' AND relationship.source_entity_id IN (?,?)
+      ORDER BY relationship.sort_order,relationship.created_at`).bind(organizationId,featuredId),
+    database.prepare(`SELECT activity.id,activity.title,activity.summary,activity.body,activity.date_label,activity.public_visible,
+        (SELECT MIN(subject.public_visible) FROM entity_activity_subjects subject
+          WHERE subject.activity_id=activity.id AND subject.subject_entity_id=?) subject_public_visible
+      FROM entity_activity activity
+      WHERE activity.entity_id=? AND EXISTS(
+        SELECT 1 FROM entity_activity_subjects subject WHERE subject.activity_id=activity.id AND subject.subject_entity_id=?
+      ) ORDER BY activity.sort_order,activity.created_at`).bind(organizationId,featuredId,organizationId),
+  ]);
+  const rows=result=>result?.results||[],organizationDossier=rows(organizationDossierResult)[0]||null,timeline=rows(timelineResult)[0]||null,chapters=rows(chaptersResult),symbol=rows(symbolResult)[0]||null,thread=rows(threadResult)[0]||null,members=rows(membersResult),threadSymbols=rows(threadSymbolsResult),featured=rows(featuredResult)[0]||null,featuredRecord=rows(featuredRecordResult)[0]||null,subjects=rows(subjectsResult),currentMarkBrand=rows(currentMarkBrandResult)[0]||null,appearanceRows=rows(appearancesResult),relationshipRows=rows(relationshipsResult),activities=rows(activitiesResult);
+  const blockers=[];
+  const block=(component,code,message)=>blockers.push({component,code,message});
+  if(!profile.origin_date_label||!profile.hero_descriptor||!profile.current_role||!profile.origin_body||!profile.return_body)block("profile","profile-copy","Add the origin date, hero descriptor, current role, origin account, and return account before publishing.");
+  if(!organizationDossier)block("identity-dossier","identity-dossier-missing","Prepare the Creative Identity Archive record before publishing.");
+  else if(!organizationDossier.orientation||!organizationDossier.story)block("identity-dossier","identity-dossier-copy","Complete the Creative Identity Archive orientation and story before publishing.");
+  if(!timeline||timeline.subject_entity_id!==organizationId)block("timeline","timeline-missing","Link a timeline owned by this identity before publishing.");
+  else if(!timeline.slug||!timeline.title||!timeline.description)block("timeline","timeline-copy","Complete the identity timeline title, introduction, and route before publishing.");
+  if(timeline&&(!chapters.length||chapters.some(chapter=>!chapter.title||!chapter.summary||!chapter.body||!chapter.date_label)))block("timeline","timeline-chapters","Complete the title, summary, history, and visitor-facing date for every included timeline chapter.");
+  if(!symbol)block("current-mark","current-mark-missing","Link the current Legend mark before publishing.");
+  else if(symbol.state==="archived"||!symbol.slug||!symbol.name||!symbol.category_id||!symbol.meaning||!symbol.svg_markup)block("current-mark","current-mark-incomplete","Complete the selected current Legend mark before releasing this identity history.");
+  if(!thread)block("origin-thread","origin-thread-missing","Link an Origin Thread before publishing.");
+  else if(!thread.slug||!thread.title||!thread.summary)block("origin-thread","origin-thread-copy","Complete the Origin Thread title, introduction, and route before publishing.");
+  const memberIds=new Set(members.map(member=>member.entity_id));
+  const relationships=relationshipRows.filter(relationship=>(relationship.source_entity_id===organizationId&&relationship.target_entity_id===symbolId)||(relationship.source_entity_id===featuredId&&relationship.target_type==="visual_symbol"&&memberIds.has(relationship.target_entity_id)));
+  if(thread&&(!memberIds.has(organizationId)||!memberIds.has(featuredId)||!memberIds.has(symbolId)))block("origin-thread","origin-thread-members","The Origin Thread must include the identity, its origin record, and its current mark.");
+  if(!featured||!featuredRecord)block("origin-record","origin-record-missing","Link a complete Archive origin record before publishing.");
+  else{
+    if(!featuredRecord.title||!featuredRecord.slug||!featuredRecord.summary||!featuredRecord.body||!featuredRecord.cultural_object_type_id||!featuredRecord.medium_label||!featuredRecord.creator_entity_id||!featuredRecord.date_precision||!featuredRecord.date_or_period||featured.catalogue_object_type_id!==featuredRecord.cultural_object_type_id||!featured.catalogue_medium_id)block("origin-record","origin-record-copy","Complete the origin record title, description, catalogue type, medium, creator, and visitor-facing date before publishing.");
+    if(!featured.state_id||!featured.version_id||!featured.lead_material_id||featured.version_entity_id!==featuredId||featured.lead_material_entity_id!==featuredId)block("origin-record","origin-record-structure","Choose the current version, current state, and lead public image owned by the origin record.");
+    if(!featured.derivative_media_id||featured.media_state!=="active"||featured.media_privacy!=="public"||featured.media_presentation!=="inline"||!/^image\//i.test(featured.mime_type||"")||!featured.alt_text||!featured.caption)block("origin-record","origin-record-media","The origin record needs an active public display image with alt text and caption.");
+    if(!featured.master_media_id)block("origin-record","origin-record-media-pair","Pair the public display image with its private archival master before publishing.");
+    else if(featured.master_state!=="active"||!['internal','private'].includes(featured.master_privacy)||featured.master_presentation!=="hidden")block("origin-record","origin-record-master-privacy","The archival master must remain active, private, and hidden before publishing.");
+  }
+  const brandSubject=subjects.find(subject=>subject.subject_entity_id===organizationId&&subject.role==="brand"),creatorSubject=subjects.find(subject=>subject.subject_entity_id===featured?.creator_entity_id&&subject.role==="creator");
+  if(!brandSubject||!creatorSubject)block("origin-record","origin-record-subjects","Connect the identity and credited creator to the origin record before publishing.");
+  const identityRelationship=relationships.find(relationship=>relationship.source_entity_id===organizationId&&relationship.target_entity_id===symbolId);
+  const originSymbolRelationships=relationships.filter(relationship=>relationship.source_entity_id===featuredId&&relationship.target_type==="visual_symbol");
+  const appearanceSymbolIds=new Set([symbolId,...originSymbolRelationships.map(relationship=>relationship.target_entity_id)]),packageSymbols=threadSymbols.filter(item=>appearanceSymbolIds.has(item.id)),appearances=appearanceRows.filter(appearance=>appearanceSymbolIds.has(appearance.symbol_entity_id));
+  if(!identityRelationship)block("connections","identity-mark-connection","Connect the identity to its current mark before publishing.");
+  if(!originSymbolRelationships.length)block("connections","origin-symbol-connection","Connect the origin record to its documented symbol before publishing.");
+  if(packageSymbols.length!==appearanceSymbolIds.size||packageSymbols.some(item=>item.state==="archived"||!item.slug||!item.name||!item.category_id||!item.meaning||!item.svg_markup)||originSymbolRelationships.some(relationship=>!memberIds.has(relationship.target_entity_id)))block("connections","origin-symbol-review","Complete every documented symbol and include it in the Origin Thread before publishing.");
+  const currentAppearance=appearances.find(appearance=>appearance.symbol_entity_id===symbolId&&appearance.appearance_role==="variant"),documentedTargets=new Set(originSymbolRelationships.map(relationship=>relationship.target_entity_id));
+  if(!currentAppearance||[...documentedTargets].some(target=>!appearances.some(appearance=>appearance.symbol_entity_id===target))||appearances.some(appearance=>!appearance.title||!appearance.caption))block("legend-appearances","legend-appearances-missing","Complete the origin artifact appearance on the current mark and each documented historical symbol before publishing.");
+  if(!currentMarkBrand)block("connections","current-mark-brand-missing","Connect the current mark to this identity before publishing.");
+  if(!activities.length)block("timeline","origin-activity-missing","Add the origin record activity to the identity timeline before publishing.");
+  else if(activities.some(activity=>!activity.title||!activity.summary||!activity.body||!activity.date_label))block("timeline","origin-activity-copy","Complete the origin activity title, summary, history, and visitor-facing date before publishing.");
+  const packageSubjectRoles=new Set(["brand","creator","signature"]),packageSubjects=subjects.filter(subject=>packageSubjectRoles.has(subject.role));
+  const subjectPublic=subject=>subject.visibility==="public"
+    &&(subject.entity_type!=="person"||(subject.person_state==="published"&&subject.person_privacy==="public"))
+    &&(subject.entity_type!=="organization"||subject.organization_state==="published")
+    &&(subject.entity_type!=="place"||(subject.place_state==="published"&&subject.place_privacy==="public"))
+    &&(subject.entity_type!=="visual_symbol"||subject.symbol_state==="published");
+  const corePublic=profile.publication_state==="published"&&profile.visibility==="public"&&profile.organization_state==="published"&&profile.organization_visibility==="public"&&organizationDossier?.state==="published"&&Number(organizationDossier?.public_visible)===1&&timeline?.state==="published"&&Number(timeline?.public_visible)===1&&chapters.every(chapter=>chapter.state==="published"&&Number(chapter.public_visible)===1)&&thread?.state==="published"&&Number(thread?.public_visible)===1&&featured?.record_state==="published"&&featured?.entity_visibility==="public"&&featured?.dossier_state==="published"&&Number(featured?.dossier_public)===1&&featured?.version_publication==="published"&&Number(featured?.version_public)===1&&featured?.state_publication==="published"&&Number(featured?.state_public)===1&&featured?.material_state==="published"&&featured?.material_visibility==="public"&&packageSymbols.length===appearanceSymbolIds.size&&packageSymbols.every(item=>item.state==="published"&&item.visibility==="public")&&packageSubjects.every(subject=>Number(subject.public_visible)===1&&subjectPublic(subject))&&Number(currentMarkBrand?.public_visible)===1&&appearances.every(appearance=>appearance.publication_state==="published"&&Number(appearance.public_visible)===1)&&relationships.every(relationship=>Number(relationship.public_visible)===1)&&activities.every(activity=>Number(activity.public_visible)===1&&Number(activity.subject_public_visible)===1);
+  const components=[
+    identityPublicationComponent("profile","About profile",organizationId,profile.publication_state,profile.visibility==="public",!blockers.some(item=>item.component==="profile")),
+    identityPublicationComponent("identity-dossier","Identity Archive record",organizationId,organizationDossier?.state,organizationDossier?.public_visible,!blockers.some(item=>item.component==="identity-dossier")),
+    identityPublicationComponent("timeline","Timeline and chapters",timelineId,timeline?.state,timeline?.public_visible,!blockers.some(item=>item.component==="timeline")),
+    identityPublicationComponent("origin-thread","Origin Thread",threadId,thread?.state,thread?.public_visible,!blockers.some(item=>item.component==="origin-thread")),
+    identityPublicationComponent("current-mark","Current Legend mark",symbolId,symbol?.state,symbol?.visibility==="public",!blockers.some(item=>item.component==="current-mark")),
+    identityPublicationComponent("origin-record","Origin Archive record",featuredId,featured?.record_state,featured?.entity_visibility==="public"&&Number(featured?.dossier_public)===1,!blockers.some(item=>item.component==="origin-record")),
+    identityPublicationComponent("legend-appearances","Legend appearances",featuredId,appearances.every(item=>item.publication_state==="published")?"published":"draft",appearances.length>0&&appearances.every(item=>Number(item.public_visible)===1),!blockers.some(item=>item.component==="legend-appearances")),
+    identityPublicationComponent("connections","Approved identity connections",organizationId,relationships.every(item=>Number(item.public_visible)===1)?"published":"draft",relationships.length>0&&relationships.every(item=>Number(item.public_visible)===1),!blockers.some(item=>item.component==="connections")),
+  ];
+  const fullyPublic=blockers.length===0&&corePublic;
+  return {profile,featuredRecord,chapters,members,subjects,packageSubjects,packageSymbols,appearances,relationships,activities,featured,review:{slug:profile.slug,status:blockers.length?"blocked":fullyPublic?"already-published":"ready",publishable:blockers.length===0,ready:blockers.length===0,public:fullyPublic,components,blockers}};
+}
+
+async function identityPublicationApi(request,env,key,action){
+  const database=db(env),graph=await identityPublicationReview(database,key);
+  if(!graph)return failure("Creative identity not found.",404);
+  if(request.method==="GET"&&action==="publication-review")return json({publication_review:graph.review,publicationReview:graph.review,review:graph.review});
+  if(request.method!=="POST"||action!=="publish-package")return failure("Method not allowed.",405);
+  if(!graph.review.publishable)return failure("This identity history needs review before it can publish.",409,{blockers:graph.review.blockers,components:graph.review.components});
+  if(graph.review.status==="already-published")return json({publication_review:graph.review,publicationReview:graph.review,review:graph.review,record:await adminIdentityProfilePayload(database,key)});
+  const profile=graph.profile,organizationId=profile.organization_id,featuredId=profile.featured_origin_entity_id,timelineId=profile.timeline_id,threadId=profile.origin_thread_id,versionId=graph.featured.version_id,stateId=graph.featured.state_id,materialId=graph.featured.lead_material_id,masterId=graph.featured.master_media_id;
+  const appearanceIds=graph.appearances.map(item=>item.id),relationshipIds=graph.relationships.map(item=>item.id),activityIds=graph.activities.map(item=>item.id),chapterIds=graph.chapters.map(item=>item.id);
+  const packageSubjectIds=[...new Set(graph.packageSubjects.map(item=>item.subject_entity_id))];
+  const packageSymbolStatements=graph.packageSymbols.flatMap(item=>[
+    database.prepare("UPDATE visual_symbols SET state='published',updated_at=datetime('now') WHERE id=?").bind(item.id),
+    database.prepare("UPDATE content_entities SET visibility='public',search_visibility=1,public_at=COALESCE(public_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(item.id),
+    database.prepare("UPDATE archive_dossiers SET state='published',public_visible=1,published_at=COALESCE(published_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(item.id),
+    searchSyncStatement(database,"visual-language",{...item,state:"published"}),
+  ]);
+  const packageSubjectStatements=graph.packageSubjects.flatMap(item=>{
+    const rows=[database.prepare("UPDATE content_entities SET visibility='public',search_visibility=1,public_at=COALESCE(public_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(item.subject_entity_id)];
+    if(item.entity_type==="person")rows.push(database.prepare("UPDATE people SET state='published',privacy='public',updated_at=datetime('now') WHERE id=?").bind(item.subject_entity_id));
+    if(item.entity_type==="organization")rows.push(database.prepare("UPDATE organizations SET state='published',updated_at=datetime('now') WHERE id=?").bind(item.subject_entity_id));
+    if(item.entity_type==="place")rows.push(database.prepare("UPDATE places SET state='published',privacy='public',updated_at=datetime('now') WHERE id=?").bind(item.subject_entity_id));
+    return rows;
+  });
+  const beforeSummary={publication_state:profile.publication_state,visibility:profile.visibility,origin_record_state:graph.featured.record_state,origin_record_visibility:graph.featured.entity_visibility};
+  const afterSummary={publication_state:"published",visibility:"public",origin_record_state:"published",origin_record_visibility:"public",package:"approved linked identity history"};
+  const statements=[
+    database.prepare("UPDATE organizations SET state='published',updated_at=datetime('now') WHERE id=?").bind(organizationId),
+    database.prepare("UPDATE content_entities SET visibility='public',search_visibility=1,public_at=COALESCE(public_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(organizationId),
+    database.prepare("UPDATE archive_dossiers SET state='published',public_visible=1,published_at=COALESCE(published_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(organizationId),
+    database.prepare("UPDATE archive_records SET state='published',record_status=CASE WHEN lower(record_status) LIKE '%private%' OR lower(record_status) LIKE '%draft%' THEN 'published Archive record' ELSE record_status END,updated_at=datetime('now') WHERE id=?").bind(featuredId),
+    database.prepare("UPDATE content_entities SET visibility='public',search_visibility=1,public_at=COALESCE(public_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(featuredId),
+    searchSyncStatement(database,"archive",{...graph.featuredRecord,state:"published"}),
+    database.prepare("UPDATE archive_object_versions SET publication_state='published',public_visible=1,updated_by='studio',updated_at=datetime('now') WHERE id=? AND entity_id=?").bind(versionId,featuredId),
+    database.prepare("UPDATE archive_object_states SET publication_state='published',public_visible=1,updated_by='studio',updated_at=datetime('now') WHERE id=? AND version_id=?").bind(stateId,versionId),
+    database.prepare("UPDATE archive_materials SET state='published',visibility='public',updated_by='studio',updated_at=datetime('now') WHERE id=? AND dossier_entity_id=? AND state_id=?").bind(materialId,featuredId,stateId),
+    database.prepare("UPDATE archive_materials SET state='draft',visibility='internal',updated_by='studio',updated_at=datetime('now') WHERE dossier_entity_id=? AND media_id=? AND id<>?").bind(featuredId,masterId,materialId),
+    database.prepare("UPDATE entity_media SET public_visible=0 WHERE entity_id IN (?,?) AND media_id=?").bind(organizationId,featuredId,masterId),
+    database.prepare("UPDATE archive_dossiers SET state='published',public_visible=1,empty_materials_note=CASE WHEN lower(empty_materials_note) LIKE '%private%' OR lower(empty_materials_note) LIKE '%draft%' THEN 'No additional process materials are public yet.' ELSE empty_materials_note END,published_at=COALESCE(published_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(featuredId),
+    database.prepare(`UPDATE archive_dossier_subjects SET public_visible=1 WHERE dossier_entity_id=? AND subject_entity_id IN (${packageSubjectIds.map(()=>"?").join(",")})`).bind(featuredId,...packageSubjectIds),
+    database.prepare("UPDATE archive_dossier_subjects SET public_visible=1 WHERE dossier_entity_id=? AND subject_entity_id=? AND role='brand'").bind(profile.current_symbol_id,organizationId),
+    ...packageSymbolStatements,
+    ...packageSubjectStatements,
+    database.prepare("UPDATE archive_origin_threads SET state='published',public_visible=1,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(threadId),
+    database.prepare("UPDATE archive_timelines SET state='published',public_visible=1,updated_by='studio',updated_at=datetime('now') WHERE id=? AND subject_entity_id=?").bind(timelineId,organizationId),
+    database.prepare("UPDATE about_identity_profiles SET publication_state='published',visibility='public',published_at=COALESCE(published_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE organization_id=?").bind(organizationId),
+  ];
+  if(chapterIds.length)statements.splice(statements.length-1,0,database.prepare(`UPDATE archive_timeline_chapters SET state='published',public_visible=1,updated_by='studio',updated_at=datetime('now') WHERE timeline_id=? AND id IN (${chapterIds.map(()=>"?").join(",")})`).bind(timelineId,...chapterIds));
+  if(appearanceIds.length)statements.splice(statements.length-1,0,database.prepare(`UPDATE visual_symbol_archive_appearances SET publication_state='published',public_visible=1,updated_by='studio',updated_at=datetime('now') WHERE record_entity_id=? AND id IN (${appearanceIds.map(()=>"?").join(",")})`).bind(featuredId,...appearanceIds));
+  if(relationshipIds.length)statements.splice(statements.length-1,0,database.prepare(`UPDATE entity_relationships SET public_visible=1,internal_notes=replace(internal_notes,'; publication review pending.','.'),updated_at=datetime('now') WHERE id IN (${relationshipIds.map(()=>"?").join(",")})`).bind(...relationshipIds));
+  if(activityIds.length)statements.splice(statements.length-1,0,
+    database.prepare(`UPDATE entity_activity SET public_visible=1,updated_at=datetime('now') WHERE id IN (${activityIds.map(()=>"?").join(",")})`).bind(...activityIds),
+    database.prepare(`UPDATE entity_activity_subjects SET public_visible=1 WHERE subject_entity_id=? AND activity_id IN (${activityIds.map(()=>"?").join(",")})`).bind(organizationId,...activityIds));
+  statements.push(
+    database.prepare(`INSERT INTO entity_revisions(id,entity_id,revision_number,action,before_json,after_json,created_by,created_at)
+      SELECT ?,?,COALESCE(MAX(revision_number),0)+1,'creative-identity-publication',?,?, 'studio',datetime('now') FROM entity_revisions WHERE entity_id=?`).bind(id("revision"),organizationId,JSON.stringify(beforeSummary),JSON.stringify(afterSummary),organizationId),
+    database.prepare(`INSERT INTO entity_revisions(id,entity_id,revision_number,action,before_json,after_json,created_by,created_at)
+      SELECT ?,?,COALESCE(MAX(revision_number),0)+1,'archive-publication',?,?, 'studio',datetime('now') FROM entity_revisions WHERE entity_id=?`).bind(id("revision"),featuredId,JSON.stringify(beforeSummary),JSON.stringify(afterSummary),featuredId),
+  );
+  try{await database.batch(statements)}catch(error){console.error(JSON.stringify({message:"Creative identity package publication failed.",identity:profile.slug,error:String(error?.message||error)}));return failure("The identity history could not be published as one complete package.",500)}
+  const published=await identityPublicationReview(database,organizationId);
+  if(!published||!published.review.publishable||!published.review.public)return failure("The identity history was saved but did not pass the final public verification.",500,{blockers:published?.review?.blockers||[]});
+  const review={...published.review,status:"published"};
+  return json({record:await adminIdentityProfilePayload(database,organizationId),publication_review:review,publicationReview:review,review});
 }
 
 async function adminIdentitiesApi(request,env,key=""){
@@ -2467,11 +2669,14 @@ async function adminIdentitiesApi(request,env,key=""){
   if(request.method==="PATCH"&&key){
     const before=await database.prepare("SELECT * FROM about_identity_profiles WHERE organization_id=? OR slug=?").bind(key,key).first();if(!before)return failure("Creative identity not found.",404);
     const profile=normalizeIdentityProfile(body,before);profile.organization_id=before.organization_id;
+    const publishPackage=profile.publication_state==="published"&&before.publication_state!=="published";
+    if(publishPackage){profile.publication_state="draft";profile.visibility="internal"}
     const invalid=await validateIdentityProfile(database,profile);if(invalid)return failure(invalid,409);
     try{await database.prepare(`UPDATE about_identity_profiles SET slug=?,kind_label=?,lifecycle_status=?,origin_date_label=?,hero_descriptor=?,current_role=?,origin_body=?,return_body=?,timeline_id=?,current_symbol_id=?,origin_thread_id=?,featured_origin_entity_id=?,publication_state=?,visibility=?,sort_order=?,published_at=CASE WHEN ?='published' AND ?='public' THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE organization_id=?`).bind(
       profile.slug,profile.kind_label,profile.lifecycle_status,profile.origin_date_label,profile.hero_descriptor,profile.current_role,profile.origin_body,profile.return_body,profile.timeline_id,profile.current_symbol_id,profile.origin_thread_id,profile.featured_origin_entity_id,profile.publication_state,profile.visibility,profile.sort_order,profile.publication_state,profile.visibility,before.organization_id,
     ).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(String(error?.message||error))?"That identity slug is already in use.":String(error?.message||error),409)}
     const record=await adminIdentityProfilePayload(database,before.organization_id);await nextRevision(database,before.organization_id,"creative-identity-update",before,record);
+    if(publishPackage)return identityPublicationApi(new Request(request.url,{method:"POST",headers:request.headers}),env,before.organization_id,"publish-package");
     return json({record,profile:record,identity:record});
   }
   return failure("Method not allowed.",405);
@@ -2480,13 +2685,14 @@ async function adminIdentitiesApi(request,env,key=""){
 const LEGEND_ARCHIVE_APPEARANCE_ROLES=new Set(["variant","appearance"]);
 
 function normalizeLegendArchiveAppearance(body={},existing={}){
+  const publicationState=text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft";
   return {
     symbol_entity_id:text(body.symbol_entity_id??body.symbolEntityId??existing.symbol_entity_id,200),
     record_entity_id:text(body.record_entity_id??body.recordEntityId??existing.record_entity_id,200),
     appearance_role:text(body.appearance_role??body.appearanceRole??existing.appearance_role,40).toLowerCase(),
     title:text(body.title??existing.title,300),caption:text(body.caption??existing.caption,3000),
-    publication_state:text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft",
-    public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):(truthy(body.public_visible??body.publicVisible)?1:0),
+    publication_state:publicationState,
+    public_visible:publicationPublicFlag(publicationState),
     sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,
   };
 }
@@ -3711,6 +3917,10 @@ async function adminUpdate(request, env, resource, recordId, archive = false) {
     entityVisibilityStatement(database, resource, projected),
     searchSyncStatement(database, resource, projected),
   );
+  if(resource==="archive"){
+    const dossierState=projected.state==="published"?"published":projected.state==="archived"||projected.state==="retired"?"archived":"draft",dossierPublic=publicationPublicFlag(dossierState);
+    updateStatements.push(database.prepare("UPDATE archive_dossiers SET state=?,public_visible=?,published_at=CASE WHEN ?='published' THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(dossierState,dossierPublic,dossierState,recordId));
+  }
   await database.batch(updateStatements);
   let archiveDossier=null,archiveDossierError="";
   if(!archive&&projected.state!=="archived"&&archiveEligibleEntityType(config.entityType)){
@@ -4872,7 +5082,8 @@ async function archiveEventIdentifierAdminApi(request,env,entityId=""){
 }
 
 function normalizeArchiveVersion(body,existing={}){
-  return {entity_id:text(body.entity_id??body.entityId??existing.entity_id,200),version_number:Math.floor(Number(body.version_number??body.versionNumber??existing.version_number??1)),title:text(body.title??existing.title,300),description:text(body.description??existing.description,5000),occurred_at:text(body.occurred_at??body.occurredAt??existing.occurred_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||"undated",date_label:text(body.date_label??body.dateLabel??existing.date_label,160),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,publication_state:text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft",public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):(truthy(body.public_visible??body.publicVisible)?1:0)};
+  const publicationState=text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft";
+  return {entity_id:text(body.entity_id??body.entityId??existing.entity_id,200),version_number:Math.floor(Number(body.version_number??body.versionNumber??existing.version_number??1)),title:text(body.title??existing.title,300),description:text(body.description??existing.description,5000),occurred_at:text(body.occurred_at??body.occurredAt??existing.occurred_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||"undated",date_label:text(body.date_label??body.dateLabel??existing.date_label,160),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,publication_state:publicationState,public_visible:publicationPublicFlag(publicationState)};
 }
 
 async function archiveVersionsAdminApi(request,env,versionId=""){
@@ -4909,7 +5120,8 @@ async function archiveVersionsAdminApi(request,env,versionId=""){
 }
 
 function normalizeArchiveObjectState(body,existing={}){
-  return {version_id:text(body.version_id??body.versionId??existing.version_id,200),state_roman:archiveRoman(body.state_roman??body.stateRoman??existing.state_roman),state_order:Math.floor(Number(body.state_order??body.stateOrder??existing.state_order??1)),title:text(body.title??existing.title,300),description:text(body.description??existing.description,5000),variant_label:text(body.variant_label??body.variantLabel??existing.variant_label,120),occurred_at:text(body.occurred_at??body.occurredAt??existing.occurred_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||"undated",date_label:text(body.date_label??body.dateLabel??existing.date_label,160),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,publication_state:text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft",public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):(truthy(body.public_visible??body.publicVisible)?1:0),lead_material_id:text(body.lead_material_id??body.leadMaterialId??existing.lead_material_id,200)||null};
+  const publicationState=text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft";
+  return {version_id:text(body.version_id??body.versionId??existing.version_id,200),state_roman:archiveRoman(body.state_roman??body.stateRoman??existing.state_roman),state_order:Math.floor(Number(body.state_order??body.stateOrder??existing.state_order??1)),title:text(body.title??existing.title,300),description:text(body.description??existing.description,5000),variant_label:text(body.variant_label??body.variantLabel??existing.variant_label,120),occurred_at:text(body.occurred_at??body.occurredAt??existing.occurred_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||"undated",date_label:text(body.date_label??body.dateLabel??existing.date_label,160),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,publication_state:publicationState,public_visible:publicationPublicFlag(publicationState),lead_material_id:text(body.lead_material_id??body.leadMaterialId??existing.lead_material_id,200)||null};
 }
 
 async function validateArchiveObjectState(database,record,stateId=""){
@@ -4965,6 +5177,32 @@ async function archiveStatesAdminApi(request,env,stateId=""){
   return failure("Method not allowed.",405);
 }
 
+async function validateArchiveOwnerPublication(database,owner,state){
+  if(state!=="published")return "";
+  if(!["archive_record","organization"].includes(owner.entity_type))return owner.visibility==="public"?"":"Publish the item from its Studio editor before adding it to the public Archive.";
+  if(owner.entity_type!=="archive_record")return "";
+  const record=await database.prepare("SELECT * FROM archive_records WHERE id=?").bind(owner.id).first();
+  if(!record)return "The Archive item attached to this dossier no longer exists.";
+  if(record.record_type==="practice"){
+    const sections=parseJson(record.practice_sections_json);
+    if(!record.title||!record.slug||!record.summary||!Array.isArray(sections)||!sections.length)return "A practice page needs a title, slug, descriptor, and authored sections before publishing.";
+    if(!await artHasEligiblePrimary(database,owner.id))return "Attach an eligible primary practice image before publishing.";
+  }
+  return "";
+}
+
+async function archiveOwnerPublicationStatements(database,owner,state){
+  if(!["archive_record","organization"].includes(owner.entity_type))return[];
+  const visible=state==="published",statements=[database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,archived_at=?,public_at=CASE WHEN ?=1 THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(visible?"public":"internal",visible?1:0,state==="archived"?new Date().toISOString():null,visible?1:0,owner.id)];
+  const resourceEntry=Object.entries(RESOURCE_CONFIG).find(([,config])=>config.entityType===owner.entity_type&&config.fields.includes("state"));
+  if(resourceEntry&&resourceEntry[1].states.includes(state)){
+    const [resource,config]=resourceEntry,record=await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(owner.id).first();
+    statements.push(database.prepare(`UPDATE ${config.table} SET state=?,updated_at=datetime('now') WHERE id=?`).bind(state,owner.id));
+    if(record&&resource==="archive")statements.push(searchSyncStatement(database,resource,{...record,state}));
+  }
+  return statements;
+}
+
 async function archiveDossiersAdminApi(request,env,entityId=""){
   const database=db(env);
   if(request.method==="GET"){
@@ -4997,19 +5235,26 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
   }
   if(request.method==="POST"&&!entityId){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");const ownerId=text(body.entity_id||body.entityId,200);if(!ownerId)return failure("entity_id is required.");
-    const owner=await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(ownerId).first();if(!owner)return failure("Canonical entity not found.",404);if(!await archiveDossierEligibleOwner(database,owner))return failure("That entity type is not eligible for an Archive dossier.",409);
-    const archiveSlug=slug(body.archive_slug||body.archiveSlug||body.slug||ownerId);if(!archiveSlug)return failure("archive_slug is required.");const state=text(body.state,30)||"draft",publicVisible=truthy(body.public_visible??body.publicVisible)?1:0;if(!ARCHIVE_STATES.has(state))return failure("Invalid dossier state.");if(state==="published"&&publicVisible&&owner.visibility!=="public")return failure("The canonical entity must be public before its dossier can publish.",409);
-    await database.prepare(`INSERT INTO archive_dossiers(entity_id,archive_slug,orientation,story,story_html,empty_materials_note,record_type,state,public_visible,featured,sort_order,published_at,created_by,updated_by,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' AND ?=1 THEN datetime('now') ELSE NULL END,'studio','studio',datetime('now'),datetime('now'))`).bind(ownerId,archiveSlug,text(body.orientation,8000),text(body.story,50000),text(body.story_html,50000),text(body.empty_materials_note,3000)||"No process materials are public yet.",text(body.record_type,100)||archiveDossierRecordType(owner.entity_type),state,publicVisible,truthy(body.featured)?1:0,Number(body.sort_order)||0,state,publicVisible).run();
+    const owner=await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(ownerId).first();if(!owner)return failure("The item attached to this Archive record no longer exists.",404);if(!await archiveDossierEligibleOwner(database,owner))return failure("That item type is not eligible for an Archive record.",409);
+    const archiveSlug=slug(body.archive_slug||body.archiveSlug||body.slug||ownerId);if(!archiveSlug)return failure("archive_slug is required.");const state=text(body.state,30)||"draft",publicVisible=publicationPublicFlag(state);if(!ARCHIVE_STATES.has(state))return failure("Invalid dossier state.");const ownerPublicationProblem=await validateArchiveOwnerPublication(database,owner,state);if(ownerPublicationProblem)return failure(ownerPublicationProblem,409);
+    await database.batch([
+      database.prepare(`INSERT INTO archive_dossiers(entity_id,archive_slug,orientation,story,story_html,empty_materials_note,record_type,state,public_visible,featured,sort_order,published_at,created_by,updated_by,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' AND ?=1 THEN datetime('now') ELSE NULL END,'studio','studio',datetime('now'),datetime('now'))`).bind(ownerId,archiveSlug,text(body.orientation,8000),text(body.story,50000),text(body.story_html,50000),text(body.empty_materials_note,3000)||"No process materials are public yet.",text(body.record_type,100)||archiveDossierRecordType(owner.entity_type),state,publicVisible,truthy(body.featured)?1:0,Number(body.sort_order)||0,state,publicVisible),
+      ...await archiveOwnerPublicationStatements(database,owner,state),
+    ]);
     try{await ensureArchiveEventStructure(database,owner);await ensureArchiveCatalogueEntry(database,owner)}catch(error){return failure(error.message,409)}
     return archiveDossiersAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,ownerId);
   }
   if(request.method==="PATCH"&&entityId){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();if(!before)return failure("Dossier not found.",404);const owner=await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(entityId).first();
-    const next={archive_slug:slug(body.archive_slug??body.archiveSlug??body.slug??before.archive_slug),orientation:text(body.orientation??before.orientation,8000),story:text(body.story??before.story,50000),story_html:text(body.story_html??before.story_html,50000),empty_materials_note:text(body.empty_materials_note??before.empty_materials_note,3000),record_type:text(body.record_type??body.recordType??before.record_type,100),state:text(body.state??before.state,30),public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible)?1:0,featured:body.featured===undefined?Number(before.featured):truthy(body.featured)?1:0,sort_order:Number(body.sort_order??before.sort_order)||0};
-    if(!next.archive_slug)return failure("archive_slug is required.");if(!ARCHIVE_STATES.has(next.state))return failure("Invalid dossier state.");if(next.state==="published"&&next.public_visible&&owner?.visibility!=="public")return failure("The canonical entity must be public before its dossier can publish.",409);
+    const next={archive_slug:slug(body.archive_slug??body.archiveSlug??body.slug??before.archive_slug),orientation:text(body.orientation??before.orientation,8000),story:text(body.story??before.story,50000),story_html:text(body.story_html??before.story_html,50000),empty_materials_note:text(body.empty_materials_note??before.empty_materials_note,3000),record_type:text(body.record_type??body.recordType??before.record_type,100),state:text(body.state??before.state,30),featured:body.featured===undefined?Number(before.featured):truthy(body.featured)?1:0,sort_order:Number(body.sort_order??before.sort_order)||0};
+    next.public_visible=publicationPublicFlag(next.state);
+    if(!next.archive_slug)return failure("archive_slug is required.");if(!ARCHIVE_STATES.has(next.state))return failure("Invalid dossier state.");if(!owner)return failure("The item attached to this Archive record no longer exists.",404);const ownerPublicationProblem=await validateArchiveOwnerPublication(database,owner,next.state);if(ownerPublicationProblem)return failure(ownerPublicationProblem,409);
     const hasCollectionUpdate=Object.prototype.hasOwnProperty.call(body,"collection_ids")||Object.prototype.hasOwnProperty.call(body,"collectionIds"),collectionIds=hasCollectionUpdate?archiveCollectionIds(body.collection_ids??body.collectionIds):[];
-    await database.prepare(`UPDATE archive_dossiers SET archive_slug=?,orientation=?,story=?,story_html=?,empty_materials_note=?,record_type=?,state=?,public_visible=?,featured=?,sort_order=?,published_at=CASE WHEN ?='published' AND ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(next.archive_slug,next.orientation,next.story,next.story_html,next.empty_materials_note,next.record_type,next.state,next.public_visible,next.featured,next.sort_order,next.state,next.public_visible,entityId).run();
+    await database.batch([
+      database.prepare(`UPDATE archive_dossiers SET archive_slug=?,orientation=?,story=?,story_html=?,empty_materials_note=?,record_type=?,state=?,public_visible=?,featured=?,sort_order=?,published_at=CASE WHEN ?='published' AND ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(next.archive_slug,next.orientation,next.story,next.story_html,next.empty_materials_note,next.record_type,next.state,next.public_visible,next.featured,next.sort_order,next.state,next.public_visible,entityId),
+      ...await archiveOwnerPublicationStatements(database,owner,next.state),
+    ]);
     if(hasCollectionUpdate)try{await replaceDossierCollections(database,entityId,collectionIds)}catch(error){return failure(error.message,409)}
     try{
       await replaceArchiveContext(database,entityId,archiveContextAssignments(body.context_assignments??body.contextAssignments));
@@ -5018,7 +5263,7 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
     try{await ensureArchiveEventStructure(database,owner);await ensureArchiveCatalogueEntry(database,owner)}catch(error){return failure(error.message,409)}
     const after=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();await nextRevision(database,entityId,"archive-dossier-update",before,after);return archiveDossiersAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,entityId);
   }
-  if(request.method==="DELETE"&&entityId){await database.prepare("UPDATE archive_dossiers SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(entityId).run();return json({ok:true});}
+  if(request.method==="DELETE"&&entityId){const owner=await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(entityId).first();if(!owner)return failure("The item attached to this Archive record no longer exists.",404);await database.batch([database.prepare("UPDATE archive_dossiers SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(entityId),...await archiveOwnerPublicationStatements(database,owner,"archived")]);return json({ok:true});}
   return failure("Method not allowed.",405);
 }
 
@@ -5057,8 +5302,8 @@ async function editableArchiveDossierAdminApi(request,env,entityId){
 
 function normalizeArchiveMaterial(body,existing={}){
   const materialType=text(body.material_type??body.materialType??existing.material_type,80).replace(/_/g,"-").toLowerCase()||"note";
-  const visibility=text(body.visibility??body.privacy??existing.visibility,30).toLowerCase()||"internal";
   const state=text(body.state??existing.state,30).toLowerCase()||"draft";
+  const visibility=publicationVisibility(state);
   const occurredAt=text(body.occurred_at??body.start_date??body.start??existing.occurred_at,80)||null;
   const endedAt=text(body.ended_at??body.end_date??body.end??existing.ended_at,80)||null;
   const datePrecision=text(body.date_precision??body.datePrecision??existing.date_precision,30).toLowerCase()||(occurredAt?"exact":"undated");
@@ -5081,7 +5326,7 @@ async function validateArchiveMaterial(database,material){
     if(leadState.publication_state==="published"&&Number(leadState.public_visible)&&(material.state!=="published"||material.visibility!=="public"||!media||media.state!=="active"||media.privacy!=="public"||media.public_presentation!=="inline"))return failure("Choose another state lead before hiding or archiving this public material.",409);
   }
   if(material.state==="published"&&material.visibility==="public"){
-    if(dossier.state!=="published"||!Number(dossier.public_visible)||dossier.canonical_visibility!=="public")return failure("Publish the canonical entity and dossier before publishing this material.",409);
+    if(dossier.state!=="published"||!Number(dossier.public_visible)||dossier.canonical_visibility!=="public")return failure("Publish the Archive record before publishing this material.",409);
     if(media&&(media.state!=="active"||media.privacy!=="public"||media.public_presentation!=="inline"))return failure("The attached Digital asset must be active, public, and shown inline.",409);
   }
   return {dossier,media};
@@ -5123,6 +5368,7 @@ function archiveSourceMaterialStateIds(value){
 function normalizeArchiveSourceMaterialSet(body,existing={}){
   const occurredAt=text(body.occurred_at??body.occurredAt??existing.occurred_at,80)||null;
   const sourceKind=text(body.source_kind??body.sourceKind??existing.source_kind,80)||"client-correspondence";
+  const publicationState=text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft";
   return {
     dossier_entity_id:text(body.dossier_entity_id??body.entity_id??body.entityId??existing.dossier_entity_id,200),
     source_kind:sourceKind,
@@ -5133,8 +5379,8 @@ function normalizeArchiveSourceMaterialSet(body,existing={}){
     ended_at:text(body.ended_at??body.endedAt??existing.ended_at,80)||null,
     date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||(occurredAt?"exact":"undated"),
     date_label:text(body.date_label??body.dateLabel??existing.date_label,160),
-    visibility:text(body.visibility??existing.visibility,30)||"internal",
-    publication_state:text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft",
+    visibility:publicationVisibility(publicationState),
+    publication_state:publicationState,
     sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,
   };
 }
@@ -5271,7 +5517,7 @@ async function validateArchiveSourceMaterialSet(database,record,stateIds,setId="
   if(stateRows.length!==stateIds.length)return failure("Choose states that belong to this cultural object.",409);
   if(record.publication_state==="published"){
     if(record.visibility!=="public")return failure("Published source materials must use Public visibility.",409);
-    if(dossier.state!=="published"||!Number(dossier.public_visible)||dossier.canonical_visibility!=="public")return failure("Publish the canonical entity and dossier before publishing this source material.",409);
+    if(dossier.state!=="published"||!Number(dossier.public_visible)||dossier.canonical_visibility!=="public")return failure("Publish the Archive record before publishing this source material.",409);
     const publicStates=stateRows.filter(state=>state.publication_state==="published"&&Number(state.public_visible)&&state.version_publication_state==="published"&&Number(state.version_public_visible));
     if(!publicStates.length)return failure("Link at least one published public state before publishing this source material.",409);
     if(!setId)return failure("Create the source material as a draft, add its entries, and then publish it.",409);
@@ -5414,7 +5660,7 @@ async function archiveSourceMaterialsAdminApi(request,env,setId="",entryId="",ac
       const structuralValid=await validateArchiveSourceMaterialSet(database,structural,stateIds,setId);if(structuralValid instanceof Response)return structuralValid;
       const owner=await database.prepare(`SELECT ad.state dossier_state,ad.public_visible dossier_public,ce.visibility canonical_visibility
         FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ad.entity_id=?`).bind(record.dossier_entity_id).first();
-      if(owner?.dossier_state!=="published"||!Number(owner?.dossier_public)||owner?.canonical_visibility!=="public")return failure("Publish the canonical entity and dossier before publishing this source material.",409);
+      if(owner?.dossier_state!=="published"||!Number(owner?.dossier_public)||owner?.canonical_visibility!=="public")return failure("Publish the Archive record before publishing this source material.",409);
       const stateRows=await archiveSourceMaterialStateRows(database,record.dossier_entity_id,stateIds);
       const publicStates=stateRows.filter(state=>state.publication_state==="published"&&Number(state.public_visible)&&state.version_publication_state==="published"&&Number(state.version_public_visible));
       if(!publicStates.length)return failure("Link at least one published public state before publishing this source material.",409);
@@ -6385,8 +6631,8 @@ async function archiveActivitiesAdminApi(request,env,activityId=""){
   return failure("Method not allowed.",405);
 }
 
-function normalizeArchiveTimeline(body,existing={}){return {subject_entity_id:text(body.subject_entity_id??body.subjectEntityId??existing.subject_entity_id,200),slug:slug(body.slug??existing.slug),title:text(body.title??existing.title,300),description:text(body.description??existing.description,8000),state:text(body.state??existing.state,30)||"draft",public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):truthy(body.public_visible??body.publicVisible)?1:0,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
-function normalizeArchiveChapter(body,existing={}){const occurredAt=text(body.occurred_at??body.start_date??body.start??existing.occurred_at,80)||null;return {title:text(body.title??existing.title,300),summary:text(body.summary??existing.summary,5000),body:text(body.body??body.inline_text??body.inlineText??existing.body,50000),occurred_at:occurredAt,ended_at:text(body.ended_at??body.end_date??body.end??existing.ended_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||(occurredAt?"exact":"undated"),date_label:text(body.date_label??body.display_date??body.displayDate??existing.date_label,160),anchor_slug:slug(body.anchor_slug??body.anchor??existing.anchor_slug),dedupe_key:text(body.dedupe_key??body.dedupeKey??existing.dedupe_key,200),state:text(body.state??existing.state,30)||"draft",public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):truthy(body.public_visible??body.publicVisible)?1:0,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
+function normalizeArchiveTimeline(body,existing={}){const state=text(body.state??existing.state,30)||"draft";return {subject_entity_id:text(body.subject_entity_id??body.subjectEntityId??existing.subject_entity_id,200),slug:slug(body.slug??existing.slug),title:text(body.title??existing.title,300),description:text(body.description??existing.description,8000),state,public_visible:publicationPublicFlag(state),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
+function normalizeArchiveChapter(body,existing={}){const occurredAt=text(body.occurred_at??body.start_date??body.start??existing.occurred_at,80)||null,state=text(body.state??existing.state,30)||"draft";return {title:text(body.title??existing.title,300),summary:text(body.summary??existing.summary,5000),body:text(body.body??body.inline_text??body.inlineText??existing.body,50000),occurred_at:occurredAt,ended_at:text(body.ended_at??body.end_date??body.end??existing.ended_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||(occurredAt?"exact":"undated"),date_label:text(body.date_label??body.display_date??body.displayDate??existing.date_label,160),anchor_slug:slug(body.anchor_slug??body.anchor??existing.anchor_slug),dedupe_key:text(body.dedupe_key??body.dedupeKey??existing.dedupe_key,200),state,public_visible:publicationPublicFlag(state),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
 
 async function archiveTimelinesAdminApi(request,env,timelineId="",chapterId=""){
   const database=db(env);
@@ -6400,7 +6646,7 @@ async function archiveTimelinesAdminApi(request,env,timelineId="",chapterId=""){
   return failure("Method not allowed.",405);
 }
 
-function normalizeOriginThread(body,existing={}){return {slug:slug(body.slug??existing.slug),title:text(body.title??existing.title,300),summary:text(body.summary??existing.summary,8000),state:text(body.state??existing.state,30)||"draft",public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):truthy(body.public_visible??body.publicVisible)?1:0,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
+function normalizeOriginThread(body,existing={}){const state=text(body.state??existing.state,30)||"draft";return {slug:slug(body.slug??existing.slug),title:text(body.title??existing.title,300),summary:text(body.summary??existing.summary,8000),state,public_visible:publicationPublicFlag(state),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
 
 async function entityOriginThreadPayload(database,entityId){
   const entity=await database.prepare("SELECT id,entity_type,node_id,visibility FROM content_entities WHERE id=?").bind(entityId).first();
@@ -7371,6 +7617,7 @@ export async function handleConstructApi(request,env){
   const auth=requireStudioAdmin(request,env);if(auth)return auth;
   const colorMaterialsAdmin=await handleArchiveColorMaterialsAdmin(request,env,path);if(colorMaterialsAdmin)return colorMaterialsAdmin;
   if(path==="/api/admin/identities")return adminIdentitiesApi(request,env);
+  const identityPublicationMatch=path.match(/^\/api\/admin\/identities\/([^/]+)\/(publication-review|publish-package)$/);if(identityPublicationMatch)return identityPublicationApi(request,env,decodeURIComponent(identityPublicationMatch[1]),identityPublicationMatch[2]);
   const identityAdminMatch=path.match(/^\/api\/admin\/identities\/([^/]+)$/);if(identityAdminMatch)return adminIdentitiesApi(request,env,decodeURIComponent(identityAdminMatch[1]));
   if(path==="/api/admin/archive-records/create-cultural-object"||path==="/api/admin/archive-cultural-objects")return createCulturalObjectAdminApi(request,env);
   const failedExperimentMediaPairMatch=path.match(/^\/api\/admin\/archive-failed-experiments\/([^/]+)\/media-pair$/);if(failedExperimentMediaPairMatch)return archiveFailedExperimentMediaPairAdminApi(request,env,decodeURIComponent(failedExperimentMediaPairMatch[1]));

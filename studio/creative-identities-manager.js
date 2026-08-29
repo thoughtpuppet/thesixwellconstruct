@@ -67,12 +67,34 @@ function linkedId(record, relation, ...keys) {
 
 function publicationLabel(record) {
   const state = String(first(record, "publication_state", "publicationState") || "draft");
-  const visible = checked(first(record, "public_visible", "publicVisible", "visibility"));
-  return `${state} / ${visible ? "public" : "private"}`;
+  return state.charAt(0).toUpperCase() + state.slice(1);
+}
+
+function publicationReviewFrom(payload) {
+  if (payload?.publication_review && typeof payload.publication_review === "object") return payload.publication_review;
+  if (payload?.publicationReview && typeof payload.publicationReview === "object") return payload.publicationReview;
+  if (payload?.review && typeof payload.review === "object") return payload.review;
+  return payload && typeof payload === "object" ? payload : {};
+}
+
+function publicationComponentStatus(component) {
+  const ready = first(component, "ready", "publishable");
+  const state = String(first(component, "publication_state", "publicationState", "state", "status") || "").toLowerCase();
+  const visibleValue = first(component, "public_visible", "publicVisible", "visibility");
+  const isPublic = visibleValue === "" ? state === "published" : checked(visibleValue);
+  if (ready === false || ready === 0) return "Needs review";
+  if (state === "published" && isPublic) return "Already public";
+  if (ready === true || ready === 1) return "Ready to publish";
+  return state === "published" ? "Ready to repair" : "Ready to publish";
 }
 
 function option(value, label, current) {
   return `<option value="${esc(value)}" ${String(value) === String(current) ? "selected" : ""}>${esc(label)}</option>`;
+}
+
+function profilePublicationOptions(current) {
+  const states = current === "published" ? ["published", "draft", "archived"] : ["draft", "archived"];
+  return states.map((value) => option(value, value, current)).join("");
 }
 
 function listOptionLabel(record, titleKeys = ["title", "name", "slug"]) {
@@ -153,11 +175,18 @@ function reviewCard({ label, item, id = "", route = "", openArchiveId = "", empt
   const visible = item && first(item, "public_visible", "publicVisible") !== ""
     ? checked(first(item, "public_visible", "publicVisible"))
     : null;
+  const status = !item
+    ? "Not linked"
+    : state === "published" && visible !== false
+      ? "Public"
+      : state === "published" && visible === false
+        ? "Publication repair needed"
+        : state === "archived" ? "Archived" : "Not published";
   const resolvedRoute = safeRoute(route || item?.route || "");
   return `<article class="ci-review-card" data-review-state="${esc(state)}">
     <span class="cm-section-index">${esc(label)}</span>
     <strong>${esc(title)}</strong>
-    <span class="cm-meta">${esc(itemId || empty)}${item ? ` · ${esc(state)}${visible === null ? "" : visible ? " · public" : " · private"}` : ""}</span>
+    <span class="cm-meta">${esc(itemId || empty)}${item ? ` · ${esc(status)}` : ""}</span>
     <div class="cm-actions">
       ${openArchiveId ? `<button class="button" type="button" data-open-archive-record="${esc(openArchiveId)}">Open Archive record</button>` : ""}
       ${resolvedRoute ? `<a class="button" href="${esc(resolvedRoute)}" target="_blank" rel="noopener">Open route</a>` : ""}
@@ -173,19 +202,17 @@ function legendAppearanceReviewRow(appearance) {
   const recordTitle = String(first(appearance, "record_title", "recordTitle") || recordId || "Archive record");
   const role = String(first(appearance, "appearance_role", "appearanceRole", "role") || "appearance");
   const publication = String(first(appearance, "publication_state", "publicationState") || "draft");
-  const visible = checked(first(appearance, "public_visible", "publicVisible"));
   const route = safeRoute(first(appearance, "route"));
   return `<article class="ci-appearance-row" data-legend-appearance-row data-appearance-id="${esc(appearanceId)}" data-review-state="${esc(publication)}">
     <div class="ci-appearance-row-head">
       <div><span class="cm-section-index">${esc(symbolName)} · ${esc(recordTitle)}</span><strong>${esc(symbolId)} · ${esc(appearanceId)}</strong></div>
-      <span class="cm-pill" data-legend-appearance-publication-label>${esc(publication)} / ${visible ? "public" : "private"}</span>
+      <span class="cm-pill" data-legend-appearance-publication-label>${esc(publicationLabel(appearance))}</span>
     </div>
     <div class="cm-form-grid ci-appearance-fields">
       <label>Public title<input data-legend-appearance-title value="${esc(first(appearance, "title"))}" maxlength="300"></label>
       <label>Legend role<select data-legend-appearance-role>${option("variant", "Visual variant", role)}${option("appearance", "Documented appearance", role)}</select></label>
       <label>Publication state<select data-legend-appearance-publication>${["draft", "published", "archived"].map((value) => option(value, value, publication)).join("")}</select></label>
       <label>Display order<input data-legend-appearance-order type="number" min="0" step="1" value="${esc(first(appearance, "sort_order", "sortOrder") || 0)}"></label>
-      <label class="cm-check-field wide"><input data-legend-appearance-visible type="checkbox" ${visible ? "checked" : ""}><span>Publicly visible when the appearance and both linked records are published</span></label>
       <label class="wide">Public caption<textarea data-legend-appearance-caption maxlength="3000">${esc(first(appearance, "caption"))}</textarea></label>
     </div>
     <div class="ci-appearance-record-meta"><span>Canonical record · ${esc(recordId || "not returned")}</span>${route ? `<a href="${esc(route)}" target="_blank" rel="noopener">Open Archive record</a>` : ""}</div>
@@ -218,9 +245,46 @@ function legendAppearanceReviewSection(record, support, { creating = false } = {
     : "";
   return `<section class="ci-appearance-review" data-identity-legend-appearances data-current-symbol-id="${esc(symbolId)}" data-featured-record-id="${esc(featuredRecordId)}">
     <div class="ci-section-head">
-      <div><span class="cm-section-index">Identity lineage · Archive evidence</span><h4>Legend appearance review</h4><p>Review appearances for ${esc(symbolName)}, linked Origin Thread symbols, and the featured origin record. Publication here is separate from the identity profile’s publication state.</p></div>
+      <div><span class="cm-section-index">Identity lineage · Archive evidence</span><h4>Legend appearance review</h4><p>Review appearances for ${esc(symbolName)}, linked Origin Thread symbols, and the featured origin record. Setting an appearance to published automatically makes it publicly visible.</p></div>
     </div>
     ${warning}${content}
+  </section>`;
+}
+
+function identityPublicationReviewPanel(record, review, { creating = false, loading = false, error = "" } = {}) {
+  if (creating) {
+    return `<div class="cm-notice"><strong>Publication becomes available after the draft is created.</strong><p>Save the identity first, then Studio can review and publish its linked history as one package.</p></div>`;
+  }
+  const key = identityKey(record);
+  const status = String(first(review, "status") || "").toLowerCase();
+  const components = Array.isArray(review?.components) ? review.components : [];
+  const blockers = Array.isArray(review?.blockers) ? review.blockers : [];
+  const isPublished = status === "published" || status === "already-published" || status === "already_published";
+  const publishable = review?.publishable === true || review?.ready === true || status === "ready";
+  const stateLabel = loading ? "Checking…" : isPublished ? "Published" : publishable ? "Ready" : error || blockers.length ? "Needs review" : "Check required";
+  const summary = isPublished
+    ? "The profile and approved linked history are public. Publication includes visibility automatically."
+    : publishable
+      ? "The profile and approved linked history are ready to become public together. No separate visibility step is required."
+      : "Studio checks the saved profile, dossier, timeline, origin record, Origin Thread, current mark, and approved appearances before publishing them together.";
+  return `<section class="ci-publication-review" data-identity-publication-panel data-review-state="${esc(status || "unchecked")}" tabindex="-1">
+    <div class="ci-section-head">
+      <div><span class="cm-section-index">Coordinated release</span><h4>Publication review</h4><p>${esc(summary)}</p></div>
+      <span class="cm-pill" data-identity-publication-state>${esc(stateLabel)}</span>
+    </div>
+    ${error ? `<div class="cm-notice" data-kind="error" role="alert"><strong>Publication review could not be loaded.</strong><p>${esc(error)}</p></div>` : ""}
+    ${components.length ? `<div class="ci-publication-components">${components.map((component) => {
+      const label = first(component, "label", "title", "key") || "Linked item";
+      const entityId = first(component, "entity_id", "entityId", "id");
+      const ready = first(component, "ready", "publishable");
+      return `<article class="ci-publication-component" data-ready="${ready === false || ready === 0 ? "false" : "true"}"><strong>${esc(label)}</strong><span>${esc(publicationComponentStatus(component))}</span>${entityId ? `<small>${esc(entityId)}</small>` : ""}</article>`;
+    }).join("")}</div>` : ""}
+    ${blockers.length ? `<div class="ci-publication-blockers" role="alert"><strong>Resolve before publishing</strong><ul>${blockers.map((blocker) => `<li>${esc(first(blocker, "message", "label") || "A linked item needs review.")}</li>`).join("")}</ul></div>` : ""}
+    <div class="cm-actions">
+      <button class="button" type="button" data-identity-publish-package="${esc(key)}" ${loading || !publishable || isPublished ? "disabled" : ""}>${isPublished ? "Identity history is public" : "Publish identity and linked history"}</button>
+      <button class="button" type="button" data-identity-publication-review="${esc(key)}" ${loading ? "disabled" : ""}>${loading ? "Checking…" : "Refresh publication review"}</button>
+      <span class="cm-upload-status" data-identity-publication-status aria-live="polite"></span>
+    </div>
   </section>`;
 }
 
@@ -261,7 +325,7 @@ function selectOptions(records, current, idKeys, label) {
   }).join("");
 }
 
-function identityEditor(record, support, { creating = false } = {}) {
+function identityEditor(record, support, { creating = false, publicationReview = null, publicationReviewLoading = false, publicationReviewError = "" } = {}) {
   const organizationId = identityOrganizationId(record);
   const timelineId = linkedId(record, "timeline", "timeline_id", "timelineId");
   const symbolId = linkedId(record, "current_symbol", "current_symbol_id", "currentSymbolId", "current_symbol_entity_id", "currentSymbolEntityId");
@@ -271,7 +335,6 @@ function identityEditor(record, support, { creating = false } = {}) {
   const key = creating ? "" : identityKey(record);
   const lifecycle = String(first(record, "lifecycle_status", "lifecycleStatus") || "forming");
   const publication = String(first(record, "publication_state", "publicationState") || "draft");
-  const publicVisible = checked(first(record, "public_visible", "publicVisible", "visibility"));
   const organizations = creating
     ? support.organizations.filter((item) => !support.usedOrganizationIds?.has(String(first(item, "id"))))
     : support.organizations;
@@ -325,13 +388,12 @@ function identityEditor(record, support, { creating = false } = {}) {
       </section>
 
       <section class="ci-form-section">
-        <div class="ci-section-head"><div><span class="cm-section-index">03 · Publication</span><h4>Lifecycle is not publication</h4><p>An active identity may remain private. Publishing requires a public organization and eligible linked records; the backend checks every gate again.</p></div></div>
+        <div class="ci-section-head"><div><span class="cm-section-index">03 · Publication</span><h4>Publication includes public visibility</h4><p>Lifecycle describes the identity’s creative status. Publication controls whether people can see it: published means public, while draft and archived remain private.</p></div></div>
         <div class="cm-form-grid">
-          <label>Publication state<select name="publication_state">${["draft", "published", "archived"].map((value) => option(value, value, publication)).join("")}</select></label>
+          <label>Profile state<select name="publication_state">${profilePublicationOptions(publication)}</select><span class="cm-field-note">Use the coordinated publication action below to publish. Changing a published profile to draft or archived removes it from public surfaces.</span></label>
           <label>Display order<input name="sort_order" type="number" min="0" step="1" value="${esc(first(record, "sort_order", "sortOrder") || 0)}"></label>
-          <label class="cm-check-field wide"><input name="public_visible" type="checkbox" ${publicVisible ? "checked" : ""}><span>Include this profile on public Creative Identity surfaces</span></label>
         </div>
-        ${creating ? '<div class="cm-notice">New identities are always created as private drafts. Reopen the saved profile to review every linked record before publishing.</div>' : ""}
+        ${identityPublicationReviewPanel(record, publicationReview, { creating, loading: publicationReviewLoading, error: publicationReviewError })}
       </section>
 
       <div class="cm-actions">
@@ -355,6 +417,9 @@ export async function mountCreativeIdentities(root, api, setStatus = () => {}) {
   const state = {
     records: [],
     support: { organizations: [], timelines: [], symbols: [], originThreads: [], dossiers: [], legendAppearances: [], legendAppearanceError: "", usedOrganizationIds: new Set(), failures: [] },
+    publicationReviews: new Map(),
+    publicationReviewLoading: new Set(),
+    publicationReviewErrors: new Map(),
     editingKey: "",
     creating: false,
   };
@@ -393,9 +458,33 @@ export async function mountCreativeIdentities(root, api, setStatus = () => {}) {
         <div class="cm-head-actions"><button class="button" type="button" data-identity-new>New Creative Identity</button><button class="button" type="button" data-identity-reload>Reload</button></div>
       </div>
       ${supportWarning(state.support)}
-      ${state.creating || editing ? identityEditor(editing || {}, state.support, { creating: state.creating }) : ""}
+      ${state.creating || editing ? identityEditor(editing || {}, state.support, {
+        creating: state.creating,
+        publicationReview: state.publicationReviews.get(state.editingKey) || null,
+        publicationReviewLoading: state.publicationReviewLoading.has(state.editingKey),
+        publicationReviewError: state.publicationReviewErrors.get(state.editingKey) || "",
+      }) : ""}
       <div class="cm-grid ci-identity-grid">${state.records.length ? state.records.map(creativeIdentityCard).join("") : '<div class="cm-empty">No Creative Identity profiles yet. Create one from an existing organization entity.</div>'}</div>
     </section>`;
+  }
+
+  async function refreshPublicationReview(key, { rerender = true } = {}) {
+    if (!key) return null;
+    state.publicationReviewLoading.add(key);
+    state.publicationReviewErrors.delete(key);
+    if (rerender) render();
+    try {
+      const payload = await api(`${IDENTITY_ENDPOINT}/${encodeURIComponent(key)}/publication-review`);
+      const review = publicationReviewFrom(payload);
+      state.publicationReviews.set(key, review);
+      return review;
+    } catch (error) {
+      state.publicationReviewErrors.set(key, error.message || "Publication review could not be loaded.");
+      return null;
+    } finally {
+      state.publicationReviewLoading.delete(key);
+      if (rerender) render();
+    }
   }
 
   function rememberLegendAppearance(saved) {
@@ -418,6 +507,38 @@ export async function mountCreativeIdentities(root, api, setStatus = () => {}) {
     });
   }
 
+  async function publishIdentityPackage(button) {
+    const key = String(button?.dataset.identityPublishPackage || "");
+    const output = button?.closest("[data-identity-publication-panel]")?.querySelector("[data-identity-publication-status]");
+    if (!key || !output) {
+      setStatus("The identity publication review is missing its saved profile ID");
+      return;
+    }
+    button.disabled = true;
+    output.textContent = "Publishing the identity and approved linked history…";
+    try {
+      const payload = await api(`${IDENTITY_ENDPOINT}/${encodeURIComponent(key)}/publish-package`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      state.publicationReviews.set(key, publicationReviewFrom(payload));
+      state.publicationReviewErrors.delete(key);
+      await load();
+      await refreshPublicationReview(key, { rerender: false });
+      render();
+      root.querySelector("[data-identity-publication-panel]")?.focus();
+      setStatus("Creative Identity and linked history published");
+    } catch (error) {
+      const message = error.message || "The identity package could not be published.";
+      state.publicationReviewErrors.set(key, message);
+      output.textContent = message;
+      setStatus(message);
+      render();
+      root.querySelector("[data-identity-publication-panel]")?.focus();
+    }
+  }
+
   async function saveLegendAppearance(button) {
     const row = button.closest("[data-legend-appearance-row]");
     const output = row?.querySelector("[data-legend-appearance-status]");
@@ -432,9 +553,9 @@ export async function mountCreativeIdentities(root, api, setStatus = () => {}) {
       caption: String(row.querySelector("[data-legend-appearance-caption]")?.value || "").trim(),
       appearance_role: String(row.querySelector("[data-legend-appearance-role]")?.value || "appearance"),
       publication_state: String(row.querySelector("[data-legend-appearance-publication]")?.value || "draft"),
-      public_visible: Boolean(row.querySelector("[data-legend-appearance-visible]")?.checked),
       sort_order: Number(row.querySelector("[data-legend-appearance-order]")?.value) || 0,
     };
+    payload.public_visible = payload.publication_state === "published";
     if (!payload.title) {
       output.textContent = "A public title is required.";
       titleInput?.focus();
@@ -451,12 +572,9 @@ export async function mountCreativeIdentities(root, api, setStatus = () => {}) {
       const saved = recordFrom(response, "appearance");
       rememberLegendAppearance(saved);
       const publication = String(first(saved, "publication_state", "publicationState") || payload.publication_state);
-      const visible = first(saved, "public_visible", "publicVisible") === ""
-        ? payload.public_visible
-        : checked(first(saved, "public_visible", "publicVisible"));
       row.dataset.reviewState = publication;
       const label = row.querySelector("[data-legend-appearance-publication-label]");
-      if (label) label.textContent = `${publication} / ${visible ? "public" : "private"}`;
+      if (label) label.textContent = publication.charAt(0).toUpperCase() + publication.slice(1);
       output.textContent = "Legend appearance saved.";
       setStatus("Legend appearance saved");
     } catch (error) {
@@ -485,7 +603,20 @@ export async function mountCreativeIdentities(root, api, setStatus = () => {}) {
     const close = event.target.closest("[data-identity-close]");
     const prepareDossier = event.target.closest("[data-identity-prepare-dossier]");
     const saveAppearance = event.target.closest("[data-legend-appearance-save]");
-    if (!reload && !create && !edit && !close && !prepareDossier && !saveAppearance) return;
+    const reviewPublication = event.target.closest("[data-identity-publication-review]");
+    const publishPackage = event.target.closest("[data-identity-publish-package]");
+    if (!reload && !create && !edit && !close && !prepareDossier && !saveAppearance && !reviewPublication && !publishPackage) return;
+    if (publishPackage) {
+      await publishIdentityPackage(publishPackage);
+      return;
+    }
+    if (reviewPublication) {
+      const key = String(reviewPublication.dataset.identityPublicationReview || "");
+      await refreshPublicationReview(key);
+      root.querySelector(`[data-identity-publication-review="${CSS.escape(key)}"]`)?.focus();
+      setStatus(state.publicationReviewErrors.has(key) ? state.publicationReviewErrors.get(key) : "Publication review refreshed");
+      return;
+    }
     if (saveAppearance) {
       await saveLegendAppearance(saveAppearance);
       return;
@@ -507,6 +638,8 @@ export async function mountCreativeIdentities(root, api, setStatus = () => {}) {
       state.editingKey = edit.dataset.identityEdit;
       render();
       root.querySelector("[data-identity-form]")?.scrollIntoView({ block: "start" });
+      await refreshPublicationReview(state.editingKey);
+      root.querySelector("[data-identity-publication-panel]")?.focus();
       return;
     }
     if (close) {
@@ -552,9 +685,9 @@ export async function mountCreativeIdentities(root, api, setStatus = () => {}) {
       origin_thread_id: String(data.get("origin_thread_id") || "").trim() || null,
       featured_origin_entity_id: String(data.get("featured_origin_entity_id") || "").trim() || null,
       publication_state: String(data.get("publication_state") || "draft"),
-      public_visible: form.elements.public_visible.checked,
       sort_order: Number(data.get("sort_order")) || 0,
     };
+    payload.public_visible = payload.publication_state === "published";
     if (!payload.organization_id || !payload.slug || !payload.kind_label || !payload.hero_descriptor) {
       output.textContent = "Organization, slug, public kind label, and hero descriptor are required.";
       return;
@@ -572,6 +705,7 @@ export async function mountCreativeIdentities(root, api, setStatus = () => {}) {
       state.creating = false;
       state.editingKey = identityKey(saved) || key || organizationId;
       await load();
+      await refreshPublicationReview(state.editingKey, { rerender: false });
       render();
       setStatus(key ? "Creative Identity saved" : "Private Creative Identity draft created");
     } catch (error) {
@@ -654,7 +788,7 @@ export async function mountCulturalObjectCreator(root, api, setStatus = () => {}
         <div><span class="cm-section-index">Archive · Canonical intake</span><h2>Records</h2><p class="cm-summary">Create an independently identifiable cultural object as one private canonical record. The action prepares its dossier, catalogue identity, Version 1, and State I together.</p></div>
         <button class="button" type="button" data-object-reload>Reload vocabulary</button>
       </div>
-      <div class="cm-notice"><strong>Draft boundary</strong><p>Creation does not upload media or publish anything. After the record exists, open its dossier to add reviewed state evidence, relationships, provenance, and publication controls.</p></div>
+      <div class="cm-notice"><strong>Draft boundary</strong><p>Creation does not upload media or publish anything. After the record exists, open its dossier to add reviewed state evidence, relationships, provenance, and complete the publication review.</p></div>
       ${resultMarkup}
       <form class="cm-editor cm-form ci-object-form" data-cultural-object-form>
         <div class="cm-row"><div><span class="cm-section-index">New cultural object</span><h3>Canonical identity</h3></div><span class="cm-pill">private draft</span></div>

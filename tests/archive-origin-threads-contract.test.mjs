@@ -127,9 +127,55 @@ test("Lost Marbles origin thread returns its curated records and only approved e
 test("Studio manages reusable assignments, one primary thread, and archival without deleting provenance", async () => {
   const db = database();
   const runtime = env(db);
-  const created = await handleConstructApi(request("/api/admin/archive-origin-threads", { method: "POST", admin: true, body: { title: "Second source", slug: "second-source", summary: "A shared reference family.", state: "published", public_visible: true } }), runtime);
+  const created = await handleConstructApi(request("/api/admin/archive-origin-threads", { method: "POST", admin: true, body: { title: "Second source", slug: "second-source", summary: "A shared reference family.", state: "published", public_visible: false } }), runtime);
   assert.equal(created.status, 201);
   const thread = (await created.json()).record;
+  assert.equal(thread.state, "published");
+  assert.equal(Boolean(thread.public_visible), true, "published Origin Thread state must override a conflicting visibility input");
+
+  const timelineResponse = await handleConstructApi(request("/api/admin/archive-timelines", {
+    method: "POST",
+    admin: true,
+    body: {
+      subject_entity_id: "art-marbles",
+      title: "Publication-state contract",
+      slug: "publication-state-contract",
+      description: "A test timeline.",
+      state: "published",
+      public_visible: false,
+    },
+  }), runtime);
+  assert.equal(timelineResponse.status, 201);
+  const timeline = (await timelineResponse.json()).record;
+  assert.equal(timeline.state, "published");
+  assert.equal(Boolean(timeline.public_visible), true, "published timeline state must override a conflicting visibility input");
+
+  let chapterResponse = await handleConstructApi(request(`/api/admin/archive-timelines/${encodeURIComponent(timeline.id)}/chapters`, {
+    method: "POST",
+    admin: true,
+    body: {
+      title: "Private chapter",
+      summary: "A private summary.",
+      body: "A complete but unpublished chapter.",
+      date_label: "Undated",
+      state: "draft",
+      public_visible: true,
+    },
+  }), runtime);
+  assert.equal(chapterResponse.status, 201);
+  const chapter = (await chapterResponse.json()).record;
+  assert.equal(chapter.state, "draft");
+  assert.equal(Boolean(chapter.public_visible), false, "draft chapter state must override a conflicting visibility input");
+
+  chapterResponse = await handleConstructApi(request(`/api/admin/archive-timelines/${encodeURIComponent(timeline.id)}/chapters/${encodeURIComponent(chapter.id)}`, {
+    method: "PATCH",
+    admin: true,
+    body: { state: "published", public_visible: false },
+  }), runtime);
+  assert.equal(chapterResponse.status, 200);
+  const publishedChapter = (await chapterResponse.json()).record;
+  assert.equal(publishedChapter.state, "published");
+  assert.equal(Boolean(publishedChapter.public_visible), true);
 
   const assigned = await handleConstructApi(request("/api/admin/entities/art-marbles/origin-threads", { method: "PUT", admin: true, body: { origin_thread_ids: ["origin-thread-lost-marbles", thread.id], primary_origin_thread_id: thread.id } }), runtime);
   assert.equal(assigned.status, 200);

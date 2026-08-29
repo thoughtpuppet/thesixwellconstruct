@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relativePath) => readFile(path.join(ROOT, relativePath), "utf8");
 
-test("Creative Identities Studio reviews and safely saves identity-lineage Archive appearances", async () => {
+test("Creative Identities Studio coordinates package publication and derives public visibility from publication state", async () => {
   const [manager, css, studio, identitySeed] = await Promise.all([
     read("studio/creative-identities-manager.js"),
     read("studio/creative-identities-manager.css"),
@@ -35,7 +35,8 @@ test("Creative Identities Studio reviews and safely saves identity-lineage Archi
   assert.match(manager, /data-legend-appearance-caption[^>]*maxlength="3000"/);
   assert.match(manager, /data-legend-appearance-role[\s\S]*?option\("variant",\s*"Visual variant"[\s\S]*?option\("appearance",\s*"Documented appearance"/);
   assert.match(manager, /data-legend-appearance-publication[\s\S]*?\["draft",\s*"published",\s*"archived"\]/);
-  assert.match(manager, /data-legend-appearance-visible type="checkbox"/);
+  assert.doesNotMatch(manager, /data-legend-appearance-visible|name="visibility"|name="public_visible"/, "publication-backed records must not expose a second visibility control");
+  assert.match(manager, /Setting an appearance to published automatically makes it publicly visible\./);
   assert.match(manager, /data-legend-appearance-order type="number" min="0" step="1"/);
   assert.match(manager, /type="button" data-legend-appearance-save>Save Legend appearance<\/button>/);
   assert.match(manager, /data-legend-appearance-status aria-live="polite"/);
@@ -44,9 +45,10 @@ test("Creative Identities Studio reviews and safely saves identity-lineage Archi
   const saveEnd = manager.indexOf("\n\n  try {", saveStart);
   assert.ok(saveStart >= 0 && saveEnd > saveStart, "appearance save handler must remain isolated inside the identity manager");
   const saveHandler = manager.slice(saveStart, saveEnd);
-  for (const field of ["title", "caption", "appearance_role", "publication_state", "public_visible", "sort_order"]) {
+  for (const field of ["title", "caption", "appearance_role", "publication_state", "sort_order"]) {
     assert.match(saveHandler, new RegExp(`\\b${field}:`));
   }
+  assert.match(saveHandler, /payload\.public_visible\s*=\s*payload\.publication_state\s*===\s*"published"/);
   assert.match(saveHandler, /api\(`\$\{LEGEND_APPEARANCE_ENDPOINT\}\/\$\{encodeURIComponent\(appearanceId\)\}`,[\s\S]*?method:\s*"PATCH"[\s\S]*?body:\s*JSON\.stringify\(payload\)/);
   assert.match(saveHandler, /if \(!payload\.title\)[\s\S]*?titleInput\?\.focus\(\)/);
   assert.match(saveHandler, /catch \(error\)[\s\S]*?Legend appearance could not be saved/);
@@ -58,8 +60,28 @@ test("Creative Identities Studio reviews and safely saves identity-lineage Archi
   assert.match(manager, /The identity editor remains available; reload before publication review\./);
   assert.match(manager, /<form class="cm-form" data-identity-form/);
   assert.match(manager, /creating\s*\?\s*"Create private identity draft"\s*:\s*"Save identity"/);
+  assert.match(manager, /Publication includes public visibility/);
+  assert.match(manager, /published means public, while draft and archived remain private/);
+  assert.match(manager, /function profilePublicationOptions\(current\)[\s\S]*?current === "published" \? \["published", "draft", "archived"\] : \["draft", "archived"\]/, "ordinary profile editing must route first publication through the coordinated action");
   assert.match(manager, /<\/form>\s*\$\{legendAppearanceReviewSection\(record, support, \{ creating \}\)\}/, "appearance controls must remain outside the identity-profile form");
   assert.match(manager, /if \(saveAppearance\)\s*\{\s*await saveLegendAppearance\(saveAppearance\);\s*return;/);
+
+  assert.match(manager, /function identityPublicationReviewPanel\(record, review/);
+  assert.match(manager, /data-identity-publication-panel[\s\S]*?tabindex="-1"/);
+  assert.match(manager, /Publish identity and linked history/);
+  assert.match(manager, /No separate visibility step is required\./);
+  assert.match(manager, /data-identity-publication-status aria-live="polite"/);
+  assert.match(manager, /async function refreshPublicationReview\(key[\s\S]*?`\$\{IDENTITY_ENDPOINT\}\/\$\{encodeURIComponent\(key\)\}\/publication-review`/);
+  assert.match(manager, /async function publishIdentityPackage\(button\)[\s\S]*?`\$\{IDENTITY_ENDPOINT\}\/\$\{encodeURIComponent\(key\)\}\/publish-package`[\s\S]*?method:\s*"POST"/);
+  assert.match(manager, /publishIdentityPackage\(publishPackage\)/);
+  assert.match(manager, /await refreshPublicationReview\(state\.editingKey\)/);
+
+  const profileSubmitStart = manager.indexOf('root.addEventListener("submit"');
+  const profileSubmitEnd = manager.indexOf("\n}\n\nfunction catalogueLists", profileSubmitStart);
+  assert.ok(profileSubmitStart >= 0 && profileSubmitEnd > profileSubmitStart);
+  const profileSubmit = manager.slice(profileSubmitStart, profileSubmitEnd);
+  assert.match(profileSubmit, /payload\.public_visible\s*=\s*payload\.publication_state\s*===\s*"published"/);
+  assert.doesNotMatch(profileSubmit, /data\.get\("visibility"\)|data\.get\("public_visible"\)/);
 
   assert.match(identitySeed, /'legend-appearance-thoughtpuppet-early-puppet','identity-thoughtpuppet',[\s\S]*?'archive-record-thought-puppet-puppet-thoughts'/);
   assert.match(identitySeed, /'legend-appearance-six-well-cover-signature','identity-six-well',[\s\S]*?'archive-record-thought-puppet-puppet-thoughts'/);
@@ -70,5 +92,8 @@ test("Creative Identities Studio reviews and safely saves identity-lineage Archi
   assert.match(css, /\.ci-appearance-row\[data-review-state="published"\]\s*\{[^}]*border-color:var\(--accent\)/);
   assert.match(css, /\.ci-appearance-fields label\s*\{[^}]*display:grid/);
   assert.match(css, /\.ci-appearance-fields \.wide\s*\{[^}]*grid-column:1\/-1/);
+  assert.match(css, /\.ci-publication-review\s*\{[^}]*border:5px solid/);
+  assert.match(css, /\.ci-publication-review\[data-review-state="ready"\][^\{]*\{[^}]*border-color:var\(--accent\)/);
+  assert.match(css, /\.ci-publication-component\s*\{[^}]*gap:6px[^}]*border:5px solid/);
   assert.match(css, /@media\(max-width:800px\)[\s\S]*?\.ci-appearance-review,[\s\S]*?\.ci-appearance-row\{padding:14px\}/);
 });

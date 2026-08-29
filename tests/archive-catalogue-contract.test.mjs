@@ -495,11 +495,13 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
       date_precision: "undated",
       sort_order: 2,
       publication_state: "published",
-      public_visible: true,
+      public_visible: false,
     },
   }), runtime);
   assert.equal(versionResponse.status, 201);
   const version = (await versionResponse.json()).record;
+  assert.equal(version.publication_state, "published");
+  assert.equal(version.public_visible, 1, "published version state must override a conflicting visibility input");
 
   const stateResponse = await handleConstructApi(request("/api/admin/archive-states", {
     method: "POST",
@@ -512,11 +514,13 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
       date_precision: "undated",
       sort_order: 1,
       publication_state: "draft",
-      public_visible: false,
+      public_visible: true,
     },
   }), runtime);
   assert.equal(stateResponse.status, 201);
   const state = (await stateResponse.json()).record;
+  assert.equal(state.publication_state, "draft");
+  assert.equal(state.public_visible, 0, "draft state must override a conflicting visibility input");
 
   db.exec(`INSERT INTO media_assets
       (id,source_url,original_filename,mime_type,alt_text,privacy,state,public_presentation,created_by,created_at,updated_at)
@@ -533,24 +537,27 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
       media_id: "media-art-marbles-v2-lead",
       material_type: "process-photo",
       title: "Revised composition image",
-      visibility: "public",
+      visibility: "internal",
       state: "published",
       date_precision: "undated",
     },
   }), runtime);
   assert.equal(leadResponse.status, 201);
   const lead = (await leadResponse.json()).record;
+  assert.equal(lead.state, "published");
+  assert.equal(lead.visibility, "public", "published material state must override a conflicting visibility input");
 
   const publishStateResponse = await handleConstructApi(request(`/api/admin/archive-states/${encodeURIComponent(state.id)}`, {
     method: "PATCH",
     admin: true,
     body: {
       publication_state: "published",
-      public_visible: true,
+      public_visible: false,
       lead_material_id: lead.id,
     },
   }), runtime);
   assert.equal(publishStateResponse.status, 200);
+  assert.equal((await publishStateResponse.json()).record.public_visible, 1);
 
   const currentStateResponse = await handleConstructApi(request("/api/admin/archive-catalogue/art-marbles", {
     method: "PATCH",
@@ -929,6 +936,33 @@ test("Studio lists Archive People and Places without requiring sortable columns"
   assert.deepEqual(places.map((record) => record.name), ["Alpha Place", "Purple Fish Studios", "Zulu Place"]);
 });
 
+test("Archive dossier publication state alone controls dossier public visibility", async () => {
+  const db = database();
+  const runtime = env(db);
+
+  let response = await handleConstructApi(request("/api/admin/archive-dossiers/art-marbles", {
+    method: "PATCH",
+    admin: true,
+    body: { state: "draft", public_visible: true },
+  }), runtime);
+  assert.equal(response.status, 200);
+  let record = (await response.json()).record;
+  assert.equal(record.state, "draft");
+  assert.equal(record.public_visible, 0);
+  assert.deepEqual({ ...db.prepare("SELECT state,public_visible FROM archive_dossiers WHERE entity_id='art-marbles'").get() }, { state: "draft", public_visible: 0 });
+
+  response = await handleConstructApi(request("/api/admin/archive-dossiers/art-marbles", {
+    method: "PATCH",
+    admin: true,
+    body: { state: "published", public_visible: false },
+  }), runtime);
+  assert.equal(response.status, 200);
+  record = (await response.json()).record;
+  assert.equal(record.state, "published");
+  assert.equal(record.public_visible, 1);
+  assert.deepEqual({ ...db.prepare("SELECT state,public_visible FROM archive_dossiers WHERE entity_id='art-marbles'").get() }, { state: "published", public_visible: 1 });
+});
+
 test("Studio and public Archive surfaces expose the catalogue system", () => {
   const studio = readFileSync(join(ROOT, "studio", "construct-manager.js"), "utf8");
   const publicScript = readFileSync(join(ROOT, "js", "archive-public.js"), "utf8");
@@ -937,6 +971,20 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   const compareScript = readFileSync(join(ROOT, "js", "archive-compare.js"), "utf8");
   const compareCss = readFileSync(join(ROOT, "css", "archive-compare.css"), "utf8");
   const comparePage = readFileSync(join(ROOT, "archive", "compare", "index.html"), "utf8");
+  const studioSection = (startMarker, endMarker) => {
+    const start = studio.indexOf(startMarker);
+    const end = studio.indexOf(endMarker, start + startMarker.length);
+    assert.ok(start >= 0 && end > start, `Studio section ${startMarker} must remain discoverable`);
+    return studio.slice(start, end);
+  };
+  const versionEditor = studioSection("function versionForm(", "function stateForm(");
+  const stateEditor = studioSection("function stateForm(", "function evolutionMarkup(");
+  const materialEditor = studioSection("function materialForm(", "function materialCard(");
+  const sourceSetEditor = studioSection("function sourceMaterialForm(", "function sourceEntryPreview(");
+  const dossierPublication = studioSection("const publicationControls=", "return `<section class=\"construct-manager cm-dossier-workspace\"");
+  const originThreadEditor = studioSection("function originThreadForm(", "async function renderOriginThreads(");
+  const timelineEditor = studioSection("function timelineForm(", "function chapterForm(");
+  const chapterEditor = studioSection("function chapterForm(", "function blackboardOptions(");
   assert.match(studio, /Cultural object identity/);
   assert.match(studio, /Versions and states/);
   assert.match(studio, /Initialize catalogue, version, and state/);
@@ -951,7 +999,8 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(studio, /Current public condition/);
   assert.match(studio, /Adaptive catalogue documentation/);
   assert.match(studio, /Lead material/);
-  assert.match(studio, /Visible in the public evolution/);
+  assert.match(versionEditor, /Published automatically makes this version visible in the public evolution/);
+  assert.match(stateEditor, /Published automatically makes this state visible in the public evolution/);
   assert.match(studio, /Event authority identity/);
   assert.match(studio, /Contextual Archive record · no object versions or creative states/);
   assert.match(studio, /People, organizations, places, events, and themes/);
@@ -960,6 +1009,35 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(studio, /Shared Digital asset privacy/);
   assert.match(studio, /Source materials/);
   assert.match(studio, /Add client correspondence/);
+
+  for (const [label, editor] of [
+    ["dossier", dossierPublication],
+    ["version", versionEditor],
+    ["state", stateEditor],
+    ["material", materialEditor],
+    ["source set", sourceSetEditor],
+    ["Origin Thread", originThreadEditor],
+    ["timeline", timelineEditor],
+    ["chapter", chapterEditor],
+  ]) {
+    assert.doesNotMatch(editor, /name="(?:public_visible|visibility)"/, `${label} publication must not expose a second visibility control`);
+  }
+  assert.match(dossierPublication, /Published automatically makes this Archive record publicly visible/);
+  assert.match(materialEditor, /Published automatically makes this material public\. Draft and Archived keep it internal/);
+  assert.match(materialEditor, /Shared Digital asset privacy<select name="media_privacy"/, "Digital-asset privacy remains an independent safety control");
+  assert.match(sourceSetEditor, /Published automatically makes this source set public\. Draft and Archived keep it internal/);
+  assert.match(originThreadEditor, /Published automatically makes this Origin Thread public/);
+  assert.match(timelineEditor, /Published automatically makes this timeline public/);
+  assert.match(chapterEditor, /Published automatically makes this chapter public on its timeline/);
+
+  assert.match(studio, /publication_state:publicationState,public_visible:publicationState==="published"/);
+  assert.match(studio, /state:publicationState,public_visible:publicationState==="published",lead_material_id/);
+  assert.match(studio, /archiveEndpoints\.dossier\(entityId\),"PATCH",\{state:publicationState,public_visible:publicationState==="published",featured:/);
+  assert.match(studio, /visibility:publicationState==="published"\?"public":"internal",state:publicationState/);
+  assert.match(studio, /visibility:publicationState==="published"\?"public":"internal",publication_state:publicationState/);
+  assert.match(studio, /state:publicationState,public_visible:publicationState==="published",sort_order/);
+  assert.match(studio, /function serializeTimelineForm[\s\S]*?state:publicationState,public_visible:publicationState==="published"/);
+  assert.match(studio, /function serializeChapterForm[\s\S]*?state:publicationState,public_visible:publicationState==="published"/);
   assert.match(publicScript, /archive-catalogue-identifier/);
   assert.match(publicScript, /archive-digital-asset-label/);
   assert.match(publicScript, /Version \$\{versionNumber\}, State/);
