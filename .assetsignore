@@ -33,6 +33,10 @@ migrations
 migrations/**
 tests
 tests/**
+workers
+workers/**
+shared/archive-viewer-javascript.js
+tools/archive-web-history.mjs
 _worker.js
 wrangler.jsonc
 
