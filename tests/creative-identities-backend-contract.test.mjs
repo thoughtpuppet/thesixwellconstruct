@@ -238,6 +238,16 @@ test("generic cultural-object creation is atomic, private, canonical, and brand-
   assert.equal(result.body.state.public_visible, 0);
   assert.equal(database.prepare("SELECT role FROM archive_dossier_subjects WHERE dossier_entity_id=? AND subject_entity_id=?").get("archive-record-test-object", "org-thoughtpuppet").role, "brand");
 
+  result = await api(environment, `/api/admin/archive-states/${encodeURIComponent(result.body.state.id)}`, {
+    method: "PATCH",
+    admin: true,
+    body: { title: "Reviewed draft state" },
+  });
+  assert.equal(result.response.status, 200, result.body.error);
+  assert.equal(result.body.record.title, "Reviewed draft state");
+  assert.equal(result.body.record.publication_state, "draft");
+  assert.equal(result.body.record.public_visible, 0);
+
   result = await api(environment, "/api/admin/archive-records/create-cultural-object", { method: "POST", admin: true, body: {
     id: "archive-record-invalid-creator", slug: "invalid-creator", title: "Invalid", cultural_object_type_id: "art-digital-work", creator_entity_id: "identity-thoughtpuppet",
   } });
