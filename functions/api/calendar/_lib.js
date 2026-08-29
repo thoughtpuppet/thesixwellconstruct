@@ -8160,7 +8160,7 @@ function enrichPastedSocialEvent(item, sourceUrl, renderedHtml, media) {
   ].map(cleanSourceText).filter(Boolean).join("\n");
   const titleFallback = asString(item?.title) ? "" : pastedSocialEvidenceTitle(focusedEvidenceText);
   const hasTimedStart = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(asString(item?.startsAt));
-  const labeledSchedule = hasTimedStart ? null : pastedSocialLabeledSchedule(focusedEvidenceText, context.postedDate);
+  const labeledSchedule = pastedSocialLabeledSchedule(focusedEvidenceText, context.postedDate);
   const timedFallback = hasTimedStart ? null : labeledSchedule || pastedSocialTimedStart(focusedEvidenceText, context.postedDate);
   const explicitlyPublic = /\bfree\s+and\s+open\s+to\s+all\b/i.test(focusedEvidenceText);
   const virtual = /\b(?:virtual event|virtual presentation|online event|online only)\b/i.test(focusedEvidenceText);
@@ -8203,7 +8203,7 @@ function enrichPastedSocialEvent(item, sourceUrl, renderedHtml, media) {
     organizerUrl: asString(item?.organizerUrl) || (contextHandle ? `https://www.instagram.com/${contextHandle}/` : ""),
     venueName: asString(item?.venueName) || (virtual ? "Online" : ""),
     startsAt: hasTimedStart ? asString(item.startsAt) : timedFallback?.startsAt || asString(item?.startsAt),
-    endsAt: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(asString(item?.endsAt)) ? asString(item.endsAt) : timedFallback?.endsAt || asString(item?.endsAt),
+    endsAt: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(asString(item?.endsAt)) ? asString(item.endsAt) : labeledSchedule?.endsAt || timedFallback?.endsAt || asString(item?.endsAt),
     eventUrl: sourceUrl,
     imageUrl: asString(item?.imageUrl) || primaryImage?.url || "",
     imageAlt: primaryImageAlt.length >= returnedImageAlt.length ? primaryImageAlt : returnedImageAlt,
@@ -9804,6 +9804,24 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
       && (!row.venue_name || !proposal.venueName || similarity(row.venue_name, proposal.venueName) >= 0.5)
     )) || null;
   }
+  if (!existing) {
+    const socialIdentity = proposal.socialEvidence.find((item) => SOCIAL_PLATFORMS.has(asString(item.platform)) && asString(item.postId));
+    if (socialIdentity) {
+      existing = await db.prepare(
+        `SELECT c.id
+         FROM calendar_candidate_social_evidence e
+         JOIN calendar_candidates c ON c.id=e.candidate_id
+         WHERE e.platform=? AND e.post_id=? AND c.status<>'duplicate'
+         ORDER BY
+           CASE c.status WHEN 'published' THEN 0 WHEN 'candidate' THEN 1 WHEN 'needs_verification' THEN 1 ELSE 2 END,
+           CASE WHEN c.verification_state='verified' THEN 0 ELSE 1 END,
+           CASE WHEN c.source_authority<>'unresolved' THEN 0 ELSE 1 END,
+           CASE WHEN instr(COALESCE(c.starts_at,''),'T')>0 THEN 0 ELSE 1 END,
+           c.updated_at DESC
+         LIMIT 1`
+      ).bind(socialIdentity.platform, socialIdentity.postId).first();
+    }
+  }
   if (!existing && proposal.sourceUrl) {
     const rows = await db.prepare("SELECT id,title,starts_at,source_id,source_event_id FROM calendar_candidates WHERE source_url=?").bind(proposal.sourceUrl).all();
     existing = (rows.results || []).find((row) => {
@@ -10708,6 +10726,7 @@ async function resolveDiscoveryProposal(env, db, profile, source, proposal) {
     }
     const matchEntry = ranked[0];
     const match = matchEntry.item;
+    const preserveDiscoveryRestriction = proposal.accessStatus === "restricted" && match.accessStatus !== "restricted";
     audit.selectedUrl = match.sourceUrl;
     audit.status = "resolved";
     audit.notes = matchEntry.homepageVerified
@@ -10719,6 +10738,13 @@ async function resolveDiscoveryProposal(env, db, profile, source, proposal) {
         ...match,
         sourceId: proposal.sourceId,
         sourceEventId: proposal.sourceEventId,
+        endsAt: validDate(match.endsAt) ? match.endsAt : proposal.endsAt,
+        confirmedThrough: validDate(match.confirmedThrough) ? match.confirmedThrough : proposal.confirmedThrough,
+        accessStatus: preserveDiscoveryRestriction ? proposal.accessStatus : match.accessStatus,
+        accessNotes: preserveDiscoveryRestriction ? proposal.accessNotes : match.accessNotes,
+        audiences: preserveDiscoveryRestriction ? proposal.audiences : match.audiences,
+        ticketNotes: asString(match.ticketNotes) || proposal.ticketNotes,
+        planningNotes: asString(match.planningNotes) || proposal.planningNotes,
         discoveryUrl,
         discoveryChannel: proposal.discoveryChannel,
         socialEvidence: proposal.socialEvidence?.length ? proposal.socialEvidence : match.socialEvidence,

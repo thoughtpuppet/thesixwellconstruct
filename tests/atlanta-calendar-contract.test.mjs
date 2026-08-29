@@ -5125,6 +5125,7 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
   const db = database();
   const sharedUrl = "https://www.instagram.com/p/DcmKcf5pEGn/?igsi=OTRuN3ZtYnk0NDR1";
   const eventUrl = "https://www.instagram.com/p/DcmKcf5pEGn/";
+  const ticketUrl = "https://www.universe.com/events/lil-yachty-presents-game-night-tickets-XH3SP8";
   const flyerUrl = "https://scontent-atl3-3.cdninstagram.com/lil-yachty-game-night.jpg";
   const recommendationUrl = "https://scontent-atl3-3.cdninstagram.com/lil-yachty-recommended-post.jpg";
   const caption = "ATLANTA, i am doing a game night tomorrow.. open to the public. tickets r 5 dollars. address will be emailed when u purchase a ticket. Alcohol will be there.. phones will be put in cases so we can all just have a good time.";
@@ -5148,6 +5149,19 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     extractionNotes:[], conflicts:[], carouselImages:[{ url:flyerUrl, altText:"Poster for Lil Yachty Presents Game Night", extractedText:"Lil Yachty Presents Game Night; Date: August; Time:", role:"flyer" }],
     occurrences:[], recurringOccurrences:[], ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"", scheduleStatus:"scheduled",
   };
+  const resolvedEvent = {
+    sourceId:"", sourceEventId:"universe-XH3SP8", sourceUrl:ticketUrl, ticketUrl, discoveryUrl:"",
+    organizerUrl:"https://www.instagram.com/lilyachty/", venueUrl:"", sourceAuthority:"authorized_ticket_host",
+    sourceResolutionNotes:"The exact authorized ticket listing identifies Lil Yachty and the event.", relatedLinks:[],
+    title:"Lil Yachty Presents: Game Night", organizer:"Lil Yachty",
+    factualDescription:"Lil Yachty presents a public game night with table games, video-game tournaments, and karaoke.",
+    eventStructure:"single", accessStatus:"public", accessNotes:"Public audience; no attendance restriction has been established.", audiences:["Public"],
+    dateKind:"timed", startsAt:"2026-08-29T19:00:00-04:00", endsAt:"", confirmedThrough:"", timezone:"America/New_York",
+    venueName:"", venueAddress:"", city:"Atlanta", region:"GA", subjects:["poetry-music"], formats:["experimental-event"], experimental:false,
+    scheduleStatus:"scheduled", ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"", planningNotes:"",
+    verificationState:"needs_verification", verificationNotes:"The ticket listing does not provide an end time.", confidence:0.8,
+    occurrences:[], socialEvidence:[], privateRationale:"", attendanceUse:"", programmingIdeas:"", potentialCollaborators:"", internalNotes:"",
+  };
   const browser = {
     async quickAction(action, options) {
       assert.equal(action, "content");
@@ -5156,6 +5170,7 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     },
   };
   let visionRequest = null;
+  let intakeCount = 0;
   let resolutionCalls = 0;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options = {}) => {
@@ -5164,11 +5179,12 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     if (value === "https://api.openai.com/v1/responses") {
       const body = JSON.parse(options.body);
       if (body.text?.format?.name === "pasted_social_event") {
+        intakeCount += 1;
         visionRequest = body;
         return Response.json({ output_text:JSON.stringify({ events:[visionEvent] }), usage:{ input_tokens:850, output_tokens:450, total_tokens:1300 } });
       }
       resolutionCalls += 1;
-      return Response.json({ output_text:JSON.stringify({ events:[] }), usage:{} });
+      return Response.json({ output_text:JSON.stringify({ events:intakeCount >= 2 ? [resolvedEvent] : [] }), usage:{} });
     }
     assert.fail(`Unexpected game-night intake request: ${value}`);
   };
@@ -5207,6 +5223,37 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     assert.equal(run.status, "completed");
     assert.equal(run.failure_count, 0);
     assert.deepEqual(JSON.parse(run.sources_searched_json), [eventUrl]);
+
+    const refreshed = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:sharedUrl }, admin:true }),
+      env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }),
+    );
+    assert.equal(refreshed.status, 200, await refreshed.clone().text());
+    const refreshedPayload = await refreshed.json();
+    assert.equal(refreshedPayload.existing, true);
+    assert.equal(refreshedPayload.candidate.id, payload.candidate.id);
+    assert.equal(resolutionCalls, 4);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_social_evidence WHERE platform='instagram' AND post_id='DcmKcf5pEGn'").get().count, 1);
+    assert.ok(refreshedPayload.candidate.pendingRevisionId);
+    const revision = db.prepare("SELECT snapshot_json,change_set_json FROM calendar_candidate_revisions WHERE id=?").get(refreshedPayload.candidate.pendingRevisionId);
+    const snapshot = JSON.parse(revision.snapshot_json);
+    assert.equal(snapshot.sourceUrl, ticketUrl);
+    assert.equal(snapshot.ticketUrl, ticketUrl);
+    assert.equal(snapshot.endsAt, "2026-08-30T00:00:00-04:00");
+    assert.equal(snapshot.accessStatus, "restricted");
+    assert.deepEqual(snapshot.audiences, ["Ages 21+"]);
+    assert.equal(snapshot.ticketNotes, "Admission is $5. The event address is sent after ticket purchase.");
+    const fields = JSON.parse(revision.change_set_json).map((change) => change.field);
+    const applied = await admin(db, `/candidates/${payload.candidate.id}/revisions/${refreshedPayload.candidate.pendingRevisionId}/apply`, { method:"POST", body:{ fields } });
+    assert.equal(applied.status, 200, await applied.clone().text());
+    const finalCandidate = (await applied.json()).candidate;
+    assert.equal(finalCandidate.sourceUrl, ticketUrl);
+    assert.equal(finalCandidate.ticketUrl, ticketUrl);
+    assert.equal(finalCandidate.sourceAuthority, "authorized_ticket_host");
+    assert.equal(finalCandidate.discoveryUrl, eventUrl);
+    assert.equal(finalCandidate.endsAt, "2026-08-30T00:00:00-04:00");
+    assert.equal(finalCandidate.accessStatus, "restricted");
+    assert.equal(finalCandidate.publicEntryId, "");
   } finally {
     globalThis.fetch = originalFetch;
   }
