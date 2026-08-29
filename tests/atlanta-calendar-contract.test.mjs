@@ -5144,7 +5144,7 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     city:"Atlanta", region:"GA", startsAt:"2026-08-29", endsAt:"",
     confirmedThrough:"", visitingHours:[], visitingHoursNote:"", visitingHoursSourceUrl:"", eventUrl, ticketUrl:"",
     imageUrl:flyerUrl, imageAlt:"Poster for Lil Yachty Presents Game Night", accessStatus:"public", accessNotes:"Open to the public.", audiences:["Public"],
-    eventStructure:"single", dateKind:"all_day", timezone:"America/New_York", subjects:[], formats:["experimental-event"], experimental:false,
+    eventStructure:"single", dateKind:"all_day", timezone:"America/New_York", subjects:["poetry-music"], formats:["experimental-event"], experimental:true,
     authorHandle:"lilyachty", authorDisplayName:"Lil Yachty", authorIsVerified:true, postedAt:"2026-08-28", mediaType:"image",
     extractionNotes:[], conflicts:[], carouselImages:[{ url:flyerUrl, altText:"Poster for Lil Yachty Presents Game Night", extractedText:"Lil Yachty Presents Game Night; Date: August; Time:", role:"flyer" }],
     occurrences:[], recurringOccurrences:[], ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"", scheduleStatus:"scheduled",
@@ -5157,8 +5157,8 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     factualDescription:"Lil Yachty presents a public game night with table games, video-game tournaments, and karaoke.",
     eventStructure:"single", accessStatus:"public", accessNotes:"Public audience; no attendance restriction has been established.", audiences:["Public"],
     dateKind:"timed", startsAt:"2026-08-29T19:00:00-04:00", endsAt:"", confirmedThrough:"", timezone:"America/New_York",
-    venueName:"", venueAddress:"", city:"Atlanta", region:"GA", subjects:["poetry-music"], formats:["experimental-event"], experimental:false,
-    scheduleStatus:"scheduled", ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"", planningNotes:"",
+    venueName:"", venueAddress:"", city:"Atlanta", region:"GA", subjects:[], formats:[], experimental:false,
+    scheduleStatus:"scheduled", ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"Ticket availability is not established.", planningNotes:"",
     verificationState:"needs_verification", verificationNotes:"The ticket listing does not provide an end time.", confidence:0.8,
     occurrences:[], socialEvidence:[], privateRationale:"", attendanceUse:"", programmingIdeas:"", potentialCollaborators:"", internalNotes:"",
   };
@@ -5243,6 +5243,9 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     assert.equal(snapshot.accessStatus, "restricted");
     assert.deepEqual(snapshot.audiences, ["Ages 21+"]);
     assert.equal(snapshot.ticketNotes, "Admission is $5. The event address is sent after ticket purchase.");
+    assert.deepEqual(snapshot.subjects, ["poetry-music"]);
+    assert.deepEqual(snapshot.formats, ["experimental-event"]);
+    assert.equal(snapshot.experimental, true);
     const fields = JSON.parse(revision.change_set_json).map((change) => change.field);
     const applied = await admin(db, `/candidates/${payload.candidate.id}/revisions/${refreshedPayload.candidate.pendingRevisionId}/apply`, { method:"POST", body:{ fields } });
     assert.equal(applied.status, 200, await applied.clone().text());
@@ -5253,6 +5256,8 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     assert.equal(finalCandidate.discoveryUrl, eventUrl);
     assert.equal(finalCandidate.endsAt, "2026-08-30T00:00:00-04:00");
     assert.equal(finalCandidate.accessStatus, "restricted");
+    assert.deepEqual(finalCandidate.subjects, ["poetry-music"]);
+    assert.deepEqual(finalCandidate.formats, ["experimental-event"]);
     assert.equal(finalCandidate.publicEntryId, "");
   } finally {
     globalThis.fetch = originalFetch;

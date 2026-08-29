@@ -10044,6 +10044,15 @@ function protectScoutProposal(current, proposed) {
   } else if ((current.audiences || []).length && !(proposal.audiences || []).length) {
     preserve(["audiences"], "A known audience cannot be erased by an automated source check.");
   }
+  if ((current.subjects || []).length && !(proposal.subjects || []).length) {
+    preserve(["subjects"], "Known subject classifications cannot be erased by an automated source check.");
+  }
+  if ((current.formats || []).length && !(proposal.formats || []).length) {
+    preserve(["formats"], "Known format classifications cannot be erased by an automated source check.");
+  }
+  if (current.experimental && !proposal.experimental) {
+    preserve(["experimental"], "An experimental classification cannot be removed by an automated source check.");
+  }
   const scheduleLostRange = current.dateKind === "date_range" && proposal.dateKind !== "date_range";
   const scheduleLostTime = current.dateKind === "timed" && proposal.dateKind === "all_day";
   const scheduleLostEnd = Boolean(current.endsAt) && !proposal.endsAt;
@@ -10727,6 +10736,11 @@ async function resolveDiscoveryProposal(env, db, profile, source, proposal) {
     const matchEntry = ranked[0];
     const match = matchEntry.item;
     const preserveDiscoveryRestriction = proposal.accessStatus === "restricted" && match.accessStatus !== "restricted";
+    const matchTicketNotes = asString(match.ticketNotes);
+    const proposalTicketNotes = asString(proposal.ticketNotes);
+    const resolvedTicketNotes = proposalTicketNotes && (!matchTicketNotes || /\b(?:not established|not confirmed|unknown|unavailable|not available)\b/i.test(matchTicketNotes))
+      ? proposalTicketNotes
+      : matchTicketNotes || proposalTicketNotes;
     audit.selectedUrl = match.sourceUrl;
     audit.status = "resolved";
     audit.notes = matchEntry.homepageVerified
@@ -10743,8 +10757,11 @@ async function resolveDiscoveryProposal(env, db, profile, source, proposal) {
         accessStatus: preserveDiscoveryRestriction ? proposal.accessStatus : match.accessStatus,
         accessNotes: preserveDiscoveryRestriction ? proposal.accessNotes : match.accessNotes,
         audiences: preserveDiscoveryRestriction ? proposal.audiences : match.audiences,
-        ticketNotes: asString(match.ticketNotes) || proposal.ticketNotes,
+        ticketNotes: resolvedTicketNotes,
         planningNotes: asString(match.planningNotes) || proposal.planningNotes,
+        subjects: match.subjects?.length ? match.subjects : proposal.subjects,
+        formats: match.formats?.length ? match.formats : proposal.formats,
+        experimental: Boolean(match.experimental || proposal.experimental),
         discoveryUrl,
         discoveryChannel: proposal.discoveryChannel,
         socialEvidence: proposal.socialEvidence?.length ? proposal.socialEvidence : match.socialEvidence,
