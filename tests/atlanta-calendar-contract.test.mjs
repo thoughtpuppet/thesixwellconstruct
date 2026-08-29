@@ -4748,6 +4748,315 @@ test("PHOSPHENES intake sends rendered caption and carousel assets to vision ext
   }
 });
 
+test("Instagram share intake isolates the target post, resolves an omitted year, and accepts a visibly verified official homepage", async () => {
+  const db = database();
+  const sharedUrl = "https://www.instagram.com/p/Dcjq3xEoG3Z/?igsi=MW9nNTR5aTUyYTgzeQ==";
+  const eventUrl = "https://www.instagram.com/p/Dcjq3xEoG3Z/";
+  const officialUrl = "https://liquidblackness.com/";
+  const ticketUrl = "https://www.zeffy.com/en-US/ticketing/gathering-with-liquid-blackness-studying-for-opticality-virtual-event";
+  const flyerUrl = "https://scontent-atl3-2.cdninstagram.com/opticality-flyer.jpg";
+  const detailUrl = "https://scontent-atl3-2.cdninstagram.com/opticality-detail.jpg";
+  const unrelatedUrl = "https://scontent-atl3-2.cdninstagram.com/recommended-post.jpg";
+  const sameDayUnrelatedUrl = "https://scontent-atl3-2.cdninstagram.com/same-day-recommended-post.jpg";
+  const caption = "Join us Thursday Sep 10 at 7pm for a virtual presentation and Q&A. Free and open to all. Link in bio.";
+  const flyerAlt = "Photo by liquid blackness on August 20, 2026. May be an image of text that says ‘liquid blackness: Encounters in the Black Arts presents &quot;Studying for Opticality&quot; Teach-In Virtual Event Thursday, September 10 At 7pm Free and Open to All’.";
+  const detailAlt = "Photo by liquid blackness on August 20, 2026. May be an image of text that says ‘Studying for Opticality virtual presentation and Q&A Thursday September 10 at 7pm’.";
+  const renderedHtml = `<html><head>
+    <meta property="og:description" content="184 likes, 3 comments - liquidblackness on August 20, 2026: &quot;${caption}&quot;">
+    <meta property="og:image" content="${flyerUrl}">
+  </head><body><article>
+    <img src="${flyerUrl}" alt="${flyerAlt}">
+    <img src="${detailUrl}" alt="${detailAlt}">
+  </article><section aria-label="More posts">
+    <img src="${unrelatedUrl}" alt="Photo by unrelatedartist on August 22, 2026. A recommended exhibition post.">
+    <img src="${sameDayUnrelatedUrl}" alt="Photo by anotherartist on August 20, 2026. Another recommended post.">
+  </section></body></html>`;
+  const officialHtml = `<html><body><main>
+    <h2>“Studying for Opticality” Virtual Teach-In</h2>
+    <p>Thursday, September 10, 2026, 7:00 PM–8:15 PM</p>
+    <p>Free and open to all.</p>
+    <a href="${ticketUrl}">Register for the virtual event</a>
+  </main></body></html>`;
+  const partialVisionEvent = {
+    title:"", description:"A virtual presentation and Q&A.", caption, organizer:"", organizerUrl:"", venueName:"", venueAddress:"", venueUrl:"",
+    city:"Atlanta", region:"GA", startsAt:"", endsAt:"", confirmedThrough:"", visitingHours:[], visitingHoursNote:"", visitingHoursSourceUrl:"",
+    eventUrl, ticketUrl:"", imageUrl:"", imageAlt:"", accessStatus:"unknown", accessNotes:"", audiences:[], eventStructure:"single", dateKind:"timed",
+    timezone:"America/New_York", subjects:["art"], formats:["lecture-talk"], experimental:false, authorHandle:"", authorDisplayName:"",
+    authorIsVerified:false, postedAt:"", mediaType:"carousel", extractionNotes:[], conflicts:[], carouselImages:[], occurrences:[], recurringOccurrences:[],
+  };
+  const officialEvent = {
+    sourceUrl:officialUrl, ticketUrl, discoveryUrl:eventUrl, organizerUrl:officialUrl, venueUrl:"", sourceAuthority:"organizer_event",
+    sourceResolutionNotes:"Liquid Blackness presents the exact current event on its official homepage.", sourceEventId:"liquid-blackness-studying-for-opticality",
+    title:"Studying for Opticality", relatedLinks:[{ label:"Registration", url:ticketUrl, provenanceUrl:officialUrl, role:"ticket", includePublic:true }],
+    flyerUrl:"", flyerProvenanceUrl:"", flyerAltText:"", organizer:"Liquid Blackness",
+    factualDescription:"A virtual teach-in presentation and Q&A about opticality.", eventStructure:"single", accessStatus:"public", accessNotes:"Free and open to all.", audiences:["Public"],
+    dateKind:"timed", startsAt:"2026-09-10T19:00:00-04:00", endsAt:"2026-09-10T20:15:00-04:00", confirmedThrough:"", visitingHours:[], visitingHoursNote:"", visitingHoursSourceUrl:"",
+    timezone:"America/New_York", venueName:"Online", venueAddress:"", city:"Atlanta", region:"GA", subjects:["art"], formats:["lecture-talk"], experimental:false,
+    scheduleStatus:"scheduled", ticketStatus:"registration_open", ticketOnSaleAt:"", ticketNotes:"Registration is available online.", verificationState:"verified",
+    verificationNotes:"The official organizer homepage contains the exact title and schedule.", confidence:.97, privateRationale:"Relevant Black arts scholarship.",
+    attendanceUse:"Attend the teach-in.", programmingIdeas:"Study the virtual teach-in format.", potentialCollaborators:"Liquid Blackness.", socialEvidence:[], occurrences:[],
+  };
+  const browserCalls = [];
+  const browser = {
+    async quickAction(action, options) {
+      browserCalls.push({ action, options });
+      assert.equal(action, "content");
+      assert.equal(options.url, eventUrl);
+      return new Response(renderedHtml, { status:200, headers:{ "content-type":"text/html", "x-browser-ms-used":"23" } });
+    },
+  };
+  let visionRequest = null;
+  let resolutionRequest = null;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    const value = String(url);
+    if (value === eventUrl) return new Response("<main>Instagram post</main>", { status:200, headers:{ "content-type":"text/html" } });
+    if (value === officialUrl) return new Response(officialHtml, { status:200, headers:{ "content-type":"text/html" } });
+    if (value === "https://api.openai.com/v1/responses") {
+      const body = JSON.parse(options.body);
+      if (body.text?.format?.name === "pasted_social_event") {
+        visionRequest = body;
+        return Response.json({ output_text:JSON.stringify({ events:[partialVisionEvent] }), usage:{ input_tokens:900, output_tokens:500, total_tokens:1400 } });
+      }
+      resolutionRequest = body;
+      return Response.json({ output_text:JSON.stringify({ events:[officialEvent] }), usage:{ input_tokens:300, output_tokens:220, total_tokens:520 } });
+    }
+    assert.fail(`Unexpected Opticality intake request: ${value}`);
+  };
+  try {
+    const response = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:sharedUrl }, admin:true }),
+      env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }),
+    );
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.equal(browserCalls.length, 1);
+    assert.ok(visionRequest);
+    assert.ok(resolutionRequest);
+    const visionContent = visionRequest.input[0].content;
+    assert.equal(JSON.parse(visionContent.find((item) => item.type === "input_text").text).sourceUrl, eventUrl);
+    assert.deepEqual(visionContent.filter((item) => item.type === "input_image").map((item) => item.image_url), [flyerUrl, detailUrl]);
+    assert.match(resolutionRequest.instructions, /homepage is acceptable only when that homepage visibly presents the exact event title and full date/i);
+    assert.equal(payload.extraction.mediaInspected, 2);
+    assert.equal(payload.extraction.evidenceCharacters > 0, true);
+
+    const candidate = payload.candidate;
+    assert.equal(candidate.title, "Studying for Opticality");
+    assert.equal(candidate.organizer, "Liquid Blackness");
+    assert.equal(candidate.sourceUrl, officialUrl);
+    assert.equal(candidate.discoveryUrl, eventUrl);
+    assert.equal(candidate.ticketUrl, ticketUrl);
+    assert.equal(candidate.startsAt, "2026-09-10T19:00:00-04:00");
+    assert.equal(candidate.endsAt, "2026-09-10T20:15:00-04:00");
+    assert.equal(candidate.venueName, "Online");
+    assert.equal(candidate.verificationState, "needs_verification");
+    assert.match(candidate.verificationNotes, /omitted event year was resolved to 2026/i);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+
+    const evidence = db.prepare("SELECT post_id,post_url,author_handle,media_url,provenance_json FROM calendar_candidate_social_evidence WHERE candidate_id=?").get(candidate.id);
+    assert.deepEqual({ post_id:evidence.post_id, post_url:evidence.post_url, author_handle:evidence.author_handle, media_url:evidence.media_url }, {
+      post_id:"Dcjq3xEoG3Z", post_url:eventUrl, author_handle:"liquidblackness", media_url:flyerUrl,
+    });
+    assert.deepEqual(JSON.parse(evidence.provenance_json).filter((item) => item.channel === "social_carousel_image").map((item) => item.mediaUrl), [flyerUrl,detailUrl]);
+    const resolution = db.prepare("SELECT selected_url,resolution_status,resolution_notes FROM calendar_source_resolution_attempts WHERE candidate_id=?").get(candidate.id);
+    assert.equal(resolution.selected_url, officialUrl);
+    assert.equal(resolution.resolution_status, "resolved");
+    assert.match(resolution.resolution_notes, /independently verifying the exact event title and full date/i);
+    const run = db.prepare("SELECT sources_searched_json,source_results_json FROM calendar_scout_runs WHERE id=?").get(payload.runId);
+    assert.deepEqual(JSON.parse(run.sources_searched_json), [eventUrl]);
+    assert.equal(run.source_results_json.includes("igsi"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Instagram game-night intake keeps same-night tournaments on one event and excludes linked recommendations", async () => {
+  const db = database();
+  const sharedUrl = "https://www.instagram.com/p/DcmKcf5pEGn/?igsi=OTRuN3ZtYnk0NDR1";
+  const eventUrl = "https://www.instagram.com/p/DcmKcf5pEGn/";
+  const flyerUrl = "https://scontent-atl3-3.cdninstagram.com/lil-yachty-game-night.jpg";
+  const recommendationUrl = "https://scontent-atl3-3.cdninstagram.com/lil-yachty-recommended-post.jpg";
+  const caption = "ATLANTA, i am doing a game night tomorrow.. open to the public. tickets r 5 dollars. address will be emailed when u purchase a ticket. Alcohol will be there.. phones will be put in cases so we can all just have a good time.";
+  const flyerAlt = "Photo by CONCRETE BOY BOAT^ on August 28, 2026. May be an image of a poster and text that says '21+ $5 ENTRY Date: August 29th Lil Yachty Presents Game Night Time: 7:00pm-midnight Atlanta location to be given on confirmation phone free event 2K tournament Madden tournament karaoke contest'.";
+  const renderedHtml = `<html><head>
+    <meta property="og:description" content="lilyachty on August 28, 2026: &quot;${caption}&quot;">
+    <meta property="og:image" content="${flyerUrl}">
+  </head><body><article>
+    <img src="${flyerUrl}" alt="${flyerAlt}">
+  </article><section aria-label="More posts">
+    <a href="/lilyachty/p/Dcl2IgKEQ1R/"><img src="${recommendationUrl}" alt="Photo by CONCRETE BOY BOAT^ on August 28, 2026. A different same-day post."></a>
+  </section></body></html>`;
+  const visionEvent = {
+    title:"Lil Yachty Game Night", description:"A phone-free game night with table games, video-game tournaments, and a karaoke contest.", caption,
+    organizer:"Lil Yachty", organizerUrl:"https://www.instagram.com/lilyachty/", venueName:"", venueAddress:"", venueUrl:"",
+    city:"Atlanta", region:"GA", startsAt:"2026-08-29T19:00:00-04:00", endsAt:"2026-08-30T00:00:00-04:00",
+    confirmedThrough:"", visitingHours:[], visitingHoursNote:"", visitingHoursSourceUrl:"", eventUrl, ticketUrl:"",
+    imageUrl:flyerUrl, imageAlt:flyerAlt, accessStatus:"restricted", accessNotes:"Open to the public for ages 21 and older. Admission is $5.", audiences:["21+"],
+    eventStructure:"single", dateKind:"timed", timezone:"America/New_York", subjects:["creative-technology"], formats:["experimental-event"], experimental:false,
+    authorHandle:"lilyachty", authorDisplayName:"Lil Yachty", authorIsVerified:true, postedAt:"2026-08-28", mediaType:"image",
+    extractionNotes:[], conflicts:[], carouselImages:[{ url:flyerUrl, altText:flyerAlt, extractedText:"21+ $5 ENTRY. Date: August 29th. Lil Yachty Presents Game Night. Time: 7:00pm-midnight.", role:"flyer" }],
+    occurrences:[], recurringOccurrences:[], ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"The exact location is sent after ticket purchase.", scheduleStatus:"scheduled",
+  };
+  const browser = {
+    async quickAction(action, options) {
+      assert.equal(action, "content");
+      assert.equal(options.url, eventUrl);
+      return new Response(renderedHtml, { status:200, headers:{ "content-type":"text/html", "x-browser-ms-used":"21" } });
+    },
+  };
+  let visionRequest = null;
+  let resolutionCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    const value = String(url);
+    if (value === eventUrl) return new Response("<main>Instagram post</main>", { status:200, headers:{ "content-type":"text/html" } });
+    if (value === "https://api.openai.com/v1/responses") {
+      const body = JSON.parse(options.body);
+      if (body.text?.format?.name === "pasted_social_event") {
+        visionRequest = body;
+        return Response.json({ output_text:JSON.stringify({ events:[visionEvent] }), usage:{ input_tokens:850, output_tokens:450, total_tokens:1300 } });
+      }
+      resolutionCalls += 1;
+      return Response.json({ output_text:JSON.stringify({ events:[] }), usage:{} });
+    }
+    assert.fail(`Unexpected game-night intake request: ${value}`);
+  };
+  try {
+    const response = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:sharedUrl }, admin:true }),
+      env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }),
+    );
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.ok(visionRequest);
+    assert.equal(resolutionCalls, 3);
+    assert.deepEqual(
+      visionRequest.input[0].content.filter((item) => item.type === "input_image").map((item) => item.image_url),
+      [flyerUrl],
+    );
+    assert.equal(payload.extraction.mediaInspected, 1);
+    assert.equal(payload.candidate.title, "Lil Yachty Game Night");
+    assert.equal(payload.candidate.startsAt, "2026-08-29T19:00:00-04:00");
+    assert.equal(payload.candidate.endsAt, "2026-08-30T00:00:00-04:00");
+    assert.equal(payload.candidate.eventStructure, "single");
+    assert.equal(payload.candidate.occurrences.length, 0);
+    assert.equal(payload.candidate.accessStatus, "restricted");
+    assert.deepEqual(payload.candidate.audiences, ["21+"]);
+    assert.equal(payload.candidate.sourceUrl, eventUrl);
+    assert.equal(payload.candidate.discoveryUrl, eventUrl);
+    assert.equal(payload.candidate.verificationState, "needs_verification");
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payload.candidate.id).count, 0);
+    const run = db.prepare("SELECT status,failure_count,sources_searched_json FROM calendar_scout_runs WHERE id=?").get(payload.runId);
+    assert.equal(run.status, "completed");
+    assert.equal(run.failure_count, 0);
+    assert.deepEqual(JSON.parse(run.sources_searched_json), [eventUrl]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Instagram intake keeps an unresolved undated lead private instead of discarding it before source resolution", async () => {
+  const db = database();
+  const eventUrl = "https://www.instagram.com/p/UndatedLead123/";
+  const renderedHtml = `<html><head><meta property="og:description" content="atlantaartslab on August 28, 2026: &quot;Untimed Studio Teach-In is a virtual event. Free and open to all. Schedule details coming soon.&quot;"></head><body><p>Untimed Studio Teach-In is a virtual event.</p></body></html>`;
+  const visionEvent = {
+    title:"Untimed Studio Teach-In", description:"A virtual teach-in.", caption:"Untimed Studio Teach-In is a virtual event. Free and open to all. Schedule details coming soon.",
+    organizer:"atlantaartslab", organizerUrl:"", venueName:"", venueAddress:"", venueUrl:"", city:"Atlanta", region:"GA", startsAt:"", endsAt:"",
+    eventUrl, ticketUrl:"", imageUrl:"", imageAlt:"", accessStatus:"public", accessNotes:"Free and open to all.", audiences:["Public"],
+    eventStructure:"single", dateKind:"timed", timezone:"America/New_York", subjects:["art"], formats:["lecture-talk"], experimental:false,
+    authorHandle:"atlantaartslab", authorDisplayName:"Atlanta Arts Lab", authorIsVerified:false, postedAt:"2026-08-28", mediaType:"text",
+    extractionNotes:[], conflicts:[], carouselImages:[], occurrences:[], recurringOccurrences:[],
+  };
+  const browser = {
+    async quickAction(action, options) {
+      assert.equal(action, "content");
+      assert.equal(options.url, eventUrl);
+      return new Response(renderedHtml, { status:200, headers:{ "content-type":"text/html" } });
+    },
+  };
+  let resolutionCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    const value = String(url);
+    if (value === eventUrl) return new Response("<main>Instagram post</main>", { status:200, headers:{ "content-type":"text/html" } });
+    if (value === "https://api.openai.com/v1/responses") {
+      const body = JSON.parse(options.body);
+      if (body.text?.format?.name === "pasted_social_event") return Response.json({ output_text:JSON.stringify({ events:[visionEvent] }), usage:{} });
+      resolutionCalls += 1;
+      return Response.json({ output_text:JSON.stringify({ events:[] }), usage:{} });
+    }
+    assert.fail(`Unexpected unresolved Instagram request: ${value}`);
+  };
+  try {
+    const response = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }),
+      env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }),
+    );
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.equal(resolutionCalls, 3);
+    assert.deepEqual(payload.extraction.incompleteFields, ["startsAt"]);
+    assert.equal(payload.candidate.title, "Untimed Studio Teach-In");
+    assert.equal(payload.candidate.startsAt, null);
+    assert.equal(payload.candidate.status, "needs_verification");
+    assert.equal(payload.candidate.verificationState, "needs_verification");
+    assert.equal(payload.candidate.sourceAuthority, "unresolved");
+    assert.equal(payload.candidate.sourceUrl, eventUrl);
+    assert.equal(payload.candidate.discoveryUrl, eventUrl);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payload.candidate.id).count, 0);
+    const run = db.prepare("SELECT status,failure_count,source_results_json FROM calendar_scout_runs WHERE id=?").get(payload.runId);
+    assert.equal(run.status, "partial");
+    assert.equal(run.failure_count, 0);
+    assert.match(JSON.parse(run.source_results_json)[0].sources[0].warning, /unresolved fields: startsAt/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Instagram vision failures persist bounded extraction diagnostics in Run History", async () => {
+  const db = database();
+  const sharedUrl = "https://www.instagram.com/p/NoEventFacts123/?igsi=tracking-value";
+  const eventUrl = "https://www.instagram.com/p/NoEventFacts123/";
+  const renderedHtml = `<html><head><meta property="og:description" content="sampleaccount on August 28, 2026: &quot;A new announcement is coming soon.&quot;"></head><body><p>A new announcement is coming soon.</p></body></html>`;
+  const browser = {
+    async quickAction(action, options) {
+      assert.equal(action, "content");
+      assert.equal(options.url, eventUrl);
+      return new Response(renderedHtml, { status:200, headers:{ "content-type":"text/html" } });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    const value = String(url);
+    if (value === eventUrl) return new Response("<main>Instagram post</main>", { status:200, headers:{ "content-type":"text/html" } });
+    if (value === "https://api.openai.com/v1/responses") {
+      const body = JSON.parse(options.body);
+      assert.equal(body.text?.format?.name, "pasted_social_event");
+      return Response.json({ output_text:JSON.stringify({ events:[] }), usage:{} });
+    }
+    assert.fail(`Unexpected Instagram diagnostic request: ${value}`);
+  };
+  try {
+    const response = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:sharedUrl }, admin:true }),
+      env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }),
+    );
+    assert.equal(response.status, 422);
+    const run = db.prepare("SELECT status,failure_count,sources_searched_json,source_results_json FROM calendar_scout_runs WHERE model='pasted-link' ORDER BY started_at DESC LIMIT 1").get();
+    assert.equal(run.status, "failed");
+    assert.equal(run.failure_count, 1);
+    assert.deepEqual(JSON.parse(run.sources_searched_json), [eventUrl]);
+    const source = JSON.parse(run.source_results_json)[0].sources[0];
+    assert.equal(source.url, eventUrl);
+    assert.equal(source.extraction.stage, "rendered-social-vision");
+    assert.equal(source.extraction.canonicalUrl, eventUrl);
+    assert.equal(source.extraction.evidenceCharacters > 0, true);
+    assert.deepEqual(source.extraction.missingFields, ["title","startsAt"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Instagram intake retries a rejected detailed schema and keeps the enumerated exhibition schedule", async () => {
   const db = database();
   const eventUrl = "https://www.instagram.com/p/DcRzECRkQSj/";
