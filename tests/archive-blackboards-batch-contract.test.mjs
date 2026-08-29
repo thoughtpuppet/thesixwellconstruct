@@ -8,6 +8,7 @@ import {__blackboardBatchTest as batch} from "../studio/archive-blackboards-mana
 
 const ROOT=dirname(dirname(fileURLToPath(import.meta.url)));
 const SOURCE=readFileSync(join(ROOT,"studio","archive-blackboards-manager.js"),"utf8");
+const STYLE=readFileSync(join(ROOT,"studio","archive-blackboards-manager.css"),"utf8");
 const file=(name,{type="",size=100,lastModified=1}={})=>({name,type,size,lastModified});
 
 test("Blackboard batch filenames derive editable catalogue metadata",()=>{
@@ -88,4 +89,17 @@ test("Blackboard batch upload contract preserves private sources, independent dr
   assert.match(SOURCE,/data-batch-retry/);
   assert.match(SOURCE,/name="masters" multiple/);
   assert.match(SOURCE,/name="derivatives" multiple/);
+  assert.match(SOURCE,/data-batch-dropzone="masters"/);
+  assert.match(SOURCE,/data-batch-dropzone="derivatives"/);
+  assert.match(SOURCE,/host\.addEventListener\("dragover",onBatchDragOver\)/);
+  assert.match(SOURCE,/host\.addEventListener\("drop",onBatchDrop\)/);
+  assert.match(SOURCE,/stageFragmentFiles\(role==="masters"\?files:\[\],role==="derivatives"\?files:\[\],output\)/);
+});
+
+test("Blackboard batch intake opens wide and exposes large drag targets",()=>{
+  assert.match(STYLE,/\.bb-fragment-intake \.bb-add-entry\[open\][\s\S]*?flex:\s*1 0 100%/);
+  assert.match(STYLE,/\.bb-fragment-library \.bb-manager-head[\s\S]*?flex-wrap:\s*wrap/);
+  assert.match(STYLE,/\.bb-batch-dropzone--masters[\s\S]*?min-height:\s*300px/);
+  assert.match(STYLE,/\.bb-batch-dropzone\.is-dragover[\s\S]*?border-color:\s*var\(--accent\)/);
+  assert.match(STYLE,/@media \(max-width:\s*720px\)[\s\S]*?\.bb-batch-drop-grid[\s\S]*?grid-template-columns:\s*1fr/);
 });
