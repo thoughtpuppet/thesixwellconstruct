@@ -101,7 +101,7 @@ function normalizeStroke(stroke = {}) {
     id: String(stroke.id || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`),
     tool: stroke.tool === "restore" ? "restore" : "erase",
     size: clamp(number(stroke.size, 0.08), 0.005, 0.5),
-    softness: clamp(number(stroke.softness, 0.7)),
+    softness: clamp(number(stroke.softness, 0.7), 0, 2),
     opacity: clamp(number(stroke.opacity, 1), 0.05, 1),
     points: Array.isArray(stroke.points) ? stroke.points.slice(0, 12000).map(normalizePoint) : [],
   };
@@ -118,7 +118,7 @@ export function normalizeFragmentRecipe(input = {}, source = {}) {
     crop: normalizeFragmentCrop(supplied.crop || {}, source),
     brush: {
       size: clamp(number(brush.size ?? supplied.brush_size, 0.08), 0.005, 0.5),
-      softness: clamp(number(brush.softness ?? supplied.brush_softness, 0.7)),
+      softness: clamp(number(brush.softness ?? supplied.brush_softness, 0.7), 0, 2),
       opacity: clamp(number(brush.opacity ?? supplied.brush_opacity, 1), 0.05, 1),
     },
     strokes: Array.isArray(supplied.strokes) ? supplied.strokes.slice(0, 1000).map(normalizeStroke) : [],
@@ -155,6 +155,10 @@ export function interpolateFragmentStroke(points, spacing) {
     }
   }
   return output;
+}
+
+export function fragmentBrushFeatherScale(softness) {
+  return 1 + Math.max(0, clamp(softness, 0, 2) - 1) * 1.5;
 }
 
 export class FragmentRecipeHistory {
@@ -231,14 +235,16 @@ async function fetchAdminMedia(mediaId, signal) {
 function stampMask(context, stroke, width, height) {
   if (!stroke.points.length) return;
   const minimum = Math.max(1, Math.min(width, height));
-  const radius = Math.max(1, stroke.size * minimum / 2);
-  const hardness = 1 - stroke.softness;
+  const baseRadius = Math.max(1, stroke.size * minimum / 2);
+  const softness = clamp(stroke.softness, 0, 2);
+  const featherScale = fragmentBrushFeatherScale(softness);
   const points = interpolateFragmentStroke(stroke.points, Math.max(0.0005, stroke.size / 8));
   context.save();
   context.globalCompositeOperation = stroke.tool === "restore" ? "source-over" : "destination-out";
   for (const point of points) {
-    const pointRadius = Math.max(1, radius * point.pressure);
-    const inner = Math.max(0, pointRadius * hardness);
+    const pointRadius = Math.max(1, baseRadius * featherScale * point.pressure);
+    const inner = Math.max(0, baseRadius * (1 - Math.min(1, softness)) * point.pressure);
+    const hardness = pointRadius ? inner / pointRadius : 0;
     const gradient = context.createRadialGradient(point.x * width, point.y * height, inner, point.x * width, point.y * height, pointRadius);
     const alpha = clamp(stroke.opacity * point.pressure, 0.05, 1);
     if (stroke.tool === "restore") {
@@ -326,17 +332,17 @@ function ensureAmbientField() {
 
 function editorMarkup(title) {
   return `<section class="bbfe" data-bbfe>
-    <header class="bbfe-head"><div><span class="cm-section-index">Non-destructive image editor</span><h3>${escapeHtml(title || "Fragment image")}</h3><p>Crop first, then softly erase or restore the fragment edge. The private original is never changed.</p></div><div class="bbfe-history" role="toolbar" aria-label="Edit history"><button class="button" type="button" data-bbfe-action="undo">Undo</button><button class="button" type="button" data-bbfe-action="redo">Redo</button><button class="button" type="button" data-bbfe-action="reset">Reset</button><button class="button" type="button" data-bbfe-action="before" aria-pressed="false">Before</button></div></header>
+    <header class="bbfe-head"><div><span class="cm-section-index">Non-destructive image editor</span><h3>${escapeHtml(title || "Fragment image")}</h3><p>One editing round can include a crop followed by soft erasing and restoring. Nothing is saved until you save the final revision.</p></div><div class="bbfe-history" role="toolbar" aria-label="Edit history"><button class="button" type="button" data-bbfe-action="undo">Undo</button><button class="button" type="button" data-bbfe-action="redo">Redo</button><button class="button" type="button" data-bbfe-action="reset">Revert working edit to original</button><button class="button" type="button" data-bbfe-action="before" aria-pressed="false">Before</button></div></header>
     <div class="bbfe-body">
       <aside class="bbfe-tools" aria-label="Fragment editing tools">
         <fieldset><legend>Tool</legend><div class="bbfe-tool-grid"><button class="button is-active" type="button" data-bbfe-tool="crop" aria-pressed="true">Crop</button><button class="button" type="button" data-bbfe-tool="pan" aria-pressed="false">Pan</button><button class="button" type="button" data-bbfe-tool="erase" aria-pressed="false">Soft erase</button><button class="button" type="button" data-bbfe-tool="restore" aria-pressed="false">Restore</button></div></fieldset>
-        <fieldset data-bbfe-crop-controls><legend>Crop</legend><div class="bbfe-tool-grid"><button class="button is-active" type="button" data-bbfe-crop-mode="none" aria-pressed="true">No crop</button><button class="button" type="button" data-bbfe-crop-mode="square" aria-pressed="false">Square</button><button class="button" type="button" data-bbfe-crop-mode="free" aria-pressed="false">Free crop</button></div><label>Crop zoom <output data-bbfe-crop-zoom-output>100%</output><input type="range" min="100" max="800" value="100" step="1" data-bbfe-crop-zoom disabled></label><div data-bbfe-free-controls hidden><label>Crop width <output data-bbfe-crop-width-output></output><input type="range" min="5" max="100" value="100" step="1" data-bbfe-crop-width></label><label>Crop height <output data-bbfe-crop-height-output></output><input type="range" min="5" max="100" value="100" step="1" data-bbfe-crop-height></label></div><p>No crop keeps the full image. Square makes an equal-sided output; Free crop makes a regular rectangle.</p></fieldset>
+        <fieldset data-bbfe-crop-controls><legend>Crop</legend><div class="bbfe-tool-grid"><button class="button is-active" type="button" data-bbfe-crop-mode="none" aria-pressed="true">No crop</button><button class="button" type="button" data-bbfe-crop-mode="square" aria-pressed="false">Square</button><button class="button" type="button" data-bbfe-crop-mode="free" aria-pressed="false">Free crop</button></div><label>Crop zoom <output data-bbfe-crop-zoom-output>100%</output><input type="range" min="100" max="800" value="100" step="1" data-bbfe-crop-zoom disabled></label><div data-bbfe-free-controls hidden><label>Crop width <output data-bbfe-crop-width-output></output><input type="range" min="5" max="100" value="100" step="1" data-bbfe-crop-width></label><label>Crop height <output data-bbfe-crop-height-output></output><input type="range" min="5" max="100" value="100" step="1" data-bbfe-crop-height></label></div><p>No crop keeps the full image. Square makes an equal-sided output; Free crop makes a regular rectangle.</p><button class="button bbfe-apply-crop" type="button" data-bbfe-action="apply-crop">Apply crop and continue to edge editing</button></fieldset>
         <fieldset data-bbfe-view-controls><legend>View</legend><label>View zoom <output data-bbfe-view-zoom-output>100%</output><input type="range" min="100" max="500" value="100" step="1" data-bbfe-view-zoom></label><button class="button" type="button" data-bbfe-action="fit">Fit image</button></fieldset>
-        <fieldset data-bbfe-brush-controls hidden><legend>Brush</legend><label>Size <output data-bbfe-brush-size-output></output><input type="range" min="1" max="50" value="8" step="0.5" data-bbfe-brush-size></label><label>Edge softness <output data-bbfe-brush-softness-output></output><input type="range" min="0" max="100" value="70" step="1" data-bbfe-brush-softness></label><label>Strength <output data-bbfe-brush-opacity-output></output><input type="range" min="5" max="100" value="100" step="1" data-bbfe-brush-opacity></label></fieldset>
+        <fieldset data-bbfe-brush-controls hidden><legend>Brush</legend><label>Size <output data-bbfe-brush-size-output></output><input type="range" min="1" max="50" value="8" step="0.5" data-bbfe-brush-size></label><label>Edge feather <output data-bbfe-brush-softness-output></output><input type="range" min="0" max="200" value="70" step="1" data-bbfe-brush-softness></label><label>Strength <output data-bbfe-brush-opacity-output></output><input type="range" min="5" max="100" value="100" step="1" data-bbfe-brush-opacity></label><p>100% feathers across the full brush radius. Values above 100% extend the fade beyond the brush core for a wider, softer edge.</p></fieldset>
       </aside>
       <div class="bbfe-workspace"><div class="bbfe-stage" data-bbfe-stage data-tool="crop"><canvas class="bbfe-eyes" data-bbfe-eyes aria-hidden="true"></canvas><canvas class="bbfe-canvas" data-bbfe-canvas tabindex="0" aria-label="Blackboard fragment editor"></canvas><span class="bbfe-brush-cursor" data-bbfe-brush-cursor hidden aria-hidden="true"></span></div><p class="bbfe-status" data-bbfe-status role="status" aria-live="polite">Loading editing source…</p></div>
     </div>
-    <footer class="bbfe-save"><div><strong>Save a new edit revision</strong><p>Creates a transparent display image, alpha mask, and replayable edit recipe. Your source upload stays unchanged.</p></div><button class="button" type="button" data-bbfe-save disabled>Save edit revision</button></footer>
+    <footer class="bbfe-save"><div><strong>Finish this editing round</strong><p>The crop and every erase/restore stroke are saved together as one revised version. Your source upload stays available for recovery.</p></div><button class="button" type="button" data-bbfe-save disabled>Apply edits &amp; save revision</button></footer>
   </section>`;
 }
 
@@ -550,7 +556,7 @@ export async function mountBlackboardFragmentEditor(container, options = {}) {
       const rect = canvas.getBoundingClientRect();
       brushCursor.hidden = !normalized;
       if (normalized) {
-        const size = current.brush.size * Math.min(rect.width, rect.height);
+        const size = current.brush.size * fragmentBrushFeatherScale(current.brush.softness) * Math.min(rect.width, rect.height);
         brushCursor.style.width = `${size}px`;
         brushCursor.style.height = `${size}px`;
         brushCursor.style.left = `${point.x - size / 2}px`;
@@ -656,6 +662,7 @@ export async function mountBlackboardFragmentEditor(container, options = {}) {
     if (action === "undo" && history) { history.undo(); previewRecipe = null; queueRender(); return; }
     if (action === "redo" && history) { history.redo(); previewRecipe = null; queueRender(); return; }
     if (action === "reset" && history) { history.commit(normalizeFragmentRecipe({}, dimensions())); cropZoom = 100; viewZoom = 1; viewPan = { x: 0, y: 0 }; shell.querySelector("[data-bbfe-crop-zoom]").value = "100"; shell.querySelector("[data-bbfe-view-zoom]").value = "100"; queueRender(); return; }
+    if (action === "apply-crop" && history) { tool = "erase"; showBefore = false; viewZoom = 1; viewPan = { x: 0, y: 0 }; shell.querySelector("[data-bbfe-view-zoom]").value = "100"; setStatus("Crop applied to this working round. Soft erase or restore next, then save the revision once."); queueRender(); return; }
     if (action === "before") { showBefore = !showBefore; queueRender(); return; }
     if (action === "fit") { viewZoom = 1; viewPan = { x: 0, y: 0 }; shell.querySelector("[data-bbfe-view-zoom]").value = "100"; queueRender(); return; }
     if (event.target.closest("[data-bbfe-save]") && history) {
@@ -773,5 +780,6 @@ export const __blackboardFragmentEditorTest = {
   normalizeFragmentRecipe,
   serializeFragmentRecipe,
   interpolateFragmentStroke,
+  fragmentBrushFeatherScale,
   FragmentRecipeHistory,
 };

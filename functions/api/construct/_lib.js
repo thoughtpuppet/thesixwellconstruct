@@ -6752,7 +6752,8 @@ async function archiveBlackboardFragmentsGlobalAdminApi(request,env,fragmentId="
       if(maskId)await blackboardFragmentImage(database,maskId,"Alpha mask",{mimes:new Set(["image/png"])});
       await blackboardFragmentImage(database,outputId,"Rendered output",{mimes:new Set(["image/png","image/webp"])});
     }catch(error){return failure(error.message,409)}
-    const latest=await database.prepare("SELECT COALESCE(MAX(revision_number),0) revision_number FROM archive_blackboard_fragment_edits WHERE fragment_id=?").bind(fragmentId).first(),revision=Number(latest?.revision_number||0)+1;
+    const latest=await database.prepare("SELECT COALESCE(MAX(revision_number),0) revision_number FROM archive_blackboard_fragment_edits WHERE fragment_id=?").bind(fragmentId).first(),revision=Number(latest?.revision_number||0)+1,
+      previousCurrent=await database.prepare("SELECT output_media_id FROM archive_blackboard_fragment_edits WHERE fragment_id=? AND is_current=1").bind(fragmentId).first();
     const outputPublic=before.state==="published"&&Number(before.public_visible)===1;
     const statements=[
       database.prepare("UPDATE archive_blackboard_fragment_edits SET is_current=0,updated_at=datetime('now') WHERE fragment_id=? AND is_current=1").bind(fragmentId),
@@ -6761,9 +6762,33 @@ async function archiveBlackboardFragmentsGlobalAdminApi(request,env,fragmentId="
       database.prepare("UPDATE archive_blackboard_fragments SET edit_source_media_id=?,derivative_media_id=?,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(sourceId,outputId,fragmentId),
       database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(sourceId),
       database.prepare("UPDATE media_assets SET privacy=?,public_presentation=?,updated_at=datetime('now') WHERE id=?").bind(outputPublic?"public":"internal",outputPublic?"inline":"hidden",outputId),
-    ];if(maskId)statements.push(database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(maskId));
+    ];if(previousCurrent?.output_media_id&&previousCurrent.output_media_id!==outputId)statements.push(database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(previousCurrent.output_media_id));if(maskId)statements.push(database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(maskId));
     try{await database.batch(statements)}catch(error){return failure(String(error?.message||error),409)}
     const record=(await blackboardFragmentAdminRecordsV3(database,{fragmentId}))[0];return json({record,fragment:record,edit:record.current_edit},{status:201});
+  }
+  if(request.method==="DELETE"&&before&&action.startsWith("edits/")){
+    const editId=decodeURIComponent(action.slice(6)),edit=await database.prepare("SELECT * FROM archive_blackboard_fragment_edits WHERE id=? AND fragment_id=?").bind(editId,fragmentId).first();
+    if(!edit)return failure("Blackboard fragment edit revision not found.",404);
+    const fallback=Number(edit.is_current)===1?await database.prepare("SELECT * FROM archive_blackboard_fragment_edits WHERE fragment_id=? AND id<>? ORDER BY revision_number DESC LIMIT 1").bind(fragmentId,editId).first():null;
+    const outputPublic=before.state==="published"&&Number(before.public_visible)===1&&Boolean(fallback),statements=[
+      database.prepare("DELETE FROM archive_blackboard_fragment_edits WHERE id=? AND fragment_id=?").bind(editId,fragmentId),
+      database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(edit.alpha_mask_media_id||""),
+      database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=? AND NOT EXISTS (SELECT 1 FROM archive_blackboard_fragment_edits current_edit WHERE current_edit.output_media_id=? AND current_edit.is_current=1)").bind(edit.output_media_id,edit.output_media_id),
+    ];
+    if(Number(edit.is_current)===1){
+      statements.push(database.prepare("UPDATE archive_blackboard_fragment_edits SET is_current=0,updated_at=datetime('now') WHERE fragment_id=?").bind(fragmentId));
+      if(fallback)statements.push(
+        database.prepare("UPDATE archive_blackboard_fragment_edits SET is_current=1,updated_at=datetime('now') WHERE id=? AND fragment_id=?").bind(fallback.id,fragmentId),
+        database.prepare("UPDATE archive_blackboard_fragments SET derivative_media_id=?,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(fallback.output_media_id,fragmentId),
+        database.prepare("UPDATE media_assets SET privacy=?,public_presentation=?,updated_at=datetime('now') WHERE id=?").bind(outputPublic?"public":"internal",outputPublic?"inline":"hidden",fallback.output_media_id),
+      );else statements.push(
+        database.prepare("UPDATE archive_blackboard_fragments SET derivative_media_id=NULL,public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(fragmentId),
+        database.prepare("UPDATE content_entities SET visibility='internal',search_visibility=0,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(fragmentId),
+      );
+    }
+    try{await database.batch(statements)}catch(error){return failure(String(error?.message||error),409)}
+    const record=(await blackboardFragmentAdminRecordsV3(database,{fragmentId}))[0],released=[edit.alpha_mask_media_id,edit.output_media_id].filter(Boolean);
+    return json({record,fragment:record,deleted_edit_id:editId,deletedEditId:editId,released_media_ids:released,releasedMediaIds:released});
   }
   if(request.method==="PUT"&&before&&action==="mappings"){
     if(!before.record_entity_id)return failure("Choose a Blackboard before mapping this fragment.",409);
@@ -7921,10 +7946,12 @@ export async function handleConstructApi(request,env){
   const stateMatch=path.match(/^\/api\/admin\/archive-states(?:\/([^/]+))?$/);if(stateMatch)return archiveStatesAdminApi(request,env,stateMatch[1]?decodeURIComponent(stateMatch[1]):"");
   const dossierMatch=path.match(/^\/api\/admin\/archive-dossiers(?:\/([^/]+))?$/);if(dossierMatch)return archiveDossiersAdminApi(request,env,dossierMatch[1]?decodeURIComponent(dossierMatch[1]):"");
   if(path==="/api/admin/archive-blackboards/fragments")return archiveBlackboardFragmentsGlobalAdminApi(request,env);
+  const blackboardFragmentEditMatch=path.match(/^\/api\/admin\/archive-blackboards\/fragments\/([^/]+)\/edits\/([^/]+)$/);if(blackboardFragmentEditMatch)return archiveBlackboardFragmentsGlobalAdminApi(request,env,decodeURIComponent(blackboardFragmentEditMatch[1]),`edits/${encodeURIComponent(decodeURIComponent(blackboardFragmentEditMatch[2]))}`);
   const blackboardFragmentLibraryActionMatch=path.match(/^\/api\/admin\/archive-blackboards\/fragments\/([^/]+)\/(edits|board|mappings|states|placements)$/);if(blackboardFragmentLibraryActionMatch)return archiveBlackboardFragmentsGlobalAdminApi(request,env,decodeURIComponent(blackboardFragmentLibraryActionMatch[1]),blackboardFragmentLibraryActionMatch[2]);
   const blackboardFragmentLibraryMatch=path.match(/^\/api\/admin\/archive-blackboards\/fragments\/([^/]+)$/);if(blackboardFragmentLibraryMatch)return archiveBlackboardFragmentsGlobalAdminApi(request,env,decodeURIComponent(blackboardFragmentLibraryMatch[1]));
   // Temporary aliases for early Fragment Library clients; the canonical base is /api/admin/archive-blackboards/fragments.
   if(path==="/api/admin/archive-blackboard-fragments")return archiveBlackboardFragmentsGlobalAdminApi(request,env);
+  const globalBlackboardFragmentEditMatch=path.match(/^\/api\/admin\/archive-blackboard-fragments\/([^/]+)\/edits\/([^/]+)$/);if(globalBlackboardFragmentEditMatch)return archiveBlackboardFragmentsGlobalAdminApi(request,env,decodeURIComponent(globalBlackboardFragmentEditMatch[1]),`edits/${encodeURIComponent(decodeURIComponent(globalBlackboardFragmentEditMatch[2]))}`);
   const globalBlackboardFragmentActionMatch=path.match(/^\/api\/admin\/archive-blackboard-fragments\/([^/]+)\/(edits|board|mappings|states|placements)$/);if(globalBlackboardFragmentActionMatch)return archiveBlackboardFragmentsGlobalAdminApi(request,env,decodeURIComponent(globalBlackboardFragmentActionMatch[1]),globalBlackboardFragmentActionMatch[2]);
   const globalBlackboardFragmentMatch=path.match(/^\/api\/admin\/archive-blackboard-fragments\/([^/]+)$/);if(globalBlackboardFragmentMatch)return archiveBlackboardFragmentsGlobalAdminApi(request,env,decodeURIComponent(globalBlackboardFragmentMatch[1]));
   const blackboardFragmentPlacementsMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/fragments\/([^/]+)\/placements$/);if(blackboardFragmentPlacementsMatch)return archiveBlackboardFragmentsAdminApiV2(request,env,decodeURIComponent(blackboardFragmentPlacementsMatch[1]),decodeURIComponent(blackboardFragmentPlacementsMatch[2]),"placements");

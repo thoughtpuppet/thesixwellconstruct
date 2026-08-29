@@ -9,6 +9,7 @@ import {
   FRAGMENT_EDITOR_MAX_OUTPUT,
   FRAGMENT_EDITOR_SCHEMA_VERSION,
   FragmentRecipeHistory,
+  fragmentBrushFeatherScale,
   fragmentOutputSize,
   interpolateFragmentStroke,
   moveFragmentCrop,
@@ -65,6 +66,7 @@ test("recipes normalize brush, crop, and stroke data and serialize as replayable
   assert.equal(recipe.strokes[0].tool, "restore");
   assert.deepEqual(recipe.strokes[0].points[0], { x: 0, y: 1, pressure: 1 });
   assert.deepEqual(JSON.parse(serializeFragmentRecipe(recipe, { width: 100, height: 100 })), recipe);
+  assert.equal(normalizeFragmentRecipe({ brush: { softness: 4 } }, { width: 100, height: 100 }).brush.softness, 2);
 });
 
 test("stroke interpolation fills soft brush paths without changing their endpoints", () => {
@@ -72,6 +74,12 @@ test("stroke interpolation fills soft brush paths without changing their endpoin
   assert.ok(points.length > 2);
   assert.deepEqual(points[0], { x: 0, y: 0, pressure: 1 });
   assert.deepEqual(points.at(-1), { x: 1, y: 0.5, pressure: 0.5 });
+});
+
+test("extended feather expands the visible eraser fade beyond its core radius", () => {
+  assert.equal(fragmentBrushFeatherScale(0.7), 1);
+  assert.equal(fragmentBrushFeatherScale(1), 1);
+  assert.equal(fragmentBrushFeatherScale(2), 2.5);
 });
 
 test("recipe history supports bounded undo, redo, and reset", () => {
@@ -100,5 +108,11 @@ test("Canvas editor contract keeps source immutable and exports transparent outp
   assert.match(SOURCE, /data-bbfe-crop-mode="none"/);
   assert.match(SOURCE, /data-bbfe-tool="erase"/);
   assert.match(SOURCE, /data-bbfe-tool="restore"/);
+  assert.match(SOURCE, /data-bbfe-action="apply-crop"/);
+  assert.match(SOURCE, /Apply edits &amp; save revision/);
+  assert.match(SOURCE, /max="200"[^>]*data-bbfe-brush-softness/);
+  assert.match(SOURCE, /const featherScale = fragmentBrushFeatherScale\(softness\)/);
+  assert.match(SOURCE, /current\.brush\.size \* fragmentBrushFeatherScale\(current\.brush\.softness\)/);
+  assert.match(SOURCE, /Crop applied to this working round/);
   assert.match(SOURCE, /beforeunload/);
 });

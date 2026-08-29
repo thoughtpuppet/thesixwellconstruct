@@ -135,6 +135,15 @@ test("independent fragments keep versioned private edits, then map atomically to
   const idempotent=await json(await handleConstructApi(request("/api/admin/archive-blackboards/fragments/library-fragment-one/edits",{method:"POST",admin:true,body:{id:"fragment-edit-two",source_media_id:"fragment-source",output_media_id:"fragment-output-one",recipe:{version:2}}}),runtime));
   assert.equal(idempotent.status,200);assert.equal(idempotent.body.idempotent,true);assert.equal(database.prepare("SELECT COUNT(*) count FROM archive_blackboard_fragment_edits WHERE fragment_id='library-fragment-one'").get().count,2);
 
+  insertAsset(database,"fragment-alpha-three","image/png");insertAsset(database,"fragment-output-three","image/webp");
+  const thirdEdit=await json(await handleConstructApi(request("/api/admin/archive-blackboards/fragments/library-fragment-one/edits",{method:"POST",admin:true,body:{id:"fragment-edit-three",source_media_id:"fragment-source",alpha_mask_media_id:"fragment-alpha-three",output_media_id:"fragment-output-three",recipe:{version:1,crop:{mode:"square",x:0.1,y:0.1,width:0.8,height:0.8},strokes:[]}}}),runtime));
+  assert.equal(thirdEdit.status,201,thirdEdit.body.error);assert.equal(thirdEdit.body.record.current_edit.id,"fragment-edit-three");
+  const deletedMistake=await json(await handleConstructApi(request("/api/admin/archive-blackboards/fragments/library-fragment-one/edits/fragment-edit-three",{method:"DELETE",admin:true}),runtime));
+  assert.equal(deletedMistake.status,200,deletedMistake.body.error);assert.equal(deletedMistake.body.deleted_edit_id,"fragment-edit-three");assert.deepEqual(deletedMistake.body.released_media_ids,["fragment-alpha-three","fragment-output-three"]);
+  assert.equal(deletedMistake.body.record.current_edit.id,"fragment-edit-two");assert.equal(deletedMistake.body.record.edit_revision_count,2);
+  assert.equal(database.prepare("SELECT derivative_media_id FROM archive_blackboard_fragments WHERE id='library-fragment-one'").get().derivative_media_id,"fragment-output-two");
+  assert.equal(database.prepare("SELECT id FROM media_assets WHERE id='fragment-source'").get().id,"fragment-source");
+
   const published=await json(await handleConstructApi(request("/api/admin/archive-blackboards/fragments/library-fragment-one",{method:"PATCH",admin:true,body:{state:"published",public_visible:true}}),runtime));
   assert.equal(published.status,200,published.body.error);assert.equal(published.body.record.public_visible,1);assert.equal(published.body.record.record_entity_id,null);
   const beforeAssignment=await json(await handleConstructApi(request("/api/archive/blackboards/fragment-board-one"),runtime));assert.equal(beforeAssignment.body.fragments.length,0);
@@ -172,6 +181,11 @@ test("global fragment validation enforces global slugs, private edit roles, imag
   const badOutput=await json(await handleConstructApi(request("/api/admin/archive-blackboards/fragments/validation-fragment/edits",{method:"POST",admin:true,body:{source_media_id:"validation-source",output_media_id:"validation-output-jpeg",recipe:{version:1}}}),runtime));assert.equal(badOutput.status,409);assert.match(badOutput.body.error,/unsupported image format/);
   const oversizedRecipe={payload:"é".repeat(131070)};
   const oversized=await json(await handleConstructApi(request("/api/admin/archive-blackboards/fragments/validation-fragment/edits",{method:"POST",admin:true,body:{source_media_id:"validation-source",output_media_id:"validation-output",recipe:oversizedRecipe}}),runtime));assert.equal(oversized.status,409);assert.match(oversized.body.error,/256 KiB/);
+
+  const onlyEdit=await json(await handleConstructApi(request("/api/admin/archive-blackboards/fragments/validation-fragment/edits",{method:"POST",admin:true,body:{id:"validation-only-edit",source_media_id:"validation-source",output_media_id:"validation-output",recipe:{version:1,crop:{mode:"none"},strokes:[]}}}),runtime));assert.equal(onlyEdit.status,201,onlyEdit.body.error);
+  const visible=await json(await handleConstructApi(request("/api/admin/archive-blackboards/fragments/validation-fragment",{method:"PATCH",admin:true,body:{state:"published",public_visible:true}}),runtime));assert.equal(visible.status,200,visible.body.error);assert.equal(visible.body.record.public_visible,1);
+  const deleteOnlyEdit=await json(await handleConstructApi(request("/api/admin/archive-blackboards/fragments/validation-fragment/edits/validation-only-edit",{method:"DELETE",admin:true}),runtime));assert.equal(deleteOnlyEdit.status,200,deleteOnlyEdit.body.error);assert.equal(deleteOnlyEdit.body.record.current_edit,null);assert.equal(deleteOnlyEdit.body.record.public_visible,0);
+  assert.deepEqual({...database.prepare("SELECT derivative_media_id,public_visible FROM archive_blackboard_fragments WHERE id='validation-fragment'").get()},{derivative_media_id:null,public_visible:0});assert.equal(database.prepare("SELECT visibility FROM content_entities WHERE id='validation-fragment'").get().visibility,"internal");assert.equal(database.prepare("SELECT id FROM media_assets WHERE id='validation-source'").get().id,"validation-source");
 
   const legacyPair=insertScanPair(database,"compat-fragment");
   const compatible=await json(await handleConstructApi(request(`/api/admin/archive-blackboards/records/${board.id}/fragments`,{method:"POST",admin:true,body:{id:"compat-fragment",slug:"compat-fragment",title:"Compatibility fragment",...legacyPair}}),runtime));

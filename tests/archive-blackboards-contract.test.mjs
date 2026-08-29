@@ -172,6 +172,9 @@ test("Studio Blackboards opens as a record library before exposing an editor",()
   assert.doesNotMatch(manager,/record\.title\|\|"Studio Blackboard — South Wall"/);
   assert.match(manager,/fragment\?fragmentWorkflowMarkup\(fragment\):record\?workspaceMarkup\(record\):libraryView==="fragments"\?fragmentLibraryMarkup\(\):libraryMarkup\(\)/);
   assert.match(manager,/Fragment Library/);assert.match(manager,/data-library-view="fragments"/);
+  assert.match(manager,/function fragmentEditHistoryMarkup\(fragment\)/);assert.match(manager,/data-open-edit-revision/);assert.match(manager,/data-delete-edit-revision/);
+  assert.match(manager,/deleteEdit:\(id,editId\)/);assert.match(manager,/cleanupReleasedMedia/);
+  assert.match(styles,/\.bb-edit-revision-grid/);assert.match(styles,/\.bb-edit-revision-card\.is-current/);
   assert.match(styles,/\.bb-record-grid/);assert.match(styles,/\.bb-workspace-panel/);assert.match(styles,/border: 5px solid/);
 });
 
