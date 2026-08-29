@@ -14,6 +14,7 @@ import {
   normalizeArchivePath,
   normalizeText,
   scanFileGraph,
+  selectReviewCandidate,
   seedStudioArchive,
   writeBundle,
 } from "../tools/archive-web-history.mjs";
@@ -74,14 +75,27 @@ test("initial review queue groups the approved high-signal directions", () => {
     "first-system-refinement",
     "landing-page-redirection",
     "new-home-system",
+    "puzzle-entry-room-introduced",
     "entry-room-home-split",
     "entry-threshold-eye-direction",
   ]);
   assert.deepEqual(queue[0].commits.map((commit) => commit.commit.slice(0, 7)), ["6ace78c", "df16adf"]);
   assert.match(queue[0].reason, /temporary mobile\/touch excursion[\s\S]*restored/i);
   assert.equal(queue[0].proposed_lineage_role, "restoration");
+  const introduced = queue.find((candidate) => candidate.id === "puzzle-entry-room-introduced");
+  assert.equal(introduced.entry_path, "entry-room/index.html");
+  assert.equal(introduced.proposed_lineage_role, "exploratory-branch");
+  assert.equal(introduced.title, "Puzzle / Entry Room introduced");
   assert.equal(queue.find((candidate) => candidate.id === "entry-room-home-split").entry_path, "home/index.html");
   assert.ok(queue.every((candidate) => candidate.review_decision === "pending"));
+});
+
+test("single-candidate selection keeps sync scoped and rejects unknown ids", () => {
+  const report = { schema_version: 1, initial_review_queue: buildInitialReviewQueue() };
+  const selected = selectReviewCandidate(report, "puzzle-entry-room-introduced");
+  assert.deepEqual(selected.initial_review_queue.map((candidate) => candidate.id), ["puzzle-entry-room-introduced"]);
+  assert.equal(report.initial_review_queue.length > 1, true, "the original report is not mutated");
+  assert.throws(() => selectReviewCandidate(report, "not-a-candidate"), /Unknown history candidate/);
 });
 
 test("the entry-threshold bundle keeps unsupported WASM as missing review evidence", () => {

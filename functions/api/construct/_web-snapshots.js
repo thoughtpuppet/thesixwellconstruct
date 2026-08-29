@@ -1845,6 +1845,19 @@ async function releasePendingCandidate(database, candidateId, token) {
 const claimReviewCandidate = (database, candidateId) => claimPendingCandidate(database, candidateId, "review");
 const releaseReviewCandidate = releasePendingCandidate;
 
+async function stagedCandidateActivity(database, candidate) {
+  const activityId = text(candidate.activity_id, 200);
+  if (!activityId) return null;
+  const activity = await database.prepare("SELECT * FROM entity_activity WHERE id=?").bind(activityId).first();
+  if (!activity || activity.entity_id !== candidate.dossier_entity_id || Number(activity.public_visible)) {
+    throw new Error("The candidate's staged history activity must be a private activity owned by this Archive dossier.");
+  }
+  const otherCandidate = await database.prepare(`SELECT id FROM archive_web_history_candidates
+    WHERE activity_id=? AND id<>? LIMIT 1`).bind(activityId, candidate.id).first();
+  if (otherCandidate) throw new Error("The candidate's staged history activity is already assigned to another website-history candidate.");
+  return activity;
+}
+
 async function reviewCandidate(request, env, candidateId) {
   if (request.method !== "POST") return failure("Method not allowed.", 405);
   const body = await readJson(request);
@@ -1976,13 +1989,19 @@ async function reviewCandidate(request, env, candidateId) {
   const desktopCapture = await database.prepare(`SELECT id FROM archive_web_snapshot_captures
     WHERE candidate_id=? AND viewport='desktop'`).bind(candidateId).first();
   const screenshotUrl = desktopCapture ? captureViewerUrl(snapshot.id, desktopCapture.id, "", env.ARCHIVE_VIEWER_ORIGIN) : "";
-  const activityId = id("activity"), lineageRole = decision === "preserved-branch" ? "exploratory-branch" : decision === "merged" ? "restoration" : "canonical-state";
-  statements.push(
-    database.prepare(`INSERT INTO entity_activity
+  let stagedActivity = null;
+  try { stagedActivity = await stagedCandidateActivity(database, candidate); }
+  catch (error) { return failure(String(error?.message || error), 409); }
+  const activityId = stagedActivity?.id || id("activity"), lineageRole = decision === "preserved-branch" ? "exploratory-branch" : decision === "merged" ? "restoration" : "canonical-state";
+  if (!stagedActivity) statements.push(database.prepare(`INSERT INTO entity_activity
       (id,entity_id,activity_type,title,notes,occurred_at,public_visible,sort_order,created_by,created_at,updated_at,summary,body,date_precision,date_label,source_note)
       VALUES(?,?,'website-snapshot-review',?,?,?,0,0,'studio',datetime('now'),datetime('now'),?,?,?,?,'Git history candidate reviewed in Studio.')`).bind(
       activityId, entityId, candidate.title, curatorNote || candidate.message, occurredAt, candidate.message, curatorNote, datePrecision, dateLabel,
-    ),
+    ));
+  statements.push(
+    database.prepare(`INSERT OR IGNORE INTO entity_activity_subjects
+      (activity_id,subject_entity_id,public_visible,sort_order,created_at)
+      VALUES(?,?,0,1,datetime('now'))`).bind(activityId, entityId),
     database.prepare(`UPDATE archive_web_snapshots SET state_id=?,material_id=?,lineage_role=?,
       screenshot_url=CASE WHEN screenshot_url='' AND ?<>'' THEN ? ELSE screenshot_url END,
       reviewed_by='studio',reviewed_at=datetime('now'),mutation_token='',mutation_kind='',mutation_started_at=NULL,

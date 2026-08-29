@@ -674,6 +674,11 @@ test("credential findings block viewer approval and candidate reviews create dra
   assert.equal(material.state, "draft");
   assert.equal(material.visibility, "internal");
   assert.equal(sql.prepare("SELECT public_visible FROM entity_activity WHERE id=?").get(review.body.record.activity_id).public_visible, 0);
+  assert.deepEqual({ ...sql.prepare(`SELECT public_visible,sort_order FROM entity_activity_subjects
+    WHERE activity_id=? AND subject_entity_id=?`).get(review.body.record.activity_id, started.body.record.id) }, {
+    public_visible: 0,
+    sort_order: 1,
+  });
   assert.equal((await rawUpload(env, candidateSnapshot.body.record.id, "after-review.js", "console.log('changed')", "text/javascript")).status, 409);
   assert.equal((await handleConstructApi(request(`/api/admin/archive-web-snapshots/${candidateSnapshot.body.record.id}/finalize`, { method: "POST", admin: true, body: {} }), env)).status, 409);
   assert.equal((await handleConstructApi(request(`/api/admin/archive-web-snapshots/${candidateSnapshot.body.record.id}`, {
@@ -688,6 +693,112 @@ test("credential findings block viewer approval and candidate reviews create dra
     "generated screenshots cannot be appended after a curator decision");
   const reviewedExternal = candidateFinal.body.dependencies.find((dependency) => dependency.original_reference.includes("legacy.example/second.png"));
   assert.equal((await uploadReplacement(env, candidateSnapshot.body.record.id, reviewedExternal.id, "external-replacements/second.png", PNG_FIXTURE, "image/png")).status, 409);
+});
+
+test("candidate review reuses only a private staged dossier activity", async () => {
+  const sql = database(), env = runtime(sql);
+  const started = await startWebsiteArchive(env);
+  assert.equal(started.status, 201, started.body.error);
+
+  const readyCandidate = async (candidateId, title, commitSha, commitDate) => {
+    const snapshot = await createWebsiteSnapshot(env, started.body.record.id, null, title);
+    assert.equal(snapshot.status, 201, snapshot.body.error);
+    assert.equal((await rawUpload(env, snapshot.body.record.id, "index.html", `<!doctype html><title>${title}</title>`, "text/html")).status, 201);
+    const finalized = await responseJson(await handleConstructApi(request(`/api/admin/archive-web-snapshots/${snapshot.body.record.id}/finalize`, {
+      method: "POST", admin: true, body: {},
+    }), env));
+    assert.equal(finalized.status, 200, finalized.body.error);
+    assert.equal(finalized.body.record.scan_status, "ready");
+    const synchronized = await responseJson(await handleConstructApi(request("/api/admin/archive-web-history-candidates/sync", {
+      method: "POST", admin: true, body: { records: [{
+        id: candidateId,
+        dossier_entity_id: started.body.record.id,
+        snapshot_id: snapshot.body.record.id,
+        representative_commit: { sha: commitSha, date: commitDate, message: title },
+        review_decision: "pending",
+      }] },
+    }), env));
+    assert.equal(synchronized.status, 200, synchronized.body.error);
+    return snapshot.body.record;
+  };
+
+  await readyCandidate("candidate-staged-activity", "Entry Room becomes the root", "da31b71", "2026-07-07T13:15:04-04:00");
+  const stagedActivityId = "activity-entry-room-root-staged";
+  sql.prepare(`INSERT INTO entity_activity
+    (id,entity_id,activity_type,title,notes,occurred_at,public_visible,sort_order,created_by,created_at,updated_at,summary,body,date_precision,date_label,source_note)
+    VALUES(?,?,'milestone','Puzzle / Entry Room becomes the root','Curator-authored marker.','2026-07-07T13:15:04-04:00',0,3,'studio',datetime('now'),datetime('now'),
+      'The Entry Room becomes the front door.','The former landing page moves to /home/.','exact','July 7, 2026','Git commit da31b71.')`).run(
+    stagedActivityId, started.body.record.id,
+  );
+  sql.prepare("UPDATE archive_web_history_candidates SET activity_id=? WHERE id='candidate-staged-activity'").run(stagedActivityId);
+  const activitiesBefore = sql.prepare("SELECT COUNT(*) count FROM entity_activity WHERE entity_id=?").get(started.body.record.id).count;
+
+  const reviewed = await responseJson(await handleConstructApi(request("/api/admin/archive-web-history-candidates/candidate-staged-activity/review", {
+    method: "POST", admin: true, body: {
+      decision: "approved-state",
+      version_id: started.body.version.id,
+      state_title: "Entry Room becomes the root",
+      curator_note: "Approve the source bundle while retaining the authored timeline marker.",
+    },
+  }), env));
+  assert.equal(reviewed.status, 200, reviewed.body.error);
+  assert.equal(reviewed.body.record.activity_id, stagedActivityId);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_activity WHERE entity_id=?").get(started.body.record.id).count, activitiesBefore,
+    "review must not create a duplicate activity when a safe staged marker is explicitly linked");
+  assert.deepEqual({ ...sql.prepare(`SELECT title,body,source_note,public_visible FROM entity_activity
+    WHERE id=?`).get(stagedActivityId) }, {
+    title: "Puzzle / Entry Room becomes the root",
+    body: "The former landing page moves to /home/.",
+    source_note: "Git commit da31b71.",
+    public_visible: 0,
+  }, "review preserves curator-authored activity evidence");
+  assert.deepEqual({ ...sql.prepare(`SELECT public_visible,sort_order FROM entity_activity_subjects
+    WHERE activity_id=? AND subject_entity_id=?`).get(stagedActivityId, started.body.record.id) }, {
+    public_visible: 0,
+    sort_order: 1,
+  });
+
+  await readyCandidate("candidate-duplicate-staged-activity", "Duplicate staged activity", "duplicate123", "2026-07-08T10:00:00-04:00");
+  sql.prepare("UPDATE archive_web_history_candidates SET activity_id=? WHERE id='candidate-duplicate-staged-activity'").run(stagedActivityId);
+  const statesBeforeDuplicateReview = sql.prepare("SELECT COUNT(*) count FROM archive_object_states").get().count;
+  const duplicate = await responseJson(await handleConstructApi(request("/api/admin/archive-web-history-candidates/candidate-duplicate-staged-activity/review", {
+    method: "POST", admin: true, body: {
+      decision: "approved-state",
+      version_id: started.body.version.id,
+      state_title: "Duplicate staged activity",
+      curator_note: "One authored timeline activity cannot stand for two history candidates.",
+    },
+  }), env));
+  assert.equal(duplicate.status, 409);
+  assert.match(duplicate.body.error, /already assigned to another website-history candidate/);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_object_states").get().count, statesBeforeDuplicateReview);
+
+  await readyCandidate("candidate-public-staged-activity", "Unsafe staged activity", "unsafe123", "2026-07-08T12:00:00-04:00");
+  const publicActivityId = "activity-public-staged";
+  sql.prepare(`INSERT INTO entity_activity
+    (id,entity_id,activity_type,title,notes,occurred_at,public_visible,sort_order,created_by,created_at,updated_at,summary,body,date_precision,date_label,source_note)
+    VALUES(?,?,'milestone','Already public','','2026-07-08T12:00:00-04:00',1,0,'studio',datetime('now'),datetime('now'),'','','exact','July 8, 2026','')`).run(
+    publicActivityId, started.body.record.id,
+  );
+  sql.prepare("UPDATE archive_web_history_candidates SET activity_id=? WHERE id='candidate-public-staged-activity'").run(publicActivityId);
+  const statesBeforeRejectedReview = sql.prepare("SELECT COUNT(*) count FROM archive_object_states").get().count;
+  const activitiesBeforeRejectedReview = sql.prepare("SELECT COUNT(*) count FROM entity_activity").get().count;
+  const rejected = await responseJson(await handleConstructApi(request("/api/admin/archive-web-history-candidates/candidate-public-staged-activity/review", {
+    method: "POST", admin: true, body: {
+      decision: "approved-state",
+      version_id: started.body.version.id,
+      state_title: "Unsafe staged activity",
+      curator_note: "This must not silently replace a public activity with a duplicate.",
+    },
+  }), env));
+  assert.equal(rejected.status, 409);
+  assert.match(rejected.body.error, /private activity owned by this Archive dossier/);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_object_states").get().count, statesBeforeRejectedReview);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_activity").get().count, activitiesBeforeRejectedReview);
+  assert.deepEqual({ ...sql.prepare("SELECT decision,reviewed_by FROM archive_web_history_candidates WHERE id='candidate-public-staged-activity'").get() }, {
+    decision: "pending",
+    reviewed_by: "",
+  });
 });
 
 test("snapshot generation claims serialize finalize, upload, and review while failed uploads remain atomic", async () => {

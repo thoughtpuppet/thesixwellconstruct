@@ -33,6 +33,15 @@ export const INITIAL_REVIEW_GROUPS = Object.freeze([
     reason: "A new homepage direction changed the root experience and its supporting systems.",
   },
   {
+    id: "puzzle-entry-room-introduced",
+    title: "Puzzle / Entry Room introduced",
+    commits: ["ba4ff83564f2828f9e6deb2f4d6e84a56acdf609"],
+    representative: "ba4ff83564f2828f9e6deb2f4d6e84a56acdf609",
+    reason: "The Puzzle first appeared at /entry-room/ while the existing root landing page remained byte-identical.",
+    proposed_lineage_role: "exploratory-branch",
+    entry_path: "entry-room/index.html",
+  },
+  {
     id: "entry-room-home-split",
     commits: ["da31b71"],
     representative: "da31b71",
@@ -482,6 +491,13 @@ export function buildScanReport() {
   };
 }
 
+export function selectReviewCandidate(report, candidateId = "") {
+  if (!candidateId) return report;
+  const selected = (report.initial_review_queue || []).filter((candidate) => candidate.id === candidateId);
+  if (selected.length !== 1) throw new Error(`Unknown history candidate: ${candidateId}`);
+  return { ...report, initial_review_queue: selected };
+}
+
 function ensureEmptyBundleDirectory(outputDirectory) {
   const target = resolve(outputDirectory);
   if (existsSync(target) && readdirSync(target).length) throw new Error(`Bundle directory is not empty: ${target}`);
@@ -798,10 +814,15 @@ async function uploadSnapshotCapture(baseUrl, token, snapshotId, viewport, path)
   });
 }
 
-function loadCaptureManifest(path) {
+function loadCaptureManifest(path, candidateId = "") {
   if (!path) return { captures: {} };
   const payload = JSON.parse(readFileSync(resolve(path), "utf8"));
-  return payload && typeof payload === "object" ? payload : { captures: {} };
+  if (!payload || typeof payload !== "object") return { captures: {} };
+  if (payload.captures && typeof payload.captures === "object") return payload;
+  if (candidateId && (payload.desktop_capture_path || payload.mobile_capture_path)) {
+    return { captures: { [candidateId]: payload } };
+  }
+  return { captures: {} };
 }
 
 export async function seedStudioArchive(report, adminBase, tokenEnvironment = "SUBMISSIONS_ADMIN_TOKEN", options = {}) {
@@ -824,7 +845,7 @@ export async function seedStudioArchive(report, adminBase, tokenEnvironment = "S
     title: "First committed landing page",
     lineageRole: "canonical-state",
   });
-  const captureManifest = loadCaptureManifest(options.captureManifest || "");
+  const captureManifest = loadCaptureManifest(options.captureManifest || "", options.candidateId || "");
   const seedCapture = captureManifest.captures?.seed || {};
   const captureUploads = {
     seed: {
@@ -838,7 +859,7 @@ export async function seedStudioArchive(report, adminBase, tokenEnvironment = "S
     for (const candidate of report.initial_review_queue) {
       const inspection = inspectCommit(candidate.representative, candidate.entry_path || SEED_ENTRY_PATH);
       candidateImports.set(candidate.id, await importInspection(baseUrl, token, dossierEntityId, null, inspection, {
-        title: candidate.id.replaceAll("-", " "),
+        title: candidate.title || candidate.id.replaceAll("-", " "),
         lineageRole: candidate.proposed_lineage_role || "canonical-state",
       }));
     }
@@ -853,7 +874,7 @@ export async function seedStudioArchive(report, adminBase, tokenEnvironment = "S
       dossier_entity_id: dossierEntityId,
       snapshot_id: candidateImports.get(candidate.id)?.id || null,
       commits: candidate.commits.map((commit) => commit.commit),
-      title: candidate.id.replaceAll("-", " ").replace(/\b\w/g, (character) => character.toUpperCase()),
+      title: candidate.title || candidate.id.replaceAll("-", " ").replace(/\b\w/g, (character) => character.toUpperCase()),
       representative_commit: {
         sha: representative.commit,
         date: representative.authored_at,
@@ -898,11 +919,13 @@ export async function main(args = process.argv.slice(2)) {
     if (!output) throw new Error("capture-queue requires --out <empty-directory>.");
     payload = await captureReviewQueue(output, { includeSeed: !args.includes("--no-seed"), captureUrlBase: option(args, "--capture-url-base", "") });
   } else if (command === "scan" || command === "sync" || command === "seed") {
-    const report = buildScanReport();
+    const candidateId = option(args, "--candidate", "");
+    const report = selectReviewCandidate(buildScanReport(), candidateId);
     payload = command === "sync" || command === "seed"
       ? await seedStudioArchive(report, option(args, "--base-url", "http://127.0.0.1:4173"), option(args, "--token-env", "SUBMISSIONS_ADMIN_TOKEN"), {
           importCandidates: !args.includes("--metadata-only"),
           captureManifest: option(args, "--capture-manifest", ""),
+          candidateId,
         })
       : report;
   } else {
