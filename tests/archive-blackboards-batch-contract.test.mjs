@@ -58,6 +58,17 @@ test("Blackboard derivatives can be staged with or after their matching masters"
   assert.equal(paired.rows[0].derivativeFile,derivative);
 });
 
+test("Blackboard queue previews readable masters and waits for a TIFF editing source",()=>{
+  const jpeg=file("chalk-study.jpg",{type:"image/jpeg"});
+  const heic=file("chalk-study.heic",{type:"image/heic"});
+  const tiff=file("chalk-study.tiff",{type:"image/tiff"});
+  const companion=file("chalk-study-webp.webp",{type:"image/webp"});
+  assert.equal(batch.batchPreviewFile({masterFile:jpeg,derivativeFile:null,generatedDerivativeFile:null}),jpeg);
+  assert.equal(batch.batchPreviewFile({masterFile:heic,derivativeFile:null,generatedDerivativeFile:companion}),companion);
+  assert.equal(batch.batchPreviewFile({masterFile:tiff,derivativeFile:null,generatedDerivativeFile:null}),null);
+  assert.equal(batch.batchPreviewFile({masterFile:tiff,derivativeFile:companion,generatedDerivativeFile:null}),companion);
+});
+
 test("Blackboard session tray caps logical fragment rows at 50",()=>{
   const masters=Array.from({length:51},(_,index)=>file(`fragment-${index}.jpg`,{type:"image/jpeg",size:index+1,lastModified:index+1}));
   const planned=batch.planFragmentBatchSelection([],new Map(),masters,[],"blackboard-1");
@@ -94,6 +105,10 @@ test("Blackboard batch upload contract preserves private sources, independent dr
   assert.match(SOURCE,/host\.addEventListener\("dragover",onBatchDragOver\)/);
   assert.match(SOURCE,/host\.addEventListener\("drop",onBatchDrop\)/);
   assert.match(SOURCE,/stageFragmentFiles\(role==="masters"\?files:\[\],role==="derivatives"\?files:\[\],output\)/);
+  assert.match(SOURCE,/URL\.createObjectURL\(source\)/);
+  assert.match(SOURCE,/URL\.revokeObjectURL\(row\.previewUrl\)/);
+  assert.match(SOURCE,/queueBatchPreviews\(\)/);
+  assert.match(SOURCE,/bb-batch-row-preview/);
 });
 
 test("Blackboard batch intake opens wide and exposes large drag targets",()=>{
@@ -101,5 +116,6 @@ test("Blackboard batch intake opens wide and exposes large drag targets",()=>{
   assert.match(STYLE,/\.bb-fragment-library \.bb-manager-head[\s\S]*?flex-wrap:\s*wrap/);
   assert.match(STYLE,/\.bb-batch-dropzone--masters[\s\S]*?min-height:\s*300px/);
   assert.match(STYLE,/\.bb-batch-dropzone\.is-dragover[\s\S]*?border-color:\s*var\(--accent\)/);
+  assert.match(STYLE,/\.bb-batch-row-preview[\s\S]*?min-height:\s*170px/);
   assert.match(STYLE,/@media \(max-width:\s*720px\)[\s\S]*?\.bb-batch-drop-grid[\s\S]*?grid-template-columns:\s*1fr/);
 });

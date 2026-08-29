@@ -414,6 +414,56 @@
   min-height: 48px;
 }
 
+.bb-batch-row {
+  grid-template-columns: minmax(140px, 210px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.bb-batch-row > .cm-card-head {
+  grid-column: 1 / -1;
+}
+
+.bb-batch-row-preview {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  min-height: 170px;
+  margin: 0;
+  overflow: hidden;
+  border: 5px solid var(--ring-faint);
+  background: var(--bg);
+}
+
+.bb-batch-row-preview img {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: contain;
+}
+
+.bb-batch-row-preview figcaption,
+.bb-batch-row-preview.is-pending {
+  padding: 8px;
+  color: var(--dim);
+  font: 900 9px/1.45 var(--sans);
+  letter-spacing: .1em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.bb-batch-row-preview.is-pending span {
+  color: var(--muted);
+  font: 11px/1.5 var(--sans);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.bb-batch-row-main {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
 .bb-fragment-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -970,6 +1020,14 @@
   .bb-batch-dropzone--masters {
     min-height: 210px;
     padding: 18px;
+  }
+
+  .bb-batch-row {
+    grid-template-columns: 1fr;
+  }
+
+  .bb-batch-row-preview img {
+    height: 220px;
   }
 
   .bb-workflow-preview {
