@@ -6123,7 +6123,11 @@ async function blackboardFragmentsV2(database,recordId,states,publicOnly=false){
     ORDER BY CASE WHEN fragment.occurred_at IS NULL THEN 1 ELSE 0 END,fragment.occurred_at,fragment.sort_order,fragment.created_at`).bind(recordId).all()).results||[];
   const stateMap=new Map(states.map(state=>[state.id,state])),fragments=[];
   for(const row of rows){
-    const stateLinks=(await database.prepare("SELECT state_id FROM archive_blackboard_fragment_states WHERE fragment_id=? ORDER BY sort_order,created_at").bind(row.id).all()).results||[];
+    const stateLinks=(await database.prepare(`SELECT link.state_id,placement.x_percent,placement.y_percent,
+        placement.width_percent,placement.height_percent,placement.sort_order placement_sort_order
+      FROM archive_blackboard_fragment_states link
+      LEFT JOIN archive_blackboard_fragment_placements placement ON placement.fragment_id=link.fragment_id AND placement.state_id=link.state_id
+      WHERE link.fragment_id=? ORDER BY link.sort_order,link.created_at`).bind(row.id).all()).results||[];
     let manifestations=[],threads=[];
     if(publicOnly){
       const relationRows=(await database.prepare(`SELECT er.target_entity_id,rt.forward_label,rt.slug FROM entity_relationships er
@@ -6137,10 +6141,13 @@ async function blackboardFragmentsV2(database,recordId,states,publicOnly=false){
         JOIN archive_origin_threads thread ON thread.id=member.thread_id WHERE member.entity_id=? AND thread.state='published' AND thread.public_visible=1
         ORDER BY member.is_primary DESC,member.sort_order,thread.sort_order`).bind(row.id).all()).results||[];
     }
-    const visible=stateLinks.map(link=>stateMap.get(link.state_id)).filter(Boolean);
+    const visible=stateLinks.map(link=>stateMap.get(link.state_id)).filter(Boolean),placements=stateLinks.filter(link=>stateMap.has(link.state_id)&&link.x_percent!==null&&link.x_percent!==undefined).map(link=>({
+      state_id:link.state_id,stateId:link.state_id,x_percent:Number(link.x_percent),xPercent:Number(link.x_percent),y_percent:Number(link.y_percent),yPercent:Number(link.y_percent),
+      width_percent:Number(link.width_percent),widthPercent:Number(link.width_percent),height_percent:Number(link.height_percent),heightPercent:Number(link.height_percent),sort_order:Number(link.placement_sort_order)||0,sortOrder:Number(link.placement_sort_order)||0,
+    }));
     fragments.push({id:row.id,slug:row.slug,title:row.title,caption:row.caption||"",body:row.body||"",date:row.date_label||row.occurred_at||"",
       occurred_at:row.occurred_at,image:publicBlackboardMedia(row),visible_in:visible,visibleIn:visible,state_ids:stateLinks.map(item=>item.state_id),
-      stateIds:stateLinks.map(item=>item.state_id),manifestations,origin_threads:threads,originThreads:threads,state:row.state,public_visible:Number(row.public_visible||0)});
+      stateIds:stateLinks.map(item=>item.state_id),placements,manifestations,origin_threads:threads,originThreads:threads,state:row.state,public_visible:Number(row.public_visible||0)});
     if(!publicOnly)Object.assign(fragments.at(-1),{master_media_id:row.master_media_id,derivative_media_id:row.derivative_media_id,master_filename:row.master_filename,derivative_filename:row.derivative_filename});
   }
   return fragments;
@@ -6269,7 +6276,24 @@ async function archiveBlackboardFragmentsAdminApiV2(request,env,recordId,fragmen
   if(request.method==="PUT"&&before&&action==="states"){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");const stateIds=[...new Set((body.state_ids??body.stateIds??[]).map(value=>text(value,200)).filter(Boolean))];
     if(stateIds.length){const valid=(await database.prepare(`SELECT object_state.id FROM archive_object_states object_state JOIN archive_object_versions version ON version.id=object_state.version_id WHERE version.entity_id=? AND object_state.id IN (${stateIds.map(()=>"?").join(",")})`).bind(recordId,...stateIds).all()).results||[];if(valid.length!==stateIds.length)return failure("Every Visible in state must belong to this Blackboard record.",409)}
-    await database.batch([database.prepare("DELETE FROM archive_blackboard_fragment_states WHERE fragment_id=?").bind(fragmentId),...stateIds.map((linkedId,index)=>database.prepare("INSERT INTO archive_blackboard_fragment_states(fragment_id,state_id,sort_order,created_by,created_at) VALUES(?,?,?,'studio',datetime('now'))").bind(fragmentId,linkedId,index+1))]);return json({ok:true,state_ids:stateIds});
+    const remove=stateIds.length?database.prepare(`DELETE FROM archive_blackboard_fragment_states WHERE fragment_id=? AND state_id NOT IN (${stateIds.map(()=>"?").join(",")})`).bind(fragmentId,...stateIds):database.prepare("DELETE FROM archive_blackboard_fragment_states WHERE fragment_id=?").bind(fragmentId);
+    await database.batch([remove,...stateIds.flatMap((linkedId,index)=>[
+      database.prepare("INSERT OR IGNORE INTO archive_blackboard_fragment_states(fragment_id,state_id,sort_order,created_by,created_at) VALUES(?,?,?,'studio',datetime('now'))").bind(fragmentId,linkedId,index+1),
+      database.prepare("UPDATE archive_blackboard_fragment_states SET sort_order=? WHERE fragment_id=? AND state_id=?").bind(index+1,fragmentId,linkedId),
+    ])]);return json({ok:true,state_ids:stateIds});
+  }
+  if(request.method==="PUT"&&before&&action==="placements"){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const source=body.placements??[];if(!Array.isArray(source))return failure("Placements must be an array.",409);if(source.length>100)return failure("A fragment may have at most 100 state placements.",409);
+    const seen=new Set(),placements=[];
+    for(let index=0;index<source.length;index++){
+      const item=source[index]||{},stateId=text(item.state_id??item.stateId,200),x=Number(item.x_percent??item.xPercent??item.x),y=Number(item.y_percent??item.yPercent??item.y),width=Number(item.width_percent??item.widthPercent??item.width),height=Number(item.height_percent??item.heightPercent??item.height);
+      if(!stateId||seen.has(stateId))return failure("Each placement needs one unique Blackboard state.",409);seen.add(stateId);
+      if(![x,y,width,height].every(Number.isFinite)||x<0||y<0||width<=0||height<=0||x+width>100.000001||y+height>100.000001)return failure("Placement coordinates must form a positive rectangle inside the full scan.",409);
+      placements.push({state_id:stateId,x_percent:x,y_percent:y,width_percent:width,height_percent:height,sort_order:Number(item.sort_order??item.sortOrder)||index+1});
+    }
+    if(placements.length){const ids=placements.map(item=>item.state_id),valid=(await database.prepare(`SELECT link.state_id FROM archive_blackboard_fragment_states link JOIN archive_object_states object_state ON object_state.id=link.state_id JOIN archive_object_versions version ON version.id=object_state.version_id WHERE link.fragment_id=? AND version.entity_id=? AND link.state_id IN (${ids.map(()=>"?").join(",")})`).bind(fragmentId,recordId,...ids).all()).results||[];if(valid.length!==placements.length)return failure("Confirm every placement with a Visible in state match first.",409)}
+    await database.batch([database.prepare("DELETE FROM archive_blackboard_fragment_placements WHERE fragment_id=?").bind(fragmentId),...placements.map(item=>database.prepare(`INSERT INTO archive_blackboard_fragment_placements(fragment_id,state_id,x_percent,y_percent,width_percent,height_percent,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(fragmentId,item.state_id,item.x_percent,item.y_percent,item.width_percent,item.height_percent,item.sort_order))]);
+    return json({ok:true,placements});
   }
   if(request.method==="PATCH"&&before){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");const state=text(body.state??before.state,30),requested=body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible),publicVisible=state==="published"&&requested&&before.derivative_media_id?1:0;
@@ -7370,6 +7394,7 @@ export async function handleConstructApi(request,env){
   const versionMatch=path.match(/^\/api\/admin\/archive-versions(?:\/([^/]+))?$/);if(versionMatch)return archiveVersionsAdminApi(request,env,versionMatch[1]?decodeURIComponent(versionMatch[1]):"");
   const stateMatch=path.match(/^\/api\/admin\/archive-states(?:\/([^/]+))?$/);if(stateMatch)return archiveStatesAdminApi(request,env,stateMatch[1]?decodeURIComponent(stateMatch[1]):"");
   const dossierMatch=path.match(/^\/api\/admin\/archive-dossiers(?:\/([^/]+))?$/);if(dossierMatch)return archiveDossiersAdminApi(request,env,dossierMatch[1]?decodeURIComponent(dossierMatch[1]):"");
+  const blackboardFragmentPlacementsMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/fragments\/([^/]+)\/placements$/);if(blackboardFragmentPlacementsMatch)return archiveBlackboardFragmentsAdminApiV2(request,env,decodeURIComponent(blackboardFragmentPlacementsMatch[1]),decodeURIComponent(blackboardFragmentPlacementsMatch[2]),"placements");
   const blackboardFragmentStatesMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/fragments\/([^/]+)\/(?:states|captures)$/);if(blackboardFragmentStatesMatch)return archiveBlackboardFragmentsAdminApiV2(request,env,decodeURIComponent(blackboardFragmentStatesMatch[1]),decodeURIComponent(blackboardFragmentStatesMatch[2]),"states");
   const blackboardFragmentMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/fragments(?:\/([^/]+))?$/);if(blackboardFragmentMatch)return archiveBlackboardFragmentsAdminApiV2(request,env,decodeURIComponent(blackboardFragmentMatch[1]),blackboardFragmentMatch[2]?decodeURIComponent(blackboardFragmentMatch[2]):"");
   const blackboardNotebookMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/(?:notebook|context)(?:\/([^/]+))?$/);if(blackboardNotebookMatch)return archiveBlackboardNotebookAdminApiV2(request,env,decodeURIComponent(blackboardNotebookMatch[1]),blackboardNotebookMatch[2]?decodeURIComponent(blackboardNotebookMatch[2]):"");

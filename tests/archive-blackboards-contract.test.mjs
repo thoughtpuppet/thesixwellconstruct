@@ -99,6 +99,15 @@ test("South Wall scans become Version 1 States I through III and studio context 
   await handleConstructApi(request(`/api/admin/archive-blackboards/records/${recordId}/fragments/${fragmentId}`,{method:"PATCH",admin:true,body:{state:"published",public_visible:true}}),runtime);
   const stateIds=[firstState.id,added[1].id];
   const links=await json(await handleConstructApi(request(`/api/admin/archive-blackboards/records/${recordId}/fragments/${fragmentId}/states`,{method:"PUT",admin:true,body:{state_ids:stateIds}}),runtime));assert.equal(links.status,200,links.body.error);
+  const invalidPlacement=await json(await handleConstructApi(request(`/api/admin/archive-blackboards/records/${recordId}/fragments/${fragmentId}/placements`,{method:"PUT",admin:true,body:{placements:[{state_id:added[0].id,x_percent:10,y_percent:10,width_percent:20,height_percent:20}]}}),runtime));assert.equal(invalidPlacement.status,409);
+  const placementRows=[
+    {state_id:firstState.id,x_percent:34.5,y_percent:17.2,width_percent:24.1,height_percent:31.8,sort_order:1},
+    {state_id:added[1].id,x_percent:35.1,y_percent:16.8,width_percent:23.7,height_percent:32.4,sort_order:2},
+  ];
+  const placements=await json(await handleConstructApi(request(`/api/admin/archive-blackboards/records/${recordId}/fragments/${fragmentId}/placements`,{method:"PUT",admin:true,body:{placements:placementRows}}),runtime));assert.equal(placements.status,200,placements.body.error);
+  assert.equal(placements.body.placements.length,2);
+  const sameLinks=await json(await handleConstructApi(request(`/api/admin/archive-blackboards/records/${recordId}/fragments/${fragmentId}/states`,{method:"PUT",admin:true,body:{state_ids:stateIds}}),runtime));assert.equal(sameLinks.status,200,sameLinks.body.error);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_blackboard_fragment_placements WHERE fragment_id=?").get(fragmentId).count,2);
 
   const targetRows=db.prepare(`SELECT ce.id FROM content_entities ce WHERE ce.visibility='public' AND ce.entity_type IN ('art_work','merch_item') ORDER BY ce.entity_type LIMIT 2`).all();assert.equal(targetRows.length,2);
   for(const [index,target] of targetRows.entries()){const response=await handleConstructApi(request("/api/admin/relationships",{method:"POST",admin:true,body:{source_entity_id:fragmentId,target_entity_id:target.id,relationship_type_id:index?"rel-study-for":"rel-source-for",public_visible:true}}),runtime);assert.equal(response.status,201,JSON.stringify(await response.json()))}
@@ -113,6 +122,8 @@ test("South Wall scans become Version 1 States I through III and studio context 
   assert.equal(detail.body.notebook.length,1);
   assert.equal(detail.body.notebook[0].image.id,"studio-context-web");
   assert.equal(detail.body.fragments[0].visibleIn.length,2);
+  assert.deepEqual(detail.body.fragments[0].placements.map(item=>item.state_id),stateIds);
+  assert.deepEqual(detail.body.fragments[0].placements.map(item=>item.x_percent),[34.5,35.1]);
   assert.deepEqual(detail.body.fragments[0].manifestations.map(item=>item.relationship),["Source for","Study for"]);
   assert.equal(detail.body.fragments[0].originThreads[0].slug,"lost-marbles");
   assert.equal(detail.body.itemHistory.length,0);
@@ -121,7 +132,13 @@ test("South Wall scans become Version 1 States I through III and studio context 
   const reused=await json(await handleConstructApi(request(`/api/admin/archive-blackboards/records/${recordId}/fragments`,{method:"POST",admin:true,body:{...fragmentPair,title:"Second reading",slug:"second-reading"}}),runtime));
   assert.equal(reused.status,201,reused.body.error);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM media_assets WHERE id IN ('fragment-master','fragment-web')").get().count,2);
+  assert.equal((await blackboardDetail(runtime)).fragments.find(item=>item.id===reused.body.record.id)?.placements.length,0);
+
+  await handleConstructApi(request(`/api/admin/archive-blackboards/records/${recordId}/fragments/${fragmentId}/states`,{method:"PUT",admin:true,body:{state_ids:[firstState.id]}}),runtime);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_blackboard_fragment_placements WHERE fragment_id=?").get(fragmentId).count,1);
 });
+
+async function blackboardDetail(runtime){return (await json(await handleConstructApi(request("/api/admin/archive-blackboards/records" ,{admin:true}),runtime))).body.records[0]}
 
 test("Open Notebook materials on catalogued records remain visible without a state assignment",async()=>{
   const db=database(),runtime=env(db),created=await createRecord(runtime),recordId=created.body.record.id,stateId=created.body.record.states[0].id;
@@ -133,10 +150,17 @@ test("Open Notebook materials on catalogued records remain visible without a sta
 });
 
 test("Blackboard migration preserves client correspondence kinds and defines the record/state correction",()=>{
-  const migration80=readFileSync(join(ROOT,"migrations","0080_archive_client_correspondence_sets.sql"),"utf8"),migration81=readFileSync(join(ROOT,"migrations","0081_archive_blackboards.sql"),"utf8"),migration176=readFileSync(join(ROOT,"migrations","0176_archive_blackboard_record_states.sql"),"utf8");
+  const migration80=readFileSync(join(ROOT,"migrations","0080_archive_client_correspondence_sets.sql"),"utf8"),migration81=readFileSync(join(ROOT,"migrations","0081_archive_blackboards.sql"),"utf8"),migration176=readFileSync(join(ROOT,"migrations","0176_archive_blackboard_record_states.sql"),"utf8"),migration190=readFileSync(join(ROOT,"migrations","0190_archive_blackboard_fragment_placements.sql"),"utf8");
   assert.match(migration80,/'client-correspondence','blackboard'/);assert.match(migration80,/'blackboard-whole',\s*'blackboard-detail'/);
   assert.match(migration81,/media_asset_variants/);assert.match(migration81,/archive_material_source_contexts/);assert.match(migration81,/upload_kind TEXT NOT NULL DEFAULT 'video'/);
   assert.match(migration176,/archive_blackboard_records/);assert.match(migration176,/archive_blackboard_fragment_states/);assert.match(migration176,/'notebook','process-photo'/);
+  assert.match(migration190,/archive_blackboard_fragment_placements/);assert.match(migration190,/FOREIGN KEY\(fragment_id,state_id\)/);assert.match(migration190,/x_percent \+ width_percent <= 100/);
+});
+
+test("public Blackboard fragment viewer is driven by stored placements and keeps the full-board return path",()=>{
+  const script=readFileSync(join(ROOT,"js","archive-blackboards.js"),"utf8"),styles=readFileSync(join(ROOT,"css","archive-blackboards.css"),"utf8");
+  assert.match(script,/statePlacements/);assert.match(script,/data-enter-fragment-view/);assert.match(script,/data-select-board-fragment/);assert.match(script,/data-fragment-full/);assert.match(script,/Return to Blackboard record/);
+  assert.match(styles,/\.blackboard-fragment-rail/);assert.match(styles,/border: 5px solid/);assert.match(styles,/data-mode="detail"/);
 });
 
 test("archival master uploads resume, complete privately, and cancel without recreating a board",async()=>{

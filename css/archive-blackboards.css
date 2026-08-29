@@ -240,6 +240,215 @@
   line-height: 1.55;
 }
 
+.blackboard-fragment-entry,
+.blackboard-fragment-view button {
+  padding: 10px 12px;
+  border: 5px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.blackboard-fragment-entry {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  text-align: left;
+}
+
+.blackboard-fragment-entry span {
+  color: var(--color-archive, #fcb867);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.blackboard-fragment-view {
+  min-width: 0;
+  padding: 40px 0 20px;
+}
+
+.blackboard-fragment-view-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: end;
+  padding-bottom: 18px;
+  border-bottom: 5px solid var(--color-archive, #fcb867);
+}
+
+.blackboard-fragment-view-toolbar h2 {
+  margin: 0;
+  font-size: clamp(36px, 6vw, 76px);
+}
+
+.blackboard-fragment-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  min-width: 0;
+  margin-top: 16px;
+  border: 5px solid currentColor;
+  background: var(--color-bg);
+}
+
+.blackboard-fragment-canvas {
+  min-width: 0;
+}
+
+.blackboard-fragment-modebar {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 5px solid currentColor;
+}
+
+.blackboard-fragment-modebar button[aria-pressed="true"] {
+  background: var(--color-archive, #fcb867);
+  color: var(--color-bg);
+}
+
+.blackboard-fragment-modebar button:disabled {
+  opacity: .46;
+  cursor: not-allowed;
+}
+
+.blackboard-interactive-stage {
+  position: relative;
+  min-height: 240px;
+  overflow: hidden;
+  background: #111;
+  isolation: isolate;
+}
+
+.blackboard-interactive-stage > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform-origin: var(--fragment-origin-x, 50%) var(--fragment-origin-y, 50%);
+  transition: transform .55s cubic-bezier(.2, .75, .25, 1);
+}
+
+.blackboard-interactive-stage[data-mode="detail"] > img {
+  transform: translate(calc(50% - var(--fragment-origin-x, 50%)), calc(50% - var(--fragment-origin-y, 50%))) scale(var(--fragment-scale, 2));
+}
+
+.blackboard-hotspots {
+  position: absolute;
+  inset: 0;
+  transition: opacity .2s ease;
+}
+
+.blackboard-hotspots button {
+  position: absolute;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 5px solid var(--color-archive, #fcb867);
+  background: rgba(14, 14, 14, .12);
+  color: var(--color-archive, #fcb867);
+  cursor: zoom-in;
+}
+
+.blackboard-hotspots button:hover,
+.blackboard-hotspots button:focus-visible {
+  background: rgba(252, 184, 103, .24);
+  outline: 5px solid var(--color-bg);
+  outline-offset: 0;
+}
+
+.blackboard-hotspots button span {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  min-width: 30px;
+  padding: 4px 6px;
+  background: var(--color-archive, #fcb867);
+  color: var(--color-bg);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.blackboard-interactive-stage[data-mode="detail"] .blackboard-hotspots {
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-fragment-view-detail] {
+  min-width: 0;
+  padding: 18px;
+  border-left: 5px solid currentColor;
+}
+
+[data-fragment-view-detail] > p:first-child {
+  margin-top: 0;
+}
+
+.blackboard-fragment-view-detail h3 {
+  margin: 0 0 12px;
+  font-size: clamp(26px, 4vw, 44px);
+}
+
+.blackboard-fragment-view-detail > button {
+  width: 100%;
+  margin-top: 18px;
+}
+
+.blackboard-fragment-rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(180px, 240px);
+  min-width: 0;
+  margin-top: 16px;
+  overflow-x: auto;
+  border: 5px solid currentColor;
+  background: var(--color-bg);
+  overscroll-behavior-inline: contain;
+}
+
+.blackboard-fragment-rail > button {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 0;
+  text-align: left;
+}
+
+.blackboard-fragment-rail > button + button {
+  border-left: 5px solid currentColor;
+}
+
+.blackboard-fragment-rail > button[aria-current="true"] {
+  background: var(--color-archive, #fcb867);
+  color: var(--color-bg);
+}
+
+.blackboard-fragment-rail img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: #111;
+}
+
+.blackboard-fragment-rail span {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  padding: 4px 7px;
+  background: var(--color-archive, #fcb867);
+  color: var(--color-bg);
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .blackboard-contexts {
   margin: 18px 0 0;
   padding: 16px 0 0;
@@ -352,5 +561,31 @@
   .blackboard-card-copy,
   .blackboard-fragment-copy {
     padding: 14px;
+  }
+
+  .blackboard-fragment-view-toolbar,
+  .blackboard-fragment-modebar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .blackboard-fragment-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  [data-fragment-view-detail] {
+    border-top: 5px solid currentColor;
+    border-left: 0;
+  }
+
+  .blackboard-fragment-rail {
+    grid-auto-columns: minmax(148px, 70vw);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blackboard-interactive-stage > img,
+  .blackboard-hotspots {
+    transition: none;
   }
 }
