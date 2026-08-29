@@ -242,6 +242,7 @@
         </div>
         <nav class="section-nav" aria-label="about sections">
           <a href="/about/#orientation">ABOUT</a>
+          <a href="/about/identities/">Creative identities</a>
           <a href="/about/visual-language/">Visual language</a>
           <a href="/about/breakdown/">Breakdown</a>
           <a href="/about/saieldauhnsolehman/">Founder</a>

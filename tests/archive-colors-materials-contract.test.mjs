@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 
-import { ciede2000 } from "../functions/api/construct/_colors-materials.js";
+import { ciede2000, srgbHexToReferenceProfile } from "../functions/api/construct/_colors-materials.js";
 import {
   discoverVisualColorWorkSources,
   mergeVisualColorSuggestions,
@@ -79,14 +79,109 @@ test("visual color migration preserves Black, seeds atomic families, and stays i
   ) VALUES('combined-family','gold-ochre','Gold/Ochre','','#999999','draft',0,0,datetime('now'),datetime('now'))`).run(),/singular and atomic/);
 });
 
+test("reference color migration is idempotent and guards atomic provenance",()=>{
+  const sql=new DatabaseSync(":memory:");sql.exec("PRAGMA foreign_keys=ON");
+  const migrations=readdirSync(join(ROOT,"migrations")).filter(value=>value.endsWith(".sql")).sort();
+  for(const name of migrations.filter(value=>value<"0182_archive_reference_colors.sql"))sql.exec(readFileSync(join(ROOT,"migrations",name),"utf8"));
+  const migration=readFileSync(join(ROOT,"migrations/0182_archive_reference_colors.sql"),"utf8");sql.exec(migration);sql.exec(migration);
+  const blue=sql.prepare("SELECT id FROM archive_color_families WHERE slug='blue'").get();
+  sql.prepare(`INSERT INTO archive_color_references(
+    id,name,srgb_hex,lab_l,lab_a,lab_b,oklch_l,oklch_c,oklch_h,family_id,
+    sample_method,sample_x,sample_y,source_filename,notes,state,created_by,updated_by,created_at,updated_at
+  ) VALUES('reference-test','Blue sample','#2463B5',43,12,-45,.5,.12,250,?,'point',.25,.75,'sample.png','','active','test','test',datetime('now'),datetime('now'))`).run(blue.id);
+  assert.throws(()=>sql.prepare("UPDATE archive_color_references SET srgb_hex='#FFFFFF' WHERE id='reference-test'").run(),/immutable/);
+  assert.throws(()=>sql.prepare(`INSERT INTO archive_color_references(
+    id,name,srgb_hex,lab_l,lab_a,lab_b,oklch_l,oklch_c,family_id,sample_method,source_filename,created_at,updated_at
+  ) VALUES('bad-hex','Bad','#zzzzzz',0,0,0,0,0,?,'palette','',datetime('now'),datetime('now'))`).run(blue.id),/CHECK constraint/);
+  assert.throws(()=>sql.prepare(`INSERT INTO archive_color_references(
+    id,name,srgb_hex,lab_l,lab_a,lab_b,oklch_l,oklch_c,family_id,sample_method,sample_x,sample_y,source_filename,created_at,updated_at
+  ) VALUES('bad-point','Bad point','#2463B5',0,0,0,0,0,?,'point',1.2,.5,'',datetime('now'),datetime('now'))`).run(blue.id),/CHECK constraint/);
+  sql.prepare(`INSERT INTO archive_color_families(
+    id,slug,name,description,swatch_hex,publication_state,public_visible,sort_order,created_at,updated_at
+  ) VALUES('plural-blue','blues','Blues','','#315A7A','published',1,0,datetime('now'),datetime('now'))`).run();
+  assert.throws(()=>sql.prepare(`INSERT INTO archive_color_references(
+    id,name,srgb_hex,lab_l,lab_a,lab_b,oklch_l,oklch_c,family_id,sample_method,source_filename,created_at,updated_at
+  ) VALUES('bad-family','Bad family','#2463B5',0,0,0,0,0,'plural-blue','palette','',datetime('now'),datetime('now'))`).run(),/atomic visual family/);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_color_references").get().count,1);
+});
+
+test("reference colors are authenticated private records with immutable samples",async()=>{
+  const sql=database(),runtime=env(sql),blue=sql.prepare("SELECT id FROM archive_color_families WHERE slug='blue'").get();
+  const unauthenticated=await payload(await handleConstructApi(request("/api/admin/archive-color-materials/reference-colors"),runtime));
+  assert.equal(unauthenticated.status,401);
+  const created=await admin(runtime,"/api/admin/archive-color-materials/reference-colors",{
+    name:"Sampled blue",srgb_hex:"#2463b5",family_id:blue.id,sample_method:"point",sample_x:.2,sample_y:.8,source_filename:"local-blue.png",notes:"Pixel sample",
+  });
+  assert.equal(created.status,201,created.body.error);
+  assert.equal(created.body.record.srgb_hex,"#2463B5");
+  assert.equal(created.body.record.family_slug,"blue");
+  assert.equal(created.body.record.source_retained,0);
+  const expected=srgbHexToReferenceProfile("#2463B5");
+  assert.equal(created.body.record.lab_l,expected.lab_l);
+  assert.equal(created.body.record.oklch_h,expected.oklch_h);
+
+  const immutable=await admin(runtime,`/api/admin/archive-color-materials/reference-colors/${created.body.record.id}`,{srgb_hex:"#FFFFFF"},"PATCH");
+  assert.equal(immutable.status,409);
+  const renamed=await admin(runtime,`/api/admin/archive-color-materials/reference-colors/${created.body.record.id}`,{name:"Reviewed sampled blue",family_id:blue.id,notes:"Reviewed",state:"archived"},"PATCH");
+  assert.equal(renamed.status,200,renamed.body.error);
+  assert.equal(renamed.body.record.name,"Reviewed sampled blue");
+  assert.equal(renamed.body.record.srgb_hex,"#2463B5");
+  const active=await payload(await handleConstructApi(request("/api/admin/archive-color-materials/reference-colors?state=active",{admin:true}),runtime));
+  const archived=await payload(await handleConstructApi(request("/api/admin/archive-color-materials/reference-colors?state=archived",{admin:true}),runtime));
+  assert.equal(active.body.count,0);assert.equal(archived.body.count,1);
+  const publicResult=await payload(await handleConstructApi(request("/api/archive/reference-colors"),runtime));
+  assert.equal(publicResult.status,404);
+
+  sql.prepare(`INSERT INTO media_assets(
+    id,source_url,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,
+    state,created_by,created_at,updated_at,public_presentation
+  ) VALUES('private-sampling-source','','construct/private/sample.png','sample.png','image/png',100,
+    'Private sampling source','private','active','test',datetime('now'),datetime('now'),'hidden')`).run();
+  const retained=await admin(runtime,"/api/admin/archive-color-materials/reference-colors",{
+    name:"Retained blue",srgb_hex:"#2463B5",family_id:blue.id,sample_method:"palette",source_media_id:"private-sampling-source",source_filename:"ignored-name.png",
+  });
+  assert.equal(retained.status,201,retained.body.error);
+  assert.equal(retained.body.record.source_retained,1);
+  assert.equal(retained.body.record.source_filename,"sample.png");
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_media WHERE media_id='private-sampling-source'").get().count,0);
+  assert.throws(()=>sql.prepare("UPDATE media_assets SET privacy='public' WHERE id='private-sampling-source'").run(),/remain active private hidden/);
+
+  const publicMedia=sql.prepare("SELECT id FROM media_assets WHERE privacy='public' LIMIT 1").get();
+  const invalidSource=await admin(runtime,"/api/admin/archive-color-materials/reference-colors",{
+    srgb_hex:"#2463B5",family_id:blue.id,sample_method:"palette",source_media_id:publicMedia.id,
+  });
+  assert.equal(invalidSource.status,409);
+  assert.match(invalidSource.body.error,/private hidden/i);
+});
+
+test("reference colors reject non-atomic curated families",async()=>{
+  const runtime=env(database());
+  const family=await admin(runtime,"/api/admin/archive-color-materials/families",{
+    name:"Blues",
+    slug:"blues",
+    swatch_hex:"#315A7A",
+    publication_state:"published",
+    public_visible:true,
+  });
+  assert.equal(family.status,201);
+  const rejected=await admin(runtime,"/api/admin/archive-color-materials/reference-colors",{
+    name:"Plural family sample",
+    srgb_hex:"#315A7A",
+    family_id:family.body.record.id,
+    sample_method:"palette",
+  });
+  assert.equal(rejected.status,409);
+  assert.match(rejected.body.error,/atomic visual color family/i);
+});
+
 test("visual source discovery excludes Tattoo context images and merges only allowed atomic suggestions",async()=>{
   const sql=database(),runtime=env(sql);
   sql.exec(`INSERT INTO portfolio_items(
     id,source_url,storage_key,original_filename,content_type,title,alt_text,year,placement,
-    primary_style,collection,caption,state,sort_order,created_at,updated_at,primary_consent_status,project_type
+    primary_style,collection,caption,state,sort_order,created_at,updated_at,primary_public_visible,project_type
   ) VALUES(
     'visual-tattoo','https://cdn.example.test/tattoo-primary.jpg','','tattoo-primary.jpg','image/jpeg',
-    'Reviewed tattoo','Reviewed tattoo','2026','arm','abstract','','','published',0,datetime('now'),datetime('now'),'granted','cover_up'
+    'Reviewed tattoo','Reviewed tattoo','2026','arm','abstract','','','published',0,datetime('now'),datetime('now'),1,'cover_up'
   );
   INSERT INTO content_entities(
     id,entity_type,visibility,search_visibility,featured,created_by,updated_by,created_at,updated_at
@@ -99,11 +194,11 @@ test("visual source discovery excludes Tattoo context images and merges only all
     ('visual-tattoo','visual-detail','unspecified','','',datetime('now'),datetime('now'),'detail'),
     ('visual-tattoo','visual-result','healed','','',datetime('now'),datetime('now'),'result');
   INSERT INTO media_assets(
-    id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation
+    id,source_url,original_filename,mime_type,alt_text,privacy,state,created_by,created_at,updated_at,public_presentation
   ) VALUES
-    ('visual-before','https://cdn.example.test/before.jpg','before.jpg','image/jpeg','Before','public','granted','active','test',datetime('now'),datetime('now'),'inline'),
-    ('visual-detail','https://cdn.example.test/detail.jpg','detail.jpg','image/jpeg','Detail','public','granted','active','test',datetime('now'),datetime('now'),'inline'),
-    ('visual-result','https://cdn.example.test/result.jpg','result.jpg','image/jpeg','Result','public','granted','active','test',datetime('now'),datetime('now'),'inline');
+    ('visual-before','https://cdn.example.test/before.jpg','before.jpg','image/jpeg','Before','public','active','test',datetime('now'),datetime('now'),'inline'),
+    ('visual-detail','https://cdn.example.test/detail.jpg','detail.jpg','image/jpeg','Detail','public','active','test',datetime('now'),datetime('now'),'inline'),
+    ('visual-result','https://cdn.example.test/result.jpg','result.jpg','image/jpeg','Result','public','active','test',datetime('now'),datetime('now'),'inline');
   INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,created_at) VALUES
     ('visual-tattoo','visual-before','gallery',1,1,datetime('now')),
     ('visual-tattoo','visual-detail','gallery',2,1,datetime('now')),
@@ -556,13 +651,13 @@ test("reviewed placement maps store owned geometry and export inert accessible S
       AND aov.publication_state='published' AND aov.public_visible=1 LIMIT 1`).get();
   sql.exec(`INSERT INTO media_assets(
     id,source_url,original_filename,mime_type,width,height,alt_text,privacy,
-    consent_status,state,public_presentation,created_by,created_at,updated_at
+    state,public_presentation,created_by,created_at,updated_at
   ) VALUES(
     'palette-map-source','https://cdn.example.test/palette-source.jpg','palette-source.jpg','image/jpeg',
-    1200,900,'Reviewed source artwork','public','not-required','active','inline','test',datetime('now'),datetime('now')
+    1200,900,'Reviewed source artwork','public','active','inline','test',datetime('now'),datetime('now')
   )`);
   const media=sql.prepare(`SELECT id,width,height FROM media_assets
-    WHERE state='active' AND privacy='public' AND consent_status IN ('not-required','granted')
+    WHERE state='active' AND privacy='public'
       AND public_presentation='inline' AND mime_type LIKE 'image/%' AND width>0 AND height>0 LIMIT 1`).get();
   assert.ok(state&&media);
   const paint=await admin(runtime,"/api/admin/archive-color-materials/materials",{name:"Map paint",slug:"map-paint",material_kind:"art-paint",medium_scope:"art",publication_state:"published",public_visible:true});
@@ -719,13 +814,14 @@ test("Tattoo session evidence is state-scoped, privately inspectable, and public
 
 test("Studio SVG import owns transforms and public map interactions use privacy-safe analytics",()=>{
   const studioSource=readFileSync(join(ROOT,"studio/archive-colors-materials.js"),"utf8");
+  assert.doesNotMatch(studioSource,/consent_status|consentStatus|\bConsent\b/);
   const publicSource=readFileSync(join(ROOT,"js/archive-public.js"),"utf8");
   const publicReferenceSource=readFileSync(join(ROOT,"js/archive-colors-materials.js"),"utf8");
   const referenceCss=readFileSync(join(ROOT,"css/archive-colors-materials.css"),"utf8");
   const archiveCss=readFileSync(join(ROOT,"css/archive-public.css"),"utf8");
   const context={window:{},console};
   runInNewContext(studioSource,context);
-  const {transformMatrix,matrixMultiply,srgbHexToColorProfile}=context.window.ArchiveColorMaterialsStudio;
+  const {transformMatrix,matrixMultiply,srgbHexToColorProfile,extractPaletteFromRgba,nearestColorFamily,normalizedCanvasPoint}=context.window.ArchiveColorMaterialsStudio;
   assert.deepEqual(Array.from(transformMatrix("translate(10 20) scale(2)")),[2,0,0,2,10,20]);
   assert.deepEqual(Array.from(matrixMultiply([1,0,0,1,5,6],[1,0,0,1,7,8])),[1,0,0,1,12,14]);
   assert.deepEqual({...srgbHexToColorProfile("#000000")},{
@@ -738,8 +834,19 @@ test("Studio SVG import owns transforms and public map interactions use privacy-
   assert.ok(Math.abs(red.oklch_l-.627955)<.000002);
   assert.ok(Math.abs(red.oklch_c-.257683)<.000002);
   assert.ok(Math.abs(red.oklch_h-29.234)<.002);
+  const pixels=new Uint8ClampedArray([
+    255,0,0,255,255,0,0,255,0,0,255,255,
+    255,0,0,255,0,255,0,0,0,0,255,255,
+  ]);
+  const firstPalette=Array.from(extractPaletteFromRgba(pixels,3,2,8));
+  const secondPalette=Array.from(extractPaletteFromRgba(pixels,3,2,8));
+  assert.deepEqual(firstPalette,secondPalette);
+  assert.deepEqual(firstPalette,["#FF0000","#0000FF"]);
+  assert.equal(nearestColorFamily("#225FBA",[{id:"blue",swatch_hex:"#2463B5"},{id:"gold",swatch_hex:"#C89B2C"}]),"blue");
+  assert.deepEqual({...normalizedCanvasPoint({left:100,top:50,width:400,height:200},300,150)},{x:.5,y:.5});
   assert.match(studioSource,/Calculate Lab and OKLCH from sRGB/);
   assert.match(studioSource,/mount:mountSimple/);
+  assert.doesNotMatch(studioSource,/async function mount\(host/);
   assert.match(studioSource,/Add premade paint or ink/);
   assert.match(studioSource,/Create mixed color/);
   assert.match(studioSource,/No second visibility control is required/);
@@ -758,6 +865,18 @@ test("Studio SVG import owns transforms and public map interactions use privacy-
   assert.match(studioSource,/data-review-run/);
   assert.match(studioSource,/Approve complete set/);
   assert.match(studioSource,/Gold and Ochre are separate families/);
+  assert.match(studioSource,/Image color sampler/);
+  assert.match(studioSource,/Save reference color/);
+  assert.match(studioSource,/Use as family swatch/);
+  assert.match(studioSource,/data-confirm-family-swatch/);
+  assert.match(studioSource,/Current ·/);
+  assert.match(studioSource,/Proposed ·/);
+  assert.match(studioSource,/Keep source privately/);
+  assert.match(studioSource,/upload\.append\("privacy","private"\)/);
+  assert.match(studioSource,/source_media_id:sampler\.retainedMediaId/);
+  assert.match(studioSource,/reference-colors\?state=/);
+  assert.match(studioSource,/URL\.revokeObjectURL/);
+  assert.match(studioSource,/drawImage\(sampler\.sourceImage,x,y,1,1,0,0,1,1\)/);
   assert.match(studioSource,/querySelectorAll\("path,polygon,polyline,rect,circle,ellipse"\)/);
   assert.doesNotMatch(studioSource,/innerHTML\s*=\s*await file\.text/);
   assert.doesNotMatch(publicReferenceSource,/material\.formulations/);

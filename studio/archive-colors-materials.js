@@ -1,4 +1,5 @@
 (() => {
+  const tokenKey="swc_submissions_admin_token";
   const esc=(value)=>String(value??"").replace(/[&<>"']/g,(character)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[character]));
   const title=(value)=>String(value||"").replace(/[-_]+/g," ").replace(/\b\w/g,(letter)=>letter.toUpperCase());
   const kinds=[
@@ -7,6 +8,7 @@
     ["support-substrate","Support / substrate"],["tool","Tool"],["equipment","Equipment"],
     ["needle-cartridge","Needle / cartridge"],["disposable","Disposable"],["aftercare","Aftercare"],
   ];
+  const visualFamilySlugs=new Set(["black","gray","white","cream","beige","tan","brown","red","orange","yellow","gold","ochre","green","teal","turquoise","cyan","blue","indigo","purple","pink","silver"]);
   const publicationOptions=(current="draft")=>["draft","published","archived"].map(value=>`<option value="${value}" ${current===value?"selected":""}>${title(value)}</option>`).join("");
   const optionList=(records,label=(record)=>record.name,current="")=>records.map(record=>`<option value="${esc(record.id)}" ${current===record.id?"selected":""}>${esc(label(record))}</option>`).join("");
   const publicCheck=(name="public_visible",checked=false)=>`<label class="acm-checkbox"><input type="checkbox" name="${name}" ${checked?"checked":""}>Publicly visible</label>`;
@@ -53,6 +55,42 @@
     if(!automatic)return;
     const values=srgbHexToColorProfile(form.elements.srgb_hex.value);
     Object.entries(values).forEach(([name,value])=>{form.elements[name].value=value});
+  }
+
+  const clamp=(value,minimum=0,maximum=1)=>Math.min(maximum,Math.max(minimum,value));
+  const normalizedHex=(value)=>{const match=/^#?([0-9a-f]{6})$/i.exec(String(value||"").trim());return match?`#${match[1].toUpperCase()}`:""};
+  const hexToRgb=(value)=>{const hex=normalizedHex(value);return hex?{r:parseInt(hex.slice(1,3),16),g:parseInt(hex.slice(3,5),16),b:parseInt(hex.slice(5,7),16)}:null};
+  const rgbToHex=(red,green,blue)=>`#${[red,green,blue].map(value=>Math.round(clamp(Number(value)||0,0,255)).toString(16).padStart(2,"0")).join("").toUpperCase()}`;
+  function rgbToOklab({r,g,b}){
+    const [red,green,blue]=[r,g,b].map(value=>{const channel=value/255;return channel<=.04045?channel/12.92:((channel+.055)/1.055)**2.4});
+    const linearL=Math.cbrt(.4122214708*red+.5363325363*green+.0514459929*blue),linearM=Math.cbrt(.2119034982*red+.6806995451*green+.1073969566*blue),linearS=Math.cbrt(.0883024619*red+.2817188376*green+.6299787005*blue);
+    return {l:.2104542553*linearL+.793617785*linearM-.0040720468*linearS,a:1.9779984951*linearL-2.428592205*linearM+.4505937099*linearS,b:.0259040371*linearL+.7827717662*linearM-.808675766*linearS};
+  }
+  const perceptualDistance=(left,right)=>{const a=rgbToOklab(left),b=rgbToOklab(right);return Math.hypot((a.l-b.l)*.8,a.a-b.a,a.b-b.b)};
+  function nearestColorFamily(value,families=[]){
+    const color=hexToRgb(value);if(!color)return"";
+    let closest="",distance=Infinity;
+    families.forEach(family=>{const swatch=hexToRgb(family.swatch_hex);if(!swatch)return;const next=perceptualDistance(color,swatch);if(next<distance){distance=next;closest=family.id}});
+    return closest;
+  }
+  function extractPaletteFromRgba(pixelData,width,height,limit=8){
+    const data=pixelData?.data||pixelData;if(!data||!Number(width)||!Number(height))return[];
+    const stride=Math.max(1,Math.floor(Math.sqrt((width*height)/65536))),bins=new Map();
+    for(let y=0;y<height;y+=stride){for(let x=0;x<width;x+=stride){const offset=(y*width+x)*4,alpha=data[offset+3];if(alpha<128)continue;const red=data[offset],green=data[offset+1],blue=data[offset+2],key=`${red>>3}-${green>>3}-${blue>>3}`,bin=bins.get(key)||{red:0,green:0,blue:0,count:0,key};bin.red+=red;bin.green+=green;bin.blue+=blue;bin.count+=1;bins.set(key,bin)}}
+    const ranked=[...bins.values()].map(bin=>({r:bin.red/bin.count,g:bin.green/bin.count,b:bin.blue/bin.count,count:bin.count,key:bin.key})).sort((a,b)=>b.count-a.count||a.key.localeCompare(b.key)),selected=[];
+    for(const threshold of [.045,.025,0]){
+      for(const color of ranked){if(selected.length>=Math.max(1,Math.min(8,Number(limit)||8)))break;if(selected.some(item=>item.key===color.key)||selected.some(item=>perceptualDistance(item,color)<threshold))continue;selected.push(color)}
+      if(selected.length>=Math.max(1,Math.min(8,Number(limit)||8)))break;
+    }
+    return selected.map(color=>rgbToHex(color.r,color.g,color.b));
+  }
+  function normalizedCanvasPoint(rect,clientX,clientY){
+    return {x:clamp((clientX-rect.left)/Math.max(1,rect.width)),y:clamp((clientY-rect.top)/Math.max(1,rect.height))};
+  }
+  function confirmFamilySwatch(family,proposedHex){
+    return new Promise(resolve=>{
+      const dialog=document.createElement("dialog");dialog.className="acm-swatch-dialog";dialog.innerHTML=`<form method="dialog"><span class="acm-kicker">Public family swatch</span><h3>Replace ${esc(family.name)}?</h3><p>This changes the swatch used publicly for this atomic family. It does not create a recipe or work-usage claim.</p><div class="acm-swatch-comparison"><figure><span class="acm-swatch" style="--swatch:${esc(family.swatch_hex)}"></span><figcaption>Current · ${esc(family.swatch_hex)}</figcaption></figure><figure><span class="acm-swatch" style="--swatch:${esc(proposedHex)}"></span><figcaption>Proposed · ${esc(proposedHex)}</figcaption></figure></div><div class="acm-actions"><button class="button" value="cancel">Keep current swatch</button><button class="button" value="confirm" data-confirm-family-swatch>Replace family swatch</button></div></form>`;document.body.append(dialog);dialog.addEventListener("close",()=>{const accepted=dialog.returnValue==="confirm";dialog.remove();resolve(accepted)},{once:true});dialog.showModal();
+    });
   }
 
   function materialForm(){
@@ -153,97 +191,78 @@
     const counts=review.counts||{},families=review.families||[],terms=review.descriptor_terms||[];
     return `<section class="acm-section acm-visual-review"><header class="acm-section-head"><div><span class="acm-kicker">Studio review boundary</span><h3>Visual color review</h3><p>AI suggestions and safe metadata facts remain private until you approve the complete work-level set. Re-analysis never replaces an existing public approval.</p></div><button class="button" type="button" data-enqueue-visual-colors>Refresh eligible works</button></header><nav class="acm-review-filters" aria-label="Visual color review status">${["pending","approved","rejected","failed"].map(value=>`<button class="button ${review.filter===value?"is-active":""}" type="button" data-review-filter="${value}" aria-pressed="${String(review.filter===value)}">${title(value)} · ${Number(counts[value]||0)}</button>`).join("")}</nav><details class="acm-add acm-vocabulary"><summary>Atomic family vocabulary &amp; swatches</summary><p>Every label is singular. Gold and Ochre are separate families; combined labels are rejected.</p><div class="acm-vocabulary-grid">${families.map(family=>`<form class="acm-vocabulary-item" data-edit-visual-family="${esc(family.id)}"><span class="acm-swatch" style="--swatch:${esc(family.swatch_hex||"#777777")}"></span><label>Name<input name="name" value="${esc(family.name)}" required></label><label>Swatch<input name="swatch_hex" type="color" value="${esc(family.swatch_hex||"#777777")}"></label><button class="button" type="submit">Save</button><span class="acm-output" aria-live="polite"></span></form>`).join("")}</div></details><div class="acm-review-grid">${(review.runs||[]).map(run=>visualReviewCard(run,families,terms)).join("")||'<div class="cm-empty">No works match this review status.</div>'}</div></section>`;
   }
-  async function mount(host,api,status){
-    host.innerHTML='<section class="construct-manager acm-studio"><p>Loading Colors &amp; Materials…</p></section>';
-    async function load(){
-      const data=await api("/api/admin/archive-color-materials"),materials=data.materials||[],formulations=data.formulations||[],recipes=data.recipes||[],versions=data.recipe_versions||[],components=data.recipe_components||[],declarations=data.declared_pigments||[],profiles=data.color_profiles||[],families=data.color_families||[],pigments=materials.filter(item=>item.material_kind==="raw-pigment"),equipment=materials.filter(item=>item.material_kind==="equipment");
-      host.innerHTML=`<section class="construct-manager acm-studio"><header class="acm-head"><div><span class="acm-kicker">Archive reference system</span><h2>Colors &amp; Materials</h2><p class="cm-summary">Capture authored formulas, frozen commercial formulations, declared pigments, tools, supports, private batches, and sourced color references shared by Art and Tattoo.</p></div><a class="button" href="/archive/colors-materials/" target="_blank" rel="noopener">Open public library</a></header>
-        <div class="acm-dashboard"><div class="acm-stat"><strong>${recipes.length}</strong><span>Named colors</span></div><div class="acm-stat"><strong>${pigments.length}</strong><span>Pigments</span></div><div class="acm-stat"><strong>${materials.filter(item=>["art-paint","tattoo-ink"].includes(item.material_kind)).length}</strong><span>Paints &amp; inks</span></div><div class="acm-stat"><strong>${materials.filter(item=>["tool","equipment"].includes(item.material_kind)).length}</strong><span>Tools &amp; equipment</span></div></div>
-        <section class="acm-section"><header class="acm-section-head"><div><span class="acm-kicker">01 · Definitions</span><h3>Materials, products &amp; equipment</h3><p>Duplicate identity is checked across brand, line, product/color name, code, finish, and formulation version. Batches and serial identities stay private.</p></div><details class="acm-add"><summary>New definition</summary>${materialForm()}</details></header><details class="acm-add"><summary>Add commercial formulation version</summary>${formulationForm(materials)}</details><details class="acm-add"><summary>Add manufacturer-declared pigment</summary>${declarationForm(formulations,pigments)}</details><div class="acm-grid">${materials.map(record=>materialCard(record,formulations,declarations,profiles,pigments)).join("")||"<p>No material definitions yet.</p>"}</div></section>
-        <section class="acm-section"><header class="acm-section-head"><div><span class="acm-kicker">02 · Authored colors</span><h3>Named colors &amp; immutable recipes</h3><p>Commercial paint used unchanged belongs on a dossier as a direct product. Create a named color only for a meaningful mixture or authored reference color.</p></div><details class="acm-add"><summary>New named color</summary>${recipeForm()}</details></header><details class="acm-add"><summary>Create recipe version</summary>${recipeVersionForm(recipes)}</details><details class="acm-add"><summary>Add recipe component</summary>${componentForm(versions,formulations,pigments)}</details><div class="acm-grid">${recipes.map(record=>recipeCard(record,versions,components,profiles)).join("")||"<p>No named colors yet.</p>"}</div></section>
-        <section class="acm-section"><header class="acm-section-head"><div><span class="acm-kicker">03 · Reference color</span><h3>Sourced color profiles &amp; curated families</h3><p>Numeric values drive CIEDE2000 neighbors. Family membership remains human-confirmed and may be multiple.</p></div></header><details class="acm-add" data-profile-panel><summary>Add / replace color profile</summary>${profileForm(formulations,versions)}</details><details class="acm-add"><summary>Create color family</summary>${familyForm()}</details><details class="acm-add"><summary>Confirm family membership</summary>${assignmentForm(profiles,families)}</details></section>
-        <section class="acm-section"><header class="acm-section-head"><div><span class="acm-kicker">04 · Private trace</span><h3>Batches &amp; individual equipment assets</h3><p class="acm-warning">Lot, expiration, opened date, serial number, nickname, and private notes are Studio-only and never enter public APIs.</p></div></header><details class="acm-add"><summary>Add consumable batch</summary>${privateForm("batch",formulations)}</details><details class="acm-add"><summary>Add equipment asset</summary>${privateForm("equipment",equipment)}</details></section></section>`;
-      bind();
-    }
-    function bind(){
-      host.querySelectorAll("[data-component-type]").forEach(select=>select.addEventListener("change",()=>{const form=select.form;form.querySelectorAll("[data-component-choice]").forEach(label=>label.hidden=label.dataset.componentChoice!==select.value)}));
-      host.querySelectorAll("[data-profile-type]").forEach(select=>select.addEventListener("change",()=>{const form=select.form;form.querySelectorAll("[data-profile-source]").forEach(label=>label.hidden=label.dataset.profileSource!==select.value)}));
-      host.querySelectorAll('[data-acm-form="profile"]').forEach(form=>{
-        const swatch=form.querySelector('[name="srgb_hex"]'),automatic=form.querySelector('[name="auto_color_conversion"]');
-        swatch.addEventListener("input",()=>syncProfileColor(form));
-        swatch.addEventListener("change",()=>syncProfileColor(form));
-        automatic.addEventListener("change",()=>syncProfileColor(form));
-        syncProfileColor(form);
-      });
-      host.addEventListener("submit",async event=>{
-        const editMaterial=event.target.closest("[data-edit-material]"),editFormulation=event.target.closest("[data-edit-formulation]"),editDeclaration=event.target.closest("[data-edit-declaration]");
-        if(editMaterial||editFormulation||editDeclaration){
-          event.preventDefault();const form=event.target,values=formValues(form),output=form.querySelector(".acm-output");output.textContent="Saving…";
-          try{
-            if(editMaterial)await post(api,`/api/admin/archive-color-materials/materials/${encodeURIComponent(editMaterial.dataset.editMaterial)}`,"PATCH",values);
-            if(editFormulation)await post(api,`/api/admin/archive-color-materials/formulations/${encodeURIComponent(editFormulation.dataset.editFormulation)}`,"PATCH",{...values,optical_effects:String(values.optical_effects_text||"").split(",").map(value=>value.trim()).filter(Boolean)});
-            if(editDeclaration)await post(api,`/api/admin/archive-color-materials/declared-pigments/${encodeURIComponent(editDeclaration.dataset.editDeclaration)}`,"PATCH",values);
-            status("Colors & Materials changes saved");await load();
-          }catch(error){output.textContent=error.message;status(error.message)}
-          return;
-        }
-        const form=event.target.closest("[data-acm-form]");if(!form)return;event.preventDefault();const output=form.querySelector(".acm-output"),kind=form.dataset.acmForm,values=formValues(form);output.textContent="Saving…";
-        try{
-          let path="",body=values;
-          if(kind==="material")path="/api/admin/archive-color-materials/materials";
-          if(kind==="formulation"){path="/api/admin/archive-color-materials/formulations";body={...values,optical_effects:String(values.optical_effects_text||"").split(",").map(value=>value.trim()).filter(Boolean)}}
-          if(kind==="declaration")path="/api/admin/archive-color-materials/declared-pigments";
-          if(kind==="recipe")path="/api/admin/archive-color-materials/recipes";
-          if(kind==="recipe-version")path="/api/admin/archive-color-materials/recipe-versions";
-          if(kind==="component"){path="/api/admin/archive-color-materials/recipe-components";body={...values,formulation_id:values.component_type==="formulation"?values.formulation_id:"",raw_pigment_material_id:values.component_type==="pigment"?values.raw_pigment_material_id:"",nested_recipe_version_id:values.component_type==="recipe"?values.nested_recipe_version_id:""}}
-          if(kind==="profile"){path="/api/admin/archive-color-materials/profiles";body={...values,source_id:values.source_type==="recipe-version"?values.recipe_source_id:values.formulation_source_id}}
-          if(kind==="family")path="/api/admin/archive-color-materials/families";
-          if(kind==="family-assignment")path="/api/admin/archive-color-materials/family-assignments";
-          if(kind==="batch")path="/api/admin/archive-color-materials/batches";
-          if(kind==="equipment")path="/api/admin/archive-color-materials/equipment-assets";
-          await post(api,path,"POST",body);status("Colors & Materials saved");await load();
-        }catch(error){output.textContent=error.message;status(error.message)}
-      });
-      host.addEventListener("click",async event=>{
-        const formulation=event.target.closest("[data-publish-formulation]"),version=event.target.closest("[data-publish-recipe-version]"),profile=event.target.closest("[data-profile-for]"),archiveMaterial=event.target.closest("[data-archive-material]"),removeDeclaration=event.target.closest("[data-remove-declaration]");
-        if(profile){
-          const panel=host.querySelector("[data-profile-panel]"),form=panel?.querySelector('[data-acm-form="profile"]'),type=form?.querySelector("[data-profile-type]"),source=form?.querySelector('[name="formulation_source_id"]');
-          if(panel&&form&&type&&source){panel.open=true;type.value="material-formulation";type.dispatchEvent(new Event("change"));source.value=profile.dataset.profileFor;panel.scrollIntoView({block:"start"});form.querySelector('[name="srgb_hex"]')?.focus();status("Complete this sourced color profile to unlock publication")}
-          return;
-        }
-        if(archiveMaterial){
-          if(!window.confirm(`Archive ${archiveMaterial.dataset.materialName}? The definition will leave public discovery, but its historical evidence will remain.`))return;
-          try{await post(api,`/api/admin/archive-color-materials/materials/${encodeURIComponent(archiveMaterial.dataset.archiveMaterial)}`,"DELETE",{});status("Material definition archived");await load()}catch(error){status(error.message)}
-          return;
-        }
-        if(removeDeclaration){
-          if(!window.confirm(`Remove the ${removeDeclaration.dataset.pigmentName} declaration from this draft formulation? This cannot be undone.`))return;
-          try{await post(api,`/api/admin/archive-color-materials/declared-pigments/${encodeURIComponent(removeDeclaration.dataset.removeDeclaration)}`,"DELETE",{});status("Pigment declaration removed");await load()}catch(error){status(error.message)}
-          return;
-        }
-        if(!formulation&&!version)return;
-        try{if(formulation)await post(api,`/api/admin/archive-color-materials/formulations/${encodeURIComponent(formulation.dataset.publishFormulation)}`,"PATCH",{publication_state:"published",public_visible:true});else await post(api,`/api/admin/archive-color-materials/recipe-versions/${encodeURIComponent(version.dataset.publishRecipeVersion)}`,"PATCH",{publication_state:"published",public_visible:true});status("Immutable version published");await load()}catch(error){status(error.message)}
-      });
-    }
-    try{await load()}catch(error){host.innerHTML=`<section class="construct-manager"><div class="cm-empty">${esc(error.message)}</div></section>`}
+  const samplerFamilyOptions=(families,current="")=>`<option value="">Choose one family</option>${optionList(families,item=>item.name,current)}`;
+  function samplerCandidateMarkup(candidate,families){
+    const rgb=hexToRgb(candidate.hex)||{r:0,g:0,b:0};
+    return `<form class="acm-sample-card" data-sampler-candidate="${esc(candidate.id)}"><div class="acm-sample-color"><input aria-label="Sample color" name="srgb_hex" type="color" value="${esc(candidate.hex)}"><span><strong>${esc(candidate.hex)}</strong><small>RGB ${Math.round(rgb.r)}, ${Math.round(rgb.g)}, ${Math.round(rgb.b)} · ${esc(title(candidate.method))}</small></span></div><label>Name<input name="name" value="${esc(candidate.name)}" required></label><label>Atomic family<select name="family_id" required>${samplerFamilyOptions(families,candidate.family_id)}</select></label><label class="wide">Private notes<textarea name="notes" rows="2"></textarea></label><div class="acm-actions"><button class="button" type="submit">Save reference color</button><button class="button" type="button" data-use-family-swatch>Use as family swatch</button><button class="button danger-button" type="button" data-remove-sample>Remove from tray</button><span class="acm-output" aria-live="polite"></span></div></form>`;
   }
-
+  function samplerSessionMarkup(state,families){
+    if(!state.file)return `<div class="acm-sampler-empty"><strong>No image loaded.</strong><span>Choose or drop a reference image. It stays in this browser unless you explicitly retain it.</span></div>`;
+    return `<div class="acm-sampler-source"><div class="acm-sampler-source-head"><div><strong>${esc(state.file.name)}</strong><span>${state.sourceWidth} × ${state.sourceHeight} sampled pixels · ${(state.file.size/1024/1024).toFixed(2)} MB</span></div><div class="acm-actions">${state.retainedMediaId?'<span class="acm-retained">Source retained privately</span>':'<button class="button" type="button" data-retain-sampler-source>Keep source privately</button>'}<button class="button danger-button" type="button" data-clear-sampler>Clear image</button></div></div><div class="acm-sampler-stage"><canvas data-sampler-canvas tabindex="0" aria-label="Reference image color sampler. Click or tap the image to sample a point. Use arrow keys to move the keyboard point and Enter to sample."></canvas><div class="acm-sampler-markers" aria-hidden="true"></div></div><p class="acm-sampler-guidance">Click or tap the image for an exact point sample. The automatic palette favors broad, repeated colors; use point sampling for meaningful accents.</p><div class="acm-sampler-tray" data-sampler-tray>${state.candidates.map(candidate=>samplerCandidateMarkup(candidate,families)).join("")||'<div class="cm-empty">No samples remain. Click the image to add one.</div>'}</div></div>`;
+  }
+  function referenceColorCard(record,families){
+    return `<article class="acm-reference-card"><form data-reference-color-id="${esc(record.id)}"><div class="acm-reference-head"><span class="acm-swatch" style="--swatch:${esc(record.srgb_hex)}"></span><div><h4>${esc(record.name)}</h4><div class="acm-meta"><span>${esc(record.srgb_hex)}</span><span>${esc(record.family_name)}</span><span>${record.source_retained?"Private source retained":"Source not retained"}</span></div></div></div><label>Name<input name="name" value="${esc(record.name)}" required></label><label>Atomic family<select name="family_id" required>${samplerFamilyOptions(families,record.family_id)}</select></label><label class="wide">Private notes<textarea name="notes" rows="2">${esc(record.notes)}</textarea></label><div class="acm-actions"><button class="button" type="submit">Save reference details</button>${record.source_media_id?`<button class="button" type="button" data-open-reference-source="${esc(record.source_media_id)}">Open private source</button>`:""}${record.state==="active"?'<button class="button danger-button" type="button" data-archive-reference-color>Archive reference</button>':'<button class="button" type="button" data-restore-reference-color>Restore reference</button>'}<span class="acm-output" aria-live="polite"></span></div></form></article>`;
+  }
+  function samplerMarkup(state,families,references,referenceFilter){
+    return `<section class="acm-section acm-color-sampler"><header class="acm-section-head"><div><span class="acm-kicker">Studio-only sampling utility</span><h3>Image color sampler</h3><p>Sample visible digital colors without claiming a paint, ink, recipe, or artwork relationship. Nothing leaves this browser until you save a reference or retain its source.</p></div><label class="button acm-sampler-upload">Choose image<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-sampler-file hidden></label></header><div class="acm-sampler-drop" data-sampler-drop tabindex="0"><strong>Drop a JPEG, PNG, WebP, or GIF here</strong><span>Maximum 15 MB. GIF sampling uses the displayed first frame.</span></div><div data-sampler-session>${samplerSessionMarkup(state,families)}</div><section class="acm-reference-shelf"><header><div><span class="acm-kicker">Saved Studio records</span><h4>Reference colors</h4><p>These exact digital samples remain separate from recipes and work-specific usage.</p></div><nav class="acm-review-filters" aria-label="Reference color state">${["active","archived"].map(value=>`<button class="button ${referenceFilter===value?"is-active":""}" type="button" data-reference-filter="${value}" aria-pressed="${String(referenceFilter===value)}">${title(value)}</button>`).join("")}</nav></header><div class="acm-reference-grid">${references.map(record=>referenceColorCard(record,families)).join("")||`<div class="cm-empty">No ${esc(referenceFilter)} reference colors.</div>`}</div></section></section>`;
+  }
   async function mountSimple(host,api,status){
     host.innerHTML='<section class="construct-manager acm-studio"><p>Loading Colors &amp; Materials…</p></section>';
-    let visualStatus="pending";
+    let visualStatus="pending",referenceStatus="active",currentFamilies=[];
+    const sampler={file:null,objectUrl:"",sourceImage:null,sourceCanvas:null,sourceWidth:0,sourceHeight:0,candidates:[],retainedMediaId:"",keyboardPoint:{x:.5,y:.5},sequence:0,resizeObserver:null};
+    const cleanupSampler=()=>{if(sampler.objectUrl)URL.revokeObjectURL(sampler.objectUrl);sampler.resizeObserver?.disconnect();sampler.file=null;sampler.objectUrl="";sampler.sourceImage=null;sampler.sourceCanvas=null;sampler.sourceWidth=0;sampler.sourceHeight=0;sampler.candidates=[];sampler.retainedMediaId=""};
+    const sampleCandidate=(hex,method,point=null)=>({id:`sample-${++sampler.sequence}`,hex:normalizedHex(hex),name:`Sample ${normalizedHex(hex)}`,family_id:nearestColorFamily(hex,currentFamilies),method,x:point?.x??null,y:point?.y??null});
+    function renderSamplerMarkers(){
+      const canvas=host.querySelector("[data-sampler-canvas]"),markers=host.querySelector(".acm-sampler-markers");if(!canvas||!markers)return;
+      const stage=canvas.closest(".acm-sampler-stage"),stageRect=stage.getBoundingClientRect(),canvasRect=canvas.getBoundingClientRect(),left=canvasRect.left-stageRect.left,top=canvasRect.top-stageRect.top;
+      markers.innerHTML=sampler.candidates.filter(candidate=>candidate.method==="point").map(candidate=>`<span class="acm-sampler-marker" style="--marker:${esc(candidate.hex)};left:${left+candidate.x*canvasRect.width}px;top:${top+candidate.y*canvasRect.height}px"></span>`).join("")+`<span class="acm-sampler-marker is-keyboard" style="left:${left+sampler.keyboardPoint.x*canvasRect.width}px;top:${top+sampler.keyboardPoint.y*canvasRect.height}px"></span>`;
+    }
+    function addPointSample(point){
+      if(!sampler.sourceImage)return;
+      const x=Math.min(sampler.sourceWidth-1,Math.max(0,Math.floor(point.x*sampler.sourceWidth))),y=Math.min(sampler.sourceHeight-1,Math.max(0,Math.floor(point.y*sampler.sourceHeight))),pixelCanvas=document.createElement("canvas");pixelCanvas.width=1;pixelCanvas.height=1;const pixelContext=pixelCanvas.getContext("2d",{willReadFrequently:true});pixelContext.drawImage(sampler.sourceImage,x,y,1,1,0,0,1,1);const pixel=pixelContext.getImageData(0,0,1,1).data;
+      if(pixel[3]<128){status("That point is transparent. Choose a visible pixel.");return}
+      sampler.candidates.push(sampleCandidate(rgbToHex(pixel[0],pixel[1],pixel[2]),"point",{x:Number(point.x.toFixed(6)),y:Number(point.y.toFixed(6))}));renderSamplerSession();
+    }
+    function renderSamplerSession(){
+      const mount=host.querySelector("[data-sampler-session]");if(!mount)return;sampler.resizeObserver?.disconnect();mount.innerHTML=samplerSessionMarkup(sampler,currentFamilies);
+      const canvas=mount.querySelector("[data-sampler-canvas]");
+      if(canvas&&sampler.sourceCanvas){canvas.width=sampler.sourceCanvas.width;canvas.height=sampler.sourceCanvas.height;canvas.getContext("2d").drawImage(sampler.sourceCanvas,0,0);canvas.addEventListener("pointerup",event=>{addPointSample(normalizedCanvasPoint(canvas.getBoundingClientRect(),event.clientX,event.clientY))});canvas.addEventListener("keydown",event=>{const step=event.shiftKey?.05:.01;if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(event.key)){event.preventDefault();if(event.key==="ArrowLeft")sampler.keyboardPoint.x=clamp(sampler.keyboardPoint.x-step);if(event.key==="ArrowRight")sampler.keyboardPoint.x=clamp(sampler.keyboardPoint.x+step);if(event.key==="ArrowUp")sampler.keyboardPoint.y=clamp(sampler.keyboardPoint.y-step);if(event.key==="ArrowDown")sampler.keyboardPoint.y=clamp(sampler.keyboardPoint.y+step);renderSamplerMarkers()}if(event.key==="Enter"||event.key===" "){event.preventDefault();addPointSample(sampler.keyboardPoint);host.querySelector("[data-sampler-canvas]")?.focus()}});sampler.resizeObserver=new ResizeObserver(renderSamplerMarkers);sampler.resizeObserver.observe(canvas);requestAnimationFrame(renderSamplerMarkers)}
+      mount.querySelectorAll('[data-sampler-candidate] input[name="srgb_hex"]').forEach(input=>input.addEventListener("change",()=>{const candidate=sampler.candidates.find(item=>item.id===input.closest("[data-sampler-candidate]").dataset.samplerCandidate);if(!candidate)return;candidate.hex=normalizedHex(input.value);candidate.family_id=nearestColorFamily(candidate.hex,currentFamilies);if(/^Sample #[0-9A-F]{6}$/.test(candidate.name))candidate.name=`Sample ${candidate.hex}`;renderSamplerSession()}));
+    }
+    async function loadSamplerFile(file){
+      const accepted=new Set(["image/jpeg","image/png","image/webp","image/gif"]);if(!accepted.has(file?.type))throw new Error("Use a JPEG, PNG, WebP, or GIF image.");if(file.size>15*1024*1024)throw new Error("Image must be 15 MB or smaller.");
+      cleanupSampler();sampler.file=file;sampler.objectUrl=URL.createObjectURL(file);
+      const image=await new Promise((resolve,reject)=>{const element=new Image();element.onload=()=>resolve(element);element.onerror=()=>reject(new Error("The image could not be decoded."));element.src=sampler.objectUrl}).catch(error=>{cleanupSampler();renderSamplerSession();throw error});
+      const scale=Math.min(1,4096/Math.max(image.naturalWidth,image.naturalHeight)),canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));const context=canvas.getContext("2d",{willReadFrequently:true});context.drawImage(image,0,0,canvas.width,canvas.height);sampler.sourceImage=image;sampler.sourceCanvas=canvas;sampler.sourceWidth=image.naturalWidth;sampler.sourceHeight=image.naturalHeight;sampler.candidates=extractPaletteFromRgba(context.getImageData(0,0,canvas.width,canvas.height),canvas.width,canvas.height,8).map(hex=>sampleCandidate(hex,"palette"));renderSamplerSession();status(`Sampled ${sampler.candidates.length} broad colors locally from ${file.name}`);
+    }
+    async function retainSamplerSource(){
+      if(!sampler.file||sampler.retainedMediaId)return;const button=host.querySelector("[data-retain-sampler-source]");if(button)button.disabled=true;
+      const upload=new FormData();upload.append("file",sampler.file);upload.append("alt_text",`Private color sampling source: ${sampler.file.name}`);upload.append("privacy","private");upload.append("public_presentation","hidden");
+      const result=await api("/api/admin/media",{method:"POST",body:upload});if(!result.record?.id)throw new Error("The private source uploaded without a media ID.");sampler.retainedMediaId=result.record.id;renderSamplerSession();status("Color sampling source retained privately");
+    }
+    async function openReferenceSource(mediaId){
+      const response=await fetch(`/api/admin/media/${encodeURIComponent(mediaId)}/file`,{headers:{authorization:`Bearer ${localStorage.getItem(tokenKey)||""}`},cache:"no-store"});
+      if(!response.ok)throw new Error(`Private source unavailable (${response.status}).`);
+      const objectUrl=URL.createObjectURL(await response.blob());window.open(objectUrl,"_blank","noopener,noreferrer");setTimeout(()=>URL.revokeObjectURL(objectUrl),60000);
+    }
+    function bindSampler(){
+      const input=host.querySelector("[data-sampler-file]"),drop=host.querySelector("[data-sampler-drop]");input?.addEventListener("change",()=>{const file=input.files?.[0];if(file)loadSamplerFile(file).catch(error=>status(error.message));input.value=""});
+      if(drop){const activate=event=>{event.preventDefault();drop.classList.add("is-active")},deactivate=event=>{event.preventDefault();drop.classList.remove("is-active")};["dragenter","dragover"].forEach(name=>drop.addEventListener(name,activate));["dragleave","drop"].forEach(name=>drop.addEventListener(name,deactivate));drop.addEventListener("drop",event=>{const file=event.dataTransfer?.files?.[0];if(file)loadSamplerFile(file).catch(error=>status(error.message))});drop.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();input?.click()}})}
+      renderSamplerSession();
+    }
     async function load(){
-      const [data,visualReview]=await Promise.all([api("/api/admin/archive-color-materials"),api(`/api/admin/archive-color-materials/visual-review?status=${encodeURIComponent(visualStatus)}`)]),materials=data.materials||[],products=data.products||[],recipes=data.recipes||[],versions=data.recipe_versions||[],components=data.recipe_components||[],declarations=data.declared_pigments||[],profiles=data.color_profiles||[],families=data.color_families||[],pigments=materials.filter(item=>item.material_kind==="raw-pigment"),equipment=materials.filter(item=>item.material_kind==="equipment"),references=materials.filter(item=>!["art-paint","tattoo-ink"].includes(item.material_kind));
+      const [data,visualReview,referencePayload]=await Promise.all([api("/api/admin/archive-color-materials"),api(`/api/admin/archive-color-materials/visual-review?status=${encodeURIComponent(visualStatus)}`),api(`/api/admin/archive-color-materials/reference-colors?state=${encodeURIComponent(referenceStatus)}`)]),materials=data.materials||[],products=data.products||[],recipes=data.recipes||[],versions=data.recipe_versions||[],components=data.recipe_components||[],declarations=data.declared_pigments||[],profiles=data.color_profiles||[],families=data.color_families||[],savedReferences=referencePayload.records||[],pigments=materials.filter(item=>item.material_kind==="raw-pigment"),equipment=materials.filter(item=>item.material_kind==="equipment"),references=materials.filter(item=>!["art-paint","tattoo-ink"].includes(item.material_kind));currentFamilies=families.filter(family=>visualFamilySlugs.has(family.slug));
       const referenceCards=references.map(record=>`<article class="acm-card"><div class="acm-meta"><span class="acm-pill">${esc(title(record.material_kind))}</span><span>${esc(record.publication_state)}</span></div><h4>${esc(record.name)}</h4>${detailRows([["Pigment code",record.pigment_code],["Brand",record.brand],["Product / model",record.product_name||record.model_name],["Practice",title(record.medium_scope)]])}${materialEditForm(record)}</article>`).join("");
       const batchForm=`<form class="acm-form" data-acm-form="batch"><label>Premade paint or ink<select name="material_id" required><option value="">Choose product</option>${optionList(products,item=>[item.brand,item.color_name||item.name].filter(Boolean).join(" · "))}</select></label><label>Article / lot reference<input name="lot_number"></label><label>Expiration<input name="expiration_date" type="date"></label><label>Opened<input name="opened_date" type="date"></label><label class="wide">Private notes<textarea name="private_notes"></textarea></label><div class="acm-actions"><button class="button">Save private batch</button><span class="acm-output"></span></div></form>`;
       const assignment=`<form class="acm-form" data-acm-form="family-assignment"><label>Reviewed color<select name="profile_id">${optionList(profiles,item=>item.srgb_hex)}</select></label><label>Human-confirmed family<select name="family_id">${optionList(families)}</select></label><div class="acm-actions"><button class="button">Confirm family</button><span class="acm-output"></span></div></form>`;
-      host.innerHTML=`<section class="construct-manager acm-studio"><header class="acm-head"><div><span class="acm-kicker">Archive reference system</span><h2>Colors &amp; Materials</h2><p class="cm-summary">Document premade paints and tattoo inks, the pigments manufacturers list for them, and the colors you mix from those products.</p></div><a class="button" href="/archive/colors-materials/" target="_blank" rel="noopener">Open public library</a></header>${visualReviewMarkup(visualReview)}
+      host.innerHTML=`<section class="construct-manager acm-studio"><header class="acm-head"><div><span class="acm-kicker">Archive reference system</span><h2>Colors &amp; Materials</h2><p class="cm-summary">Document premade paints and tattoo inks, the pigments manufacturers list for them, and the colors you mix from those products.</p></div><a class="button" href="/archive/colors-materials/" target="_blank" rel="noopener">Open public library</a></header>${visualReviewMarkup(visualReview)}${samplerMarkup(sampler,currentFamilies,savedReferences,referenceStatus)}
         <div class="acm-dashboard"><div class="acm-stat"><strong>${products.length}</strong><span>Premade colors</span></div><div class="acm-stat"><strong>${recipes.length}</strong><span>Mixed colors</span></div><div class="acm-stat"><strong>${pigments.length}</strong><span>Shared raw pigments</span></div><div class="acm-stat"><strong>${materials.filter(item=>["tool","equipment"].includes(item.material_kind)).length}</strong><span>Tools &amp; equipment</span></div></div>
         <section class="acm-section"><header class="acm-section-head"><div><span class="acm-kicker">01 · Premade colors</span><h3>Paints &amp; tattoo inks</h3><p>Add each purchased product once. Finish, swatch, and an optional first manufacturer-listed pigment are saved with it in one step.</p></div><details class="acm-add"><summary>Add premade paint or ink</summary>${productCreateForm(pigments)}</details></header><div class="acm-grid">${products.map(product=>productCardSimple(product,declarations,pigments)).join("")||"<p>No premade paints or inks yet.</p>"}</div></section>
         <section class="acm-section"><header class="acm-section-head"><div><span class="acm-kicker">02 · Your mixtures</span><h3>Mixed colors &amp; shades</h3><p>Create the authored color, then add each premade paint or ink and its amount. Raw pigment is available only when you intentionally add raw pigment yourself.</p></div><details class="acm-add"><summary>Create mixed color</summary>${mixedColorCreateForm()}</details></header><details class="acm-add"><summary>Add ingredient to mixed color</summary>${ingredientForm(versions,products,pigments)}</details><div class="acm-grid">${recipes.map(recipe=>mixedColorCardSimple(recipe,versions,components,profiles)).join("")||"<p>No mixed colors yet.</p>"}</div></section>
         <section class="acm-section"><header class="acm-section-head"><div><span class="acm-kicker">03 · Shared references</span><h3>Raw pigments, tools &amp; other materials</h3><p>Raw pigments are shared reference components. Supports, tools, equipment, finishes, and consumables remain reusable material records.</p></div><details class="acm-add"><summary>Add shared reference</summary>${referenceMaterialForm()}</details></header><div class="acm-grid">${referenceCards||"<p>No shared references yet.</p>"}</div></section>
         <section class="acm-section"><header class="acm-section-head"><div><span class="acm-kicker">04 · Color families</span><h3>Human-reviewed families</h3><p>Similarity still uses the calculated color profile; broad families such as blues remain human-confirmed.</p></div></header><details class="acm-add"><summary>Create color family</summary>${familyForm()}</details><details class="acm-add"><summary>Confirm family membership</summary>${assignment}</details></section>
         <section class="acm-section"><header class="acm-section-head"><div><span class="acm-kicker">05 · Private trace</span><h3>Batches &amp; equipment assets</h3><p class="acm-warning">Lot, expiration, opened date, serial number, nickname, and private notes are Studio-only.</p></div></header><details class="acm-add"><summary>Add consumable batch</summary>${batchForm}</details><details class="acm-add"><summary>Add equipment asset</summary>${privateForm("equipment",equipment)}</details></section></section>`;
-      bind();
+      bind();bindSampler();
     }
     function bind(){
       host.querySelectorAll("[data-component-type]").forEach(select=>select.addEventListener("change",()=>select.form.querySelectorAll("[data-component-choice]").forEach(label=>label.hidden=label.dataset.componentChoice!==select.value)));
@@ -254,6 +273,9 @@
       host.onsubmit=async event=>{
         const form=event.target.closest("form");if(!form)return;event.preventDefault();const values=formValues(form),output=form.querySelector(".acm-output");if(output)output.textContent="Saving…";
         try{
+          const sampleForm=form.closest("[data-sampler-candidate]"),referenceForm=form.closest("[data-reference-color-id]");
+          if(sampleForm){const candidate=sampler.candidates.find(item=>item.id===sampleForm.dataset.samplerCandidate);if(!candidate)throw new Error("This sample is no longer in the tray.");if(!values.family_id)throw new Error("Choose exactly one atomic color family.");await post(api,"/api/admin/archive-color-materials/reference-colors","POST",{name:values.name,srgb_hex:normalizedHex(values.srgb_hex),family_id:values.family_id,sample_method:candidate.method,sample_x:candidate.method==="point"?candidate.x:null,sample_y:candidate.method==="point"?candidate.y:null,source_media_id:sampler.retainedMediaId,source_filename:sampler.file?.name||"",notes:values.notes});sampler.candidates=sampler.candidates.filter(item=>item.id!==candidate.id);status("Reference color saved separately from recipes and work usage");await load();return}
+          if(referenceForm){await post(api,`/api/admin/archive-color-materials/reference-colors/${encodeURIComponent(referenceForm.dataset.referenceColorId)}`,"PATCH",{name:values.name,family_id:values.family_id,notes:values.notes});status("Reference color details saved");await load();return}
           const visualFamily=form.closest("[data-edit-visual-family]"),reviewRun=form.closest("[data-review-run]");
           if(visualFamily){await post(api,`/api/admin/archive-color-materials/families/${encodeURIComponent(visualFamily.dataset.editVisualFamily)}`,"PATCH",values);status("Atomic color family saved");await load();return}
           if(reviewRun){const colors=[...form.querySelectorAll("[data-review-color-row]")].map(row=>({family_id:row.querySelector('[name="family_id"]').value,strength:row.querySelector('[name="strength"]').value,display_order:Number(row.querySelector('[name="display_order"]').value)||0})),descriptor_term_ids=[...form.querySelectorAll('[name="descriptor_term_id"]:checked')].map(input=>input.value);await post(api,`/api/admin/archive-color-materials/visual-review/${encodeURIComponent(reviewRun.dataset.reviewRun)}/approve`,"POST",{colors,descriptor_term_ids});status("Visual classifications approved");await load();return}
@@ -275,9 +297,16 @@
         }catch(error){if(output)output.textContent=error.message;status(error.message)}
       };
       host.onclick=async event=>{
-        const reviewFilter=event.target.closest("[data-review-filter]"),enqueueVisual=event.target.closest("[data-enqueue-visual-colors]"),addReviewColor=event.target.closest("[data-add-review-color]"),removeReviewColor=event.target.closest("[data-remove-review-color]"),rejectReview=event.target.closest("[data-reject-review]"),retryReview=event.target.closest("[data-retry-review]"),archiveProduct=event.target.closest("[data-archive-product]"),archiveMaterial=event.target.closest("[data-archive-material]"),removeDeclaration=event.target.closest("[data-remove-declaration]"),publishRecipe=event.target.closest("[data-publish-recipe-version]");
+        const reviewFilter=event.target.closest("[data-review-filter]"),referenceFilter=event.target.closest("[data-reference-filter]"),enqueueVisual=event.target.closest("[data-enqueue-visual-colors]"),addReviewColor=event.target.closest("[data-add-review-color]"),removeReviewColor=event.target.closest("[data-remove-review-color]"),rejectReview=event.target.closest("[data-reject-review]"),retryReview=event.target.closest("[data-retry-review]"),useFamilySwatch=event.target.closest("[data-use-family-swatch]"),removeSample=event.target.closest("[data-remove-sample]"),retainSource=event.target.closest("[data-retain-sampler-source]"),clearSampler=event.target.closest("[data-clear-sampler]"),openSource=event.target.closest("[data-open-reference-source]"),archiveReference=event.target.closest("[data-archive-reference-color]"),restoreReference=event.target.closest("[data-restore-reference-color]"),archiveProduct=event.target.closest("[data-archive-product]"),archiveMaterial=event.target.closest("[data-archive-material]"),removeDeclaration=event.target.closest("[data-remove-declaration]"),publishRecipe=event.target.closest("[data-publish-recipe-version]");
         try{
           if(reviewFilter){visualStatus=reviewFilter.dataset.reviewFilter;await load();return}
+          if(referenceFilter){referenceStatus=referenceFilter.dataset.referenceFilter;await load();return}
+          if(retainSource){await retainSamplerSource();return}
+          if(clearSampler){cleanupSampler();renderSamplerSession();status("Local sampling image cleared");return}
+          if(openSource){await openReferenceSource(openSource.dataset.openReferenceSource);return}
+          if(removeSample){const form=removeSample.closest("[data-sampler-candidate]");sampler.candidates=sampler.candidates.filter(item=>item.id!==form.dataset.samplerCandidate);renderSamplerSession();return}
+          if(useFamilySwatch){const form=useFamilySwatch.closest("[data-sampler-candidate]"),candidate=sampler.candidates.find(item=>item.id===form.dataset.samplerCandidate),familyId=form.elements.family_id.value,family=currentFamilies.find(item=>item.id===familyId),hex=normalizedHex(form.elements.srgb_hex.value);if(!candidate||!family)throw new Error("Choose exactly one atomic family before replacing its swatch.");if(!await confirmFamilySwatch(family,hex))return;await post(api,`/api/admin/archive-color-materials/families/${encodeURIComponent(family.id)}`,"PATCH",{swatch_hex:hex});candidate.family_id=family.id;status(`${family.name} family swatch replaced`);await load();return}
+          if(archiveReference||restoreReference){const form=(archiveReference||restoreReference).closest("[data-reference-color-id]"),state=archiveReference?"archived":"active";await post(api,`/api/admin/archive-color-materials/reference-colors/${encodeURIComponent(form.dataset.referenceColorId)}`,"PATCH",{state});status(state==="archived"?"Reference color archived":"Reference color restored");await load();return}
           if(enqueueVisual){await post(api,"/api/admin/archive-color-materials/visual-review/enqueue","POST",{});status("Eligible painting and tattoo sources refreshed");await load();return}
           if(addReviewColor){const list=addReviewColor.closest("form").querySelector("[data-review-color-list]"),families=await api("/api/admin/archive-color-materials/families");list.querySelector("[data-review-color-empty]")?.remove();list.insertAdjacentHTML("beforeend",reviewColorRow(families.records||[],{},list.querySelectorAll("[data-review-color-row]").length));return}
           if(removeReviewColor){const list=removeReviewColor.closest("[data-review-color-list]");removeReviewColor.closest("[data-review-color-row]").remove();if(!list.querySelector("[data-review-color-row]"))list.innerHTML='<p data-review-color-empty>No color families selected.</p>';return}
@@ -290,7 +319,7 @@
         }catch(error){status(error.message)}
       };
     }
-    try{await load()}catch(error){host.innerHTML=`<section class="construct-manager"><div class="cm-empty">${esc(error.message)}</div></section>`}
+    try{await load();const observer=new MutationObserver(()=>{if(!host.isConnected||!host.querySelector(".acm-color-sampler")){cleanupSampler();observer.disconnect()}});observer.observe(host,{childList:true})}catch(error){host.innerHTML=`<section class="construct-manager"><div class="cm-empty">${esc(error.message)}</div></section>`}
   }
 
   const stateLabel=(state)=>`v${Number(state.version_number||1)} / ${state.state_roman||"I"}${state.variant_label?`, ${state.variant_label}`:""} · ${state.title||"State"}`;
@@ -441,5 +470,5 @@
     }
     try{await loadState()}catch(error){host.innerHTML=`<div class="cm-empty">${esc(error.message)}</div>`}
   }
-  window.ArchiveColorMaterialsStudio={mount:mountSimple,mountDossier,importSvgGeometry,transformMatrix,matrixMultiply,srgbHexToColorProfile};
+  window.ArchiveColorMaterialsStudio={mount:mountSimple,mountDossier,importSvgGeometry,transformMatrix,matrixMultiply,srgbHexToColorProfile,extractPaletteFromRgba,nearestColorFamily,normalizedCanvasPoint};
 })();

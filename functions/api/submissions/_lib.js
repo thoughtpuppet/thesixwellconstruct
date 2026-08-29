@@ -2811,8 +2811,8 @@ export async function handlePromoteMazeArchiveSubmission(request, env, submissio
         VALUES(?,?,?,'','','No process materials are public for this community Maze.','community-maze','draft',0,0,0,NULL,'maze-archive','maze-archive',?,?)`)
         .bind(entityId,archiveSlug,publicExplanation,now,now),
       database.prepare(`INSERT INTO media_assets
-        (id,source_url,storage_key,original_filename,mime_type,byte_size,width,height,duration_seconds,alt_text,caption,credit,rights_notes,privacy,consent_status,state,created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_title,public_description,public_presentation)
-        VALUES(?,'',?,'maze.png','image/png',?,NULL,NULL,NULL,?,'',?,'Maze Archive display permission recorded on the source submission.','public','granted','active','maze-archive',?,?,'','not-requested','',?,'','inline')`)
+        (id,source_url,storage_key,original_filename,mime_type,byte_size,width,height,duration_seconds,alt_text,caption,credit,rights_notes,privacy,state,created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_title,public_description,public_presentation)
+        VALUES(?,'',?,'maze.png','image/png',?,NULL,NULL,NULL,?,'',?,'Maze Archive display permission recorded on the source submission.','public','active','maze-archive',?,?,'','not-requested','',?,'','inline')`)
         .bind(mediaId,archiveKey,Number(sourceFile.size||source.size||0),altText,consent.public_credit,now,now,title),
       database.prepare(`INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at)
         VALUES(?,?,'primary',1,1,?,'',?)`).bind(entityId,mediaId,altText,now),

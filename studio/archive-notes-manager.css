@@ -17,6 +17,12 @@
 .archive-note-studio-preview .archive-note-reader{border:0;max-height:none;padding:0}
 .archive-note-link-list,.archive-note-asset-list{display:grid;gap:10px}
 .archive-note-link-row,.archive-note-asset-row{border:5px solid #6D3D15;padding:12px;display:grid;gap:10px}
+.archive-note-asset-row img{display:block;width:min(100%,220px);max-height:180px;object-fit:cover;border:5px solid #6D3D15}
+.archive-note-history-review{margin-top:16px}
+.archive-note-history-review-card{display:grid;gap:16px;border:5px solid #6D3D15;padding:16px;background:#0b0b0b}
+.archive-note-history-review-card h4{margin:8px 0 0;text-transform:uppercase}
+.archive-note-history-review-card+.archive-note-history-review-card{margin-top:16px}
+.archive-note-history-review-card .archive-note-source-private{margin:0;color:#b87a32;line-height:1.6}
 .archive-note-link-row{grid-template-columns:minmax(180px,1fr) minmax(120px,.5fr) auto auto auto;align-items:end}
 .archive-note-origin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
 .archive-note-origin-grid label{border:5px solid #6D3D15;padding:10px}

@@ -38,10 +38,10 @@ async function createRecord(runtime,overrides={}){
   }}),runtime));
 }
 function insertPair(db,key,label){
-  db.prepare(`INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
-    VALUES(?,?,?,?,?,'internal','not-required','active','hidden','test',datetime('now'),datetime('now'))`).run(`${key}-master`,`https://private.example.test/${key}.tif`,`${key}-master.tif`,`image/tiff`,`${label} private master`);
-  db.prepare(`INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
-    VALUES(?,?,?,?,?,'public','not-required','active','inline','test',datetime('now'),datetime('now'))`).run(`${key}-web`,`https://cdn.example.test/${key}.jpg`,`${key}.jpg`,`image/jpeg`,label);
+  db.prepare(`INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,state,public_presentation,created_by,created_at,updated_at)
+    VALUES(?,?,?,?,?,'internal','active','hidden','test',datetime('now'),datetime('now'))`).run(`${key}-master`,`https://private.example.test/${key}.tif`,`${key}-master.tif`,`image/tiff`,`${label} private master`);
+  db.prepare(`INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,state,public_presentation,created_by,created_at,updated_at)
+    VALUES(?,?,?,?,?,'public','active','inline','test',datetime('now'),datetime('now'))`).run(`${key}-web`,`https://cdn.example.test/${key}.jpg`,`${key}.jpg`,`image/jpeg`,label);
   return {master_media_id:`${key}-master`,derivative_media_id:`${key}-web`};
 }
 
@@ -63,9 +63,12 @@ test("one Blackboard record owns its catalogue identity and state scans",async()
   const rejected=await handleConstructApi(request(`/api/admin/archive-blackboards/${recordId}/publish`,{method:"POST",admin:true,body:{}}),runtime);
   assert.equal(rejected.status,409);
   const pair=insertPair(db,"aug-01","August 1 Blackboard state"),stateId=created.body.record.states[0].id;
+  assert.deepEqual({...db.prepare("SELECT privacy,state,public_presentation FROM media_assets WHERE id='aug-01-master'").get()},{privacy:"internal",state:"active",public_presentation:"hidden"});
+  assert.deepEqual({...db.prepare("SELECT privacy,state,public_presentation FROM media_assets WHERE id='aug-01-web'").get()},{privacy:"public",state:"active",public_presentation:"inline"});
   assert.equal((await handleConstructApi(request(`/api/admin/archive-blackboards/records/${recordId}/states/${stateId}`,{method:"POST",admin:true,body:pair}),runtime)).status,200);
   const published=await json(await handleConstructApi(request(`/api/admin/archive-blackboards/${recordId}/publish`,{method:"POST",admin:true,body:{}}),runtime));
   assert.equal(published.status,200,published.body.error);
+  assert.deepEqual({...db.prepare("SELECT state,public_visible FROM archive_dossiers WHERE entity_id=?").get(recordId)},{state:"published",public_visible:1});
 
   const index=await json(await handleConstructApi(request("/api/archive/blackboards"),runtime));
   assert.equal(index.body.records.length,1);

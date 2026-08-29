@@ -5,6 +5,7 @@ import {
   tattooStylePayload,
   TattooStyleValidationError,
 } from "../_shared/tattoo-styles.js";
+import { ensureEditableArchiveDossier } from "../_shared/archive-dossiers.js";
 import { serveR2Media } from "../_shared/r2-media.js";
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
@@ -18,8 +19,6 @@ const HEALING_STATES = new Set(["fresh", "healed", "in-progress", "unspecified"]
 const IMAGE_PRESENTATIONS = new Set(["standard", "compare", "grouped"]);
 const PROJECT_TYPES = new Set(["standard", "cover_up"]);
 const IMAGE_ROLES = new Set(["result", "before", "process", "detail"]);
-const CONSENT_STATUSES = new Set(["not-required", "required", "granted", "denied", "unknown"]);
-const PUBLIC_CONSENT_STATUSES = new Set(["not-required", "granted"]);
 const EDITABLE_FIELDS = new Map([
   ["title", "title"],
   ["altText", "alt_text"],
@@ -69,8 +68,8 @@ function cleanText(value, max = 500) {
   return String(value ?? "").trim().slice(0, max);
 }
 
-function hasPublicConsent(value) {
-  return PUBLIC_CONSENT_STATUSES.has(String(value || ""));
+function isTruthy(value) {
+  return value === true || value === 1 || value === "1" || value === "true" || value === "on";
 }
 
 function optionSlug(value) {
@@ -166,7 +165,7 @@ function itemFromRow(row, admin = false, detail = false) {
     item.sourceUrl = row.source_url || "";
     item.storageKey = row.storage_key || "";
     item.contentType = row.content_type || "";
-    item.primaryConsentStatus = row.primary_consent_status || "unknown";
+    item.primaryPublicVisible = Number(row.primary_public_visible || 0) === 1;
     if (row.storage_key) item.imageUrl = `/api/admin/portfolio/media/${encodeURIComponent(row.id)}`;
   }
   return item;
@@ -196,7 +195,6 @@ function mediaItem(row, admin = false) {
     transcriptLanguage: row.transcript_language || "",
   };
   if (admin) {
-    item.consentStatus = row.consent_status || "unknown";
     item.publicVisible = Number(row.public_visible || 0) === 1;
     item.privacy = row.privacy || "internal";
   }
@@ -211,7 +209,6 @@ async function galleryMedia(db, entityIds, admin = false) {
     : `AND em.public_visible = 1
        AND m.state = 'active'
        AND m.privacy = 'public'
-       AND m.consent_status IN ('not-required','granted')
        AND COALESCE(m.public_presentation, 'inline') = 'inline'
        AND EXISTS (
          SELECT 1 FROM content_entities ce
@@ -220,7 +217,7 @@ async function galleryMedia(db, entityIds, admin = false) {
   const result = await db.prepare(`
     SELECT em.entity_id, em.media_id, em.role, em.sort_order, em.alt_text_override,
       em.caption_override, em.public_visible, m.source_url, m.original_filename,
-      m.alt_text, m.caption, m.privacy, m.consent_status, m.public_presentation,
+      m.alt_text, m.caption, m.privacy, m.public_presentation,
       m.mime_type, m.byte_size, m.duration_seconds, m.transcript, m.transcript_status,
       m.transcript_language
     FROM entity_media em
@@ -262,7 +259,7 @@ function documentedImage(image, imageRef, details, coverImageRef) {
 function applyImageDocumentation(item, angles, details, options = {}) {
   const includeImages = options.includeImages === true;
   const admin = options.admin === true;
-  const primaryConsentStatus = options.primaryConsentStatus || "unknown";
+  const primaryPublicVisible = options.primaryPublicVisible === true;
   const primary = documentedImage({
     id: "primary",
     kind: "image",
@@ -272,11 +269,11 @@ function applyImageDocumentation(item, angles, details, options = {}) {
     altText: item.altText,
     caption: "",
     originalFilename: item.originalFilename,
-    ...(admin ? { consentStatus: primaryConsentStatus, publicVisible: hasPublicConsent(primaryConsentStatus) } : {}),
+    ...(admin ? { publicVisible: primaryPublicVisible } : {}),
   }, "primary", details, item.coverImageRef);
   const documentedAngles = angles.map((angle) => documentedImage(angle, angle.id, details, item.coverImageRef));
   const images = [
-    ...(admin || hasPublicConsent(primaryConsentStatus) ? [primary] : []),
+    ...(admin || primaryPublicVisible ? [primary] : []),
     ...documentedAngles,
   ];
   let cover = images.find((image) => image.kind !== "video" && image.isCover && image.imageRole === "result");
@@ -294,7 +291,7 @@ function applyImageDocumentation(item, angles, details, options = {}) {
   item.documentationStates = states;
   item.hasFreshAndHealed = states.includes("fresh") && states.includes("healed");
   if (includeImages) {
-    item.primaryImage = admin || hasPublicConsent(primaryConsentStatus) ? primary : null;
+    item.primaryImage = admin || primaryPublicVisible ? primary : null;
     item.angles = documentedAngles.filter((media) => media.kind !== "video");
     item.media = images;
   }
@@ -315,7 +312,6 @@ async function listPublic(env) {
     db.prepare(`
       SELECT * FROM portfolio_items
       WHERE state = 'published'
-        AND primary_consent_status IN ('not-required','granted')
         AND EXISTS (SELECT 1 FROM content_entities ce WHERE ce.id = portfolio_items.id AND ce.visibility = 'public')
       ORDER BY created_at DESC, rowid DESC
     `).all(),
@@ -333,7 +329,7 @@ async function listPublic(env) {
       decorateItem(itemFromRow(row), options, styleAssignments.get(row.id)),
       media.get(row.id) || [],
       documentation.get(row.id),
-      { primaryConsentStatus: row.primary_consent_status }
+      { primaryPublicVisible: Number(row.primary_public_visible || 0) === 1 }
     )),
     options,
   });
@@ -359,7 +355,7 @@ async function listAdmin(request, env) {
       decorateItem(itemFromRow(row, true), options, styleAssignments.get(row.id)),
       media.get(row.id) || [],
       documentation.get(row.id),
-      { includeImages: true, admin: true, primaryConsentStatus: row.primary_consent_status }
+      { includeImages: true, admin: true, primaryPublicVisible: Number(row.primary_public_visible || 0) === 1 }
     )),
     options,
   });
@@ -370,7 +366,6 @@ async function getPublicItem(env, id) {
   const row = await db.prepare(`
     SELECT * FROM portfolio_items
     WHERE id = ? AND state = 'published'
-      AND primary_consent_status IN ('not-required','granted')
       AND EXISTS (SELECT 1 FROM content_entities ce WHERE ce.id = portfolio_items.id AND ce.visibility = 'public')
   `).bind(id).first();
   if (!row) return errorResponse("Portfolio item not found.", 404);
@@ -384,7 +379,7 @@ async function getPublicItem(env, id) {
     decorateItem(itemFromRow(row, false, true), options, styleAssignments.get(id)),
     media.get(id) || [],
     documentation.get(id),
-    { includeImages: true, primaryConsentStatus: row.primary_consent_status }
+    { includeImages: true, primaryPublicVisible: Number(row.primary_public_visible || 0) === 1 }
   );
   return json({ item, options });
 }
@@ -398,7 +393,7 @@ async function mediaResponse(request, env, id, admin = false) {
   const row = await db.prepare(
     `SELECT storage_key, content_type, original_filename FROM portfolio_items WHERE id = ?${admin ? "" : `
       AND state = 'published'
-      AND primary_consent_status IN ('not-required','granted')
+      AND primary_public_visible = 1
       AND EXISTS (SELECT 1 FROM content_entities ce WHERE ce.id = portfolio_items.id AND ce.visibility = 'public')
     `}`
   ).bind(id).first();
@@ -441,8 +436,8 @@ async function createUpload(request, env) {
       db.prepare(`
         INSERT INTO portfolio_items (
           id, storage_key, original_filename, content_type, title, alt_text, primary_style,
-          state, sort_order, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, datetime('now'), datetime('now'))
+          primary_public_visible,state, sort_order, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'draft', ?, datetime('now'), datetime('now'))
       `).bind(id, key, originalFilename, file.type, title, altText, styleAssignments[0].value, order),
       db.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'portfolio_item','node-tattoos','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(id),
       db.prepare("INSERT INTO portfolio_image_details(portfolio_item_id,image_ref,healing_state,timing_note,caption,created_at,updated_at) VALUES(?,'primary','unspecified','','',datetime('now'),datetime('now'))").bind(id),
@@ -453,12 +448,27 @@ async function createUpload(request, env) {
     throw error;
   }
 
+  let archiveDossierError = "";
+  try {
+    await ensureEditableArchiveDossier(db, id);
+  } catch (error) {
+    archiveDossierError = error instanceof Error ? error.message : String(error);
+    console.error(JSON.stringify({
+      message: "Unable to ensure the editable Archive dossier after Portfolio creation.",
+      entityId: id,
+      error: archiveDossierError,
+    }));
+  }
+
   const [row, options, assignmentMap] = await Promise.all([
     db.prepare("SELECT * FROM portfolio_items WHERE id = ?").bind(id).first(),
     portfolioOptions(db, true),
     loadTattooStyleAssignments(db, [id]),
   ]);
-  return json({ item: decorateItem(itemFromRow(row, true), options, assignmentMap.get(id)) }, { status: 201 });
+  return json({
+    item: decorateItem(itemFromRow(row, true), options, assignmentMap.get(id)),
+    ...(archiveDossierError ? { archive_dossier_error: archiveDossierError } : {}),
+  }, { status: 201 });
 }
 
 function defaultAngleAltText(item, imageRole) {
@@ -489,11 +499,14 @@ async function attachStoredPortfolioMedia(request, db, item) {
   const existing = await db.prepare("SELECT 1 ok FROM entity_media WHERE entity_id = ? AND media_id = ?").bind(item.id, mediaId).first();
   if (existing) return errorResponse("This media is already attached to the portfolio item.", 409);
   const order = await db.prepare("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM entity_media WHERE entity_id = ? AND role = 'gallery'").bind(item.id).first();
-  const publicVisible = media.privacy === "public"
-    && hasPublicConsent(media.consent_status)
-    && (media.public_presentation || "inline") === "inline";
+  const defaultPublicVisible = imageRole === "result" || imageRole === "detail";
+  const publicVisible = Object.prototype.hasOwnProperty.call(body, "publicVisible")
+    ? isTruthy(body.publicVisible)
+    : defaultPublicVisible;
   const altText = cleanText(body.altText, 1000) || media.alt_text || defaultAngleAltText(item, imageRole);
   const statements = [
+    db.prepare("UPDATE media_assets SET privacy=?,public_presentation='inline',updated_at=datetime('now') WHERE id=?")
+      .bind(publicVisible ? "public" : "internal", mediaId),
     db.prepare(`INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at)
       VALUES(?,?,'gallery',?,?,?,?,datetime('now'))`).bind(item.id,mediaId,Number(order?.next_order||1),publicVisible?1:0,altText,cleanText(body.caption,3000)),
     db.prepare(`INSERT INTO portfolio_image_details(portfolio_item_id,image_ref,healing_state,image_role,timing_note,caption,created_at,updated_at)
@@ -538,6 +551,9 @@ async function createAngleUpload(request, env, itemId) {
     return errorResponse("Save the Project type as Cover-up before uploading Before / existing tattoo photographs.", 409);
   }
 
+  const publicVisible = form.has("publicVisible")
+    ? isTruthy(form.get("publicVisible"))
+    : imageRole === "result" || imageRole === "detail";
   const mediaId = crypto.randomUUID();
   const originalFilename = cleanText(file.name, 255) || `portfolio-angle.${extension}`;
   const storageKey = `portfolio/${itemId}/${mediaId}.${extension}`;
@@ -554,14 +570,14 @@ async function createAngleUpload(request, env, itemId) {
       db.prepare(`
         INSERT INTO media_assets(
           id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,
-          consent_status,state,created_by,created_at,updated_at,public_presentation
-        ) VALUES(?,?,?,?,?,?,'private','unknown','active','studio',datetime('now'),datetime('now'),'inline')
-      `).bind(mediaId, storageKey, originalFilename, file.type, file.size, altText),
+          state,created_by,created_at,updated_at,public_presentation
+        ) VALUES(?,?,?,?,?,?,?,'active','studio',datetime('now'),datetime('now'),'inline')
+      `).bind(mediaId, storageKey, originalFilename, file.type, file.size, altText, publicVisible ? "public" : "internal"),
       db.prepare(`
         INSERT INTO entity_media(
           entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at
-        ) VALUES(?,?,'gallery',?,0,?,'',datetime('now'))
-      `).bind(itemId, mediaId, Number(order?.next_order || 1), altText),
+        ) VALUES(?,?,'gallery',?,?,?,'',datetime('now'))
+      `).bind(itemId, mediaId, Number(order?.next_order || 1), publicVisible ? 1 : 0, altText),
       db.prepare(`
         INSERT INTO portfolio_image_details(
           portfolio_item_id,image_ref,healing_state,image_role,timing_note,caption,created_at,updated_at
@@ -582,9 +598,8 @@ async function createAngleUpload(request, env, itemId) {
       id: mediaId,
       imageRef: mediaId,
       imageRole,
-      consentStatus: "unknown",
-      privacy: "private",
-      publicVisible: false,
+      privacy: publicVisible ? "public" : "internal",
+      publicVisible,
       altText,
       originalFilename,
     },
@@ -602,8 +617,7 @@ async function portfolioCoverImage(db, item) {
       imageRef,
       kind: "image",
       imageRole: details?.image_role || "result",
-      consentStatus: item.primary_consent_status || "unknown",
-      publicVisible: true,
+      publicVisible: Number(item.primary_public_visible || 0) === 1,
       privacy: "public",
       state: "active",
       publicPresentation: "inline",
@@ -611,7 +625,7 @@ async function portfolioCoverImage(db, item) {
   }
   const row = await db.prepare(`
     SELECT COALESCE(pid.image_role, 'result') AS image_role,m.mime_type,
-      em.public_visible, m.privacy, m.consent_status, m.state,
+      em.public_visible, m.privacy, m.state,
       COALESCE(m.public_presentation, 'inline') AS public_presentation
     FROM entity_media em
     JOIN media_assets m ON m.id = em.media_id
@@ -624,7 +638,6 @@ async function portfolioCoverImage(db, item) {
     imageRef,
     kind: String(row.mime_type||"").startsWith("video/")?"video":"image",
     imageRole: row.image_role || "result",
-    consentStatus: row.consent_status || "unknown",
     publicVisible: Number(row.public_visible || 0) === 1,
     privacy: row.privacy || "internal",
     state: row.state || "active",
@@ -633,14 +646,11 @@ async function portfolioCoverImage(db, item) {
 }
 
 async function validatePublishedPortfolioItem(db, item) {
-  if (!hasPublicConsent(item.primary_consent_status)) {
-    return "Confirm publication permission for the primary result image before publishing.";
-  }
   const cover = await portfolioCoverImage(db, item);
   if (!cover) return "Choose an available result image as the portfolio cover before publishing.";
   if (cover.kind === "video") return "The portfolio cover must remain a still result image.";
   if (cover.imageRole !== "result") return "The portfolio cover must be a finished result image.";
-  if (!hasPublicConsent(cover.consentStatus)) return "Confirm publication permission for the selected cover image before publishing.";
+  if (!cover.publicVisible) return "Make the selected cover image publicly visible before publishing.";
   if (cover.imageRef !== "primary" && (
     !cover.publicVisible
     || cover.privacy !== "public"
@@ -662,6 +672,7 @@ async function patchItem(request, env, id) {
   const updates = [];
   const values = [];
   let nextProjectType = current.project_type || "standard";
+  let nextPrimaryPublicVisible = Number(current.primary_public_visible || 0) === 1;
   const currentStyleMap = await loadTattooStyleAssignments(db, [id]);
   const currentStyleValues = (currentStyleMap.get(id) || []).map((assignment) => assignment.value);
   if (!currentStyleValues.length) currentStyleValues.push(current.primary_style || "unclassified");
@@ -752,6 +763,14 @@ async function patchItem(request, env, id) {
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, "primaryPublicVisible")) {
+    nextPrimaryPublicVisible = isTruthy(body.primaryPublicVisible);
+    if (nextPrimaryPublicVisible !== (Number(current.primary_public_visible || 0) === 1)) {
+      updates.push("primary_public_visible = ?");
+      values.push(nextPrimaryPublicVisible ? 1 : 0);
+    }
+  }
+
   let nextState = current.state;
   if (Object.prototype.hasOwnProperty.call(body, "state")) {
     nextState = cleanText(body.state, 20);
@@ -771,7 +790,7 @@ async function patchItem(request, env, id) {
 
 
   if (nextState === "published") {
-    const publishError = await validatePublishedPortfolioItem(db, { ...current, project_type: nextProjectType });
+    const publishError = await validatePublishedPortfolioItem(db, { ...current, project_type: nextProjectType, primary_public_visible: nextPrimaryPublicVisible ? 1 : 0 });
     if (publishError) return errorResponse(publishError, 422);
   }
 
@@ -803,7 +822,7 @@ async function patchImageDocumentation(request, env, itemId, imageRef) {
   let attached = null;
   if (imageRef !== "primary") {
     attached = await db.prepare(`
-      SELECT em.public_visible, m.privacy, m.consent_status, m.state,m.mime_type,
+      SELECT em.public_visible, m.privacy, m.state,m.mime_type,
         COALESCE(m.public_presentation, 'inline') AS public_presentation
       FROM entity_media em JOIN media_assets m ON m.id = em.media_id
       WHERE em.entity_id = ? AND em.media_id = ? AND em.role = 'gallery'
@@ -831,35 +850,27 @@ async function patchImageDocumentation(request, env, itemId, imageRef) {
   if ((item.cover_image_ref || "primary") === imageRef && imageRole !== "result") {
     return errorResponse("Choose another result image as the cover before changing this image role.", 409);
   }
-  const currentConsent = imageRef === "primary"
-    ? item.primary_consent_status || "unknown"
-    : attached.consent_status || "unknown";
-  const consentSupplied = Object.prototype.hasOwnProperty.call(body, "consentStatus");
-  const consentStatus = cleanText(body.consentStatus ?? currentConsent, 30) || "unknown";
-  if (!CONSENT_STATUSES.has(consentStatus)) return errorResponse("Choose a valid publication-permission status.", 422);
+  const currentPublicVisible = imageRef === "primary"
+    ? Number(item.primary_public_visible || 0) === 1
+    : Number(attached.public_visible || 0) === 1;
+  const visibilitySupplied = Object.prototype.hasOwnProperty.call(body, "publicVisible");
+  const publicVisible = visibilitySupplied ? isTruthy(body.publicVisible) : currentPublicVisible;
   const isCover = body.isCover === true || body.isCover === "true" || body.isCover === "on";
   if (isCover && isVideo) return errorResponse("A portfolio cover must be a still result image.", 422);
   if (isCover && imageRole !== "result") return errorResponse("Only a finished result image can be the portfolio cover.", 422);
-  if (item.state === "published" && imageRef === "primary" && !hasPublicConsent(consentStatus)) {
-    return errorResponse("Unpublish this portfolio item before removing permission from its primary result image.", 409);
+  if (item.state === "published" && (item.cover_image_ref || "primary") === imageRef && !publicVisible) {
+    return errorResponse("Unpublish this portfolio item or choose another public result image before hiding its cover.", 409);
   }
-  if (item.state === "published" && (item.cover_image_ref || "primary") === imageRef && !hasPublicConsent(consentStatus)) {
-    return errorResponse("Unpublish this portfolio item or choose another permitted result image before removing permission from its cover.", 409);
-  }
-  if (item.state === "published" && isCover && !hasPublicConsent(consentStatus)) {
-    return errorResponse("Confirm publication permission before using this image as the cover.", 409);
-  }
-  if (item.state === "published" && isCover && imageRef !== "primary") {
-    const nextPublicVisible = consentSupplied ? hasPublicConsent(consentStatus) : Number(attached.public_visible || 0) === 1;
-    const nextPrivacy = consentSupplied ? (hasPublicConsent(consentStatus) ? "public" : "private") : attached.privacy;
-    const nextPresentation = consentSupplied ? "inline" : attached.public_presentation;
+  if (item.state === "published" && isCover) {
+    const nextPrivacy = imageRef === "primary" ? "public" : visibilitySupplied ? (publicVisible ? "public" : "internal") : attached.privacy;
+    const nextPresentation = imageRef === "primary" ? "inline" : attached.public_presentation;
     if (
-      !nextPublicVisible
+      !publicVisible
       || nextPrivacy !== "public"
-      || attached.state !== "active"
+      || (imageRef !== "primary" && attached.state !== "active")
       || nextPresentation !== "inline"
     ) {
-      return errorResponse("Make this permitted result image publicly visible before using it as the cover.", 409);
+      return errorResponse("Make this result image publicly visible before using it as the cover.", 409);
     }
   }
   const timingNote = cleanText(body.timingNote, 160);
@@ -877,15 +888,14 @@ async function patchImageDocumentation(request, env, itemId, imageRef) {
   if (promotionRequested) {
     statements.unshift(db.prepare("UPDATE portfolio_items SET project_type = 'cover_up', updated_at = datetime('now') WHERE id = ? AND project_type = 'standard'").bind(itemId));
   }
-  if (consentSupplied && imageRef === "primary") {
-    statements.push(db.prepare("UPDATE portfolio_items SET primary_consent_status = ?, updated_at = datetime('now') WHERE id = ?").bind(consentStatus, itemId));
-  } else if (consentSupplied) {
-    const publicAllowed = hasPublicConsent(consentStatus);
+  if (visibilitySupplied && imageRef === "primary") {
+    statements.push(db.prepare("UPDATE portfolio_items SET primary_public_visible = ?, updated_at = datetime('now') WHERE id = ?").bind(publicVisible ? 1 : 0, itemId));
+  } else if (visibilitySupplied) {
     statements.push(
-      db.prepare("UPDATE media_assets SET consent_status = ?, privacy = ?, public_presentation = 'inline', updated_at = datetime('now') WHERE id = ?")
-        .bind(consentStatus, publicAllowed ? "public" : "private", imageRef),
+      db.prepare("UPDATE media_assets SET privacy = ?, public_presentation = 'inline', updated_at = datetime('now') WHERE id = ?")
+        .bind(publicVisible ? "public" : "internal", imageRef),
       db.prepare("UPDATE entity_media SET public_visible = ? WHERE entity_id = ? AND media_id = ? AND role = 'gallery'")
-        .bind(publicAllowed ? 1 : 0, itemId, imageRef)
+        .bind(publicVisible ? 1 : 0, itemId, imageRef)
     );
   }
   if (isVideo && ["transcript","transcriptStatus","transcriptLanguage"].some((field)=>Object.prototype.hasOwnProperty.call(body,field))) {

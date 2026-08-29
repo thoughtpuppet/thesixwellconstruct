@@ -31,7 +31,7 @@ const RESEARCH_CHANGE_PATHS = new Set([
   "dateKind", "startsAt", "endsAt", "confirmedThrough", "timezone", "venueName", "venueAddress", "visitingHours",
   "visitingHoursNote", "visitingHoursSourceUrl", "visitingHoursVerifiedAt", "city", "region", "subjects",
   "formats", "experimental", "sourceUrl", "ticketUrl", "scheduleStatus", "ticketStatus", "ticketOnSaleAt",
-  "ticketNotes", "discoveryUrl", "organizerUrl", "venueUrl", "sourceAuthority", "sourceResolutionNotes",
+  "ticketNotes", "planningNotes", "discoveryUrl", "organizerUrl", "venueUrl", "sourceAuthority", "sourceResolutionNotes",
   "verificationState", "verificationNotes", "privateRationale", "attendanceUse", "programmingIdeas",
   "potentialCollaborators", "relatedLinks", "occurrences", "media:add",
 ]);
@@ -1076,6 +1076,7 @@ function candidateSnapshot(candidate) {
     timezone: candidate.timezone,
     venueName: candidate.venueName,
     venueAddress: candidate.venueAddress,
+    planningNotes: candidate.planningNotes || "",
     city: candidate.city,
     region: candidate.region,
     subjects: candidate.subjects,
@@ -1138,6 +1139,7 @@ function candidateSnapshot(candidate) {
       ticketStatus: occurrence.ticketStatus,
       ticketOnSaleAt: occurrence.ticketOnSaleAt,
       ticketNotes: occurrence.ticketNotes,
+      planningNotes: occurrence.planningNotes || "",
       status: occurrence.status,
       verificationState: occurrence.verificationState,
       verificationNotes: occurrence.verificationNotes,
@@ -1155,6 +1157,7 @@ const CANDIDATE_CHANGE_LABELS = {
   city: "City", region: "Region", subjects: "Subjects", formats: "Formats", experimental: "Experimental attribute",
   sourceUrl: "Source URL", ticketUrl: "Ticket URL", scheduleStatus: "Schedule status", ticketStatus: "Ticket status",
   ticketOnSaleAt: "Tickets on sale", ticketNotes: "Ticket note", organizerUrl: "Organizer URL", venueUrl: "Venue URL",
+  planningNotes: "Visitor info",
   sourceAuthority: "Source authority", sourceResolutionNotes: "Source-resolution note", relatedLinks: "Related links",
   flyerMediaId: "Flyer", flyerPublicApproved: "Public flyer approval", media: "Media gallery", occurrences: "Related schedule",
   privateRationale: "Why it fits", attendanceUse: "Best use", programmingIdeas: "Programming model",
@@ -2320,7 +2323,7 @@ async function syncEntryMedia(db, entryId, candidate, now) {
     item.altText || `${candidate.title} event image`,item.caption,Number.isFinite(Number(item.sortOrder))?Number(item.sortOrder):index,
   )));
   await db.batch(publicMedia.map((item) => db.prepare(
-    `UPDATE media_assets SET privacy='public',consent_status='not-required',state='active',
+    `UPDATE media_assets SET privacy='public',state='active',
        public_presentation='inline',updated_at=? WHERE id=?`
   ).bind(now,item.mediaId)));
 }
@@ -2474,7 +2477,7 @@ async function approveCandidate(env, id) {
   }
   if (candidate.flyerPublicApproved && flyer) {
     await db.prepare(
-      `UPDATE media_assets SET privacy='public',consent_status='not-required',state='active',
+      `UPDATE media_assets SET privacy='public',state='active',
          public_presentation='inline',updated_at=? WHERE id=?`
     ).bind(now, flyer.id).run();
   }
@@ -2717,7 +2720,6 @@ function curatedPublicView(row, relatedLinks = [], media = []) {
     row.flyer_media_id
     && row.flyer_state === "active"
     && row.flyer_privacy === "public"
-    && ["not-required", "granted"].includes(row.flyer_consent_status)
     && row.flyer_public_presentation === "inline"
     && FLYER_MIME_TYPES.has(asString(row.flyer_mime_type).toLowerCase())
   );
@@ -2851,7 +2853,7 @@ async function loadCuratedEvents(db) {
   const creditRolesEnabled = await calendarCreditRolesEnabled(db);
   const [result, links, occurrenceRows, mediaRows] = await Promise.all([
     db.prepare(
-      `SELECT e.*,m.state flyer_state,m.privacy flyer_privacy,m.consent_status flyer_consent_status,
+      `SELECT e.*,m.state flyer_state,m.privacy flyer_privacy,
               m.public_presentation flyer_public_presentation,m.mime_type flyer_mime_type,
               m.width flyer_width,m.height flyer_height
        FROM calendar_entries e LEFT JOIN media_assets m ON m.id=e.flyer_media_id
@@ -2860,10 +2862,9 @@ async function loadCuratedEvents(db) {
     db.prepare(`SELECT entry_id,label,url,link_role,${creditRolesEnabled ? "credit_role" : "'' credit_role"},sort_order FROM calendar_entry_links ORDER BY entry_id,sort_order,id`).all(),
     db.prepare("SELECT * FROM calendar_entry_occurrences ORDER BY starts_at,title,id").all(),
     db.prepare(
-      `SELECT em.*,m.state,m.privacy,m.consent_status,m.public_presentation,m.mime_type,m.width,m.height
+      `SELECT em.*,m.state,m.privacy,m.public_presentation,m.mime_type,m.width,m.height
        FROM calendar_entry_media em JOIN media_assets m ON m.id=em.media_id
        WHERE m.state='active' AND m.privacy='public' AND m.public_presentation='inline'
-         AND m.consent_status IN ('not-required','granted')
        ORDER BY em.entry_id,em.sort_order,em.id`
     ).all().catch((error) => {
       if (/no such table:\s*calendar_entry_media/i.test(asString(error?.message))) return { results: [] };
@@ -3000,6 +3001,10 @@ async function normalizedEvents(db) {
       detailUrl: detailUrls.get(occurrence.id) || "",
     })),
   })).sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt) || a.title.localeCompare(b.title));
+}
+
+export async function loadPublicCalendarSearchEvents(env) {
+  return normalizedEvents(requireDb(env));
 }
 
 function filteredEvents(events, searchParams) {
@@ -3592,6 +3597,7 @@ async function requestCandidateResearch(env, db, candidate, thread, instruction)
       "Compare every confirmed fact with the current candidate snapshot. When the evidence supplies a missing, corrected, or more precise record value, you must include the corresponding field-level change; a confirmed finding by itself is not a proposed correction. Do not propose a change when the stored value already matches.",
       "Use explicit UTC offsets for timed dates. Unless a source explicitly restricts attendance, treat the event as open to the public; use unknown access only when sources genuinely conflict about who may attend. Performer, vendor, applicant, workshop, or competition eligibility is separate from audience attendance unless the source also limits spectators or attendees. Keep exhibition ranges distinct from dated openings, talks, performances, screenings, panels, and workshops.",
       "For every public-facing field, including factualDescription, accessNotes, ticketNotes, planningNotes, and occurrence equivalents, state the event fact directly. Never mention what a caption, flyer, post, page, listing, source, extraction, verification, or research process says. Keep evidence narration only in private findings, sourceResolutionNotes, verificationNotes, citations, or private Studio notes.",
+      "Put factual parking, transit, entrance, arrival, and wayfinding guidance in planningNotes. Keep accessNotes for audience eligibility and ticketNotes for admission, registration, and ticket facts.",
       "For an exhibition, identify every credited artist and research each artist's official website and official Instagram profile. Propose relatedLinks with role artist for both verified destinations. If neither can be verified, propose a Google search link labeled Search for followed by the artist's name. Artist links may be public, but Instagram posts, reels, galleries, articles, fan accounts, and similarly named people are not artist identity links.",
       "When evidence establishes a parent exhibition or series plus dated related programs, propose one coordinated structure update: correct the parent title, eventStructure, dateKind, startsAt, endsAt, factualDescription, and strongest exact source fields as needed, and propose one occurrences value containing every already-saved occurrence plus every confirmed opening reception, closing reception, artist talk, screening, performance, panel, workshop, lecture, mixer, or other dated program. Preserve existing occurrence IDs and confirmed facts. Give each occurrence its own exact sourceUrl or ticketUrl when available. Gallery or venue hours describe when the parent is viewable; do not turn routine hours into separate occurrences unless the source presents them as distinct public programs.",
       "A proposed image must include mediaUrl and provenanceUrl in valueJson. Use retrievedMediaCandidates when available; each one was extracted from the static or fully rendered provenance page. Suggest at most 20 images and never suggest an image merely because it appears in search results. If the event page visibly has a flyer but no asset URL can be recovered, describe that extraction limitation without claiming that no flyer exists.",
@@ -5106,8 +5112,8 @@ async function captureCandidateFlyer(env, db, candidateId, flyerUrl, provenanceU
     await db.prepare(
       `INSERT INTO media_assets
         (id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,credit,rights_notes,
-         privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
-       VALUES (?,?,?,?,?,?,?,?,?,'internal','not-required','active','calendar-scout',?,?, 'hidden')`
+         privacy,state,created_by,created_at,updated_at,public_presentation)
+       VALUES (?,?,?,?,?,?,?,?,?,'internal','active','calendar-scout',?,?, 'hidden')`
     ).bind(
       mediaId, storageKey, filename, fetched.mimeType, fetched.bytes.byteLength, asString(altText).slice(0, 1000), "", "",
       `Captured from ${provenanceUrl}`, now, now,
@@ -5152,8 +5158,8 @@ async function captureCandidateMedia(env, db, candidateId, value) {
       db.prepare(
         `INSERT INTO media_assets
           (id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,credit,rights_notes,
-           privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
-         VALUES (?,?,?,?,?,?,?,?,?,'internal','not-required','active','calendar-scout',?,?,'hidden')`
+           privacy,state,created_by,created_at,updated_at,public_presentation)
+         VALUES (?,?,?,?,?,?,?,?,?,'internal','active','calendar-scout',?,?,'hidden')`
       ).bind(mediaId,storageKey,filename,fetched.mimeType,fetched.bytes.byteLength,altText,caption,"",`Captured from ${provenanceUrl}`,now,now),
       db.prepare(
         `INSERT INTO calendar_candidate_media
@@ -5190,22 +5196,42 @@ async function fetchExternalSource(sourceUrl) {
   throw new Error("Source exceeded the redirect limit.");
 }
 
+// Schema.org includes Event subclasses without an "Event" suffix, so keep the
+// accepted calendar-event hierarchy explicit instead of matching type names.
+const SCHEMA_EVENT_TYPE_NAMES = Object.freeze([
+  "Event", "BusinessEvent", "ChildrensEvent", "ComedyEvent", "ConferenceEvent", "CourseInstance",
+  "DanceEvent", "DeliveryEvent", "EducationEvent", "EventSeries", "ExhibitionEvent", "Festival",
+  "FoodEvent", "Hackathon", "LiteraryEvent", "MusicEvent", "PerformingArtsEvent", "PublicationEvent",
+  "BroadcastEvent", "OnDemandEvent", "SaleEvent", "ScreeningEvent", "SocialEvent", "SportsEvent",
+  "TheaterEvent", "VisualArtsEvent",
+]);
+
+function schemaTypeName(value) {
+  const type = asString(value);
+  if (/^[A-Za-z][A-Za-z0-9]*$/.test(type)) return type;
+  return asString(type.match(/^(?:https?:\/\/schema\.org\/|schema:)([A-Za-z][A-Za-z0-9]*)\/?$/i)?.[1]);
+}
+
+function hasSchemaEventType(value) {
+  const rawTypes = value?.["@type"];
+  const types = Array.isArray(rawTypes) ? rawTypes : [rawTypes];
+  return types.some((type) => SCHEMA_EVENT_TYPE_NAMES.includes(schemaTypeName(type)));
+}
+
 function jsonLdObjects(value) {
   if (Array.isArray(value)) return value.flatMap(jsonLdObjects);
   if (!value || typeof value !== "object") return [];
   const graph = Array.isArray(value["@graph"]) ? value["@graph"].flatMap(jsonLdObjects) : [];
-  const type = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
-  return type.includes("Event") ? [value, ...graph] : graph;
+  return hasSchemaEventType(value) ? [value, ...graph] : graph;
 }
 
 function nestedJsonLdEvents(value) {
   if (Array.isArray(value)) return value.flatMap(nestedJsonLdEvents);
   if (!value || typeof value !== "object") return [];
-  const type = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
   const nested = Object.entries(value)
     .filter(([key]) => key !== "@context" && key !== "@type")
     .flatMap(([, child]) => nestedJsonLdEvents(child));
-  return type.includes("Event") ? [value, ...nested] : nested;
+  return hasSchemaEventType(value) ? [value, ...nested] : nested;
 }
 
 function firstStructuredImage(value) {

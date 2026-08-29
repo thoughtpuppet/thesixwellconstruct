@@ -205,7 +205,7 @@ test("works and pages only return eligible public internal destinations", async 
   assert.equal((await pages.json()).destination.route, "/about/");
 });
 
-test("process selection reuses publication, consent, presentation, and public-included gates", async () => {
+test("process selection reuses record publication, media privacy and presentation, and public-included gates", async () => {
   const db = database();
   db.exec(`
     UPDATE content_entities SET visibility='internal';
@@ -219,17 +219,20 @@ test("process selection reuses publication, consent, presentation, and public-in
       VALUES('explore-public-note','art-marbles','note','Public studio note','A public process note.','public','published',datetime('now'),datetime('now'));
     INSERT INTO archive_materials(id,dossier_entity_id,material_type,title,body,visibility,state,created_at,updated_at)
       VALUES('explore-private-note','art-marbles','note','Private studio note','Never public.','private','published',datetime('now'),datetime('now'));
-    INSERT INTO media_assets(id,source_url,mime_type,privacy,consent_status,state,created_at,updated_at,public_presentation)
-      VALUES('explore-denied-media','/private/denied.jpg','image/jpeg','public','denied','active',datetime('now'),datetime('now'),'inline');
+    INSERT INTO media_assets(id,source_url,mime_type,privacy,state,created_at,updated_at,public_presentation)
+      VALUES('explore-hidden-media','/private/hidden.jpg','image/jpeg','public','active',datetime('now'),datetime('now'),'hidden');
     INSERT INTO archive_materials(id,dossier_entity_id,media_id,material_type,title,visibility,state,created_at,updated_at)
-      VALUES('explore-denied-photo','art-marbles','explore-denied-media','process-photo','Denied process photo','public','published',datetime('now'),datetime('now'));
+      VALUES('explore-hidden-photo','art-marbles','explore-hidden-media','process-photo','Hidden process photo','public','published',datetime('now'),datetime('now'));
   `);
+  assert.deepEqual({...db.prepare("SELECT privacy,state,public_presentation FROM media_assets WHERE id='explore-hidden-media'").get()},{privacy:"public",state:"active",public_presentation:"hidden"});
+  assert.deepEqual({...db.prepare("SELECT state,visibility FROM archive_materials WHERE id='explore-hidden-photo'").get()},{state:"published",visibility:"public"});
+  assert.deepEqual({...db.prepare("SELECT state,public_visible FROM archive_dossiers WHERE entity_id='art-marbles'").get()},{state:"published",public_visible:1});
   const response = await handleConstructApi(request("/api/site/explore?scope=process"), runtime(db));
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.destination.key, "process:material:explore-public-note");
   assert.match(payload.destination.route, /^\/archive\/records\/[^/]+\/#/);
-  assert.doesNotMatch(payload.destination.route, /denied\.jpg|\/api\//);
+  assert.doesNotMatch(payload.destination.route, /hidden\.jpg|\/api\//);
   const excluded = await handleConstructApi(request(`/api/site/explore?scope=process&exclude=${payload.destination.key}`), runtime(db));
   assert.equal((await excluded.json()).restarted, true);
 });

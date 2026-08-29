@@ -414,6 +414,13 @@ function appearanceDetailSlug(pathname) {
   return hasFileExtension(pathname) || parts[2] === "detail" ? "" : parts[2];
 }
 
+function identityProfileSlug(pathname) {
+  const parts = normalizePath(pathname).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "about" || parts[1] !== "identities") return "";
+  if (hasFileExtension(pathname) || parts[2] === "detail") return "";
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(parts[2]) ? parts[2] : "";
+}
+
 const LEGEND_RECORD_RESERVED_SLUGS = new Set([
   "categories-managed-preview",
   "detail",
@@ -671,6 +678,17 @@ async function serveMerchRecordPage(request, env, slug) {
   headers.delete("etag");
   headers.set("cache-control", "no-store");
   return new Response(html, { status: assetResponse.status, headers });
+}
+
+async function serveIdentityProfilePage(request, env, slug) {
+  const apiUrl = new URL(`/api/identities/${encodeURIComponent(slug)}`, request.url);
+  const apiResponse = await handleConstructApi(new Request(apiUrl, {
+    method: "GET",
+    headers: { accept: "application/json" },
+  }), env);
+  if (apiResponse.status === 404) return notFoundPage(request, env);
+  if (!apiResponse.ok) return apiResponse;
+  return servePublicAsset(request, env, "/about/identities/detail/index.html");
 }
 
 async function serveCalendarEventPage(request, env, reference) {
@@ -1408,6 +1426,7 @@ export default {
       url.pathname === "/api/site/explore" ||
       url.pathname === "/api/site/navigation" ||
       url.pathname === "/api/current-projects" ||
+      url.pathname === "/api/identities" || url.pathname.startsWith("/api/identities/") ||
       url.pathname.startsWith("/api/connections/") ||
       url.pathname.startsWith("/api/construct/media/") ||
       url.pathname.startsWith("/api/construct/entity-media/") ||
@@ -1428,6 +1447,7 @@ export default {
       url.pathname.startsWith("/api/admin/people") ||
       url.pathname.startsWith("/api/admin/appearances") ||
       url.pathname.startsWith("/api/admin/current-projects") ||
+      url.pathname.startsWith("/api/admin/identities") ||
       url.pathname.startsWith("/api/admin/organizations") ||
       url.pathname.startsWith("/api/admin/places") ||
       url.pathname.startsWith("/api/admin/nodes") ||
@@ -1759,6 +1779,17 @@ export default {
 
     if (appearanceDetailSlug(url.pathname)) {
       return servePublicAsset(request, env, "/about/exhibitions-appearances/detail/index.html");
+    }
+
+    const requestedIdentitySlug = identityProfileSlug(url.pathname);
+    if (requestedIdentitySlug) {
+      if (!url.pathname.endsWith("/")) {
+        const canonicalUrl = new URL(request.url);
+        canonicalUrl.pathname = `${normalizePath(url.pathname)}/`;
+        canonicalUrl.search = "";
+        return Response.redirect(canonicalUrl, 308);
+      }
+      return serveIdentityProfilePage(request, env, requestedIdentitySlug);
     }
 
     if (isFlashDetailPagePath(url.pathname)) {

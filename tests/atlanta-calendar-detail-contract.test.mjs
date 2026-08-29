@@ -85,6 +85,7 @@ test("approved curated records expose canonical detail APIs, routes, metadata, a
       sourceAuthority:"organizer_event",
       venueName:"Atlanta Sound Room",
       venueAddress:"100 Sound Way, Atlanta, GA",
+      planningNotes:"Use the south deck entrance for parking.",
       city:"Atlanta",
       region:"GA",
       accessStatus:"public",
@@ -127,6 +128,7 @@ test("approved curated records expose canonical detail APIs, routes, metadata, a
   const series = list.series.find((item) => item.title === "Canonical Atlanta Sound Series");
   const occurrence = list.events.find((item) => item.title.includes("Opening Performance"));
   assert.match(series.detailUrl, /^\/calendar\/events\/canonical-atlanta-sound-series--curated%3A/);
+  assert.equal(series.planning.notes, "Use the south deck entrance for parking.");
   assert.match(occurrence.detailUrl, /^\/calendar\/events\/canonical-atlanta-sound-series-opening-performance--curated-occurrence%3A/);
   assert.equal(occurrence.parentDetailUrl, series.detailUrl);
   assert.equal(series.relatedOccurrences[0].detailUrl, occurrence.detailUrl);
@@ -192,10 +194,18 @@ test("calendar detail UI keeps titles plain and replaces new in-page event ancho
   assert.doesNotMatch(detail, /syncDescriptionToggles|data-tag-toggle|data-description-toggle/);
   assert.match(html, /data-calendar-event-canonical/);
   assert.match(html, /data-calendar-event-og-title/);
-  assert.match(html, /atlanta-calendar-record\.js\?v=20260822-calendar-detail-expanded/);
+  assert.match(html, /atlanta-calendar-record\.js\?v=20260828-calendar-visitor-info/);
   assert.match(css, /\.calendar-day-agenda-item>a \{ min-height:44px/);
   assert.match(css, /\.calendar-event-card\[data-calendar-card-href\] \{ cursor:pointer; \}/);
   assert.match(css, /\.calendar-event-detail-record/);
+});
+
+test("visitor logistics remain a Scout-reviewable public field", () => {
+  const api = readFileSync(join(ROOT, "functions", "api", "calendar", "_lib.js"), "utf8");
+  assert.match(api, /const RESEARCH_CHANGE_PATHS[\s\S]*"planningNotes"/);
+  assert.match(api, /function candidateSnapshot[\s\S]*planningNotes: candidate\.planningNotes \|\| ""/);
+  assert.match(api, /planningNotes: "Visitor info"/);
+  assert.match(api, /Put factual parking, transit, entrance, arrival, and wayfinding guidance in planningNotes\./);
 });
 
 test("dedicated event records render every approved detail without collapsed controls", () => {
@@ -217,7 +227,7 @@ test("dedicated event records render every approved detail without collapsed con
     subjects:["art", "poetry-music", "technology"],
     formats:["performance", "panel"],
     affiliations:[],
-    planning:{ latitude:33.749, longitude:-84.388 },
+    planning:{ latitude:33.749, longitude:-84.388, notes:"For GPS and parking, use 330 Chapel Street S, Atlanta, GA 30313." },
     status:"published",
     scheduleStatus:"scheduled",
     ticketStatus:"on_sale",
@@ -244,6 +254,8 @@ test("dedicated event records render every approved detail without collapsed con
   };
   const expanded = context.window.AtlantaCalendarRecord.renderEvent(fixture, { headingTag:"h1", includeViewEvent:false, detail:true });
   assert.match(expanded, /hero-descriptor calendar-event-description"/);
+  assert.match(expanded, /<p class="calendar-event-planning"><strong>Visitor info \/ <\/strong>For GPS and parking, use 330 Chapel Street S, Atlanta, GA 30313\.<\/p>/);
+  assert.ok(expanded.indexOf("calendar-event-description") < expanded.indexOf("calendar-event-planning"));
   assert.match(expanded, /calendar-map-choices is-expanded/);
   assert.match(expanded, /Google Maps/);
   assert.match(expanded, /Apple Maps/);
@@ -263,4 +275,5 @@ test("dedicated event records render every approved detail without collapsed con
   assert.match(compact, /data-description-toggle/);
   assert.match(compact, /data-tag-toggle/);
   assert.match(compact, /data-calendar-card-href/);
+  assert.match(compact, /calendar-event-planning/);
 });

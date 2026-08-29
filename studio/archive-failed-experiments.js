@@ -188,7 +188,6 @@
           <label class="wide">Upload evidence<input type="file" name="files" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,audio/*,application/pdf,text/plain,.doc,.docx" required><span class="cm-field-note">JPEG, PNG, and WebP images are paired automatically. MP4/WebM video uses resumable upload. Other files are limited by the shared media service.</span></label>
           <label class="wide">Alt text<input name="alt_text" value="${esc(value(workspace.record,"title"))}" placeholder="Describe visual evidence"></label>
           <label class="wide">Shared caption<textarea name="caption" placeholder="Applied to each uploaded attachment; refine individually afterward."></textarea></label>
-          <label>Consent<select name="consent_status">${options([["not-required","Not required"],["granted","Granted"],["required","Required"],["unknown","Unknown"],["denied","Denied"]],"not-required")}</select></label>
           <label class="cm-check-field"><input type="checkbox" name="public_visible">Mark new evidence public</label>
         </div>
         <div class="cm-actions"><button class="button" type="submit">Upload and attach</button><button class="button danger-button" type="button" data-fe-upload-cancel hidden>Cancel upload</button><span class="cm-upload-status" data-fe-upload-status aria-live="polite"></span></div>
@@ -238,7 +237,7 @@
 
   function readinessMarkup(record){
     const published=String(value(record,"state")||"draft")==="published",hasNote=Boolean(String(value(record,"public_note","publicNote")||"").trim()),publicEvidence=workspace.media.filter(item=>truthy(value(item,"public_visible","publicVisible"))).length;
-    return `<div class="fe-readiness${published?" is-ready":""}"><strong>${published?"Published":"Internal draft"}</strong><span>${hasNote?"Public note ready":"No public note"} · ${publicEvidence} public attachment${publicEvidence===1?"":"s"}. Media privacy, consent, presentation, and state are checked again by the server.</span></div>`;
+    return `<div class="fe-readiness${published?" is-ready":""}"><strong>${published?"Published":"Internal draft"}</strong><span>${hasNote?"Public note ready":"No public note"} · ${publicEvidence} public attachment${publicEvidence===1?"":"s"}. Media privacy, presentation, and state are checked again by the server.</span></div>`;
   }
 
   function paintDetail(){
@@ -339,7 +338,7 @@
   }
 
   function mediaForm(file,metadata){
-    const form=new FormData();form.append("file",file);form.append("alt_text",metadata.altText);form.append("caption",metadata.caption);form.append("privacy",metadata.privacy);form.append("consent_status",metadata.consentStatus);form.append("public_presentation",metadata.publicPresentation);form.append("public_title",metadata.publicTitle);form.append("public_description",metadata.caption);return form;
+    const form=new FormData();form.append("file",file);form.append("alt_text",metadata.altText);form.append("caption",metadata.caption);form.append("privacy",metadata.privacy);form.append("public_presentation",metadata.publicPresentation);form.append("public_title",metadata.publicTitle);form.append("public_description",metadata.caption);return form;
   }
 
   async function uploadSimple(file,metadata){
@@ -351,7 +350,7 @@
   async function uploadResumable(file,metadata,output,uploadKind="video"){
     if(!window.StudioResumableMedia){if(file.size<=15*1024*1024)return uploadSimple(file,metadata);throw new Error("The resumable uploader is unavailable. Refresh Studio and try again.")}
     workspace.uploadController=new AbortController();workspace.uploadSession="";
-    return window.StudioResumableMedia.upload(file,{token:localStorage.getItem(tokenKey)||"",uploadKind,signal:workspace.uploadController.signal,altText:metadata.altText,caption:metadata.caption,privacy:metadata.privacy,consentStatus:metadata.consentStatus,publicTitle:metadata.publicTitle,publicDescription:metadata.caption,publicPresentation:metadata.publicPresentation,onSession:session=>{workspace.uploadSession=session.id},onStatus:message=>{output.textContent=message},onProgress:progress=>{output.textContent=`${progress.resumed?"Resuming":"Uploading"} ${file.name}: ${progress.percent}%`}});
+    return window.StudioResumableMedia.upload(file,{token:localStorage.getItem(tokenKey)||"",uploadKind,signal:workspace.uploadController.signal,altText:metadata.altText,caption:metadata.caption,privacy:metadata.privacy,publicTitle:metadata.publicTitle,publicDescription:metadata.caption,publicPresentation:metadata.publicPresentation,onSession:session=>{workspace.uploadSession=session.id},onStatus:message=>{output.textContent=message},onProgress:progress=>{output.textContent=`${progress.resumed?"Resuming":"Uploading"} ${file.name}: ${progress.percent}%`}});
   }
 
   async function imageSource(file){
@@ -366,14 +365,14 @@
 
   async function uploadImagePair(file,metadata,entityId,role,sortOrder,publicVisible,output){
     output.textContent=`Preparing ${file.name} display derivative…`;
-    const derivativeFile=await webpDerivative(file),masterMetadata={...metadata,privacy:"internal",consentStatus:"not-required",publicPresentation:"hidden"},master=await uploadResumable(file,masterMetadata,output,"archive-master");
+    const derivativeFile=await webpDerivative(file),masterMetadata={...metadata,privacy:"internal",publicPresentation:"hidden"},master=await uploadResumable(file,masterMetadata,output,"archive-master");
     output.textContent=`Uploading ${file.name} WebP derivative…`;
     const derivative=await uploadSimple(derivativeFile,{...metadata,privacy:"public",publicPresentation:"inline"});
     await workspace.api(`${base}/${encodeURIComponent(entityId)}/media-pair`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({master_media_id:mediaId(master),derivative_media_id:mediaId(derivative),role,sort_order:sortOrder,public_visible:publicVisible,alt_text_override:metadata.altText,caption_override:metadata.caption})});
   }
 
   async function uploadEvidence(form,entityId){
-    const output=form.querySelector("[data-fe-upload-status]"),cancel=form.querySelector("[data-fe-upload-cancel]"),data=new FormData(form),files=[...form.elements.files.files],publicVisible=data.has("public_visible"),metadata={altText:String(data.get("alt_text")||value(workspace.record,"title")||"").trim(),caption:String(data.get("caption")||"").trim(),privacy:publicVisible?"public":"internal",consentStatus:String(data.get("consent_status")||"not-required"),publicPresentation:"inline",publicTitle:String(value(workspace.record,"title")||"")};
+    const output=form.querySelector("[data-fe-upload-status]"),cancel=form.querySelector("[data-fe-upload-cancel]"),data=new FormData(form),files=[...form.elements.files.files],publicVisible=data.has("public_visible"),metadata={altText:String(data.get("alt_text")||value(workspace.record,"title")||"").trim(),caption:String(data.get("caption")||"").trim(),privacy:publicVisible?"public":"internal",publicPresentation:"inline",publicTitle:String(value(workspace.record,"title")||"")};
     if(!files.length)return;
     setFormBusy(form,true);cancel.disabled=false;cancel.hidden=false;
     try{

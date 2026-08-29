@@ -109,7 +109,7 @@ test("Studio owns appearances, context, connected works, and reusable organizati
   assert.match(studio,/data-tab="about">About/);
   assert.match(studio,/Exhibitions &amp; Appearances/);
   assert.match(studio,/\["organizations","Organizations"\]/);
-  assert.match(manager,/about:new Set\(\["current-works","appearances"\]\)/);
+  assert.match(manager,/about:new Set\(\["current-works","creative-identities","appearances"\]\)/);
   assert.match(manager,/Hosts, participants &amp; venue/);
   assert.match(manager,/Works involved or exhibited/);
   assert.match(manager,/context_assignments:contextAssignments/);

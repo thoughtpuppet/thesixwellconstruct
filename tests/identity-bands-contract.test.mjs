@@ -3,9 +3,60 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relativePath) => readFile(path.join(ROOT, relativePath), "utf8");
+
+async function exerciseThoughtPuppetPublicationGate({ responseOk = true, payload, reject = false } = {}) {
+  const source = await read("js/thoughtpuppet-public-links.js");
+  const styles = new Map();
+  const element = {
+    hidden: false,
+    dataset: {},
+    style: {
+      setProperty(name, value, priority) {
+        styles.set(name, { value, priority });
+      },
+      removeProperty(name) {
+        styles.delete(name);
+      },
+    },
+  };
+
+  class MutationObserverStub {
+    constructor(callback) {
+      this.callback = callback;
+    }
+
+    observe() {}
+  }
+
+  const context = {
+    document: {
+      documentElement: {},
+      querySelectorAll(selector) {
+        assert.equal(selector, "[data-thoughtpuppet-public-links], [data-thoughtpuppet-public-link]");
+        return [element];
+      },
+    },
+    MutationObserver: MutationObserverStub,
+    fetch: async (url, options) => {
+      assert.equal(url, "/api/identities");
+      assert.equal(options.cache, "no-store");
+      assert.equal(options.headers.accept, "application/json");
+      if (reject) throw new Error("network unavailable");
+      return {
+        ok: responseOk,
+        json: async () => payload,
+      };
+    },
+  };
+
+  vm.runInNewContext(source, context, { filename: "thoughtpuppet-public-links.js" });
+  await new Promise((resolve) => setImmediate(resolve));
+  return { element, styles };
+}
 
 test("identity-band landings share one stylesheet and explicit structure", async () => {
   const legendSlugs = ["thoughtpuppet", "six-well", "art-pill"];
@@ -46,14 +97,17 @@ test("identity-band landings share one stylesheet and explicit structure", async
     });
   });
 
-  assert.match(pages[0], /href="\/about\/visual-language\/" data-copy-id="art-brand-action-about">learn more about thoughtpuppet<\/a>/);
+  assert.match(pages[0], /data-thoughtpuppet-public-links hidden/);
+  assert.match(pages[0], /href="\/about\/identities\/thoughtpuppet\/" data-copy-id="art-brand-action-about">learn more about thoughtpuppet<\/a>/);
+  assert.match(pages[0], /href="\/archive\/timelines\/thoughtpuppet\/" data-copy-id="art-brand-action-history">view full archive history<\/a>/);
+  assert.match(pages[0], /src="\/js\/thoughtpuppet-public-links\.js"/);
   assert.match(pages[1], /href="\/about\/six-well\/" data-copy-id="merch-brand-action-about">learn more about six\.well<\/a>/);
 
   const tattooActionIds = [...pages[2].matchAll(/<a class="brand-band-link"[^>]*\bdata-copy-id="([^"]+)"/g)]
     .map((match) => match[1]);
   assert.equal(new Set(tattooActionIds).size, tattooActionIds.length, "Tattoo identity action copy IDs must be unique");
   assert.match(pages[2], /href="\/about\/artpilltattoohouse\/" data-copy-id="tattoos-brand-action-about">learn more about art\.pill<\/a>/);
-  assert.match(pages[2], /href="\/about\/founder\/" data-copy-id="tattoos-artist-action-about">learn more about saiel<\/a>/);
+  assert.match(pages[2], /href="\/about\/saieldauhnsolehman\/" data-copy-id="tattoos-artist-action-about">learn more about saiel<\/a>/);
   assert.match(pages[2], /href="\/tattoos\/portfolio\/" data-copy-id="tattoos-artist-action-portfolio">view saiel’s tattoo portfolio<\/a>/);
 
   assert.match(
@@ -136,6 +190,42 @@ test("Tattoo index keeps its identity bands together without walk-in availabilit
   assert.ok(brandIndex >= 0 && artistIndex > brandIndex);
   assert.doesNotMatch(html, /walkin-section|walk-in-windows|walkInCards|displayedStudioHours/);
   assert.doesNotMatch(html, /css\/walk-in-windows\.css|js\/walk-in-windows\.js|loadWalkInCards/);
+});
+
+test("ThoughtPuppet identity actions fail closed until the exact public profile is listed", async () => {
+  const hiddenCases = [
+    { responseOk: false, payload: {} },
+    { reject: true },
+    { payload: { records: [] } },
+    { payload: { records: [{ slug: "thoughtpuppet", canonical_route: "/about/identities/another-identity/" }] } },
+    { payload: { records: [{ slug: "another-identity", canonical_route: "/about/identities/thoughtpuppet/" }] } },
+  ];
+
+  for (const gateCase of hiddenCases) {
+    const { element, styles } = await exerciseThoughtPuppetPublicationGate(gateCase);
+    assert.equal(element.hidden, true);
+    assert.deepEqual(styles.get("display"), { value: "none", priority: "important" });
+    assert.equal(element.dataset.publicationConfirmed, undefined);
+  }
+
+  const { element, styles } = await exerciseThoughtPuppetPublicationGate({
+    payload: {
+      records: [{
+        slug: "thoughtpuppet",
+        canonical_route: "/about/identities/thoughtpuppet/",
+      }],
+    },
+  });
+  assert.equal(element.hidden, false);
+  assert.equal(styles.has("display"), false);
+  assert.equal(element.dataset.publicationConfirmed, "true");
+
+  const [identityCss, currentWorksCss] = await Promise.all([
+    read("css/identity-bands.css"),
+    read("currently/current-works.css"),
+  ]);
+  assert.match(identityCss, /\[data-thoughtpuppet-public-links\]\[hidden\]\s*\{\s*display:\s*none\s*!important/);
+  assert.match(currentWorksCss, /\[data-thoughtpuppet-public-link\]\[hidden\]\s*\{\s*display:\s*none\s*!important/);
 });
 
 test("shared identity actions are outlined, node-responsive, accessible controls", async () => {

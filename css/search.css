@@ -304,6 +304,21 @@ body.construct-search-page {
   font: 400 14px/1.55 var(--search-serif);
 }
 
+.search-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  margin: 0 0 10px;
+  color: var(--search-body);
+  font: 700 10px/1.45 var(--search-sans);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.search-result-status {
+  color: var(--result-accent);
+}
+
 .search-match {
   display: flex;
   flex-wrap: wrap;

@@ -1434,6 +1434,44 @@ body[data-archive-view="record"] .archive-state-card.is-current {
   font-size: 0.78rem;
 }
 
+.archive-timeline-summary {
+  margin: 0;
+  font-weight: 700;
+}
+
+.archive-timeline-body {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.archive-timeline-body p {
+  margin: 0;
+}
+
+.archive-timeline-media {
+  margin: 0.4rem 0 0;
+  border: var(--archive-rule) solid var(--archive-line);
+  background: #090807;
+}
+
+.archive-timeline-media a {
+  display: block;
+}
+
+.archive-timeline-media img {
+  display: block;
+  width: 100%;
+  max-height: 34rem;
+  object-fit: contain;
+}
+
+.archive-timeline-media figcaption {
+  padding: 0.75rem 0.9rem;
+  border-top: var(--archive-rule) solid var(--archive-line);
+  color: var(--archive-muted);
+  font-size: 0.78rem;
+}
+
 .archive-timeline-source a {
   color: var(--archive-signal-soft);
 }

@@ -128,7 +128,7 @@ test("client correspondence source sets stay private by default and publish as o
   const created = (await createResponse.json()).record;
   assert.equal(created.publication_state, "draft");
   assert.equal(created.visibility, "internal");
-  assert.equal(created.permission_status, "not-required");
+  assert.equal(created.dossier_entity_id, "art-marbles");
   assert.equal(created.participant_label, "Client");
   assert.equal(created.state_links.length, 2);
   assert.equal(new Set(created.state_links.map((link) => link.document_reference)).size >= 1, true);
@@ -137,12 +137,12 @@ test("client correspondence source sets stay private by default and publish as o
   assert.equal(created.state_links.find((link) => link.state_id === internalState.id).document_reference, "D01");
 
   db.exec(`INSERT INTO media_assets
-      (id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
+      (id,source_url,original_filename,mime_type,alt_text,privacy,state,public_presentation,created_by,created_at,updated_at)
     VALUES
       ('source-correspondence-image','https://cdn.example.test/redacted-correspondence.jpg','private-client-name-chat.jpg','image/jpeg',
-       'Redacted client correspondence page','internal','unknown','active','hidden','test',datetime('now'),datetime('now')),
+       'Redacted client correspondence page','internal','active','hidden','test',datetime('now'),datetime('now')),
       ('source-reference-image','https://cdn.example.test/client-reference.jpg','private-reference-filename.jpg','image/jpeg',
-       'Client-supplied visual reference','internal','unknown','active','hidden','test',datetime('now'),datetime('now'));`);
+       'Client-supplied visual reference','internal','active','hidden','test',datetime('now'),datetime('now'));`);
 
   const entryBodies = [
     {
@@ -207,25 +207,24 @@ test("client correspondence source sets stay private by default and publish as o
     body: {
       visibility: "public",
       publication_state: "published",
-      permission_status: "not-required",
     },
   }), runtime);
   assert.equal(publishResponse.status, 200);
   const published = (await publishResponse.json()).record;
   assert.equal(published.publication_state, "published");
   assert.equal(published.visibility, "public");
+  assert.deepEqual({...db.prepare("SELECT publication_state,visibility FROM archive_source_material_sets WHERE id=?").get(created.id)},{publication_state:"published",visibility:"public"});
 
-  const preparedMedia = db.prepare("SELECT privacy,consent_status,state,public_presentation FROM media_assets WHERE id='source-correspondence-image'").get();
+  const preparedMedia = db.prepare("SELECT privacy,state,public_presentation FROM media_assets WHERE id='source-correspondence-image'").get();
   assert.deepEqual({ ...preparedMedia }, {
     privacy: "public",
-    consent_status: "not-required",
     state: "active",
     public_presentation: "inline",
   });
-  const excludedMedia = db.prepare("SELECT privacy,consent_status,public_presentation FROM media_assets WHERE id='source-reference-image'").get();
+  const excludedMedia = db.prepare("SELECT privacy,state,public_presentation FROM media_assets WHERE id='source-reference-image'").get();
   assert.deepEqual({ ...excludedMedia }, {
     privacy: "internal",
-    consent_status: "unknown",
+    state: "active",
     public_presentation: "hidden",
   });
 

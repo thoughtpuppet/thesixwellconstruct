@@ -60,7 +60,6 @@ export async function entityMedia(database, entityIds) {
     JOIN media_assets m ON m.id=em.media_id
     JOIN content_entities ce ON ce.id=em.entity_id AND ce.visibility='public'
     WHERE em.public_visible=1 AND m.state='active' AND m.privacy='public'
-      AND m.consent_status IN ('not-required','granted')
       AND m.public_presentation='inline'
       AND em.entity_id IN (${placeholders})
     ORDER BY em.entity_id,CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order,em.created_at`).bind(...entityIds).all();

@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { handleConstructApi } from "../functions/api/construct/_lib.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const source = (relativePath) => readFileSync(path.join(ROOT, relativePath), "utf8");
@@ -42,7 +43,21 @@ function migratedDatabase() {
   return database;
 }
 
-test("identity marks are published as managed Legend cards", () => {
+class D1Statement {
+  constructor(database, sql, values = []) { this.database = database; this.sql = sql; this.values = values; }
+  bind(...values) { return new D1Statement(this.database, this.sql, values); }
+  async first() { return this.database.prepare(this.sql).get(...this.values) || null; }
+  async all() { return { results: this.database.prepare(this.sql).all(...this.values) }; }
+  async run() { const result = this.database.prepare(this.sql).run(...this.values); return { success: true, meta: { changes: Number(result.changes || 0) } }; }
+}
+
+class LocalD1 {
+  constructor(database) { this.database = database; }
+  prepare(sql) { return new D1Statement(this.database, sql); }
+  async batch(statements) { this.database.exec("BEGIN"); try { const results = []; for (const statement of statements) results.push(await statement.run()); this.database.exec("COMMIT"); return results; } catch (error) { this.database.exec("ROLLBACK"); throw error; } }
+}
+
+test("identity marks are published as managed Legend cards while staged history stays private", async () => {
   const database = migratedDatabase();
   const category = database.prepare(
     "SELECT id,name,slug,state,sort_order FROM visual_symbol_categories WHERE id='identity'",
@@ -74,7 +89,22 @@ test("identity marks are published as managed Legend cards", () => {
     assert.equal(symbol.state, "published");
     assert.match(symbol.meaning, /\S/);
     assert.match(symbol.svg_markup, /currentColor/);
-    assert.deepEqual(JSON.parse(symbol.examples_json).map((example) => example.href), [expected.sourceRoute]);
+    const rawExamples = JSON.parse(symbol.examples_json);
+    assert.deepEqual(rawExamples.map((example) => example.href), [expected.sourceRoute]);
+    if (expected.id === "identity-thoughtpuppet") {
+      assert.equal(JSON.parse(database.prepare("SELECT variants_json FROM visual_symbols WHERE id=?").get(expected.id).variants_json)
+        .some((entry) => entry.record_entity_id === "archive-record-thought-puppet-puppet-thoughts"), false);
+      const stagedVariant = database.prepare("SELECT * FROM visual_symbol_archive_appearances WHERE id=?").get("legend-appearance-thoughtpuppet-early-puppet");
+      assert.equal(stagedVariant.title, "Early puppet character / class-project identity");
+      assert.equal(stagedVariant.publication_state, "draft");
+      assert.equal(stagedVariant.public_visible, 0);
+    }
+    if (expected.id === "identity-six-well") {
+      assert.equal(rawExamples.some((entry) => entry.record_entity_id === "archive-record-thought-puppet-puppet-thoughts"), false);
+      const stagedCover = database.prepare("SELECT * FROM visual_symbol_archive_appearances WHERE id=?").get("legend-appearance-six-well-cover-signature");
+      assert.equal(stagedCover.publication_state, "draft");
+      assert.equal(stagedCover.public_visible, 0);
+    }
     assert.deepEqual({ ...entity }, {
       entity_type: "visual_symbol",
       node_id: "node-legend",
@@ -86,6 +116,18 @@ test("identity marks are published as managed Legend cards", () => {
       state: "published",
       collection_labels: "Identity",
     });
+  }
+
+  for (const slug of ["thoughtpuppet", "six-well"]) {
+    const response = await handleConstructApi(new Request(`https://example.test/api/legend/${slug}`), { SUBMISSIONS_DB: new LocalD1(database) });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    const publicRecord = payload.record || payload.records?.[0];
+    assert.ok(publicRecord);
+    assert.equal(publicRecord.examples.some((entry) => entry.record_entity_id === "archive-record-thought-puppet-puppet-thoughts"), false);
+    assert.equal(publicRecord.examples.some((entry) => entry.href === "/about/identities/thoughtpuppet/" || entry.href === "/archive/timelines/thoughtpuppet/"), false);
+    assert.equal(publicRecord.variants.some((entry) => entry.record_entity_id === "archive-record-thought-puppet-puppet-thoughts"), false);
+    assert.deepEqual(publicRecord.archive_appearances, []);
   }
 
   assert.equal(database.prepare("PRAGMA integrity_check").get().integrity_check, "ok");

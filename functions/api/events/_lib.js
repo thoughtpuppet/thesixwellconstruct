@@ -23,6 +23,7 @@ import {
 } from "../notifications/_lib.js";
 import { ingestCrmSourceRecord } from "../crm/ingest.js";
 import { captureMarketingConsent } from "../outreach/_lib.js";
+import { ensureEditableArchiveDossier } from "../_shared/archive-dossiers.js";
 
 const SQUARE_VERSION = "2026-05-20";
 
@@ -2940,6 +2941,17 @@ export async function handleAdminEventCreate(request, env) {
     const created = await getEventBySlug(db, slug);
     await replaceEventOccurrences(db, created, occurrences, now);
     await syncEventContentEntity(db, created);
+    let archiveDossierError = "";
+    try {
+      await ensureEditableArchiveDossier(db, created.id);
+    } catch (error) {
+      archiveDossierError = error instanceof Error ? error.message : String(error);
+      console.error(JSON.stringify({
+        message: "Unable to ensure the editable Archive dossier after Event creation.",
+        entityId: created.id,
+        error: archiveDossierError,
+      }));
+    }
     const stats = await eventStats(db, created.id);
     const occurrenceViews = await eventOccurrencesWithStats(db, created);
     return json({
@@ -2951,6 +2963,7 @@ export async function handleAdminEventCreate(request, env) {
         isRecurring:created.isRecurring || occurrenceViews.length > 1,
         occurrences:occurrenceViews,
       },
+      ...(archiveDossierError ? { archive_dossier_error: archiveDossierError } : {}),
     }, { status: 201 });
   } catch (error) {
     return errorResponse("Unable to create event.", 500, { detail: error.message });

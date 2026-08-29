@@ -108,7 +108,7 @@ export async function discoverVisualColorWorkSources(database, env = {}) {
       JOIN entity_media em ON em.entity_id=aw.id AND em.role='primary' AND em.public_visible=1
       JOIN media_assets m ON m.id=em.media_id
       WHERE aw.state='published' AND m.state='active' AND m.privacy='public'
-        AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+        AND m.public_presentation='inline'
         AND m.mime_type LIKE 'image/%'
       ORDER BY aw.sort_order,aw.id,em.sort_order,em.created_at`),
     database.prepare(`SELECT pi.id,pi.title,pi.year,pi.cover_image_ref,pi.source_url,pi.storage_key,pi.content_type,
@@ -116,7 +116,7 @@ export async function discoverVisualColorWorkSources(database, env = {}) {
       FROM portfolio_items pi
       JOIN content_entities ce ON ce.id=pi.id AND ce.visibility='public'
       LEFT JOIN portfolio_image_details pid ON pid.portfolio_item_id=pi.id AND pid.image_ref='primary'
-      WHERE pi.state='published' AND pi.primary_consent_status IN ('not-required','granted')
+      WHERE pi.state='published' AND pi.primary_public_visible=1
         AND pi.content_type LIKE 'image/%' AND (pi.source_url<>'' OR pi.storage_key<>'')
         AND COALESCE(pid.image_role,'result')='result'
       ORDER BY pi.created_at DESC,pi.id`),
@@ -129,7 +129,7 @@ export async function discoverVisualColorWorkSources(database, env = {}) {
       JOIN media_assets m ON m.id=em.media_id
       JOIN portfolio_image_details pid ON pid.portfolio_item_id=pi.id AND pid.image_ref=em.media_id AND pid.image_role='result'
       WHERE pi.state='published' AND m.state='active' AND m.privacy='public'
-        AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+        AND m.public_presentation='inline'
         AND m.mime_type LIKE 'image/%'
       ORDER BY pi.created_at DESC,pi.id,em.sort_order,em.created_at`),
   ]);

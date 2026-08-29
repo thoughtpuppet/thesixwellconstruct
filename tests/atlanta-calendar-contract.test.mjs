@@ -1109,18 +1109,18 @@ test("Eventbrite discovery uses bounded rendered detail extraction and keeps ver
   }
 });
 
-test("Eventbrite discovers exact child pages from nested ItemList JSON-LD", async () => {
+test("Eventbrite discovers exact SocialEvent child pages from nested ItemList JSON-LD", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_eventbrite_atlanta'");
   const sourceUrl = "https://www.eventbrite.com/d/ga--atlanta/events/";
   const eventUrl = "https://www.eventbrite.com/e/creative-technology-panel-tickets-654321";
   const hub = `<script type="application/ld+json">${JSON.stringify({
     "@context":"https://schema.org", "@type":"ItemList", itemListElement:[{
-      "@type":"ListItem", position:1, item:{ "@type":"Event", name:"Creative Technology Panel", startDate:"2026-11-06", endDate:"2026-11-06", url:eventUrl },
+      "@type":"ListItem", position:1, item:{ "@type":["https://schema.org/SocialEvent","Product"], name:"Creative Technology Panel", startDate:"2026-11-06", endDate:"2026-11-06", url:eventUrl },
     }],
   })}</script>`;
   const detail = `<script type="application/ld+json">${JSON.stringify({
-    "@context":"https://schema.org", "@type":"Event", identifier:"654321", name:"Creative Technology Panel",
+    "@context":"https://schema.org", "@type":"SocialEvent", identifier:"654321", name:"Creative Technology Panel",
     description:"An Atlanta panel about interactive art and creative technology.", startDate:"2026-11-06T18:00:00-05:00", endDate:"2026-11-06T20:00:00-05:00", url:eventUrl,
     organizer:{ "@type":"Organization", name:"Atlanta Creative Lab", url:"https://atlantacreativelab.example/events/panel" },
     location:{ "@type":"Place", name:"Atlanta Arts Center", address:{ "@type":"PostalAddress", streetAddress:"100 Art Way", addressLocality:"Atlanta", addressRegion:"GA" } },
@@ -1141,6 +1141,68 @@ test("Eventbrite discovers exact child pages from nested ItemList JSON-LD", asyn
       { ...db.prepare("SELECT source_event_id,starts_at,ends_at,verification_state FROM calendar_candidates WHERE source_event_id='eventbrite-654321'").get() },
       { source_event_id:"eventbrite-654321", starts_at:"2026-11-06T18:00:00-05:00", ends_at:"2026-11-06T20:00:00-05:00", verification_state:"verified" },
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a pasted Eventbrite SocialEvent uses structured data without Browser extraction", async () => {
+  const db = database();
+  const eventUrl = "https://www.eventbrite.com/e/4-years-of-gas-tickets-1999045571116";
+  const sourceHtml = `<script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org", "@type":"SocialEvent", name:"4 YEARS OF G.A.S",
+    description:"Join Gallery Anderson Smith for our fourth anniversary.", url:eventUrl,
+    eventStatus:"https://schema.org/EventScheduled",
+    location:{
+      "@type":"Place", name:"Gallery Anderson Smith",
+      address:{
+        "@type":"PostalAddress", streetAddress:"1401 Peachtree Street Northeast, #Ste. A200, Atlanta, GA 30309",
+        addressLocality:"Atlanta", addressRegion:"GA", addressCountry:"US",
+      },
+    },
+    organizer:{
+      "@type":"Organization", name:"Anderson Smith",
+      url:"https://www.eventbrite.com/o/anderson-smith-29451319151",
+    },
+    eventAttendanceMode:"https://schema.org/OfflineEventAttendanceMode",
+    startDate:"2026-09-18T19:00:00-04:00", endDate:"2026-09-18T22:00:00-04:00",
+    offers:[{
+      "@type":"AggregateOffer", lowPrice:"0.0", highPrice:"0.0", url:eventUrl,
+      availability:"https://schema.org/InStock", priceCurrency:"USD",
+    }],
+  })}</script>`;
+  let browserCalls = 0;
+  const browser = {
+    async quickAction() {
+      browserCalls += 1;
+      throw new Error("Browser extraction should not run when Eventbrite exposes SocialEvent JSON-LD.");
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), eventUrl);
+    return new Response(sourceHtml, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const response = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }),
+      env(db, { BROWSER:browser }),
+    );
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.deepEqual(payload.extraction, { retrieval:"static", browserMs:0, adapter:"eventbrite" });
+    assert.equal(browserCalls, 0);
+    assert.deepEqual(
+      { ...db.prepare(
+        `SELECT source_event_id,title,status,verification_state,starts_at,ends_at,source_url,ticket_url
+         FROM calendar_candidates WHERE id=?`,
+      ).get(payload.candidate.id) },
+      {
+        source_event_id:"eventbrite-1999045571116", title:"4 YEARS OF G.A.S", status:"candidate", verification_state:"verified",
+        starts_at:"2026-09-18T19:00:00-04:00", ends_at:"2026-09-18T22:00:00-04:00", source_url:eventUrl, ticket_url:eventUrl,
+      },
+    );
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payload.candidate.id).count, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2986,8 +3048,8 @@ test("related links and event media remain private until their individual public
   const bucket = new MemoryBucket();
   await bucket.put("calendar/test-flyer.png", new Uint8Array([137,80,78,71]), { httpMetadata:{ contentType:"image/png" } });
   db.prepare(`INSERT INTO media_assets
-    (id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
-    VALUES('calendar-test-flyer','calendar/test-flyer.png','test-flyer.png','image/png',4,'Private flyer','internal','not-required','active','test',datetime('now'),datetime('now'),'hidden')`).run();
+    (id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('calendar-test-flyer','calendar/test-flyer.png','test-flyer.png','image/png',4,'Private flyer','internal','active','test',datetime('now'),datetime('now'),'hidden')`).run();
   const runtime = env(db, { SUBMISSION_FILES:bucket });
 
   const saved = await handleCalendarAdminApi(request("/api/admin/calendar/candidates/cal_candidate_sound_vision", {
@@ -3028,10 +3090,10 @@ test("related links and event media remain private until their individual public
 test("invalid and oversized flyer selections fail safely without publishing media", async () => {
   const db = database();
   db.exec(`
-    INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
-    VALUES('calendar-pdf','calendar/flyer.pdf','flyer.pdf','application/pdf',100,'internal','not-required','active','test',datetime('now'),datetime('now'),'hidden');
-    INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
-    VALUES('calendar-huge','calendar/huge.png','huge.png','image/png',15728641,'internal','not-required','active','test',datetime('now'),datetime('now'),'hidden');
+    INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('calendar-pdf','calendar/flyer.pdf','flyer.pdf','application/pdf',100,'internal','active','test',datetime('now'),datetime('now'),'hidden');
+    INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('calendar-huge','calendar/huge.png','huge.png','image/png',15728641,'internal','active','test',datetime('now'),datetime('now'),'hidden');
   `);
   for (const flyerMediaId of ["calendar-pdf","calendar-huge"]) {
     const response = await admin(db, "/candidates/cal_candidate_sound_vision", { method:"PATCH", body:{ flyerMediaId } });
@@ -3150,6 +3212,7 @@ test("candidate research stores citations and memories, then applies only select
           changes:[
             { id:"description-change", path:"factualDescription", label:"Description", valueJson:JSON.stringify("An interdisciplinary Atlanta Film Society program combining moving image, sound, art, and performance."), rationale:"The official event page supports the broader format description.", confidence:.94, citations:[sourceUrl] },
             { id:"venue-change", path:"venueName", label:"Venue", valueJson:JSON.stringify("LOOP Arts Center"), rationale:"The official listing provides a more specific venue label.", confidence:.91, citations:[sourceUrl] },
+            { id:"visitor-info-change", path:"planningNotes", label:"Visitor info", valueJson:JSON.stringify("Free parking is available in the south deck."), rationale:"The official event page provides visitor parking guidance.", confidence:.93, citations:[sourceUrl] },
             { id:"blocked-status", path:"status", label:"Status", valueJson:JSON.stringify("published"), rationale:"Unsupported lifecycle change.", confidence:1, citations:[sourceUrl] },
           ],
           eventMemories:["Always separate dated programs from the parent event."],
@@ -3168,25 +3231,31 @@ test("candidate research stores citations and memories, then applies only select
     assert.equal(requestBody.tools[0].type, "web_search");
     assert.equal(requestBody.tool_choice, "required");
     assert.equal(requestBody.text.format.type, "json_schema");
+    assert.ok(requestBody.text.format.schema.properties.changes.items.properties.path.enum.includes("planningNotes"));
     assert.match(requestBody.instructions, /untrusted data/i);
     assert.match(requestBody.instructions, /Unless a source explicitly restricts attendance, treat the event as open to the public/i);
     assert.match(requestBody.instructions, /competition eligibility is separate from audience attendance/i);
+    assert.match(requestBody.instructions, /parking, transit, entrance, arrival, and wayfinding guidance in planningNotes/i);
     const result = await response.json();
     const proposal = result.research.proposals[0];
-    assert.deepEqual(proposal.changes.map((change) => change.id), ["description-change","venue-change"]);
+    assert.deepEqual(proposal.changes.map((change) => change.id), ["description-change","venue-change","visitor-info-change"]);
     assert.equal(db.prepare("SELECT factual_description FROM calendar_candidates WHERE id=?").get(candidateId).factual_description, originalDescription);
+    assert.equal(db.prepare("SELECT planning_notes FROM calendar_candidates WHERE id=?").get(candidateId).planning_notes, "");
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_research_rules WHERE scope='event' AND status='active'").get().count, 1);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_research_rules WHERE scope='source' AND status='pending'").get().count, 1);
 
     const applied = await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/proposals/${proposal.id}/apply`, {
-      method:"POST", admin:true, body:{ changeIds:["description-change"] },
+      method:"POST", admin:true, body:{ changeIds:["description-change","visitor-info-change"] },
     }), runtime);
     assert.equal(applied.status, 200, await applied.clone().text());
     const appliedPayload = await applied.json();
     assert.equal(appliedPayload.proposal.state, "partially_applied");
     assert.equal(appliedPayload.candidate.factualDescription, "An interdisciplinary Atlanta Film Society program combining moving image, sound, art, and performance.");
+    assert.equal(appliedPayload.candidate.planningNotes, "Free parking is available in the south deck.");
     assert.equal(appliedPayload.candidate.venueName, "LOOP");
     assert.ok(appliedPayload.candidate.pendingRevisionId);
+    const revisionChanges = JSON.parse(db.prepare("SELECT change_set_json FROM calendar_candidate_revisions WHERE id=?").get(appliedPayload.candidate.pendingRevisionId).change_set_json);
+    assert.deepEqual(revisionChanges.map((change) => change.field), ["factualDescription","planningNotes"]);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidateId).count, 0);
 
     const sourceRule = result.research.rules.find((rule) => rule.scope === "source");
@@ -3313,8 +3382,8 @@ test("permanent published deletion clears feeds and only removes orphaned Scout 
   ];
   for (const [mediaId,storageKey] of mediaRows) {
     db.prepare(`INSERT INTO media_assets
-      (id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
-      VALUES (?,?,?,'image/jpeg',4,?,'internal','not-required','active','calendar-scout',datetime('now'),datetime('now'),'hidden')`
+      (id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,state,created_by,created_at,updated_at,public_presentation)
+      VALUES (?,?,?,'image/jpeg',4,?,'internal','active','calendar-scout',datetime('now'),datetime('now'),'hidden')`
     ).run(mediaId,storageKey,"flyer.jpg",`${mediaId} flyer`);
     await bucket.put(storageKey,new Uint8Array([255,216,255,217]));
     db.prepare(`INSERT INTO calendar_candidate_media

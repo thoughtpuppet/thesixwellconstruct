@@ -7,14 +7,16 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (file) => readFile(path.join(root, file), "utf8");
 
-test("Archive index exposes the guide at the top of the explorer", async () => {
+test("Archive index exposes the guide before the explorer", async () => {
   const source = await read("js/archive-public.js");
-  const heroStart = source.indexOf('<section class="archive-hero');
-  const heroEnd = source.indexOf("</section>", heroStart);
-  const guideLink = source.indexOf('href="/archive/guide/"', heroStart);
+  const resourcesStart = source.indexOf('<section class="archive-search-panel');
+  const resourcesEnd = source.indexOf("</section>", resourcesStart);
+  const explorerStart = source.indexOf('<section class="archive-explorer');
+  const guideLink = source.indexOf('href="/archive/guide/"', resourcesStart);
 
-  assert.ok(heroStart >= 0 && heroEnd > heroStart, "archive explorer hero must exist");
-  assert.ok(guideLink > heroStart && guideLink < heroEnd, "Archive Guide link must appear inside the top hero");
+  assert.ok(resourcesStart >= 0 && resourcesEnd > resourcesStart, "archive resources panel must exist");
+  assert.ok(guideLink > resourcesStart && guideLink < resourcesEnd, "Archive Guide link must appear inside the top resources panel");
+  assert.ok(guideLink < explorerStart, "Archive Guide link must appear before the explorer");
 });
 
 test("Archive Guide explains the live catalogue and comparison system", async () => {
@@ -29,7 +31,7 @@ test("Archive Guide explains the live catalogue and comparison system", async ()
   assert.match(html, /Materials and documentation/);
   assert.match(html, /Archive dossier/);
   assert.match(html, /Digital asset/);
-  assert.match(html, /separate privacy, consent, public-presentation, and transcript controls/);
+  assert.match(html, /separate privacy, public-presentation, and transcript controls/);
   assert.match(html, /ART-004/);
   assert.match(html, /Roman numerals/);
   assert.match(html, /Cultural object/);
@@ -108,7 +110,7 @@ test("Archive Guide keeps creative state separate from publication controls", as
   assert.match(html, /Source-material publication/);
   assert.match(html, /Documentation visibility/);
   assert.match(html, /Presentation/);
-  assert.match(html, /Consent/);
+  assert.doesNotMatch(html, /Consent/);
   assert.match(html, /Inline note text is visible/);
   assert.match(html, /Public client correspondence rule/);
   assert.match(html, /Contextual Event records are exempt/);

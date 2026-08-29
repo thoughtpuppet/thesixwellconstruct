@@ -217,6 +217,7 @@
     var descriptionClass = options.detail ? "hero-descriptor calendar-event-description" : "calendar-event-description is-collapsed";
     var descriptionToggle = options.detail ? '' : '<button class="calendar-description-toggle" type="button" data-description-toggle aria-controls="' + descriptionId + '" aria-expanded="false" hidden>See more</button>';
     var description = cleanDescription ? '<p class="' + descriptionClass + '" id="' + descriptionId + '">' + escapeHtml(cleanDescription) + '</p>' + descriptionToggle : '';
+    var planningNote = String((event.planning || {}).notes || "").trim();
     var parent = event.isOccurrence ? '<p class="calendar-event-series">Part of / ' + (event.parentDetailUrl ? '<a href="' + escapeHtml(event.parentDetailUrl) + '" data-calendar-detail-link>' + escapeHtml(event.parentTitle) + '</a>' : escapeHtml(event.parentTitle)) + ' / ' + escapeHtml(OCCURRENCE_LABELS[event.occurrenceType] || "Related Program") + '</p>' : '';
     var viewAction = includeViewEvent && event.detailUrl ? '<a href="' + escapeHtml(event.detailUrl) + '" data-calendar-detail-link>View event</a>' : '';
     var officialAction = officialUrl ? '<a href="' + escapeHtml(officialUrl) + '">Official details</a>' : '';
@@ -242,6 +243,7 @@
       (ticketNote ? '<p class="calendar-event-ticket"><strong>Tickets / </strong>' + escapeHtml(ticketNote) + '</p>' : '') +
       (event.visitingHoursLabel ? '<p class="calendar-event-hours"><strong>Gallery hours / </strong>' + escapeHtml(event.visitingHoursLabel) + (event.visitingHoursNote ? ' / ' + escapeHtml(event.visitingHoursNote) : '') + '</p>' : '') +
       description +
+      (planningNote ? '<p class="calendar-event-planning"><strong>Visitor info / </strong>' + escapeHtml(planningNote) + '</p>' : '') +
       '<div class="calendar-event-facts">' +
         (event.organizer ? '<span><strong>organizer:</strong> ' + escapeHtml(event.organizer) + '</span>' : '') +
         (event.venueName ? '<span><strong>venue:</strong> ' + escapeHtml(event.venueName) + '</span>' : '') +

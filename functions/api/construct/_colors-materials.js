@@ -15,6 +15,7 @@ const RECIPE_KINDS = new Set(["raw-pigment","art-paint","tattoo-ink","medium-dil
 const STATES = new Set(["draft","published","archived"]);
 const OPTICAL_EFFECTS = new Set(["metallic","fluorescent","pearlescent","iridescent","interference"]);
 const GEOMETRY_TYPES = new Set(["polygon","polyline","path","rect","circle","ellipse"]);
+const VISUAL_FAMILY_SLUGS = new Set(["black","gray","white","cream","beige","tan","brown","red","orange","yellow","gold","ochre","green","teal","turquoise","cyan","blue","indigo","purple","pink","silver"]);
 
 function publicSql(alias) {
   return `${alias}.publication_state='published' AND ${alias}.public_visible=1`;
@@ -33,6 +34,44 @@ function nullableNumber(value) {
   if (value === "" || value === null || value === undefined) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizedSrgbHex(value) {
+  const match = /^#?([0-9a-f]{6})$/i.exec(text(value, 20));
+  return match ? `#${match[1].toUpperCase()}` : "";
+}
+
+function srgbHexToReferenceProfile(value) {
+  const srgbHex = normalizedSrgbHex(value);
+  if (!srgbHex) return null;
+  const encoded = [1,3,5].map((offset) => parseInt(srgbHex.slice(offset, offset + 2), 16) / 255);
+  const [red,green,blue] = encoded.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  const xyz = [
+    0.4124564*red + 0.3575761*green + 0.1804375*blue,
+    0.2126729*red + 0.7151522*green + 0.072175*blue,
+    0.0193339*red + 0.119192*green + 0.9503041*blue,
+  ];
+  const epsilon = 216/24389;
+  const kappa = 24389/27;
+  const labCurve = (channel) => channel > epsilon ? Math.cbrt(channel) : (kappa*channel + 16)/116;
+  const [fx,fy,fz] = [xyz[0]/0.95047,xyz[1],xyz[2]/1.08883].map(labCurve);
+  const linearL = Math.cbrt(0.4122214708*red + 0.5363325363*green + 0.0514459929*blue);
+  const linearM = Math.cbrt(0.2119034982*red + 0.6806995451*green + 0.1073969566*blue);
+  const linearS = Math.cbrt(0.0883024619*red + 0.2817188376*green + 0.6299787005*blue);
+  const okL = 0.2104542553*linearL + 0.793617785*linearM - 0.0040720468*linearS;
+  const okA = 1.9779984951*linearL - 2.428592205*linearM + 0.4505937099*linearS;
+  const okB = 0.0259040371*linearL + 0.7827717662*linearM - 0.808675766*linearS;
+  const chroma = Math.hypot(okA,okB);
+  const round = (number, places) => Number(number.toFixed(places));
+  return {
+    srgb_hex: srgbHex,
+    lab_l: round(116*fy - 16, 4),
+    lab_a: round(500*(fx - fy), 4),
+    lab_b: round(200*(fy - fz), 4),
+    oklch_l: round(okL, 6),
+    oklch_c: round(chroma, 6),
+    oklch_h: chroma < 1e-7 ? null : round((Math.atan2(okB,okA)*180/Math.PI + 360)%360, 3),
+  };
 }
 
 function cleanSlug(value) {
@@ -433,7 +472,7 @@ export async function projectPublicPalette(database,{entityId="",stateId="",cata
       JOIN archive_dossiers ad ON ad.entity_id=aov.entity_id AND ad.state='published' AND ad.public_visible=1
       JOIN content_entities ce ON ce.id=ad.entity_id AND ce.visibility='public'
       JOIN media_assets m ON m.id=pm.source_media_id AND m.state='active' AND m.privacy='public'
-        AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+        AND m.public_presentation='inline'
       WHERE ${condition} AND pm.publication_state='published' AND pm.public_visible=1
       ORDER BY aov.sort_order,aos.sort_order,pm.created_at`).bind(target),
   ]);
@@ -499,7 +538,7 @@ async function publicPaletteMap(request, env, mapId, svg = false) {
     JOIN archive_dossiers ad ON ad.entity_id=aov.entity_id AND ad.state='published' AND ad.public_visible=1
     JOIN content_entities ce ON ce.id=ad.entity_id AND ce.visibility='public'
     JOIN media_assets m ON m.id=pm.source_media_id AND m.state='active' AND m.privacy='public'
-      AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+      AND m.public_presentation='inline'
     WHERE (pm.id=? OR pm.state_id=?) AND ${publicSql("pm")}
     ORDER BY pm.reviewed_at DESC LIMIT 1`).bind(mapId, mapId).first();
   if (!map) return failure("Published palette map not found.", 404);
@@ -1250,6 +1289,97 @@ async function adminFamilyAssignments(request,database,recordId="") {
   return failure("Method not allowed.",405);
 }
 
+function referenceColorSelect(where="") {
+  return `SELECT reference.*,family.name family_name,family.slug family_slug,
+      family.swatch_hex family_swatch_hex,
+      CASE WHEN source.id IS NULL THEN 0 ELSE 1 END source_retained
+    FROM archive_color_references reference
+    JOIN archive_color_families family ON family.id=reference.family_id
+    LEFT JOIN media_assets source ON source.id=reference.source_media_id
+    ${where}
+    ORDER BY reference.updated_at DESC,reference.name,reference.id`;
+}
+
+async function referenceColorById(database,recordId) {
+  return database.prepare(referenceColorSelect("WHERE reference.id=?")).bind(recordId).first();
+}
+
+async function adminReferenceColors(request,database,recordId="") {
+  if(request.method==="GET"){
+    if(recordId){
+      const record=await referenceColorById(database,recordId);
+      return record?json({record}):failure("Reference color not found.",404);
+    }
+    const requestedState=new URL(request.url).searchParams.get("state")||"active";
+    if(!["active","archived","all"].includes(requestedState))return failure("Choose active, archived, or all reference colors.");
+    const statement=requestedState==="all"
+      ?database.prepare(referenceColorSelect())
+      :database.prepare(referenceColorSelect("WHERE reference.state=?")).bind(requestedState);
+    const records=(await statement.all()).results||[];
+    return json({records,count:records.length,state:requestedState});
+  }
+  const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+  if(request.method==="POST"&&!recordId){
+    const profile=srgbHexToReferenceProfile(body.srgb_hex);
+    if(!profile)return failure("Choose a six-digit sRGB color.");
+    const familyId=text(body.family_id,200);
+    const family=await database.prepare("SELECT id,slug FROM archive_color_families WHERE id=? AND publication_state<>'archived'").bind(familyId).first();
+    if(!family||!VISUAL_FAMILY_SLUGS.has(family.slug))return failure("Choose one active atomic visual color family.",409);
+    const sampleMethod=["palette","point"].includes(body.sample_method)?body.sample_method:"";
+    if(!sampleMethod)return failure("Choose palette or point sampling.");
+    const sampleX=nullableNumber(body.sample_x),sampleY=nullableNumber(body.sample_y);
+    if(sampleMethod==="palette"&&(sampleX!==null||sampleY!==null))return failure("Automatic palette samples cannot include point coordinates.");
+    if(sampleMethod==="point"&&(sampleX===null||sampleY===null||sampleX<0||sampleX>1||sampleY<0||sampleY>1))return failure("Point samples need normalized image coordinates between zero and one.");
+    const sourceMediaId=text(body.source_media_id,200)||null;
+    let retainedSource=null;
+    if(sourceMediaId){
+      retainedSource=await database.prepare(`SELECT id,original_filename FROM media_assets
+        WHERE id=? AND state='active' AND privacy='private' AND public_presentation='hidden'`).bind(sourceMediaId).first();
+      if(!retainedSource)return failure("A retained source must be active private hidden media.",409);
+    }
+    const recordId=text(body.id,200)||id("reference-color");
+    const values={
+      name:text(body.name,240)||`Sample ${profile.srgb_hex}`,
+      ...profile,
+      family_id:familyId,
+      sample_method:sampleMethod,
+      sample_x:sampleX,
+      sample_y:sampleY,
+      source_media_id:sourceMediaId,
+      source_filename:text(retainedSource?.original_filename||body.source_filename,255),
+      notes:text(body.notes,4000),
+      state:"active",
+      created_by:"studio",
+      updated_by:"studio",
+    };
+    try{
+      await writeRecord(database,"archive_color_references",recordId,values,true);
+      return json({record:await referenceColorById(database,recordId)},{status:201});
+    }catch(error){return failure(error.message,409)}
+  }
+  if(request.method==="PATCH"&&recordId){
+    const before=await database.prepare("SELECT * FROM archive_color_references WHERE id=?").bind(recordId).first();
+    if(!before)return failure("Reference color not found.",404);
+    const immutableFields=["srgb_hex","sample_method","sample_x","sample_y","source_media_id","source_filename","lab_l","lab_a","lab_b","oklch_l","oklch_c","oklch_h"];
+    if(immutableFields.some((field)=>Object.prototype.hasOwnProperty.call(body,field)))return failure("Sampled color values and source provenance are immutable. Save a new reference instead.",409);
+    const familyId=text(body.family_id??before.family_id,200);
+    const family=await database.prepare("SELECT id,slug FROM archive_color_families WHERE id=? AND publication_state<>'archived'").bind(familyId).first();
+    if(!family||!VISUAL_FAMILY_SLUGS.has(family.slug))return failure("Choose one active atomic visual color family.",409);
+    const state=["active","archived"].includes(body.state)?body.state:before.state;
+    try{
+      await writeRecord(database,"archive_color_references",recordId,{
+        name:text(body.name??before.name,240)||before.name,
+        family_id:familyId,
+        notes:text(body.notes??before.notes,4000),
+        state,
+        updated_by:"studio",
+      });
+      return json({record:await referenceColorById(database,recordId)});
+    }catch(error){return failure(error.message,409)}
+  }
+  return failure("Method not allowed.",405);
+}
+
 async function adminPrivateAssets(request,database,kind,recordId="") {
   const config=kind==="batches"?{
     table:"archive_material_batches",parent:"formulation_id",
@@ -1426,14 +1556,14 @@ async function adminDossierPalette(request,database,stateId="",part="",recordId=
     if(request.method==="POST"&&!recordId){
       const mediaId=text(body.source_media_id,200),media=await database.prepare("SELECT id,width,height,mime_type FROM media_assets WHERE id=?").bind(mediaId).first();if(!media)return failure("Source media not found.",404);if(!String(media.mime_type||"").startsWith("image/"))return failure("Placement maps require an image source.",409);
       const publication=STATES.has(body.publication_state)?body.publication_state:"draft";
-      if(publication==="published"){const eligible=await database.prepare("SELECT 1 ok FROM media_assets WHERE id=? AND state='active' AND privacy='public' AND consent_status IN ('not-required','granted') AND public_presentation='inline' AND mime_type LIKE 'image/%'").bind(mediaId).first();if(!eligible)return failure("The source image must be publicly eligible before this map can publish.",409)}
+      if(publication==="published"){const eligible=await database.prepare("SELECT 1 ok FROM media_assets WHERE id=? AND state='active' AND privacy='public' AND public_presentation='inline' AND mime_type LIKE 'image/%'").bind(mediaId).first();if(!eligible)return failure("The source image must be publicly eligible before this map can publish.",409)}
       const values={state_id:stateId,source_media_id:mediaId,title:text(body.title,240),width:Math.max(1,number(body.width,media.width||1)),height:Math.max(1,number(body.height,media.height||1)),viewbox_x:number(body.viewbox_x,0),viewbox_y:number(body.viewbox_y,0),overlay_opacity:Math.min(1,Math.max(0,number(body.overlay_opacity,.55))),publication_state:publication,public_visible:bool(body.public_visible),reviewed_at:publication==="published"?(text(body.reviewed_at,80)||new Date().toISOString()):null};
       return json({record:await writeRecord(database,"archive_palette_maps",text(body.id,200)||id("palette-map"),values,true)},{status:201});
     }
     if(request.method==="PATCH"&&recordId){
       const before=await database.prepare("SELECT * FROM archive_palette_maps WHERE id=? AND state_id=?").bind(recordId,stateId).first();if(!before)return failure("Palette map not found.",404);
       const publication=STATES.has(body.publication_state)?body.publication_state:before.publication_state;
-      if(publication==="published"){const eligible=await database.prepare("SELECT 1 ok FROM media_assets WHERE id=? AND state='active' AND privacy='public' AND consent_status IN ('not-required','granted') AND public_presentation='inline' AND mime_type LIKE 'image/%'").bind(before.source_media_id).first();if(!eligible)return failure("The source image is no longer publicly eligible. Review a new map/image pairing.",409)}
+      if(publication==="published"){const eligible=await database.prepare("SELECT 1 ok FROM media_assets WHERE id=? AND state='active' AND privacy='public' AND public_presentation='inline' AND mime_type LIKE 'image/%'").bind(before.source_media_id).first();if(!eligible)return failure("The source image is no longer publicly eligible. Review a new map/image pairing.",409)}
       const values={title:text(body.title??before.title,240),overlay_opacity:Math.min(1,Math.max(0,number(body.overlay_opacity,before.overlay_opacity))),publication_state:publication,public_visible:bool(body.public_visible??before.public_visible),reviewed_at:publication==="published"?(text(body.reviewed_at??before.reviewed_at,80)||new Date().toISOString()):null};
       return json({record:await writeRecord(database,"archive_palette_maps",recordId,values)});
     }
@@ -1502,6 +1632,8 @@ export async function handleArchiveColorMaterialsAdmin(request, env, path) {
   if(family)return adminFamilies(request,database,family[1]?decodeURIComponent(family[1]):"");
   const assignment=path.match(/^\/api\/admin\/archive-color-materials\/family-assignments(?:\/([^/]+))?$/);
   if(assignment)return adminFamilyAssignments(request,database,assignment[1]?decodeURIComponent(assignment[1]):"");
+  const referenceColor=path.match(/^\/api\/admin\/archive-color-materials\/reference-colors(?:\/([^/]+))?$/);
+  if(referenceColor)return adminReferenceColors(request,database,referenceColor[1]?decodeURIComponent(referenceColor[1]):"");
   const privateAsset=path.match(/^\/api\/admin\/archive-color-materials\/(batches|equipment-assets)(?:\/([^/]+))?$/);
   if(privateAsset)return adminPrivateAssets(request,database,privateAsset[1],privateAsset[2]?decodeURIComponent(privateAsset[2]):"");
   if(path==="/api/admin/archive-color-materials"&&request.method==="GET")return json(await librarySnapshot(database));
@@ -1510,4 +1642,4 @@ export async function handleArchiveColorMaterialsAdmin(request, env, path) {
   return null;
 }
 
-export { ciede2000, runVisualColorAnalysisPass };
+export { ciede2000, runVisualColorAnalysisPass, srgbHexToReferenceProfile };

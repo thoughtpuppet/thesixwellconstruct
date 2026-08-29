@@ -66,9 +66,9 @@ test("public catalogue survives Shopify failure and hides private Merch drafts",
 
 test("Studio product media supplies the ordered public gallery and admin editor",async()=>{
   const database=migratedDatabase();
-  database.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,alt_text,privacy,consent_status,state,created_by,created_at,updated_at)
-    VALUES('media-merch-primary','construct/media-merch-primary/front.webp','front.webp','image/webp','Front view','public','not-required','active','test',datetime('now'),datetime('now')),
-      ('media-merch-gallery','construct/media-merch-gallery/back.webp','back.webp','image/webp','Back view','public','not-required','active','test',datetime('now'),datetime('now'))`).run();
+  database.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,alt_text,privacy,state,created_by,created_at,updated_at)
+    VALUES('media-merch-primary','construct/media-merch-primary/front.webp','front.webp','image/webp','Front view','public','active','test',datetime('now'),datetime('now')),
+      ('media-merch-gallery','construct/media-merch-gallery/back.webp','back.webp','image/webp','Back view','public','active','test',datetime('now'),datetime('now'))`).run();
   database.prepare(`INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at)
     VALUES('merch-maze-puffer-jacket','media-merch-gallery','gallery',2,1,'Back of the MAZE puffer jacket','',datetime('now')),
       ('merch-maze-puffer-jacket','media-merch-primary','primary',1,1,'Front of the MAZE puffer jacket','',datetime('now'))`).run();
@@ -99,7 +99,7 @@ test("Studio retains an existing primary while later upload selections append ga
   const database=migratedDatabase(),bucket=new MemoryBucket(),env={SUBMISSIONS_DB:new LocalD1(database),SUBMISSIONS_ADMIN_TOKEN:"studio-secret",SUBMISSION_FILES:bucket};
   const created=await handleAdminMerchApi(request("/api/admin/merch-workflow","POST",{title:"Three View Product",slug:"three-view-product",availability_state:"coming_soon"},true),env);
   assert.equal(created.status,201,await created.clone().text());const productId=(await created.json()).record.id;
-  async function upload(filename,bytes){const form=new FormData();form.set("file",new File([new Uint8Array(bytes)],filename,{type:"image/png"}));form.set("alt_text",filename);form.set("privacy","public");form.set("consent_status","not-required");form.set("public_presentation","inline");const response=await handleConstructApi(new Request("https://example.test/api/admin/media",{method:"POST",headers:{authorization:"Bearer studio-secret"},body:form}),env);assert.equal(response.status,201,await response.clone().text());return(await response.json()).record.id}
+  async function upload(filename,bytes){const form=new FormData();form.set("file",new File([new Uint8Array(bytes)],filename,{type:"image/png"}));form.set("alt_text",filename);form.set("privacy","public");form.set("public_presentation","inline");const response=await handleConstructApi(new Request("https://example.test/api/admin/media",{method:"POST",headers:{authorization:"Bearer studio-secret"},body:form}),env);assert.equal(response.status,201,await response.clone().text());return(await response.json()).record.id}
   async function attach(mediaId,role,sortOrder){const response=await handleConstructApi(request(`/api/admin/entities/${productId}/media`,"POST",{media_id:mediaId,role,sort_order:sortOrder,public_visible:true,alt_text_override:`${role} view`},true),env);assert.equal(response.status,201,await response.clone().text())}
   const primary=await upload("front.png",[1,2,3]);await attach(primary,"primary",1);
   const primaryBefore=database.prepare("SELECT media_id,role,sort_order FROM entity_media WHERE entity_id=? AND role='primary'").get(productId);
@@ -161,6 +161,10 @@ test("Studio creation never requires or invents a Shopify handle",async()=>{
   const response=await handleAdminMerchApi(request("/api/admin/merch-workflow","POST",{title:"Future Object",slug:"future-object",availability_state:"coming_soon"},true),env);
   assert.equal(response.status,201,await response.clone().text());
   const record=(await response.json()).record;assert.equal(record.shopify_handle,null);assert.equal(record.state,"draft");assert.equal(record.route,"/merch/future-object/");
+  assert.deepEqual(
+    {...database.prepare("SELECT entity_id,archive_slug,state,public_visible,published_at FROM archive_dossiers WHERE entity_id=?").get(record.id)},
+    {entity_id:record.id,archive_slug:"future-object",state:"draft",public_visible:0,published_at:null},
+  );
 });
 
 test("shared Merch routes and alert forms stay contractually connected",()=>{
@@ -171,9 +175,10 @@ test("shared Merch routes and alert forms stay contractually connected",()=>{
   assert.doesNotMatch(detail,/<style>/);assert.doesNotMatch(detail,/Marbles\. Print/);assert.match(detail,/class="product-image"/);assert.match(detail,/class="product-details"/);assert.match(detail,/id="launchAlertSlot"/);
   assert.match(detailCss,/grid-template-columns:1fr 1fr/);assert.match(detailCss,/\.product-image\s*\{/);assert.match(detailCss,/position:sticky; top:73px/);assert.match(detailCss,/\.origin-inner\s*\{/);assert.match(detailCss,/\.cart-drawer\s*\{/);
   assert.doesNotMatch(detailCss,/\.merch-top/);assert.doesNotMatch(detailCss,/\.product-copy/);
+  assert.doesNotMatch(manager,/consent_status|consentStatus|\bConsent\b/);
   assert.match(alertsCss,/grid-template-columns:1fr!important/);assert.match(alertsCss,/--src-color-bright/);assert.match(alertsCss,/input\[type="email"\].*outline:0/);assert.match(alertsCss,/\.launch-alert-toggle\{display:inline-flex/);assert.match(alertsCss,/aria-expanded="true".*border-top-color:var\(--color-accent/);assert.match(merchApi,/AbortSignal\.timeout\(4000\)/);
   assert.match(catalog,/--src-color-bright:\$\{source\.brightColor\}/);assert.match(detailScript,/SOURCE_BRIGHT_TOKENS/);
-  assert.match(manager,/name="product_images"/);assert.match(manager,/uploadProductImages/);assert.match(manager,/data-merch-media-action="primary"/);assert.match(manager,/data-merch-pending-files/);assert.match(manager,/data-merch-upload-selected/);assert.match(manager,/data-merch-pending-remove/);assert.match(manager,/stageProductImages/);assert.match(manager,/updatePendingStatus/);assert.match(manager,/\["image_url","Primary image URL","image-reference"\]/);assert.match(manager,/function imageReference/);assert.match(manager,/same-site path or a full http\(s\) URL/);assert.doesNotMatch(manager,/\["image_url","Primary image URL","url"\]/);assert.match(manager,/20260813-merch-image-reference/);assert.match(constructManager,/merch-manager\.js\?v=20260813-merch-image-reference/);
+  assert.match(manager,/name="product_images"/);assert.match(manager,/uploadProductImages/);assert.match(manager,/data-merch-media-action="primary"/);assert.match(manager,/data-merch-pending-files/);assert.match(manager,/data-merch-upload-selected/);assert.match(manager,/data-merch-pending-remove/);assert.match(manager,/stageProductImages/);assert.match(manager,/updatePendingStatus/);assert.match(manager,/\["image_url","Primary image URL","image-reference"\]/);assert.match(manager,/function imageReference/);assert.match(manager,/same-site path or a full http\(s\) URL/);assert.doesNotMatch(manager,/\["image_url","Primary image URL","url"\]/);assert.match(manager,/20260813-merch-image-reference/);assert.match(constructManager,/merch-manager\.js\?v=20260828-editable-archive-records/);
   assert.match(catalog,/export function renderProductGallery/);assert.match(detailScript,/renderProductGallery\(product/);assert.match(detailScript,/\sproduct,\s/);
 });
 

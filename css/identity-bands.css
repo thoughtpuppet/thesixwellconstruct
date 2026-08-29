@@ -352,6 +352,10 @@
   margin-top: 22px;
 }
 
+[data-thoughtpuppet-public-links][hidden] {
+  display: none !important;
+}
+
 .brand-band .band-actions {
   justify-content: flex-start;
 }

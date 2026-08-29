@@ -154,7 +154,7 @@ function insertPortfolioItem(database, {
   id,
   state = "draft",
   projectType = "standard",
-  consent = "unknown",
+  primaryPublicVisible = false,
   coverImageRef = "primary",
 } = {}) {
   const visibility = state === "published" ? "public" : "internal";
@@ -163,12 +163,22 @@ function insertPortfolioItem(database, {
       (id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at)
     VALUES (?,'portfolio_item','node-tattoos',?,?, 'test','test',datetime('now'),datetime('now'))
   `).run(id, visibility, state === "published" ? 1 : 0);
-  database.prepare(`
-    INSERT INTO portfolio_items
-      (id,storage_key,original_filename,content_type,title,alt_text,state,sort_order,
-       cover_image_ref,project_type,primary_consent_status,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,1,?,?,?,datetime('now'),datetime('now'))
-  `).run(id, `portfolio/${id}.jpg`, `${id}.jpg`, "image/jpeg", `Tattoo ${id}`, `Tattoo ${id}`, state, coverImageRef, projectType, consent);
+  const currentColumns = new Set(database.prepare("PRAGMA table_info(portfolio_items)").all().map((column) => column.name));
+  if (currentColumns.has("primary_public_visible")) {
+    database.prepare(`
+      INSERT INTO portfolio_items
+        (id,storage_key,original_filename,content_type,title,alt_text,state,sort_order,
+         cover_image_ref,project_type,primary_public_visible,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,1,?,?,?,datetime('now'),datetime('now'))
+    `).run(id, `portfolio/${id}.jpg`, `${id}.jpg`, "image/jpeg", `Tattoo ${id}`, `Tattoo ${id}`, state, coverImageRef, projectType, primaryPublicVisible ? 1 : 0);
+  } else {
+    database.prepare(`
+      INSERT INTO portfolio_items
+        (id,storage_key,original_filename,content_type,title,alt_text,state,sort_order,
+         cover_image_ref,project_type,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,1,?,?,datetime('now'),datetime('now'))
+    `).run(id, `portfolio/${id}.jpg`, `${id}.jpg`, "image/jpeg", `Tattoo ${id}`, `Tattoo ${id}`, state, coverImageRef, projectType);
+  }
   database.prepare(`
     INSERT INTO portfolio_image_details
       (portfolio_item_id,image_ref,healing_state,image_role,timing_note,caption,created_at,updated_at)
@@ -179,7 +189,6 @@ function insertPortfolioItem(database, {
 function attachImage(database, itemId, {
   id,
   role = "result",
-  consent = "unknown",
   privacy = "internal",
   publicVisible = false,
   healingState = "unspecified",
@@ -188,9 +197,9 @@ function attachImage(database, itemId, {
 } = {}) {
   database.prepare(`
     INSERT INTO media_assets
-      (id,storage_key,original_filename,mime_type,alt_text,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
-    VALUES (?,?,?,?,?,?,?,?,'test',datetime('now'),datetime('now'),?)
-  `).run(id, `construct/${id}.jpg`, `${id}.jpg`, "image/jpeg", `${role} photograph`, privacy, consent, state, presentation);
+      (id,storage_key,original_filename,mime_type,alt_text,privacy,state,created_by,created_at,updated_at,public_presentation)
+    VALUES (?,?,?,?,?,?,?,'test',datetime('now'),datetime('now'),?)
+  `).run(id, `construct/${id}.jpg`, `${id}.jpg`, "image/jpeg", `${role} photograph`, privacy, state, presentation);
   database.prepare(`
     INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,created_at)
     VALUES (?,?,'gallery',1,?,datetime('now'))
@@ -214,14 +223,15 @@ function assignTattooStyles(database, entityId, values) {
   });
 }
 
-test("cover-up migration preserves published work and keeps new drafts permission-gated", () => {
-  const migration = "0044_portfolio_cover_up_documentation.sql";
-  const database = migratedDatabase({ before: migration });
+test("media publication visibility migrations preserve eligible work and remove consent columns", () => {
+  const visibilityMigration = "0185_media_publication_visibility.sql";
+  const removalMigration = "0186_remove_media_publication_consent.sql";
+  const database = migratedDatabase({ before: visibilityMigration });
   const baseInsert = (id, state) => database.prepare(`
     INSERT INTO portfolio_items
-      (id,storage_key,original_filename,content_type,title,alt_text,state,sort_order,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,1,datetime('now'),datetime('now'))
-  `).run(id, `portfolio/${id}.jpg`, `${id}.jpg`, "image/jpeg", id, id, state);
+      (id,storage_key,original_filename,content_type,title,alt_text,state,sort_order,primary_consent_status,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,1,?,datetime('now'),datetime('now'))
+  `).run(id, `portfolio/${id}.jpg`, `${id}.jpg`, "image/jpeg", id, id, state, state === "published" ? "granted" : "unknown");
   baseInsert("legacy-published", "published");
   baseInsert("legacy-draft", "draft");
   for (const id of ["legacy-published", "legacy-draft"]) {
@@ -231,30 +241,36 @@ test("cover-up migration preserves published work and keeps new drafts permissio
       VALUES (?,'primary','unspecified','','',datetime('now'),datetime('now'))
     `).run(id);
   }
-  database.exec(readFileSync(join(ROOT, "migrations", migration), "utf8"));
+  database.exec(readFileSync(join(ROOT, "migrations", visibilityMigration), "utf8"));
+  database.exec(readFileSync(join(ROOT, "migrations", removalMigration), "utf8"));
 
   assert.deepEqual({ ...database.prepare(`
-    SELECT project_type,primary_consent_status FROM portfolio_items WHERE id='legacy-published'
-  `).get() }, { project_type: "standard", primary_consent_status: "granted" });
-  assert.equal(database.prepare("SELECT primary_consent_status FROM portfolio_items WHERE id='legacy-draft'").get().primary_consent_status, "unknown");
+    SELECT project_type,primary_public_visible FROM portfolio_items WHERE id='legacy-published'
+  `).get() }, { project_type: "standard", primary_public_visible: 1 });
+  assert.equal(database.prepare("SELECT primary_public_visible FROM portfolio_items WHERE id='legacy-draft'").get().primary_public_visible, 0);
   assert.equal(database.prepare("SELECT image_role FROM portfolio_image_details WHERE portfolio_item_id='legacy-published'").get().image_role, "result");
+  assert.equal(database.prepare("PRAGMA table_info(portfolio_items)").all().some((column) => column.name === "primary_consent_status"), false);
+  assert.equal(database.prepare("PRAGMA table_info(media_assets)").all().some((column) => column.name === "consent_status"), false);
+  assert.equal(database.prepare("PRAGMA table_info(media_upload_sessions)").all().some((column) => column.name === "consent_status"), false);
 });
 
-test("public portfolio exposes only permitted media while Studio retains private documentation", async () => {
+test("public portfolio exposes only explicitly visible eligible media while Studio retains internal documentation", async () => {
   const database = migratedDatabase();
-  insertPortfolioItem(database, { id: "cover-public", state: "published", projectType: "cover_up", consent: "granted", coverImageRef: "result-public" });
-  attachImage(database, "cover-public", { id: "result-public", role: "result", consent: "granted", privacy: "public", publicVisible: true, healingState: "healed" });
-  attachImage(database, "cover-public", { id: "process-public", role: "process", consent: "not-required", privacy: "public", publicVisible: true });
-  attachImage(database, "cover-public", { id: "before-private", role: "before", consent: "unknown", privacy: "internal", publicVisible: false });
-  attachImage(database, "cover-public", { id: "before-denied", role: "before", consent: "denied", privacy: "public", publicVisible: true });
-  attachImage(database, "cover-public", { id: "detail-hidden", role: "detail", consent: "granted", privacy: "public", publicVisible: true, presentation: "hidden" });
-  attachImage(database, "cover-public", { id: "process-archived", role: "process", consent: "granted", privacy: "public", publicVisible: true, state: "archived" });
+  insertPortfolioItem(database, { id: "cover-public", state: "published", projectType: "cover_up", primaryPublicVisible: true, coverImageRef: "result-public" });
+  attachImage(database, "cover-public", { id: "result-public", role: "result", privacy: "public", publicVisible: true, healingState: "healed" });
+  attachImage(database, "cover-public", { id: "process-public", role: "process", privacy: "public", publicVisible: true });
+  attachImage(database, "cover-public", { id: "before-internal", role: "before", privacy: "internal", publicVisible: false });
+  attachImage(database, "cover-public", { id: "before-relationship-hidden", role: "before", privacy: "public", publicVisible: false });
+  attachImage(database, "cover-public", { id: "detail-hidden", role: "detail", privacy: "public", publicVisible: true, presentation: "hidden" });
+  attachImage(database, "cover-public", { id: "process-archived", role: "process", privacy: "public", publicVisible: true, state: "archived" });
 
   const adminResponse = await handlePortfolioApi(request("/api/admin/portfolio", { admin: true }), env(database));
   assert.equal(adminResponse.status, 200);
   const adminItem = (await adminResponse.json()).items.find((item) => item.id === "cover-public");
   assert.equal(adminItem.projectType, "cover_up");
-  assert.equal(adminItem.angles.find((image) => image.id === "before-private").consentStatus, "unknown");
+  assert.equal(adminItem.angles.find((image) => image.id === "before-internal").publicVisible, false);
+  assert.equal(adminItem.angles.find((image) => image.id === "before-internal").privacy, "internal");
+  assert.equal("consentStatus" in adminItem.angles.find((image) => image.id === "before-internal"), false);
 
   const publicResponse = await handlePortfolioApi(request("/api/portfolio/cover-public"), env(database));
   assert.equal(publicResponse.status, 200);
@@ -265,21 +281,28 @@ test("public portfolio exposes only permitted media while Studio retains private
   assert.equal("consentStatus" in publicItem.angles[0], false);
 
   const downgrade = await handlePortfolioApi(request("/api/admin/portfolio/cover-public/images/process-public", {
-    method: "PATCH", admin: true, body: { imageRole: "process", healingState: "unspecified", consentStatus: "denied" },
+    method: "PATCH", admin: true, body: { imageRole: "process", healingState: "unspecified", publicVisible: false },
   }), env(database));
   assert.equal(downgrade.status, 200);
-  assert.deepEqual({ ...database.prepare("SELECT privacy,consent_status FROM media_assets WHERE id='process-public'").get() }, { privacy: "private", consent_status: "denied" });
+  assert.equal(database.prepare("SELECT privacy FROM media_assets WHERE id='process-public'").get().privacy, "internal");
   assert.equal(database.prepare("SELECT public_visible FROM entity_media WHERE media_id='process-public'").get().public_visible, 0);
   const filteredAgain = await handlePortfolioApi(request("/api/portfolio/cover-public"), env(database));
   assert.deepEqual((await filteredAgain.json()).item.angles.map((image) => image.id), ["result-public"]);
 
-  const coverDowngrade = await handlePortfolioApi(request("/api/admin/portfolio/cover-public/images/result-public", {
+  const legacyKeyIgnored = await handlePortfolioApi(request("/api/admin/portfolio/cover-public/images/result-public", {
     method: "PATCH", admin: true, body: { imageRole: "result", healingState: "healed", consentStatus: "denied" },
+  }), env(database));
+  assert.equal(legacyKeyIgnored.status, 200);
+  assert.equal(database.prepare("SELECT privacy FROM media_assets WHERE id='result-public'").get().privacy, "public");
+  assert.equal(database.prepare("SELECT public_visible FROM entity_media WHERE media_id='result-public' AND role='gallery'").get().public_visible, 1);
+
+  const coverDowngrade = await handlePortfolioApi(request("/api/admin/portfolio/cover-public/images/result-public", {
+    method: "PATCH", admin: true, body: { imageRole: "result", healingState: "healed", publicVisible: false },
   }), env(database));
   assert.equal(coverDowngrade.status, 409);
 });
 
-test("portfolio project, image-role, healing, and consent enums reject unknown values", async () => {
+test("portfolio project, image-role, and healing enums reject unknown values", async () => {
   const database = migratedDatabase();
   insertPortfolioItem(database, { id: "enum-draft" });
   attachImage(database, "enum-draft", { id: "enum-image" });
@@ -290,9 +313,8 @@ test("portfolio project, image-role, healing, and consent enums reject unknown v
   assert.equal(response.status, 422);
 
   for (const body of [
-    { imageRole: "reference", healingState: "fresh", consentStatus: "unknown" },
-    { imageRole: "result", healingState: "old", consentStatus: "unknown" },
-    { imageRole: "result", healingState: "fresh", consentStatus: "approved" },
+    { imageRole: "reference", healingState: "fresh" },
+    { imageRole: "result", healingState: "old" },
   ]) {
     response = await handlePortfolioApi(request("/api/admin/portfolio/enum-draft/images/enum-image", {
       method: "PATCH", admin: true, body,
@@ -306,9 +328,9 @@ test("portfolio project, image-role, healing, and consent enums reject unknown v
   assert.throws(() => database.prepare("UPDATE portfolio_items SET project_type='standard' WHERE id='enum-draft'").run(), /before images require a cover-up portfolio project/);
 });
 
-test("a cover-up can publish with only its permitted primary result", async () => {
+test("a cover-up can publish with only its publicly included primary result", async () => {
   const database = migratedDatabase();
-  insertPortfolioItem(database, { id: "result-only", projectType: "cover_up", consent: "granted" });
+  insertPortfolioItem(database, { id: "result-only", projectType: "cover_up", primaryPublicVisible: true });
   const response = await handlePortfolioApi(request("/api/admin/portfolio/result-only", {
     method: "PATCH", admin: true, body: { state: "published" },
   }), env(database));
@@ -316,7 +338,7 @@ test("a cover-up can publish with only its permitted primary result", async () =
   assert.equal(database.prepare("SELECT state FROM portfolio_items WHERE id='result-only'").get().state, "published");
 });
 
-test("role-based additional uploads are atomic, private, and described for their role", async () => {
+test("role-based additional uploads are atomic, described, and default visibility by role", async () => {
   const database = migratedDatabase();
   const bucket = new MemoryBucket();
   insertPortfolioItem(database, { id: "angle-cover", projectType: "cover_up" });
@@ -347,53 +369,60 @@ test("role-based additional uploads are atomic, private, and described for their
   assert.equal(response.status, 201);
   const image = (await response.json()).image;
   assert.equal(image.imageRole, "before");
-  assert.equal(image.consentStatus, "unknown");
+  assert.equal(image.publicVisible, false);
+  assert.equal("consentStatus" in image, false);
   assert.match(image.altText, /^Before \/ existing tattoo photograph/);
-  assert.deepEqual({ ...database.prepare("SELECT privacy,consent_status,state,public_presentation,alt_text FROM media_assets WHERE id=?").get(image.id) }, {
-    privacy: "private",
-    consent_status: "unknown",
+  assert.deepEqual({ ...database.prepare("SELECT privacy,state,public_presentation,alt_text FROM media_assets WHERE id=?").get(image.id) }, {
+    privacy: "internal",
     state: "active",
     public_presentation: "inline",
     alt_text: image.altText,
   });
   assert.equal(database.prepare("SELECT public_visible FROM entity_media WHERE entity_id='angle-cover' AND media_id=? AND role='gallery'").get(image.id).public_visible, 0);
   assert.equal(database.prepare("SELECT image_role FROM portfolio_image_details WHERE portfolio_item_id='angle-cover' AND image_ref=?").get(image.id).image_role, "before");
-  assert.equal(bucket.objects.size, 2);
+
+  response = await upload("angle-cover", "detail");
+  assert.equal(response.status, 201);
+  const detail = (await response.json()).image;
+  assert.equal(detail.publicVisible, true);
+  assert.equal(database.prepare("SELECT privacy FROM media_assets WHERE id=?").get(detail.id).privacy, "public");
+  assert.equal(database.prepare("SELECT public_visible FROM entity_media WHERE entity_id='angle-cover' AND media_id=? AND role='gallery'").get(detail.id).public_visible, 1);
+  assert.equal(bucket.objects.size, 3);
 });
 
-test("image roles, cover selection, consent changes, and project reclassification are guarded", async () => {
+test("image roles, cover selection, visibility changes, and project reclassification are guarded", async () => {
   const database = migratedDatabase();
-  insertPortfolioItem(database, { id: "cover-draft", projectType: "standard", consent: "unknown" });
+  insertPortfolioItem(database, { id: "cover-draft", projectType: "standard" });
   attachImage(database, "cover-draft", { id: "before-photo" });
 
   let response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft", {
     method: "PATCH", admin: true, body: { state: "published" },
   }), env(database));
   assert.equal(response.status, 422);
-  assert.match((await response.json()).error, /permission/i);
+  assert.match((await response.json()).error, /publicly visible/i);
 
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft/images/before-photo", {
-    method: "PATCH", admin: true, body: { imageRole: "before", healingState: "unspecified", consentStatus: "granted" },
+    method: "PATCH", admin: true, body: { imageRole: "before", healingState: "unspecified", publicVisible: true },
   }), env(database));
   assert.equal(response.status, 409);
 
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft/images/before-photo", {
-    method: "PATCH", admin: true, body: { imageRole: "before", healingState: "unspecified", consentStatus: "granted", promoteToCoverUp: true },
+    method: "PATCH", admin: true, body: { imageRole: "before", healingState: "unspecified", publicVisible: true, promoteToCoverUp: true },
   }), env(database));
   assert.equal(response.status, 200);
   assert.equal(database.prepare("SELECT project_type FROM portfolio_items WHERE id='cover-draft'").get().project_type, "cover_up");
 
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft/images/before-photo", {
-    method: "PATCH", admin: true, body: { imageRole: "before", healingState: "unspecified", consentStatus: "granted", isCover: true },
+    method: "PATCH", admin: true, body: { imageRole: "before", healingState: "unspecified", publicVisible: true, isCover: true },
   }), env(database));
   assert.equal(response.status, 422);
   assert.match((await response.json()).error, /result image/i);
 
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft/images/before-photo", {
-    method: "PATCH", admin: true, body: { imageRole: "before", healingState: "unspecified", consentStatus: "granted" },
+    method: "PATCH", admin: true, body: { imageRole: "before", healingState: "unspecified", publicVisible: true },
   }), env(database));
   assert.equal(response.status, 200);
-  assert.deepEqual({ ...database.prepare("SELECT privacy,consent_status FROM media_assets WHERE id='before-photo'").get() }, { privacy: "public", consent_status: "granted" });
+  assert.equal(database.prepare("SELECT privacy FROM media_assets WHERE id='before-photo'").get().privacy, "public");
   assert.equal(database.prepare("SELECT public_visible FROM entity_media WHERE media_id='before-photo'").get().public_visible, 1);
 
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft", {
@@ -402,32 +431,34 @@ test("image roles, cover selection, consent changes, and project reclassificatio
   assert.equal(response.status, 409);
 
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft/images/primary", {
-    method: "PATCH", admin: true, body: { imageRole: "result", healingState: "fresh", consentStatus: "granted" },
+    method: "PATCH", admin: true, body: { imageRole: "result", healingState: "fresh", publicVisible: true },
   }), env(database));
   assert.equal(response.status, 200);
+  assert.equal(database.prepare("SELECT primary_public_visible FROM portfolio_items WHERE id='cover-draft'").get().primary_public_visible, 1);
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft", {
     method: "PATCH", admin: true, body: { state: "published" },
   }), env(database));
   assert.equal(response.status, 200);
 
-  attachImage(database, "cover-draft", { id: "replacement-private", role: "result", consent: "granted", privacy: "private", publicVisible: false, healingState: "healed" });
+  attachImage(database, "cover-draft", { id: "replacement-private", role: "result", privacy: "internal", publicVisible: false, healingState: "healed" });
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft/images/replacement-private", {
     method: "PATCH", admin: true, body: { imageRole: "result", healingState: "healed", isCover: true },
   }), env(database));
   assert.equal(response.status, 409);
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft/images/replacement-private", {
-    method: "PATCH", admin: true, body: { imageRole: "result", healingState: "healed", consentStatus: "granted", isCover: true },
+    method: "PATCH", admin: true, body: { imageRole: "result", healingState: "healed", publicVisible: true, isCover: true },
   }), env(database));
   assert.equal(response.status, 200);
   assert.equal(database.prepare("SELECT cover_image_ref FROM portfolio_items WHERE id='cover-draft'").get().cover_image_ref, "replacement-private");
 
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft/images/primary", {
-    method: "PATCH", admin: true, body: { imageRole: "result", healingState: "fresh", consentStatus: "denied" },
+    method: "PATCH", admin: true, body: { imageRole: "result", healingState: "fresh", publicVisible: false },
   }), env(database));
-  assert.equal(response.status, 409);
+  assert.equal(response.status, 200);
+  assert.equal(database.prepare("SELECT primary_public_visible FROM portfolio_items WHERE id='cover-draft'").get().primary_public_visible, 0);
 
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft/images/replacement-private", {
-    method: "PATCH", admin: true, body: { imageRole: "result", healingState: "healed", consentStatus: "denied" },
+    method: "PATCH", admin: true, body: { imageRole: "result", healingState: "healed", publicVisible: false },
   }), env(database));
   assert.equal(response.status, 409);
 });
@@ -443,7 +474,6 @@ test("automatic cover-up promotion does not commit when the image change is inva
     body: {
       imageRole: "before",
       healingState: "unspecified",
-      consentStatus: "unknown",
       promoteToCoverUp: true,
     },
   }), env(database));
@@ -509,18 +539,27 @@ test("automatic cover-up upload rolls back its project and stored file when imag
   assert.equal(bucket.objects.size, 0);
 });
 
-test("public portfolio and primary media refuse a published row without recorded permission", async () => {
+test("record state gates public portfolio records while primary visibility gates primary media", async () => {
   const database = migratedDatabase();
-  insertPortfolioItem(database, { id: "unsafe-primary", state: "published", consent: "unknown" });
+  insertPortfolioItem(database, { id: "unsafe-primary", state: "published", primaryPublicVisible: false });
   let response = await handlePortfolioApi(request("/api/portfolio"), env(database));
-  assert.deepEqual((await response.json()).items, []);
+  assert.deepEqual((await response.json()).items.map((item) => item.id), ["unsafe-primary"]);
   response = await handlePortfolioApi(request("/api/portfolio/unsafe-primary"), env(database));
-  assert.equal(response.status, 404);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).item.primaryImage, null);
   response = await handlePortfolioApi(request("/api/portfolio/media/unsafe-primary"), env(database));
   assert.equal(response.status, 404);
 
+  insertPortfolioItem(database, { id: "draft-visible-primary", state: "draft", primaryPublicVisible: true });
+  response = await handlePortfolioApi(request("/api/portfolio"), env(database));
+  assert.equal((await response.json()).items.some((item) => item.id === "draft-visible-primary"), false);
+  response = await handlePortfolioApi(request("/api/portfolio/draft-visible-primary"), env(database));
+  assert.equal(response.status, 404);
+  response = await handlePortfolioApi(request("/api/portfolio/media/draft-visible-primary"), env(database));
+  assert.equal(response.status, 404);
+
   const bucket = new MemoryBucket();
-  insertPortfolioItem(database, { id: "safe-primary", state: "published", consent: "granted" });
+  insertPortfolioItem(database, { id: "safe-primary", state: "published", primaryPublicVisible: true });
   await bucket.put("portfolio/safe-primary.jpg", new Uint8Array([1, 2, 3]), { httpMetadata: { contentType: "image/jpeg", cacheControl: "public, max-age=31536000, immutable" } });
   response = await handlePortfolioApi(request("/api/portfolio/media/safe-primary"), env(database, bucket));
   assert.equal(response.status, 200);
@@ -534,7 +573,7 @@ test("public and Studio portfolio lists order entries newest to oldest", async (
     ["portfolio-order-middle", "2025-01-01 12:00:00", 2],
     ["portfolio-order-newest", "2026-01-01 12:00:00", 99],
   ]) {
-    insertPortfolioItem(database, { id, state: "published", consent: "granted" });
+    insertPortfolioItem(database, { id, state: "published", primaryPublicVisible: true });
     database.prepare("UPDATE portfolio_items SET created_at=?,sort_order=? WHERE id=?").run(createdAt, sortOrder, id);
   }
 
@@ -550,18 +589,25 @@ test("public and Studio portfolio lists order entries newest to oldest", async (
 
 test("generic media and attachment APIs cannot privatize a published portfolio cover", async () => {
   const database = migratedDatabase();
-  insertPortfolioItem(database, { id: "generic-cover", state: "published", projectType: "cover_up", consent: "granted", coverImageRef: "generic-result" });
-  attachImage(database, "generic-cover", { id: "generic-result", role: "result", consent: "granted", privacy: "public", publicVisible: true });
-  attachImage(database, "generic-cover", { id: "generic-process", role: "process", consent: "granted", privacy: "public", publicVisible: true });
+  insertPortfolioItem(database, { id: "generic-cover", state: "published", projectType: "cover_up", primaryPublicVisible: false, coverImageRef: "generic-result" });
+  attachImage(database, "generic-cover", { id: "generic-result", role: "result", privacy: "public", publicVisible: true });
+  attachImage(database, "generic-cover", { id: "generic-process", role: "process", privacy: "public", publicVisible: true });
+  insertPortfolioItem(database, { id: "generic-primary", state: "published", primaryPublicVisible: true });
 
-  assert.throws(() => database.prepare("UPDATE media_assets SET consent_status='denied' WHERE id='generic-result'").run(), /published portfolio cover must remain eligible/);
+  assert.throws(() => database.prepare("UPDATE media_assets SET privacy='internal' WHERE id='generic-result'").run(), /published portfolio cover must remain eligible/);
+  assert.throws(() => database.prepare("UPDATE media_assets SET public_presentation='hidden' WHERE id='generic-result'").run(), /published portfolio cover must remain eligible/);
   assert.throws(() => database.prepare("UPDATE entity_media SET public_visible=0 WHERE entity_id='generic-cover' AND media_id='generic-result' AND role='gallery'").run(), /published portfolio cover must remain eligible/);
   assert.throws(() => database.prepare("UPDATE portfolio_image_details SET image_role='before' WHERE portfolio_item_id='generic-cover' AND image_ref='generic-result'").run(), /published portfolio cover must remain eligible/);
   assert.throws(() => database.prepare("UPDATE portfolio_items SET cover_image_ref='generic-process' WHERE id='generic-cover'").run(), /published portfolio cover must remain eligible/);
-  assert.throws(() => database.prepare("UPDATE portfolio_items SET primary_consent_status='denied' WHERE id='generic-cover'").run(), /published portfolio cover must remain eligible/);
+  assert.throws(() => database.prepare("UPDATE portfolio_items SET primary_public_visible=0 WHERE id='generic-primary'").run(), /published portfolio cover must remain eligible/);
 
   let response = await handleConstructApi(request("/api/admin/media/generic-result", {
     method: "PATCH", admin: true, body: { consent_status: "denied" },
+  }), env(database));
+  assert.equal(response.status, 200, "obsolete media consent keys are ignored");
+  assert.equal(database.prepare("SELECT privacy FROM media_assets WHERE id='generic-result'").get().privacy, "public");
+  response = await handleConstructApi(request("/api/admin/media/generic-result", {
+    method: "PATCH", admin: true, body: { privacy: "internal" },
   }), env(database));
   assert.equal(response.status, 409);
   response = await handleConstructApi(request("/api/admin/entities/generic-cover/media", {
@@ -578,7 +624,7 @@ test("generic media and attachment APIs cannot privatize a published portfolio c
     method: "PATCH", admin: true, body: { consent_status: "denied" },
   }), env(database));
   assert.equal(response.status, 200);
-  assert.equal(database.prepare("SELECT consent_status FROM media_assets WHERE id='generic-process'").get().consent_status, "denied");
+  assert.equal(database.prepare("SELECT privacy FROM media_assets WHERE id='generic-process'").get().privacy, "public");
 });
 
 test("multi-style migration backfills Portfolio and Flash without inventing classifications", () => {
@@ -623,7 +669,7 @@ test("multi-style migration backfills Portfolio and Flash without inventing clas
 
 test("Portfolio API stores ordered style sets and preserves secondary styles for legacy clients", async () => {
   const database = migratedDatabase();
-  insertPortfolioItem(database, { id: "multi-style", state: "published", consent: "granted" });
+  insertPortfolioItem(database, { id: "multi-style", state: "published", primaryPublicVisible: true });
 
   let response = await handlePortfolioApi(request("/api/admin/portfolio/multi-style", {
     method: "PATCH", admin: true, body: { styles: ["unclassified", "symbolic", "surreal"] },
@@ -798,7 +844,6 @@ test("Flash drafts upload ordered galleries and cannot publish or lose their pri
     form.set("file", new File([new Uint8Array(bytes)], filename, { type: "image/png" }));
     form.set("alt_text", filename.replace(".png", ""));
     form.set("privacy", "public");
-    form.set("consent_status", "not-required");
     form.set("public_presentation", "inline");
     const uploaded = await handleConstructApi(new Request("https://example.test/api/admin/media", {
       method: "POST",
@@ -961,7 +1006,6 @@ test("managed Flash sheets generate stable A-Z children and derive public claima
   form.set("file", new File([new Uint8Array([1, 2, 3])], "sheet.png", { type: "image/png" }));
   form.set("alt_text", "Managed sheet artwork");
   form.set("privacy", "public");
-  form.set("consent_status", "not-required");
   form.set("public_presentation", "inline");
   response = await handleConstructApi(new Request("https://example.test/api/admin/media", {
     method: "POST",
@@ -1041,9 +1085,13 @@ test("new Portfolio uploads begin with the shared Unclassified style assignment"
   assert.deepEqual(item.styles, ["unclassified"]);
   assert.deepEqual(item.styleLabels, ["Unclassified"]);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM tattoo_item_styles WHERE entity_id=?").get(item.id).count, 1);
+  assert.deepEqual(
+    { ...database.prepare("SELECT entity_id,state,public_visible,published_at FROM archive_dossiers WHERE entity_id=?").get(item.id) },
+    { entity_id:item.id, state:"draft", public_visible:0, published_at:null },
+  );
 });
 
-test("a new Studio upload can save multi-style metadata and primary permission before publishing", async () => {
+test("a new Studio upload can save multi-style metadata and primary visibility before publishing", async () => {
   const database = migratedDatabase();
   const bucket = new MemoryBucket();
   const form = new FormData();
@@ -1055,7 +1103,10 @@ test("a new Studio upload can save multi-style metadata and primary permission b
     body: form,
   }), env(database, bucket));
   assert.equal(response.status, 201);
-  const itemId = (await response.json()).item.id;
+  const createdItem = (await response.json()).item;
+  const itemId = createdItem.id;
+  assert.equal(createdItem.primaryPublicVisible, true);
+  assert.equal(database.prepare("SELECT primary_public_visible FROM portfolio_items WHERE id=?").get(itemId).primary_public_visible, 1);
 
   response = await handlePortfolioApi(request(`/api/admin/portfolio/${itemId}`, {
     method: "PATCH",
@@ -1078,7 +1129,7 @@ test("a new Studio upload can save multi-style metadata and primary permission b
       healingState: "healed",
       timingNote: "Eight weeks healed",
       caption: "Finished result",
-      consentStatus: "granted",
+      publicVisible: true,
     },
   }), env(database, bucket));
   assert.equal(response.status, 200);
@@ -1093,6 +1144,10 @@ test("a new Studio upload can save multi-style metadata and primary permission b
   assert.deepEqual({ ...database.prepare(`
     SELECT visibility,search_visibility FROM content_entities WHERE id=?
   `).get(itemId) }, { visibility: "public", search_visibility: 1 });
+  assert.deepEqual(
+    { ...database.prepare("SELECT state,public_visible,published_at FROM archive_dossiers WHERE entity_id=?").get(itemId) },
+    { state:"draft", public_visible:0, published_at:null },
+  );
 
   response = await handlePortfolioApi(request(`/api/portfolio/${itemId}`), env(database, bucket));
   assert.equal(response.status, 200);
@@ -1174,7 +1229,7 @@ test("scheduled cleanup aborts expired multipart sessions without creating media
 test("stored media supports HEAD and valid full, partial, suffix, and invalid ranges", async () => {
   const database = migratedDatabase();
   const bucket = new MemoryBucket();
-  insertPortfolioItem(database, { id: "range-primary", state: "published", consent: "granted" });
+  insertPortfolioItem(database, { id: "range-primary", state: "published", primaryPublicVisible: true });
   await bucket.put("portfolio/range-primary.jpg", new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), {
     httpMetadata: { contentType: "image/jpeg" },
   });
@@ -1200,19 +1255,19 @@ test("stored media supports HEAD and valid full, partial, suffix, and invalid ra
 test("portfolio accepts completed video as mixed media but rejects video Before and cover roles", async () => {
   const database = migratedDatabase();
   const bucket = new MemoryBucket();
-  insertPortfolioItem(database, { id: "mixed-media", state: "draft", consent: "granted" });
+  insertPortfolioItem(database, { id: "mixed-media", state: "draft", primaryPublicVisible: true });
   database.prepare(`INSERT INTO media_assets(
-    id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,consent_status,state,
+    id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,state,
     created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_presentation
   ) VALUES('portfolio-video','construct/portfolio-video/clip.mp4','clip.mp4','video/mp4',7,'Tattoo process video',
-    'public','granted','active','test',datetime('now'),datetime('now'),'Spoken process notes','ready','en','inline')`).run();
+    'public','active','test',datetime('now'),datetime('now'),'Spoken process notes','ready','en','inline')`).run();
   await bucket.put("construct/portfolio-video/clip.mp4", new Uint8Array([1, 2, 3, 4, 5, 6, 7]), {
     httpMetadata: { contentType: "video/mp4" },
   });
   const environment = env(database, bucket);
 
   let response = await handlePortfolioApi(request("/api/admin/portfolio/mixed-media/images", {
-    method: "POST", admin: true, body: { mediaId: "portfolio-video", imageRole: "process" },
+    method: "POST", admin: true, body: { mediaId: "portfolio-video", imageRole: "process", publicVisible: true },
   }), environment);
   assert.equal(response.status, 201);
   assert.equal((await response.json()).media.kind, "video");
@@ -1268,6 +1323,7 @@ test("Portfolio batch organizer combines, splits, constrains covers, and preserv
     completedEntries: 0,
     completedImages: 0,
   });
+  assert.equal(organizer.groups.every((group) => group.media[0].publicVisible), true);
 
   const [first, second] = organizer.groups;
   organizer.setSelected(first.id, true);
@@ -1279,15 +1335,23 @@ test("Portfolio batch organizer combines, splits, constrains covers, and preserv
 
   const secondary = combined.media[1];
   organizer.setRole(combined.id, secondary.id, "detail");
+  assert.equal(secondary.publicVisible, true);
+  organizer.setRole(combined.id, secondary.id, "process");
+  assert.equal(secondary.publicVisible, false);
+  organizer.setPublicVisible(combined.id, secondary.id, true);
+  assert.equal(secondary.publicVisible, true);
+  organizer.setRole(combined.id, secondary.id, "detail");
   organizer.setHealingState(combined.id, secondary.id, "healed");
   organizer.setCover(combined.id, secondary.id);
   assert.equal(secondary.role, "result");
+  assert.equal(secondary.publicVisible, true);
   assert.equal(secondary.healingState, "healed");
   assert.throws(() => organizer.setRole(combined.id, secondary.id, "before"), /cover image must remain a Result/);
 
   const split = organizer.splitMedia(combined.id, secondary.id);
   assert.equal(split.media[0].isCover, true);
   assert.equal(split.media[0].role, "result");
+  assert.equal(split.media[0].publicVisible, true);
   assert.deepEqual(Array.from(organizer.groups, (group) => Array.from(group.media, (media) => media.name)).flat(), ["one.jpg", "two.jpg", "three.jpg"]);
   assert.deepEqual({ ...organizer.summary() }, {
     entries: 3,
@@ -1318,6 +1382,47 @@ test("Portfolio batch organizer combines, splits, constrains covers, and preserv
   assert.deepEqual(revoked, ["preview:one.jpg", "preview:two.jpg", "preview:three.jpg"]);
 });
 
+test("Portfolio batch organizer is session-only, skips duplicates, and caps logical draft groups at 50", () => {
+  const source = readFileSync(join(ROOT, "studio", "portfolio-batch-organizer.js"), "utf8");
+  assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB/);
+  const context = {};
+  runInNewContext(source, context);
+  const organizer = new context.PortfolioBatchOrganizer({
+    createPreview: (file) => `preview:${file.name}`,
+    revokePreview: () => {},
+  });
+  const files = Array.from({ length: 50 }, (_, index) => ({
+    name: `tattoo-${index}.jpg`,
+    size: 1000 + index,
+    lastModified: 100000 + index,
+    type: "image/jpeg",
+  }));
+  const added = organizer.addFiles([...files, files[0]]);
+  assert.equal(added.length, 50);
+  assert.equal(organizer.lastAddDuplicates.length, 1);
+  assert.equal(organizer.groups.length, 50);
+  assert.equal(organizer.addFiles([files[0]]).length, 0);
+  assert.equal(organizer.lastAddDuplicates.length, 1);
+  const [first, second] = organizer.groups;
+  organizer.setSelected(first.id, true);
+  organizer.setSelected(second.id, true);
+  organizer.combineSelected();
+  assert.equal(organizer.groups.length, 49);
+  assert.equal(organizer.addFiles([{
+    name: "overflow.jpg",
+    size: 9999,
+    lastModified: 999999,
+    type: "image/jpeg",
+  }]).length, 1);
+  assert.equal(organizer.groups.length, 50);
+  assert.throws(() => organizer.addFiles([{
+    name: "overflow-again.jpg",
+    size: 10000,
+    lastModified: 1000000,
+    type: "image/jpeg",
+  }]), /at most 50 draft entries/);
+});
+
 test("Studio Portfolio loads the pre-upload organizer and resumable retry controls", () => {
   const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
   assert.match(studio, /portfolio-batch-organizer\.js/);
@@ -1327,5 +1432,11 @@ test("Studio Portfolio loads the pre-upload organizer and resumable retry contro
   assert.match(studio, /Retry unfinished uploads/);
   assert.match(studio, /stagePortfolioFiles/);
   assert.match(studio, /uploadPortfolioBatch/);
-  assert.match(studio, /consentStatus:\s*"unknown"/);
+  assert.match(studio, /const PORTFOLIO_BATCH_CONCURRENCY = 2/);
+  assert.match(studio, /Math\.min\(PORTFOLIO_BATCH_CONCURRENCY, groups\.length\)/);
+  assert.match(studio, /upload\.append\("state", "draft"\)/);
+  assert.match(studio, /primaryPublicVisible/);
+  assert.match(studio, /publicVisible/);
+  assert.match(studio, /data-batch-public/);
+  assert.doesNotMatch(studio, /PORTFOLIO_CONSENT_STATUSES|Publication permission|name="consentStatus"|consentStatus:\s*"unknown"/);
 });

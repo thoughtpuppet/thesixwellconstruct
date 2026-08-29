@@ -50,7 +50,7 @@ db.exec(`
   CREATE TABLE construct_pathways(id TEXT PRIMARY KEY,name TEXT,route TEXT,updated_at TEXT);
   INSERT INTO construct_pathways VALUES('path-events-03','x','x',datetime('now'));
   CREATE TABLE media_assets(
-    id TEXT PRIMARY KEY,state TEXT,privacy TEXT,consent_status TEXT,
+    id TEXT PRIMARY KEY,state TEXT,privacy TEXT,
     public_presentation TEXT,mime_type TEXT,width INTEGER,height INTEGER,
     alt_text TEXT,caption TEXT
   );

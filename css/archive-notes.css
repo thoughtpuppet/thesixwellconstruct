@@ -55,6 +55,23 @@ body.archive-note-image-open{overflow:hidden}
 .archive-note-dialog-content{overflow:hidden;padding:16px}
 .archive-note-dialog-content .archive-note-reader{max-height:calc(94dvh - 118px)}
 body.archive-note-dialog-open{overflow:hidden}
+.archive-open-notebook-groups{display:grid;gap:32px}
+.archive-open-notebook-group{display:grid;gap:16px;min-width:0}
+.archive-open-notebook-group>header{display:grid;gap:8px;padding-bottom:16px;border-bottom:5px solid var(--color-archive,#6D3D15)}
+.archive-open-notebook-group>header h3{margin:0;font-size:clamp(1.1rem,2vw,1.75rem);letter-spacing:.08em;text-transform:uppercase}
+.archive-open-notebook-group>header p{max-width:720px;margin:0;color:#B87A32;font-size:.78rem;letter-spacing:.06em;line-height:1.65;text-transform:uppercase}
+.archive-journal-feed{display:grid;gap:16px}
+.archive-journal-entry{min-width:0;border:5px solid var(--color-archive,#6D3D15);background:var(--color-bg)}
+.archive-journal-entry>button{display:grid;width:100%;padding:0;border:0;background:transparent;color:inherit;cursor:pointer;text-align:left}
+.archive-journal-entry-media{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(170px,30%);gap:12px;overflow-x:auto;overscroll-behavior-inline:contain;padding:12px;border-bottom:5px solid var(--color-archive,#6D3D15);scroll-snap-type:x proximity}
+.archive-journal-entry-image{display:block;min-width:0;aspect-ratio:4/3;overflow:hidden;scroll-snap-align:start;background:#17110e}
+.archive-journal-entry-image img{display:block;width:100%;height:100%;object-fit:cover}
+.archive-journal-entry-copy{display:grid;gap:10px;padding:18px}
+.archive-journal-entry-copy strong{font-size:clamp(1.05rem,2vw,1.6rem);line-height:1.1;text-transform:uppercase}
+.archive-journal-entry-copy>span:not(.archive-date){max-width:760px;color:#B87A32;font-size:.78rem;letter-spacing:.06em;line-height:1.65;text-transform:uppercase}
+.archive-journal-entry-copy em{color:#FCB867;font-size:.7rem;font-style:normal;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
+.archive-journal-entry>button:hover .archive-journal-entry-copy em,.archive-journal-entry>button:focus-visible .archive-journal-entry-copy em{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px}
+.archive-journal-entry>button:focus-visible{outline:5px solid rgba(252,184,103,.7);outline-offset:-5px}
 @media(max-width:760px){
   .archive-notes-grid,.archive-note-layout{grid-template-columns:1fr}
   .archive-note-card>a{grid-template-columns:1fr}
@@ -68,4 +85,6 @@ body.archive-note-dialog-open{overflow:hidden}
   .archive-note-image-dialog{width:calc(100vw - 16px);height:calc(100dvh - 16px);max-height:none}
   .archive-note-image-dialog-shell{height:100%;max-height:none}
   .archive-note-image-dialog-media img{max-height:calc(100dvh - 130px)}
+  .archive-open-notebook-groups{gap:24px}
+  .archive-journal-entry-media{grid-auto-columns:minmax(140px,78%)}
 }

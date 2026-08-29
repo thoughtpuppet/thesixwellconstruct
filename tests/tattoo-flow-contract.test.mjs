@@ -330,9 +330,9 @@ test("Special Project gallery media is publicly readable after attachment", asyn
   database.prepare(`
     INSERT INTO media_assets(
       id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,privacy,
-      consent_status,state,created_by,created_at,updated_at,transcript,transcript_status,
+      state,created_by,created_at,updated_at,transcript,transcript_status,
       transcript_language,public_title,public_description,public_presentation
-    ) VALUES(?,?,?,?,?,'Project artwork','','public','not-required','active','studio',?,?,'','not-requested','en','Project artwork','','inline')
+    ) VALUES(?,?,?,?,?,'Project artwork','','public','active','studio',?,?,'','not-requested','en','Project artwork','','inline')
   `).run(mediaId, storageKey, "project.png", "image/png", 13, now, now);
   const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSION_FILES: bucket };
   const beforeAttachment = await handleConstructApi(new Request(`https://example.test/api/construct/media/${mediaId}`), env);
@@ -2298,12 +2298,12 @@ test("Studio manages Experimental Project modes, dates, deposit, healing interva
   const database = migratedDatabase();
   const now = new Date().toISOString();
   database.prepare(
-    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
-     VALUES(?,?,?,?,?,'public','granted','active','inline','test',?,?)`
+    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,state,public_presentation,created_by,created_at,updated_at)
+     VALUES(?,?,?,?,?,'public','active','inline','test',?,?)`
   ).run("project-media-a", "https://example.test/a.jpg", "a.jpg", "image/jpeg", "First view", now, now);
   database.prepare(
-    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
-     VALUES(?,?,?,?,?,'public','granted','active','inline','test',?,?)`
+    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,state,public_presentation,created_by,created_at,updated_at)
+     VALUES(?,?,?,?,?,'public','active','inline','test',?,?)`
   ).run("project-media-b", "https://example.test/b.jpg", "b.jpg", "image/jpeg", "Second view", now, now);
   const adminToken = "special-project-settings-admin";
   const localD1 = new LocalD1(database);
@@ -2569,8 +2569,8 @@ test("Special Project card focal migration centers existing attachments and enfo
   const database = migratedDatabase({ before: migrationName });
   const now = new Date().toISOString();
   database.prepare(
-    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
-     VALUES(?,?,?,?,?,'public','granted','active','inline','test',?,?)`
+    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,state,public_presentation,created_by,created_at,updated_at)
+     VALUES(?,?,?,?,?,'public','active','inline','test',?,?)`
   ).run("legacy-card-media", "https://example.test/legacy.jpg", "legacy.jpg", "image/jpeg", "Legacy", now, now);
   database.prepare(
     `INSERT INTO special_project_call_media(project_id,media_id,role,sort_order,alt_text_override,created_at,updated_at)
@@ -2669,8 +2669,8 @@ test("Studio manages Special Project Series, cover media, assignment, and public
   const database = migratedDatabase();
   const now = new Date().toISOString();
   database.prepare(
-    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
-     VALUES('series-cover','https://example.test/series-cover.jpg','series-cover.jpg','image/jpeg','Classic Cliches cover','public','granted','active','inline','test',?,?)`
+    `INSERT INTO media_assets(id,source_url,original_filename,mime_type,alt_text,privacy,state,public_presentation,created_by,created_at,updated_at)
+     VALUES('series-cover','https://example.test/series-cover.jpg','series-cover.jpg','image/jpeg','Classic Cliches cover','public','active','inline','test',?,?)`
   ).run(now, now);
   const adminToken = "special-project-series-admin";
   const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSIONS_ADMIN_TOKEN: adminToken };
@@ -4424,6 +4424,8 @@ test("Tattoo aftercare is part of the client resource packet and keeps medical e
   assert.match(aftercare, /aad\.org\/public\/everyday-care\/skin-care-basics\/tattoos\/tattoo-skin-reactions/);
   for (const source of [policies, dayOf, location]) assert.match(source, /href="\/tattoos\/aftercare\/"/);
   assert.match(location, /You may park on the street alongside the building\. A free gravel parking lot is also available at the very end of Mangum Street, the street adjacent to the building\. Continue to the end of Mangum Street; the lot will be on your left\./);
+  assert.match(location, /<figure class="parking-guide">[\s\S]*?src="\/assets\/images\/artpill-location-parking-guide\.jpg"[\s\S]*?width="1672" height="941"[\s\S]*?loading="lazy"[\s\S]*?alt="The brick studio building beside Mangum Street, with an arrow pointing down Mangum Street toward the free gravel parking lot\."/);
+  assert.match(location, /\.parking-guide \{[\s\S]*?border: 5px solid/);
 });
 
 test("Custom Tattoo Inquiry explains approval and booking before asking for detail", () => {

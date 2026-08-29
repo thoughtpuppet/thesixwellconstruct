@@ -133,6 +133,13 @@ test("admin event creation defaults to Draft and Closed", async () => {
     { ...database.prepare("SELECT visibility,search_visibility FROM content_entities WHERE id=?").get(event.id) },
     { visibility:"internal", search_visibility:0 },
   );
+  assert.deepEqual(
+    { ...database.prepare("SELECT entity_id,archive_slug,state,public_visible,published_at FROM archive_dossiers WHERE entity_id=?").get(event.id) },
+    { entity_id:event.id, archive_slug:"lifecycle-default", state:"draft", public_visible:0, published_at:null },
+  );
+  assert.ok(database.prepare("SELECT event_id FROM archive_event_identifiers WHERE entity_id=?").get(event.id)?.event_id);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM archive_catalogue_entries WHERE entity_id=?").get(event.id).count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM archive_object_versions WHERE entity_id=?").get(event.id).count, 0);
 
   const updateResponse = await handleAdminEventUpdate(request(`/api/admin/events/${event.slug}`, {
     method:"PATCH",
@@ -143,6 +150,10 @@ test("admin event creation defaults to Draft and Closed", async () => {
   assert.deepEqual(
     { ...database.prepare("SELECT visibility,search_visibility FROM content_entities WHERE id=?").get(event.id) },
     { visibility:"public", search_visibility:1 },
+  );
+  assert.deepEqual(
+    { ...database.prepare("SELECT state,public_visible,published_at FROM archive_dossiers WHERE entity_id=?").get(event.id) },
+    { state:"draft", public_visible:0, published_at:null },
   );
 });
 

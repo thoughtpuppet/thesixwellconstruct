@@ -271,14 +271,17 @@ test("Art print intent is managed and private Merch drafts stay out of public co
     VALUES
       ('test-marbles-open-eye','art-marbles','fig-eye','rel-uses-symbol',1,'Test fixture.',3,'test',datetime('now'),datetime('now'));
     INSERT INTO media_assets
-      (id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,created_by,created_at,updated_at)
+      (id,source_url,original_filename,mime_type,alt_text,privacy,state,created_by,created_at,updated_at,public_presentation)
     VALUES
-      ('test-open-eye-variant','https://example.test/open-eye-color.png','open-eye-color.png','image/png','Open Eye color variant','public','not-required','active','test',datetime('now'),datetime('now'));
+      ('test-open-eye-variant','https://example.test/open-eye-color.png','open-eye-color.png','image/png','Open Eye color variant','public','active','test',datetime('now'),datetime('now'),'inline');
     INSERT INTO entity_media
       (entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at)
     VALUES
       ('fig-eye','test-open-eye-variant','legend-variant',1,1,'Open Eye color variant','',datetime('now'));
   `);
+  assert.deepEqual({...database.prepare("SELECT privacy,state,public_presentation FROM media_assets WHERE id='test-open-eye-variant'").get()},{privacy:"public",state:"active",public_presentation:"inline"});
+  assert.deepEqual({...database.prepare("SELECT public_visible FROM entity_relationships WHERE id='test-marbles-open-eye'").get()},{public_visible:1});
+  assert.equal(database.prepare("SELECT visibility FROM content_entities WHERE id='fig-eye'").get().visibility,"public");
 
   const connections = await jsonResponse(await handleConstructApi(request("/api/connections/art-marbles"), env));
   const print = connections.payload.records.find((record) => record.related.id === "merch-marbles-print");
@@ -400,12 +403,14 @@ test("new artwork stages privately, publishes to its canonical route, locks its 
 
   database.exec(`
     INSERT INTO media_assets
-      (id,storage_key,original_filename,mime_type,alt_text,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
+      (id,storage_key,original_filename,mime_type,alt_text,privacy,state,created_by,created_at,updated_at,public_presentation)
     VALUES
-      ('media-indigo-auto','art/media-indigo-auto.jpg','indigo.jpg','image/jpeg','Exorcism: Indigo','public','granted','active','test',datetime('now'),datetime('now'),'inline');
+      ('media-indigo-auto','art/media-indigo-auto.jpg','indigo.jpg','image/jpeg','Exorcism: Indigo','public','active','test',datetime('now'),datetime('now'),'inline');
     INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,created_at)
     VALUES('art-indigo-auto','media-indigo-auto','primary',1,1,datetime('now'));
   `);
+  assert.deepEqual({...database.prepare("SELECT privacy,state,public_presentation FROM media_assets WHERE id='media-indigo-auto'").get()},{privacy:"public",state:"active",public_presentation:"inline"});
+  assert.deepEqual({...database.prepare("SELECT role,public_visible FROM entity_media WHERE entity_id='art-indigo-auto' AND media_id='media-indigo-auto'").get()},{role:"primary",public_visible:1});
 
   const adminDraft = await jsonResponse(await handleConstructApi(request("/api/admin/art", { admin: true }), env));
   const draftRecord = adminDraft.payload.records.find((record) => record.id === "art-indigo-auto");
@@ -420,6 +425,7 @@ test("new artwork stages privately, publishes to its canonical route, locks its 
     body: { state: "published" },
   }), env));
   assert.equal(published.response.status, 200);
+  assert.equal(published.payload.record.state,"published");
 
   const publicRecord = await jsonResponse(await handleConstructApi(request("/api/art/exorcism-indigo"), env));
   assert.equal(publicRecord.response.status, 200);

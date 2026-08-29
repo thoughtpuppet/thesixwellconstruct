@@ -1,6 +1,7 @@
 import { fetchCatalog as fetchShopifyCatalog, fetchProductByHandle } from "../shop/_lib.js";
 import { captureMarketingConsent } from "../outreach/_lib.js";
 import { db, failure, json, readJson, requireStudioAdmin, text } from "../_shared/construct.js";
+import { ensureEditableArchiveDossier } from "../_shared/archive-dossiers.js";
 import {
   publishTemplateDraft,
   saveTemplateDraft,
@@ -101,7 +102,6 @@ async function productMedia(database, entityIds, { publicOnly = false } = {}) {
   if (publicOnly) conditions.push(
     "em.public_visible=1",
     "m.privacy='public'",
-    "m.consent_status IN ('not-required','granted')",
     "m.public_presentation='inline'",
   );
   const result = await database.prepare(`SELECT em.entity_id,em.media_id,em.role,em.sort_order,em.public_visible,
@@ -421,7 +421,21 @@ async function createMerch(request, env) {
       database.prepare(`INSERT INTO merch_items(id,${fields.join(",")},created_at,updated_at) VALUES(?,${fields.map(() => "?").join(",")},datetime('now'),datetime('now'))`).bind(recordId,...fields.map((field) => values[field])),
     ]);
   } catch (error) { return failure(error.message, 409); }
-  return json({ record: await database.prepare("SELECT * FROM merch_items WHERE id=?").bind(recordId).first() }, { status: 201 });
+  let archiveDossierError = "";
+  try {
+    await ensureEditableArchiveDossier(database, recordId);
+  } catch (error) {
+    archiveDossierError = error instanceof Error ? error.message : String(error);
+    console.error(JSON.stringify({
+      message: "Unable to ensure the editable Archive dossier after Merch creation.",
+      entityId: recordId,
+      error: archiveDossierError,
+    }));
+  }
+  return json({
+    record: await database.prepare("SELECT * FROM merch_items WHERE id=?").bind(recordId).first(),
+    ...(archiveDossierError ? { archive_dossier_error: archiveDossierError } : {}),
+  }, { status: 201 });
 }
 
 async function updateMerch(request, env, recordId) {

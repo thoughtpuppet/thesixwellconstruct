@@ -36,6 +36,30 @@
   .arrival-item p {
     line-height: 1.65;
   }
+  .arrival-copy {
+    min-width: 0;
+  }
+  .parking-guide {
+    margin: 24px 0 0;
+    overflow: hidden;
+    border: 5px solid rgba(110, 4, 4, 0.55);
+    background: var(--color-bg);
+  }
+  .parking-guide img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .parking-guide figcaption {
+    border-top: 5px solid rgba(110, 4, 4, 0.55);
+    padding: 12px 16px;
+    color: var(--color-text-muted);
+    font-family: var(--font-serif);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    line-height: 1.5;
+    text-transform: uppercase;
+  }
   @media (max-width: 700px) {
     .arrival-item { grid-template-columns: 1fr; gap: 10px; }
   }
@@ -66,7 +90,13 @@
       </div>
       <div class="arrival-item">
         <h2>Parking</h2>
-        <p>You may park on the street alongside the building. A free gravel parking lot is also available at the very end of Mangum Street, the street adjacent to the building. Continue to the end of Mangum Street; the lot will be on your left.</p>
+        <div class="arrival-copy">
+          <p>You may park on the street alongside the building. A free gravel parking lot is also available at the very end of Mangum Street, the street adjacent to the building. Continue to the end of Mangum Street; the lot will be on your left.</p>
+          <figure class="parking-guide">
+            <img src="/assets/images/artpill-location-parking-guide.jpg" width="1672" height="941" loading="lazy" decoding="async" alt="The brick studio building beside Mangum Street, with an arrow pointing down Mangum Street toward the free gravel parking lot.">
+            <figcaption>Studio building and route down Mangum Street toward the free gravel lot.</figcaption>
+          </figure>
+        </div>
       </div>
       <div class="arrival-item">
         <h2>Entrance</h2>
@@ -85,6 +115,7 @@
     <section class="page-section">
       <div class="action-row">
         <a class="tattoos-button" href="/tattoos/day-of/">Day-of prep</a>
+        <a class="tattoos-button-secondary" href="/archive/places/jr-erikson-building/">Building history</a>
         <a class="tattoos-button-secondary" href="/tattoos/policies/">Booking policies</a>
         <a class="tattoos-button-secondary" href="/tattoos/aftercare/">Aftercare instructions</a>
       </div>

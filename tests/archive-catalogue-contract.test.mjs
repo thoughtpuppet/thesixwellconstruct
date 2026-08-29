@@ -74,7 +74,7 @@ function request(path, { method = "GET", body, admin = false } = {}) {
 test("migration assigns every existing cultural object an identity from the exact agreed families", () => {
   const db = database();
   const counts = db.prepare(`SELECT
-    (SELECT COUNT(*) FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ce.entity_type NOT IN ('event','appearance')) cultural_objects,
+    (SELECT COUNT(*) FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ce.entity_type NOT IN ('event','appearance','organization')) cultural_objects,
     (SELECT COUNT(*) FROM archive_catalogue_entries) catalogue_entries,
     (SELECT COUNT(*) FROM archive_object_versions) versions,
     (SELECT COUNT(*) FROM archive_object_states) states`).get();
@@ -82,7 +82,14 @@ test("migration assigns every existing cultural object an identity from the exac
   assert.equal(counts.versions, counts.cultural_objects);
   assert.equal(counts.states, counts.cultural_objects);
   assert.equal(db.prepare(`SELECT COUNT(*) count FROM archive_catalogue_entries ace
-    JOIN content_entities ce ON ce.id=ace.entity_id WHERE ce.entity_type IN ('event','appearance')`).get().count, 0);
+    JOIN content_entities ce ON ce.id=ace.entity_id WHERE ce.entity_type IN ('event','appearance','organization')`).get().count, 0);
+  assert.deepEqual({ ...db.prepare(`SELECT ad.record_type,ad.state,ad.public_visible
+    FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id
+    WHERE ad.entity_id='org-thoughtpuppet' AND ce.entity_type='organization'`).get() }, {
+    record_type: "creative-identity",
+    state: "draft",
+    public_visible: 0,
+  });
   const eventCounts = db.prepare(`SELECT
     (SELECT COUNT(*) FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ce.entity_type IN ('event','appearance')) event_records,
     (SELECT COUNT(*) FROM archive_event_identifiers) event_identifiers`).get();
@@ -113,8 +120,15 @@ test("migration assigns every existing cultural object an identity from the exac
     JOIN content_entities ce ON ce.id=am.dossier_entity_id
     WHERE ce.entity_type NOT IN ('event','appearance') AND (am.state_id IS NULL OR am.material_reference='')`).get();
   assert.equal(unassigned.count, 0);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_object_versions WHERE publication_state<>'published' OR public_visible<>1").get().count, 0);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_object_states WHERE publication_state<>'published' OR public_visible<>1").get().count, 0);
+  assert.ok(db.prepare(`SELECT COUNT(*) count FROM archive_object_versions version
+    JOIN archive_dossiers dossier ON dossier.entity_id=version.entity_id
+    WHERE dossier.state='draft' AND dossier.public_visible=0
+      AND version.publication_state='draft' AND version.public_visible=0`).get().count > 0);
+  assert.equal(db.prepare(`SELECT COUNT(*) count FROM archive_object_versions version
+    JOIN archive_dossiers dossier ON dossier.entity_id=version.entity_id
+    WHERE dossier.created_by='migration-0183'
+      AND (dossier.state<>'draft' OR dossier.public_visible<>0 OR dossier.published_at IS NOT NULL
+        OR version.publication_state<>'draft' OR version.public_visible<>0)`).get().count, 0);
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='archive_catalogue_documentation'").get());
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='archive_catalogue_identity_changes'").get());
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name='archive_catalogue_identity_change_audit'").get());
@@ -505,10 +519,11 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
   const state = (await stateResponse.json()).record;
 
   db.exec(`INSERT INTO media_assets
-      (id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
+      (id,source_url,original_filename,mime_type,alt_text,privacy,state,public_presentation,created_by,created_at,updated_at)
     VALUES
       ('media-art-marbles-v2-lead','https://cdn.example.test/art-marbles-v2.jpg','art-marbles-v2.jpg','image/jpeg',
-       'Revised Lost Marbles composition','public','granted','active','inline','test',datetime('now'),datetime('now'));`);
+       'Revised Lost Marbles composition','public','active','inline','test',datetime('now'),datetime('now'));`);
+  assert.deepEqual({...db.prepare("SELECT privacy,state,public_presentation FROM media_assets WHERE id='media-art-marbles-v2-lead'").get()},{privacy:"public",state:"active",public_presentation:"inline"});
   const leadResponse = await handleConstructApi(request("/api/admin/archive-materials", {
     method: "POST",
     admin: true,
@@ -788,9 +803,11 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
   const digitalAssetUpdate = await handleConstructApi(request(`/api/admin/media/${encodeURIComponent(adminDigitalAssetMaterial.media_id)}`, {
     method: "PATCH",
     admin: true,
-    body: { state: "active", privacy: "public", consent_status: "not-required", public_presentation: "inline" },
+    body: { state: "active", privacy: "public", public_presentation: "inline" },
   }), runtime);
   assert.equal(digitalAssetUpdate.status, 200);
+  const updatedDigitalAsset = (await digitalAssetUpdate.json()).record;
+  assert.deepEqual({privacy:updatedDigitalAsset.privacy,state:updatedDigitalAsset.state,public_presentation:updatedDigitalAsset.public_presentation},{privacy:"public",state:"active",public_presentation:"inline"});
   const publishedDigitalAssetMaterial = await handleConstructApi(request(`/api/admin/archive-materials/${encodeURIComponent(adminDigitalAssetMaterial.id)}`, {
     method: "PATCH",
     admin: true,
@@ -828,7 +845,7 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
   assert.ok(eventSearch.items.some((item) => item.entity_id === "event-context-only"));
 });
 
-test("public Archive media prefers explicit evidence, then approved canonical covers and symbols", async () => {
+test("public Archive media prefers explicit evidence, then explicitly public canonical covers and symbols", async () => {
   const db = database();
   const runtime = env(db);
 
@@ -837,10 +854,22 @@ test("public Archive media prefers explicit evidence, then approved canonical co
     VALUES
       ('portfolio-archive-cover-test','portfolio_item','node-tattoos','public',1,datetime('now'),'test','test',datetime('now'),datetime('now'));
     INSERT INTO portfolio_items
-      (id,source_url,storage_key,original_filename,content_type,title,alt_text,year,placement,primary_style,collection,caption,state,sort_order,created_at,updated_at,primary_consent_status)
+      (id,source_url,storage_key,original_filename,content_type,title,alt_text,year,placement,primary_style,collection,caption,state,sort_order,created_at,updated_at,primary_public_visible)
     VALUES
       ('portfolio-archive-cover-test','https://cdn.example.test/canonical-tattoo.jpg','','canonical-tattoo.jpg','image/jpeg',
-       'Canonical tattoo cover','A documented tattoo','2026','arm','blackwork','','','published',1,datetime('now'),datetime('now'),'granted');`);
+       'Canonical tattoo cover','A documented tattoo','2026','arm','blackwork','','','published',1,datetime('now'),datetime('now'),1);`);
+
+  db.exec(`UPDATE archive_dossiers
+      SET state='published',public_visible=1,published_at=datetime('now')
+      WHERE entity_id='portfolio-archive-cover-test';
+    UPDATE archive_object_versions
+      SET publication_state='published',public_visible=1
+      WHERE entity_id='portfolio-archive-cover-test';
+    UPDATE archive_object_states
+      SET publication_state='published',public_visible=1
+      WHERE version_id IN (SELECT id FROM archive_object_versions WHERE entity_id='portfolio-archive-cover-test');`);
+  assert.deepEqual({...db.prepare("SELECT state,primary_public_visible FROM portfolio_items WHERE id='portfolio-archive-cover-test'").get()},{state:"published",primary_public_visible:1});
+  assert.deepEqual({...db.prepare("SELECT state,public_visible FROM archive_dossiers WHERE entity_id='portfolio-archive-cover-test'").get()},{state:"published",public_visible:1});
 
   const canonicalResponse = await handleConstructApi(request("/api/archive/items/portfolio-archive-cover-test"), runtime);
   assert.equal(canonicalResponse.status, 200);
@@ -849,10 +878,10 @@ test("public Archive media prefers explicit evidence, then approved canonical co
   assert.equal(canonicalRecord.item.primary_media.kind, "image");
 
   db.exec(`INSERT INTO media_assets
-      (id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
+      (id,source_url,original_filename,mime_type,alt_text,privacy,state,public_presentation,created_by,created_at,updated_at)
     VALUES
       ('media-archive-cover-test','https://cdn.example.test/archive-final.jpg','archive-final.jpg','image/jpeg',
-       'Archive final image','public','granted','active','inline','test',datetime('now'),datetime('now'));
+       'Archive final image','public','active','inline','test',datetime('now'),datetime('now'));
     INSERT INTO archive_materials
       (id,dossier_entity_id,media_id,role,material_type,title,visibility,state,sort_order,material_reference,created_by,updated_by,created_at,updated_at)
     VALUES

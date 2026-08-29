@@ -70,8 +70,40 @@ for (const name of readdirSync(path.join(root, "migrations")).filter((value) => 
   sqlite.exec(readFileSync(path.join(root, "migrations", name), "utf8"));
 }
 
+const previewObjects = new Map();
+const previewBucket = {
+  async put(key, body, options = {}) {
+    const bytes = Buffer.from(await new Response(body).arrayBuffer());
+    previewObjects.set(key, { bytes, httpMetadata: options.httpMetadata || {} });
+  },
+  async delete(key) {
+    previewObjects.delete(key);
+  },
+  async head(key) {
+    const record = previewObjects.get(key);
+    if (!record) return null;
+    return {
+      size: record.bytes.byteLength,
+      httpEtag: `"preview-${record.bytes.byteLength}"`,
+      writeHttpMetadata(headers) {
+        if (record.httpMetadata.contentType) headers.set("content-type", record.httpMetadata.contentType);
+      },
+    };
+  },
+  async get(key, options = {}) {
+    const record = previewObjects.get(key);
+    if (!record) return null;
+    const range = options.range;
+    const bytes = range
+      ? record.bytes.subarray(range.offset, range.offset + range.length)
+      : record.bytes;
+    return { body: bytes };
+  },
+};
+
 const environment = {
   SUBMISSIONS_DB: new LocalD1(sqlite),
+  SUBMISSION_FILES: previewBucket,
   SUBMISSIONS_ADMIN_TOKEN: token,
 };
 
@@ -131,11 +163,11 @@ async function seed() {
   sqlite.prepare(`
     INSERT INTO media_assets(
       id, source_url, original_filename, mime_type, width, height, alt_text, privacy,
-      consent_status, state, public_presentation, created_by, created_at, updated_at
+      state, public_presentation, created_by, created_at, updated_at
     ) VALUES(
       'browser-palette-source', '/favicon-v2.svg', 'browser-palette-source.svg', 'image/svg+xml',
       512, 512, 'Representative source artwork for palette map testing', 'public',
-      'not-required', 'active', 'inline', 'preview', datetime('now'), datetime('now')
+      'active', 'inline', 'preview', datetime('now'), datetime('now')
     )
   `).run();
 
@@ -432,8 +464,9 @@ createServer(async (request, response) => {
   const url = new URL(request.url || "/", `http://${host}:${port}`);
   try {
     if (url.pathname === "/tools/archive-colors-materials-studio-preview/") {
-      const markup = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Colors and Materials Studio preview</title><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/studio/construct-manager.css"><link rel="stylesheet" href="/studio/archive-colors-materials.css"><style>html,body{margin:0;background:#0e0e0e;color:#f5b86d}body{padding:16px}button,input,select,textarea{font:inherit}</style></head><body><div id="status" aria-live="polite"></div><main id="mount"></main><script src="/studio/archive-colors-materials.js"></script><script>
+      const markup = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Colors and Materials Studio preview</title><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/studio/console-system.css"><link rel="stylesheet" href="/studio/construct-manager.css"><link rel="stylesheet" href="/studio/archive-colors-materials.css"><style>html,body{margin:0;background:#0e0e0e;color:#f5b86d}body{padding:16px}button,input,select,textarea{font:inherit}</style></head><body><div id="status" aria-live="polite"></div><main id="mount"></main><script src="/studio/archive-colors-materials.js"></script><script>
         const api=async(path,options={})=>{const response=await fetch(path,{...options,headers:{authorization:'Bearer ${token}',...(options.headers||{})}});const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||'Request failed');return payload};
+        localStorage.setItem('swc_submissions_admin_token','${token}');
         const status=(message)=>document.querySelector('#status').textContent=message;
         window.ArchiveColorMaterialsStudio.mount(document.querySelector('#mount'),api,status);
       </script></body></html>`;

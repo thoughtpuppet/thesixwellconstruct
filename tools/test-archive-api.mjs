@@ -73,16 +73,16 @@ function migrate(database) {
 
 function seedPrivacyMatrix(database) {
   const insertMedia = database.prepare(`INSERT INTO media_assets
-    (id,source_url,original_filename,mime_type,byte_size,alt_text,caption,privacy,consent_status,state,created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_title,public_description,public_presentation)
-    VALUES(?,?,?,?,1,?,?,?,?,?,'qa',datetime('now'),datetime('now'),?,?,?,?,?,?)`);
+    (id,source_url,original_filename,mime_type,byte_size,alt_text,caption,privacy,state,created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_title,public_description,public_presentation)
+    VALUES(?,?,?,?,1,?,?,?,?,'qa',datetime('now'),datetime('now'),?,?,?,?,?,?)`);
   const media = [
-    ["qa-media-ready","/assets/qa-ready.mp3","qa-ready.mp3","audio/mpeg","Ready audio","Reviewed voice memo","public","granted","active","orbital whisper in the blue room","ready","en","Ready voice memo","Reviewed transcript","inline"],
-    ["qa-media-pending","/assets/qa-pending.mp3","qa-pending.mp3","audio/mpeg","Pending audio","Pending voice memo","public","granted","active","pending secret phrase","pending","en","Pending voice memo","Not reviewed","inline"],
-    ["qa-media-denied","/assets/qa-denied.jpg","qa-denied.jpg","image/jpeg","Denied image","Denied consent","public","denied","active","denied secret phrase","ready","en","Denied image","Must stay private","inline"],
-    ["qa-media-hidden","/assets/qa-hidden.jpg","qa-hidden.jpg","image/jpeg","Hidden image","Hidden presentation","public","granted","active","hidden secret phrase","ready","en","Hidden image","Must stay hidden","hidden"],
-    ["qa-media-archived","/assets/qa-archived.jpg","qa-archived.jpg","image/jpeg","Archived image","Archived asset","public","granted","archived","archived secret phrase","ready","en","Archived image","Must stay archived","inline"],
-    ["qa-media-internal","/assets/qa-internal.jpg","qa-internal.jpg","image/jpeg","Internal image","Internal asset","internal","granted","active","internal secret phrase","ready","en","Internal image","Must stay internal","inline"],
-    ["qa-media-detached","/assets/qa-detached.jpg","qa-detached.jpg","image/jpeg","Detached image","No public attachment","public","granted","active","detached secret phrase","ready","en","Detached image","Must stay detached","inline"],
+    ["qa-media-ready","/assets/qa-ready.mp3","qa-ready.mp3","audio/mpeg","Ready audio","Reviewed voice memo","public","active","orbital whisper in the blue room","ready","en","Ready voice memo","Reviewed transcript","inline"],
+    ["qa-media-pending","/assets/qa-pending.mp3","qa-pending.mp3","audio/mpeg","Pending audio","Pending voice memo","public","active","pending secret phrase","pending","en","Pending voice memo","Not reviewed","inline"],
+    ["qa-media-additional","/assets/qa-additional.jpg","qa-additional.jpg","image/jpeg","Additional image","Public process evidence","public","active","additional public phrase","ready","en","Additional image","Public process evidence","inline"],
+    ["qa-media-hidden","/assets/qa-hidden.jpg","qa-hidden.jpg","image/jpeg","Hidden image","Hidden presentation","public","active","hidden secret phrase","ready","en","Hidden image","Must stay hidden","hidden"],
+    ["qa-media-archived","/assets/qa-archived.jpg","qa-archived.jpg","image/jpeg","Archived image","Archived asset","public","archived","archived secret phrase","ready","en","Archived image","Must stay archived","inline"],
+    ["qa-media-internal","/assets/qa-internal.jpg","qa-internal.jpg","image/jpeg","Internal image","Internal asset","internal","active","internal secret phrase","ready","en","Internal image","Must stay internal","inline"],
+    ["qa-media-detached","/assets/qa-detached.jpg","qa-detached.jpg","image/jpeg","Detached image","No public attachment","public","active","detached secret phrase","ready","en","Detached image","Must stay detached","inline"],
   ];
   for (const row of media) insertMedia.run(...row);
 
@@ -97,7 +97,7 @@ function seedPrivacyMatrix(database) {
     ["qa-note-draft","art-marbles",null,"notebook-draft","note","Draft note","","draft secret phrase","",null,null,"undated","","public","draft",24],
     ["qa-audio-ready","art-marbles","qa-media-ready","notebook-ready","voice-memo","Ready voice memo","A reviewed audio excerpt","","reflection","2023-06-01",null,"exact","June 1, 2023","public","published",25],
     ["qa-audio-pending","art-marbles","qa-media-pending","notebook-pending","voice-memo","Pending voice memo","Transcript is under review","","reflection",null,null,"undated","Date not verified","public","published",26],
-    ["qa-media-denied-material","art-marbles","qa-media-denied","notebook-denied","process-photo","Denied material","","","process",null,null,"undated","","public","published",27],
+    ["qa-media-additional-material","art-marbles","qa-media-additional","notebook-additional","process-photo","Additional public material","","","process",null,null,"undated","","public","published",27],
     ["qa-media-hidden-material","art-marbles","qa-media-hidden","notebook-hidden","process-photo","Hidden material","","","process",null,null,"undated","","public","published",28],
     ["qa-media-archived-material","art-marbles","qa-media-archived","notebook-archived","process-photo","Archived material","","","process",null,null,"undated","","public","published",29],
     ["qa-media-internal-material","art-marbles","qa-media-internal","notebook-media-internal","process-photo","Internal media material","","","process",null,null,"undated","","public","published",30],
@@ -151,7 +151,7 @@ async function run() {
 
   const items = await jsonApi(env, "/api/archive/items?limit=100");
   assert.equal(items.response.status, 200);
-  assert.equal(items.payload.pagination.total, 17);
+  assert.equal(items.payload.pagination.total, 24);
   assert.equal(items.payload.items.filter((item) => item.entity_id === "art-marbles").length, 1);
   assert.ok(items.payload.facets.material_type.some((facet) => facet.slug === "note"));
 
@@ -160,12 +160,13 @@ async function run() {
   assert.ok(includesId(detail.payload.materials, "qa-note-public"));
   assert.ok(includesId(detail.payload.materials, "qa-audio-ready"));
   assert.ok(includesId(detail.payload.materials, "qa-audio-pending"));
-  for (const id of ["qa-note-unlisted","qa-note-private","qa-note-internal","qa-note-draft","qa-media-denied-material","qa-media-hidden-material","qa-media-archived-material","qa-media-internal-material"]) {
+  assert.ok(includesId(detail.payload.materials, "qa-media-additional-material"));
+  for (const id of ["qa-note-unlisted","qa-note-private","qa-note-internal","qa-note-draft","qa-media-hidden-material","qa-media-archived-material","qa-media-internal-material"]) {
     assert.ok(!includesId(detail.payload.materials, id), `${id} leaked into public detail`);
   }
   const detailText = JSON.stringify(detail.payload);
   assert.match(detailText, /orbital whisper/);
-  for (const secret of ["pending secret phrase","denied secret phrase","hidden secret phrase","archived secret phrase","internal secret phrase","unlisted secret phrase","private secret phrase","draft secret phrase"]) assert.ok(!detailText.includes(secret), `${secret} leaked`);
+  for (const secret of ["pending secret phrase","hidden secret phrase","archived secret phrase","internal secret phrase","unlisted secret phrase","private secret phrase","draft secret phrase"]) assert.ok(!detailText.includes(secret), `${secret} leaked`);
 
   for (const query of ["blue?", '"blue?"', "dots & memory"] ) {
     const search = await jsonApi(env, `/api/search?q=${encodeURIComponent(query)}`);
@@ -228,7 +229,10 @@ async function run() {
   assert.equal(publicMedia.status, 302);
   assert.equal(publicMedia.headers.get("cache-control"), "private, no-store");
   assert.match(publicMedia.headers.get("location"), /qa-ready\.mp3$/);
-  for (const id of ["qa-media-denied","qa-media-hidden","qa-media-archived","qa-media-internal","qa-media-detached"]) assert.equal((await requestApi(env, `/api/construct/media/${id}`)).status, 404, `${id} file gate failed`);
+  const additionalPublicMedia = await requestApi(env, "/api/construct/media/qa-media-additional");
+  assert.equal(additionalPublicMedia.status, 302);
+  assert.match(additionalPublicMedia.headers.get("location"), /qa-additional\.jpg$/);
+  for (const id of ["qa-media-hidden","qa-media-archived","qa-media-internal","qa-media-detached"]) assert.equal((await requestApi(env, `/api/construct/media/${id}`)).status, 404, `${id} file gate failed`);
   assert.equal((await requestApi(env, "/api/construct/media/qa-media-ready", { method: "POST" })).status, 405);
   assert.equal((await requestApi(env, "/api/construct/entity-media/qa-media-hidden")).status, 404);
   assert.equal((await requestApi(env, "/api/admin/media/qa-media-internal/file")).status, 401);

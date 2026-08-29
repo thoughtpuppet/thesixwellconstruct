@@ -1,6 +1,8 @@
 (function(global){
   const roles=new Set(["result","before","process","detail"]);
+  const publicRoles=new Set(["result","detail"]);
   const healingStates=new Set(["unspecified","fresh","healed","in-progress"]);
+  const MAX_GROUPS=50;
 
   class PortfolioBatchOrganizer {
     constructor(options={}) {
@@ -9,17 +11,37 @@
       this.groups=[];
       this.nextGroupId=1;
       this.nextMediaId=1;
+      this.fileFingerprints=new Set();
+      this.lastAddDuplicates=[];
+      this.maxGroups=MAX_GROUPS;
     }
 
     addFiles(files) {
+      this.assertEditable();
       const added=[];
+      const pendingFingerprints=new Set();
+      const candidates=[];
+      this.lastAddDuplicates=[];
       for(const file of files||[]) {
+        const fingerprint=this.fileFingerprint(file);
+        if(this.fileFingerprints.has(fingerprint)||pendingFingerprints.has(fingerprint)) {
+          this.lastAddDuplicates.push(file);
+          continue;
+        }
+        pendingFingerprints.add(fingerprint);
+        candidates.push({file,fingerprint});
+      }
+      if(this.groups.length+candidates.length>this.maxGroups) {
+        throw new Error(`A batch can contain at most ${this.maxGroups} draft entries. Combine related photographs or start a second batch.`);
+      }
+      for(const {file,fingerprint} of candidates) {
         const media={
           id:`batch-media-${this.nextMediaId++}`,
           file,
           name:String(file?.name||"Portfolio image"),
           previewUrl:this.createPreview(file),
           role:"result",
+          publicVisible:true,
           healingState:"unspecified",
           isCover:true,
           uploadStatus:"pending",
@@ -34,10 +56,15 @@
           error:"",
           media:[media],
         };
+        this.fileFingerprints.add(fingerprint);
         this.groups.push(group);
         added.push(group);
       }
       return added;
+    }
+
+    fileFingerprint(file) {
+      return [file?.webkitRelativePath||file?.name||"",file?.size||0,file?.lastModified||0,file?.type||""].join("|");
     }
 
     group(groupId) {
@@ -70,7 +97,10 @@
       destination.media=selected.flatMap((group)=>group.media);
       destination.media.forEach((media)=>{
         media.isCover=media===preservedCover;
-        if(media.isCover) media.role="result";
+        if(media.isCover) {
+          media.role="result";
+          media.publicVisible=true;
+        }
       });
       destination.selected=false;
       this.groups=this.groups.filter((group)=>group===destination||!selectedIds.has(group.id));
@@ -79,6 +109,7 @@
 
     splitMedia(groupId,mediaId) {
       this.assertEditable();
+      if(this.groups.length>=this.maxGroups) throw new Error(`A batch can contain at most ${this.maxGroups} draft entries.`);
       const groupIndex=this.groups.findIndex((entry)=>entry.id===groupId);
       const group=this.groups[groupIndex];
       if(!group||group.media.length<2) throw new Error("This image is already its own proposed entry.");
@@ -87,9 +118,11 @@
       const [media]=group.media.splice(mediaIndex,1);
       media.isCover=true;
       media.role="result";
+      media.publicVisible=true;
       if(!group.media.some((entry)=>entry.isCover)) {
         group.media[0].isCover=true;
         group.media[0].role="result";
+        group.media[0].publicVisible=true;
       }
       const splitGroup={
         id:`batch-group-${this.nextGroupId++}`,
@@ -110,6 +143,7 @@
       if(!group||!media) throw new Error("Portfolio image not found in this batch.");
       group.media.forEach((entry)=>{ entry.isCover=entry===media; });
       media.role="result";
+      media.publicVisible=true;
       return media;
     }
 
@@ -120,6 +154,16 @@
       if(!media) throw new Error("Portfolio image not found in this batch.");
       if(media.isCover&&role!=="result") throw new Error("The cover image must remain a Result.");
       media.role=role;
+      media.publicVisible=publicRoles.has(role);
+      return media;
+    }
+
+    setPublicVisible(groupId,mediaId,publicVisible) {
+      this.assertEditable();
+      const media=this.media(groupId,mediaId);
+      if(!media) throw new Error("Portfolio image not found in this batch.");
+      if(media.isCover&&!publicVisible) throw new Error("The cover image must remain included on the public portfolio.");
+      media.publicVisible=Boolean(publicVisible);
       return media;
     }
 
@@ -156,6 +200,8 @@
         }
       }
       this.groups=[];
+      this.fileFingerprints.clear();
+      this.lastAddDuplicates=[];
     }
   }
 

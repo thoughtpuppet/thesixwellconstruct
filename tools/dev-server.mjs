@@ -79,6 +79,8 @@ const checkRoutes = [
   ["/edit-links-mac", 200],
   ["/page-visibility", 200],
   ["/about/", 200],
+  ["/about/identities/", 200],
+  ["/about/identities/thoughtpuppet/", 200],
   ["/about/visual-language/", 200],
   ["/about/legend/open-eye/", 200],
   ["/about/breakdown/", 200],
@@ -125,9 +127,14 @@ const checkRoutes = [
   ["/archive/sixwell-construct/", 200],
   ["/archive/tattoos/", 200],
   ["/archive/writings/", 200],
+  ["/archive/places/", 200],
+  ["/archive/places/jr-erikson-building/", 200],
   ["/archive/records/lostmarbles/", 200],
   ["/archive/notes/lost-marbles-inception-note/", 200],
   ["/archive/records/made-in-public/", 200],
+  ["/archive/records/thoughtpuppet/", 200],
+  ["/archive/records/thought-puppet-puppet-thoughts/", 200],
+  ["/archive/timelines/thoughtpuppet/", 200],
   ["/archive/timelines/art/", 200],
   ["/tattoos/", 200],
   ["/tattoos/special-projects/", 200],
@@ -248,6 +255,13 @@ function appearanceDetailRouteFile(urlPath) {
   return path.resolve(root, "about", "exhibitions-appearances", "detail", "index.html");
 }
 
+function identityProfileRouteFile(urlPath) {
+  const parts = normalizeRoute(urlPath).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "about" || parts[1] !== "identities") return null;
+  if (parts[2] === "detail" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(parts[2])) return null;
+  return path.resolve(root, "about", "identities", "detail", "index.html");
+}
+
 async function isHiddenPublicRoute(urlPath) {
   const pathname = requestPathname(urlPath);
   if (!isPublicPageRoute(urlPath) || isLocalOnlyRoute(urlPath) || isPageVisibilityOperationalExemptPath(pathname)) return false;
@@ -297,6 +311,8 @@ function safePath(urlPath) {
   if (legendRecordFile) return legendRecordFile;
   const appearanceDetailFile = appearanceDetailRouteFile(decoded);
   if (appearanceDetailFile) return appearanceDetailFile;
+  const identityProfileFile = identityProfileRouteFile(decoded);
+  if (identityProfileFile) return identityProfileFile;
 
   const clean = decoded === "/" ? "/index.html" : decoded;
   if (isEventDetailRoute(clean)) return eventDetailRouteFile(clean);

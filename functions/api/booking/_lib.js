@@ -9424,7 +9424,7 @@ async function tattooSettingsPayload(db, includeInactive = false) {
        WHERE m.state = 'active'
          AND (? = 1 OR (
            spc.publication_state = 'published' AND ce.visibility = 'public'
-           AND m.privacy = 'public' AND m.consent_status IN ('not-required','granted')
+           AND m.privacy = 'public'
            AND m.public_presentation = 'inline'
          ))
        ORDER BY spm.project_id, CASE spm.role WHEN 'primary' THEN 0 ELSE 1 END, spm.sort_order, spm.media_id`
@@ -9447,7 +9447,6 @@ async function tattooSettingsPayload(db, includeInactive = false) {
          AND (? = 1 OR (
            s.state = 'published' AND ce.visibility = 'public'
            AND em.public_visible = 1 AND m.privacy = 'public'
-           AND m.consent_status IN ('not-required','granted')
            AND m.public_presentation = 'inline'
          ))
        ORDER BY em.entity_id, em.sort_order, em.created_at`
@@ -9612,11 +9611,11 @@ export async function handleAdminTattooSettings(request, env) {
           const eligibleCover = await db.prepare(
             `SELECT id FROM media_assets
              WHERE id = ? AND state = 'active' AND privacy = 'public'
-               AND consent_status IN ('not-required','granted') AND public_presentation = 'inline'
+               AND public_presentation = 'inline'
                AND mime_type LIKE 'image/%'`
           ).bind(coverMediaId).first();
           if (!eligibleCover) {
-            return errorResponse("A Special Project Series cover must be an active, public, consent-cleared Shared Media image.", 409);
+            return errorResponse("A Special Project Series cover must be an active, public, inline Shared Media image.", 409);
           }
         }
         const visibility = state === "published" ? "public" : "internal";
@@ -9765,10 +9764,10 @@ export async function handleAdminTattooSettings(request, env) {
         const eligible = await db.prepare(
           `SELECT id FROM media_assets
            WHERE id IN (${placeholders}) AND state='active' AND privacy='public'
-             AND consent_status IN ('not-required','granted') AND public_presentation='inline'`
+             AND public_presentation='inline'`
         ).bind(...normalizedMedia.map((item) => item.id)).all();
         if ((eligible.results || []).length !== normalizedMedia.length) {
-          return errorResponse("Special Project media must be active, public, consent-cleared, inline Shared Media assets.", 409);
+          return errorResponse("Special Project media must be active, public, inline Shared Media assets.", 409);
         }
       }
       const visibility = publicationState === "published" ? "public" : "internal";

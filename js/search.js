@@ -95,6 +95,55 @@
     return { kind: kind || 'Record', label: label || 'Published record' };
   }
 
+  function resultKindFor(record) {
+    if (record.result_kind) return String(record.result_kind);
+    var type = String(record.entity_type || 'record').toLowerCase();
+    if (type === 'appearance') return 'Appearance';
+    if (type === 'event') return 'Six.Well event';
+    return type.replace(/_/g, ' ');
+  }
+
+  function eventDate(value) {
+    var raw = String(value || '').trim();
+    if (!raw) return null;
+    var date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw + 'T12:00:00Z' : raw);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+
+  function eventDateLabel(context) {
+    var timezone = String(context.timezone || 'America/New_York');
+    var start = eventDate(context.startsAt);
+    var end = eventDate(context.endsAt || context.confirmedThrough);
+    if (!start) return '';
+    var dateFormat = new Intl.DateTimeFormat('en-US', { timeZone: timezone, month: 'short', day: 'numeric', year: 'numeric' });
+    if (context.dateKind === 'date_range' && end) return dateFormat.format(start) + ' – ' + dateFormat.format(end);
+    var label = dateFormat.format(start);
+    if (context.dateKind === 'timed') {
+      var timeFormat = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', minute: '2-digit' });
+      label += ' · ' + timeFormat.format(start);
+      if (end && dateFormat.format(end) === dateFormat.format(start)) label += '–' + timeFormat.format(end);
+    }
+    return label;
+  }
+
+  function eventStatusLabel(context) {
+    var schedule = String(context.scheduleStatus || '').toLowerCase();
+    if (schedule && !['scheduled', 'published'].includes(schedule)) return schedule.replace(/_/g, ' ');
+    var temporal = String(context.temporalState || '').toLowerCase();
+    if (temporal === 'on_view') return 'On view';
+    if (temporal === 'upcoming') return 'Upcoming';
+    if (temporal === 'past') return 'Past';
+    if (temporal === 'cancelled') return 'Cancelled';
+    return '';
+  }
+
+  function eventMetaMarkup(record) {
+    var context = record.event_context;
+    if (!context || typeof context !== 'object') return '';
+    var values = [eventDateLabel(context), context.venueName, context.organizer, eventStatusLabel(context)].map(function (value) { return String(value || '').trim(); }).filter(function (value, index, list) { return value && list.indexOf(value) === index; });
+    return values.length ? '<p class="search-result-meta">' + values.map(function (value, index) { return '<span' + (index === values.length - 1 ? ' class="search-result-status"' : '') + '>' + esc(value) + '</span>'; }).join('') + '</p>' : '';
+  }
+
   function recordMarkup(record) {
     var route = safeRoute(record.route);
     if (!route) return '';
@@ -102,11 +151,12 @@
     var match = matchFor(record);
     var summary = summaryFor(record);
     return '<a class="search-result" data-medium="' + esc(medium) + '" href="' + esc(route) + '">' +
-      '<span class="search-result-copy"><span class="search-result-kind">' + esc(MEDIUM_LABELS[medium] || 'Archive') + ' · ' + esc(String(record.entity_type || 'record').replace(/_/g, ' ')) + '</span>' +
+      '<span class="search-result-copy"><span class="search-result-kind">' + esc(MEDIUM_LABELS[medium] || 'Archive') + ' · ' + esc(resultKindFor(record)) + '</span>' +
       '<h2>' + esc(record.title || record.name || 'Untitled record') + '</h2>' +
+      eventMetaMarkup(record) +
       (summary ? '<p class="search-result-summary">' + esc(summary) + '</p>' : '') +
       '<p class="search-match"><span class="search-match-label">Found through</span><span>' + esc(match.kind) + ' · ' + esc(match.label) + '</span></p></span>' +
-      '<span class="search-result-action" aria-hidden="true">Open record</span></a>';
+      '<span class="search-result-action" aria-hidden="true">' + (record.event_context ? 'Open event' : 'Open record') + '</span></a>';
   }
 
   function visibleRecords() {
@@ -144,7 +194,7 @@
     results.setAttribute('aria-busy', 'true');
     showStatus('loading');
     try {
-      var params = new URLSearchParams({ q: activeQuery, include: 'pages' });
+      var params = new URLSearchParams({ q: activeQuery, include: 'pages,calendar' });
       var response = await fetch('/api/search?' + params.toString(), { headers: { accept: 'application/json' }, cache: 'no-store', signal: controller.signal });
       if (!response.ok) throw new Error('Search unavailable');
       var payload = await response.json();

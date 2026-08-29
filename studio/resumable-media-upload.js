@@ -51,7 +51,7 @@
       const created=await request("/api/admin/media/uploads",token,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
         uploadKind,filename:file.name,mimeType:file.type,byteSize:file.size,
         altText:options.altText||"",caption:options.caption||"",privacy:options.privacy||"internal",
-        consentStatus:options.consentStatus||"unknown",transcript:options.transcript||"",
+        transcript:options.transcript||"",
         transcriptStatus:options.transcriptStatus||"not-requested",transcriptLanguage:options.transcriptLanguage||"en",
         publicTitle:options.publicTitle||"",publicDescription:options.publicDescription||"",
         publicPresentation:options.publicPresentation||"inline",

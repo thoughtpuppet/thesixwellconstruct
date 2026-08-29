@@ -27,10 +27,22 @@
   const anchorImage = document.querySelector("[data-current-anchor-image]");
   const anchorCaption = document.querySelector(".current-constellation-photo figcaption");
 
+  function projectLinks(project) {
+    const links=Array.isArray(project.links)?[...project.links]:[];
+    if (project.slug!=="thoughtpuppet") return links;
+    const required=[
+      {label:"Identity profile",url:"/about/identities/thoughtpuppet/",publicationGate:"thoughtpuppet"},
+      {label:"Full Archive history",url:"/archive/timelines/thoughtpuppet/",publicationGate:"thoughtpuppet"}
+    ];
+    const seen=new Set(links.map((link)=>safeUrl(link?.url)).filter(Boolean));
+    required.forEach((link)=>{if(!seen.has(link.url)){links.push(link);seen.add(link.url)}});
+    return links;
+  }
+
   function renderProjects(projects) {
     constellation.querySelectorAll(".current-project-node,.current-loading").forEach((element) => element.remove());
     constellation.insertAdjacentHTML("beforeend", projects.map((project,index) => {
-      const links=(project.links||[]).map((link)=>{const url=safeUrl(link.url);return url?`<a href="${escape(url)}">${escape(link.label)}</a>`:""}).join("");
+      const links=projectLinks(project).map((link)=>{const url=safeUrl(link.url),gated=link.publicationGate==="thoughtpuppet";return url?`<a href="${escape(url)}"${gated?' data-thoughtpuppet-public-link hidden':""}>${escape(link.label)}</a>`:""}).join("");
       const token=accentTokens[project.accent]||accentTokens.about;
       return `<article class="current-project-node" id="current-project-${escape(project.slug)}" data-position="${index+1}" style="--project-accent:var(${token})">
         <div class="current-project-meta"><span>${escape(project.category)}</span><span class="current-project-status">${escape(project.status)}</span></div>

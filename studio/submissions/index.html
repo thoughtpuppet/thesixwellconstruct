@@ -12,9 +12,10 @@
 <link rel="stylesheet" href="/studio/construct-manager.css?v=20260821-studio-visibility">
 <link rel="stylesheet" href="/studio/archive-notes-manager.css?v=1">
 <link rel="stylesheet" href="/studio/archive-catalogue.css?v=1">
-<link rel="stylesheet" href="/studio/archive-colors-materials.css?v=4">
+<link rel="stylesheet" href="/studio/archive-colors-materials.css?v=5">
 <link rel="stylesheet" href="/studio/archive-failed-experiments.css?v=1">
 <link rel="stylesheet" href="/studio/connections-manager.css?v=1">
+<link rel="stylesheet" href="/studio/creative-identities-manager.css?v=20260828-creative-identities">
 <link rel="stylesheet" href="/studio/admin-collapse.css?v=1">
 <link rel="stylesheet" href="/studio/analytics.css?v=tattoo-interest-1">
 <link rel="stylesheet" href="/studio/people-manager.css?v=4">
@@ -929,6 +930,7 @@
   let portfolioOptions = { styles: [], collections: [] };
   let portfolioBatch = null;
   let portfolioBatchUploading = false;
+  const PORTFOLIO_BATCH_CONCURRENCY = 2;
   let tattooSettings = { settings: {}, rateCards: [], specialProjectSeries: [], specialProjects: [], displayedHours: "" };
   let specialProjectMediaAssets = [];
   let specialProjectMediaPreviewUrls = [];
@@ -1809,6 +1811,138 @@
     });
   }
 
+  let archiveOpenGeneration = 0;
+
+  function cancelArchiveOpenNavigation() {
+    archiveOpenGeneration += 1;
+    window.ConstructManager?.cancelArchiveDossierOpen?.();
+  }
+
+  function archiveEntityIdFromLocation() {
+    return new URLSearchParams(window.location.search).get("archive")?.trim() || "";
+  }
+
+  function studioViewHistoryState() {
+    return {
+      activeTab,
+      subView,
+      activeId,
+      activeAppointmentId,
+      activePortfolioItemId,
+      selectedEventSlug,
+      portfolioState,
+    };
+  }
+
+  function restoreStudioViewHistoryState(view) {
+    if (!view || typeof view !== "object") return false;
+    cancelArchiveOpenNavigation();
+    activeTab = String(view.activeTab || "home");
+    subView = String(view.subView || "requests");
+    activeId = String(view.activeId || "");
+    activeAppointmentId = String(view.activeAppointmentId || "");
+    activePortfolioItemId = String(view.activePortfolioItemId || "");
+    selectedEventSlug = String(view.selectedEventSlug || "");
+    portfolioState = String(view.portfolioState || "published");
+    renderActiveTab();
+    return true;
+  }
+
+  function archiveLocation(entityId = "") {
+    const url = new URL(window.location.href);
+    if (entityId) url.searchParams.set("archive", entityId);
+    else url.searchParams.delete("archive");
+    return `${url.pathname}${url.search}${url.hash}`;
+  }
+
+  function replaceArchiveHistoryState(entityId = "") {
+    if (!entityId) cancelArchiveOpenNavigation();
+    const state = { ...(window.history.state || {}) };
+    if (entityId) state.archiveEntityId = entityId;
+    else delete state.archiveEntityId;
+    window.history.replaceState(state, "", archiveLocation(entityId));
+  }
+
+  function prepareArchiveDossierView() {
+    activeTab = "archive";
+    subView = "dossiers";
+    activeId = "";
+    activeAppointmentId = "";
+    activePortfolioItemId = "";
+    selectedEventSlug = "";
+    document.body.classList.remove("is-analytics-tab");
+    window.StudioAnalytics?.clearHash?.();
+    window.PeopleManager?.unmount?.();
+    tabsEl.querySelectorAll(".tab").forEach((button) => button.classList.toggle("is-active", button.dataset.tab === "archive"));
+    buildSubnav();
+    layoutEl.classList.add("single");
+    listPane.classList.add("hidden");
+    toolbarEl.innerHTML = "";
+  }
+
+  function renderArchiveOpenError(entityId, error) {
+    const message = error?.message || "This Archive record could not be opened.";
+    detailEl.innerHTML = `<section class="construct-manager"><div class="cm-notice error" role="alert"><strong>Archive record unavailable</strong><p>${escapeHtml(message)}</p><p class="contact">The Studio item was preserved. Return to all dossiers or retry this canonical record.</p></div><div class="cm-actions"><button class="button" type="button" data-archive-all-dossiers>All dossiers</button><button class="button" type="button" data-open-archive-record="${escapeHtml(entityId)}">Try again</button></div></section>`;
+    setStatus(message);
+  }
+
+  async function openArchiveRecord(entityId, { historyMode = "push" } = {}) {
+    const canonicalId = String(entityId || "").trim();
+    if (!canonicalId) {
+      prepareArchiveDossierView();
+      renderArchiveOpenError("", new Error("A canonical Studio item ID is required."));
+      return null;
+    }
+    if (historyMode === "push" && archiveEntityIdFromLocation() === canonicalId) historyMode = "replace";
+    const openGeneration = ++archiveOpenGeneration;
+    window.ConstructManager?.cancelArchiveDossierOpen?.();
+
+    const sourceView = studioViewHistoryState();
+    if (historyMode === "push") {
+      window.history.replaceState({ ...(window.history.state || {}), studioView: sourceView }, "", window.location.href);
+      window.history.pushState({ archiveEntityId: canonicalId }, "", archiveLocation(canonicalId));
+    } else if (historyMode === "replace") {
+      replaceArchiveHistoryState(canonicalId);
+    }
+
+    prepareArchiveDossierView();
+    detailEl.innerHTML = '<section class="construct-manager"><div class="cm-notice">Opening editable Archive record…</div></section>';
+    setStatus("Opening editable Archive record");
+    try {
+      await api(`/api/admin/entities/${encodeURIComponent(canonicalId)}/archive-dossier`, { method: "POST" });
+      if (openGeneration !== archiveOpenGeneration || archiveEntityIdFromLocation() !== canonicalId) return null;
+      if (!window.ConstructManager?.openArchiveDossier) throw new Error("Archive dossier editor is unavailable.");
+      await window.ConstructManager.openArchiveDossier(canonicalId);
+      if (openGeneration !== archiveOpenGeneration || archiveEntityIdFromLocation() !== canonicalId) return null;
+      setStatus("Editable Archive record opened");
+      return canonicalId;
+    } catch (error) {
+      if (error?.status === 401 || error?.status === 403) throw error;
+      renderArchiveOpenError(canonicalId, error);
+      return null;
+    }
+  }
+
+  async function showAllDossiers({ historyMode = "push" } = {}) {
+    cancelArchiveOpenNavigation();
+    const hasArchiveLocation = Boolean(archiveEntityIdFromLocation());
+    prepareArchiveDossierView();
+    if (historyMode === "push" && hasArchiveLocation) {
+      window.history.pushState({ studioView: studioViewHistoryState() }, "", archiveLocation());
+    } else {
+      replaceArchiveHistoryState();
+    }
+    if (!window.ConstructManager?.render) {
+      renderArchiveOpenError("", new Error("Archive dossier editor is unavailable."));
+      return;
+    }
+    await window.ConstructManager.render("archive", "dossiers");
+    setStatus("Archive dossiers");
+  }
+
+  window.openArchiveRecord = openArchiveRecord;
+  window.StudioArchiveHost = { openArchiveRecord, showAllDossiers };
+
   function renderMazeRevisions(submission) {
     if (submission.type !== "maze_design") return "";
     const revisions = Array.isArray(submission.mazeRevisions) ? submission.mazeRevisions : [];
@@ -2119,7 +2253,7 @@
     } else if (activeTab === "legend") {
       html = [["symbols","Symbols"],["categories","Categories"],["composition-rules","Composition Rules"],["themes","Themes"],["examples","Examples"],["usage","Usage and Relationships"],["drafts","Drafts"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "about") {
-      html = `<button class="subnav-btn ${subView === "current-works" ? "is-active" : ""}" type="button" data-subview="current-works">Current Works</button><button class="subnav-btn ${subView === "appearances" ? "is-active" : ""}" type="button" data-subview="appearances">Exhibitions &amp; Appearances</button>`;
+      html = `<button class="subnav-btn ${subView === "current-works" ? "is-active" : ""}" type="button" data-subview="current-works">Current Works</button><button class="subnav-btn ${subView === "creative-identities" ? "is-active" : ""}" type="button" data-subview="creative-identities">Creative Identities</button><button class="subnav-btn ${subView === "appearances" ? "is-active" : ""}" type="button" data-subview="appearances">Exhibitions &amp; Appearances</button>`;
     } else if (activeTab === "events") {
       html = `<button class="subnav-btn ${subView !== "event-archive" && !selectedEventSlug ? "is-active" : ""}" type="button" data-events-home>Current Events</button><button class="subnav-btn ${subView === "event-archive" ? "is-active" : ""}" type="button" data-subview="event-archive">Event Archive</button><a class="subnav-btn" href="/studio/calendar/">Atlanta Calendar</a>`;
       if (selectedEventSlug) {
@@ -2128,7 +2262,7 @@
       }
       html += `<button class="subnav-btn" type="button" data-event-setup style="margin-left:auto;">Manage / New Events</button>`;
     } else if (activeTab === "archive") {
-      html = [["dossiers","Dossiers"],["notes","Notes"],["failed-experiments","Failed Experiments"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["organizations","Organizations"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["dossiers","Dossiers"],["records","Records"],["legacy-records","Legacy Records"],["notes","Notes"],["failed-experiments","Failed Experiments"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["collections","Collections"],["timeline","Timelines"],["people","People"],["organizations","Organizations"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "site") {
       html = [["pathways","Homepage Pathways"],["nodes","Construct Nodes"],["navigation","Navigation"],["search","Search"],["visibility","Public Visibility"],["settings","Site Settings"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "shared") {
@@ -2230,13 +2364,14 @@
     ["process", "Process"],
     ["detail", "Detail"],
   ];
-  const PORTFOLIO_CONSENT_STATUSES = [
-    ["unknown", "Not reviewed - keep private"],
-    ["required", "Permission required - keep private"],
-    ["granted", "Permission granted"],
-    ["not-required", "Permission not required"],
-    ["denied", "Permission denied - keep private"],
-  ];
+  function portfolioRolePublicByDefault(role) {
+    return role === "result" || role === "detail";
+  }
+
+  function portfolioBoolean(value, fallback = false) {
+    if (value === undefined || value === null || value === "") return fallback;
+    return value === true || value === 1 || value === "1" || value === "true";
+  }
   function portfolioOptionList(kind, currentValue = "") {
     const key = kind === "style" ? "styles" : "collections";
     const options = (portfolioOptions[key] || []).filter((option) => option.enabled || option.value === currentValue);
@@ -2341,7 +2476,7 @@
       altText: item.altText,
       healingState: "unspecified",
       imageRole: "result",
-      consentStatus: item.primaryConsentStatus || "unknown",
+      publicVisible: portfolioBoolean(item.primaryPublicVisible ?? item.primary_public_visible, true),
       isCover: !item.coverImageRef || item.coverImageRef === "primary",
     };
     return [{ ...primary, imageRole: "result" }, ...(item.angles || [])];
@@ -2372,7 +2507,12 @@
     const primary = image.imageRef === "primary";
     const video = image.kind === "video";
     const imageRole = primary ? "result" : (image.imageRole || "result");
-    const consentStatus = image.consentStatus || "unknown";
+    const publicVisible = portfolioBoolean(
+      primary
+        ? image.primaryPublicVisible ?? image.primary_public_visible ?? image.publicVisible ?? image.public_visible
+        : image.publicVisible ?? image.public_visible,
+      portfolioRolePublicByDefault(imageRole),
+    );
     const isCoverIneligible = imageRole !== "result";
     const editorId = portfolioImageEditorId(item, image, index);
     return `<div class="portfolio-angle-editor" id="${escapeHtml(editorId)}" data-image-editor-panel hidden>
@@ -2385,7 +2525,7 @@
         <label>Timing note<input name="timingNote" value="${escapeHtml(image.timingNote || "")}" maxlength="160" placeholder="Example: day of, 8 weeks healed"></label>
         <label>${video?"Video":"Image"} caption<textarea name="caption" maxlength="1000">${escapeHtml(image.documentationCaption || "")}</textarea></label>
         ${video?`<label>Transcript status<select name="transcriptStatus">${[["not-requested","Not requested"],["pending","Pending"],["ready","Ready"],["failed","Failed"]].map(([value,label])=>`<option value="${value}"${value===(image.transcriptStatus||"not-requested")?" selected":""}>${label}</option>`).join("")}</select></label><label>Transcript language<input name="transcriptLanguage" value="${escapeHtml(image.transcriptLanguage||"en")}" maxlength="40"></label><label class="wide">Transcript<textarea name="transcript" maxlength="100000">${escapeHtml(image.transcript||"")}</textarea></label>`:""}
-        <label>Publication permission<select name="consentStatus">${PORTFOLIO_CONSENT_STATUSES.map(([value,label]) => `<option value="${value}"${value === consentStatus ? " selected" : ""}>${label}</option>`).join("")}</select><span class="portfolio-field-note">Only media marked Permission granted or Permission not required can appear publicly.${primary ? " This result must be eligible before the tattoo can be published." : ""}</span></label>
+        <label class="check"><input name="${primary ? "primaryPublicVisible" : "publicVisible"}" type="checkbox" ${publicVisible ? "checked" : ""}><span>Include on the public portfolio</span><span class="portfolio-field-note">Result and Detail media default to public inclusion; Before and Process media default to internal.${primary ? " Publishing requires the selected Result cover to be included publicly." : ""}</span></label>
         <div class="portfolio-angle-actions">
           <button class="button" type="submit">Save ${video ? "video" : "image"}</button>
           <button class="button" type="button" data-image-cover ${video || image.isCover || isCoverIneligible ? "disabled" : ""}>${video ? "Videos cannot be covers" : image.isCover ? "Current cover" : isCoverIneligible ? "Only results can be covers" : "Use as cover"}</button>
@@ -2412,7 +2552,7 @@
     const stateAction = item.state === "published"
       ? `<button class="button" type="button" data-portfolio-state="draft" data-id="${escapeHtml(item.id)}">Unpublish</button>`
       : item.state === "draft"
-        ? `<button class="button" type="button" data-portfolio-state="published" data-id="${escapeHtml(item.id)}" title="Save the visible metadata and image permissions, then publish">Save &amp; publish</button>`
+        ? `<button class="button" type="button" data-portfolio-state="published" data-id="${escapeHtml(item.id)}" title="Save the visible metadata and public media selections, then publish">Save &amp; publish</button>`
         : `<button class="button" type="button" data-portfolio-state="draft" data-id="${escapeHtml(item.id)}">Restore to draft</button>`;
     return `
       <article class="portfolio-card${editor ? " is-open" : ""}" data-portfolio-card="${escapeHtml(item.id)}">
@@ -2424,6 +2564,7 @@
           <div class="meta">${styleLabels.map(escapeHtml).join(" + ")}${item.collection ? ` / ${escapeHtml(portfolioOptionLabel("collection", item.collection))}` : ""}${projectType === "cover_up" ? " / Cover-up" : ""}</div>
           <div class="portfolio-card-actions">
             <button class="button" type="button" data-portfolio-open="${escapeHtml(item.id)}">Open</button>
+            <button class="button" type="button" data-open-archive-record="${escapeHtml(item.id)}">Open Archive Record</button>
             ${stateAction}
             <button class="button" type="button" data-portfolio-connections data-id="${escapeHtml(item.id)}" aria-expanded="false" aria-controls="portfolio-connections-${escapeHtml(item.id)}">Connections</button>
             ${item.state !== "archived" ? `<button class="button danger-button" type="button" data-portfolio-archive data-id="${escapeHtml(item.id)}">Archive</button>` : ""}
@@ -2564,6 +2705,7 @@
         <span class="portfolio-batch-filename">${escapeHtml(media.name)}</span>
         <label class="portfolio-batch-cover"><input type="radio" name="batch-cover-${escapeHtml(group.id)}" data-batch-cover="${escapeHtml(media.id)}" data-group-id="${escapeHtml(group.id)}" ${media.isCover ? "checked" : ""} ${locked ? "disabled" : ""}><span>Use as cover</span></label>
         <label>Media role<select data-batch-role="${escapeHtml(media.id)}" data-group-id="${escapeHtml(group.id)}" ${media.isCover || locked ? "disabled" : ""}>${PORTFOLIO_IMAGE_ROLES.map(([value,label]) => `<option value="${value}"${value === role ? " selected" : ""}>${label}</option>`).join("")}</select></label>
+        <label class="check"><input type="checkbox" data-batch-public="${escapeHtml(media.id)}" data-group-id="${escapeHtml(group.id)}" ${media.publicVisible ? "checked" : ""} ${media.isCover || locked ? "disabled" : ""}><span>Include publicly</span></label>
         <label>Condition<select data-batch-healing="${escapeHtml(media.id)}" data-group-id="${escapeHtml(group.id)}" ${locked ? "disabled" : ""}>${PORTFOLIO_HEALING_STATES.map(([value,label]) => `<option value="${value}"${value === media.healingState ? " selected" : ""}>${label}</option>`).join("")}</select></label>
         ${group.media.length > 1 ? `<button class="button" type="button" data-batch-split="${escapeHtml(media.id)}" data-group-id="${escapeHtml(group.id)}" ${locked ? "disabled" : ""}>Make separate entry</button>` : ""}
       </div>
@@ -2579,6 +2721,7 @@
       </div>
       ${group.error ? `<p class="portfolio-batch-error" role="alert">${escapeHtml(group.error)}</p>` : ""}
       <div class="portfolio-batch-media">${group.media.map((media) => portfolioBatchImageMarkup(group, media)).join("")}</div>
+      ${group.itemId ? `<div class="portfolio-batch-actions"><button class="button" type="button" data-open-archive-record="${escapeHtml(group.itemId)}">Open Archive Record</button></div>` : ""}
     </article>`;
   }
 
@@ -2602,7 +2745,7 @@
     host.hidden = false;
     host.innerHTML = `
       <div class="portfolio-batch-head">
-        <div><h3>Organize batch</h3><p class="contact">Combine photographs of the same tattoo before creating drafts. Use the upload area above to add more images.</p></div>
+        <div><h3>Organize batch</h3><p class="contact">Combine photographs of the same tattoo before creating drafts. Result and Detail media begin public; Before and Process media begin internal. This temporary organizer clears if Studio reloads and can hold up to 50 draft entries.</p></div>
         <span class="portfolio-batch-summary">${summary.images} image${summary.images === 1 ? "" : "s"} → ${summary.entries} draft entr${summary.entries === 1 ? "y" : "ies"}</span>
       </div>
       <div class="portfolio-batch-actions">
@@ -2628,9 +2771,18 @@
     });
     if (accepted.length) {
       if (!portfolioBatch) portfolioBatch = new window.PortfolioBatchOrganizer();
-      portfolioBatch.addFiles(accepted);
-      renderPortfolioBatch();
-      document.getElementById("portfolioUploadStatus").textContent = `${accepted.length} image${accepted.length === 1 ? "" : "s"} added to the organizer`;
+      try {
+        const added = portfolioBatch.addFiles(accepted);
+        const duplicateCount = portfolioBatch.lastAddDuplicates.length;
+        renderPortfolioBatch();
+        document.getElementById("portfolioUploadStatus").textContent = [
+          added.length ? `${added.length} image${added.length === 1 ? "" : "s"} added to the organizer` : "",
+          duplicateCount ? `${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"} skipped` : "",
+        ].filter(Boolean).join(" · ");
+      } catch (error) {
+        errors.push(error.message);
+        if (!portfolioBatch.groups.length) portfolioBatch = null;
+      }
     }
     if (errors.length) setStatus(errors.join(" · "));
   }
@@ -2642,7 +2794,7 @@
       body: JSON.stringify({
         imageRole: media.isCover ? "result" : media.role,
         healingState: media.healingState,
-        consentStatus: "unknown",
+        publicVisible: Boolean(media.publicVisible),
         promoteToCoverUp: media.role === "before",
       }),
     });
@@ -2659,12 +2811,15 @@
       const upload = new FormData();
       upload.append("file", media.file);
       if (step === "create-entry") {
+        upload.append("state", "draft");
+        upload.append("primaryPublicVisible", String(Boolean(media.publicVisible)));
         const payload = await api("/api/admin/portfolio", { method: "POST", body: upload });
         if (!payload.item?.id) throw new Error("The draft was created without a portfolio ID. Refresh before retrying.");
         group.itemId = payload.item.id;
         media.imageRef = "primary";
       } else {
         upload.append("imageRole", media.role);
+        upload.append("publicVisible", String(Boolean(media.publicVisible)));
         if (media.role === "before") upload.append("promoteToCoverUp", "true");
         const payload = await api(`/api/admin/portfolio/${encodeURIComponent(group.itemId)}/images`, { method: "POST", body: upload });
         if (!payload.image?.id) throw new Error("The image was uploaded without a media ID. Refresh before retrying.");
@@ -2687,9 +2842,10 @@
     portfolioBatchUploading = true;
     renderPortfolioBatch();
     let failedEntries = 0;
-    for (let groupIndex = 0; groupIndex < portfolioBatch.groups.length; groupIndex += 1) {
-      const group = portfolioBatch.groups[groupIndex];
-      if (group.uploadStatus === "complete") continue;
+    const groups = [...portfolioBatch.groups];
+    let nextGroupIndex = 0;
+    const uploadGroup = async (group) => {
+      if (group.uploadStatus === "complete") return 0;
       group.uploadStatus = "uploading";
       group.error = "";
       const cover = group.media.find((media) => media.isCover);
@@ -2702,7 +2858,6 @@
         }
         group.uploadStatus = "complete";
       } catch (error) {
-        failedEntries += 1;
         group.uploadStatus = "error";
         group.error = error.message;
         if (activeMedia) {
@@ -2711,7 +2866,19 @@
         }
       }
       renderPortfolioBatch();
-    }
+      return group.uploadStatus === "error" ? 1 : 0;
+    };
+    const uploadWorker = async () => {
+      while (nextGroupIndex < groups.length) {
+        const group = groups[nextGroupIndex];
+        nextGroupIndex += 1;
+        if (group.uploadStatus !== "complete") failedEntries += await uploadGroup(group);
+      }
+    };
+    await Promise.all(Array.from(
+      { length: Math.min(PORTFOLIO_BATCH_CONCURRENCY, groups.length) },
+      () => uploadWorker(),
+    ));
     portfolioBatchUploading = false;
     const summary = portfolioBatch.summary();
     if (!failedEntries && summary.completedEntries === summary.entries) {
@@ -2730,6 +2897,7 @@
 
   async function uploadPortfolioAngles(itemId, files, imageRole = "result") {
     if (!PORTFOLIO_IMAGE_ROLES.some(([value]) => value === imageRole)) throw new Error("Choose a valid image role before uploading.");
+    const publicVisible = portfolioRolePublicByDefault(imageRole);
     const imageTypes=new Set(["image/jpeg","image/png","image/webp"]),videoTypes=new Set(["video/mp4","video/webm"]);
     const accepted = [...files].filter((file) => (imageTypes.has(file.type)&&file.size<=15*1024*1024)||(videoTypes.has(file.type)&&file.size<=2*1024*1024*1024));
     if(accepted.some(file=>videoTypes.has(file.type))&&imageRole==="before")throw new Error("Video can be Result, Process, or Detail media, but not Before / existing tattoo.");
@@ -2744,15 +2912,16 @@
           if(cancel){cancel.hidden=false;cancel.onclick=async()=>{controller.abort();if(sessionId)try{await window.StudioResumableMedia.cancel(sessionId,token)}catch{};cancel.hidden=true;setStatus("Video upload cancelled")}}
           let media;
           try{
-            media=await window.StudioResumableMedia.upload(file,{token,signal:controller.signal,privacy:"private",consentStatus:"unknown",
+            media=await window.StudioResumableMedia.upload(file,{token,signal:controller.signal,privacy:publicVisible?"public":"private",
               altText:`Tattoo ${imageRole} video`,onSession:session=>{sessionId=session.id},
               onStatus:message=>setStatus(message),onProgress:progress=>setStatus(`${progress.resumed?"Resuming":"Uploading"} ${file.name}: ${progress.percent}%`)});
           }finally{if(cancel){cancel.hidden=true;cancel.onclick=null}}
-          await api(`/api/admin/portfolio/${encodeURIComponent(itemId)}/images`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mediaId:media.id,imageRole})});
+          await api(`/api/admin/portfolio/${encodeURIComponent(itemId)}/images`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mediaId:media.id,imageRole,publicVisible})});
         }else{
           const upload = new FormData();
           upload.append("file", file);
           upload.append("imageRole", imageRole);
+          upload.append("publicVisible", String(publicVisible));
           if (imageRole === "before") upload.append("promoteToCoverUp", "true");
           await api(`/api/admin/portfolio/${encodeURIComponent(itemId)}/images`, { method: "POST", body: upload });
         }
@@ -2766,7 +2935,7 @@
     }
     await loadPortfolioItems();
     const roleLabel = PORTFOLIO_IMAGE_ROLES.find(([value]) => value === imageRole)?.[1] || "Result";
-    setStatus(accepted.length ? `${accepted.length} ${roleLabel} media item${accepted.length === 1 ? "" : "s"} attached privately; set publication permission before use` : "Use images up to 15 MB or MP4/WebM video up to 2 GiB");
+    setStatus(accepted.length ? `${accepted.length} ${roleLabel} media item${accepted.length === 1 ? "" : "s"} attached; ${publicVisible ? "included on the public portfolio by default" : "kept internal by default"}` : "Use images up to 15 MB or MP4/WebM video up to 2 GiB");
   }
 
   async function movePortfolioAngle(itemId, mediaId, direction) {
@@ -2807,6 +2976,9 @@
     const itemId = form.dataset.imageDocumentation;
     const imageRef = form.dataset.imageRef;
     const values = Object.fromEntries(new FormData(form));
+    const visibilityControl = imageRef === "primary" ? form.elements.primaryPublicVisible : form.elements.publicVisible;
+    values.publicVisible = isCover || Boolean(visibilityControl?.checked);
+    delete values.primaryPublicVisible;
     if (imageRef === "primary") values.imageRole = "result";
     if (values.imageRole === "before") values.promoteToCoverUp = true;
     values.isCover = isCover;
@@ -2880,7 +3052,7 @@
     const coverForm = [...card.querySelectorAll("[data-image-documentation]")]
       .find((form) => form.querySelector("[data-image-cover]")?.textContent.includes("Current cover"));
     let section = imageDetails;
-    let target = primaryForm?.elements.consentStatus || imageDetails?.querySelector("summary");
+    let target = primaryForm?.elements.primaryPublicVisible || imageDetails?.querySelector("summary");
 
     if (normalized.includes("title") || normalized.includes("alt text") || normalized.includes("metadata")) {
       section = metadataDetails;
@@ -2888,7 +3060,7 @@
       const altText = metadataForm?.elements.altText;
       target = title && !String(title.value || "").trim() ? title : altText || title;
     } else if (normalized.includes("cover") && coverForm) {
-      target = coverForm.elements.consentStatus || coverForm.querySelector("[data-image-role]") || target;
+      target = coverForm.elements.primaryPublicVisible || coverForm.elements.publicVisible || coverForm.querySelector("[data-image-role]") || target;
     } else if (normalized.includes("before") || normalized.includes("cover-up")) {
       section = metadataDetails;
       target = metadataForm?.elements.projectType || target;
@@ -2972,6 +3144,14 @@
         } catch (error) { setStatus(error.message); }
         return;
       }
+      const batchPublic = event.target.closest("[data-batch-public]");
+      if (batchPublic) {
+        try {
+          portfolioBatch?.setPublicVisible(batchPublic.dataset.groupId, batchPublic.dataset.batchPublic, batchPublic.checked);
+          renderPortfolioBatch();
+        } catch (error) { setStatus(error.message); }
+        return;
+      }
       const batchHealing = event.target.closest("[data-batch-healing]");
       if (batchHealing) {
         try {
@@ -2987,6 +3167,8 @@
       const roleSelect = event.target.closest("[data-image-role]");
       if (roleSelect) {
         const form = roleSelect.closest("[data-image-documentation]");
+        const publicControl = form?.elements.publicVisible;
+        if (publicControl) publicControl.checked = portfolioRolePublicByDefault(roleSelect.value);
         const coverButton = form?.querySelector("[data-image-cover]");
         if (coverButton && !coverButton.textContent.includes("Current cover")) {
           const eligible = roleSelect.value === "result";
@@ -3071,6 +3253,8 @@
         const form = cover.closest("[data-image-documentation]");
         if (form) {
           try {
+            const publicControl = form.elements.primaryPublicVisible || form.elements.publicVisible;
+            if (publicControl) publicControl.checked = true;
             await savePortfolioImageDocumentation(form, true);
           } catch (error) {
             setStatus(`Cannot use that cover: ${error.message}`);
@@ -3179,7 +3363,7 @@
           <div class="portfolio-head"><div><h2>Portfolio</h2><p class="contact">Upload, describe, and publish tattoo work. Newest entries appear first in Studio and on the public gallery.</p></div>
             <div class="portfolio-filters">${["published", "draft", "archived"].map((state) => `<button class="subnav-btn ${portfolioState === state ? "is-active" : ""}" type="button" data-portfolio-filter="${state}">${state} (${counts[state] || 0})</button>`).join("")}</div>
           </div>
-          <div class="portfolio-drop" id="portfolioDrop"><input id="portfolioFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple><strong>Drop JPEG, PNG, or WebP images here</strong><span class="contact">Up to 15 MB each. Organize related photographs before creating private Draft entries.</span><button class="button" id="portfolioChoose" type="button">Choose images</button><div class="portfolio-upload-status" id="portfolioUploadStatus" aria-live="polite"></div></div>
+          <div class="portfolio-drop" id="portfolioDrop"><input id="portfolioFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple><strong>Drop JPEG, PNG, or WebP images here</strong><span class="contact">Up to 15 MB each and 50 draft entries per batch. Organize related photographs before upload; the temporary organizer clears if Studio reloads.</span><button class="button" id="portfolioChoose" type="button">Choose images</button><div class="portfolio-upload-status" id="portfolioUploadStatus" aria-live="polite"></div></div>
           <section class="portfolio-batch" id="portfolioBatch" aria-label="Organize portfolio upload batch" hidden></section>
           <div class="portfolio-grid" id="portfolioGrid"><div class="portfolio-empty">Loading portfolio...</div></div>
         </div>
@@ -3335,7 +3519,6 @@
       (item.state || "active") === "active"
       && String(item.mime_type || item.mimeType || "").startsWith("image/")
       && (item.privacy || "public") === "public"
-      && ["not-required", "granted"].includes(item.consent_status || item.consentStatus || "not-required")
       && (item.public_presentation || item.publicPresentation || "inline") === "inline"
     );
     tattooSettings = {
@@ -3617,7 +3800,6 @@
         upload.append("alt_text", altText);
         upload.append("public_title", projectTitle);
         upload.append("privacy", "public");
-        upload.append("consent_status", "not-required");
         upload.append("public_presentation", "inline");
         const payload = await api("/api/admin/media", { method: "POST", body: upload });
         const asset = payload.record || {};
@@ -3673,7 +3855,6 @@
       upload.append("alt_text", altText);
       upload.append("public_title", `${seriesName} series cover`);
       upload.append("privacy", "public");
-      upload.append("consent_status", "not-required");
       upload.append("public_presentation", "inline");
       const payload = await api("/api/admin/media", { method: "POST", body: upload });
       const asset = payload.record || {};
@@ -4566,6 +4747,11 @@
   }
 
   function setActiveTab(tab) {
+    if (tab === "archive" && tab === activeTab && subView === "dossiers" && archiveEntityIdFromLocation()) {
+      showAllDossiers().catch((error) => setStatus(error.message));
+      return;
+    }
+    if (archiveEntityIdFromLocation()) replaceArchiveHistoryState();
     if (tab === activeTab) {
       if (tab !== "tattoo" || subView === "appointments") return;
       subView = "appointments";
@@ -4590,6 +4776,11 @@
   }
 
   function setSubView(view) {
+    if (activeTab === "archive" && view === "dossiers" && subView === view && archiveEntityIdFromLocation()) {
+      showAllDossiers().catch((error) => setStatus(error.message));
+      return;
+    }
+    if (archiveEntityIdFromLocation()) replaceArchiveHistoryState();
     if (subView === view) return;
     subView = view;
     activePortfolioItemId = "";
@@ -4756,6 +4947,7 @@
         <div class="booking-actions">
           <a class="button" href="${escapeHtml(publicEventPath(ev.slug))}" target="_blank" rel="noopener noreferrer">Open Public Page</a>
           <button class="button" type="button" data-copy-public-link="${escapeHtml(publicEventPath(ev.slug))}">Copy Public Link</button>
+          <button class="button" type="button" data-open-archive-record="${escapeHtml(ev.id)}">Open Archive Record</button>
         </div>
       </div>
       <div class="review-card">
@@ -5805,7 +5997,7 @@ ${meetingLines}
       <div class="booking-actions"><button class="button" type="button" data-maze-archive-promote="${escapeHtml(submission.id)}">Create private Archive draft</button><button class="button danger-button" type="button" data-maze-archive-action="reject">Reject candidate</button></div>
       <p class="save-feedback" id="mazeArchiveActionState" role="status" aria-live="polite"></p>`;
     if (state === "rejected") controls = `<div class="booking-actions"><button class="button" type="button" data-maze-archive-action="restore">Restore candidate</button></div>`;
-    if (state === "promoted") controls = `<p class="contact">Private Archive identity: ${escapeHtml(archive.archiveTitle || archive.archiveEntityId)}. Publish it only through the canonical record and dossier gates.</p><div class="booking-actions">${archive.archiveSlug ? `<a class="button" href="/archive/records/${encodeURIComponent(archive.archiveSlug)}/?preview=1" target="_blank" rel="noopener">Preview dossier</a>` : ""}<button class="button danger-button" type="button" data-maze-archive-action="withdraw">Withdraw from Archive</button></div>`;
+    if (state === "promoted") controls = `<p class="contact">Private Archive identity: ${escapeHtml(archive.archiveTitle || archive.archiveEntityId)}. Publish it only through the canonical record and dossier gates.</p><div class="booking-actions">${archive.archiveSlug ? `<a class="button" href="/archive/records/${encodeURIComponent(archive.archiveSlug)}/?preview=1" target="_blank" rel="noopener">Preview dossier</a>` : ""}<button class="button" type="button" data-open-archive-record="${escapeHtml(archive.archiveEntityId)}">Open Archive Record</button><button class="button danger-button" type="button" data-maze-archive-action="withdraw">Withdraw from Archive</button></div>`;
     if (state === "withdrawn") controls = `<p class="contact">Public eligibility has been removed. The private source submission and audit trail are preserved.</p>`;
     return `<div class="assist-panel" id="mazeArchivePanel"><label>Maze Archive</label><p class="contact">${escapeHtml(summary)}</p><div class="value" style="margin-top:10px;">Curation: ${escapeHtml(titleize(state))}<br>Consent copy: ${escapeHtml(archive.consentVersion || "Unknown")}</div>${controls}</div>`;
   }
@@ -6934,7 +7126,10 @@ ${meetingLines}
                 <div class="event-admission-list" data-event-admission-list>${ev.admissionOptions.map(eventAdmissionEditor).join("")}</div>
               </div>` : ""}
             </div>
-            <button class="button save-schedule" type="submit">Save Event</button>
+            <div class="booking-actions">
+              <button class="button save-schedule" type="submit">Save Event</button>
+              <button class="button" type="button" data-open-archive-record="${escapeHtml(ev.id)}">Open Archive Record</button>
+            </div>
           </form>
           <div class="cm-entity-connections" data-event-connections="${escapeHtml(ev.id)}"></div>
         </div>
@@ -8386,6 +8581,11 @@ ${meetingLines}
 
   async function loadAndRender() {
     await Promise.all([loadSubmissions(), loadManualTextTemplates()]);
+    const archiveEntityId = archiveEntityIdFromLocation();
+    if (archiveEntityId) {
+      await openArchiveRecord(archiveEntityId, { historyMode: "replace" });
+      return;
+    }
     renderActiveTab();
   }
 
@@ -8405,6 +8605,40 @@ ${meetingLines}
     } catch (error) {
       setStatus(error.message);
       tokenModal.classList.remove("hidden");
+    }
+  });
+
+  document.addEventListener("click", async (event) => {
+    const openButton = event.target.closest?.("[data-open-archive-record]");
+    const allDossiersButton = event.target.closest?.("[data-archive-all-dossiers]");
+    if (!openButton && !allDossiersButton) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const button = openButton || allDossiersButton;
+    button.disabled = true;
+    try {
+      if (openButton) await openArchiveRecord(openButton.dataset.openArchiveRecord);
+      else await showAllDossiers();
+    } catch (error) {
+      setStatus(error.message || "Archive could not be opened");
+      if (error?.status === 401 || error?.status === 403) tokenModal.classList.remove("hidden");
+    } finally {
+      if (button.isConnected) button.disabled = false;
+    }
+  }, true);
+
+  window.addEventListener("popstate", (event) => {
+    const archiveEntityId = archiveEntityIdFromLocation();
+    if (archiveEntityId) {
+      openArchiveRecord(archiveEntityId, { historyMode: "none" }).catch((error) => {
+        setStatus(error.message || "Archive could not be opened");
+        if (error?.status === 401 || error?.status === 403) tokenModal.classList.remove("hidden");
+      });
+      return;
+    }
+    if (!restoreStudioViewHistoryState(event.state?.studioView)) {
+      if (activeTab === "archive") subView = "dossiers";
+      renderActiveTab();
     }
   });
 
@@ -11151,6 +11385,10 @@ ${meetingLines}
     activeTab = "analytics";
     subView = analyticsHashState.view;
   }
+  if (archiveEntityIdFromLocation()) {
+    activeTab = "archive";
+    subView = "dossiers";
+  }
 
   if (directInvitePreview) {
     tokenModal.classList.add("hidden");
@@ -11172,10 +11410,10 @@ ${meetingLines}
 </script>
 <script src="/studio/origin-thread-manager.js?v=1"></script>
 <script src="/studio/connections-manager.js?v=3"></script>
-<script src="/studio/archive-colors-materials.js?v=4"></script>
+<script src="/studio/archive-colors-materials.js?v=5"></script>
 <script src="/studio/archive-failed-experiments.js?v=1"></script>
 <script src="/js/archive-note-markdown.js?v=1"></script>
-<script src="/studio/construct-manager.js?v=20260826-blackboard-records"></script>
+<script src="/studio/construct-manager.js?v=20260828-editable-archive-records"></script>
 <script src="/studio/people-manager.js?v=11"></script>
 </body>
 </html>

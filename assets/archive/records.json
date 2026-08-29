@@ -1,6 +1,5 @@
 {
   "generated_at": "2026-05-17T21:05:07.024Z",
-  "source": "Obsidian: The Six Well Construct/Website/Archive/Records",
   "publish_rule": "archive_publish must be true and visibility must be public",
   "records": [
     {
@@ -20,20 +19,16 @@
         "/assets/paintings/IMG_8905.jpg",
         "/assets/paintings/PAINTING%20CONTAINER.JPG"
       ],
-      "related_notes": [
-        "[[Website/Archive/README]]"
-      ],
       "related_site_routes": [
         "/archive/",
         "/about/"
       ],
-      "why_it_matters": "This record marks the point where the archive stops being a placeholder and becomes a repeatable publishing system.",
-      "source_note": "process-archive-frame.md"
+      "why_it_matters": "This record marks the point where the archive stops being a placeholder and becomes a repeatable publishing system."
     },
     {
       "archive_id": "marbles-source-thread",
       "title": "Marbles Source Thread",
-      "node": "Thoughtpuppet / Sai Solehman",
+      "node": "ThoughtPuppet / Sai Solehman",
       "record_type": "artwork",
       "room": "Symbols",
       "date_or_period": "2026",
@@ -46,16 +41,11 @@
       "assets": [
         "/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
       ],
-      "related_notes": [
-        "[[03_Nodes/thoughtpuppet/Sai Solehman - Artist/Paintings/Am I Losing My Marbles Or Hiding Them]]",
-        "[[03_Nodes/thoughtpuppet/Sai Solehman - Artist/Paintings/MUMA]]"
-      ],
       "related_site_routes": [
         "/art/",
         "/archive/"
       ],
-      "why_it_matters": "This is the kind of record that lets the archive explain lineage without overexplaining the private studio process.",
-      "source_note": "marbles-source-thread.md"
+      "why_it_matters": "This is the kind of record that lets the archive explain lineage without overexplaining the private studio process."
     },
     {
       "archive_id": "coparent-flash-residue",
@@ -73,16 +63,12 @@
       "assets": [
         "/assets/flash/COPARENT.png"
       ],
-      "related_notes": [
-        "[[03_Nodes/art.pill Tattoo House/FLASH/Co-Parent]]"
-      ],
       "related_site_routes": [
         "/tattoos/",
         "/tattoos/flash/",
         "/archive/"
       ],
-      "why_it_matters": "The record shows that tattoo flash can function as a live offer, a past reference, and a source-language artifact at the same time.",
-      "source_note": "coparent-flash-residue.md"
+      "why_it_matters": "The record shows that tattoo flash can function as a live offer, a past reference, and a source-language artifact at the same time."
     }
   ],
   "filters": {
@@ -94,7 +80,7 @@
     "nodes": [
       "Art.Pill Tattoo House",
       "The Six.Well Construct",
-      "Thoughtpuppet / Sai Solehman"
+      "ThoughtPuppet / Sai Solehman"
     ],
     "record_types": [
       "artwork",

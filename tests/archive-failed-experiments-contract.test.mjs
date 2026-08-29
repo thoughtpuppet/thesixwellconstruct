@@ -111,7 +111,6 @@ function insertMedia(db, {
   altText = "",
   caption = "",
   privacy = "public",
-  consentStatus = "not-required",
   state = "active",
   presentation = "inline",
   publicTitle = "",
@@ -119,10 +118,10 @@ function insertMedia(db, {
   transcript = "",
 } = {}) {
   db.prepare(`INSERT INTO media_assets
-      (id,source_url,original_filename,mime_type,alt_text,caption,privacy,consent_status,state,
+      (id,source_url,original_filename,mime_type,alt_text,caption,privacy,state,
        public_presentation,public_title,public_description,transcript,created_by,created_at,updated_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'test',?,?)`)
-    .run(id, `/test/${id}`, `${id}.bin`, mimeType, altText, caption, privacy, consentStatus, state,
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'test',?,?)`)
+    .run(id, `/test/${id}`, `${id}.bin`, mimeType, altText, caption, privacy, state,
       presentation, publicTitle, publicDescription, transcript, NOW, NOW);
 }
 
@@ -219,8 +218,8 @@ test("0087 creates standalone failed-experiment evidence with private draft defa
   assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_dossiers WHERE entity_id=?").get(record.entity_id).count, 0, "evidence records must not receive catalogue dossiers");
 
   db.prepare(`INSERT INTO media_assets
-      (id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
-    VALUES('failed-experiment-image','/test/failed-experiment.jpg','failed-experiment.jpg','image/jpeg','Failed material test','internal','not-required','active','hidden','test',?,?)`)
+      (id,source_url,original_filename,mime_type,alt_text,privacy,state,public_presentation,created_by,created_at,updated_at)
+    VALUES('failed-experiment-image','/test/failed-experiment.jpg','failed-experiment.jpg','image/jpeg','Failed material test','internal','active','hidden','test',?,?)`)
     .run(NOW, NOW);
   db.prepare(`INSERT INTO entity_media
       (entity_id,media_id,role,sort_order,public_visible,created_at)
@@ -517,16 +516,16 @@ test("publication rejects ineligible or inaccessible evidence and media revocati
   });
   const privatePublish = await admin(runtimeEnv, `/api/admin/archive-failed-experiments/${encodeURIComponent(privateRecord.id)}`, { state: "published" }, "PATCH");
   assert.equal(privatePublish.status, 409);
-  assert.match(privatePublish.body.error, /active, public, inline, and consent-cleared/i);
+  assert.match(privatePublish.body.error, /active, public, and inline/i);
 
-  const deniedRecord = await preparedDraft("Denied failed evidence", {
-    id: "failed-denied-media",
-    altText: "Consent-denied material test",
-    consentStatus: "denied",
+  const hiddenRecord = await preparedDraft("Hidden failed evidence", {
+    id: "failed-hidden-media",
+    altText: "Hidden material test",
+    presentation: "hidden",
   });
-  const deniedPublish = await admin(runtimeEnv, `/api/admin/archive-failed-experiments/${encodeURIComponent(deniedRecord.id)}`, { state: "published" }, "PATCH");
-  assert.equal(deniedPublish.status, 409);
-  assert.match(deniedPublish.body.error, /consent-cleared/i);
+  const hiddenPublish = await admin(runtimeEnv, `/api/admin/archive-failed-experiments/${encodeURIComponent(hiddenRecord.id)}`, { state: "published" }, "PATCH");
+  assert.equal(hiddenPublish.status, 409);
+  assert.match(hiddenPublish.body.error, /active, public, and inline/i);
 
   const inaccessibleRecord = await preparedDraft("Inaccessible failed evidence", {
     id: "failed-inaccessible-media",
@@ -545,7 +544,7 @@ test("publication rejects ineligible or inaccessible evidence and media revocati
   assert.ok(db.prepare("SELECT entity_id FROM search_documents WHERE entity_id=?").get(revocableRecord.id));
   assert.equal((await api(runtimeEnv, `/api/archive/failed-experiments/${encodeURIComponent(revocableRecord.slug)}`)).status, 200);
 
-  const revoke = await admin(runtimeEnv, "/api/admin/media/failed-revocable-media", { consent_status: "denied" }, "PATCH");
+  const revoke = await admin(runtimeEnv, "/api/admin/media/failed-revocable-media", { privacy: "internal" }, "PATCH");
   assert.equal(revoke.status, 200, revoke.body.error);
   assert.equal((await api(runtimeEnv, `/api/archive/failed-experiments/${encodeURIComponent(revocableRecord.slug)}`)).status, 404);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM search_documents WHERE entity_id=?").get(revocableRecord.id).count, 0);
@@ -750,6 +749,7 @@ test("API, Studio, and public surfaces share the approved failed-experiments con
   assert.match(studioModule, /archive-failed-experiments/);
   assert.match(studioModule, /media-pair/);
   assert.match(studioModule, /image\/webp/);
+  assert.doesNotMatch(studioModule, /consent_status|consentStatus|\bConsent\b/);
 
   assert.match(publicSurface, /<h1[^>]*>Failed Experiments\.<\/h1>/);
   assert.match(publicSurface, /Abandoned concepts, flawed tests, and unresolved attempts preserved as part of the work\./);

@@ -24,6 +24,7 @@
     ["music", "Music", "/archive/music/"],
     ["writings", "Writings", "/archive/writings/"],
     ["film", "Film", "/archive/film/"],
+    ["places", "Places", "/archive/places/"],
     ["sixwell-construct", "The Construct", "/archive/sixwell-construct/"],
   ];
 
@@ -102,6 +103,7 @@
     '"': "&quot;",
     "'": "&#39;",
   }[character]));
+  const inlineEmphasis = (value) => escapeHtml(value).replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
 
   const list = (value) => Array.isArray(value) ? value : value ? [value] : [];
   const first = (...values) => values.find((value) => value !== undefined && value !== null && value !== "");
@@ -235,6 +237,7 @@
     let key = "q";
     let value = text(subject && subject.slug, id, name);
     if (entityType === "person" || role.includes("founder") || role.includes("artist")) key = "person";
+    else if (entityType === "organization" || id.startsWith("org-")) key = "brand";
     else if (role === "brand") key = "brand";
     else if (entityType === "construct_node" || role === "medium") {
       key = "medium";
@@ -358,7 +361,7 @@
           <input id="archive-query" name="q" type="search" autocomplete="off" placeholder="Try a piece, material, person, symbol, or year">
           <button class="archive-search-button" type="submit">Search</button>
         </form>
-        ${collectionsView ? "" : '<nav class="archive-actions archive-search-actions" aria-label="Archive resources"><a class="archive-button" href="/archive/notes/">Notes</a><a class="archive-button" href="/archive/maze/">Maze Archive</a><a class="archive-button" href="/archive/failed-experiments/">Failed Experiments</a><a class="archive-button" href="/archive/colors-materials/">Colors &amp; Materials</a><a class="archive-button" href="/archive/art/making-the-canvas/">Making the Canvas</a><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/blackboards/">View blackboards</a><a class="archive-button" href="/archive/compare/">Compare records</a></nav>'}
+        ${collectionsView ? "" : '<nav class="archive-actions archive-search-actions" aria-label="Archive resources"><a class="archive-button" href="/archive/notes/">Notes</a><a class="archive-button" href="/archive/timelines/">Timelines</a><a class="archive-button" href="/archive/places/">Places</a><a class="archive-button" href="/archive/maze/">Maze Archive</a><a class="archive-button" href="/archive/failed-experiments/">Failed Experiments</a><a class="archive-button" href="/archive/colors-materials/">Colors &amp; Materials</a><a class="archive-button" href="/archive/art/making-the-canvas/">Making the Canvas</a><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/blackboards/">View blackboards</a><a class="archive-button" href="/archive/compare/">Compare records</a></nav>'}
       </section>
       <section class="archive-explorer" aria-label="Archive explorer">
         <aside class="archive-filter-panel" aria-labelledby="archive-filter-title">
@@ -749,15 +752,21 @@
   }
 
   function archiveNoteThumbnailMarkup(note,index){
-    const title=text(note.title,"Archive Note"),preview=safeUrl(first(note.preview_url,note.previewUrl));
-    return `<article class="archive-note-quick-card"><button type="button" data-archive-note-trigger data-note-index="${index}" aria-haspopup="dialog" aria-controls="archive-note-dialog" aria-label="Open ${escapeHtml(title)}"><span class="archive-note-quick-card-preview">${preview?`<img src="${escapeHtml(preview)}" alt="" loading="lazy" decoding="async">`:`<span class="archive-notebook-placeholder" aria-hidden="true">Note</span>`}</span><span class="archive-note-quick-card-copy"><span class="archive-date">${escapeHtml(text(note.date_label,note.dateLabel,"Archive Note"))}</span><strong>${escapeHtml(title)}</strong></span></button></article>`;
+    const title=text(note.title,"Archive Note"),preview=safeUrl(first(note.preview_url,note.previewUrl)),journal=text(note.note_type,note.noteType)==="journal-entry",label=journal?"Journal moment":"Archive Note",date=text(note.date_label,note.dateLabel),cardLabel=date||label,noteIndex=Number.isInteger(note._noteIndex)?note._noteIndex:index;
+    return `<article class="archive-note-quick-card"><button type="button" data-archive-note-trigger data-note-index="${noteIndex}" aria-haspopup="dialog" aria-controls="archive-note-dialog" aria-label="Open ${escapeHtml(title)}"><span class="archive-note-quick-card-preview">${preview?`<img src="${escapeHtml(preview)}" alt="" loading="lazy" decoding="async">`:`<span class="archive-notebook-placeholder" aria-hidden="true">${escapeHtml(label)}</span>`}</span><span class="archive-note-quick-card-copy"><span class="archive-date">${escapeHtml(cardLabel)}</span><strong>${escapeHtml(title)}</strong></span></button></article>`;
   }
 
-  function archiveNoteDialogShellMarkup(){return `<dialog class="archive-note-dialog" id="archive-note-dialog" aria-labelledby="archive-note-dialog-title"><div class="archive-note-dialog-shell"><header class="archive-note-dialog-header"><span class="archive-kicker">Complete Archive Note</span><button type="button" data-archive-note-close>Close</button></header><div class="archive-note-dialog-content" data-archive-note-dialog-content><div class="archive-loading" role="status"><p>Opening the Note…</p></div></div></div></dialog>`}
+  function archiveJournalEntryMarkup(note,index){
+    const title=text(note.title,"Untitled Journal moment"),date=text(note.date_label,note.dateLabel,note.source_created_at,note.sourceCreatedAt,"Undated"),excerpt=text(note.excerpt,"Open the complete entry to read this Journal moment."),noteIndex=Number.isInteger(note._noteIndex)?note._noteIndex:index,assets=list(note.assets).slice().sort((a,b)=>Number(first(a.sort_order,a.sortOrder,0))-Number(first(b.sort_order,b.sortOrder,0)));
+    const media=assets.length?`<span class="archive-journal-entry-media" aria-label="${assets.length} ordered image${assets.length===1?"":"s"}">${assets.map(asset=>{const url=safeUrl(asset.url),alt=text(asset.alt_text,asset.altText);return url?`<span class="archive-journal-entry-image"><img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async"></span>`:""}).join("")}</span>`:"";
+    return `<article class="archive-journal-entry"><button type="button" data-archive-note-trigger data-note-index="${noteIndex}" aria-haspopup="dialog" aria-controls="archive-note-dialog" aria-label="Open Journal moment ${escapeHtml(title)}">${media}<span class="archive-journal-entry-copy"><span class="archive-date">${escapeHtml(date)}</span><strong>${escapeHtml(title)}</strong><span>${escapeHtml(excerpt)}</span><em>Open complete Journal moment</em></span></button></article>`;
+  }
+
+  function archiveNoteDialogShellMarkup(){return `<dialog class="archive-note-dialog" id="archive-note-dialog" aria-labelledby="archive-note-dialog-title"><div class="archive-note-dialog-shell"><header class="archive-note-dialog-header"><span class="archive-kicker" data-archive-note-dialog-kicker>Complete Archive Note</span><button type="button" data-archive-note-close>Close</button></header><div class="archive-note-dialog-content" data-archive-note-dialog-content><div class="archive-loading" role="status"><p>Opening the Note…</p></div></div></div></dialog>`}
 
   function setupArchiveNoteQuickView(notes){
-    const dialog=app.querySelector("#archive-note-dialog");if(!dialog||!window.ArchiveNoteMarkdown)return;const content=dialog.querySelector("[data-archive-note-dialog-content]"),close=dialog.querySelector("[data-archive-note-close]");let lastTrigger=null,controller=null;
-    async function openNote(index,trigger){const note=notes[index];if(!note)return;lastTrigger=trigger;controller?.abort();controller=new AbortController();content.innerHTML='<div class="archive-loading" role="status"><p>Opening the Note…</p></div>';if(!dialog.open)dialog.showModal();document.body.classList.add("archive-note-dialog-open");close.focus();try{const payload=await getJson(`/api/archive/notes/${encodeURIComponent(text(note.slug,note.id))}`,controller.signal),record=first(payload.note,payload.record,note),assets=list(payload.assets);content.innerHTML=`<div class="archive-note-reader" tabindex="0" role="region" aria-label="Complete ${escapeHtml(text(record.title,"Archive Note"))}"><h2 id="archive-note-dialog-title">${escapeHtml(text(record.title,"Archive Note"))}</h2>${window.ArchiveNoteMarkdown.render(first(record.body_markdown,record.bodyMarkdown),assets)}<p><a class="archive-button" href="${escapeHtml(safeUrl(record.route)||`/archive/notes/${encodeURIComponent(text(record.slug))}/`)}">Open permanent Note record</a></p></div>`;window.ArchiveNoteMarkdown.bindImageLightboxes(content);content.querySelector(".archive-note-reader")?.focus()}catch(error){if(error.name!=="AbortError")content.innerHTML='<div class="archive-note-empty"><p>This Note could not be opened.</p></div>'}}
+    const dialog=app.querySelector("#archive-note-dialog");if(!dialog||!window.ArchiveNoteMarkdown)return;const content=dialog.querySelector("[data-archive-note-dialog-content]"),close=dialog.querySelector("[data-archive-note-close]"),kicker=dialog.querySelector("[data-archive-note-dialog-kicker]");let lastTrigger=null,controller=null;
+    async function openNote(index,trigger){const note=notes[index];if(!note)return;const journal=text(note.note_type,note.noteType)==="journal-entry",publicLabel=journal?"Journal moment":"Archive Note";lastTrigger=trigger;controller?.abort();controller=new AbortController();if(kicker)kicker.textContent=`Complete ${publicLabel}`;content.innerHTML=`<div class="archive-loading" role="status"><p>Opening the ${publicLabel}…</p></div>`;if(!dialog.open)dialog.showModal();document.body.classList.add("archive-note-dialog-open");close.focus();try{const payload=await getJson(`/api/archive/notes/${encodeURIComponent(text(note.slug,note.id))}`,controller.signal),record=first(payload.note,payload.record,note),assets=list(payload.assets);content.innerHTML=`<div class="archive-note-reader" tabindex="0" role="region" aria-label="Complete ${escapeHtml(publicLabel)} ${escapeHtml(text(record.title,"Untitled"))}"><h2 id="archive-note-dialog-title">${escapeHtml(text(record.title,"Untitled"))}</h2>${window.ArchiveNoteMarkdown.render(first(record.body_markdown,record.bodyMarkdown),assets)}<p><a class="archive-button" href="${escapeHtml(safeUrl(record.route)||`/archive/notes/${encodeURIComponent(text(record.slug))}/`)}">Open permanent ${escapeHtml(publicLabel)} record</a></p></div>`;window.ArchiveNoteMarkdown.bindImageLightboxes(content);content.querySelector(".archive-note-reader")?.focus()}catch(error){if(error.name!=="AbortError")content.innerHTML=`<div class="archive-note-empty"><p>This ${escapeHtml(publicLabel)} could not be opened.</p></div>`}}
     app.querySelectorAll("[data-archive-note-trigger]").forEach(trigger=>trigger.addEventListener("click",()=>openNote(Number(trigger.dataset.noteIndex),trigger)));close.addEventListener("click",()=>dialog.close());dialog.addEventListener("click",event=>{if(event.target===dialog)dialog.close()});dialog.addEventListener("close",()=>{controller?.abort();document.body.classList.remove("archive-note-dialog-open");lastTrigger?.focus()});
   }
 
@@ -1118,9 +1127,11 @@
       }).sort((a, b) => Number(first(a.sort_order, 9999)) - Number(first(b.sort_order, 9999)) || text(a.sort_date, a.occurred_at, a.date).localeCompare(text(b.sort_date, b.occurred_at, b.date)));
       const primaryMaterial = materials.find((material) => slugify(first(material.material_type, material.type, material.kind)) === "final-image");
       const notebookMaterials = materials.filter((material) => slugify(first(material.material_type, material.type, material.kind)) !== "final-image");
-      const notes = data.notes.slice().sort((a,b)=>Number(first(a.sort_order,a.sortOrder,9999))-Number(first(b.sort_order,b.sortOrder,9999)));
+      const notes = data.notes.slice().sort((a,b)=>text(b.source_created_at,b.sourceCreatedAt,b.created_at,b.createdAt).localeCompare(text(a.source_created_at,a.sourceCreatedAt,a.created_at,a.createdAt))||Number(first(a.sort_order,a.sortOrder,9999))-Number(first(b.sort_order,b.sortOrder,9999))).map((note,index)=>({...note,_noteIndex:index}));
+      const journalNotes = notes.filter(note=>text(note.note_type,note.noteType)==="journal-entry");
+      const supportingNotes = notes.filter(note=>text(note.note_type,note.noteType)!=="journal-entry");
       const sourceMaterials = data.sourceMaterials.slice().sort((a, b) => Number(first(a.sort_order, a.sortOrder, 9999)) - Number(first(b.sort_order, b.sortOrder, 9999)) || text(a.occurred_at, a.occurredAt, a.id).localeCompare(text(b.occurred_at, b.occurredAt, b.id)));
-      const hasNotebookEvidence = notebookMaterials.length > 0 || sourceMaterials.length > 0 || notes.length > 0;
+      const hasSupportingEvidence = notebookMaterials.length > 0 || sourceMaterials.length > 0 || supportingNotes.length > 0;
       const media = first(payload.primary_media, data.dossier.primary_media, mediaObject(primaryMaterial), mediaObject(item));
       const image = mediaObject({ primary_media: media });
       const imageUrl = mediaUrl(image);
@@ -1144,13 +1155,13 @@
       document.title = `${title} · Archive · the six.well construct`;
       app.innerHTML = `
         <article${mediumKey ? ` data-archive-medium="${escapeHtml(mediumKey)}"` : ""}>
-          <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(archiveObjectTypeLabel(item), item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadataHtml}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${relatedActionMarkup}</div></div></div>${imageUrl || imageMarkup ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${escapeHtml(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
+          <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(archiveObjectTypeLabel(item), item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadataHtml}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${relatedActionMarkup}</div></div></div>${imageUrl || imageMarkup ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${inlineEmphasis(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
           <nav class="archive-jump-nav" aria-label="On this record"><a href="#overview">Overview</a><a href="#story">Story</a>${data.documentation.length ? `<a href="#documentation">Documentation</a>` : ""}${data.versions.length ? `<a href="#evolution">Evolution</a>` : ""}${data.colorUsages.length||data.materialUsages.length||data.paletteMaps.length?`<a href="#palette-materials">Palette &amp; Materials</a>`:""}<a href="#notebook">Notebook</a><a href="#history">History</a><a href="#connections">Connections</a></nav>
           <section class="archive-document-section" id="story"><header class="archive-section-heading"><span class="archive-section-index">01 / Context</span><h2 class="archive-section-title">The story</h2></header><div><div class="archive-prose">${story ? paragraphMarkup(story) : "<p>This dossier currently holds the public facts of the work. Its fuller story has not been published yet.</p>"}${data.collections.length ? `<div class="archive-link-chips">${data.collections.map((collection) => `<a class="archive-chip" href="/archive/?collection=${encodeURIComponent(text(collection.slug, collection.id, collection.name))}">${escapeHtml(text(collection.name, collection.title, collection.slug))}</a>`).join("")}</div>` : ""}</div>${contextMarkup(data.subjects, data.terms)}</div></section>
           ${data.documentation.length ? `<section class="archive-document-section" id="documentation"><header class="archive-section-heading"><span class="archive-section-index">02 / Catalogue</span><h2 class="archive-section-title">Documentation</h2></header><div>${documentationMarkup(data.documentation)}</div></section>` : ""}
           ${data.versions.length ? `<section class="archive-document-section" id="evolution"><header class="archive-section-heading"><span class="archive-section-index">03 / Evolution</span><h2 class="archive-section-title">Versions and states</h2></header><div>${evolutionMarkup(data, materials, item)}</div></section>` : ""}
           ${data.colorUsages.length||data.materialUsages.length||data.paletteMaps.length?`<section class="archive-document-section" id="palette-materials"><header class="archive-section-heading"><span class="archive-section-index">04 / Material record</span><h2 class="archive-section-title">Palette &amp; Materials</h2></header><div class="archive-palette-document">${data.colorUsages.length?`<section><h3>Documented colors</h3><ol class="archive-palette-region-list archive-palette-usage-list">${data.colorUsages.map(paletteUsageMarkup).join("")}</ol></section>`:""}${data.materialUsages.length?`<section><h3>Materials, tools &amp; equipment</h3><ul class="archive-material-usage-list">${data.materialUsages.map(paletteMaterialMarkup).join("")}</ul></section>`:""}${data.paletteMaps.map(paletteMapShellMarkup).join("")}</div></section>`:""}
-          <section class="archive-document-section" id="notebook"><header class="archive-section-heading"><span class="archive-section-index">04 / Evidence</span><h2 class="archive-section-title">Open notebook</h2></header><div>${hasNotebookEvidence ? `<div class="archive-notebook-grid">${notes.map(archiveNoteThumbnailMarkup).join("")}${notebookMaterials.map((material,index)=>materialThumbnailMarkup(material,index,imageUrl)).join("")}${sourceMaterials.map(sourceMaterialThumbnailMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>${escapeHtml(text(data.dossier.empty_materials_note, "No process materials are public yet. The completed work and known history remain available here while sketches, notes, audio, and process images are reviewed."))}</p></div>`}</div></section>
+          <section class="archive-document-section" id="notebook"><header class="archive-section-heading"><span class="archive-section-index">04 / Evidence</span><h2 class="archive-section-title">Open notebook</h2></header><div class="archive-open-notebook-groups"><section class="archive-open-notebook-group" aria-labelledby="journal-entries-title"><header><span class="archive-kicker">Authored record</span><h3 id="journal-entries-title">Journal moments</h3><p>Subjective observations from the life of this archived item, with their images kept in authored order.</p></header>${journalNotes.length?`<div class="archive-journal-feed">${journalNotes.map(archiveJournalEntryMarkup).join("")}</div>`:`<div class="archive-note-empty"><p>No Journal moments have been published for this item yet.</p></div>`}</section><section class="archive-open-notebook-group" aria-labelledby="process-evidence-title"><header><span class="archive-kicker">Supporting record</span><h3 id="process-evidence-title">Process Evidence / Source Materials</h3><p>Documentation, references, correspondence, and other supporting records are kept distinct from authored Journal moments.</p></header>${hasSupportingEvidence?`<div class="archive-notebook-grid">${supportingNotes.map(archiveNoteThumbnailMarkup).join("")}${notebookMaterials.map((material,index)=>materialThumbnailMarkup(material,index,imageUrl)).join("")}${sourceMaterials.map(sourceMaterialThumbnailMarkup).join("")}</div>`:`<div class="archive-note-empty"><p>${escapeHtml(text(data.dossier.empty_materials_note, "No process evidence or source materials are public yet."))}</p></div>`}</section></div></section>
           <section class="archive-document-section" id="history"><header class="archive-section-heading"><span class="archive-section-index">05 / Time</span><h2 class="archive-section-title">Item history</h2></header><div>${activities.length ? `<div class="archive-history">${activities.map(historyMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>No dated history entries are public yet.</p></div>`}</div></section>
           <section class="archive-document-section" id="connections"><header class="archive-section-heading"><span class="archive-section-index">06 / Field</span><h2 class="archive-section-title">Connections</h2></header><div>${relationships.length || data.originThreads.length ? `${groupedConnectionsMarkup(item, relationships, data.originThreads)}${relationshipGraph(title, relationships)}` : `<div class="archive-note-empty"><p>No public relationships have been attached to this dossier yet.</p></div>`}</div></section>
         </article>
@@ -1173,14 +1184,53 @@
     return text(entry.sort_date, entry.occurred_at, entry.date_start, entry.start_date, entry.date, entry.year, "9999-12-31");
   }
 
+  function timelineEra(entry) {
+    const supplied = text(entry.era, entry.year);
+    if (supplied) return supplied;
+    const datedText = [
+      entry.occurred_at,
+      entry.ended_at,
+      entry.date_start,
+      entry.start_date,
+      entry.date,
+      entry.date_label,
+      entry.display_date,
+    ].map((value) => text(value)).join(" ");
+    const yearMatch = datedText.match(/(?:^|\D)((?:18|19|20)\d{2})(?:\D|$)/);
+    if (!yearMatch) return "Undated";
+    const year = Number(yearMatch[1]);
+    return `${Math.floor(year / 10) * 10}s`;
+  }
+
+  function timelineLeadMedia(entry) {
+    const media = first(entry.lead_media, entry.leadMedia, entry.primary_media, entry.primaryMedia);
+    if (media && typeof media === "object") return media;
+    const url = safeUrl(first(entry.lead_media_url, entry.leadMediaUrl, entry.media_url, entry.mediaUrl));
+    return url ? {
+      url,
+      alt: text(entry.lead_media_alt, entry.leadMediaAlt, entry.alt_text, entry.altText),
+      width: Number(first(entry.lead_media_width, entry.leadMediaWidth, entry.width, 0)) || null,
+      height: Number(first(entry.lead_media_height, entry.leadMediaHeight, entry.height, 0)) || null,
+    } : null;
+  }
+
   function timelineEntryMarkup(entry, index) {
     const kind = entry._kind === "chapter" || text(entry.entry_type, entry.type) === "chapter" ? "chapter" : "entry";
     const id = `timeline-${slugify(first(entry.anchor_slug, entry.slug, entry.id, `${kind}-${index + 1}`))}`;
     const title = text(entry.title, entry.label, entry.activity_type, "History entry");
-    const summary = text(entry.summary, entry.description, entry.body, entry.note);
+    const summary = text(entry.summary, entry.description, entry.note);
+    const body = text(entry.body);
     const source = text(entry.source_note, entry.source, entry.caveat);
     const sourceUrl = safeUrl(entry.source_url);
-    return `<article class="archive-${kind === "chapter" ? "chapter" : "timeline-entry"}" id="${id}" data-era="${escapeHtml(text(entry.era, entry.year))}" data-kind="${escapeHtml(slugify(first(entry.activity_type, entry.entry_type, entry.type, kind)))}"><div class="archive-date">${escapeHtml(dateLabel(entry))}</div><div class="archive-timeline-copy"><span class="archive-label">${escapeHtml(titleCase(first(entry.activity_type, entry.entry_type, entry.type, kind)))}</span><h2>${escapeHtml(title)}</h2>${summary ? `<p>${escapeHtml(summary)}</p>` : ""}${source ? `<p class="archive-timeline-source">${escapeHtml(source)}${sourceUrl ? ` · <a href="${escapeHtml(sourceUrl)}">View source</a>` : ""}</p>` : ""}</div></article>`;
+    const recordRoute = safeUrl(first(entry.archive_route, entry.archiveRoute, entry.record_route, entry.recordRoute));
+    const media = timelineLeadMedia(entry);
+    const mediaSrc = mediaUrl(media);
+    const mediaAlt = text(media && (media.alt_text || media.alt), entry.lead_media_alt, entry.leadMediaAlt, title);
+    const mediaWidth = Number(first(media && media.width, 0)) || 0;
+    const mediaHeight = Number(first(media && media.height, 0)) || 0;
+    const dimensions = mediaWidth && mediaHeight ? ` width="${mediaWidth}" height="${mediaHeight}"` : "";
+    const mediaMarkup = mediaSrc ? `<figure class="archive-timeline-media">${recordRoute ? `<a href="${escapeHtml(recordRoute)}" aria-label="Open record for ${escapeHtml(title)}">` : ""}<img src="${escapeHtml(mediaSrc)}" alt="${escapeHtml(mediaAlt)}"${dimensions} loading="lazy">${recordRoute ? "</a>" : ""}${text(media.caption, entry.lead_media_caption, entry.leadMediaCaption) ? `<figcaption>${inlineEmphasis(text(media.caption, entry.lead_media_caption, entry.leadMediaCaption))}</figcaption>` : ""}</figure>` : "";
+    return `<article class="archive-${kind === "chapter" ? "chapter" : "timeline-entry"}" id="${id}" data-era="${escapeHtml(timelineEra(entry))}" data-kind="${escapeHtml(slugify(first(entry.activity_type, entry.entry_type, entry.type, kind)))}"><div class="archive-date">${escapeHtml(dateLabel(entry))}</div><div class="archive-timeline-copy"><span class="archive-label">${escapeHtml(titleCase(first(entry.activity_type, entry.entry_type, entry.type, kind)))}</span><h2>${escapeHtml(title)}</h2>${summary ? `<p class="archive-timeline-summary">${escapeHtml(summary)}</p>` : ""}${body && body !== summary ? `<div class="archive-timeline-body">${paragraphMarkup(body)}</div>` : ""}${mediaMarkup}${source ? `<p class="archive-timeline-source">${escapeHtml(source)}${sourceUrl ? ` · <a href="${escapeHtml(sourceUrl)}">View source</a>` : ""}</p>` : ""}${recordRoute ? `<div class="archive-actions"><a class="archive-button" href="${escapeHtml(recordRoute)}">Open record</a></div>` : ""}</div></article>`;
   }
 
   function mergeTimelineEntries(payload) {
@@ -1244,13 +1294,15 @@
       const title = text(timelineRecord.title, timelineRecord.name, titleCase(slug));
       const intro = text(timelineRecord.introduction, timelineRecord.summary, timelineRecord.description);
       const entries = mergeTimelineEntries(payload);
-      const eras = [...new Set(entries.map((entry) => text(entry.era, entry.year)).filter(Boolean))];
+      const eras = [...new Set(entries.map(timelineEra).filter(Boolean))];
       const kinds = [...new Set(entries.map((entry) => slugify(first(entry.activity_type, entry.entry_type, entry.type, entry._kind, "entry"))).filter(Boolean))];
       const breadcrumbCurrent = document.querySelector("[data-archive-breadcrumb-current]");
       if (breadcrumbCurrent) breadcrumbCurrent.textContent = title;
       document.title = `${title} timeline · Archive · the six.well construct`;
-      app.innerHTML = `<header class="archive-timeline-header site-hero site-hero--supporting"><div><span class="archive-kicker">Interactive history</span><h1 class="archive-timeline-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${intro ? `<p class="archive-timeline-intro hero-descriptor">${escapeHtml(intro)}</p>` : ""}<div class="archive-meta"><span>${entries.length} ${entries.length === 1 ? "entry" : "entries"}</span>${timelineRecord.updated_at ? `<span>Updated ${escapeHtml(dateLabel({ date: timelineRecord.updated_at }))}</span>` : ""}</div><div class="archive-actions"><a class="archive-button" href="${escapeHtml(subjectExplorerUrl({ ...timelineRecord, slug }))}">Explore related records</a></div></div></header>
-        ${entries.length ? `<div class="archive-timeline-controls" aria-label="Timeline filters"><label>Era<select data-timeline-filter="era"><option value="">All eras</option>${eras.map((era) => `<option value="${escapeHtml(era)}">${escapeHtml(era)}</option>`).join("")}</select></label><label>Entry type<select data-timeline-filter="kind"><option value="">All types</option>${kinds.map((kind) => `<option value="${escapeHtml(kind)}">${escapeHtml(titleCase(kind))}</option>`).join("")}</select></label><button class="archive-clear" type="button" data-timeline-clear>Clear filters</button></div><section class="archive-timeline-track" aria-label="${escapeHtml(title)} timeline" data-timeline-track>${entries.map(timelineEntryMarkup).join("")}</section><div class="archive-note-empty" data-timeline-empty hidden><p>No public entries match these timeline filters.</p></div>` : `<section class="archive-empty"><span class="archive-kicker">Timeline forming</span><h2>No public entries yet.</h2><p>This permanent timeline address is ready; dated chapters will appear as their evidence is reviewed.</p></section>`}`;
+      const profileRoute = safeUrl(first(timelineRecord.profile_route, timelineRecord.profileRoute, payload.profile_route, payload.profileRoute));
+      const hasUsefulFilters = eras.length > 1 || kinds.length > 1;
+      app.innerHTML = `<header class="archive-timeline-header site-hero site-hero--supporting"><div><span class="archive-kicker">Interactive history</span><h1 class="archive-timeline-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${intro ? `<p class="archive-timeline-intro hero-descriptor">${escapeHtml(intro)}</p>` : ""}<div class="archive-meta"><span>${entries.length} ${entries.length === 1 ? "entry" : "entries"}</span>${timelineRecord.updated_at ? `<span>Updated ${escapeHtml(dateLabel({ date: timelineRecord.updated_at }))}</span>` : ""}</div><div class="archive-actions">${profileRoute ? `<a class="archive-button" href="${escapeHtml(profileRoute)}">Read identity profile</a>` : ""}<a class="archive-button" href="${escapeHtml(subjectExplorerUrl({ ...timelineRecord, slug }))}">Explore related records</a></div></div></header>
+        ${entries.length ? `${hasUsefulFilters ? `<div class="archive-timeline-controls" aria-label="Timeline filters">${eras.length > 1 ? `<label>Era<select data-timeline-filter="era"><option value="">All eras</option>${eras.map((era) => `<option value="${escapeHtml(era)}">${escapeHtml(era)}</option>`).join("")}</select></label>` : ""}${kinds.length > 1 ? `<label>Entry type<select data-timeline-filter="kind"><option value="">All types</option>${kinds.map((kind) => `<option value="${escapeHtml(kind)}">${escapeHtml(titleCase(kind))}</option>`).join("")}</select></label>` : ""}<button class="archive-clear" type="button" data-timeline-clear>Clear filters</button></div>` : ""}<section class="archive-timeline-track" aria-label="${escapeHtml(title)} timeline" data-timeline-track>${entries.map(timelineEntryMarkup).join("")}</section><div class="archive-note-empty" data-timeline-empty hidden><p>No public entries match these timeline filters.</p></div>` : `<section class="archive-empty"><span class="archive-kicker">Timeline forming</span><h2>No public entries yet.</h2><p>This permanent timeline address is ready; dated chapters will appear as their evidence is reviewed.</p></section>`}`;
       if (!entries.length) return;
       const eraSelect = app.querySelector('[data-timeline-filter="era"]');
       const kindSelect = app.querySelector('[data-timeline-filter="kind"]');
@@ -1258,8 +1310,8 @@
       const empty = app.querySelector("[data-timeline-empty]");
       function filterTimeline(mode) {
         const url = new URL(location.href);
-        const era = eraSelect.value;
-        const kind = kindSelect.value;
+        const era = eraSelect ? eraSelect.value : "";
+        const kind = kindSelect ? kindSelect.value : "";
         era ? url.searchParams.set("era", era) : url.searchParams.delete("era");
         kind ? url.searchParams.set("kind", kind) : url.searchParams.delete("kind");
         history[mode === "replace" ? "replaceState" : "pushState"]({}, "", url);
@@ -1273,12 +1325,12 @@
         if (mode !== "replace") window.SixWellAnalytics?.track("filter_change", { action: "archive-timeline", itemId: era || kind || "all", count: visible });
       }
       const initial = new URL(location.href).searchParams;
-      eraSelect.value = initial.get("era") || "";
-      kindSelect.value = initial.get("kind") || "";
-      eraSelect.addEventListener("change", () => filterTimeline());
-      kindSelect.addEventListener("change", () => filterTimeline());
-      app.querySelector("[data-timeline-clear]").addEventListener("click", () => { eraSelect.value = ""; kindSelect.value = ""; filterTimeline(); });
-      window.addEventListener("popstate", () => { const current = new URL(location.href).searchParams; eraSelect.value = current.get("era") || ""; kindSelect.value = current.get("kind") || ""; filterTimeline("replace"); });
+      if (eraSelect) eraSelect.value = initial.get("era") || "";
+      if (kindSelect) kindSelect.value = initial.get("kind") || "";
+      eraSelect?.addEventListener("change", () => filterTimeline());
+      kindSelect?.addEventListener("change", () => filterTimeline());
+      app.querySelector("[data-timeline-clear]")?.addEventListener("click", () => { if (eraSelect) eraSelect.value = ""; if (kindSelect) kindSelect.value = ""; filterTimeline(); });
+      window.addEventListener("popstate", () => { const current = new URL(location.href).searchParams; if (eraSelect) eraSelect.value = current.get("era") || ""; if (kindSelect) kindSelect.value = current.get("kind") || ""; filterTimeline("replace"); });
       filterTimeline("replace");
     } catch (error) {
       app.innerHTML = error.status === 404

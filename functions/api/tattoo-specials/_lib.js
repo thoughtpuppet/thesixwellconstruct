@@ -156,7 +156,7 @@ async function loadSettings(db) {
   return db.prepare(
     `SELECT s.*, m.source_url, m.storage_key, m.original_filename, m.mime_type, m.alt_text,
             m.state AS media_state, m.privacy AS media_privacy,
-            m.consent_status AS media_consent_status, m.public_presentation AS media_presentation
+            m.public_presentation AS media_presentation
      FROM tattoo_special_settings s
      LEFT JOIN media_assets m ON m.id = s.artwork_media_id
      WHERE s.id = 'default'`
@@ -167,7 +167,7 @@ async function loadCampaigns(db, includeArchived = true) {
   const rows = (await db.prepare(
     `SELECT c.*, m.source_url, m.storage_key, m.original_filename, m.mime_type, m.alt_text,
             m.state AS media_state, m.privacy AS media_privacy,
-            m.consent_status AS media_consent_status, m.public_presentation AS media_presentation
+            m.public_presentation AS media_presentation
      FROM tattoo_special_campaigns c
      LEFT JOIN media_assets m ON m.id = c.artwork_media_id
      ${includeArchived ? "" : "WHERE c.archived_at IS NULL"}
@@ -762,7 +762,7 @@ async function adminPayload(db) {
     `SELECT id, source_url, storage_key, original_filename, mime_type, alt_text, public_title
      FROM media_assets
      WHERE state = 'active' AND privacy = 'public' AND public_presentation = 'inline'
-       AND consent_status IN ('not-required','granted') AND mime_type LIKE 'image/%'
+       AND mime_type LIKE 'image/%'
      ORDER BY created_at DESC LIMIT 250`
   ).all()).results || [];
   return {
@@ -810,7 +810,7 @@ export async function handleAdminTattooSpecials(request, env) {
     if (mediaId) {
       const eligible = await db.prepare(
         `SELECT id FROM media_assets WHERE id = ? AND state = 'active' AND privacy = 'public'
-         AND public_presentation = 'inline' AND consent_status IN ('not-required','granted') AND mime_type LIKE 'image/%'`
+         AND public_presentation = 'inline' AND mime_type LIKE 'image/%'`
       ).bind(mediaId).first();
       if (!eligible) return failure("Choose a public, active, inline image from Shared Media.", 409);
     }
@@ -859,7 +859,7 @@ async function validateCampaignArtwork(db, mediaId) {
   if (!mediaId) return true;
   return Boolean(await db.prepare(
     `SELECT id FROM media_assets WHERE id = ? AND state = 'active' AND privacy = 'public'
-     AND public_presentation = 'inline' AND consent_status IN ('not-required','granted') AND mime_type LIKE 'image/%'`
+     AND public_presentation = 'inline' AND mime_type LIKE 'image/%'`
   ).bind(mediaId).first());
 }
 
