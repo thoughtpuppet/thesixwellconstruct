@@ -173,6 +173,7 @@ test("public Blackboard fragment viewer is driven by stored placements and keeps
   assert.match(script,/function fragmentIndexCard/);assert.match(script,/blackboard-index-fragment-grid/);assert.match(script,/One field\. Two scales\./);
   assert.match(styles,/\.blackboard-fragment-rail/);assert.match(styles,/border: 5px solid/);assert.match(styles,/data-mode="detail"/);
   assert.match(styles,/\.blackboard-grid[\s\S]*repeat\(3, minmax\(0, 1fr\)\)/);assert.match(styles,/\.blackboard-index-fragment-grid/);
+  assert.match(styles,/border: 5px solid var\(--color-archive, #6d3d15\)/);assert.doesNotMatch(styles,/border(?:-(?:top|right|bottom|left))?: 5px solid currentColor/);
 });
 
 test("Studio Blackboards opens as a record library before exposing an editor",()=>{
