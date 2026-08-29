@@ -32,6 +32,15 @@ test("Studio exposes the Website Inception workspace and keeps creation private"
   assert.match(manager, /data-snapshot-behaviors/);
   assert.match(manager, /six-living-cultures/);
   assert.match(manager, /curator-authored/);
+  for (const sectionId of ["website-lineage-markers", "website-interaction-evolution", "website-snapshots", "website-history-review"]) {
+    assert.match(page, new RegExp(sectionId));
+    assert.match(manager, new RegExp(sectionId));
+  }
+  assert.match(page, /function activateWebsiteArchiveDeepLink\(\)/);
+  assert.match(page, /activeTab = "archive";[\s\S]*subView = "web-snapshots";/);
+  assert.match(page, /window\.addEventListener\("hashchange", activateWebsiteArchiveDeepLink\)/);
+  assert.match(manager, /scrollToRequestedWebsiteSection\(\)/);
+  assert.match(manager, /window\.addEventListener\("hashchange", \(\) => scrollToRequestedWebsiteSection/);
 });
 
 test("Studio stages entry, additional, and folder files with the bounded import contract", () => {

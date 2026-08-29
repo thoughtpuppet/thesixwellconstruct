@@ -27,6 +27,12 @@ const BEHAVIOR_MEANING_STATUSES = [
   ["code-inferred", "Interpretive / code-inferred"],
   ["pending-interpretation", "Meaning awaiting direction"],
 ];
+const WEBSITE_SECTION_IDS = new Set([
+  "website-lineage-markers",
+  "website-interaction-evolution",
+  "website-snapshots",
+  "website-history-review",
+]);
 const BEHAVIOR_EVOLUTION_RESEARCH = [
   ["2026-04-15T20:30:19-04:00", "11cf577", ["Eyes", "Ring / nodes", "Dots"], "Inaugural system: ten eye rings share a nine-second breath; nine nodes orbit and open pathways; six inner dots orbit and vibrate before becoming six medium nodes."],
   ["2026-05-07T12:55:05-04:00", "70660bc", ["Eyes", "Responsive"], "Adds smooth breath, phase-lagged outer rings, responsive scaling, a time-varying open/closed eye crossfade, and raises the amber particle cap to 170."],
@@ -65,6 +71,25 @@ let previewUrls = new Map();
 let snapshotCaptureUrls = new Map();
 let candidateCaptureUrls = new Map();
 let eventController = null;
+
+function requestedWebsiteSection() {
+  let sectionId = "";
+  try {
+    sectionId = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  } catch {
+    return "";
+  }
+  return WEBSITE_SECTION_IDS.has(sectionId) ? sectionId : "";
+}
+
+function scrollToRequestedWebsiteSection({ behavior = "auto" } = {}) {
+  const sectionId = requestedWebsiteSection();
+  if (!sectionId) return false;
+  const target = mountNode?.querySelector(`#${CSS.escape(sectionId)}`);
+  if (!target) return false;
+  requestAnimationFrame(() => target.scrollIntoView({ behavior, block: "start" }));
+  return true;
+}
 
 function ensureStyles() {
   if (document.querySelector('link[href*="archive-web-snapshots.css"]')) return;
@@ -707,6 +732,7 @@ function bindEvents() {
   eventController?.abort();
   eventController = new AbortController();
   const { signal } = eventController;
+  window.addEventListener("hashchange", () => scrollToRequestedWebsiteSection({ behavior: "smooth" }), { signal });
   mountNode.addEventListener("submit", async (event) => {
     const create = event.target.closest("[data-snapshot-create]");
     const addFiles = event.target.closest("[data-snapshot-add-files]");
@@ -793,6 +819,7 @@ export async function mountArchiveWebSnapshots(root, api, status) {
   bindEvents();
   try {
     await loadWorkspace({ preserveSelection: false });
+    scrollToRequestedWebsiteSection();
   } catch (error) {
     mountNode.innerHTML = `<section class="construct-manager archive-web-studio"><div class="cm-notice" data-kind="error">${esc(error.message)}</div><button class="button" type="button" data-web-refresh>Try again</button></section>`;
     reportStatus(error.message);

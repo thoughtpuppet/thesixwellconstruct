@@ -1813,6 +1813,41 @@
   }
 
   let archiveOpenGeneration = 0;
+  const websiteArchiveSectionIds = new Set([
+    "website-lineage-markers",
+    "website-interaction-evolution",
+    "website-snapshots",
+    "website-history-review",
+  ]);
+
+  function websiteArchiveSectionFromLocation() {
+    let sectionId = "";
+    try {
+      sectionId = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+    } catch {
+      return "";
+    }
+    return websiteArchiveSectionIds.has(sectionId) ? sectionId : "";
+  }
+
+  function clearWebsiteArchiveSection() {
+    if (!websiteArchiveSectionFromLocation()) return;
+    window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+  }
+
+  function activateWebsiteArchiveDeepLink() {
+    if (!websiteArchiveSectionFromLocation()) return false;
+    if (activeTab === "archive" && subView === "web-snapshots") return true;
+    cancelArchiveOpenNavigation();
+    activeTab = "archive";
+    subView = "web-snapshots";
+    activeId = "";
+    activeAppointmentId = "";
+    activePortfolioItemId = "";
+    selectedEventSlug = "";
+    renderActiveTab();
+    return true;
+  }
 
   function cancelArchiveOpenNavigation() {
     archiveOpenGeneration += 1;
@@ -4748,6 +4783,7 @@
   }
 
   function setActiveTab(tab) {
+    if (tab !== "archive") clearWebsiteArchiveSection();
     if (tab === "archive" && tab === activeTab && subView === "dossiers" && archiveEntityIdFromLocation()) {
       showAllDossiers().catch((error) => setStatus(error.message));
       return;
@@ -4777,6 +4813,7 @@
   }
 
   function setSubView(view) {
+    if (view !== "web-snapshots") clearWebsiteArchiveSection();
     if (activeTab === "archive" && view === "dossiers" && subView === view && archiveEntityIdFromLocation()) {
       showAllDossiers().catch((error) => setStatus(error.message));
       return;
@@ -8643,6 +8680,8 @@ ${meetingLines}
     }
   });
 
+  window.addEventListener("hashchange", activateWebsiteArchiveDeepLink);
+
   listEl.addEventListener("click", async (event) => {
     const studioAppointmentRow = event.target.closest("[data-studio-appointment-id]");
     if (studioAppointmentRow) {
@@ -11381,10 +11420,14 @@ ${meetingLines}
   });
 
   const analyticsHashState = window.StudioAnalytics?.hashState?.();
+  const websiteArchiveSection = websiteArchiveSectionFromLocation();
   setSidebarCollapsed(sidebarCollapsed, false);
   if (analyticsHashState?.active) {
     activeTab = "analytics";
     subView = analyticsHashState.view;
+  } else if (websiteArchiveSection) {
+    activeTab = "archive";
+    subView = "web-snapshots";
   }
   if (archiveEntityIdFromLocation()) {
     activeTab = "archive";
