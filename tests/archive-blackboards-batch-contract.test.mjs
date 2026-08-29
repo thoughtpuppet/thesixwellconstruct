@@ -109,6 +109,9 @@ test("Blackboard batch upload contract preserves private sources, independent dr
   assert.match(SOURCE,/URL\.revokeObjectURL\(row\.previewUrl\)/);
   assert.match(SOURCE,/queueBatchPreviews\(\)/);
   assert.match(SOURCE,/bb-batch-row-preview/);
+  assert.match(SOURCE,/const locked=row\.status==="complete"/);
+  assert.match(SOURCE,/if\(!row\|\|row\.status==="complete"\)return;row\[field\.dataset\.batchField\]=field\.value/);
+  assert.doesNotMatch(SOURCE,/if\(!row\|\|batchRowActive\(row\)\|\|row\.status==="complete"\)return/);
 });
 
 test("Blackboard batch intake opens wide, exposes large drag targets, and stacks queue previews above metadata",()=>{
