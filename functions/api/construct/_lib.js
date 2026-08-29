@@ -1419,18 +1419,23 @@ function presentArchiveItem(row) {
   const summary = row.orientation || row.canonical_summary || "";
   const archiveRoute = `/archive/records/${encodeURIComponent(row.archive_slug)}/`;
   const primarySvgMarkup = row.primary_svg_markup ? sanitizeLegendSvg(row.primary_svg_markup) : "";
-  const primaryMedia = row.primary_image
-    ? {
-        url: row.primary_image,
-        alt_text: row.primary_image_alt || row.title || "",
-        altText: row.primary_image_alt || row.title || "",
-        caption: row.primary_image_caption || "",
-        width: Number(row.primary_image_width || 0),
-        height: Number(row.primary_image_height || 0),
-        kind: "image",
-      }
-    : primarySvgMarkup
-      ? { svg_markup: primarySvgMarkup, svgMarkup: primarySvgMarkup, kind: "symbol" }
+  const primaryImage = primarySvgMarkup ? "" : row.primary_image || "";
+  const primaryImageAlt = primaryImage ? row.primary_image_alt || row.title || "" : "";
+  const primaryImageCaption = primaryImage ? row.primary_image_caption || "" : "";
+  const primaryImageWidth = primaryImage ? Number(row.primary_image_width || 0) : 0;
+  const primaryImageHeight = primaryImage ? Number(row.primary_image_height || 0) : 0;
+  const primaryMedia = primarySvgMarkup
+    ? { svg_markup: primarySvgMarkup, svgMarkup: primarySvgMarkup, kind: "symbol" }
+    : primaryImage
+      ? {
+          url: primaryImage,
+          alt_text: primaryImageAlt,
+          altText: primaryImageAlt,
+          caption: primaryImageCaption,
+          width: primaryImageWidth,
+          height: primaryImageHeight,
+          kind: "image",
+        }
       : null;
   return {
     entity_id: row.entity_id,
@@ -1487,18 +1492,18 @@ function presentArchiveItem(row) {
     route: row.canonical_route || "",
     archive_route: archiveRoute,
     archiveRoute,
-    primary_image: row.primary_image || "",
-    primaryImage: row.primary_image || "",
-    image_url: row.primary_image || "",
-    imageUrl: row.primary_image || "",
-    primary_image_alt: row.primary_image_alt || "",
-    primaryImageAlt: row.primary_image_alt || "",
-    primary_image_caption: row.primary_image_caption || "",
-    primaryImageCaption: row.primary_image_caption || "",
-    primary_image_width: Number(row.primary_image_width || 0),
-    primaryImageWidth: Number(row.primary_image_width || 0),
-    primary_image_height: Number(row.primary_image_height || 0),
-    primaryImageHeight: Number(row.primary_image_height || 0),
+    primary_image: primaryImage,
+    primaryImage,
+    image_url: primaryImage,
+    imageUrl: primaryImage,
+    primary_image_alt: primaryImageAlt,
+    primaryImageAlt,
+    primary_image_caption: primaryImageCaption,
+    primaryImageCaption,
+    primary_image_width: primaryImageWidth,
+    primaryImageWidth,
+    primary_image_height: primaryImageHeight,
+    primaryImageHeight,
     primary_svg_markup: primarySvgMarkup,
     primarySvgMarkup,
     primary_media: primaryMedia,

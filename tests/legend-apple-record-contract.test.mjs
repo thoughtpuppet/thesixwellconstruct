@@ -180,6 +180,40 @@ test("Studio and public Legend APIs render the existing Apple record and preserv
   assert.match(renderer, /renderApplications\(layers\.applications\)/);
 });
 
+test("Apple Archive record keeps the canonical symbol primary and the raster attachment variant-only", async () => {
+  const database = databaseWithStudioApple();
+  const env = apiEnv(database);
+  database.prepare(
+    `UPDATE archive_dossiers
+     SET archive_slug='apple',state='published',public_visible=1,published_at=datetime('now')
+     WHERE entity_id=?`,
+  ).run(APPLE_ID);
+
+  const response = await handleConstructApi(
+    new Request("https://example.test/api/archive/items/apple"),
+    env,
+  );
+  const payload = await response.json();
+  const item = payload.item;
+
+  assert.equal(response.status, 200);
+  assert.equal(item.entity_type, "visual_symbol");
+  assert.equal(item.primary_image, "");
+  assert.equal(item.image_url, "");
+  assert.equal(item.primary_media.kind, "symbol");
+  assert.match(item.primary_media.svg_markup, /M62\.7,43c-11-9/);
+  assert.doesNotMatch(JSON.stringify(item.primary_media), /apple-colored|media-35a3c693/);
+
+  const legendResponse = await handleConstructApi(
+    new Request("https://example.test/api/legend/apple"),
+    env,
+  );
+  const legendPayload = await legendResponse.json();
+  assert.equal(legendResponse.status, 200);
+  assert.equal(legendPayload.record.media[0].id, APPLE_MEDIA_ID);
+  assert.equal(legendPayload.record.media[0].role, "legend-variant");
+});
+
 test("Apple canonical page follows the existing public About gate", async () => {
   const database = databaseWithStudioApple();
   const detail = source("about/legend/detail/index.html");
