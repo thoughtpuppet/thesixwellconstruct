@@ -130,10 +130,19 @@ test("South Wall scans become Version 1 States I through III and studio context 
   assert.equal(detail.body.itemHistory.length,0);
   assert.equal(JSON.stringify(detail.body).includes("-master"),false);
 
+  const publicIndex=await json(await handleConstructApi(request("/api/archive/blackboards"),runtime));assert.equal(publicIndex.status,200,publicIndex.body.error);
+  assert.equal(publicIndex.body.records.length,1);assert.equal(publicIndex.body.records[0].state_count,3);assert.equal(publicIndex.body.records[0].fragment_count,1);
+  assert.equal(publicIndex.body.fragments.length,1);assert.equal(publicIndex.body.count.fragments,1);
+  assert.equal(publicIndex.body.fragments[0].id,fragmentId);assert.equal(publicIndex.body.fragments[0].board.id,recordId);
+  assert.equal(publicIndex.body.fragments[0].board.route,"/archive/blackboards/studio-blackboard-south-wall/");
+  assert.equal(JSON.stringify(publicIndex.body).includes("-master"),false);
+
   const reused=await json(await handleConstructApi(request(`/api/admin/archive-blackboards/records/${recordId}/fragments`,{method:"POST",admin:true,body:{...fragmentPair,title:"Second reading",slug:"second-reading"}}),runtime));
   assert.equal(reused.status,201,reused.body.error);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM media_assets WHERE id IN ('fragment-master','fragment-web')").get().count,2);
   assert.equal((await blackboardDetail(runtime)).fragments.find(item=>item.id===reused.body.record.id)?.placements.length,0);
+  const redactedIndex=await json(await handleConstructApi(request("/api/archive/blackboards"),runtime));
+  assert.equal(redactedIndex.body.records[0].fragment_count,1);assert.equal(redactedIndex.body.fragments.length,1);
 
   await handleConstructApi(request(`/api/admin/archive-blackboards/records/${recordId}/fragments/${fragmentId}/states`,{method:"PUT",admin:true,body:{state_ids:[firstState.id]}}),runtime);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_blackboard_fragment_placements WHERE fragment_id=?").get(fragmentId).count,1);
@@ -161,7 +170,9 @@ test("Blackboard migration preserves client correspondence kinds and defines the
 test("public Blackboard fragment viewer is driven by stored placements and keeps the full-board return path",()=>{
   const script=readFileSync(join(ROOT,"js","archive-blackboards.js"),"utf8"),styles=readFileSync(join(ROOT,"css","archive-blackboards.css"),"utf8");
   assert.match(script,/statePlacements/);assert.match(script,/data-enter-fragment-view/);assert.match(script,/data-select-board-fragment/);assert.match(script,/data-fragment-full/);assert.match(script,/Return to Blackboard record/);
+  assert.match(script,/function fragmentIndexCard/);assert.match(script,/blackboard-index-fragment-grid/);assert.match(script,/One field\. Two scales\./);
   assert.match(styles,/\.blackboard-fragment-rail/);assert.match(styles,/border: 5px solid/);assert.match(styles,/data-mode="detail"/);
+  assert.match(styles,/\.blackboard-grid[\s\S]*repeat\(3, minmax\(0, 1fr\)\)/);assert.match(styles,/\.blackboard-index-fragment-grid/);
 });
 
 test("Studio Blackboards opens as a record library before exposing an editor",()=>{

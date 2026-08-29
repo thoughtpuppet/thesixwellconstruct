@@ -6577,6 +6577,7 @@ async function publicBlackboardRecordDetailV2(database,slugValue){
   if(!row)return null;
   const record=presentBlackboardRecordV2(row),states=await blackboardStateRowsV2(database,record.id,true),notebook=await blackboardNotebookRowsV2(database,record.id,true);
   const fragments=await blackboardFragmentsV2(database,record.id,states,true);
+  record.state_count=states.length;record.stateCount=states.length;record.fragment_count=fragments.length;record.fragmentCount=fragments.length;
   const activities=(await database.prepare(`SELECT activity.*,('history-'||activity.id) anchor FROM entity_activity activity
     WHERE activity.entity_id=? AND activity.public_visible=1 ORDER BY CASE WHEN activity.occurred_at IS NULL THEN 1 ELSE 0 END,activity.occurred_at,activity.sort_order,activity.created_at`).bind(record.id).all()).results||[];
   const versions=[];
@@ -6590,9 +6591,23 @@ async function publicArchiveBlackboardsV2(request,env,recordSlug=""){
   if(request.method!=="GET")return failure("Method not allowed.",405);
   const database=db(env);
   if(recordSlug){const detail=await publicBlackboardRecordDetailV2(database,recordSlug);return detail?json(detail):failure("Blackboard record not found.",404)}
-  const rows=(await database.prepare(`${blackboardRecordSqlV2(true)} ORDER BY profile.sort_order,ar.title`).all()).results||[],records=[];
-  for(const row of rows){const record=presentBlackboardRecordV2(row),states=await blackboardStateRowsV2(database,record.id,true);record.latest_state=states.at(-1)||null;record.latestState=record.latest_state;record.latest_capture=record.latest_state;record.latestCapture=record.latest_state;records.push(record)}
-  return json({records,surfaces:records,boards:records,fragments:[],count:{records:records.length,surfaces:records.length,boards:records.length,fragments:0}});
+  const rows=(await database.prepare(`${blackboardRecordSqlV2(true)} ORDER BY profile.sort_order,ar.title`).all()).results||[],records=[],fragments=[];
+  for(const row of rows){
+    const record=presentBlackboardRecordV2(row),states=await blackboardStateRowsV2(database,record.id,true),recordFragments=await blackboardFragmentsV2(database,record.id,states,true);
+    record.latest_state=states.at(-1)||null;record.latestState=record.latest_state;record.latest_capture=record.latest_state;record.latestCapture=record.latest_state;
+    record.state_count=states.length;record.stateCount=states.length;record.fragment_count=recordFragments.length;record.fragmentCount=recordFragments.length;
+    const board={id:record.id,entity_id:record.id,entityId:record.id,slug:record.slug,title:record.title,route:record.route,
+      catalogue_id:record.catalogue_id,catalogueId:record.catalogue_id,catalogue_label:record.catalogue_label,catalogueLabel:record.catalogue_label};
+    fragments.push(...recordFragments.map(fragment=>({...fragment,board})));
+    records.push(record);
+  }
+  fragments.sort((left,right)=>{
+    const leftDate=Date.parse(left.occurred_at||""),rightDate=Date.parse(right.occurred_at||"");
+    if(Number.isFinite(leftDate)&&Number.isFinite(rightDate)&&leftDate!==rightDate)return rightDate-leftDate;
+    if(Number.isFinite(rightDate))return 1;if(Number.isFinite(leftDate))return -1;
+    return String(left.title||"").localeCompare(String(right.title||""));
+  });
+  return json({records,surfaces:records,boards:records,fragments,count:{records:records.length,surfaces:records.length,boards:records.length,fragments:fragments.length}});
 }
 
 async function blackboardRecordAdminPayloadV2(database,recordId=""){

@@ -243,14 +243,14 @@
 
   function recordCard(record) {
     const latest = record.latestState || record.latest_state || record.latestCapture || record.latest_capture;
-    return `<article class="blackboard-surface-card">
-      ${latest ? zoomButton(latest.scan, `${record.title} · ${latest.title}`) : ""}
+    return `<article class="blackboard-surface-card blackboard-field-card">
+      ${latest ? `<div class="blackboard-field-media"><span>Latest documented state</span>${zoomButton(latest.scan, `${record.title} · ${latest.title}`)}</div>` : ""}
       <div class="blackboard-card-copy">
         <p class="blackboard-card-meta">${escapeHtml(record.catalogueLabel || record.catalogue_label)} · ${escapeHtml(record.studioLocation || record.studio_location)} · ${escapeHtml(record.wallDesignation || record.wall_designation)}</p>
         <h2><a href="${escapeHtml(safeUrl(record.route))}">${escapeHtml(record.title)}</a></h2>
         ${record.summary ? `<p>${escapeHtml(record.summary)}</p>` : ""}
-        <p>${Number(record.stateCount || record.state_count)} documented states · ${Number(record.fragmentCount || record.fragment_count)} fragments</p>
-        <a href="${escapeHtml(safeUrl(record.route))}">Open Blackboard record</a>
+        <dl class="blackboard-card-register"><div><dt>Current state</dt><dd>${escapeHtml(latest?.catalogue_label || latest?.title || "Not available")}</dd></div><div><dt>Captured states</dt><dd>${Number(record.stateCount || record.state_count)}</dd></div><div><dt>Public fragments</dt><dd>${Number(record.fragmentCount || record.fragment_count)}</dd></div></dl>
+        <a class="blackboard-card-open" href="${escapeHtml(safeUrl(record.route))}">Open Blackboard record <span aria-hidden="true">↗</span></a>
       </div>
     </article>`;
   }
@@ -271,6 +271,31 @@
         ${manifestationList(Array.isArray(fragment.manifestations) ? fragment.manifestations : [])}
         ${visible.length ? `<div class="blackboard-fragment-links"><h4>Visible in</h4><ul>${visible.map((state) => `<li><a href="#state-${escapeHtml(state.id)}">${escapeHtml(state.catalogue_label)} · ${escapeHtml(state.date_label || state.title)}</a></li>`).join("")}</ul></div>` : ""}
         ${threads.length ? `<div class="blackboard-fragment-links"><h4>Origin threads</h4><ul>${threads.map((thread) => `<li>${escapeHtml(thread.title)}</li>`).join("")}</ul></div>` : ""}
+      </div>
+    </article>`;
+  }
+
+  function fragmentIndexCard(fragment) {
+    const board = fragment.board || {};
+    const boardRoute = safeUrl(board.route) || "/archive/blackboards/";
+    const visible = fragment.visibleIn || fragment.visible_in || [];
+    const threads = fragment.originThreads || fragment.origin_threads || [];
+    const manifestations = Array.isArray(fragment.manifestations) ? fragment.manifestations : [];
+    const relationships = [...new Set([
+      ...manifestations.map((item) => item.relationship).filter(Boolean),
+      ...(visible.length ? ["Visible in state"] : []),
+      ...(threads.length ? ["Origin Thread"] : []),
+    ])];
+    const fragmentRoute = `${boardRoute}#fragment-${encodeURIComponent(fragment.slug || fragment.id || "")}`;
+    const boardLabel = board.catalogueLabel || board.catalogue_label || board.title || "Blackboard record";
+    return `<article class="blackboard-fragment blackboard-index-fragment" id="index-fragment-${escapeHtml(fragment.slug)}">
+      <div class="blackboard-index-fragment-media"><span>Blackboard fragment</span>${zoomButton(fragment.image, fragment.title, "blackboard-scan-button", "lazy", "fragment")}</div>
+      <div class="blackboard-fragment-copy">
+        <p class="blackboard-fragment-board"><a href="${escapeHtml(boardRoute)}">${escapeHtml(boardLabel)}</a>${fragment.date ? ` · ${escapeHtml(fragment.date)}` : ""}</p>
+        <h3>${escapeHtml(fragment.title)}</h3>
+        ${fragment.caption ? `<p>${escapeHtml(fragment.caption)}</p>` : ""}
+        ${relationships.length ? `<div class="blackboard-index-relationships" aria-label="Fragment relationships">${relationships.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}</div>` : ""}
+        <a class="blackboard-card-open" href="${escapeHtml(fragmentRoute)}">Trace fragment connections <span aria-hidden="true">↗</span></a>
       </div>
     </article>`;
   }
@@ -495,10 +520,18 @@
   function renderIndex(data) {
     cleanupPresentations(app);
     const records = Array.isArray(data.records) ? data.records : (Array.isArray(data.surfaces) ? data.surfaces : []);
-    app.innerHTML = `<section class="blackboards-section" aria-labelledby="blackboard-records">
-      <div class="blackboards-section-heading"><h2 id="blackboard-records">Blackboard records</h2><p>Each physical Blackboard keeps one catalogue identity while its dated states and Notebook evidence accumulate.</p></div>
+    const fragments = Array.isArray(data.fragments) ? data.fragments : [];
+    app.innerHTML = `<section class="blackboard-field-intro" aria-labelledby="blackboard-field-thesis"><h2 id="blackboard-field-thesis">One field. Two scales.</h2><div><p>First, browse complete Blackboards as evolving physical records. Then move deeper into the fragments that left those surfaces and entered the wider Construct.</p><p>Both inventories use the same card language, but each answers a different question: “Which board is this?” and “Where did this thought travel?”</p></div></section>
+      <nav class="blackboard-field-jump" aria-label="Browse this Blackboard field"><a href="#blackboard-records"><span>01 · Browse boards</span><span aria-hidden="true">↓</span></a><a href="#blackboard-fragment-index"><span>02 · Browse fragments</span><span aria-hidden="true">↓</span></a></nav>
+      <section class="blackboards-section blackboard-field-section" aria-labelledby="blackboard-records">
+      <div class="blackboards-section-heading"><h2 id="blackboard-records">The Field</h2><p>Every card is one physical Blackboard with a permanent catalogue identity. Its newest public state leads; earlier states remain inside the record.</p></div>
       ${records.length ? `<div class="blackboard-grid">${records.map(recordCard).join("")}</div>` : `<p class="blackboards-empty">No Blackboard records are public yet.</p>`}
-    </section>`;
+      </section>
+      <section class="blackboards-section blackboard-fragment-index-section" aria-labelledby="blackboard-fragment-index">
+        <div class="blackboards-section-heading"><h2 id="blackboard-fragment-index">Fragment Index</h2><p>Fragments are close readings of the field. Each card identifies its board context and foregrounds the work, record, or Origin Thread the thought became part of.</p></div>
+        ${fragments.length ? `<div class="blackboard-index-fragment-grid">${fragments.map(fragmentIndexCard).join("")}</div>` : `<p class="blackboards-empty">No reviewed public fragments are available yet. Open a Blackboard record to browse its captured states.</p>`}
+      </section>`;
+    mountPresentations(app);
   }
 
   async function load() {
