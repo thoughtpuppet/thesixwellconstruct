@@ -28,6 +28,11 @@ OUTREACH_PREFERENCES_ENABLED=false
 OUTREACH_INDIVIDUAL_EMAIL_ENABLED=false
 OUTREACH_EMAIL_CAMPAIGNS_ENABLED=false
 SUBMISSIONS_ADMIN_TOKEN=replace-with-a-long-private-token
+# Shared HMAC key for short-lived, snapshot-scoped Archive viewer previews.
+# Store the same secret on the primary Worker and the dedicated viewer Worker.
+ARCHIVE_VIEWER_SIGNING_KEY=replace-with-a-different-long-random-preview-signing-key
+# Optional local override. Production defaults to the dedicated HTTPS domain.
+ARCHIVE_VIEWER_ORIGIN=http://127.0.0.1:8788
 # Dedicated write-only credential for repository-backed Atlanta Creative Scout
 # scheduled handoffs. Never reuse the full Studio admin token here.
 CALENDAR_SCOUT_INGEST_TOKEN=replace-with-a-different-long-random-token

@@ -9,6 +9,7 @@ import {
 } from "../_shared/tattoo-styles.js";
 import { serveR2Media } from "../_shared/r2-media.js";
 import { loadPublicCalendarSearchEvents } from "../calendar/_lib.js";
+import { handleArchiveWebSnapshotsAdmin, loadPublicArchiveWebSnapshots } from "./_web-snapshots.js";
 import {
   ArchiveDossierEnsureError,
   archiveDossierEligibleOwner,
@@ -2070,7 +2071,9 @@ async function publicArchiveDetail(request,env,archiveSlug){
   const relationshipRows=relationshipsResult.results||[];
   const relatedIds=relationshipRows.map(r=>r.source_entity_id===entityId?r.target_entity_id:r.source_entity_id);
   const relatedMap=await entityRecords(database,relatedIds);
-  const relatedDossiers=relatedIds.length?(await database.prepare(`SELECT entity_id,archive_slug FROM archive_dossiers WHERE state='published' AND public_visible=1 AND entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
+  const relatedDossiers=relatedIds.length?(await database.prepare(`SELECT entity_id,archive_slug,
+      COALESCE((SELECT record_type FROM archive_records WHERE id=archive_dossiers.entity_id),'') record_type
+      FROM archive_dossiers WHERE state='published' AND public_visible=1 AND entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
   const relatedCatalogue=relatedIds.length?(await database.prepare(`SELECT ace.entity_id,ace.catalogue_id,ace.current_state_id,ace.medium_id catalogue_medium,
       COALESCE(aov.version_number,ace.current_version) current_version,
       COALESCE(aos.state_roman,ace.current_state) current_state,
@@ -2085,10 +2088,10 @@ async function publicArchiveDetail(request,env,archiveSlug){
       LEFT JOIN archive_object_versions aov ON aov.id=aos.version_id
       WHERE ace.entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
   const relatedEvents=relatedIds.length?(await database.prepare(`SELECT entity_id,event_id,event_number FROM archive_event_identifiers WHERE entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
-  const relatedSlugs=new Map(relatedDossiers.map(d=>[d.entity_id,d.archive_slug]));
+  const relatedSlugs=new Map(relatedDossiers.map(d=>[d.entity_id,d]));
   const relatedCatalogueMap=new Map(relatedCatalogue.map(record=>[record.entity_id,{...record,catalogue_label:archiveCatalogueLabel(record)}]));
   const relatedEventMap=new Map(relatedEvents.map(record=>[record.entity_id,{...record,record_identifier:record.event_id}]));
-  const relationships=[];for(const relation of relationshipRows){const outgoing=relation.source_entity_id===entityId;const relatedId=outgoing?relation.target_entity_id:relation.source_entity_id;const related=relatedMap.get(relatedId);if(!related||related.visibility!=="public")continue;const archive_slug=relatedSlugs.get(relatedId)||"",catalogue=relatedCatalogueMap.get(relatedId)||{},eventIdentity=relatedEventMap.get(relatedId)||{};relationships.push({id:relation.id,direction:outgoing?"outgoing":"incoming",label:outgoing?relation.forward_label:relation.reverse_label,relationship_type:relation.relationship_slug,related:{...related,...catalogue,...eventIdentity,imageUrl:"",archive_slug,archiveRoute:archive_slug?`/archive/records/${encodeURIComponent(archive_slug)}/`:""}});}
+  const relationships=[];for(const relation of relationshipRows){const outgoing=relation.source_entity_id===entityId;const relatedId=outgoing?relation.target_entity_id:relation.source_entity_id;const related=relatedMap.get(relatedId);if(!related||related.visibility!=="public")continue;const relatedDossier=relatedSlugs.get(relatedId)||{},archive_slug=relatedDossier.archive_slug||"",catalogue=relatedCatalogueMap.get(relatedId)||{},eventIdentity=relatedEventMap.get(relatedId)||{},archiveRoute=archive_slug?(relatedDossier.record_type==="blackboard"?`/archive/blackboards/${encodeURIComponent(archive_slug)}/`:`/archive/records/${encodeURIComponent(archive_slug)}/`):"";relationships.push({id:relation.id,direction:outgoing?"outgoing":"incoming",label:outgoing?relation.forward_label:relation.reverse_label,relationship_type:relation.relationship_slug,related:{...related,...catalogue,...eventIdentity,imageUrl:"",archive_slug,archiveRoute}});}
   const materials=(materialsResult.results||[]).map(material=>presentArchiveMaterial({...material,anchor:`material-${material.id}`,url:material.media_url||"",inline_text:material.body||""}));
   const states=(statesResult.results||[]).map(state=>presentArchiveState(state,item));
   const documentation=(documentationResult.results||[]).map(presentArchiveDocumentation);
@@ -2124,7 +2127,8 @@ async function publicArchiveDetail(request,env,archiveSlug){
   const activities=(activitiesResult.results||[]).map(redactPublicArchiveActivity);
   const notes=await publicNotesForTarget(database,entityId);
   const originThreads=originThreadsResult.results||[],primaryOriginThread=originThreads.find(thread=>Number(thread.is_primary))||null;
-  return json({item,dossier:item,materials,notes,color_usages:colorUsages,colorUsages,material_usages:materialUsages,materialUsages,palette_maps:paletteMaps,paletteMaps,source_materials:sourceMaterials,sourceMaterials,evidence_sets:sourceMaterials,evidenceSets:sourceMaterials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states,documentation,terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
+  const webSnapshots=await loadPublicArchiveWebSnapshots(database,entityId,env.ARCHIVE_VIEWER_ORIGIN);
+  return json({item,dossier:item,materials,notes,color_usages:colorUsages,colorUsages,material_usages:materialUsages,materialUsages,palette_maps:paletteMaps,paletteMaps,source_materials:sourceMaterials,sourceMaterials,evidence_sets:sourceMaterials,evidenceSets:sourceMaterials,web_snapshots:webSnapshots,webSnapshots,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states,documentation,terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
 }
 
 function archiveComparisonSubject(payload,stateId=""){
@@ -7616,6 +7620,7 @@ export async function handleConstructApi(request,env){
   const publicMatch=path.match(/^\/api\/(flash|legend|visual-language|art|archive|archive-collections|appearances)(?:\/([^/]+))?$/);if(publicMatch)return publicCatalog(request,env,canonicalResource(publicMatch[1]),publicMatch[2]?decodeURIComponent(publicMatch[2]):"");
   const auth=requireStudioAdmin(request,env);if(auth)return auth;
   const colorMaterialsAdmin=await handleArchiveColorMaterialsAdmin(request,env,path);if(colorMaterialsAdmin)return colorMaterialsAdmin;
+  const archiveWebSnapshotsAdmin=await handleArchiveWebSnapshotsAdmin(request,env,path);if(archiveWebSnapshotsAdmin)return archiveWebSnapshotsAdmin;
   if(path==="/api/admin/identities")return adminIdentitiesApi(request,env);
   const identityPublicationMatch=path.match(/^\/api\/admin\/identities\/([^/]+)\/(publication-review|publish-package)$/);if(identityPublicationMatch)return identityPublicationApi(request,env,decodeURIComponent(identityPublicationMatch[1]),identityPublicationMatch[2]);
   const identityAdminMatch=path.match(/^\/api\/admin\/identities\/([^/]+)$/);if(identityAdminMatch)return adminIdentitiesApi(request,env,decodeURIComponent(identityAdminMatch[1]));

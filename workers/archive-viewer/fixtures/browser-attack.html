@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="0;url=https://example.com/archive-viewer-meta-refresh-probe">
+  <title>Archive viewer browser attack fixture</title>
+  <script src="./browser-attack-local.js"></script>
+</head>
+<body>
+  <img id="local-asset" src="./browser-attack-asset.svg" alt="Local fixture asset">
+  <a id="external-navigation" href="https://example.com/archive-viewer-navigation-probe">External navigation</a>
+  <button id="inline-navigation" type="button" onclick="location.href='/probe-inline-handler'">Inline navigation probe</button>
+  <button id="inline-call-navigation" type="button" onclick="location.assign.call(location, '/probe-inline-call')">Call navigation probe</button>
+  <button id="inline-bind-navigation" type="button" onclick="const replace=location.replace.bind(location);replace('/probe-inline-bind')">Bound navigation probe</button>
+  <button id="inline-passed-location-navigation" type="button" onclick="((target)=>target.assign('/probe-inline-passed-location'))(location)">Passed Location probe</button>
+  <button id="inline-reflected-navigation" type="button" onclick="Reflect.get(window,'location').assign('/probe-inline-reflected')">Reflected navigation probe</button>
+  <button id="inline-global-alias-navigation" type="button" onclick="const root=window;root.location.assign('/probe-inline-global-alias')">Global alias navigation probe</button>
+  <button id="inline-carrier-function-navigation" type="button" onclick="function go(g){g.location.href='/probe-inline-carrier-function'}go(globalThis)">Carrier function navigation probe</button>
+  <button id="inline-escaped-navigation" type="button" onclick="loc\u0061tion.assign('/probe-inline-escaped')">Escaped navigation probe</button>
+  <button id="dynamic-script-navigation" type="button" onclick="const script=document.createElement('script');script.textContent=`location.href='/probe-dynamic-script'`;document.body.append(script)">Dynamic script probe</button>
+  <button id="dynamic-handler-navigation" type="button" onclick="document.body.setAttribute('onmouseover',`location.href='/probe-dynamic-handler'`)">Dynamic handler probe</button>
+  <script data-archive-attack-controller>
+    (async () => {
+      const results = {};
+      const settle = (start) => new Promise((resolve) => {
+        let finished = false;
+        const done = (value) => { if (!finished) { finished = true; resolve(value); } };
+        start(done);
+        setTimeout(() => done(true), 250);
+      });
+      await new Promise((resolve) => addEventListener("load", resolve, { once: true }));
+      results.local_script = document.documentElement.dataset.localScript === "ok";
+      results.local_asset = document.querySelector("#local-asset").naturalWidth > 0;
+      results.meta_refresh_removed = !document.querySelector('meta[http-equiv="refresh" i]');
+      results.external_navigation_rewritten = document.querySelector("#external-navigation").getAttribute("href").includes("__archive_blocked_navigation__");
+      try { void parent.document; results.parent_access_blocked = false; } catch { results.parent_access_blocked = true; }
+      try { localStorage.setItem("archive-viewer-probe", "1"); results.storage_blocked = false; } catch { results.storage_blocked = true; }
+      try { results.popup_blocked = window.open("/probe-popup") === null; } catch { results.popup_blocked = true; }
+      try { await fetch("/probe-fetch"); results.fetch_blocked = false; } catch { results.fetch_blocked = true; }
+      results.xhr_blocked = await settle((done) => {
+        try { const xhr = new XMLHttpRequest(); xhr.open("GET", "/probe-xhr"); xhr.onload = () => done(false); xhr.onerror = () => done(true); xhr.send(); } catch { done(true); }
+      });
+      results.websocket_blocked = await settle((done) => {
+        try { const socket = new WebSocket(`ws://${location.host}/probe-websocket`); socket.onopen = () => done(false); socket.onerror = () => done(true); } catch { done(true); }
+      });
+      try { navigator.sendBeacon("/probe-beacon", "blocked"); } catch {}
+      results.worker_blocked = await settle((done) => {
+        try { const worker = new Worker("/probe-worker.js"); worker.onmessage = () => done(false); worker.onerror = () => done(true); } catch { done(true); }
+      });
+      results.service_worker_blocked = await settle(async (done) => {
+        try { await navigator.serviceWorker.register("/probe-service-worker.js"); done(false); } catch { done(true); }
+      });
+      const form = document.createElement("form"); form.action = "/probe-form"; form.method = "post"; document.body.append(form);
+      try { form.requestSubmit(); } catch {}
+      const download = document.createElement("a"); download.href = "/probe-download"; download.download = "probe.txt"; document.body.append(download);
+      try { download.click(); } catch {}
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const initialLocation = location.href;
+      const locationAttempts = [
+        ["script_location_href_blocked", () => { globalThis.__archiveViewerNavigationTarget = "/probe-location-href"; }],
+        ["script_location_assign_blocked", () => globalThis.__archiveViewerBlockNavigation("/probe-location-assign")],
+        ["script_location_replace_blocked", () => globalThis.__archiveViewerBlockNavigation("/probe-location-replace")],
+        ["external_script_navigation_blocked", () => window.archiveExternalScriptNavigationProbe()],
+        ["inline_handler_navigation_blocked", () => document.querySelector("#inline-navigation").click()],
+        ["inline_call_navigation_blocked", () => document.querySelector("#inline-call-navigation").click()],
+        ["inline_bind_navigation_blocked", () => document.querySelector("#inline-bind-navigation").click()],
+        ["inline_passed_location_navigation_blocked", () => document.querySelector("#inline-passed-location-navigation").click()],
+        ["inline_reflected_navigation_blocked", () => document.querySelector("#inline-reflected-navigation").click()],
+        ["inline_global_alias_navigation_blocked", () => document.querySelector("#inline-global-alias-navigation").click()],
+        ["inline_carrier_function_navigation_blocked", () => document.querySelector("#inline-carrier-function-navigation").click()],
+        ["inline_escaped_navigation_blocked", () => document.querySelector("#inline-escaped-navigation").click()],
+        ["dynamic_script_navigation_blocked", () => document.querySelector("#dynamic-script-navigation").click()],
+        ["dynamic_handler_navigation_blocked", () => document.querySelector("#dynamic-handler-navigation").click()],
+      ];
+      for (const [key, attempt] of locationAttempts) {
+        delete document.documentElement.dataset.archiveScriptNavigationBlocked;
+        try { attempt(); } catch {}
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        results[key] = location.href === initialLocation
+          && document.documentElement.dataset.archiveScriptNavigationBlocked === "true"
+          && document.querySelector("#__archive_script_navigation_blocked__ h1")?.textContent === "Historical navigation blocked";
+      }
+      const reset = document.querySelector("#__archive_script_navigation_blocked__ a");
+      const resetTargetsInitialDocument = reset?.href === initialLocation;
+      reset?.addEventListener("click", (event) => event.preventDefault(), { once: true });
+      reset?.click();
+      results.script_navigation_reset = resetTargetsInitialDocument
+        && !document.querySelector("#__archive_script_navigation_blocked__")
+        && location.href === initialLocation;
+      results.nested_srcdoc_cross_origin_navigation_attempted = true;
+      top.postMessage({ type: "archive-viewer-attack-result", results }, "*");
+      setTimeout(() => { try { __ARCHIVE_UNREWRITTEN_NAVIGATION_PROBE__(); } catch {} }, 0);
+    })();
+  </script>
+</body>
+</html>

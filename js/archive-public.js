@@ -70,6 +70,7 @@
     archive: "archive",
     other: "archive",
     "other-cultural-object": "archive",
+    "other-website": "archive",
   }));
 
   const archiveBrandMediumAliases = new Map(Object.entries({
@@ -561,6 +562,7 @@
       materialUsages: list(first(payload && payload.material_usages, payload && payload.materialUsages, dossier.material_usages, item.material_usages, [])),
       paletteMaps: list(first(payload && payload.palette_maps, payload && payload.paletteMaps, dossier.palette_maps, item.palette_maps, [])),
       terms: list(first(payload && payload.terms, dossier.terms, item.terms, [])),
+      webSnapshots: list(first(payload && payload.web_snapshots, payload && payload.webSnapshots, dossier.web_snapshots, dossier.webSnapshots, item.web_snapshots, item.webSnapshots, [])),
     };
   }
 
@@ -580,6 +582,131 @@
     const roman = text(state.state_roman, state.stateRoman, "I").toUpperCase();
     const variant = text(state.variant_label, state.variantLabel);
     return `Version ${versionNumber}, State ${roman}${variant ? `, ${variant}` : ""}`;
+  }
+
+  function safeWebViewerUrl(value) {
+    const supplied = safeUrl(value);
+    if (!supplied) return "";
+    try {
+      const parsed = new URL(supplied, location.origin);
+      const localHosts = new Set(["127.0.0.1", "localhost"]);
+      if (localHosts.has(location.hostname)) {
+        return localHosts.has(parsed.hostname) && ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "";
+      }
+      return parsed.protocol === "https:" && parsed.hostname === "archive-viewer.thesixwellconstruct.com" ? parsed.href : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function webSnapshotSummary(snapshot) {
+    const supplied = first(snapshot.dependency_summary, snapshot.dependencySummary, {});
+    if (supplied && typeof supplied === "object" && !Array.isArray(supplied)) return supplied;
+    try {
+      const parsed = JSON.parse(supplied || "{}");
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function webSnapshotTitle(snapshot, index) {
+    return text(snapshot.title, snapshot.state_label, snapshot.stateLabel, `Website snapshot ${index + 1}`);
+  }
+
+  function webSnapshotPlacement(snapshot) {
+    const supplied = text(snapshot.version_state_label, snapshot.versionStateLabel, snapshot.state_label, snapshot.stateLabel);
+    if (supplied) return supplied;
+    const versionNumber = first(snapshot.version_number, snapshot.versionNumber);
+    const versionTitle = text(snapshot.version_title, snapshot.versionTitle);
+    const stateRoman = text(snapshot.state_roman, snapshot.stateRoman);
+    const stateTitle = text(snapshot.state_title, snapshot.stateTitle);
+    if (versionNumber || versionTitle || stateRoman || stateTitle) return [versionNumber ? `Version ${versionNumber}` : versionTitle, stateRoman ? `State ${stateRoman}` : "", stateTitle].filter(Boolean).join(" · ");
+    return "Documented website state";
+  }
+
+  function webSnapshotProvenanceMarkup(snapshot) {
+    const commit = text(snapshot.git_commit_sha, snapshot.gitCommitSha);
+    const treeHash = text(snapshot.tree_sha256, snapshot.tree_hash, snapshot.treeSha256, snapshot.treeHash);
+    const committedAt = text(snapshot.git_commit_date, snapshot.gitCommitDate, snapshot.git_commit_at, snapshot.gitCommitAt);
+    const facts = [
+      ["Archive placement", webSnapshotPlacement(snapshot)],
+      ["Lineage role", titleCase(text(snapshot.lineage_role, snapshot.lineageRole, "canonical-state"))],
+      ["Entry path", text(snapshot.entry_path, snapshot.entryPath, "index.html")],
+      ...(commit ? [["Git commit", commit]] : []),
+      ...(committedAt ? [["Committed", dateLabel({ date: committedAt })]] : []),
+      ...(treeHash ? [["Tree SHA-256", treeHash]] : []),
+    ];
+    return `<dl class="archive-web-provenance">${facts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${label.includes("path") || label.includes("commit") || label.includes("SHA") ? `<code title="${escapeHtml(value)}">${escapeHtml(value)}</code>` : escapeHtml(value)}</dd></div>`).join("")}</dl>`;
+  }
+
+  function webSnapshotDependencyMarkup(snapshot) {
+    const summary = webSnapshotSummary(snapshot);
+    const labels = [
+      ["resolved", "Resolved"],
+      ["missing", "Missing"],
+      ["case-mismatch", "Case mismatch"],
+      ["case_mismatch", "Case mismatch"],
+      ["external-blocked", "External blocked"],
+      ["external_blocked", "External blocked"],
+      ["navigation", "Navigation paths"],
+      ["embedded", "Embedded"],
+      ["unverifiable", "Unverifiable"],
+      ["accepted-missing", "Accepted missing"],
+      ["accepted_missing", "Accepted missing"],
+    ];
+    const seenLabels = new Set();
+    const entries = labels.flatMap(([key, label]) => {
+      const count = Number(summary[key] || 0);
+      if (!count || seenLabels.has(label)) return [];
+      seenLabels.add(label);
+      return [[label, count]];
+    });
+    return entries.length ? `<div class="archive-web-dependency-summary" aria-label="Dependency summary">${entries.map(([label, count]) => `<span>${count} ${escapeHtml(label)}</span>`).join("")}</div>` : "";
+  }
+
+  function webSnapshotViewerMarkup(snapshots) {
+    const publicSnapshots = snapshots.map((snapshot, index) => ({ snapshot, index, viewerUrl: safeWebViewerUrl(first(snapshot.viewer_url, snapshot.viewerUrl)) })).filter((entry) => entry.viewerUrl);
+    if (!publicSnapshots.length) return "";
+    return `<div class="archive-web-viewer" data-archive-web-viewer data-viewport="desktop">
+      <div class="archive-web-viewer-toolbar"><label class="archive-web-viewer-picker">Documented website state<select data-archive-web-snapshot-select>${publicSnapshots.map(({ snapshot, index }) => `<option value="${escapeHtml(text(snapshot.id, index))}">${escapeHtml(webSnapshotTitle(snapshot, index))} · ${escapeHtml(webSnapshotPlacement(snapshot))}</option>`).join("")}</select></label><div class="archive-web-viewer-controls" aria-label="Viewer controls"><button class="archive-button" type="button" data-archive-web-viewport="desktop" aria-pressed="true">Desktop</button><button class="archive-button" type="button" data-archive-web-viewport="mobile" aria-pressed="false">390 px</button><button class="archive-button" type="button" data-archive-web-reset>Reset snapshot</button></div></div>
+      ${publicSnapshots.map(({ snapshot, index, viewerUrl }, publicIndex) => {
+        const id = text(snapshot.id, index);
+        const title = webSnapshotTitle(snapshot, index);
+        const screenshot = safeUrl(first(snapshot.screenshot_url, snapshot.screenshotUrl));
+        return `<article class="archive-web-snapshot-panel" data-archive-web-snapshot-panel="${escapeHtml(id)}" ${publicIndex ? "hidden" : ""}><header class="archive-web-snapshot-heading"><div><span class="archive-label">Interactive historical source</span><h3>${escapeHtml(title)}</h3></div><p>The original local code runs inside an isolated, network-blocked viewer. External resources and historical navigation remain unavailable by design.</p></header><div class="archive-web-stage"><iframe title="Historical website snapshot: ${escapeHtml(title)}" sandbox="allow-scripts" referrerpolicy="no-referrer" ${publicIndex ? "" : `src="${escapeHtml(viewerUrl)}" `}data-viewer-src="${escapeHtml(viewerUrl)}" loading="lazy"></iframe></div>${webSnapshotProvenanceMarkup(snapshot)}${webSnapshotDependencyMarkup(snapshot)}${screenshot ? `<details class="archive-web-screenshot"><summary>Open generated screenshot fallback</summary><img src="${escapeHtml(screenshot)}" alt="Generated fallback capture of ${escapeHtml(title)}" loading="lazy"></details>` : ""}</article>`;
+      }).join("")}
+    </div>`;
+  }
+
+  function setupArchiveWebSnapshots() {
+    const viewer = app.querySelector("[data-archive-web-viewer]");
+    if (!viewer) return;
+    const select = viewer.querySelector("[data-archive-web-snapshot-select]");
+    const panels = [...viewer.querySelectorAll("[data-archive-web-snapshot-panel]")];
+    const activate = (id) => {
+      panels.forEach((panel) => {
+        const active = panel.dataset.archiveWebSnapshotPanel === id;
+        panel.hidden = !active;
+        const frame = panel.querySelector("iframe[data-viewer-src]");
+        if (active && frame && !frame.getAttribute("src")) frame.src = frame.dataset.viewerSrc;
+      });
+    };
+    select?.addEventListener("change", () => activate(select.value));
+    viewer.addEventListener("click", (event) => {
+      const viewport = event.target.closest("[data-archive-web-viewport]");
+      if (viewport) {
+        viewer.dataset.viewport = viewport.dataset.archiveWebViewport;
+        viewer.querySelectorAll("[data-archive-web-viewport]").forEach((button) => button.setAttribute("aria-pressed", String(button === viewport)));
+        return;
+      }
+      if (!event.target.closest("[data-archive-web-reset]")) return;
+      const frame = panels.find((panel) => !panel.hidden)?.querySelector("iframe[data-viewer-src]");
+      if (!frame) return;
+      const src = frame.dataset.viewerSrc;
+      frame.src = "about:blank";
+      requestAnimationFrame(() => { frame.src = src; });
+    });
   }
 
   function evolutionMarkup(data, materials, item) {
@@ -1140,6 +1267,7 @@
       const activities = data.activities.slice().sort((a, b) => text(a.sort_date, a.occurred_at, a.date_start, a.date, "9999").localeCompare(text(b.sort_date, b.occurred_at, b.date_start, b.date, "9999")));
       const relationships = data.relationships;
       const primaryOriginThread = data.primaryOriginThread;
+      const webSnapshotMarkup = webSnapshotViewerMarkup(data.webSnapshots);
       const mediumKey = recordMediumKey(item);
       const browseMediumValue = text(item.catalogue_medium, item.catalogueMedium, item.medium);
       const metadataHtml = metadata(item).map((entry) => {
@@ -1156,10 +1284,11 @@
       app.innerHTML = `
         <article${mediumKey ? ` data-archive-medium="${escapeHtml(mediumKey)}"` : ""}>
           <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(archiveObjectTypeLabel(item), item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadataHtml}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${relatedActionMarkup}</div></div></div>${imageUrl || imageMarkup ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${inlineEmphasis(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
-          <nav class="archive-jump-nav" aria-label="On this record"><a href="#overview">Overview</a><a href="#story">Story</a>${data.documentation.length ? `<a href="#documentation">Documentation</a>` : ""}${data.versions.length ? `<a href="#evolution">Evolution</a>` : ""}${data.colorUsages.length||data.materialUsages.length||data.paletteMaps.length?`<a href="#palette-materials">Palette &amp; Materials</a>`:""}<a href="#notebook">Notebook</a><a href="#history">History</a><a href="#connections">Connections</a></nav>
+          <nav class="archive-jump-nav" aria-label="On this record"><a href="#overview">Overview</a><a href="#story">Story</a>${data.documentation.length ? `<a href="#documentation">Documentation</a>` : ""}${data.versions.length ? `<a href="#evolution">Evolution</a>` : ""}${webSnapshotMarkup ? `<a href="#website-snapshots">Website snapshots</a>` : ""}${data.colorUsages.length||data.materialUsages.length||data.paletteMaps.length?`<a href="#palette-materials">Palette &amp; Materials</a>`:""}<a href="#notebook">Notebook</a><a href="#history">History</a><a href="#connections">Connections</a></nav>
           <section class="archive-document-section" id="story"><header class="archive-section-heading"><span class="archive-section-index">01 / Context</span><h2 class="archive-section-title">The story</h2></header><div><div class="archive-prose">${story ? paragraphMarkup(story) : "<p>This dossier currently holds the public facts of the work. Its fuller story has not been published yet.</p>"}${data.collections.length ? `<div class="archive-link-chips">${data.collections.map((collection) => `<a class="archive-chip" href="/archive/?collection=${encodeURIComponent(text(collection.slug, collection.id, collection.name))}">${escapeHtml(text(collection.name, collection.title, collection.slug))}</a>`).join("")}</div>` : ""}</div>${contextMarkup(data.subjects, data.terms)}</div></section>
           ${data.documentation.length ? `<section class="archive-document-section" id="documentation"><header class="archive-section-heading"><span class="archive-section-index">02 / Catalogue</span><h2 class="archive-section-title">Documentation</h2></header><div>${documentationMarkup(data.documentation)}</div></section>` : ""}
           ${data.versions.length ? `<section class="archive-document-section" id="evolution"><header class="archive-section-heading"><span class="archive-section-index">03 / Evolution</span><h2 class="archive-section-title">Versions and states</h2></header><div>${evolutionMarkup(data, materials, item)}</div></section>` : ""}
+          ${webSnapshotMarkup ? `<section class="archive-document-section" id="website-snapshots"><header class="archive-section-heading"><span class="archive-section-index">04 / Living source</span><h2 class="archive-section-title">Website snapshots</h2></header><div>${webSnapshotMarkup}</div></section>` : ""}
           ${data.colorUsages.length||data.materialUsages.length||data.paletteMaps.length?`<section class="archive-document-section" id="palette-materials"><header class="archive-section-heading"><span class="archive-section-index">04 / Material record</span><h2 class="archive-section-title">Palette &amp; Materials</h2></header><div class="archive-palette-document">${data.colorUsages.length?`<section><h3>Documented colors</h3><ol class="archive-palette-region-list archive-palette-usage-list">${data.colorUsages.map(paletteUsageMarkup).join("")}</ol></section>`:""}${data.materialUsages.length?`<section><h3>Materials, tools &amp; equipment</h3><ul class="archive-material-usage-list">${data.materialUsages.map(paletteMaterialMarkup).join("")}</ul></section>`:""}${data.paletteMaps.map(paletteMapShellMarkup).join("")}</div></section>`:""}
           <section class="archive-document-section" id="notebook"><header class="archive-section-heading"><span class="archive-section-index">04 / Evidence</span><h2 class="archive-section-title">Open notebook</h2></header><div class="archive-open-notebook-groups"><section class="archive-open-notebook-group" aria-labelledby="journal-entries-title"><header><span class="archive-kicker">Authored record</span><h3 id="journal-entries-title">Journal moments</h3><p>Subjective observations from the life of this archived item, with their images kept in authored order.</p></header>${journalNotes.length?`<div class="archive-journal-feed">${journalNotes.map(archiveJournalEntryMarkup).join("")}</div>`:`<div class="archive-note-empty"><p>No Journal moments have been published for this item yet.</p></div>`}</section><section class="archive-open-notebook-group" aria-labelledby="process-evidence-title"><header><span class="archive-kicker">Supporting record</span><h3 id="process-evidence-title">Process Evidence / Source Materials</h3><p>Documentation, references, correspondence, and other supporting records are kept distinct from authored Journal moments.</p></header>${hasSupportingEvidence?`<div class="archive-notebook-grid">${supportingNotes.map(archiveNoteThumbnailMarkup).join("")}${notebookMaterials.map((material,index)=>materialThumbnailMarkup(material,index,imageUrl)).join("")}${sourceMaterials.map(sourceMaterialThumbnailMarkup).join("")}</div>`:`<div class="archive-note-empty"><p>${escapeHtml(text(data.dossier.empty_materials_note, "No process evidence or source materials are public yet."))}</p></div>`}</section></div></section>
           <section class="archive-document-section" id="history"><header class="archive-section-heading"><span class="archive-section-index">05 / Time</span><h2 class="archive-section-title">Item history</h2></header><div>${activities.length ? `<div class="archive-history">${activities.map(historyMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>No dated history entries are public yet.</p></div>`}</div></section>
@@ -1172,6 +1301,7 @@
       setupSourceMaterialQuickView(sourceMaterials);
       setupArchiveNoteQuickView(notes);
       setupPaletteMaps();
+      setupArchiveWebSnapshots();
     } catch (error) {
       app.innerHTML = error.status === 404
         ? errorState("This dossier is not public.", "It may be unpublished, unlisted, or no longer available under this address.")

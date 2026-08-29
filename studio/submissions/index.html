@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="/studio/archive-catalogue.css?v=1">
 <link rel="stylesheet" href="/studio/archive-colors-materials.css?v=5">
 <link rel="stylesheet" href="/studio/archive-failed-experiments.css?v=1">
+<link rel="stylesheet" href="/css/archive-web-snapshots.css?v=1">
 <link rel="stylesheet" href="/studio/connections-manager.css?v=1">
 <link rel="stylesheet" href="/studio/creative-identities-manager.css?v=20260829-identity-publication">
 <link rel="stylesheet" href="/studio/admin-collapse.css?v=1">
@@ -2262,7 +2263,7 @@
       }
       html += `<button class="subnav-btn" type="button" data-event-setup style="margin-left:auto;">Manage / New Events</button>`;
     } else if (activeTab === "archive") {
-      html = [["dossiers","Dossiers"],["records","Records"],["legacy-records","Legacy Records"],["notes","Notes"],["failed-experiments","Failed Experiments"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["collections","Collections"],["timeline","Timelines"],["people","People"],["organizations","Organizations"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["dossiers","Dossiers"],["web-snapshots","Website Inception"],["records","Records"],["legacy-records","Legacy Records"],["notes","Notes"],["failed-experiments","Failed Experiments"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["collections","Collections"],["timeline","Timelines"],["people","People"],["organizations","Organizations"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "site") {
       html = [["pathways","Homepage Pathways"],["nodes","Construct Nodes"],["navigation","Navigation"],["search","Search"],["visibility","Public Visibility"],["settings","Site Settings"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "shared") {
