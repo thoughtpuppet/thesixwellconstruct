@@ -15,7 +15,6 @@ const RECIPE_KINDS = new Set(["raw-pigment","art-paint","tattoo-ink","medium-dil
 const STATES = new Set(["draft","published","archived"]);
 const OPTICAL_EFFECTS = new Set(["metallic","fluorescent","pearlescent","iridescent","interference"]);
 const GEOMETRY_TYPES = new Set(["polygon","polyline","path","rect","circle","ellipse"]);
-const VISUAL_FAMILY_SLUGS = new Set(["black","gray","white","cream","beige","tan","brown","red","orange","yellow","gold","ochre","green","teal","turquoise","cyan","blue","indigo","purple","pink","silver"]);
 
 function publicSql(alias) {
   return `${alias}.publication_state='published' AND ${alias}.public_visible=1`;
@@ -856,7 +855,11 @@ async function librarySnapshot(database) {
       LEFT JOIN archive_color_recipes nested_recipe ON nested_recipe.id=nested_version.recipe_id
       ORDER BY component.recipe_version_id,component.sort_order`),
     database.prepare("SELECT * FROM archive_color_profiles ORDER BY updated_at DESC"),
-    database.prepare("SELECT * FROM archive_color_families ORDER BY sort_order,name"),
+    database.prepare(`SELECT family.*,
+        CASE WHEN vocabulary.family_id IS NULL THEN 0 ELSE 1 END visual_vocabulary
+      FROM archive_color_families family
+      LEFT JOIN archive_visual_color_vocabulary vocabulary ON vocabulary.family_id=family.id
+      ORDER BY family.sort_order,family.name`),
     database.prepare("SELECT * FROM archive_color_profile_families ORDER BY profile_id,family_id"),
   ]);
   const products=await productRows(database);
@@ -1304,6 +1307,12 @@ async function referenceColorById(database,recordId) {
   return database.prepare(referenceColorSelect("WHERE reference.id=?")).bind(recordId).first();
 }
 
+async function visualVocabularyFamily(database,familyId) {
+  return database.prepare(`SELECT family.* FROM archive_color_families family
+    JOIN archive_visual_color_vocabulary vocabulary ON vocabulary.family_id=family.id
+    WHERE family.id=? AND family.publication_state<>'archived'`).bind(familyId).first();
+}
+
 async function adminReferenceColors(request,database,recordId="") {
   if(request.method==="GET"){
     if(recordId){
@@ -1322,9 +1331,19 @@ async function adminReferenceColors(request,database,recordId="") {
   if(request.method==="POST"&&!recordId){
     const profile=srgbHexToReferenceProfile(body.srgb_hex);
     if(!profile)return failure("Choose a six-digit sRGB color.");
-    const familyId=text(body.family_id,200);
-    const family=await database.prepare("SELECT id,slug FROM archive_color_families WHERE id=? AND publication_state<>'archived'").bind(familyId).first();
-    if(!family||!VISUAL_FAMILY_SLUGS.has(family.slug))return failure("Choose one active atomic visual color family.",409);
+    const requestedFamilyId=text(body.family_id,200),newFamilyName=text(body.new_family_name,240);
+    if(Boolean(requestedFamilyId)===Boolean(newFamilyName))return failure("Choose one existing color family or name one new color family.",409);
+    let family=await visualVocabularyFamily(database,requestedFamilyId),createFamily=false;
+    if(newFamilyName){
+      if(!isAtomicFamilyName(newFamilyName))return failure("Color family names must be singular. Use separate families instead of combined labels.",409);
+      const familySlug=cleanSlug(newFamilyName);
+      if(!familySlug)return failure("Name the new color family.");
+      const existing=await database.prepare("SELECT id,name FROM archive_color_families WHERE slug=? OR lower(name)=lower(?) LIMIT 1").bind(familySlug,newFamilyName).first();
+      if(existing)return failure(`${existing.name} already exists. Choose that family instead of creating a duplicate.`,409);
+      const order=await database.prepare("SELECT COALESCE(MAX(sort_order),-10)+10 sort_order FROM archive_color_families").first();
+      family={id:id("color-family"),slug:familySlug,name:newFamilyName,swatch_hex:profile.srgb_hex,sort_order:Number(order?.sort_order||0)};createFamily=true;
+    }
+    if(!family)return failure("Choose one active visual color family.",409);
     const sampleMethod=["palette","point"].includes(body.sample_method)?body.sample_method:"";
     if(!sampleMethod)return failure("Choose palette or point sampling.");
     const sampleX=nullableNumber(body.sample_x),sampleY=nullableNumber(body.sample_y);
@@ -1341,7 +1360,7 @@ async function adminReferenceColors(request,database,recordId="") {
     const values={
       name:text(body.name,240)||`Sample ${profile.srgb_hex}`,
       ...profile,
-      family_id:familyId,
+      family_id:family.id,
       sample_method:sampleMethod,
       sample_x:sampleX,
       sample_y:sampleY,
@@ -1353,8 +1372,18 @@ async function adminReferenceColors(request,database,recordId="") {
       updated_by:"studio",
     };
     try{
-      await writeRecord(database,"archive_color_references",recordId,values,true);
-      return json({record:await referenceColorById(database,recordId)},{status:201});
+      if(createFamily){
+        await database.batch([
+          insertRecordStatement(database,"archive_color_families",family.id,{
+            slug:family.slug,name:family.name,
+            description:"Studio-defined visual color family created from a sampled reference color.",
+            swatch_hex:family.swatch_hex,publication_state:"published",public_visible:1,sort_order:family.sort_order,
+          }),
+          database.prepare("INSERT INTO archive_visual_color_vocabulary(family_id,created_by,created_at) VALUES(?,'studio',datetime('now'))").bind(family.id),
+          insertRecordStatement(database,"archive_color_references",recordId,values),
+        ]);
+      }else await writeRecord(database,"archive_color_references",recordId,values,true);
+      return json({record:await referenceColorById(database,recordId),family:await database.prepare("SELECT * FROM archive_color_families WHERE id=?").bind(family.id).first(),family_created:createFamily},{status:201});
     }catch(error){return failure(error.message,409)}
   }
   if(request.method==="PATCH"&&recordId){
@@ -1363,8 +1392,8 @@ async function adminReferenceColors(request,database,recordId="") {
     const immutableFields=["srgb_hex","sample_method","sample_x","sample_y","source_media_id","source_filename","lab_l","lab_a","lab_b","oklch_l","oklch_c","oklch_h"];
     if(immutableFields.some((field)=>Object.prototype.hasOwnProperty.call(body,field)))return failure("Sampled color values and source provenance are immutable. Save a new reference instead.",409);
     const familyId=text(body.family_id??before.family_id,200);
-    const family=await database.prepare("SELECT id,slug FROM archive_color_families WHERE id=? AND publication_state<>'archived'").bind(familyId).first();
-    if(!family||!VISUAL_FAMILY_SLUGS.has(family.slug))return failure("Choose one active atomic visual color family.",409);
+    const family=await visualVocabularyFamily(database,familyId);
+    if(!family)return failure("Choose one active visual color family.",409);
     const state=["active","archived"].includes(body.state)?body.state:before.state;
     try{
       await writeRecord(database,"archive_color_references",recordId,{

@@ -121,6 +121,7 @@
 .acm-sampler-guidance { margin:0; }
 .acm-sampler-tray,.acm-reference-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
 .acm-sample-card,.acm-reference-card form { min-width:0; border:5px solid var(--ring-faint); padding:14px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-content:start; }
+.acm-sample-card [hidden] { display:none!important; }
 .acm-sample-card label,.acm-reference-card label { display:grid; gap:6px; color:var(--dim); font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
 .acm-sample-card input,.acm-sample-card select,.acm-sample-card textarea,.acm-reference-card input,.acm-reference-card select,.acm-reference-card textarea { width:100%; min-height:44px; border:5px solid var(--ring-faint); background:var(--panel); color:var(--text); padding:7px; font:600 13px/1.35 var(--sans); }
 .acm-sample-card .wide,.acm-reference-card .wide { grid-column:1/-1; }
@@ -128,6 +129,7 @@
 .acm-sample-color input[type="color"] { width:68px; height:68px; padding:4px; flex:0 0 auto; }
 .acm-sample-color span { display:grid; gap:4px; }
 .acm-sample-color small { color:var(--dim); }
+.acm-family-note { margin:0; border:5px solid var(--ring-faint); padding:10px; color:var(--muted); font-size:12px; line-height:1.5; }
 .acm-reference-shelf { border-top:5px solid var(--ring-faint); padding-top:16px; display:grid; gap:14px; }
 .acm-reference-shelf > header { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
 .acm-reference-shelf h4 { margin:4px 0; font-size:22px; }

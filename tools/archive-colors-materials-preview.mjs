@@ -274,9 +274,9 @@ async function seed() {
 
   const family = await api("/api/admin/archive-color-materials/families", {
     id: "browser-family-blue",
-    name: "Blues",
-    slug: "blues",
-    description: "Artist-confirmed blue colorants.",
+    name: "Cobalt",
+    slug: "cobalt",
+    description: "Artist-confirmed cobalt colorants.",
     swatch_hex: "#315A7A",
     publication_state: "published",
     public_visible: true,

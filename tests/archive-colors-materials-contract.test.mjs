@@ -12,6 +12,7 @@ import {
   mergeVisualColorSuggestions,
   normalizeVisualColorResult,
   runVisualColorAnalysisPass,
+  syncVisualColorQueue,
   visualColorFingerprint,
 } from "../functions/api/construct/_visual-colors.js";
 import { handleConstructApi } from "../functions/api/construct/_lib.js";
@@ -79,12 +80,15 @@ test("visual color migration preserves Black, seeds atomic families, and stays i
   ) VALUES('combined-family','gold-ochre','Gold/Ochre','','#999999','draft',0,0,datetime('now'),datetime('now'))`).run(),/singular and atomic/);
 });
 
-test("reference color migration is idempotent and guards atomic provenance",()=>{
+test("reference color and visual vocabulary migrations are idempotent and guard provenance",()=>{
   const sql=new DatabaseSync(":memory:");sql.exec("PRAGMA foreign_keys=ON");
   const migrations=readdirSync(join(ROOT,"migrations")).filter(value=>value.endsWith(".sql")).sort();
   for(const name of migrations.filter(value=>value<"0182_archive_reference_colors.sql"))sql.exec(readFileSync(join(ROOT,"migrations",name),"utf8"));
-  const migration=readFileSync(join(ROOT,"migrations/0182_archive_reference_colors.sql"),"utf8");sql.exec(migration);sql.exec(migration);
+  const referenceMigration=readFileSync(join(ROOT,"migrations/0182_archive_reference_colors.sql"),"utf8");
+  const vocabularyMigration=readFileSync(join(ROOT,"migrations/0191_archive_visual_color_vocabulary.sql"),"utf8");
+  sql.exec(referenceMigration);sql.exec(referenceMigration);sql.exec(vocabularyMigration);sql.exec(vocabularyMigration);
   const blue=sql.prepare("SELECT id FROM archive_color_families WHERE slug='blue'").get();
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_visual_color_vocabulary").get().count,21);
   sql.prepare(`INSERT INTO archive_color_references(
     id,name,srgb_hex,lab_l,lab_a,lab_b,oklch_l,oklch_c,oklch_h,family_id,
     sample_method,sample_x,sample_y,source_filename,notes,state,created_by,updated_by,created_at,updated_at
@@ -101,7 +105,7 @@ test("reference color migration is idempotent and guards atomic provenance",()=>
   ) VALUES('plural-blue','blues','Blues','','#315A7A','published',1,0,datetime('now'),datetime('now'))`).run();
   assert.throws(()=>sql.prepare(`INSERT INTO archive_color_references(
     id,name,srgb_hex,lab_l,lab_a,lab_b,oklch_l,oklch_c,family_id,sample_method,source_filename,created_at,updated_at
-  ) VALUES('bad-family','Bad family','#2463B5',0,0,0,0,0,'plural-blue','palette','',datetime('now'),datetime('now'))`).run(),/atomic visual family/);
+  ) VALUES('bad-family','Bad family','#2463B5',0,0,0,0,0,'plural-blue','palette','',datetime('now'),datetime('now'))`).run(),/visual vocabulary family/);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_color_references").get().count,1);
 });
 
@@ -154,28 +158,84 @@ test("reference colors are authenticated private records with immutable samples"
   assert.match(invalidSource.body.error,/private hidden/i);
 });
 
-test("reference colors reject non-atomic curated families",async()=>{
+test("sampled references can create singular visual color families",async()=>{
+  const sql=database(),runtime=env(sql);
+  const created=await admin(runtime,"/api/admin/archive-color-materials/reference-colors",{
+    name:"First Burgundy sample",
+    srgb_hex:"#731F32",
+    new_family_name:"Burgundy",
+    sample_method:"palette",
+  });
+  assert.equal(created.status,201,created.body.error);
+  assert.equal(created.body.family_created,true);
+  assert.equal(created.body.family.slug,"burgundy");
+  assert.equal(created.body.family.name,"Burgundy");
+  assert.equal(created.body.family.swatch_hex,"#731F32");
+  assert.equal(created.body.family.publication_state,"published");
+  assert.equal(created.body.family.public_visible,1);
+  assert.equal(created.body.record.family_slug,"burgundy");
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_visual_color_vocabulary WHERE family_id=?").get(created.body.family.id).count,1);
+
+  const library=await payload(await handleConstructApi(request("/api/admin/archive-color-materials",{admin:true}),runtime));
+  assert.equal(library.body.color_families.find(family=>family.slug==="burgundy").visual_vocabulary,1);
+  const publicFamilies=await payload(await handleConstructApi(request("/api/archive/visual-color-families"),runtime));
+  assert.equal(publicFamilies.body.families.some(family=>family.slug==="burgundy"),false);
+  const combined=await admin(runtime,"/api/admin/archive-color-materials/reference-colors",{
+    srgb_hex:"#731F32",new_family_name:"Red/Burgundy",sample_method:"palette",
+  });
+  assert.equal(combined.status,409);
+  assert.match(combined.body.error,/singular/i);
+  const duplicate=await admin(runtime,"/api/admin/archive-color-materials/reference-colors",{
+    srgb_hex:"#741F32",new_family_name:"Burgundy",sample_method:"palette",
+  });
+  assert.equal(duplicate.status,409);
+  assert.match(duplicate.body.error,/already exists/i);
+});
+
+test("reference colors reject curated families outside the visual vocabulary",async()=>{
   const runtime=env(database());
   const family=await admin(runtime,"/api/admin/archive-color-materials/families",{
-    name:"Blues",
-    slug:"blues",
+    name:"Cobalt",
+    slug:"cobalt",
     swatch_hex:"#315A7A",
     publication_state:"published",
     public_visible:true,
   });
   assert.equal(family.status,201);
   const rejected=await admin(runtime,"/api/admin/archive-color-materials/reference-colors",{
-    name:"Plural family sample",
+    name:"Non-vocabulary family sample",
     srgb_hex:"#315A7A",
     family_id:family.body.record.id,
     sample_method:"palette",
   });
   assert.equal(rejected.status,409);
-  assert.match(rejected.body.error,/atomic visual color family/i);
+  assert.match(rejected.body.error,/active visual color family/i);
+});
+
+test("adding a sampled visual family versions future analyzer runs",async()=>{
+  const sql=database(),runtime=env(sql);
+  await syncVisualColorQueue(runtime);
+  const before=sql.prepare("SELECT prompt_version FROM archive_visual_color_runs WHERE work_type='painting' AND work_id='art-marbles' ORDER BY rowid DESC LIMIT 1").get();
+  assert.ok(before?.prompt_version);
+
+  const burgundy=await admin(runtime,"/api/admin/archive-color-materials/reference-colors",{
+    name:"Vocabulary Burgundy",srgb_hex:"#731F32",new_family_name:"Burgundy",sample_method:"palette",
+  });
+  assert.equal(burgundy.status,201,burgundy.body.error);
+  await syncVisualColorQueue(runtime);
+
+  const runs=sql.prepare("SELECT prompt_version FROM archive_visual_color_runs WHERE work_type='painting' AND work_id='art-marbles' ORDER BY rowid").all();
+  assert.equal(runs.length,2);
+  assert.notEqual(runs[0].prompt_version,runs[1].prompt_version);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_visual_color_assignments WHERE work_type='painting' AND work_id='art-marbles'").get().count,0);
 });
 
 test("visual source discovery excludes Tattoo context images and merges only allowed atomic suggestions",async()=>{
   const sql=database(),runtime=env(sql);
+  const burgundy=await admin(runtime,"/api/admin/archive-color-materials/reference-colors",{
+    name:"Analyzer Burgundy",srgb_hex:"#731F32",new_family_name:"Burgundy",sample_method:"palette",
+  });
+  assert.equal(burgundy.status,201,burgundy.body.error);
   sql.exec(`INSERT INTO portfolio_items(
     id,source_url,storage_key,original_filename,content_type,title,alt_text,year,placement,
     primary_style,collection,caption,state,sort_order,created_at,updated_at,primary_public_visible,project_type
@@ -247,6 +307,7 @@ test("visual source discovery excludes Tattoo context images and merges only all
   assert.equal(assetFetches.length,1);
   assert.match(calls[0].input.prompt,/Exclude tiny noise, skin, photographic backgrounds/);
   assert.match(calls[0].input.prompt,/only 2 to 8 families/);
+  assert.match(calls[0].input.prompt,/burgundy/);
   assert.match(calls[0].input.prompt,/Return only one minified JSON object/);
   assert.equal(calls[0].input.image,"data:image/jpeg;base64,/9j/2Q==");
   assert.equal(calls[0].input.max_tokens,512);
@@ -866,7 +927,10 @@ test("Studio SVG import owns transforms and public map interactions use privacy-
   assert.match(studioSource,/Approve complete set/);
   assert.match(studioSource,/Gold and Ochre are separate families/);
   assert.match(studioSource,/Image color sampler/);
-  assert.match(studioSource,/Save reference color/);
+  assert.match(studioSource,/Save to color family/);
+  assert.match(studioSource,/Create a new color family/);
+  assert.match(studioSource,/new_family_name/);
+  assert.match(studioSource,/future visual analysis vocabulary/);
   assert.match(studioSource,/Use as family swatch/);
   assert.match(studioSource,/data-confirm-family-swatch/);
   assert.match(studioSource,/Current ·/);

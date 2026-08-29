@@ -11,7 +11,8 @@ const DEFAULT_WORKS_PER_PASS = 1;
 
 export function isAtomicFamilyName(value) {
   const name = text(value, 240);
-  return Boolean(name) && !/[\/&+,]/.test(name) && !/(^|\s)and(\s|$)/i.test(name);
+  const pluralBasicFamily=/^(reds|oranges|yellows|greens|blues|purples|pinks|browns|blacks|whites|grays|greys|creams|beiges|tans)$/i;
+  return Boolean(name) && !/[\/&+,]/.test(name) && !/(^|\s)and(\s|$)/i.test(name) && !pluralBasicFamily.test(name);
 }
 
 function parseJson(value, fallback) {
@@ -212,6 +213,15 @@ export async function visualColorFingerprint(work) {
   return sha256(JSON.stringify(fingerprintManifest(work)));
 }
 
+async function publishedVisualVocabulary(database) {
+  const result=await database.prepare(`SELECT family.id,family.slug,family.name,family.swatch_hex,family.sort_order
+    FROM archive_color_families family
+    JOIN archive_visual_color_vocabulary vocabulary ON vocabulary.family_id=family.id
+    WHERE family.publication_state='published' AND family.public_visible=1
+    ORDER BY family.sort_order,family.name`).all();
+  return (result.results||[]).filter(family=>isAtomicFamilyName(family.name));
+}
+
 function modelConfig(env) {
   return {
     modelName: text(env.VISUAL_COLOR_MODEL, 300) || DEFAULT_MODEL,
@@ -224,6 +234,9 @@ export async function syncVisualColorQueue(env, options = {}) {
   const database = db(env);
   const works = await discoverVisualColorWorkSources(database, env);
   const config = modelConfig(env);
+  const vocabulary=await publishedVisualVocabulary(database);
+  const vocabularyFingerprint=await sha256(JSON.stringify(vocabulary.map(family=>[family.slug,family.name])));
+  config.promptVersion=`${config.promptVersion}:${vocabularyFingerprint.slice(0,12)}`;
   const statements = [];
   for (const work of works.values()) {
     const manifest = fingerprintManifest(work);
@@ -361,8 +374,11 @@ export async function runVisualColorAnalysisPass(env) {
   const [runResult, familyResult] = await database.batch([
     database.prepare(`SELECT * FROM archive_visual_color_runs
       WHERE status='pending' AND attempts<? ORDER BY created_at,rowid LIMIT ?`).bind(maxAttempts, limit),
-    database.prepare(`SELECT id,slug,name,swatch_hex,sort_order FROM archive_color_families
-      WHERE publication_state='published' AND public_visible=1 ORDER BY sort_order,name`),
+    database.prepare(`SELECT family.id,family.slug,family.name,family.swatch_hex,family.sort_order
+      FROM archive_color_families family
+      JOIN archive_visual_color_vocabulary vocabulary ON vocabulary.family_id=family.id
+      WHERE family.publication_state='published' AND family.public_visible=1
+      ORDER BY family.sort_order,family.name`),
   ]);
   const families = (familyResult.results || []).filter((family) => isAtomicFamilyName(family.name));
   if (!families.length) return { ...queue, processed: [], error: "No published atomic color vocabulary is available." };
@@ -396,8 +412,11 @@ async function publicVisualFamilies(request, env) {
   const database = db(env);
   const works = currentWorkMap(await discoverVisualColorWorkSources(database, env));
   const [familyResult, assignmentResult] = await database.batch([
-    database.prepare(`SELECT id,slug,name,swatch_hex,sort_order FROM archive_color_families
-      WHERE publication_state='published' AND public_visible=1 ORDER BY sort_order,name`),
+    database.prepare(`SELECT family.id,family.slug,family.name,family.swatch_hex,family.sort_order
+      FROM archive_color_families family
+      JOIN archive_visual_color_vocabulary vocabulary ON vocabulary.family_id=family.id
+      WHERE family.publication_state='published' AND family.public_visible=1
+      ORDER BY family.sort_order,family.name`),
     database.prepare("SELECT work_type,work_id,family_id,strength,display_order FROM archive_visual_color_assignments"),
   ]);
   const assignments = assignmentResult.results || [];
@@ -420,8 +439,10 @@ async function publicFamilyWorks(request, env, slug) {
   const type = text(url.searchParams.get("type"), 20) || "all";
   if (type !== "all" && !WORK_TYPES.has(type)) return failure("Choose all, painting, or tattoo.", 400);
   const database = db(env);
-  const family = await database.prepare(`SELECT id,slug,name,swatch_hex FROM archive_color_families
-    WHERE slug=? AND publication_state='published' AND public_visible=1`).bind(slug).first();
+  const family = await database.prepare(`SELECT family.id,family.slug,family.name,family.swatch_hex
+    FROM archive_color_families family
+    JOIN archive_visual_color_vocabulary vocabulary ON vocabulary.family_id=family.id
+    WHERE family.slug=? AND family.publication_state='published' AND family.public_visible=1`).bind(slug).first();
   if (!family || !isAtomicFamilyName(family.name)) return failure("Visual color family not found.", 404);
   const works = currentWorkMap(await discoverVisualColorWorkSources(database, env));
   const assignments = (await database.prepare(`SELECT work_type,work_id,strength,display_order
@@ -487,7 +508,9 @@ async function reviewSnapshot(request, env) {
       FROM archive_visual_color_runs current
       WHERE rowid=(SELECT MAX(newer.rowid) FROM archive_visual_color_runs newer
         WHERE newer.work_type=current.work_type AND newer.work_id=current.work_id)`),
-    database.prepare("SELECT * FROM archive_color_families ORDER BY sort_order,name"),
+    database.prepare(`SELECT family.* FROM archive_color_families family
+      JOIN archive_visual_color_vocabulary vocabulary ON vocabulary.family_id=family.id
+      WHERE family.publication_state<>'archived' ORDER BY family.sort_order,family.name`),
     database.prepare("SELECT * FROM archive_work_descriptor_terms WHERE publication_state<>'archived' ORDER BY sort_order,name"),
   ]);
   const where = reviewStatusSql(filter);
@@ -562,13 +585,14 @@ async function approveRun(request, env, runId) {
 
   const colors = Array.isArray(body.colors) ? body.colors : [];
   const descriptorTermIds = [...new Set((Array.isArray(body.descriptor_term_ids) ? body.descriptor_term_ids : []).map((value) => text(value, 200)).filter(Boolean))];
-  if (colors.length > 21) return failure("Choose no more than the published color vocabulary.");
   const familyIds = [...new Set(colors.map((row) => text(row.family_id, 200)).filter(Boolean))];
   if (familyIds.length !== colors.length) return failure("Each approved family may appear only once.", 409);
   for (const row of colors) if (!STRENGTHS.has(text(row.strength, 30))) return failure("Choose dominant, supporting, or accent for every family.");
   if (familyIds.length) {
-    const found = (await database.prepare(`SELECT id,name FROM archive_color_families WHERE id IN (${familyIds.map(() => "?").join(",")})
-      AND publication_state='published' AND public_visible=1`).bind(...familyIds).all()).results || [];
+    const found = (await database.prepare(`SELECT family.id,family.name FROM archive_color_families family
+      JOIN archive_visual_color_vocabulary vocabulary ON vocabulary.family_id=family.id
+      WHERE family.id IN (${familyIds.map(() => "?").join(",")})
+        AND family.publication_state='published' AND family.public_visible=1`).bind(...familyIds).all()).results || [];
     if (found.length !== familyIds.length || found.some((family) => !isAtomicFamilyName(family.name))) return failure("Every approved family must belong to the published atomic vocabulary.", 409);
   }
   if (descriptorTermIds.length) {
