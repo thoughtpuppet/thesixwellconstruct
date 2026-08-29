@@ -111,11 +111,13 @@ test("Blackboard batch upload contract preserves private sources, independent dr
   assert.match(SOURCE,/bb-batch-row-preview/);
 });
 
-test("Blackboard batch intake opens wide and exposes large drag targets",()=>{
+test("Blackboard batch intake opens wide, exposes large drag targets, and stacks queue previews above metadata",()=>{
   assert.match(STYLE,/\.bb-fragment-intake \.bb-add-entry\[open\][\s\S]*?flex:\s*1 0 100%/);
   assert.match(STYLE,/\.bb-fragment-library \.bb-manager-head[\s\S]*?flex-wrap:\s*wrap/);
   assert.match(STYLE,/\.bb-batch-dropzone--masters[\s\S]*?min-height:\s*300px/);
   assert.match(STYLE,/\.bb-batch-dropzone\.is-dragover[\s\S]*?border-color:\s*var\(--accent\)/);
-  assert.match(STYLE,/\.bb-batch-row-preview[\s\S]*?min-height:\s*170px/);
+  assert.match(STYLE,/\.bb-batch-row[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(STYLE,/\.bb-batch-row-preview[\s\S]*?min-height:\s*260px/);
+  assert.match(SOURCE,/data-fragment-batch-row="\$\{esc\(row\.id\)\}">\$\{batchPreviewMarkup\(row\)\}<div class="cm-card-head">/);
   assert.match(STYLE,/@media \(max-width:\s*720px\)[\s\S]*?\.bb-batch-drop-grid[\s\S]*?grid-template-columns:\s*1fr/);
 });

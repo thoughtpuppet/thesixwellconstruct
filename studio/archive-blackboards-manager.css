@@ -415,19 +415,15 @@
 }
 
 .bb-batch-row {
-  grid-template-columns: minmax(140px, 210px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-}
-
-.bb-batch-row > .cm-card-head {
-  grid-column: 1 / -1;
 }
 
 .bb-batch-row-preview {
   display: grid;
   align-content: center;
   gap: 8px;
-  min-height: 170px;
+  min-height: 260px;
   margin: 0;
   overflow: hidden;
   border: 5px solid var(--ring-faint);
@@ -437,7 +433,7 @@
 .bb-batch-row-preview img {
   display: block;
   width: 100%;
-  height: 150px;
+  height: 240px;
   object-fit: contain;
 }
 
@@ -1020,10 +1016,6 @@
   .bb-batch-dropzone--masters {
     min-height: 210px;
     padding: 18px;
-  }
-
-  .bb-batch-row {
-    grid-template-columns: 1fr;
   }
 
   .bb-batch-row-preview img {
