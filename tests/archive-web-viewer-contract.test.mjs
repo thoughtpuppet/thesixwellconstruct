@@ -24,6 +24,7 @@ import {
   rewriteSrcsetForViewer,
   rewriteViewerReference,
   verifyPreviewToken,
+  viewerFocusStudyScript,
   viewerGuardScript,
   viewerHeaders,
 } from "../workers/archive-viewer/src/lib.js";
@@ -453,6 +454,18 @@ test("the injected guard fails closed for script-driven self navigation and rese
   assert.match(rewriteJavaScriptForViewer("navigation.traverseTo(key)"), /__archiveViewerBlockNavigation\(key\)/);
   const attackFixture = readFileSync(join(ROOT, "workers", "archive-viewer", "fixtures", "browser-attack.html"), "utf8");
   for (const expression of ["location.href =", "__archiveViewerBlockNavigation(\"/probe-location-assign\")", "location.assign.call", "location.replace.bind", "loc\\u0061tion.assign", "createElement('script')", "setAttribute('onmouseover'", "script_navigation_reset", "__ARCHIVE_UNREWRITTEN_NAVIGATION_PROBE__"]) assert.ok(attackFixture.includes(expression));
+});
+
+test("focused animation studies mirror named historical canvas functions without altering source", () => {
+  const eyes = viewerFocusStudyScript("breathing-eyes");
+  assert.match(eyes, /drawEyes/);
+  assert.match(eyes, /archiveFocusStudy/);
+  assert.match(eyes, /__archive_focus_canvas__/);
+  assert.match(eyes, /opacity:\.14/);
+  assert.match(eyes, /getBoundingClientRect/);
+  assert.match(eyes, /CanvasRenderingContext2D\.prototype/);
+  assert.match(eyes, /Reflect\.apply\(original,target,args\)/);
+  assert.equal(viewerFocusStudyScript("not-a-study"), "");
 });
 
 test("historical source is escaped into one additional sandbox boundary", () => {

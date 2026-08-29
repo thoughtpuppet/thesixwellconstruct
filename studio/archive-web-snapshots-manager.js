@@ -21,6 +21,15 @@ const BEHAVIOR_PRESETS = [
   ["node-orbits-pathways", "Node orbits and pathways"],
   ["six-living-cultures", "Six living cultures"],
 ];
+const FOCUS_STUDIES = [["", "Full live site"], ...BEHAVIOR_PRESETS];
+const PREPARED_RECOMMENDATIONS = [
+  { commits: ["6ace78c", "df16adf"], decision: "merged", title: "Treat the paired restoration as merged evidence", rationale: "The two commits reverse one another closely enough to preserve as a restoration sequence instead of inventing a canonical State.", note: "Preserve the paired exact-restoration sequence as contextual evidence attached to its nearest canonical State." },
+  { commits: ["97aa62f"], decision: "approved-state", title: "Add the mobile opening as the next State", rationale: "This introduces the meaningful mobile ring movement, scale change, vertical node stack, and active-node pathway arrangement.", note: "Approve as the next State because the construct gains a distinct mobile opening behavior while remaining the same landing-page system." },
+  { commits: ["478f243"], decision: "approved-state", title: "Add the depth and living-field direction as the next State", rationale: "The eye field, parallax, depth, intro brightness, and responsive dot motion materially change how the landing system feels without changing its route role.", note: "Approve as the next State because depth, parallax, adaptive eyes, and responsive dot motion establish a materially different experience within the landing-page system." },
+  { commits: ["ba4ff83"], decision: "preserved-branch", title: "Preserve the first Entry Room as an exploratory branch", rationale: "The Puzzle appears at /entry-room/ while the established landing page remains the root. It is important lineage, but it has not yet replaced the canonical entrance.", note: "Preserve as an exploratory branch attached to the current landing-page State: this is the first committed Entry Room while the original root remains canonical." },
+  { commits: ["da31b71"], decision: "approved-version", title: "Begin a new Version when the Entry Room becomes root", rationale: "The site changes its entrance role: the Puzzle becomes / and the earlier construct landing moves to /home/.", note: "Approve as a new Version because the Entry Room becomes the root threshold and the former landing-page system moves to /home/." },
+  { commits: ["0ec9801"], decision: "approved-state", title: "Add the living Entry Room refinement as the next State", rationale: "The new root threshold gains its breathing-eye assets and substantial interaction refinement after the route-role transition.", note: "Approve as the next State of the Entry Room Version because the threshold gains its breathing-eye imagery and materially refined interaction." },
+];
 const BEHAVIOR_EVOLUTION_ROLES = ["introduced", "refined", "transformed", "disabled", "restored", "observed"];
 const BEHAVIOR_MEANING_STATUSES = [
   ["curator-authored", "Authored meaning"],
@@ -68,6 +77,7 @@ let candidates = [];
 let websiteRecord = null;
 let selectedSnapshotId = "";
 let previewUrls = new Map();
+let previewStudies = new Map();
 let snapshotCaptureUrls = new Map();
 let candidateCaptureUrls = new Map();
 let eventController = null;
@@ -330,11 +340,24 @@ function provenanceMarkup(snapshot) {
 
 function previewMarkup(snapshot) {
   const id = stableId(snapshot);
-  const previewUrl = previewUrls.get(id) || "";
+  const basePreviewUrl = previewUrls.get(id) || "";
+  const study = previewStudies.get(id) || "";
+  const previewUrl = basePreviewUrl ? focusedPreviewUrl(basePreviewUrl, study) : "";
+  const studyLabel = FOCUS_STUDIES.find(([key]) => key === study)?.[1] || "Full live site";
   return `<section class="aws-preview" data-admin-web-viewer data-viewport="desktop">
-    <div class="aws-preview-toolbar"><div><span class="aws-label">Inline live specimen</span><strong>${previewUrl ? "Short-lived live preview ready" : "Issue a preview to run this draft"}</strong><small>Scroll and interact inside the frame. Internal and external navigation remain blocked.</small></div><div class="aws-actions"><button class="button is-active" type="button" data-admin-viewport="desktop" aria-pressed="true">Desktop</button><button class="button" type="button" data-admin-viewport="mobile" aria-pressed="false">390 px</button><button class="button" type="button" data-admin-preview-reset ${previewUrl ? "" : "disabled"}>Reset</button></div></div>
+    <div class="aws-preview-toolbar"><div><span class="aws-label">Inline live specimen</span><strong>${previewUrl ? esc(study ? `Focused derivative · ${studyLabel}` : "Complete historical source") : "Issue a preview to run this draft"}</strong><small>${study ? "The exact source remains running underneath as a ghost. The selected historical drawing functions are mirrored live onto a derivative study layer." : "Scroll and interact inside the frame. Internal and external navigation remain blocked."}</small></div><div class="aws-actions"><button class="button is-active" type="button" data-admin-viewport="desktop" aria-pressed="true">Desktop</button><button class="button" type="button" data-admin-viewport="mobile" aria-pressed="false">390 px</button><button class="button" type="button" data-admin-preview-reset ${previewUrl ? "" : "disabled"}>Reset</button></div></div>
+    <div class="aws-focus-toolbar" aria-label="Focused animation studies"><span class="aws-label">Animated focus</span><div class="aws-actions">${FOCUS_STUDIES.map(([key, label]) => `<button class="button ${key === study ? "is-active" : ""}" type="button" data-preview-study="${esc(key)}" aria-pressed="${key === study}">${esc(label)}</button>`).join("")}</div><small>These studies do not replace the evidence. They isolate source functions for close examination while preserving the full live snapshot.</small></div>
     <div class="aws-preview-stage">${previewUrl ? `<iframe title="Historical website snapshot: ${esc(text(snapshot.title, "website snapshot"))}" sandbox="allow-scripts" referrerpolicy="no-referrer" src="${esc(previewUrl)}" data-preview-src="${esc(previewUrl)}"></iframe>` : `<div class="aws-preview-empty"><strong>Live source is paused.</strong><span>No code runs until Studio issues a short-lived, snapshot-scoped preview capability. Captures remain separate evidence below.</span></div>`}</div>
   </section>`;
+}
+
+function focusedPreviewUrl(value, study = "") {
+  try {
+    const url = new URL(value, window.location.origin);
+    if (study) url.searchParams.set("study", study);
+    else url.searchParams.delete("study");
+    return url.href;
+  } catch { return value; }
 }
 
 function snapshotCaptureMarkup(snapshot) {
@@ -424,11 +447,50 @@ function candidateCommitLabel(candidate) {
   return text(candidate.git_commit_sha, candidate.commit_sha, candidate.gitCommitSha, candidate.commitSha, candidate.id).slice(0, 8);
 }
 
+function candidateCommitKeys(candidate) {
+  const commits = asList(first(candidate.commit_shas, candidate.commitShas, candidate.commits));
+  const supplied = commits.map((commit) => typeof commit === "string" ? commit : text(commit.sha, commit.commit_sha));
+  const single = text(candidate.git_commit_sha, candidate.commit_sha, candidate.gitCommitSha, candidate.commitSha);
+  if (single) supplied.push(single);
+  return supplied.map((commit) => commit.slice(0, 8).toLowerCase());
+}
+
+function preparedRecommendation(candidate) {
+  const commits = candidateCommitKeys(candidate);
+  return PREPARED_RECOMMENDATIONS.find((recommendation) => recommendation.commits.some((commit) => commits.some((candidateCommit) => candidateCommit.startsWith(commit)))) || {
+    decision: "approved-state",
+    title: "Add this meaningful direction as the next State",
+    rationale: text(candidate.summary, candidate.diff_summary, candidate.diffSummary, "This candidate was promoted by the Git history analysis as a structurally or visually meaningful change."),
+    note: `Approve ${candidateCommitLabel(candidate)} as the next State based on the staged Git and live-viewer evidence.`,
+  };
+}
+
+function candidateLinkedSnapshot(candidate) {
+  const snapshotId = text(candidate.snapshot_id, candidate.snapshotId);
+  return snapshots.find((snapshot) => stableId(snapshot) === snapshotId) || null;
+}
+
+function candidateQueue(candidate) {
+  const decision = text(candidate.review_decision, candidate.reviewDecision, candidate.decision, "pending");
+  if (decision !== "pending") return "staged";
+  const snapshot = candidateLinkedSnapshot(candidate);
+  return snapshot && ["ready", "complete"].includes(scanState(snapshot)) ? "ready" : "needs-source";
+}
+
+function decisionQueueMarkup() {
+  const ready = candidates.filter((candidate) => candidateQueue(candidate) === "ready").length;
+  const needsSource = candidates.filter((candidate) => candidateQueue(candidate) === "needs-source").length;
+  const staged = candidates.filter((candidate) => candidateQueue(candidate) === "staged").length + snapshots.filter((snapshot) => text(snapshot.git_commit_sha, snapshot.gitCommitSha).startsWith("11cf577") && text(snapshot.state_id, snapshot.stateId)).length;
+  return `<section class="aws-decision-queues" aria-labelledby="website-decision-queue-title"><header class="aws-section-head"><div><span class="aws-kicker">Curator-in-the-loop</span><h3 id="website-decision-queue-title">I prepare the record. You decide the direction.</h3><p>Source retrieval, scans, evidence summaries, proposed Archive placement, and live studies are prepared before a card reaches you.</p></div></header><div class="aws-decision-queue-grid"><article><strong>${ready}</strong><span>Ready for yes / no</span><p>Complete evidence and a recommended decision.</p></article><article><strong>${needsSource}</strong><span>Needs source only I cannot recover</span><p>Reserved for missing private files, sketches, or meaning only you can supply.</p></article><article><strong>${staged}</strong><span>Approved and staged</span><p>Draft Archive structure prepared; publication remains a separate final approval.</p></article></div></section>`;
+}
+
 function candidateCard(candidate) {
   const id = text(candidate.id);
   const reasons = asList(first(candidate.scoring_reasons, candidate.scoringReasons, candidate.reasons));
   const currentDecision = text(candidate.review_decision, candidate.reviewDecision, candidate.decision, "pending");
   const captures = asList(first(candidate.captures, candidate.capture_derivatives, candidate.captureDerivatives));
+  const recommendation = preparedRecommendation(candidate);
+  const queue = candidateQueue(candidate);
   const captureMarkup = captures.map((capture) => {
     const viewport = text(capture.viewport);
     const previewUrl = candidateCaptureUrls.get(`${id}:${viewport}`) || "";
@@ -436,12 +498,12 @@ function candidateCard(candidate) {
     const hash = text(capture.sha256);
     return `<figure class="aws-candidate-capture-frame" data-viewport="${esc(viewport)}"><img class="aws-candidate-capture" src="${esc(previewUrl)}" alt="Network-blocked ${esc(viewport)} capture for ${esc(text(candidate.title, "this Git candidate"))}"><figcaption>Generated viewer derivative · ${esc(titleCase(viewport))}${hash ? ` · SHA-256 ${esc(hash.slice(0, 12))}…` : ""}</figcaption></figure>`;
   }).join("");
-  return `<article class="aws-candidate" data-candidate="${esc(id)}"><header><div><span class="aws-kicker">${esc(candidateCommitLabel(candidate))} · ${esc(formatDate(first(candidate.git_commit_date, candidate.gitCommitDate, candidate.commit_date, candidate.commitDate, candidate.git_commit_at, candidate.committed_at, candidate.committedAt)))}</span><h4>${esc(text(candidate.title, candidate.commit_message, candidate.commitMessage, candidate.message, "Git history candidate"))}</h4></div><span class="aws-pill">${esc(titleCase(currentDecision))}</span></header>
+  return `<article class="aws-candidate" data-candidate="${esc(id)}"><header><div><span class="aws-kicker">${esc(candidateCommitLabel(candidate))} · ${esc(formatDate(first(candidate.git_commit_date, candidate.gitCommitDate, candidate.commit_date, candidate.commitDate, candidate.git_commit_at, candidate.committed_at, candidate.committedAt)))}</span><h4>${esc(text(candidate.title, candidate.commit_message, candidate.commitMessage, candidate.message, "Git history candidate"))}</h4></div><span class="aws-pill">${esc(currentDecision === "pending" ? titleCase(queue) : titleCase(currentDecision))}</span></header>
     ${captureMarkup ? `<details class="aws-captured-evidence"><summary>Captured evidence · generated derivatives</summary><div class="aws-candidate-captures">${captureMarkup}</div></details>` : ""}
     <p>${esc(text(candidate.summary, candidate.diff_summary, candidate.diffSummary, "Awaiting a curatorial direction."))}</p>
     ${reasons.length ? `<ul class="aws-reasons">${reasons.map((reason) => `<li>${esc(typeof reason === "string" ? reason : text(reason.label, reason.reason, reason.kind))}</li>`).join("")}</ul>` : ""}
     ${text(candidate.snapshot_id, candidate.snapshotId) ? `<div class="aws-actions"><button class="button" type="button" data-candidate-snapshot="${esc(text(candidate.snapshot_id, candidate.snapshotId))}">Inspect linked live source</button></div>` : ""}
-    ${currentDecision === "pending" ? `<form class="aws-form" data-candidate-review="${esc(id)}"><div class="aws-form-grid"><label>Archive decision<select name="decision">${REVIEW_DECISIONS.map(([value, label]) => option(value, label, "approved-state")).join("")}</select></label><label>Existing Version ID <small>(when adding a State)</small><input name="version_id" placeholder="Leave blank to use the candidate's proposed parent"></label><label>Existing State ID <small>(branch or merged evidence)</small><input name="state_id" placeholder="Leave blank to use the proposed parent"></label><label class="wide">Curator direction<textarea name="curator_note" required placeholder="Name the meaningful change or why this candidate should not enter the canonical line."></textarea></label></div><div class="aws-actions"><button class="button" type="submit">Record decision</button><span data-form-status aria-live="polite"></span></div></form>` : `<p class="aws-review-note"><strong>Recorded direction</strong>${esc(text(candidate.curator_note, candidate.curatorNote, "No note supplied."))}</p>`}
+    ${currentDecision === "pending" ? `<section class="aws-prepared-decision"><span class="aws-label">My prepared recommendation</span><h5>${esc(recommendation.title)}</h5><p>${esc(recommendation.rationale)}</p>${queue === "ready" ? `<div class="aws-actions"><button class="button" type="button" data-prepared-decision="yes" data-candidate-id="${esc(id)}">Yes — stage it</button><button class="button danger-button" type="button" data-prepared-decision="no" data-candidate-id="${esc(id)}">No — skip it</button></div>` : `<p class="aws-review-note"><strong>I am still preparing this</strong>The exact live source must be ready before I ask you to decide. You do not need to fill in its technical fields.</p>`}<details><summary>Revise my recommendation</summary><form class="aws-form" data-candidate-review="${esc(id)}"><div class="aws-form-grid"><label>Archive decision<select name="decision">${REVIEW_DECISIONS.map(([value, label]) => option(value, label, recommendation.decision)).join("")}</select></label><label>Existing Version ID <small>(optional override)</small><input name="version_id" placeholder="Prepared parent is used when blank"></label><label>Existing State ID <small>(optional override)</small><input name="state_id" placeholder="Prepared parent is used when blank"></label><label class="wide">Direction note<textarea name="curator_note" required>${esc(recommendation.note)}</textarea></label></div><div class="aws-actions"><button class="button" type="submit">Apply revision</button><span data-form-status aria-live="polite"></span></div></form></details></section>` : `<p class="aws-review-note"><strong>Recorded direction</strong>${esc(text(candidate.curator_note, candidate.curatorNote, "No note supplied."))}</p>`}
   </article>`;
 }
 
@@ -507,6 +569,7 @@ function render() {
     <header class="aws-hero"><div><span class="aws-kicker">Archive · Website lineage</span><h2>Website Inception</h2><p class="cm-summary">Preserve exact historical site packages, understand what each file needs, and approve meaningful directions into one enduring Archive record.</p></div><div class="aws-actions"><button class="button" type="button" data-start-website-record>${websiteRecord ? "Open canonical Website record" : "Start Website Archive record"}</button>${websiteRecord ? `<a class="button" href="/archive/records/${encodeURIComponent(recordSlug)}/" target="_blank" rel="noopener">Public record route</a>` : ""}<button class="button" type="button" data-web-refresh>Refresh</button></div></header>
     <div class="aws-boundary-note"><strong>Private working boundary</strong><span>Imports, scans, and Git candidates stay internal until viewer approval and the complete record chain are separately published.</span></div>
     <nav class="aws-local-nav" aria-label="Website Archive workspace"><a href="#website-lineage-markers">Lineage markers <span>3</span></a><a href="#website-interaction-evolution">Interaction evolution <span>${BEHAVIOR_EVOLUTION_RESEARCH.length}</span></a><a href="#website-snapshots">Snapshots <span>${snapshots.length}</span></a><a href="#website-history-review">Git review <span>${pending} pending</span></a></nav>
+    ${decisionQueueMarkup()}
     ${lineageTimelineMarkup()}
     ${interactionEvolutionMarkup()}
     <section id="website-snapshots" class="aws-workspace"><aside class="aws-library"><div class="aws-section-head"><div><span class="aws-kicker">Source packages</span><h3>Snapshots</h3></div><span class="aws-pill">${snapshots.length}</span></div>${createSnapshotForm()}<div class="aws-snapshot-list">${snapshots.length ? snapshots.map(snapshotCard).join("") : '<div class="aws-empty">No source packages have been staged.</div>'}</div></aside><div class="aws-detail-host">${snapshotDetail(selected)}</div></section>
@@ -728,6 +791,20 @@ async function reviewCandidate(form) {
   await loadWorkspace();
 }
 
+async function recordPreparedDecision(candidateId, outcome) {
+  const candidate = candidates.find((record) => text(record.id) === candidateId);
+  if (!candidate) throw new Error("That prepared history candidate is no longer available.");
+  const recommendation = preparedRecommendation(candidate);
+  const accepted = outcome === "yes";
+  reportStatus(accepted ? "Staging the prepared Archive decision…" : "Recording that this candidate should not enter the Archive line…");
+  await requestApi(`${CANDIDATE_ENDPOINT}/${encodeURIComponent(candidateId)}/review`, jsonOptions("POST", {
+    decision: accepted ? recommendation.decision : "skipped",
+    curator_note: accepted ? recommendation.note : `Skip ${candidateCommitLabel(candidate)}. The prepared recommendation was declined by the curator.`,
+  }));
+  reportStatus(accepted ? "Prepared decision staged as a private Archive draft" : "Candidate skipped by curator decision");
+  await loadWorkspace();
+}
+
 function bindEvents() {
   eventController?.abort();
   eventController = new AbortController();
@@ -783,9 +860,19 @@ function bindEvents() {
     }
     const viewport = event.target.closest("[data-admin-viewport]");
     if (viewport) return setViewport(viewport.closest("[data-admin-web-viewer]"), viewport.dataset.adminViewport);
+    const study = event.target.closest("[data-preview-study]");
+    if (study) {
+      const snapshot = selectedSnapshot();
+      if (!snapshot) return;
+      previewStudies.set(stableId(snapshot), study.dataset.previewStudy || "");
+      render();
+      return;
+    }
     const reset = event.target.closest("[data-admin-preview-reset]");
     if (reset) return resetPreview(reset.closest("[data-admin-web-viewer]"));
     try {
+      const preparedDecision = event.target.closest("[data-prepared-decision]");
+      if (preparedDecision) return await recordPreparedDecision(preparedDecision.dataset.candidateId, preparedDecision.dataset.preparedDecision);
       if (event.target.closest("[data-start-website-record]")) return await startWebsiteRecord();
       if (event.target.closest("[data-web-refresh]")) return await loadWorkspace();
       const preview = event.target.closest("[data-snapshot-preview]");
@@ -815,6 +902,7 @@ export async function mountArchiveWebSnapshots(root, api, status) {
   requestApi = api;
   reportStatus = status;
   previewUrls = new Map();
+  previewStudies = new Map();
   ensureStyles();
   bindEvents();
   try {

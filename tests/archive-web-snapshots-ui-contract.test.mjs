@@ -32,6 +32,17 @@ test("Studio exposes the Website Inception workspace and keeps creation private"
   assert.match(manager, /data-snapshot-behaviors/);
   assert.match(manager, /six-living-cultures/);
   assert.match(manager, /curator-authored/);
+  assert.match(manager, /I prepare the record\. You decide the direction\./);
+  assert.match(manager, /Ready for yes \/ no/);
+  assert.match(manager, /Needs source only I cannot recover/);
+  assert.match(manager, /Approved and staged/);
+  assert.match(manager, /data-prepared-decision="yes"/);
+  assert.match(manager, /Yes — stage it/);
+  assert.match(manager, /No — skip it/);
+  assert.match(manager, /Revise my recommendation/);
+  assert.match(manager, /Focused derivative/);
+  assert.match(manager, /data-preview-study/);
+  assert.match(manager, /study", study/);
   for (const sectionId of ["website-lineage-markers", "website-interaction-evolution", "website-snapshots", "website-history-review"]) {
     assert.match(page, new RegExp(sectionId));
     assert.match(manager, new RegExp(sectionId));
@@ -120,6 +131,10 @@ test("the public dossier renders only isolated approved viewer URLs from its pro
   assert.match(publicJs, /Captured evidence · generated derivative/);
   assert.match(publicJs, /frame\.removeAttribute\("src"\)/, "inactive snapshots stop running in the background");
   assert.match(publicJs, /webSnapshotBehaviorMarkup/);
+  assert.match(publicJs, /Watch focused animation/);
+  assert.match(publicJs, /data-archive-web-study/);
+  assert.match(publicJs, /url\.searchParams\.set\("study", studyKey\)/);
+  assert.match(publicJs, /data-viewer-current-src/);
   assert.match(publicJs, /setupArchiveWebSnapshots\(\)/);
   assert.doesNotMatch(webViewerSource, /preview_url|previewUrl/);
 });

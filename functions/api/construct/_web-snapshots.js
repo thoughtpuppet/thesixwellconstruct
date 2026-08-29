@@ -2059,8 +2059,19 @@ async function reviewCandidate(request, env, candidateId) {
     ));
   } else {
     stateId = text(body.state_id ?? body.stateId ?? candidate.state_id ?? snapshot.state_id, 200);
-    const state = stateId ? await database.prepare(`SELECT state.*,version.version_number,version.entity_id FROM archive_object_states state
+    let state = stateId ? await database.prepare(`SELECT state.*,version.version_number,version.entity_id FROM archive_object_states state
       JOIN archive_object_versions version ON version.id=state.version_id WHERE state.id=? AND version.entity_id=?`).bind(stateId, entityId).first() : null;
+    if (!state) {
+      state = await database.prepare(`SELECT state.*,version.version_number,version.entity_id FROM archive_object_states state
+        JOIN archive_object_versions version ON version.id=state.version_id
+        WHERE version.entity_id=? AND (? IS NULL OR state.occurred_at IS NULL OR state.occurred_at<=?)
+        ORDER BY CASE WHEN state.occurred_at IS NULL THEN 1 ELSE 0 END,state.occurred_at DESC,
+          version.version_number DESC,state.state_order DESC LIMIT 1`).bind(entityId, occurredAt, occurredAt).first();
+      if (!state) state = await database.prepare(`SELECT state.*,version.version_number,version.entity_id FROM archive_object_states state
+        JOIN archive_object_versions version ON version.id=state.version_id WHERE version.entity_id=?
+        ORDER BY version.version_number DESC,state.state_order DESC LIMIT 1`).bind(entityId).first();
+      stateId = state?.id || "";
+    }
     if (!state) return failure("Choose the nearest canonical State for this branch or restoration.", 409);
     versionId = state.version_id; versionNumber = Number(state.version_number); stateOrder = Number(state.state_order);
   }

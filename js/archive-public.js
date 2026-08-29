@@ -675,7 +675,9 @@
       const meaningStatus = text(behavior.meaning_status, behavior.meaningStatus, "pending-interpretation");
       const sourcePath = text(behavior.source_path, behavior.sourcePath);
       const sourceSymbol = text(behavior.source_symbol, behavior.sourceSymbol);
-      return `<article class="archive-web-behavior"><div class="archive-web-behavior-heading"><span>${escapeHtml(titleCase(text(behavior.evolution_role, behavior.evolutionRole, "observed")))}</span><h5>${escapeHtml(text(behavior.title, titleCase(text(behavior.behavior_key, behavior.behaviorKey, "interaction"))))}</h5></div>${prompt ? `<p class="archive-web-interaction-prompt"><strong>Try it</strong>${escapeHtml(prompt)}</p>` : ""}${observed ? `<p><strong>Observed in the source</strong>${escapeHtml(observed)}</p>` : ""}${meaning ? `<p class="archive-web-authored-meaning"><strong>${meaningStatus === "curator-authored" ? "Authored meaning" : "Interpretive note"}</strong>${escapeHtml(meaning)}</p>` : ""}${sourcePath || sourceSymbol ? `<small>Source: ${escapeHtml([sourcePath, sourceSymbol].filter(Boolean).join(" · "))}</small>` : ""}</article>`;
+      const behaviorKey = text(behavior.behavior_key, behavior.behaviorKey);
+      const focusedStudy = ["ring-node-opening", "breathing-eyes", "node-orbits-pathways", "six-living-cultures"].includes(behaviorKey);
+      return `<article class="archive-web-behavior"><div class="archive-web-behavior-heading"><span>${escapeHtml(titleCase(text(behavior.evolution_role, behavior.evolutionRole, "observed")))}</span><h5>${escapeHtml(text(behavior.title, titleCase(text(behavior.behavior_key, behavior.behaviorKey, "interaction"))))}</h5></div>${prompt ? `<p class="archive-web-interaction-prompt"><strong>Try it</strong>${escapeHtml(prompt)}</p>` : ""}${observed ? `<p><strong>Observed in the source</strong>${escapeHtml(observed)}</p>` : ""}${meaning ? `<p class="archive-web-authored-meaning"><strong>${meaningStatus === "curator-authored" ? "Authored meaning" : "Interpretive note"}</strong>${escapeHtml(meaning)}</p>` : ""}${sourcePath || sourceSymbol ? `<small>Source: ${escapeHtml([sourcePath, sourceSymbol].filter(Boolean).join(" · "))}</small>` : ""}${focusedStudy ? `<button class="archive-button" type="button" data-archive-web-study="${escapeHtml(behaviorKey)}" aria-pressed="false">Watch focused animation</button>` : ""}</article>`;
     }).join("")}</div></section>`;
   }
 
@@ -688,7 +690,7 @@
         const id = text(snapshot.id, index);
         const title = webSnapshotTitle(snapshot, index);
         const screenshot = safeUrl(first(snapshot.screenshot_url, snapshot.screenshotUrl));
-        return `<article class="archive-web-snapshot-panel" data-archive-web-snapshot-panel="${escapeHtml(id)}" ${publicIndex ? "hidden" : ""}><header class="archive-web-snapshot-heading"><div><span class="archive-label">Interactive historical source</span><h3>${escapeHtml(title)}</h3></div><p>The original local code runs inside an isolated, network-blocked viewer. External resources and historical navigation remain unavailable by design.</p></header><p class="archive-web-live-cue"><strong>Live historical page</strong> Scroll and interact inside the frame. Motion, timing, and response are archival evidence.</p><div class="archive-web-stage"><iframe title="Historical website snapshot: ${escapeHtml(title)}" sandbox="allow-scripts" referrerpolicy="no-referrer" ${publicIndex ? "" : `src="${escapeHtml(viewerUrl)}" `}data-viewer-src="${escapeHtml(viewerUrl)}" loading="lazy"></iframe></div>${webSnapshotBehaviorMarkup(snapshot)}${webSnapshotProvenanceMarkup(snapshot)}${webSnapshotDependencyMarkup(snapshot)}${screenshot ? `<details class="archive-web-screenshot"><summary>Captured evidence · generated derivative</summary><img src="${escapeHtml(screenshot)}" alt="Generated derivative capture of ${escapeHtml(title)}" loading="lazy"></details>` : ""}</article>`;
+        return `<article class="archive-web-snapshot-panel" data-archive-web-snapshot-panel="${escapeHtml(id)}" ${publicIndex ? "hidden" : ""}><header class="archive-web-snapshot-heading"><div><span class="archive-label">Interactive historical source</span><h3>${escapeHtml(title)}</h3></div><p>The original local code runs inside an isolated, network-blocked viewer. External resources and historical navigation remain unavailable by design.</p></header><p class="archive-web-live-cue"><strong>Live historical page</strong> Scroll and interact inside the frame. Motion, timing, and response are archival evidence. <button class="archive-button" type="button" data-archive-web-study="" aria-pressed="true">Show full live site</button></p><div class="archive-web-stage"><iframe title="Historical website snapshot: ${escapeHtml(title)}" sandbox="allow-scripts" referrerpolicy="no-referrer" ${publicIndex ? "" : `src="${escapeHtml(viewerUrl)}" `}data-viewer-src="${escapeHtml(viewerUrl)}" data-viewer-current-src="${escapeHtml(viewerUrl)}" loading="lazy"></iframe></div>${webSnapshotBehaviorMarkup(snapshot)}${webSnapshotProvenanceMarkup(snapshot)}${webSnapshotDependencyMarkup(snapshot)}${screenshot ? `<details class="archive-web-screenshot"><summary>Captured evidence · generated derivative</summary><img src="${escapeHtml(screenshot)}" alt="Generated derivative capture of ${escapeHtml(title)}" loading="lazy"></details>` : ""}</article>`;
       }).join("")}
     </div>`;
   }
@@ -704,7 +706,7 @@
         panel.hidden = !active;
         const frame = panel.querySelector("iframe[data-viewer-src]");
         if (!frame) return;
-        if (active && !frame.getAttribute("src")) frame.src = frame.dataset.viewerSrc;
+        if (active && !frame.getAttribute("src")) frame.src = frame.dataset.viewerCurrentSrc || frame.dataset.viewerSrc;
         if (!active && frame.getAttribute("src")) frame.removeAttribute("src");
       });
     };
@@ -716,10 +718,25 @@
         viewer.querySelectorAll("[data-archive-web-viewport]").forEach((button) => button.setAttribute("aria-pressed", String(button === viewport)));
         return;
       }
+      const study = event.target.closest("[data-archive-web-study]");
+      if (study) {
+        const panel = study.closest("[data-archive-web-snapshot-panel]");
+        const frame = panel?.querySelector("iframe[data-viewer-src]");
+        if (!frame) return;
+        const url = new URL(frame.dataset.viewerSrc, location.origin);
+        const studyKey = study.dataset.archiveWebStudy || "";
+        if (studyKey) url.searchParams.set("study", studyKey);
+        else url.searchParams.delete("study");
+        frame.dataset.viewerCurrentSrc = url.href;
+        frame.src = url.href;
+        panel.querySelectorAll("[data-archive-web-study]").forEach((button) => button.setAttribute("aria-pressed", String(button === study)));
+        panel.querySelector(".archive-web-stage")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
       if (!event.target.closest("[data-archive-web-reset]")) return;
       const frame = panels.find((panel) => !panel.hidden)?.querySelector("iframe[data-viewer-src]");
       if (!frame) return;
-      const src = frame.dataset.viewerSrc;
+      const src = frame.dataset.viewerCurrentSrc || frame.dataset.viewerSrc;
       frame.src = "about:blank";
       requestAnimationFrame(() => { frame.src = src; });
     });

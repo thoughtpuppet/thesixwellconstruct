@@ -732,6 +732,22 @@ test("credential findings block viewer approval and candidate reviews create dra
     "generated screenshots cannot be appended after a curator decision");
   const reviewedExternal = candidateFinal.body.dependencies.find((dependency) => dependency.original_reference.includes("legacy.example/second.png"));
   assert.equal((await uploadReplacement(env, candidateSnapshot.body.record.id, reviewedExternal.id, "external-replacements/second.png", PNG_FIXTURE, "image/png")).status, 409);
+
+  const branchSnapshot = await create("Exploratory threshold");
+  await rawUpload(env, branchSnapshot.body.record.id, "index.html", "<!doctype html><title>Exploratory threshold</title>", "text/html");
+  await handleConstructApi(request(`/api/admin/archive-web-snapshots/${branchSnapshot.body.record.id}/finalize`, { method: "POST", admin: true, body: {} }), env);
+  await handleConstructApi(request("/api/admin/archive-web-history-candidates/sync", {
+    method: "POST", admin: true, body: { records: [{
+      id: "candidate-prepared-branch", dossier_entity_id: started.body.record.id, snapshot_id: branchSnapshot.body.record.id,
+      commits: ["branch18"], representative_commit: { sha: "branch18", date: "2026-04-18T12:00:00-04:00" },
+      reason: "A meaningful threshold branch.", review_decision: "pending",
+    }] },
+  }), env);
+  const preparedBranch = await responseJson(await handleConstructApi(request("/api/admin/archive-web-history-candidates/candidate-prepared-branch/review", {
+    method: "POST", admin: true, body: { decision: "preserved-branch", curator_note: "Preserve beside the nearest earlier canonical State." },
+  }), env));
+  assert.equal(preparedBranch.status, 200, preparedBranch.body.error);
+  assert.equal(preparedBranch.body.record.state_id, started.body.state.id, "one-click branch decisions infer the nearest earlier canonical State");
 });
 
 test("candidate review reuses only a private staged dossier activity", async () => {

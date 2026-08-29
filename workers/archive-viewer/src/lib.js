@@ -437,6 +437,29 @@ export function viewerGuardScript(routeBase) {
   return `<script data-archive-viewer-guard>(()=>{const base=${serializedBase};const initialDocument=location.href;const allowed=(value)=>{try{const target=new URL(value,location.href);return target.origin===location.origin&&target.pathname.startsWith(base+'/')}catch{return false}};const showBlocked=(value)=>{document.documentElement.dataset.archiveScriptNavigationBlocked='true';let screen=document.getElementById('__archive_script_navigation_blocked__');if(!screen){screen=document.createElement('section');screen.id='__archive_script_navigation_blocked__';screen.setAttribute('role','alertdialog');screen.style.cssText='position:fixed;inset:0;z-index:2147483647;box-sizing:border-box;display:grid;place-content:center;gap:16px;padding:32px;border:5px solid #6d3d15;background:#100d0a;color:#fcb867;font:16px/1.6 Georgia,serif';const heading=document.createElement('h1');heading.textContent='Historical navigation blocked';heading.style.cssText='margin:0;font:700 32px/1.1 Arial,sans-serif;text-transform:uppercase';const detail=document.createElement('p');detail.dataset.archiveBlockedTarget='true';detail.style.margin='0';const reset=document.createElement('a');reset.href=initialDocument;reset.dataset.archiveViewerReset='true';reset.textContent='Reset snapshot';reset.style.cssText='width:max-content;padding:12px 16px;background:#fcb867;color:#100d0a;font:700 14px/1 Arial,sans-serif;text-decoration:none;text-transform:uppercase';reset.addEventListener('click',()=>screen.remove());screen.append(heading,detail,reset);document.documentElement.append(screen)}const detail=screen.querySelector('[data-archive-blocked-target]');if(detail)detail.textContent='This preserved page tried to open '+String(value||'another route').slice(0,500)+'. Archive viewers do not enter the current website or the outside network.'};const blockNavigation=(value)=>{showBlocked(value);return undefined};try{Object.defineProperty(globalThis,'__archiveViewerBlockNavigation',{value:blockNavigation,configurable:false,writable:false});Object.defineProperty(globalThis,'__archiveViewerNavigationTarget',{get:()=>initialDocument,set:blockNavigation,configurable:false})}catch{globalThis.__archiveViewerBlockNavigation=blockNavigation}addEventListener('click',(event)=>{const anchor=event.target&&event.target.closest?event.target.closest('a[href]'):null;if(!anchor||anchor.dataset.archiveViewerReset==='true')return;if(anchor.hasAttribute('download')){event.preventDefault();event.stopImmediatePropagation();document.documentElement.dataset.archiveDownloadBlocked='true';return}const raw=anchor.getAttribute('href')||'';if(!raw||raw[0]==='#')return;event.preventDefault();event.stopImmediatePropagation();showBlocked(raw)},true);addEventListener('submit',(event)=>{event.preventDefault();event.stopImmediatePropagation();document.documentElement.dataset.archiveFormBlocked='true'},true);if(window.navigation&&typeof window.navigation.addEventListener==='function')window.navigation.addEventListener('navigate',(event)=>{const destination=event.destination&&event.destination.url;if(destination&&!allowed(destination)){event.preventDefault();showBlocked(destination)}});try{Object.defineProperty(window,'open',{value:()=>{document.documentElement.dataset.archivePopupBlocked='true';return null},configurable:false,writable:false})}catch{window.open=()=>null}new MutationObserver((records)=>{for(const record of records)for(const node of record.addedNodes)if(node&&node.nodeType===1){if(node.matches?.('meta[http-equiv="refresh" i],iframe,object,embed'))node.remove();node.querySelectorAll?.('meta[http-equiv="refresh" i],iframe,object,embed').forEach((entry)=>entry.remove())}}).observe(document.documentElement,{childList:true,subtree:true})})();</script>`;
 }
 
+const VIEWER_FOCUS_STUDIES = Object.freeze({
+  "breathing-eyes": ["drawEyes"],
+  "ring-node-opening": ["drawRing", "drawTravelingDots", "drawSettledNodes", "drawCollapsingNodes"],
+  "node-orbits-pathways": ["drawSettledNodes", "drawSubNodes", "drawOutgoingSubNodes"],
+  "six-living-cultures": ["drawDots", "drawTravelingDots"],
+});
+
+function viewerFocusStudy(value) {
+  const study = String(value || "").trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(VIEWER_FOCUS_STUDIES, study) ? study : "";
+}
+
+// A focus study never edits the immutable snapshot. It mirrors only the canvas
+// calls made by the named historical drawing functions onto a derivative layer
+// while the complete source remains visible underneath as a ghost.
+export function viewerFocusStudyScript(value) {
+  const study = viewerFocusStudy(value);
+  if (!study) return "";
+  const names = JSON.stringify(VIEWER_FOCUS_STUDIES[study]);
+  const serializedStudy = JSON.stringify(study);
+  return `<style data-archive-focus-style>body[data-archive-focus-study]>:not(#__archive_focus_canvas__){opacity:.14!important}#__archive_focus_canvas__{position:fixed!important;z-index:2147483000!important;pointer-events:none!important;opacity:1!important}html,body{background:#0e0e0e!important}</style><script data-archive-focus-study>(()=>{const study=${serializedStudy};const names=${names};let active=0,overlay=null,overlayContext=null,sourceCanvas=null;document.documentElement.dataset.archiveFocusStudy=study;const ensure=()=>{sourceCanvas=sourceCanvas||document.querySelector('canvas:not(#__archive_focus_canvas__)');if(!sourceCanvas||!document.body)return null;if(!overlay){overlay=document.createElement('canvas');overlay.id='__archive_focus_canvas__';overlay.setAttribute('aria-hidden','true');document.body.append(overlay);document.body.dataset.archiveFocusStudy=study;overlayContext=overlay.getContext('2d')}const rect=sourceCanvas.getBoundingClientRect();if(overlay.width!==sourceCanvas.width||overlay.height!==sourceCanvas.height){overlay.width=sourceCanvas.width;overlay.height=sourceCanvas.height}overlay.style.left=rect.left+'px';overlay.style.top=rect.top+'px';overlay.style.width=rect.width+'px';overlay.style.height=rect.height+'px';return overlayContext};const copyState=(from,to)=>{for(const key of ['fillStyle','strokeStyle','globalAlpha','globalCompositeOperation','lineWidth','lineCap','lineJoin','miterLimit','font','textAlign','textBaseline','shadowBlur','shadowColor','shadowOffsetX','shadowOffsetY','lineDashOffset','imageSmoothingEnabled'])try{to[key]=from[key]}catch{}try{to.setTransform(from.getTransform())}catch{}try{to.setLineDash(from.getLineDash())}catch{}};const stateMethods=new Set(['save','restore','translate','rotate','scale','transform','setTransform','resetTransform','setLineDash']);const methods=[...stateMethods,'beginPath','closePath','moveTo','lineTo','bezierCurveTo','quadraticCurveTo','arc','arcTo','ellipse','rect','roundRect','clip','fill','stroke','fillRect','strokeRect','clearRect','drawImage','fillText','strokeText'];for(const name of methods){const original=CanvasRenderingContext2D.prototype[name];if(typeof original!=='function')continue;Object.defineProperty(CanvasRenderingContext2D.prototype,name,{configurable:true,writable:true,value:function(...args){const result=Reflect.apply(original,this,args);if(name==='fillRect'&&!active&&sourceCanvas&&this.canvas===sourceCanvas&&args[2]>=sourceCanvas.width*.9&&args[3]>=sourceCanvas.height*.9){const target=ensure();if(target)target.clearRect(0,0,target.canvas.width,target.canvas.height)}if(active&&sourceCanvas&&this.canvas===sourceCanvas){const target=ensure();if(target){copyState(this,target);if(!stateMethods.has(name))try{Reflect.apply(original,target,args)}catch{}}}return result}})}const install=()=>{ensure();for(const name of names){const original=globalThis[name];if(typeof original!=='function'||original.__archiveFocusWrapped)continue;const wrapped=function(...args){active++;try{return Reflect.apply(original,this,args)}finally{active--}};Object.defineProperty(wrapped,'__archiveFocusWrapped',{value:true});try{globalThis[name]=wrapped}catch{}}};addEventListener('resize',ensure);setTimeout(install,0)})();</script>`;
+}
+
 function hrefMayReferenceAsset(element) {
   const tagName = String(element.tagName || "").toLowerCase();
   if (["use", "image", "feimage"].includes(tagName)) return true;
@@ -445,7 +468,7 @@ function hrefMayReferenceAsset(element) {
   return relations.some((relation) => ["stylesheet", "icon", "preload", "modulepreload"].includes(relation));
 }
 
-function historicalHtmlResponse(response, routeBase, currentPath, externalMappings = null) {
+function historicalHtmlResponse(response, routeBase, currentPath, externalMappings = null, focusStudy = "") {
   if (typeof HTMLRewriter !== "function") return response;
   let guardInjected = false;
   const rewriteAttribute = (name) => ({ element(element) {
@@ -459,7 +482,7 @@ function historicalHtmlResponse(response, routeBase, currentPath, externalMappin
   const injectGuard = { element(element) {
     if (guardInjected) return;
     guardInjected = true;
-    element.prepend(viewerGuardScript(routeBase), { html: true });
+    element.prepend(`${viewerGuardScript(routeBase)}${viewerFocusStudyScript(focusStudy)}`, { html: true });
   } };
   let styleBuffer = "", scriptBuffer = "", executableScript = false;
   return new HTMLRewriter()
@@ -636,6 +659,7 @@ async function serveSnapshotRequest(request, env, route) {
       routeBase,
       requestedPath,
       externalMappings,
+      url.searchParams.get("study") || "",
     );
     const historicalHtml = await historicalResponse.text();
     return new Response(historicalViewerShell(historicalHtml), { status: 200, headers: shellHeaders });

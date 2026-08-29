@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Website Inception Studio Preview</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/archive-web-snapshots.css">
+  <style>
+    html,body{margin:0;min-height:100%;background:#0e0e0e;color:#fcf5eb;font-family:Georgia,serif}
+    main{width:min(1500px,100%);margin:0 auto;padding:28px;box-sizing:border-box}
+    .button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:9px 12px;border:5px solid rgba(252,184,103,.18);border-radius:0;background:#0e0e0e;color:#fcb867;font:800 10px/1 Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+    .button.is-active{border-color:#fcb867}.danger-button{color:#d46a6a}
+    input,select,textarea{box-sizing:border-box;width:100%;padding:10px;border:5px solid rgba(252,184,103,.18);border-radius:0;background:#080808;color:#fcf5eb}
+  </style>
+</head>
+<body>
+  <main id="preview"></main>
+  <script type="module">
+    import { mountArchiveWebSnapshots } from "/studio/archive-web-snapshots-manager.js";
+    const stateId="archive-state-inaugural";
+    const snapshots=[
+      {id:"snapshot-11cf577",title:"First committed landing page",source_kind:"git",lineage_role:"canonical-state",entry_path:"index.html",git_commit_sha:"11cf57741bc8c03bfca3412e56090591b9abdcdc",git_commit_date:"2026-04-15T20:30:19-04:00",git_message:"Add files via upload",scan_status:"ready",viewer_approved:true,publication_state:"draft",file_count:7,total_bytes:894000,state_id:stateId,version_number:1,state_roman:"I",state_title:"First committed landing page",dependency_summary:{resolved:0,embedded:2,"external-blocked":1,navigation:45},behaviors:[{behavior_key:"breathing-eyes",title:"Breathing eyes",evolution_role:"introduced",interaction_prompt:"Let the field run and watch the concentric eyes expand and recede.",observed_behavior:"Ten concentric eye rings share a nine-second sine breath that changes their radius and opacity.",meaning_status:"pending-interpretation",source_path:"index.html",source_symbol:"drawEyes"},{behavior_key:"six-living-cultures",title:"Six living cultures",evolution_role:"introduced",interaction_prompt:"Watch the six dots inside the central ring.",observed_behavior:"Six amber dots orbit and vibrate before becoming medium nodes.",authored_meaning:"The dots represent live cultures in a six-well petri dish.",meaning_status:"curator-authored",source_path:"index.html",source_symbol:"drawDots"}]},
+      {id:"snapshot-ba4ff83",title:"First Entry Room branch",source_kind:"git",lineage_role:"exploratory-branch",entry_path:"entry-room/index.html",git_commit_sha:"ba4ff83564f2828f9e6deb2f4d6e84a56acdf609",git_commit_date:"2026-06-24T21:44:49-04:00",scan_status:"ready",viewer_approved:false,publication_state:"draft",file_count:7,total_bytes:8100000,state_id:stateId},
+      {id:"snapshot-da31b71",title:"Entry Room becomes root",source_kind:"git",lineage_role:"canonical-state",entry_path:"index.html",git_commit_sha:"da31b717df5bade789f26709cccd753476ea6721",git_commit_date:"2026-07-07T13:15:04-04:00",scan_status:"ready",viewer_approved:false,publication_state:"draft",file_count:9,total_bytes:4700000},
+    ];
+    const candidates=[
+      {id:"candidate-ba4ff83",snapshot_id:"snapshot-ba4ff83",commit_shas:["ba4ff83564f2828f9e6deb2f4d6e84a56acdf609"],git_commit_date:"2026-06-24T21:44:49-04:00",title:"Puzzle / Entry Room introduced",summary:"The Puzzle first appears at /entry-room/ while the established construct remains the root.",decision:"pending",scoring_reasons:["New route role","New interaction system","Eleven-file source bundle"]},
+      {id:"candidate-da31b71",snapshot_id:"snapshot-da31b71",commit_shas:["da31b717df5bade789f26709cccd753476ea6721"],git_commit_date:"2026-07-07T13:15:04-04:00",title:"Puzzle / Entry Room becomes the root",summary:"The root becomes the threshold and the earlier landing-page system moves to /home/.",decision:"pending",scoring_reasons:["Canonical route-role change","Former root preserved at /home/"]},
+      {id:"candidate-0ec9801",snapshot_id:"",commit_shas:["0ec9801"],git_commit_date:"2026-07-09T14:17:38-04:00",title:"Living Entry Room refinement",summary:"Breathing-eye imagery and substantial interaction refinement enter the new threshold.",decision:"pending",scoring_reasons:["Visual system change","Interaction change"]},
+    ];
+    const api=async(path,options={})=>{
+      if(path==="/api/admin/archive-web-snapshots")return{snapshots,website_record:{id:"website-record",archive_slug:"the-six-well-construct-website"}};
+      if(path==="/api/admin/archive-web-history-candidates")return{candidates};
+      const detail=snapshots.find((snapshot)=>path.endsWith(`/archive-web-snapshots/${snapshot.id}`));
+      if(detail)return{snapshot:detail,record:detail};
+      if(path.endsWith("/preview"))return{preview:{viewer_url:"about:blank",expires_at:new Date(Date.now()+600000).toISOString()}};
+      if(options.method)return{ok:true};
+      throw new Error(`Unhandled preview API route: ${path}`);
+    };
+    mountArchiveWebSnapshots(document.querySelector("#preview"),api,(message)=>{document.title=`${message} · Website Inception Preview`});
+  </script>
+</body>
+</html>
