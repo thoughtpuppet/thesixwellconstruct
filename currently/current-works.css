@@ -79,13 +79,19 @@
 .current-project-node[data-position="3"] { grid-column: 3; grid-row: 1; }
 .current-project-node[data-position="4"] { grid-column: 1; grid-row: 2; }
 .current-project-node[data-position="5"] { grid-column: 3; grid-row: 2; }
-.current-project-node[data-position="6"] { grid-column: 1 / 3; grid-row: 3; }
-.current-project-node[data-position="7"] { grid-column: 3; grid-row: 3; }
+.current-project-node[data-position="6"] { grid-column: 1; grid-row: 3; }
+.current-project-node[data-position="7"] { grid-column: 2; grid-row: 3; }
+.current-project-node[data-position="8"] { grid-column: 3; grid-row: 3; }
 .current-project-meta { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; color: var(--project-accent); font: 800 9px/1.35 var(--font-display); letter-spacing: .12em; text-transform: uppercase; }
 .current-project-status { flex: 0 0 auto; color: var(--type-body-color, var(--color-body)); text-align: right; }
 .current-project-node h3 { margin: 20px 0 10px; color: var(--project-accent); font: 900 clamp(20px, 2vw, 29px)/.92 var(--font-display); letter-spacing: -.045em; text-transform: uppercase; overflow-wrap: anywhere; }
 .current-project-context { margin: 0 0 16px; color: var(--color-text-dim); font: 700 9px/1.5 var(--font-display); letter-spacing: .1em; text-transform: uppercase; }
 .current-project-summary { max-width: 66ch; margin: 0; color: var(--color-text-muted); font: 400 13px/1.58 var(--font-serif); }
+.current-project-items { display: grid; gap: 14px; max-width: 66ch; margin: 0; padding: 0; list-style: none; }
+.current-project-items li { position: relative; margin: 0; padding-left: 18px; color: var(--color-text-muted); font: 400 13px/1.58 var(--font-serif); }
+.current-project-items li::before { content: ""; position: absolute; top: .62em; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--project-accent); }
+.current-project-items strong { display: block; margin-bottom: 2px; color: var(--project-accent); font-weight: 700; }
+.current-project-items span { display: block; }
 .current-project-links { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: auto; padding-top: 4px; }
 .current-project-links a { color: var(--project-accent); font: 800 9px/1.3 var(--font-display); letter-spacing: .11em; text-transform: uppercase; text-underline-offset: 4px; }
 .current-project-links a:focus-visible { outline: 5px solid currentColor; outline-offset: 4px; }
@@ -107,7 +113,8 @@
   .current-project-node[data-position] { grid-column: 1; grid-row: auto; min-height: 0; }
   .current-project-node:hover { transform: none; }
   .current-project-node h3 { font-size: clamp(28px, 9vw, 48px); }
-  .current-project-summary { font-size: 15px; line-height: 1.65; }
+  .current-project-summary,
+  .current-project-items li { font-size: 15px; line-height: 1.65; }
 }
 
 @media (max-width: 480px) {

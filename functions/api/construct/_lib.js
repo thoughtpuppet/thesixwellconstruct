@@ -236,6 +236,17 @@ function normalizeRecord(config, body, existing = {}) {
   if (out.whereabouts_status && !["known","unknown"].includes(out.whereabouts_status)) throw new Error("Invalid whereabouts status.");
   const merged = { ...existing, ...out };
   if (config.entityType === "current_project") {
+    if ("items_json" in out) {
+      const rawItems = parseJson(out.items_json);
+      if (!Array.isArray(rawItems) || rawItems.length > 6) throw new Error("Current Works entries can have up to six structured items.");
+      const items = rawItems.map((entry) => {
+        const title = text(entry?.title, 160);
+        const description = text(entry?.description, 1200);
+        if (!title || !description) throw new Error("Each Current Works item needs a title and description.");
+        return { title, description };
+      });
+      out.items_json = JSON.stringify(items);
+    }
     if ("links_json" in out) {
       const rawLinks = parseJson(out.links_json);
       if (!Array.isArray(rawLinks) || rawLinks.length > 3) throw new Error("Current Works entries can have up to three links.");
@@ -3610,6 +3621,10 @@ async function publicCurrentProjects(env) {
   const mediaByEntity = await publicEntityMedia(database, rows.map((row) => row.id));
   const projects = rows.map((row) => {
     const media = (mediaByEntity.get(row.id) || []).filter((item) => item.mimeType?.startsWith("image/") && text(item.alt, 1000));
+    const items = parseJson(row.items_json).slice(0, 6).map((entry) => ({
+      title: text(entry?.title, 160),
+      description: text(entry?.description, 1200),
+    })).filter((entry) => entry.title && entry.description);
     const links = parseJson(row.links_json).slice(0, 3).map((entry) => ({ label: text(entry?.label, 100), url: text(entry?.url, 1000) }))
       .filter((entry) => entry.label && (entry.url.startsWith("/") || /^https:\/\//i.test(entry.url)));
     return {
@@ -3619,6 +3634,7 @@ async function publicCurrentProjects(env) {
       title: row.title,
       contextLine: row.context_line,
       summary: row.summary,
+      items,
       status: row.status_label,
       accent: row.medium_key,
       links,
