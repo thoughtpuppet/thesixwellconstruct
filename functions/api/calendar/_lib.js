@@ -3485,7 +3485,7 @@ function staticPageMediaCandidates(html, pageUrl, maximum = 20) {
     const cleanAlt = cleanSourceText(altText).slice(0, 1000);
     if (seen.has(key)) {
       const existing = byKey.get(key);
-      if (existing && !existing.altText && cleanAlt) existing.altText = cleanAlt;
+      if (existing && cleanAlt.length > existing.altText.length) existing.altText = cleanAlt;
       return;
     }
     if (candidates.length >= maximum) return;
@@ -6792,8 +6792,8 @@ async function enrichHighArtMakingEvents(events, source, sourceLimit = 100) {
 
 function htmlAttribute(tag, name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = asString(tag).match(new RegExp(`\\b${escaped}\\s*=\\s*["']([^"']*)["']`, "i"));
-  return sourceHtmlEntities(match?.[1] || "");
+  const match = asString(tag).match(new RegExp(`\\b${escaped}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, "i"));
+  return sourceHtmlEntities(match?.[2] || "");
 }
 
 function officialListingTitle(anchorTag, innerHtml, dateLabel) {
@@ -8075,50 +8075,140 @@ function pastedSocialTimedStart(value, referenceDay = "") {
   return null;
 }
 
+function pastedSocialLabeledSchedule(value, referenceDay = "") {
+  const text = sourceHtmlEntities(asString(value));
+  const datePattern = new RegExp(`\\bdate\\s*:\\s*[^\\r\\n]{0,96}?\\b(${PASTED_SOCIAL_MONTH_PATTERN})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:\\s*,?\\s*(20\\d{2}))?\\b`, "i");
+  const dateMatch = datePattern.exec(text);
+  const timeMatch = /\btime\s*:\s*[^\r\n]{0,48}?\b(\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?))\s*(?:-|–|—|to)\s*(midnight|noon|\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?))/i.exec(text);
+  if (!dateMatch || !timeMatch) return null;
+  const month = pastedSocialMonthNumber(dateMatch[1]);
+  const day = Number(dateMatch[2]);
+  const explicitYear = Number(dateMatch[3]) || 0;
+  const clockTime = (clock) => /^midnight$/i.test(asString(clock)) ? "00:00"
+    : /^noon$/i.test(asString(clock)) ? "12:00"
+    : pastedLocalTime(clock);
+  const startTime = clockTime(timeMatch[1]);
+  const endTime = clockTime(timeMatch[2]);
+  const referenceKey = /^\d{4}-\d{2}-\d{2}$/.test(asString(referenceDay)) ? asString(referenceDay) : isoNow().slice(0, 10);
+  const reference = new Date(`${referenceKey}T12:00:00Z`);
+  if (!month || !startTime || !endTime || !Number.isFinite(reference.getTime())) return null;
+  const years = explicitYear ? [explicitYear] : [reference.getUTCFullYear(), reference.getUTCFullYear() + 1];
+  for (const year of years) {
+    const date = new Date(Date.UTC(year, month - 1, day, 12));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) continue;
+    const distance = date.getTime() - reference.getTime();
+    if (!explicitYear && (distance < -86_400_000 || distance > 370 * 86_400_000)) continue;
+    const dayKey = date.toISOString().slice(0, 10);
+    const startMinutes = Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3, 5));
+    const endMinutes = Number(endTime.slice(0, 2)) * 60 + Number(endTime.slice(3, 5));
+    const endDate = endMinutes <= startMinutes ? new Date(date.getTime() + 86_400_000) : date;
+    const endDayKey = endDate.toISOString().slice(0, 10);
+    return {
+      startsAt: canonicalCalendarDate(`${dayKey}T${startTime}:00`, TIME_ZONE),
+      endsAt: canonicalCalendarDate(`${endDayKey}T${endTime}:00`, TIME_ZONE),
+      dayKey,
+      inferredYear: !explicitYear,
+      labeled: true,
+    };
+  }
+  return null;
+}
+
+function pastedSocialTicketFacts(value) {
+  const text = sourceHtmlEntities(asString(value));
+  const priceMatch = /(?:\$\s*(\d+(?:\.\d{1,2})?)|(\d+(?:\.\d{1,2})?)\s*\$)\s*(?:entry|admission|tickets?)\b/i.exec(text);
+  const amount = Number(priceMatch?.[1] || priceMatch?.[2]);
+  const admissionNote = Number.isFinite(amount) && amount >= 0
+    ? `Admission is $${Number.isInteger(amount) ? amount : amount.toFixed(2)}.`
+    : "";
+  const delayedAddress = /\b(?:address|location)\b.{0,100}\b(?:email(?:ed)?|sent|given|provided)\b.{0,100}\b(?:purchase|ticket|confirmation)\b|\b(?:email(?:ed)?|sent|given|provided)\b.{0,100}\b(?:address|location)\b.{0,100}\b(?:purchase|ticket|confirmation)\b/i.test(text);
+  return {
+    admissionNote,
+    locationNote: delayedAddress ? "The event address is sent after ticket purchase." : "",
+  };
+}
+
+function pastedSocialQualifiedTitle(titleValue, organizerValue, evidenceValue) {
+  const title = cleanSourceText(titleValue);
+  const organizer = cleanSourceText(organizerValue);
+  if (normalizeText(title) !== "game night" || !organizer) return title;
+  const evidence = normalizeText(evidenceValue);
+  const organizerKey = normalizeText(organizer);
+  if (!evidence.includes(organizerKey) || !/\b(?:game\b.{0,24}\bnight|night\b.{0,24}\bgame)\b/.test(evidence)) return title;
+  return `${organizer} Game Night`;
+}
+
 function enrichPastedSocialEvent(item, sourceUrl, renderedHtml, media) {
   const context = renderedSocialPostContext(renderedHtml, media);
   const returnedImages = new Map((Array.isArray(item?.carouselImages) ? item.carouselImages : []).map((image) => [asString(image.url), image]));
   const carouselImages = media.length ? media.map((image, index) => {
     const returned = returnedImages.get(image.mediaUrl) || {};
+    const sourceAlt = cleanSourceText(image.altText).slice(0, 1500);
+    const returnedAlt = cleanSourceText(returned.altText).slice(0, 1500);
     return {
       url: image.mediaUrl,
-      altText: cleanSourceText(returned.altText || image.altText).slice(0, 1500),
+      altText: sourceAlt.length >= returnedAlt.length ? sourceAlt : returnedAlt,
       extractedText: cleanSourceText(returned.extractedText).slice(0, 4000),
       role: ["flyer", "installation", "artwork", "other"].includes(asString(returned.role)) ? asString(returned.role) : index === 0 ? "flyer" : "other",
     };
   }) : (Array.isArray(item?.carouselImages) ? item.carouselImages : []);
-  const evidenceText = [
-    renderedSocialEvidenceText(renderedHtml),
+  const focusedEvidenceText = [
+    context.caption,
+    ...renderedSocialMetaContents(renderedHtml),
     ...media.map((image) => image.altText),
     ...carouselImages.map((image) => image.extractedText),
   ].map(cleanSourceText).filter(Boolean).join("\n");
-  const titleFallback = asString(item?.title) ? "" : pastedSocialEvidenceTitle(evidenceText);
-  const timedFallback = validDate(item?.startsAt) ? null : pastedSocialTimedStart(evidenceText, context.postedDate);
-  const explicitlyPublic = /\bfree\s+and\s+open\s+to\s+all\b/i.test(evidenceText);
-  const virtual = /\b(?:virtual event|virtual presentation|online event|online only)\b/i.test(evidenceText);
+  const titleFallback = asString(item?.title) ? "" : pastedSocialEvidenceTitle(focusedEvidenceText);
+  const hasTimedStart = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(asString(item?.startsAt));
+  const labeledSchedule = hasTimedStart ? null : pastedSocialLabeledSchedule(focusedEvidenceText, context.postedDate);
+  const timedFallback = hasTimedStart ? null : labeledSchedule || pastedSocialTimedStart(focusedEvidenceText, context.postedDate);
+  const explicitlyPublic = /\bfree\s+and\s+open\s+to\s+all\b/i.test(focusedEvidenceText);
+  const virtual = /\b(?:virtual event|virtual presentation|online event|online only)\b/i.test(focusedEvidenceText);
   const contextHandle = /^@?[A-Za-z0-9._]+$/.test(context.author) ? context.author.replace(/^@/, "") : "";
   const extractionNotes = [...(Array.isArray(item?.extractionNotes) ? item.extractionNotes : [])];
   if (titleFallback) extractionNotes.push("The event title was recovered deterministically from quoted flyer accessibility text.");
+  if (labeledSchedule) extractionNotes.push("The event date and time range were recovered deterministically from labeled flyer accessibility text.");
   if (timedFallback?.inferredYear) {
     extractionNotes.push(`The omitted event year was resolved to ${timedFallback.dayKey.slice(0, 4)} from the post date, the nearest future month and day, and${timedFallback.statedWeekday ? ` the stated ${timedFallback.statedWeekday} weekday` : " the bounded one-year window"}.`);
   }
   const primaryImage = carouselImages.find((image) => image.role === "flyer") || carouselImages[0] || null;
-  const audiences = explicitlyPublic
-    ? [...new Set([...(Array.isArray(item?.audiences) ? item.audiences : []), "Public"])]
-    : (Array.isArray(item?.audiences) ? item.audiences : []);
+  const organizer = asString(item?.organizer) || asString(item?.authorDisplayName) || context.author;
+  const restriction = statedRestrictionEvidence(focusedEvidenceText);
+  const suppliedAudiences = audienceStrings(item?.audiences);
+  let audiences = explicitlyPublic && !suppliedAudiences.some((audience) => /\bpublic\b/i.test(audience))
+    ? [...suppliedAudiences, "Public"]
+    : suppliedAudiences;
+  if (restriction) {
+    audiences = audiences.filter((audience) => !/\bpublic\b/i.test(audience));
+    for (const audience of restriction.audiences) {
+      const age = audience.match(/\b(18|21)\s*\+/)?.[1];
+      if (age && audiences.some((existing) => new RegExp(`\\b${age}\\s*\\+`).test(existing))) continue;
+      if (!audiences.some((existing) => normalizeText(existing) === normalizeText(audience))) audiences.push(audience);
+    }
+    extractionNotes.push("The attendance restriction was recovered deterministically from flyer accessibility text.");
+  }
+  const ticketFacts = pastedSocialTicketFacts(focusedEvidenceText);
+  const ticketNotes = [directPublicCopy(item?.ticketNotes)];
+  if (ticketFacts.admissionNote && !/\$\s*\d|\d\s*dollars?\b/i.test(ticketNotes[0])) ticketNotes.push(ticketFacts.admissionNote);
+  if (ticketFacts.locationNote && !/\b(?:address|location)\b.{0,100}\b(?:purchase|ticket|confirmation)\b/i.test(ticketNotes[0])) ticketNotes.push(ticketFacts.locationNote);
+  if (ticketNotes.length > 1) extractionNotes.push("Admission or location-release facts were recovered deterministically from social evidence.");
+  const title = pastedSocialQualifiedTitle(asString(item?.title) || titleFallback, organizer, focusedEvidenceText);
+  const returnedImageAlt = cleanSourceText(item?.imageAlt).slice(0, 1500);
+  const primaryImageAlt = cleanSourceText(primaryImage?.altText).slice(0, 1500);
   return {
     ...item,
-    title: asString(item?.title) || titleFallback,
+    title,
     caption: asString(item?.caption) || context.caption,
-    organizer: asString(item?.organizer) || asString(item?.authorDisplayName) || context.author,
+    organizer,
     organizerUrl: asString(item?.organizerUrl) || (contextHandle ? `https://www.instagram.com/${contextHandle}/` : ""),
     venueName: asString(item?.venueName) || (virtual ? "Online" : ""),
-    startsAt: asString(item?.startsAt) || timedFallback?.startsAt || "",
+    startsAt: hasTimedStart ? asString(item.startsAt) : timedFallback?.startsAt || asString(item?.startsAt),
+    endsAt: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(asString(item?.endsAt)) ? asString(item.endsAt) : timedFallback?.endsAt || asString(item?.endsAt),
     eventUrl: sourceUrl,
     imageUrl: asString(item?.imageUrl) || primaryImage?.url || "",
-    imageAlt: asString(item?.imageAlt) || primaryImage?.altText || "",
-    accessStatus: explicitlyPublic ? "public" : asString(item?.accessStatus) || "unknown",
-    accessNotes: explicitlyPublic ? "Free and open to all." : asString(item?.accessNotes),
+    imageAlt: primaryImageAlt.length >= returnedImageAlt.length ? primaryImageAlt : returnedImageAlt,
+    accessStatus: restriction ? "restricted" : explicitlyPublic ? "public" : asString(item?.accessStatus) || "unknown",
+    accessNotes: restriction ? restriction.accessNotes : explicitlyPublic ? "Free and open to all." : asString(item?.accessNotes),
     audiences,
     eventStructure: asString(item?.eventStructure) || "single",
     dateKind: timedFallback ? "timed" : asString(item?.dateKind) || "timed",
@@ -8127,6 +8217,7 @@ function enrichPastedSocialEvent(item, sourceUrl, renderedHtml, media) {
     authorDisplayName: asString(item?.authorDisplayName) || context.author,
     postedAt: asString(item?.postedAt) || context.postedDate,
     mediaType: asString(item?.mediaType) || (carouselImages.length > 1 ? "carousel" : carouselImages.length ? "image" : ""),
+    ticketNotes: ticketNotes.filter(Boolean).join(" "),
     extractionNotes,
     carouselImages,
   };

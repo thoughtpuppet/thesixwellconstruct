@@ -5138,15 +5138,15 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     <a href="/lilyachty/p/Dcl2IgKEQ1R/"><img src="${recommendationUrl}" alt="Photo by CONCRETE BOY BOAT^ on August 28, 2026. A different same-day post."></a>
   </section></body></html>`;
   const visionEvent = {
-    title:"Lil Yachty Game Night", description:"A phone-free game night with table games, video-game tournaments, and a karaoke contest.", caption,
+    title:"Game Night", description:"A phone-free game night with table games, video-game tournaments, and a karaoke contest.", caption,
     organizer:"Lil Yachty", organizerUrl:"https://www.instagram.com/lilyachty/", venueName:"", venueAddress:"", venueUrl:"",
-    city:"Atlanta", region:"GA", startsAt:"2026-08-29T19:00:00-04:00", endsAt:"2026-08-30T00:00:00-04:00",
+    city:"Atlanta", region:"GA", startsAt:"2026-08-29", endsAt:"",
     confirmedThrough:"", visitingHours:[], visitingHoursNote:"", visitingHoursSourceUrl:"", eventUrl, ticketUrl:"",
-    imageUrl:flyerUrl, imageAlt:flyerAlt, accessStatus:"restricted", accessNotes:"Open to the public for ages 21 and older. Admission is $5.", audiences:["21+"],
-    eventStructure:"single", dateKind:"timed", timezone:"America/New_York", subjects:["creative-technology"], formats:["experimental-event"], experimental:false,
+    imageUrl:flyerUrl, imageAlt:"Poster for Lil Yachty Presents Game Night", accessStatus:"public", accessNotes:"Open to the public.", audiences:["Public"],
+    eventStructure:"single", dateKind:"all_day", timezone:"America/New_York", subjects:[], formats:["experimental-event"], experimental:false,
     authorHandle:"lilyachty", authorDisplayName:"Lil Yachty", authorIsVerified:true, postedAt:"2026-08-28", mediaType:"image",
-    extractionNotes:[], conflicts:[], carouselImages:[{ url:flyerUrl, altText:flyerAlt, extractedText:"21+ $5 ENTRY. Date: August 29th. Lil Yachty Presents Game Night. Time: 7:00pm-midnight.", role:"flyer" }],
-    occurrences:[], recurringOccurrences:[], ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"The exact location is sent after ticket purchase.", scheduleStatus:"scheduled",
+    extractionNotes:[], conflicts:[], carouselImages:[{ url:flyerUrl, altText:"Poster for Lil Yachty Presents Game Night", extractedText:"Lil Yachty Presents Game Night; Date: August; Time:", role:"flyer" }],
+    occurrences:[], recurringOccurrences:[], ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"", scheduleStatus:"scheduled",
   };
   const browser = {
     async quickAction(action, options) {
@@ -5185,18 +5185,24 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
       visionRequest.input[0].content.filter((item) => item.type === "input_image").map((item) => item.image_url),
       [flyerUrl],
     );
+    assert.equal(JSON.parse(visionRequest.input[0].content.find((item) => item.type === "input_text").text).imageEvidence[0].altText, flyerAlt);
     assert.equal(payload.extraction.mediaInspected, 1);
     assert.equal(payload.candidate.title, "Lil Yachty Game Night");
     assert.equal(payload.candidate.startsAt, "2026-08-29T19:00:00-04:00");
     assert.equal(payload.candidate.endsAt, "2026-08-30T00:00:00-04:00");
+    assert.equal(payload.candidate.dateKind, "timed");
     assert.equal(payload.candidate.eventStructure, "single");
     assert.equal(payload.candidate.occurrences.length, 0);
     assert.equal(payload.candidate.accessStatus, "restricted");
-    assert.deepEqual(payload.candidate.audiences, ["21+"]);
+    assert.deepEqual(payload.candidate.audiences, ["Ages 21+"]);
+    assert.equal(payload.candidate.ticketNotes, "Admission is $5. The event address is sent after ticket purchase.");
+    assert.match(payload.candidate.verificationNotes, /date and time range were recovered deterministically/i);
     assert.equal(payload.candidate.sourceUrl, eventUrl);
     assert.equal(payload.candidate.discoveryUrl, eventUrl);
     assert.equal(payload.candidate.verificationState, "needs_verification");
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payload.candidate.id).count, 0);
+    const evidence = db.prepare("SELECT provenance_json FROM calendar_candidate_social_evidence WHERE candidate_id=?").get(payload.candidate.id);
+    assert.equal(JSON.parse(evidence.provenance_json).find((item) => item.channel === "social_carousel_image").altText, flyerAlt);
     const run = db.prepare("SELECT status,failure_count,sources_searched_json FROM calendar_scout_runs WHERE id=?").get(payload.runId);
     assert.equal(run.status, "completed");
     assert.equal(run.failure_count, 0);
