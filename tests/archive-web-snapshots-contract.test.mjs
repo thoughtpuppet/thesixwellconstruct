@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { handleConstructApi } from "../functions/api/construct/_lib.js";
 import { archiveViewerOrigin } from "../functions/api/construct/_web-snapshots.js";
 import { handleArchiveViewerRequest } from "../workers/archive-viewer/src/lib.js";
-import { inspectCommit, SEED_COMMIT } from "../tools/archive-web-history.mjs";
+import { inspectCommit, readCommitFile, SEED_COMMIT } from "../tools/archive-web-history.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TOKEN = "archive-web-snapshots-test-token";
@@ -505,6 +505,31 @@ test("raw imports reject unsafe packages and report srcset, root paths, dynamic 
   }
   assert.ok(finalized.body.dependencies.some((dependency) => dependency.resolved_path === "images/one.png"));
   assert.ok(finalized.body.dependencies.some((dependency) => dependency.resolved_path === "images/two.png"));
+});
+
+test("large historical scripts use bounded dependency analysis while credentials still scan the complete source", async () => {
+  const sql = database(), env = runtime(sql);
+  const started = await startWebsiteArchive(env);
+  const created = await createWebsiteSnapshot(env, started.body.record.id, started.body.state.id, "Large vendor script fixture");
+  const snapshotId = created.body.record.id;
+  const privateKeyMarker = "-----BEGIN PRIVATE KEY-----";
+  const rapierSource = readCommitFile("0ec98018e144f0df89049129363cbbaf17548393", "entry-room/3d/vendor/rapier3d-compat.esm.js").toString("utf8");
+  const midpoint = Math.floor(rapierSource.length / 2);
+  const vendorSource = `${rapierSource.slice(0, midpoint)}\nconst archiveCredentialFixture='${privateKeyMarker}';\n${rapierSource.slice(midpoint)}`;
+  assert.ok(vendorSource.length > 512 * 1024);
+
+  assert.equal((await rawUpload(env, snapshotId, "index.html", '<script src="vendor.js"></script>', "text/html")).status, 201);
+  assert.equal((await rawUpload(env, snapshotId, "vendor.js", vendorSource, "text/javascript")).status, 201);
+  const finalized = await responseJson(await handleConstructApi(request(`/api/admin/archive-web-snapshots/${snapshotId}/finalize`, {
+    method: "POST", admin: true, body: {},
+  }), env));
+
+  assert.equal(finalized.status, 200, finalized.body.error);
+  assert.equal(finalized.body.record.scan_status, "blocked");
+  assert.ok(finalized.body.record.credential_findings.some((finding) => finding.path === "vendor.js" && finding.rule === "private-key"));
+  assert.ok(finalized.body.dependencies.some((dependency) => dependency.original_reference === "large-script-static-analysis(...)"
+    && dependency.status === "unverifiable" && dependency.critical), "bounded analysis must prevent large scripts from becoming viewer-ready");
+  assert.ok(finalized.body.dependencies.some((dependency) => dependency.resolved_path.endsWith("rapier_wasm3d_bg.wasm") && dependency.status === "missing"));
 });
 
 test("pending capture evidence remains previewable for an incomplete snapshot and becomes immutable after review", async () => {

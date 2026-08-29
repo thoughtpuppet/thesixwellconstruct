@@ -20,6 +20,8 @@ const CAPTURE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const SNAPSHOT_MUTATION_KINDS = new Set(["upload", "finalize", "review", "dependency", "capture"]);
 const EXTERNAL_REPLACEMENT_NOTE = "local-external-replacement";
 const TREE_HASH_ALGORITHM = "archive-web-tree-v1";
+const JAVASCRIPT_FULL_SCAN_MAX_CHARS = 512 * 1024;
+const JAVASCRIPT_EDGE_SCAN_CHARS = 64 * 1024;
 const TEXT_EXTENSIONS = new Set(["html", "htm", "css", "js", "mjs", "cjs", "json", "map", "txt", "md", "xml", "svg", "webmanifest"]);
 const MEDIA_EXTENSIONS = new Set(["mp3", "m4a", "wav", "ogg", "oga", "mp4", "webm"]);
 const BLOCKED_EXTENSIONS = new Set([
@@ -303,7 +305,17 @@ function hasStaticLeadingStringArgument(value, allowTrailingArguments = false) {
   return false;
 }
 
-function extractJavaScriptReferences(source) {
+function boundedJavaScriptInspectionSource(value) {
+  const source = String(value || "");
+  if (source.length <= JAVASCRIPT_FULL_SCAN_MAX_CHARS) return { source, truncated: false };
+  return {
+    source: `${source.slice(0, JAVASCRIPT_EDGE_SCAN_CHARS)}\n/* archive static analysis omitted the middle of this large script */\n${source.slice(-JAVASCRIPT_EDGE_SCAN_CHARS)}`,
+    truncated: true,
+  };
+}
+
+function extractJavaScriptReferences(value) {
+  const inspection = boundedJavaScriptInspectionSource(value), source = inspection.source;
   const references = [];
   for (const match of source.matchAll(/["'](data:[^"']+)["']/gi)) references.push({ reference: match[1], kind: "embedded" });
   for (const match of source.matchAll(/\b(?:url|href)\s*:\s*["']([^"']+)["']/gi)) references.push({ reference: match[1], kind: "navigation" });
@@ -325,8 +337,13 @@ function extractJavaScriptReferences(source) {
     ["send-beacon", /\bsendBeacon\s*\(/], ["worker", /\b(?:Shared)?Worker\s*\(/],
   ];
   for (const [reference, pattern] of dynamic) if (pattern.test(source)) references.push({ reference: `${reference}(...)`, kind: "dynamic" });
-  for (const finding of unrewritableJavaScriptNavigationFindings(source)) {
-    references.push({ reference: `unrewritable-script-navigation:${finding}`, kind: "dynamic", critical: 1 });
+  if (!inspection.truncated) {
+    for (const finding of unrewritableJavaScriptNavigationFindings(source)) {
+      references.push({ reference: `unrewritable-script-navigation:${finding}`, kind: "dynamic", critical: 1 });
+    }
+  }
+  if (inspection.truncated) {
+    references.push({ reference: "large-script-static-analysis(...)", kind: "dynamic", critical: 1 });
   }
   return references;
 }
