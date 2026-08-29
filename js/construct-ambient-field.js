@@ -48,6 +48,7 @@
     var viewportRoot = root === document.documentElement || root === document.body;
     var dprCap = clamp(finite(options.dprCap, 2), 1, 2);
     var eyeTint = options.eyeTint || '';
+    var animateEyes = options.animateEyes !== false;
     var particleCount = particleContext ? Math.max(0, Math.round(finite(options.particleCount, 120))) : 0;
     var particleColor = options.particleColor || '#FCB867';
     var particleOpacity = range(options.particleOpacity, 0.12, 0.42);
@@ -333,14 +334,14 @@
       if (!running || destroyed) return;
       var delta = Math.min(timestamp - lastTime, 50);
       lastTime = timestamp;
-      stepEyes(delta / 16.667);
+      if (animateEyes) stepEyes(delta / 16.667);
       drawEyes();
       drawParticles(delta * particleSpeed, timestamp);
       animationFrame = global.requestAnimationFrame(frame);
     }
 
     function start() {
-      if (destroyed || reducedMotion || document.hidden || running) return;
+      if (destroyed || reducedMotion || document.hidden || running || (!animateEyes && particleCount === 0)) return;
       running = true;
       animationFrame = global.requestAnimationFrame(function (timestamp) {
         lastTime = timestamp;

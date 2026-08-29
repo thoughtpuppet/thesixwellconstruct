@@ -15,6 +15,31 @@ const REVIEW_DECISIONS = [
   ["merged", "Mark as merged evidence"],
   ["skipped", "Skip this candidate"],
 ];
+const BEHAVIOR_PRESETS = [
+  ["ring-node-opening", "Opening the construct"],
+  ["breathing-eyes", "Breathing eyes"],
+  ["node-orbits-pathways", "Node orbits and pathways"],
+  ["six-living-cultures", "Six living cultures"],
+];
+const BEHAVIOR_EVOLUTION_ROLES = ["introduced", "refined", "transformed", "disabled", "restored", "observed"];
+const BEHAVIOR_MEANING_STATUSES = [
+  ["curator-authored", "Authored meaning"],
+  ["code-inferred", "Interpretive / code-inferred"],
+  ["pending-interpretation", "Meaning awaiting direction"],
+];
+const BEHAVIOR_EVOLUTION_RESEARCH = [
+  ["2026-04-15T20:30:19-04:00", "11cf577", ["Eyes", "Ring / nodes", "Dots"], "Inaugural system: ten eye rings share a nine-second breath; nine nodes orbit and open pathways; six inner dots orbit and vibrate before becoming six medium nodes."],
+  ["2026-05-07T12:55:05-04:00", "70660bc", ["Eyes", "Responsive"], "Adds smooth breath, phase-lagged outer rings, responsive scaling, a time-varying open/closed eye crossfade, and raises the amber particle cap to 170."],
+  ["2026-05-07T17:03:37-04:00", "1d91e83", ["Eyes"], "Removes the glitchy open/closed crossfade and replaces it with a stable tint mixture."],
+  ["2026-05-08T15:51:23-04:00", "97aa62f", ["Ring / nodes", "Mobile"], "Introduces the current core mobile opening: the ring moves to 17% viewport height, shrinks to 62%, and the nine nodes become a vertical stack; an active node opens its pathways around itself."],
+  ["2026-05-09T18:48:28-04:00", "70037f4", ["Ring / nodes", "Mobile"], "Adjusts the mobile node stack to its current 26% top and 93% bottom positions."],
+  ["2026-05-09T20:05:54-04:00", "12b84af", ["Eyes"], "Changes the eye field to discrete alternating open and closed image positions. The eyes alternate; they do not blink."],
+  ["2026-05-11T12:44:36-04:00", "465c740", ["Ring / nodes", "Dots"], "Makes the navigation dot larger and speeds up the node expansion."],
+  ["2026-05-11T17:17:09-04:00", "153572a + 294a207", ["Dots", "Restoration"], "Two closely related repairs remove the double-dot artifact by synchronizing traveling, crossfading, and settled renderers."],
+  ["2026-06-19T16:01:15-04:00", "478f243", ["Eyes", "Dots", "Depth"], "Adds adaptive outer rings, depth and parallax, intro brightness, and hover-responsive dot motion. The source describes entry into a watched, seemingly infinite domain; persistent particles are disabled in this state."],
+  ["2026-07-09T17:57:23-04:00", "5277d94", ["Eyes", "Performance"], "Refines eye-field culling and performance while retaining the phased breath and discrete open/closed placement."],
+  ["2026-08-13T12:01:04-04:00", "c0beaec", ["Particles", "Restoration"], "Restores the 170-particle cap in /home/ while keeping the later landing-page system."],
+];
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;",
   "<": "&lt;",
@@ -281,11 +306,50 @@ function provenanceMarkup(snapshot) {
 function previewMarkup(snapshot) {
   const id = stableId(snapshot);
   const previewUrl = previewUrls.get(id) || "";
-  const screenshot = snapshotCaptureUrls.get(`${id}:desktop`) || "";
   return `<section class="aws-preview" data-admin-web-viewer data-viewport="desktop">
-    <div class="aws-preview-toolbar"><div><span class="aws-label">Isolated preview</span><strong>${previewUrl ? "Short-lived preview ready" : "Issue a preview to inspect this draft"}</strong></div><div class="aws-actions"><button class="button is-active" type="button" data-admin-viewport="desktop" aria-pressed="true">Desktop</button><button class="button" type="button" data-admin-viewport="mobile" aria-pressed="false">390 px</button><button class="button" type="button" data-admin-preview-reset ${previewUrl ? "" : "disabled"}>Reset</button></div></div>
-    <div class="aws-preview-stage">${previewUrl ? `<iframe title="Historical website snapshot: ${esc(text(snapshot.title, "website snapshot"))}" sandbox="allow-scripts" referrerpolicy="no-referrer" src="${esc(previewUrl)}" data-preview-src="${esc(previewUrl)}"></iframe>` : screenshot ? `<img src="${esc(screenshot)}" alt="Generated fallback capture of ${esc(text(snapshot.title, "this website snapshot"))}">` : `<div class="aws-preview-empty">No code is loaded until Studio issues a short-lived preview capability.</div>`}</div>
+    <div class="aws-preview-toolbar"><div><span class="aws-label">Inline live specimen</span><strong>${previewUrl ? "Short-lived live preview ready" : "Issue a preview to run this draft"}</strong><small>Scroll and interact inside the frame. Internal and external navigation remain blocked.</small></div><div class="aws-actions"><button class="button is-active" type="button" data-admin-viewport="desktop" aria-pressed="true">Desktop</button><button class="button" type="button" data-admin-viewport="mobile" aria-pressed="false">390 px</button><button class="button" type="button" data-admin-preview-reset ${previewUrl ? "" : "disabled"}>Reset</button></div></div>
+    <div class="aws-preview-stage">${previewUrl ? `<iframe title="Historical website snapshot: ${esc(text(snapshot.title, "website snapshot"))}" sandbox="allow-scripts" referrerpolicy="no-referrer" src="${esc(previewUrl)}" data-preview-src="${esc(previewUrl)}"></iframe>` : `<div class="aws-preview-empty"><strong>Live source is paused.</strong><span>No code runs until Studio issues a short-lived, snapshot-scoped preview capability. Captures remain separate evidence below.</span></div>`}</div>
   </section>`;
+}
+
+function snapshotCaptureMarkup(snapshot) {
+  const id = stableId(snapshot);
+  const captures = asList(first(snapshot.captures, snapshot.capture_derivatives, snapshot.captureDerivatives));
+  const figures = captures.map((capture) => {
+    const viewport = text(capture.viewport);
+    const previewUrl = snapshotCaptureUrls.get(`${id}:${viewport}`) || "";
+    if (!previewUrl) return "";
+    const hash = text(capture.sha256);
+    return `<figure class="aws-candidate-capture-frame" data-viewport="${esc(viewport)}"><img class="aws-candidate-capture" src="${esc(previewUrl)}" alt="Generated ${esc(viewport)} derivative capture of ${esc(text(snapshot.title, "this website snapshot"))}"><figcaption>Generated derivative · ${esc(titleCase(viewport))}${hash ? ` · SHA-256 ${esc(hash.slice(0, 12))}…` : ""}</figcaption></figure>`;
+  }).join("");
+  return figures ? `<details class="aws-panel aws-captured-evidence"><summary>Captured evidence · generated derivatives</summary><div class="aws-candidate-captures">${figures}</div></details>` : "";
+}
+
+function snapshotBehaviors(snapshot) {
+  const existing = new Map(asList(first(snapshot.behaviors, snapshot.interaction_behaviors, snapshot.interactionBehaviors)).map((behavior) => [text(behavior.behavior_key, behavior.behaviorKey), behavior]));
+  return BEHAVIOR_PRESETS.map(([key, title], index) => ({
+    behavior_key: key,
+    title,
+    evolution_role: "observed",
+    interaction_prompt: "",
+    observed_behavior: "",
+    authored_meaning: "",
+    meaning_status: "pending-interpretation",
+    source_path: "",
+    source_symbol: "",
+    public_visible: false,
+    sort_order: (index + 1) * 10,
+    ...(existing.get(key) || {}),
+  }));
+}
+
+function behaviorEditorMarkup(snapshot) {
+  return `<details class="aws-panel aws-behavior-editor" open><summary>Document the moving systems</summary><form class="aws-form" data-snapshot-behaviors="${esc(stableId(snapshot))}"><p class="aws-help">Record what a visitor can make this exact source state do. Observable mechanics and authored meaning stay separate; visibility here does not publish the snapshot.</p><div class="aws-behavior-editor-list">${snapshotBehaviors(snapshot).map((behavior) => {
+    const key = text(behavior.behavior_key, behavior.behaviorKey);
+    const currentRole = text(behavior.evolution_role, behavior.evolutionRole, "observed");
+    const currentMeaningStatus = text(behavior.meaning_status, behavior.meaningStatus, "pending-interpretation");
+    return `<fieldset class="aws-behavior-editor-row" data-behavior-row data-behavior-key="${esc(key)}"><legend>${esc(text(behavior.title, titleCase(key)))}</legend><div class="aws-form-grid"><label>Evolution in this state<select name="evolution_role">${BEHAVIOR_EVOLUTION_ROLES.map((role) => option(role, titleCase(role), currentRole)).join("")}</select></label><label>Meaning source<select name="meaning_status">${BEHAVIOR_MEANING_STATUSES.map(([value, label]) => option(value, label, currentMeaningStatus)).join("")}</select></label><label class="wide">What to try in the live viewer<textarea name="interaction_prompt" placeholder="Open the central ring, then select a medium node…">${esc(text(behavior.interaction_prompt, behavior.interactionPrompt))}</textarea></label><label class="wide">Observed behavior<textarea name="observed_behavior" placeholder="Describe only what this historical source demonstrably does.">${esc(text(behavior.observed_behavior, behavior.observedBehavior))}</textarea></label><label class="wide">Authored meaning or interpretive note<textarea name="authored_meaning" placeholder="Keep empty when the meaning has not been established.">${esc(text(behavior.authored_meaning, behavior.authoredMeaning))}</textarea></label><label>Source path<input name="source_path" value="${esc(text(behavior.source_path, behavior.sourcePath))}" placeholder="index.html"></label><label>Source symbol / region<input name="source_symbol" value="${esc(text(behavior.source_symbol, behavior.sourceSymbol))}" placeholder="drawRing; deployNodes"></label><label class="aws-check"><input name="public_visible" type="checkbox" ${checked(first(behavior.public_visible, behavior.publicVisible, false)) ? "checked" : ""}> Show this behavior note when the snapshot is public</label></div></fieldset>`;
+  }).join("")}</div><div class="aws-actions"><button class="button" type="submit">Save behavior record</button><span data-form-status aria-live="polite"></span></div></form></details>`;
 }
 
 async function loadSnapshotCapturePreviews(snapshot) {
@@ -321,6 +385,8 @@ function snapshotDetail(snapshot) {
     <header class="aws-detail-head"><div><span class="aws-kicker">Website snapshot · ${esc(snapshotState(snapshot))}</span><h3>${esc(text(snapshot.title, "Untitled website snapshot"))}</h3><p>${esc(text(snapshot.git_commit_message, snapshot.gitCommitMessage, snapshot.git_message, snapshot.gitMessage, "An immutable historical source package and its isolated viewer derivative."))}</p></div><div class="aws-actions"><button class="button" type="button" data-snapshot-preview="${esc(id)}" ${fileCount ? "" : "disabled"}>Issue isolated preview</button><button class="button" type="button" data-snapshot-finalize="${esc(id)}" ${fileCount ? "" : "disabled"}>Rescan files</button>${viewerApproved(snapshot) ? `<button class="button danger-button" type="button" data-viewer-approval="${esc(id)}" data-approved="false">Withdraw viewer approval</button>` : `<button class="button" type="button" data-viewer-approval="${esc(id)}" data-approved="true" ${viewerReady && !findings.length ? "" : "disabled"}>Approve isolated viewer</button>`}</div></header>
     ${findings.length ? `<section class="aws-security-block" role="alert"><strong>Public viewer approval is blocked</strong><p>${findings.length} possible credential finding${findings.length === 1 ? " needs" : "s need"} removal, revocation, or an explicit private-only decision.</p><ul>${findings.map((finding) => `<li>${esc([text(finding.rule, finding.kind), text(finding.path), text(finding.message)].filter(Boolean).join(" · ") || "Possible credential")}</li>`).join("")}</ul></section>` : ""}
     ${previewMarkup(snapshot)}
+    ${behaviorEditorMarkup(snapshot)}
+    ${snapshotCaptureMarkup(snapshot)}
     <div class="aws-detail-grid"><section class="aws-panel"><h4>Provenance</h4>${provenanceMarkup(snapshot)}</section><section class="aws-panel"><h4>Package</h4><dl class="aws-provenance"><div><dt>Files</dt><dd>${fileCount}</dd></div><div><dt>Scan</dt><dd>${esc(titleCase(scanState(snapshot)))}</dd></div><div><dt>Viewer approval</dt><dd>${viewerApproved(snapshot) ? "Approved" : "Not approved"}</dd></div><div><dt>Public projection</dt><dd>${snapshotState(snapshot) === "published" && viewerApproved(snapshot) ? "Eligible when its record chain is public" : "Internal"}</dd></div></dl></section></div>
     <section class="aws-panel"><div class="aws-section-head"><div><span class="aws-kicker">Referenced files</span><h4>Dependency report</h4></div><span class="aws-pill">${esc(scanState(snapshot))}</span></div>${dependencyReportMarkup(snapshot)}</section>
     ${addFilesForm(snapshot)}
@@ -346,9 +412,10 @@ function candidateCard(candidate) {
     return `<figure class="aws-candidate-capture-frame" data-viewport="${esc(viewport)}"><img class="aws-candidate-capture" src="${esc(previewUrl)}" alt="Network-blocked ${esc(viewport)} capture for ${esc(text(candidate.title, "this Git candidate"))}"><figcaption>Generated viewer derivative · ${esc(titleCase(viewport))}${hash ? ` · SHA-256 ${esc(hash.slice(0, 12))}…` : ""}</figcaption></figure>`;
   }).join("");
   return `<article class="aws-candidate" data-candidate="${esc(id)}"><header><div><span class="aws-kicker">${esc(candidateCommitLabel(candidate))} · ${esc(formatDate(first(candidate.git_commit_date, candidate.gitCommitDate, candidate.commit_date, candidate.commitDate, candidate.git_commit_at, candidate.committed_at, candidate.committedAt)))}</span><h4>${esc(text(candidate.title, candidate.commit_message, candidate.commitMessage, candidate.message, "Git history candidate"))}</h4></div><span class="aws-pill">${esc(titleCase(currentDecision))}</span></header>
-    ${captureMarkup ? `<div class="aws-candidate-captures">${captureMarkup}</div>` : ""}
+    ${captureMarkup ? `<details class="aws-captured-evidence"><summary>Captured evidence · generated derivatives</summary><div class="aws-candidate-captures">${captureMarkup}</div></details>` : ""}
     <p>${esc(text(candidate.summary, candidate.diff_summary, candidate.diffSummary, "Awaiting a curatorial direction."))}</p>
     ${reasons.length ? `<ul class="aws-reasons">${reasons.map((reason) => `<li>${esc(typeof reason === "string" ? reason : text(reason.label, reason.reason, reason.kind))}</li>`).join("")}</ul>` : ""}
+    ${text(candidate.snapshot_id, candidate.snapshotId) ? `<div class="aws-actions"><button class="button" type="button" data-candidate-snapshot="${esc(text(candidate.snapshot_id, candidate.snapshotId))}">Inspect linked live source</button></div>` : ""}
     ${currentDecision === "pending" ? `<form class="aws-form" data-candidate-review="${esc(id)}"><div class="aws-form-grid"><label>Archive decision<select name="decision">${REVIEW_DECISIONS.map(([value, label]) => option(value, label, "approved-state")).join("")}</select></label><label>Existing Version ID <small>(when adding a State)</small><input name="version_id" placeholder="Leave blank to use the candidate's proposed parent"></label><label>Existing State ID <small>(branch or merged evidence)</small><input name="state_id" placeholder="Leave blank to use the proposed parent"></label><label class="wide">Curator direction<textarea name="curator_note" required placeholder="Name the meaningful change or why this candidate should not enter the canonical line."></textarea></label></div><div class="aws-actions"><button class="button" type="submit">Record decision</button><span data-form-status aria-live="polite"></span></div></form>` : `<p class="aws-review-note"><strong>Recorded direction</strong>${esc(text(candidate.curator_note, candidate.curatorNote, "No note supplied."))}</p>`}
   </article>`;
 }
@@ -370,6 +437,42 @@ async function loadCandidateCapturePreviews() {
   }));
 }
 
+function lineageTimelineMarkup() {
+  const markerDefinitions = [
+    {
+      key: "first-commit",
+      commit: "11cf57741bc8c03bfca3412e56090591b9abdcdc",
+      date: "2026-04-15T20:30:19-04:00",
+      title: "First committed landing page",
+      description: "The inaugural root index.html: the central ring, breathing eye field, orbiting nodes, pathways, and six living cultures begin here.",
+    },
+    {
+      key: "puzzle-entry-room-introduced",
+      commit: "ba4ff83564f2828f9e6deb2f4d6e84a56acdf609",
+      date: "2026-06-24T21:44:49-04:00",
+      title: "Puzzle / Entry Room introduced",
+      description: "The Puzzle first appears at /entry-room/ as a separate exploratory threshold while the existing root landing page remains unchanged.",
+    },
+    {
+      key: "entry-room-home-split",
+      commit: "da31b717df5bade789f26709cccd753476ea6721",
+      date: "2026-07-07T13:15:04-04:00",
+      title: "Puzzle / Entry Room becomes the root",
+      description: "The root assumes the entry-threshold role and the former landing-page system moves to /home/.",
+    },
+  ];
+  return `<section id="website-lineage-markers" class="aws-lineage"><header class="aws-section-head"><div><span class="aws-kicker">Route and concept chronology</span><h3>Lineage markers</h3><p>These are separate events: inception, introduction of the Puzzle as a branch, and the later route-role change that made it the root.</p></div></header><ol class="aws-lineage-list">${markerDefinitions.map((marker) => {
+    const candidate = candidates.find((record) => text(record.id) === marker.key || text(record.commit_sha, record.commitSha, record.git_commit_sha, record.gitCommitSha).startsWith(marker.commit));
+    const snapshot = snapshots.find((record) => text(record.git_commit_sha, record.gitCommitSha).startsWith(marker.commit));
+    const synchronized = Boolean(candidate || snapshot);
+    return `<li class="aws-lineage-marker"><time datetime="${esc(marker.date)}">${esc(formatDate(marker.date))}</time><div><span class="aws-pill">${esc(marker.commit.slice(0, 8))} · ${synchronized ? "Evidence staged" : "Awaiting synchronization"}</span><h4>${esc(marker.title)}</h4><p>${esc(marker.description)}</p>${snapshot ? `<button class="button" type="button" data-candidate-snapshot="${esc(stableId(snapshot))}">Inspect linked live source</button>` : ""}</div></li>`;
+  }).join("")}</ol></section>`;
+}
+
+function interactionEvolutionMarkup() {
+  return `<section id="website-interaction-evolution" class="aws-lineage aws-interaction-evolution"><header class="aws-section-head"><div><span class="aws-kicker">Git-observed behavior research</span><h3>Interaction evolution</h3><p>This is the comparison map for choosing future States. It records mechanics visible in the source; only separately labeled authored notes establish what those mechanics mean.</p></div></header><ol class="aws-lineage-list">${BEHAVIOR_EVOLUTION_RESEARCH.map(([date, commit, systems, description]) => `<li class="aws-lineage-marker"><time datetime="${esc(date)}">${esc(formatDate(date))}</time><div><div class="aws-system-tags"><span class="aws-pill">${esc(commit)}</span>${systems.map((system) => `<span class="aws-pill">${esc(system)}</span>`).join("")}</div><p>${esc(description)}</p></div></li>`).join("")}</ol></section>`;
+}
+
 function render() {
   const selected = selectedSnapshot();
   if (selected && !selectedSnapshotId) selectedSnapshotId = stableId(selected);
@@ -378,7 +481,9 @@ function render() {
   mountNode.innerHTML = `<section class="construct-manager archive-web-studio">
     <header class="aws-hero"><div><span class="aws-kicker">Archive · Website lineage</span><h2>Website Inception</h2><p class="cm-summary">Preserve exact historical site packages, understand what each file needs, and approve meaningful directions into one enduring Archive record.</p></div><div class="aws-actions"><button class="button" type="button" data-start-website-record>${websiteRecord ? "Open canonical Website record" : "Start Website Archive record"}</button>${websiteRecord ? `<a class="button" href="/archive/records/${encodeURIComponent(recordSlug)}/" target="_blank" rel="noopener">Public record route</a>` : ""}<button class="button" type="button" data-web-refresh>Refresh</button></div></header>
     <div class="aws-boundary-note"><strong>Private working boundary</strong><span>Imports, scans, and Git candidates stay internal until viewer approval and the complete record chain are separately published.</span></div>
-    <nav class="aws-local-nav" aria-label="Website Archive workspace"><a href="#website-snapshots">Snapshots <span>${snapshots.length}</span></a><a href="#website-history-review">Git review <span>${pending} pending</span></a></nav>
+    <nav class="aws-local-nav" aria-label="Website Archive workspace"><a href="#website-lineage-markers">Lineage markers <span>3</span></a><a href="#website-interaction-evolution">Interaction evolution <span>${BEHAVIOR_EVOLUTION_RESEARCH.length}</span></a><a href="#website-snapshots">Snapshots <span>${snapshots.length}</span></a><a href="#website-history-review">Git review <span>${pending} pending</span></a></nav>
+    ${lineageTimelineMarkup()}
+    ${interactionEvolutionMarkup()}
     <section id="website-snapshots" class="aws-workspace"><aside class="aws-library"><div class="aws-section-head"><div><span class="aws-kicker">Source packages</span><h3>Snapshots</h3></div><span class="aws-pill">${snapshots.length}</span></div>${createSnapshotForm()}<div class="aws-snapshot-list">${snapshots.length ? snapshots.map(snapshotCard).join("") : '<div class="aws-empty">No source packages have been staged.</div>'}</div></aside><div class="aws-detail-host">${snapshotDetail(selected)}</div></section>
     <section id="website-history-review" class="aws-history"><header class="aws-section-head"><div><span class="aws-kicker">Curatorial gate</span><h3>Git history review</h3><p>Detection offers evidence, not Archive truth. Every Version, State, branch, merge, or skip remains your decision.</p></div><span class="aws-pill">${pending} pending</span></header><div class="aws-candidate-list">${candidates.length ? candidates.map(candidateCard).join("") : '<div class="aws-empty">No Git candidates have been synchronized yet.</div>'}</div></section>
   </section>`;
@@ -463,6 +568,31 @@ async function addSnapshotFiles(form) {
   await uploadEntries(form.dataset.snapshotAddFiles, entries, output);
   reportStatus("Snapshot files uploaded and dependency report refreshed");
   await loadWorkspace();
+}
+
+async function saveSnapshotBehaviors(form) {
+  const output = form.querySelector("[data-form-status]");
+  const records = [...form.querySelectorAll("[data-behavior-row]")].map((row, index) => {
+    const key = row.dataset.behaviorKey;
+    const preset = BEHAVIOR_PRESETS.find(([behaviorKey]) => behaviorKey === key);
+    return {
+      behavior_key: key,
+      title: preset?.[1] || titleCase(key),
+      evolution_role: row.querySelector('[name="evolution_role"]').value,
+      interaction_prompt: row.querySelector('[name="interaction_prompt"]').value.trim(),
+      observed_behavior: row.querySelector('[name="observed_behavior"]').value.trim(),
+      authored_meaning: row.querySelector('[name="authored_meaning"]').value.trim(),
+      meaning_status: row.querySelector('[name="meaning_status"]').value,
+      source_path: row.querySelector('[name="source_path"]').value.trim(),
+      source_symbol: row.querySelector('[name="source_symbol"]').value.trim(),
+      public_visible: row.querySelector('[name="public_visible"]').checked,
+      sort_order: (index + 1) * 10,
+    };
+  });
+  output.textContent = "Saving interaction evidence…";
+  await requestApi(`${SNAPSHOT_ENDPOINT}/${encodeURIComponent(form.dataset.snapshotBehaviors)}/behaviors`, jsonOptions("PUT", { records }));
+  reportStatus("Snapshot behavior record saved");
+  await loadSnapshotDetail(form.dataset.snapshotBehaviors);
 }
 
 async function resolveDependency(button) {
@@ -580,15 +710,17 @@ function bindEvents() {
   mountNode.addEventListener("submit", async (event) => {
     const create = event.target.closest("[data-snapshot-create]");
     const addFiles = event.target.closest("[data-snapshot-add-files]");
+    const behaviors = event.target.closest("[data-snapshot-behaviors]");
     const candidate = event.target.closest("[data-candidate-review]");
-    if (!create && !addFiles && !candidate) return;
+    if (!create && !addFiles && !behaviors && !candidate) return;
     event.preventDefault();
-    const form = create || addFiles || candidate;
+    const form = create || addFiles || behaviors || candidate;
     const submit = form.querySelector('[type="submit"]');
     try {
       if (submit) submit.disabled = true;
       if (create) await createSnapshot(create);
       else if (addFiles) await addSnapshotFiles(addFiles);
+      else if (behaviors) await saveSnapshotBehaviors(behaviors);
       else await reviewCandidate(candidate);
     } catch (error) {
       form.querySelector("[data-form-status]").textContent = error.message;
@@ -600,6 +732,12 @@ function bindEvents() {
   mountNode.addEventListener("click", async (event) => {
     const open = event.target.closest("[data-snapshot-open]");
     if (open) return loadSnapshotDetail(open.dataset.snapshotOpen);
+    const candidateSnapshot = event.target.closest("[data-candidate-snapshot]");
+    if (candidateSnapshot) {
+      await loadSnapshotDetail(candidateSnapshot.dataset.candidateSnapshot);
+      mountNode.querySelector("#website-snapshots")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     const resolve = event.target.closest("[data-resolve-dependency]");
     if (resolve) return resolveDependency(resolve);
     const externalReplacement = event.target.closest("[data-map-external-dependency]");

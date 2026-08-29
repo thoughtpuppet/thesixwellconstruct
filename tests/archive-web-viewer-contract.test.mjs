@@ -434,7 +434,7 @@ test("the injected guard fails closed for script-driven self navigation and rese
     ["const root=frame.contentWindow;root.location.href='/frame-window'", "indirect-global-source"],
     ["import(moduleName)", "dynamic-global-construction"],
     [String.raw`loc\u0061tion.assign('/escaped')`, "escaped-navigation-identifier"],
-    ["document.createElement('script')", "dynamic-script-construction"],
+    ["document.createElement(tagName)", "dynamic-script-construction"],
     ["document.body.setAttribute('onclick', code)", "dynamic-event-handler-construction"],
     ["document.body.insertAdjacentHTML('beforeend', markup)", "dynamic-markup-construction"],
     ["eval(code)", "dynamic-code-evaluation"],
@@ -445,6 +445,10 @@ test("the injected guard fails closed for script-driven self navigation and rese
     assert.ok(!blocked.includes(source), `${finding} must not survive in a served derivative`);
   }
   assert.deepEqual(unrewritableJavaScriptNavigationFindings("document.createElement('canvas')"), [], "the inaugural canvas construction stays compatible");
+  assert.deepEqual(unrewritableJavaScriptNavigationFindings("const { left, top, width } = rect; return { x: left, y: top };"), [], "a local geometry top binding is not mistaken for the cross-frame global");
+  const inertScript = rewriteJavaScriptForViewer("const editor = document.createElement('script'); editor.src = '/local-editor.js'; document.body.append(editor);");
+  assert.match(inertScript, /document\.createElement\("template"\)/, "literal script construction becomes an inert element without disabling the historical file");
+  assert.doesNotMatch(inertScript, /createElement\(['\"]script['\"]\)/);
   assert.deepEqual(unrewritableJavaScriptNavigationFindings("const current = condition ? window.location.href : window.history.length; const entry = window.navigation.currentEntry;"), [], "direct read-only globals remain compatible");
   assert.match(rewriteJavaScriptForViewer("navigation.traverseTo(key)"), /__archiveViewerBlockNavigation\(key\)/);
   const attackFixture = readFileSync(join(ROOT, "workers", "archive-viewer", "fixtures", "browser-attack.html"), "utf8");

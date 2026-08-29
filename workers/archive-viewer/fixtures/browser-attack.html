@@ -69,16 +69,18 @@
         ["inline_global_alias_navigation_blocked", () => document.querySelector("#inline-global-alias-navigation").click()],
         ["inline_carrier_function_navigation_blocked", () => document.querySelector("#inline-carrier-function-navigation").click()],
         ["inline_escaped_navigation_blocked", () => document.querySelector("#inline-escaped-navigation").click()],
-        ["dynamic_script_navigation_blocked", () => document.querySelector("#dynamic-script-navigation").click()],
+        ["dynamic_script_navigation_blocked", () => document.querySelector("#dynamic-script-navigation").click(), "inert-element"],
         ["dynamic_handler_navigation_blocked", () => document.querySelector("#dynamic-handler-navigation").click()],
       ];
-      for (const [key, attempt] of locationAttempts) {
+      for (const [key, attempt, mode] of locationAttempts) {
         delete document.documentElement.dataset.archiveScriptNavigationBlocked;
         try { attempt(); } catch {}
         await new Promise((resolve) => setTimeout(resolve, 50));
-        results[key] = location.href === initialLocation
-          && document.documentElement.dataset.archiveScriptNavigationBlocked === "true"
-          && document.querySelector("#__archive_script_navigation_blocked__ h1")?.textContent === "Historical navigation blocked";
+        results[key] = mode === "inert-element"
+          ? location.href === initialLocation && Boolean(document.querySelector("template"))
+          : location.href === initialLocation
+            && document.documentElement.dataset.archiveScriptNavigationBlocked === "true"
+            && document.querySelector("#__archive_script_navigation_blocked__ h1")?.textContent === "Historical navigation blocked";
       }
       const reset = document.querySelector("#__archive_script_navigation_blocked__ a");
       const resetTargetsInitialDocument = reset?.href === initialLocation;

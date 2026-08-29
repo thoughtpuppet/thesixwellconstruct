@@ -1853,9 +1853,260 @@ test("High Art Making monitoring groups month-specific Study Hall pages and clas
         { source_event_id:"study-hall-september", starts_at:"2026-09-27T13:00:00-04:00", ends_at:"2026-09-27T15:30:00-04:00", source_url:"https://high.org/event/study-hall-september/" },
       ],
     );
+    const rechecked = await admin(db, `/candidates/${candidate.id}/recheck`, { method:"POST", body:{} });
+    assert.equal(rechecked.status, 200, await rechecked.clone().text());
+    const recheckPayload = await rechecked.json();
+    assert.equal(recheckPayload.checkStatus, "unchanged");
+    assert.equal(recheckPayload.candidate.eventStructure, "series");
+    assert.equal(recheckPayload.candidate.occurrences.length, 2);
     const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
     assert.equal(publicPayload.subjects.includes("art-making"), true);
     assert.equal(publicPayload.events.some((event) => event.title.includes("Study Hall")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("High Art Making monitoring expands weekly course detail schedules into timed series occurrences", async () => {
+  const db = database();
+  db.exec("DELETE FROM calendar_candidates WHERE source_id='cal_source_high_art_making'");
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.exec("UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_high_art_making'");
+  const sourceUrl = "https://high.org/event-category/for-adults/art-making/";
+  const drawingUrl = "https://high.org/event/drawing-on-the-right-side-of-the-brain/";
+  const drawingEveningUrl = "https://high.org/event/drawing-on-the-right-side-of-the-brain-evening-2/";
+  const birdsUrl = "https://high.org/event/georgia-birds-painting-in-watercolor-and-gouache/";
+  const figureUrl = "https://high.org/event/fundamentals-of-figure-drawing/";
+  const block = ({ date, title, href, time="1:30 - 4 p.m." }) => `<div id="at-text-images-block_${href.replace(/\W/g,"")}" class="at-text-images">
+    <h3 class="at-text-images-subheader">${date} | ${time}</h3>
+    <h2 class="at-text-images-header">${title}</h2>
+    <div class="entry-summary">Open to the public. Registration is required for this guided studio class.</div>
+    <a href="${href}" class="at-text-images-cta-button">View Details</a>
+  </div>`;
+  const categoryHtml = `<html><body>
+    ${block({ date:"August 25 - September 15, 2026", title:"Drawing on the Right Side of the Brain", href:drawingUrl })}
+    ${block({ date:"August 25 - September 15, 2026", title:"Drawing on the Right Side of the Brain", href:drawingEveningUrl, time:"6 - 8:30 p.m." })}
+    ${block({ date:"August 25 - September 15, 2026", title:"Georgia Birds: Painting in Watercolor and Gouache", href:birdsUrl })}
+    ${block({ date:"October 6 - November 10, 2026", title:"Fundamentals of Figure Drawing", href:figureUrl })}
+  </body></html>`;
+  const detailPages = new Map([
+    [drawingUrl, `<html><body><h1>Drawing on the Right Side of the Brain</h1><p>Tuesdays, August 25, September 1, 8, and 15, 1:30–4 p.m.</p></body></html>`],
+    [drawingEveningUrl, `<html><body><h1>Drawing on the Right Side of the Brain</h1><p>Tuesdays, August 25, September 1, 8, and 15, 6–8:30 p.m.</p></body></html>`],
+    [birdsUrl, `<html><body><h1>Georgia Birds: Painting in Watercolor and Gouache</h1><p>Tuesdays, August 25, September 1, 8, and 15, 1:30–4 p.m.</p></body></html>`],
+    [figureUrl, `<html><body><h1>Fundamentals of Figure Drawing</h1><p>Tuesdays, October 6, 13, 20, 27, November 3, and 10, 1:30–4 p.m.</p></body></html>`],
+  ]);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const value = String(url);
+    if (value === sourceUrl) return new Response(categoryHtml, { status:200, headers:{ "content-type":"text/html" } });
+    if (detailPages.has(value)) return new Response(detailPages.get(value), { status:200, headers:{ "content-type":"text/html" } });
+    assert.fail(`Unexpected High Art Making request: ${value}`);
+  };
+  try {
+    const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_high_art_making" });
+    assert.equal(run.status, "completed", JSON.stringify(run.outcomes));
+    assert.equal(run.candidates, 4);
+
+    const drawing = db.prepare("SELECT id,event_structure,date_kind,starts_at,ends_at FROM calendar_candidates WHERE source_url=?").get(drawingUrl);
+    assert.deepEqual(
+      { event_structure:drawing.event_structure, date_kind:drawing.date_kind, starts_at:drawing.starts_at, ends_at:drawing.ends_at },
+      { event_structure:"series", date_kind:"date_range", starts_at:"2026-08-25", ends_at:"2026-09-15" },
+    );
+    assert.deepEqual(
+      db.prepare("SELECT source_event_id,starts_at,ends_at FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at").all(drawing.id).map((row) => ({ ...row })),
+      [
+        { source_event_id:"drawing-on-the-right-side-of-the-brain:2026-08-25", starts_at:"2026-08-25T13:30:00-04:00", ends_at:"2026-08-25T16:00:00-04:00" },
+        { source_event_id:"drawing-on-the-right-side-of-the-brain:2026-09-01", starts_at:"2026-09-01T13:30:00-04:00", ends_at:"2026-09-01T16:00:00-04:00" },
+        { source_event_id:"drawing-on-the-right-side-of-the-brain:2026-09-08", starts_at:"2026-09-08T13:30:00-04:00", ends_at:"2026-09-08T16:00:00-04:00" },
+        { source_event_id:"drawing-on-the-right-side-of-the-brain:2026-09-15", starts_at:"2026-09-15T13:30:00-04:00", ends_at:"2026-09-15T16:00:00-04:00" },
+      ],
+    );
+
+    const drawingEvening = db.prepare("SELECT id,event_structure,source_event_id FROM calendar_candidates WHERE source_url=?").get(drawingEveningUrl);
+    assert.equal(drawingEvening.event_structure, "series");
+    assert.notEqual(drawingEvening.id, drawing.id);
+    assert.equal(drawingEvening.source_event_id, "drawing-on-the-right-side-of-the-brain-evening-2");
+    assert.deepEqual(
+      db.prepare("SELECT source_event_id,starts_at,ends_at FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at").all(drawingEvening.id).map((row) => ({ ...row })),
+      [
+        { source_event_id:"drawing-on-the-right-side-of-the-brain-evening-2:2026-08-25", starts_at:"2026-08-25T18:00:00-04:00", ends_at:"2026-08-25T20:30:00-04:00" },
+        { source_event_id:"drawing-on-the-right-side-of-the-brain-evening-2:2026-09-01", starts_at:"2026-09-01T18:00:00-04:00", ends_at:"2026-09-01T20:30:00-04:00" },
+        { source_event_id:"drawing-on-the-right-side-of-the-brain-evening-2:2026-09-08", starts_at:"2026-09-08T18:00:00-04:00", ends_at:"2026-09-08T20:30:00-04:00" },
+        { source_event_id:"drawing-on-the-right-side-of-the-brain-evening-2:2026-09-15", starts_at:"2026-09-15T18:00:00-04:00", ends_at:"2026-09-15T20:30:00-04:00" },
+      ],
+    );
+
+    const birds = db.prepare("SELECT id,event_structure FROM calendar_candidates WHERE source_url=?").get(birdsUrl);
+    assert.equal(birds.event_structure, "series");
+    assert.deepEqual(
+      db.prepare("SELECT starts_at FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at").all(birds.id).map((row) => row.starts_at),
+      ["2026-08-25T13:30:00-04:00","2026-09-01T13:30:00-04:00","2026-09-08T13:30:00-04:00","2026-09-15T13:30:00-04:00"],
+    );
+
+    const figure = db.prepare("SELECT id,event_structure FROM calendar_candidates WHERE source_url=?").get(figureUrl);
+    assert.equal(figure.event_structure, "series");
+    assert.deepEqual(
+      db.prepare("SELECT starts_at,ends_at FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at").all(figure.id).map((row) => [row.starts_at,row.ends_at]),
+      [
+        ["2026-10-06T13:30:00-04:00","2026-10-06T16:00:00-04:00"],
+        ["2026-10-13T13:30:00-04:00","2026-10-13T16:00:00-04:00"],
+        ["2026-10-20T13:30:00-04:00","2026-10-20T16:00:00-04:00"],
+        ["2026-10-27T13:30:00-04:00","2026-10-27T16:00:00-04:00"],
+        ["2026-11-03T13:30:00-05:00","2026-11-03T16:00:00-05:00"],
+        ["2026-11-10T13:30:00-05:00","2026-11-10T16:00:00-05:00"],
+      ],
+    );
+
+    const candidateIds = db.prepare("SELECT id FROM calendar_candidates WHERE source_id='cal_source_high_art_making' ORDER BY source_event_id").all().map((row) => row.id);
+    const occurrenceIds = db.prepare("SELECT id FROM calendar_candidate_occurrences WHERE candidate_id IN (SELECT id FROM calendar_candidates WHERE source_id='cal_source_high_art_making') ORDER BY candidate_id,starts_at").all().map((row) => row.id);
+    const repeated = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_high_art_making" });
+    assert.equal(repeated.status, "completed", JSON.stringify(repeated.outcomes));
+    assert.deepEqual(
+      db.prepare("SELECT id FROM calendar_candidates WHERE source_id='cal_source_high_art_making' ORDER BY source_event_id").all().map((row) => row.id),
+      candidateIds,
+    );
+    assert.deepEqual(
+      db.prepare("SELECT id FROM calendar_candidate_occurrences WHERE candidate_id IN (SELECT id FROM calendar_candidates WHERE source_id='cal_source_high_art_making') ORDER BY candidate_id,starts_at").all().map((row) => row.id),
+      occurrenceIds,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("High Art Making monitoring isolates an unavailable course detail and requires schedule review", async () => {
+  const db = database();
+  db.exec("DELETE FROM calendar_candidates WHERE source_id='cal_source_high_art_making'");
+  db.exec("UPDATE calendar_sources SET enabled=0");
+  db.exec("UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_high_art_making'");
+  const sourceUrl = "https://high.org/event-category/for-adults/art-making/";
+  const detailUrl = "https://high.org/event/unavailable-course/";
+  const categoryHtml = `<html><body><div id="at-text-images-block_unavailable" class="at-text-images">
+    <h3 class="at-text-images-subheader">August 25 - September 15, 2026 | 1:30 - 4 p.m.</h3>
+    <h2 class="at-text-images-header">Unavailable Painting Course</h2>
+    <div class="entry-summary">Open to the public. A guided painting studio class.</div>
+    <a href="${detailUrl}" class="at-text-images-cta-button">View Details</a>
+  </div></body></html>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => String(url) === sourceUrl
+    ? new Response(categoryHtml, { status:200, headers:{ "content-type":"text/html" } })
+    : new Response("Unavailable", { status:503, headers:{ "content-type":"text/html" } });
+  try {
+    const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_high_art_making" });
+    assert.equal(run.status, "partial", JSON.stringify(run.outcomes));
+    assert.equal(run.warnings, 1);
+    assert.equal(run.candidates, 1, JSON.stringify(run.outcomes));
+    const candidate = db.prepare("SELECT id,event_structure,date_kind,verification_state,verification_notes FROM calendar_candidates WHERE source_url=?").get(detailUrl);
+    assert.deepEqual(
+      { event_structure:candidate.event_structure, date_kind:candidate.date_kind, verification_state:candidate.verification_state },
+      { event_structure:"single", date_kind:"date_range", verification_state:"needs_verification" },
+    );
+    assert.match(candidate.verification_notes, /confirm each session date and time/i);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_url=?)").get(detailUrl).count, 0);
+
+    const reviewed = await admin(db, `/candidates/${candidate.id}`, {
+      method:"PATCH",
+      body:{ verificationState:"verified", verificationNotes:"Studio manually confirmed the official High course range and venue." },
+    });
+    assert.equal(reviewed.status, 200, await reviewed.clone().text());
+    assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 200);
+    const verifiedAt = db.prepare("SELECT last_verified_at FROM calendar_candidates WHERE id=?").get(candidate.id).last_verified_at;
+
+    const repeated = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_high_art_making" });
+    assert.equal(repeated.status, "partial", JSON.stringify(repeated.outcomes));
+    assert.equal(repeated.candidates, 0);
+    const preserved = db.prepare("SELECT verification_state,last_verified_at,last_check_status,last_check_summary,pending_revision_id FROM calendar_candidates WHERE id=?").get(candidate.id);
+    assert.equal(preserved.verification_state, "verified");
+    assert.equal(preserved.last_verified_at, verifiedAt);
+    assert.equal(preserved.last_check_status, "source_unavailable");
+    assert.match(preserved.last_check_summary, /existing verified facts were left unchanged/i);
+    assert.equal(preserved.pending_revision_id || "", "");
+    const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+    assert.equal(publicPayload.events.some((event) => event.title === "Unavailable Painting Course"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("High Art Making detail rechecks repair published range records and remain idempotent", async () => {
+  const db = database();
+  const detailUrl = "https://high.org/event/drawing-on-the-right-side-of-the-brain/";
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      sourceId:"cal_source_high_art_making", sourceEventId:"drawing-on-the-right-side-of-the-brain",
+      sourceUrl:detailUrl, sourceAuthority:"venue_event",
+      title:"Drawing on the Right Side of the Brain", organizer:"High Museum of Art",
+      factualDescription:"A four-week guided drawing studio class.", eventStructure:"single",
+      accessStatus:"public", audiences:["Public"], dateKind:"date_range",
+      startsAt:"2026-08-25", endsAt:"2026-09-15", timezone:"America/New_York",
+      venueName:"High Museum of Art", venueAddress:"1280 Peachtree Street NE, Atlanta, GA 30309",
+      city:"Atlanta", region:"GA", subjects:["art","art-making"], formats:["workshop"],
+      verificationState:"verified", verificationNotes:"The official High Museum of Art event page confirms the course schedule and venue.", monitoringEnabled:true,
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const candidate = (await created.json()).candidate;
+  assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 200);
+
+  const detailHtml = `<html><body>
+    <h1>Drawing on the Right Side of the Brain</h1>
+    <div class="description"><p>Tuesdays, August 25, September 1, 8, and 15, 1:30–4 p.m.<br>Location: High Museum of Art<br><strong>Registration Required</strong></p></div>
+  </body></html>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), detailUrl);
+    return new Response(detailHtml, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const checked = await admin(db, `/candidates/${candidate.id}/recheck`, { method:"POST", body:{} });
+    assert.equal(checked.status, 200, await checked.clone().text());
+    const payload = await checked.json();
+    assert.equal(payload.checkStatus, "changes_detected");
+    assert.equal(payload.candidate.eventStructure, "single");
+    assert.equal(payload.candidate.occurrences.length, 0);
+    assert.ok(payload.candidate.pendingRevisionId);
+
+    const revisionRow = db.prepare("SELECT snapshot_json,change_set_json FROM calendar_candidate_revisions WHERE id=?").get(payload.candidate.pendingRevisionId);
+    const snapshot = JSON.parse(revisionRow.snapshot_json);
+    const changedFields = JSON.parse(revisionRow.change_set_json).map((change) => change.field);
+    assert.ok(changedFields.includes("eventStructure"));
+    assert.ok(changedFields.includes("occurrences"));
+    assert.equal(snapshot.eventStructure, "series");
+    assert.deepEqual(snapshot.occurrences.map((occurrence) => [occurrence.startsAt,occurrence.endsAt]), [
+      ["2026-08-25T13:30:00-04:00","2026-08-25T16:00:00-04:00"],
+      ["2026-09-01T13:30:00-04:00","2026-09-01T16:00:00-04:00"],
+      ["2026-09-08T13:30:00-04:00","2026-09-08T16:00:00-04:00"],
+      ["2026-09-15T13:30:00-04:00","2026-09-15T16:00:00-04:00"],
+    ]);
+
+    const applied = await admin(db, `/candidates/${candidate.id}/revisions/${payload.candidate.pendingRevisionId}/apply`, {
+      method:"POST", body:{ fields:changedFields },
+    });
+    assert.equal(applied.status, 200, await applied.clone().text());
+    const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
+    assert.equal(approved.status, 200, await approved.clone().text());
+
+    const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+    const publicSeries = publicPayload.series.find((event) => event.title === candidate.title);
+    assert.ok(publicSeries);
+    assert.equal(publicPayload.events.some((event) => event.id === publicSeries.id), false);
+    const publicOccurrences = publicPayload.events.filter((event) => event.parentTitle === candidate.title);
+    assert.equal(publicOccurrences.length, 4);
+    const futurePayload = await (await handleCalendarPublicApi(request("/api/calendar/events?after=2026-08-29"), env(db))).json();
+    assert.deepEqual(
+      futurePayload.events.filter((event) => event.parentTitle === candidate.title).map((event) => event.startsAt),
+      ["2026-09-01T13:30:00-04:00","2026-09-08T13:30:00-04:00","2026-09-15T13:30:00-04:00"],
+    );
+
+    const occurrenceIds = db.prepare("SELECT id FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at").all(candidate.id).map((row) => row.id);
+    const repeated = await (await admin(db, `/candidates/${candidate.id}/recheck`, { method:"POST", body:{} })).json();
+    assert.equal(repeated.checkStatus, "unchanged");
+    assert.equal(repeated.candidate.pendingRevisionId, "");
+    assert.deepEqual(
+      db.prepare("SELECT id FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at").all(candidate.id).map((row) => row.id),
+      occurrenceIds,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

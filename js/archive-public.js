@@ -665,6 +665,20 @@
     return entries.length ? `<div class="archive-web-dependency-summary" aria-label="Dependency summary">${entries.map(([label, count]) => `<span>${count} ${escapeHtml(label)}</span>`).join("")}</div>` : "";
   }
 
+  function webSnapshotBehaviorMarkup(snapshot) {
+    const behaviors = list(first(snapshot.behaviors, snapshot.interaction_behaviors, snapshot.interactionBehaviors, []));
+    if (!behaviors.length) return "";
+    return `<section class="archive-web-behaviors"><header><span class="archive-label">Interaction evidence</span><h4>What to watch in this state</h4><p>The motion and response are part of the archived work. These notes distinguish observable mechanics from the maker's stated meaning.</p></header><div class="archive-web-behavior-list">${behaviors.map((behavior) => {
+      const prompt = text(behavior.interaction_prompt, behavior.interactionPrompt);
+      const observed = text(behavior.observed_behavior, behavior.observedBehavior);
+      const meaning = text(behavior.authored_meaning, behavior.authoredMeaning);
+      const meaningStatus = text(behavior.meaning_status, behavior.meaningStatus, "pending-interpretation");
+      const sourcePath = text(behavior.source_path, behavior.sourcePath);
+      const sourceSymbol = text(behavior.source_symbol, behavior.sourceSymbol);
+      return `<article class="archive-web-behavior"><div class="archive-web-behavior-heading"><span>${escapeHtml(titleCase(text(behavior.evolution_role, behavior.evolutionRole, "observed")))}</span><h5>${escapeHtml(text(behavior.title, titleCase(text(behavior.behavior_key, behavior.behaviorKey, "interaction"))))}</h5></div>${prompt ? `<p class="archive-web-interaction-prompt"><strong>Try it</strong>${escapeHtml(prompt)}</p>` : ""}${observed ? `<p><strong>Observed in the source</strong>${escapeHtml(observed)}</p>` : ""}${meaning ? `<p class="archive-web-authored-meaning"><strong>${meaningStatus === "curator-authored" ? "Authored meaning" : "Interpretive note"}</strong>${escapeHtml(meaning)}</p>` : ""}${sourcePath || sourceSymbol ? `<small>Source: ${escapeHtml([sourcePath, sourceSymbol].filter(Boolean).join(" · "))}</small>` : ""}</article>`;
+    }).join("")}</div></section>`;
+  }
+
   function webSnapshotViewerMarkup(snapshots) {
     const publicSnapshots = snapshots.map((snapshot, index) => ({ snapshot, index, viewerUrl: safeWebViewerUrl(first(snapshot.viewer_url, snapshot.viewerUrl)) })).filter((entry) => entry.viewerUrl);
     if (!publicSnapshots.length) return "";
@@ -674,7 +688,7 @@
         const id = text(snapshot.id, index);
         const title = webSnapshotTitle(snapshot, index);
         const screenshot = safeUrl(first(snapshot.screenshot_url, snapshot.screenshotUrl));
-        return `<article class="archive-web-snapshot-panel" data-archive-web-snapshot-panel="${escapeHtml(id)}" ${publicIndex ? "hidden" : ""}><header class="archive-web-snapshot-heading"><div><span class="archive-label">Interactive historical source</span><h3>${escapeHtml(title)}</h3></div><p>The original local code runs inside an isolated, network-blocked viewer. External resources and historical navigation remain unavailable by design.</p></header><div class="archive-web-stage"><iframe title="Historical website snapshot: ${escapeHtml(title)}" sandbox="allow-scripts" referrerpolicy="no-referrer" ${publicIndex ? "" : `src="${escapeHtml(viewerUrl)}" `}data-viewer-src="${escapeHtml(viewerUrl)}" loading="lazy"></iframe></div>${webSnapshotProvenanceMarkup(snapshot)}${webSnapshotDependencyMarkup(snapshot)}${screenshot ? `<details class="archive-web-screenshot"><summary>Open generated screenshot fallback</summary><img src="${escapeHtml(screenshot)}" alt="Generated fallback capture of ${escapeHtml(title)}" loading="lazy"></details>` : ""}</article>`;
+        return `<article class="archive-web-snapshot-panel" data-archive-web-snapshot-panel="${escapeHtml(id)}" ${publicIndex ? "hidden" : ""}><header class="archive-web-snapshot-heading"><div><span class="archive-label">Interactive historical source</span><h3>${escapeHtml(title)}</h3></div><p>The original local code runs inside an isolated, network-blocked viewer. External resources and historical navigation remain unavailable by design.</p></header><p class="archive-web-live-cue"><strong>Live historical page</strong> Scroll and interact inside the frame. Motion, timing, and response are archival evidence.</p><div class="archive-web-stage"><iframe title="Historical website snapshot: ${escapeHtml(title)}" sandbox="allow-scripts" referrerpolicy="no-referrer" ${publicIndex ? "" : `src="${escapeHtml(viewerUrl)}" `}data-viewer-src="${escapeHtml(viewerUrl)}" loading="lazy"></iframe></div>${webSnapshotBehaviorMarkup(snapshot)}${webSnapshotProvenanceMarkup(snapshot)}${webSnapshotDependencyMarkup(snapshot)}${screenshot ? `<details class="archive-web-screenshot"><summary>Captured evidence · generated derivative</summary><img src="${escapeHtml(screenshot)}" alt="Generated derivative capture of ${escapeHtml(title)}" loading="lazy"></details>` : ""}</article>`;
       }).join("")}
     </div>`;
   }
@@ -689,7 +703,9 @@
         const active = panel.dataset.archiveWebSnapshotPanel === id;
         panel.hidden = !active;
         const frame = panel.querySelector("iframe[data-viewer-src]");
-        if (active && frame && !frame.getAttribute("src")) frame.src = frame.dataset.viewerSrc;
+        if (!frame) return;
+        if (active && !frame.getAttribute("src")) frame.src = frame.dataset.viewerSrc;
+        if (!active && frame.getAttribute("src")) frame.removeAttribute("src");
       });
     };
     select?.addEventListener("change", () => activate(select.value));

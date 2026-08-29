@@ -10,6 +10,7 @@ const pagePath = join(ROOT, "archive", "places", "jr-erikson-building", "index.h
 const placesIndexPath = join(ROOT, "archive", "places", "index.html");
 const cssPath = join(ROOT, "css", "archive-place-study.css");
 const assetRoot = join(ROOT, "assets", "archive", "jr-erikson-building");
+const placeMigrationPath = join(ROOT, "migrations", "0196_jr_erikson_building_place.sql");
 
 function text(path) {
   return readFileSync(path, "utf8");
@@ -18,6 +19,15 @@ function text(path) {
 function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
+
+test("J.R. Erikson is a canonical Studio Place without duplicating its static dossier", () => {
+  const migration = text(placeMigrationPath);
+
+  assert.match(migration, /'place-jr-erikson-building','place','node-archive','public',1/);
+  assert.match(migration, /'J\.R\. Erikson Co\. Building','jr-erikson-building'/);
+  assert.match(migration, /'364 Nelson Street SW, Atlanta, GA 30313','','public','published'/);
+  assert.doesNotMatch(migration, /archive_dossiers|archive_records|archive_catalogue_entries|archive_record_places/);
+});
 
 test("364 Nelson place dossier is indexable at its stable public Archive route", () => {
   const page = text(pagePath);

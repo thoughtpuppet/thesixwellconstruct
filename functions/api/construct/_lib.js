@@ -10,6 +10,7 @@ import {
 import { serveR2Media } from "../_shared/r2-media.js";
 import { loadPublicCalendarSearchEvents } from "../calendar/_lib.js";
 import { handleArchiveWebSnapshotsAdmin, loadPublicArchiveWebSnapshots } from "./_web-snapshots.js";
+import { enqueueVisualColorEntity, enqueueVisualColorEntityById } from "./_automatic-visual-colors.js";
 import {
   ArchiveDossierEnsureError,
   archiveDossierEligibleOwner,
@@ -4164,6 +4165,33 @@ async function publicMediaApi(request,env,mediaId){
             AND fragment.state='published' AND fragment.public_visible=1
             AND fragment_entity.visibility='public'
             AND dossier.state='published' AND dossier.public_visible=1 AND owner.visibility='public' AND ${archiveIdentityProfilePublicSql("owner")}
+            AND EXISTS(
+              SELECT 1 FROM archive_blackboard_fragment_states public_link
+              JOIN archive_blackboard_fragment_placements public_placement ON public_placement.fragment_id=public_link.fragment_id AND public_placement.state_id=public_link.state_id
+              JOIN archive_object_states public_state ON public_state.id=public_link.state_id
+              JOIN archive_object_versions public_version ON public_version.id=public_state.version_id
+              WHERE public_link.fragment_id=fragment.id AND public_version.entity_id=blackboard.record_entity_id
+                AND public_state.publication_state='published' AND public_state.public_visible=1
+                AND public_version.publication_state='published' AND public_version.public_visible=1
+            )
+        )
+        OR EXISTS(
+          SELECT 1 FROM archive_blackboard_fragment_placements placement
+          JOIN archive_blackboard_fragment_states fragment_state
+            ON fragment_state.fragment_id=placement.fragment_id AND fragment_state.state_id=placement.state_id
+          JOIN archive_blackboard_fragments fragment ON fragment.id=placement.fragment_id
+          JOIN archive_blackboard_records blackboard ON blackboard.record_entity_id=fragment.record_entity_id
+          JOIN archive_object_states object_state ON object_state.id=placement.state_id
+          JOIN archive_object_versions version ON version.id=object_state.version_id AND version.entity_id=blackboard.record_entity_id
+          JOIN archive_dossiers dossier ON dossier.entity_id=blackboard.record_entity_id
+          JOIN content_entities owner ON owner.id=dossier.entity_id
+          JOIN content_entities fragment_entity ON fragment_entity.id=fragment.id
+          WHERE placement.hotspot_mask_media_id=m.id
+            AND fragment.state='published' AND fragment.public_visible=1
+            AND fragment_entity.visibility='public'
+            AND object_state.publication_state='published' AND object_state.public_visible=1
+            AND version.publication_state='published' AND version.public_visible=1
+            AND dossier.state='published' AND dossier.public_visible=1 AND owner.visibility='public' AND ${archiveIdentityProfilePublicSql("owner")}
         )
       )`).bind(mediaId).first();
   if(!row)return failure("Not found.",404);
@@ -4365,6 +4393,15 @@ async function mediaApi(request, env, mediaId="") {
   if(request.method==="GET"){
     if(mediaId){const record=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(mediaId).first();return record?json({record:presentMediaRecord(record)}):failure("Not found.",404);}
     const rows=(await database.prepare("SELECT * FROM media_assets ORDER BY created_at DESC").all()).results||[];return json({records:rows.map(presentMediaRecord),count:rows.length});
+  }
+  if(request.method==="DELETE"&&mediaId){
+    const before=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(mediaId).first();if(!before)return failure("Not found.",404);
+    if(!["active","archived"].includes(before.state)||!["internal","private"].includes(before.privacy)||before.public_presentation!=="hidden")return failure("Only internal or private hidden media can be permanently deleted.",409);
+    if(before.storage_key&&!env.SUBMISSION_FILES?.delete)return failure("Media storage is unavailable; the media record was not deleted.",503);
+    try{await database.prepare("DELETE FROM media_assets WHERE id=?").bind(mediaId).run()}
+    catch(error){if(/FOREIGN KEY constraint failed/i.test(String(error?.message||error)))return failure("This media is still referenced and cannot be deleted.",409);throw error}
+    if(before.storage_key){try{await env.SUBMISSION_FILES.delete(before.storage_key)}catch{return json({error:"The media record was deleted, but its stored object could not be removed.",deleted:true,deleted_id:mediaId,deletedId:mediaId,storage_deleted:false,storageDeleted:false},{status:502})}}
+    return json({ok:true,deleted:true,deleted_id:mediaId,deletedId:mediaId,storage_deleted:Boolean(before.storage_key),storageDeleted:Boolean(before.storage_key)});
   }
   if(request.method==="PATCH"&&mediaId){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");
@@ -6381,9 +6418,19 @@ async function blackboardNotebookRowsV2(database,recordId,publicOnly=false){
 }
 
 async function blackboardFragmentsV2(database,recordId,states,publicOnly=false){
+  if(!publicOnly)return blackboardFragmentAdminRecordsV3(database,{recordId,states});
   const gates=publicOnly?` AND fragment.state='published' AND fragment.public_visible=1 AND ce.visibility='public'
     AND derivative.state='active' AND derivative.privacy='public' AND derivative.public_presentation='inline'
-    AND (fragment.master_media_id IS NULL OR (master.state='active' AND master.privacy IN ('internal','private') AND master.public_presentation='hidden'))`:" AND fragment.state<>'archived'";
+    AND (fragment.master_media_id IS NULL OR (master.state='active' AND master.privacy IN ('internal','private') AND master.public_presentation='hidden'))
+    AND EXISTS(
+      SELECT 1 FROM archive_blackboard_fragment_states public_link
+      JOIN archive_blackboard_fragment_placements public_placement ON public_placement.fragment_id=public_link.fragment_id AND public_placement.state_id=public_link.state_id
+      JOIN archive_object_states public_state ON public_state.id=public_link.state_id
+      JOIN archive_object_versions public_version ON public_version.id=public_state.version_id
+      WHERE public_link.fragment_id=fragment.id AND public_version.entity_id=fragment.record_entity_id
+        AND public_state.publication_state='published' AND public_state.public_visible=1
+        AND public_version.publication_state='published' AND public_version.public_visible=1
+    )`:" AND fragment.state<>'archived'";
   const rows=(await database.prepare(`SELECT fragment.*,derivative.source_url derivative_source_url,derivative.mime_type derivative_mime_type,
       derivative.alt_text derivative_alt_text,derivative.width derivative_width,derivative.height derivative_height,
       master.original_filename master_filename,derivative.original_filename derivative_filename
@@ -6395,9 +6442,14 @@ async function blackboardFragmentsV2(database,recordId,states,publicOnly=false){
   const stateMap=new Map(states.map(state=>[state.id,state])),fragments=[];
   for(const row of rows){
     const stateLinks=(await database.prepare(`SELECT link.state_id,placement.x_percent,placement.y_percent,
-        placement.width_percent,placement.height_percent,placement.sort_order placement_sort_order
+        placement.width_percent,placement.height_percent,placement.sort_order placement_sort_order,
+        placement.hotspot_mask_media_id,hotspot_mask.source_url hotspot_mask_source_url,
+        hotspot_mask.mime_type hotspot_mask_mime_type,hotspot_mask.width hotspot_mask_width,hotspot_mask.height hotspot_mask_height,
+        hotspot_mask.state hotspot_mask_state,hotspot_mask.privacy hotspot_mask_privacy,
+        hotspot_mask.public_presentation hotspot_mask_presentation
       FROM archive_blackboard_fragment_states link
       LEFT JOIN archive_blackboard_fragment_placements placement ON placement.fragment_id=link.fragment_id AND placement.state_id=link.state_id
+      LEFT JOIN media_assets hotspot_mask ON hotspot_mask.id=placement.hotspot_mask_media_id
       WHERE link.fragment_id=? ORDER BY link.sort_order,link.created_at`).bind(row.id).all()).results||[];
     let manifestations=[],threads=[];
     if(publicOnly){
@@ -6412,14 +6464,110 @@ async function blackboardFragmentsV2(database,recordId,states,publicOnly=false){
         JOIN archive_origin_threads thread ON thread.id=member.thread_id WHERE member.entity_id=? AND thread.state='published' AND thread.public_visible=1
         ORDER BY member.is_primary DESC,member.sort_order,thread.sort_order`).bind(row.id).all()).results||[];
     }
-    const visible=stateLinks.map(link=>stateMap.get(link.state_id)).filter(Boolean),placements=stateLinks.filter(link=>stateMap.has(link.state_id)&&link.x_percent!==null&&link.x_percent!==undefined).map(link=>({
-      state_id:link.state_id,stateId:link.state_id,x_percent:Number(link.x_percent),xPercent:Number(link.x_percent),y_percent:Number(link.y_percent),yPercent:Number(link.y_percent),
-      width_percent:Number(link.width_percent),widthPercent:Number(link.width_percent),height_percent:Number(link.height_percent),heightPercent:Number(link.height_percent),sort_order:Number(link.placement_sort_order)||0,sortOrder:Number(link.placement_sort_order)||0,
-    }));
+    const publicLinks=stateLinks.filter(link=>stateMap.has(link.state_id)),visible=publicLinks.map(link=>stateMap.get(link.state_id)).filter(Boolean),placements=publicLinks.filter(link=>link.x_percent!==null&&link.x_percent!==undefined).map(link=>{
+      const maskEligible=Boolean(link.hotspot_mask_media_id&&link.hotspot_mask_state==="active"&&link.hotspot_mask_privacy==="public"&&link.hotspot_mask_presentation==="inline"&&String(link.hotspot_mask_mime_type||"").toLowerCase()==="image/png");
+      const hotspotMask=maskEligible?{id:link.hotspot_mask_media_id,url:blackboardMediaUrl({media_id:link.hotspot_mask_media_id,source_url:link.hotspot_mask_source_url}),mime_type:link.hotspot_mask_mime_type,
+        width:Number(link.hotspot_mask_width||0)||null,height:Number(link.hotspot_mask_height||0)||null}:null;
+      const bounds={x_pct:Number(link.x_percent),y_pct:Number(link.y_percent),width_pct:Number(link.width_percent),height_pct:Number(link.height_percent)};
+      return {state_id:link.state_id,stateId:link.state_id,x_percent:bounds.x_pct,xPercent:bounds.x_pct,x_pct:bounds.x_pct,y_percent:bounds.y_pct,yPercent:bounds.y_pct,y_pct:bounds.y_pct,
+        width_percent:bounds.width_pct,widthPercent:bounds.width_pct,width_pct:bounds.width_pct,height_percent:bounds.height_pct,heightPercent:bounds.height_pct,height_pct:bounds.height_pct,sort_order:Number(link.placement_sort_order)||0,sortOrder:Number(link.placement_sort_order)||0,
+        hotspot_mask_media_id:hotspotMask?.id||null,hotspotMaskMediaId:hotspotMask?.id||null,hotspot_mask:hotspotMask,hotspotMask,mask_url:hotspotMask?.url||null,maskUrl:hotspotMask?.url||null,bounds};
+    });
     fragments.push({id:row.id,slug:row.slug,title:row.title,caption:row.caption||"",body:row.body||"",date:row.date_label||row.occurred_at||"",
-      occurred_at:row.occurred_at,image:publicBlackboardMedia(row),visible_in:visible,visibleIn:visible,state_ids:stateLinks.map(item=>item.state_id),
-      stateIds:stateLinks.map(item=>item.state_id),placements,manifestations,origin_threads:threads,originThreads:threads,state:row.state,public_visible:Number(row.public_visible||0)});
-    if(!publicOnly)Object.assign(fragments.at(-1),{master_media_id:row.master_media_id,derivative_media_id:row.derivative_media_id,master_filename:row.master_filename,derivative_filename:row.derivative_filename});
+      occurred_at:row.occurred_at,image:publicBlackboardMedia(row),visible_in:visible,visibleIn:visible,state_ids:publicLinks.map(item=>item.state_id),
+      stateIds:publicLinks.map(item=>item.state_id),placements,manifestations,origin_threads:threads,originThreads:threads,state:row.state,public_visible:Number(row.public_visible||0)});
+  }
+  return fragments;
+}
+
+function blackboardFragmentAdminMedia(mediaId,row,prefix){
+  if(!mediaId)return null;
+  return {id:mediaId,url:`/api/admin/media/${encodeURIComponent(mediaId)}/file`,mime_type:row[`${prefix}_mime_type`]||"",
+    original_filename:row[`${prefix}_filename`]||"",width:Number(row[`${prefix}_width`]||0)||null,height:Number(row[`${prefix}_height`]||0)||null};
+}
+
+function parsedBlackboardFragmentJson(value){
+  if(!value)return null;
+  try{return JSON.parse(value)}catch{return null}
+}
+
+async function blackboardFragmentAdminRecordsV3(database,{recordId="",fragmentId="",states=null}={}){
+  const conditions=["fragment.state<>'archived'"];const values=[];
+  if(recordId){conditions.push("fragment.record_entity_id=?");values.push(recordId)}
+  if(fragmentId){conditions.push("fragment.id=?");values.push(fragmentId)}
+  const rows=(await database.prepare(`SELECT fragment.*,
+      board.title board_title,dossier.archive_slug board_slug,catalogue.catalogue_id board_catalogue_id,
+      master.original_filename master_filename,master.mime_type master_mime_type,master.width master_width,master.height master_height,
+      edit_source.original_filename edit_source_filename,edit_source.mime_type edit_source_mime_type,edit_source.width edit_source_width,edit_source.height edit_source_height,
+      derivative.original_filename derivative_filename,derivative.mime_type derivative_mime_type,derivative.width derivative_width,derivative.height derivative_height,
+      current_edit.id current_edit_id,current_edit.revision_number current_edit_revision_number,current_edit.source_media_id current_edit_source_media_id,
+      current_edit.alpha_mask_media_id current_edit_alpha_mask_media_id,current_edit.output_media_id current_edit_output_media_id,
+      current_edit.recipe_json current_edit_recipe_json,current_edit.created_at current_edit_created_at,current_edit.updated_at current_edit_updated_at,
+      alpha_mask.original_filename current_edit_alpha_mask_filename,alpha_mask.mime_type current_edit_alpha_mask_mime_type,
+      alpha_mask.width current_edit_alpha_mask_width,alpha_mask.height current_edit_alpha_mask_height,
+      (SELECT COUNT(*) FROM archive_blackboard_fragment_edits edit_count WHERE edit_count.fragment_id=fragment.id) edit_revision_count
+    FROM archive_blackboard_fragments fragment
+    JOIN content_entities entity ON entity.id=fragment.id
+    LEFT JOIN archive_records board ON board.id=fragment.record_entity_id AND board.record_type='blackboard'
+    LEFT JOIN archive_dossiers dossier ON dossier.entity_id=fragment.record_entity_id
+    LEFT JOIN archive_catalogue_entries catalogue ON catalogue.entity_id=fragment.record_entity_id
+    LEFT JOIN media_assets master ON master.id=fragment.master_media_id
+    LEFT JOIN media_assets edit_source ON edit_source.id=fragment.edit_source_media_id
+    LEFT JOIN media_assets derivative ON derivative.id=fragment.derivative_media_id
+    LEFT JOIN archive_blackboard_fragment_edits current_edit ON current_edit.fragment_id=fragment.id AND current_edit.is_current=1
+    LEFT JOIN media_assets alpha_mask ON alpha_mask.id=current_edit.alpha_mask_media_id
+    WHERE ${conditions.join(" AND ")}
+    ORDER BY CASE WHEN fragment.record_entity_id IS NULL THEN 0 ELSE 1 END,fragment.updated_at DESC,fragment.sort_order,fragment.created_at`).bind(...values).all()).results||[];
+  const statesByRecord=new Map();if(recordId&&states)statesByRecord.set(recordId,states);const fragments=[];
+  for(const row of rows){
+    if(row.record_entity_id&&!statesByRecord.has(row.record_entity_id))statesByRecord.set(row.record_entity_id,await blackboardStateRowsV2(database,row.record_entity_id,false));
+    const boardStates=statesByRecord.get(row.record_entity_id)||[],stateMap=new Map(boardStates.map(state=>[state.id,state]));
+    const links=(await database.prepare(`SELECT link.*,placement.x_percent,placement.y_percent,placement.width_percent,placement.height_percent,
+        placement.hotspot_mask_media_id,placement.hotspot_recipe_json,placement.sort_order placement_sort_order,
+        hotspot_mask.original_filename hotspot_mask_filename,hotspot_mask.mime_type hotspot_mask_mime_type,
+        hotspot_mask.width hotspot_mask_width,hotspot_mask.height hotspot_mask_height
+      FROM archive_blackboard_fragment_states link
+      LEFT JOIN archive_blackboard_fragment_placements placement ON placement.fragment_id=link.fragment_id AND placement.state_id=link.state_id
+      LEFT JOIN media_assets hotspot_mask ON hotspot_mask.id=placement.hotspot_mask_media_id
+      WHERE link.fragment_id=? ORDER BY link.sort_order,link.created_at`).bind(row.id).all()).results||[];
+    const placements=links.filter(link=>link.x_percent!==null&&link.x_percent!==undefined).map(link=>{
+      const hotspotMask=blackboardFragmentAdminMedia(link.hotspot_mask_media_id,link,"hotspot_mask");
+      const bounds={x_pct:Number(link.x_percent),y_pct:Number(link.y_percent),width_pct:Number(link.width_percent),height_pct:Number(link.height_percent)};
+      return {state_id:link.state_id,stateId:link.state_id,x_percent:bounds.x_pct,xPercent:bounds.x_pct,x_pct:bounds.x_pct,y_percent:bounds.y_pct,yPercent:bounds.y_pct,y_pct:bounds.y_pct,
+        width_percent:bounds.width_pct,widthPercent:bounds.width_pct,width_pct:bounds.width_pct,height_percent:bounds.height_pct,heightPercent:bounds.height_pct,height_pct:bounds.height_pct,
+        sort_order:Number(link.placement_sort_order)||0,sortOrder:Number(link.placement_sort_order)||0,hotspot_mask_media_id:link.hotspot_mask_media_id||null,
+        hotspotMaskMediaId:link.hotspot_mask_media_id||null,hotspot_mask:hotspotMask,hotspotMask,mask_url:hotspotMask?.url||null,maskUrl:hotspotMask?.url||null,bounds,hotspot_recipe_json:link.hotspot_recipe_json||null,
+        hotspotRecipeJson:link.hotspot_recipe_json||null,hotspot_recipe:parsedBlackboardFragmentJson(link.hotspot_recipe_json),hotspotRecipe:parsedBlackboardFragmentJson(link.hotspot_recipe_json)};
+    });
+    const editRows=(await database.prepare(`SELECT edit.*,
+        source.original_filename source_filename,source.mime_type source_mime_type,source.width source_width,source.height source_height,
+        alpha_mask.original_filename alpha_mask_filename,alpha_mask.mime_type alpha_mask_mime_type,alpha_mask.width alpha_mask_width,alpha_mask.height alpha_mask_height,
+        output.original_filename output_filename,output.mime_type output_mime_type,output.width output_width,output.height output_height
+      FROM archive_blackboard_fragment_edits edit
+      JOIN media_assets source ON source.id=edit.source_media_id
+      LEFT JOIN media_assets alpha_mask ON alpha_mask.id=edit.alpha_mask_media_id
+      JOIN media_assets output ON output.id=edit.output_media_id
+      WHERE edit.fragment_id=? ORDER BY edit.revision_number DESC`).bind(row.id).all()).results||[];
+    const edits=editRows.map(edit=>({id:edit.id,revision_number:Number(edit.revision_number)||1,revisionNumber:Number(edit.revision_number)||1,
+      source_media_id:edit.source_media_id,sourceMediaId:edit.source_media_id,source:blackboardFragmentAdminMedia(edit.source_media_id,edit,"source"),
+      alpha_mask_media_id:edit.alpha_mask_media_id||null,alphaMaskMediaId:edit.alpha_mask_media_id||null,alpha_mask:blackboardFragmentAdminMedia(edit.alpha_mask_media_id,edit,"alpha_mask"),
+      alphaMask:blackboardFragmentAdminMedia(edit.alpha_mask_media_id,edit,"alpha_mask"),output_media_id:edit.output_media_id,outputMediaId:edit.output_media_id,
+      output:blackboardFragmentAdminMedia(edit.output_media_id,edit,"output"),recipe_json:edit.recipe_json,recipeJson:edit.recipe_json,recipe:parsedBlackboardFragmentJson(edit.recipe_json),
+      is_current:Number(edit.is_current)===1,isCurrent:Number(edit.is_current)===1,created_at:edit.created_at,updated_at:edit.updated_at}));
+    const currentEdit=edits.find(edit=>edit.is_current)||null;
+    const board=row.record_entity_id?{id:row.record_entity_id,entity_id:row.record_entity_id,entityId:row.record_entity_id,title:row.board_title||row.record_entity_id,
+      slug:row.board_slug||"",catalogue_id:row.board_catalogue_id||"",catalogueId:row.board_catalogue_id||"",states:boardStates}:null;
+    const stateIds=links.map(link=>link.state_id),fragment={id:row.id,slug:row.slug,title:row.title,caption:row.caption||"",body:row.body||"",date:row.date_label||row.occurred_at||"",
+      occurred_at:row.occurred_at,date_precision:row.date_precision,date_label:row.date_label||"",state:row.state,public_visible:Number(row.public_visible||0),sort_order:Number(row.sort_order)||0,
+      record_entity_id:row.record_entity_id||null,recordEntityId:row.record_entity_id||null,board,master_media_id:row.master_media_id||null,masterMediaId:row.master_media_id||null,
+      edit_source_media_id:row.edit_source_media_id||null,editSourceMediaId:row.edit_source_media_id||null,derivative_media_id:row.derivative_media_id||null,
+      derivativeMediaId:row.derivative_media_id||null,master:blackboardFragmentAdminMedia(row.master_media_id,row,"master"),edit_source:blackboardFragmentAdminMedia(row.edit_source_media_id,row,"edit_source"),
+      editSource:blackboardFragmentAdminMedia(row.edit_source_media_id,row,"edit_source"),image:blackboardFragmentAdminMedia(row.derivative_media_id,row,"derivative"),current_edit:currentEdit,currentEdit,edits,
+      edit_revision_count:edits.length,editRevisionCount:edits.length,edit_status:currentEdit?"edited":"unedited",editStatus:currentEdit?"edited":"unedited",
+      mapping_status:row.record_entity_id?(placements.length?"placed":"board-selected"):"unmapped",mappingStatus:row.record_entity_id?(placements.length?"placed":"board-selected"):"unmapped",
+      visible_in:stateIds.map(stateId=>stateMap.get(stateId)).filter(Boolean),visibleIn:stateIds.map(stateId=>stateMap.get(stateId)).filter(Boolean),state_ids:stateIds,stateIds,placements,
+      created_at:row.created_at,updated_at:row.updated_at};
+    fragments.push(fragment);
   }
   return fragments;
 }
@@ -6531,49 +6679,154 @@ async function archiveBlackboardNotebookAdminApiV2(request,env,recordId,material
   return failure("Method not allowed.",405);
 }
 
-async function archiveBlackboardFragmentsAdminApiV2(request,env,recordId,fragmentId="",action=""){
-  const database=db(env),owner=await database.prepare("SELECT record_entity_id FROM archive_blackboard_records WHERE record_entity_id=?").bind(recordId).first();if(!owner)return failure("Blackboard record not found.",404);
-  const before=fragmentId?await database.prepare("SELECT * FROM archive_blackboard_fragments WHERE id=? AND record_entity_id=?").bind(fragmentId,recordId).first():null;
+function normalizedBlackboardFragmentJson(value,label,{nullable=false}={}){
+  if(value===undefined||value===null||value==="")return nullable?null:"{}";
+  const encoded=typeof value==="string"?value:JSON.stringify(value);
+  if(new TextEncoder().encode(encoded).byteLength>262144)throw new Error(`${label} exceeds the 256 KiB limit.`);
+  try{const parsed=JSON.parse(encoded);if(!parsed||Array.isArray(parsed)||typeof parsed!=="object")throw new Error()}catch{throw new Error(`${label} must be a JSON object.`)}
+  return encoded;
+}
+
+async function blackboardFragmentImage(database,mediaId,label,{mimes=null,privateOnly=false,publicOnly=false}={}){
+  if(!mediaId)return null;const media=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(mediaId).first();
+  if(!media)throw new Error(`${label} Digital Asset was not found.`);if(!String(media.mime_type||"").startsWith("image/"))throw new Error(`${label} must be an image.`);
+  if(mimes&&!mimes.has(String(media.mime_type||"").toLowerCase()))throw new Error(`${label} has an unsupported image format.`);
+  if(media.state!=="active")throw new Error(`${label} must be active.`);
+  if(privateOnly&&(!["internal","private"].includes(media.privacy)||media.public_presentation!=="hidden"))throw new Error(`${label} must remain internal or private and hidden.`);
+  if(publicOnly&&(media.privacy!=="public"||media.public_presentation!=="inline"))throw new Error(`${label} must be public and inline.`);
+  return media;
+}
+
+async function archiveBlackboardFragmentsGlobalAdminApi(request,env,fragmentId="",action="",compatibilityRecordId=""){
+  const database=db(env);let compatibilityOwner=null;
+  if(compatibilityRecordId){compatibilityOwner=await database.prepare("SELECT record_entity_id FROM archive_blackboard_records WHERE record_entity_id=?").bind(compatibilityRecordId).first();if(!compatibilityOwner)return failure("Blackboard record not found.",404)}
+  const before=fragmentId?await database.prepare("SELECT * FROM archive_blackboard_fragments WHERE id=?").bind(fragmentId).first():null;
+  if(fragmentId&&!before)return failure("Blackboard fragment not found.",404);
+  if(before&&compatibilityRecordId&&before.record_entity_id!==compatibilityRecordId)return failure("Blackboard fragment not found in this record.",404);
+  if(request.method==="GET"){
+    const records=await blackboardFragmentAdminRecordsV3(database,{fragmentId,recordId:compatibilityRecordId});
+    if(fragmentId&&!records.length)return failure("Blackboard fragment not found.",404);
+    return json(fragmentId?{record:records[0],fragment:records[0]}:{records,fragments:records,count:records.length});
+  }
   if(request.method==="POST"&&!fragmentId){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");const title=text(body.title,300),fragmentSlug=slug(body.slug||title);if(!title||!fragmentSlug)return failure("A fragment title and slug are required.",409);
-    const masterId=text(body.master_media_id??body.masterMediaId,200)||null,derivativeId=text(body.derivative_media_id??body.derivativeMediaId,200)||null;if(masterId||derivativeId){const pair=await blackboardMediaPair(database,masterId,derivativeId,{derivativeRequired:true});if(pair instanceof Response)return pair;await prepareBlackboardMediaPair(database,masterId,derivativeId)}
-    const state=text(body.state,30)||"draft",publicVisible=state==="published"&&truthy(body.public_visible??body.publicVisible)&&derivativeId?1:0,newId=text(body.id,200)||id("blackboard-fragment");
-    await database.batch([
+    const recordId=compatibilityRecordId||text(body.record_entity_id??body.recordEntityId??body.board_entity_id??body.boardEntityId,200)||null;
+    if(recordId&&!await database.prepare("SELECT record_entity_id FROM archive_blackboard_records WHERE record_entity_id=?").bind(recordId).first())return failure("Choose an existing Blackboard record.",409);
+    const masterId=text(body.master_media_id??body.masterMediaId,200)||null,legacyDerivativeId=text(body.derivative_media_id??body.derivativeMediaId,200)||null;
+    let editSourceId=text(body.edit_source_media_id??body.editSourceMediaId,200)||null;const mediaStatements=[];
+    try{
+      const master=masterId?await blackboardFragmentImage(database,masterId,"Archival master",{mimes:RESUMABLE_UPLOAD_MIMES["archive-master"]}):null;
+      if(!editSourceId&&master&&["image/jpeg","image/png","image/webp"].includes(String(master.mime_type||"").toLowerCase()))editSourceId=masterId;
+      if(editSourceId)await blackboardFragmentImage(database,editSourceId,"Edit source",{mimes:new Set(["image/jpeg","image/png","image/webp"])});
+      if(editSourceId&&legacyDerivativeId&&editSourceId===legacyDerivativeId)throw new Error("The private edit source and public derivative must be different Digital Assets.");
+      if(legacyDerivativeId){const pair=await blackboardMediaPair(database,masterId,legacyDerivativeId,{derivativeRequired:true});if(pair instanceof Response)return pair;await prepareBlackboardMediaPair(database,masterId,legacyDerivativeId);if(editSourceId&&editSourceId!==masterId)mediaStatements.push(database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(editSourceId))}
+      else for(const mediaId of new Set([masterId,editSourceId].filter(Boolean)))mediaStatements.push(database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(mediaId));
+    }catch(error){return failure(error.message,409)}
+    const state=text(body.state,30)||"draft",requested=truthy(body.public_visible??body.publicVisible),publicVisible=state==="published"&&requested&&legacyDerivativeId?1:0,newId=text(body.id,200)||id("blackboard-fragment");
+    try{await database.batch([...mediaStatements,
       database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_blackboard_fragment','archive',?,?,'studio','studio',datetime('now'),datetime('now'))").bind(newId,publicVisible?"public":"internal",publicVisible),
-      database.prepare(`INSERT INTO archive_blackboard_fragments(id,record_entity_id,slug,title,caption,body,master_media_id,derivative_media_id,occurred_at,date_precision,date_label,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at,published_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'),CASE WHEN ?=1 THEN datetime('now') END)`).bind(newId,recordId,fragmentSlug,title,text(body.caption,5000),text(body.body,20000),masterId,derivativeId,text(body.occurred_at??body.occurredAt,80)||null,text(body.date_precision??body.datePrecision,30)||(body.occurred_at||body.occurredAt?"exact":"undated"),text(body.date_label??body.dateLabel,160),state,publicVisible,Number(body.sort_order??body.sortOrder)||0,publicVisible),
-    ]);return json({record:await database.prepare("SELECT * FROM archive_blackboard_fragments WHERE id=?").bind(newId).first()},{status:201});
+      database.prepare(`INSERT INTO archive_blackboard_fragments(id,record_entity_id,slug,title,caption,body,master_media_id,edit_source_media_id,derivative_media_id,occurred_at,date_precision,date_label,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at,published_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'),CASE WHEN ?=1 THEN datetime('now') END)`).bind(newId,recordId,fragmentSlug,title,text(body.caption,5000),text(body.body,20000),masterId,editSourceId,legacyDerivativeId,text(body.occurred_at??body.occurredAt,80)||null,text(body.date_precision??body.datePrecision,30)||(body.occurred_at||body.occurredAt?"exact":"undated"),text(body.date_label??body.dateLabel,160),state,publicVisible,Number(body.sort_order??body.sortOrder)||0,publicVisible),
+    ])}catch(error){return failure(/archive_blackboard_fragments\.slug|UNIQUE constraint failed/i.test(String(error?.message||error))?"That fragment slug is already in use.":String(error?.message||error),409)}
+    const record=(await blackboardFragmentAdminRecordsV3(database,{fragmentId:newId}))[0];return json({record,fragment:record},{status:201});
+  }
+  if(request.method==="PUT"&&before&&action==="board"){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const recordId=text(body.record_entity_id??body.recordEntityId??body.board_entity_id??body.boardEntityId,200)||null;
+    if(recordId&&!await database.prepare("SELECT record_entity_id FROM archive_blackboard_records WHERE record_entity_id=?").bind(recordId).first())return failure("Choose an existing Blackboard record.",409);
+    const changed=(before.record_entity_id||null)!==recordId,mappingRow=changed?await database.prepare("SELECT COUNT(*) mapping_count FROM archive_blackboard_fragment_states WHERE fragment_id=?").bind(fragmentId).first():null,mappingCount=Number(mappingRow?.mapping_count||0);
+    if(changed&&mappingCount&&!truthy(body.confirm_reset_mappings??body.confirmResetMappings)){const details={mapping_count:mappingCount,mappingCount,confirm_required:true,confirmRequired:true};return json({error:"Changing this fragment's Blackboard will clear its saved state mappings.",...details,details},{status:409})}
+    const statements=[];if(changed)statements.push(database.prepare("DELETE FROM archive_blackboard_fragment_states WHERE fragment_id=?").bind(fragmentId));
+    statements.push(database.prepare("UPDATE archive_blackboard_fragments SET record_entity_id=?,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(recordId,fragmentId));
+    await database.batch(statements);const record=(await blackboardFragmentAdminRecordsV3(database,{fragmentId}))[0];return json({record,fragment:record,cleared_state_mappings:changed&&mappingCount>0,clearedStateMappings:changed&&mappingCount>0});
+  }
+  if(request.method==="POST"&&before&&action==="edits"){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const editId=text(body.id,200)||id("blackboard-fragment-edit");
+    const existing=await database.prepare("SELECT id,fragment_id FROM archive_blackboard_fragment_edits WHERE id=?").bind(editId).first();
+    if(existing&&existing.fragment_id!==fragmentId)return failure("That edit revision id already belongs to another fragment.",409);
+    if(existing){const record=(await blackboardFragmentAdminRecordsV3(database,{fragmentId}))[0];return json({record,fragment:record,idempotent:true})}
+    const sourceId=text(body.source_media_id??body.sourceMediaId??before.edit_source_media_id??before.master_media_id,200),maskId=text(body.alpha_mask_media_id??body.alphaMaskMediaId,200)||null,outputId=text(body.output_media_id??body.outputMediaId,200);
+    if(!sourceId||!outputId)return failure("An edit source and rendered output are required.",409);
+    if(sourceId===outputId||maskId&&(maskId===sourceId||maskId===outputId))return failure("Edit source, alpha mask, and rendered output must use distinct Digital Assets.",409);
+    let recipeJson;try{recipeJson=normalizedBlackboardFragmentJson(body.recipe_json??body.recipeJson??body.recipe,"Edit recipe");
+      await blackboardFragmentImage(database,sourceId,"Edit source",{mimes:new Set(["image/jpeg","image/png","image/webp"])});
+      if(maskId)await blackboardFragmentImage(database,maskId,"Alpha mask",{mimes:new Set(["image/png"])});
+      await blackboardFragmentImage(database,outputId,"Rendered output",{mimes:new Set(["image/png","image/webp"])});
+    }catch(error){return failure(error.message,409)}
+    const latest=await database.prepare("SELECT COALESCE(MAX(revision_number),0) revision_number FROM archive_blackboard_fragment_edits WHERE fragment_id=?").bind(fragmentId).first(),revision=Number(latest?.revision_number||0)+1;
+    const outputPublic=before.state==="published"&&Number(before.public_visible)===1;
+    const statements=[
+      database.prepare("UPDATE archive_blackboard_fragment_edits SET is_current=0,updated_at=datetime('now') WHERE fragment_id=? AND is_current=1").bind(fragmentId),
+      database.prepare(`INSERT INTO archive_blackboard_fragment_edits(id,fragment_id,revision_number,source_media_id,alpha_mask_media_id,output_media_id,recipe_json,is_current,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,1,datetime('now'),datetime('now'))`).bind(editId,fragmentId,revision,sourceId,maskId,outputId,recipeJson),
+      database.prepare("UPDATE archive_blackboard_fragments SET edit_source_media_id=?,derivative_media_id=?,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(sourceId,outputId,fragmentId),
+      database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(sourceId),
+      database.prepare("UPDATE media_assets SET privacy=?,public_presentation=?,updated_at=datetime('now') WHERE id=?").bind(outputPublic?"public":"internal",outputPublic?"inline":"hidden",outputId),
+    ];if(maskId)statements.push(database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(maskId));
+    try{await database.batch(statements)}catch(error){return failure(String(error?.message||error),409)}
+    const record=(await blackboardFragmentAdminRecordsV3(database,{fragmentId}))[0];return json({record,fragment:record,edit:record.current_edit},{status:201});
+  }
+  if(request.method==="PUT"&&before&&action==="mappings"){
+    if(!before.record_entity_id)return failure("Choose a Blackboard before mapping this fragment.",409);
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const source=body.mappings??[];if(!Array.isArray(source))return failure("Mappings must be an array.",409);if(source.length>100)return failure("A fragment may have at most 100 state mappings.",409);
+    const seen=new Set(),mappings=[];
+    for(let index=0;index<source.length;index++){
+      const item=source[index]||{},stateId=text(item.state_id??item.stateId,200),x=Number(item.x_pct??item.x_percent??item.xPercent??item.x),y=Number(item.y_pct??item.y_percent??item.yPercent??item.y),width=Number(item.width_pct??item.width_percent??item.widthPercent??item.width),height=Number(item.height_pct??item.height_percent??item.heightPercent??item.height),maskId=text(item.hotspot_mask_media_id??item.hotspotMaskMediaId,200)||null;
+      if(!stateId||seen.has(stateId))return failure("Each mapping needs one unique Blackboard state.",409);seen.add(stateId);
+      if(![x,y,width,height].every(Number.isFinite)||x<0||y<0||width<=0||height<=0||x+width>100.000001||y+height>100.000001)return failure("Mapping bounds must form a positive rectangle inside the full scan.",409);
+      let hotspotRecipeJson=null;try{hotspotRecipeJson=normalizedBlackboardFragmentJson(item.hotspot_recipe_json??item.hotspotRecipeJson??item.hotspot_recipe??item.hotspotRecipe,"Hotspot recipe",{nullable:true});if(maskId)await blackboardFragmentImage(database,maskId,"Hotspot mask",{mimes:new Set(["image/png"])})}catch(error){return failure(error.message,409)}
+      mappings.push({state_id:stateId,x_percent:x,y_percent:y,width_percent:width,height_percent:height,hotspot_mask_media_id:maskId,hotspot_recipe_json:hotspotRecipeJson,sort_order:Number(item.sort_order??item.sortOrder)||index+1});
+    }
+    if(mappings.length){const ids=mappings.map(item=>item.state_id),valid=(await database.prepare(`SELECT object_state.id FROM archive_object_states object_state JOIN archive_object_versions version ON version.id=object_state.version_id WHERE version.entity_id=? AND object_state.id IN (${ids.map(()=>"?").join(",")})`).bind(before.record_entity_id,...ids).all()).results||[];if(valid.length!==mappings.length)return failure("Every mapping state must belong to the selected Blackboard.",409)}
+    const statements=[database.prepare("DELETE FROM archive_blackboard_fragment_placements WHERE fragment_id=?").bind(fragmentId),database.prepare("DELETE FROM archive_blackboard_fragment_states WHERE fragment_id=?").bind(fragmentId)];
+    for(const item of mappings){statements.push(
+      database.prepare("INSERT INTO archive_blackboard_fragment_states(fragment_id,state_id,sort_order,created_by,created_at) VALUES(?,?,?,'studio',datetime('now'))").bind(fragmentId,item.state_id,item.sort_order),
+      database.prepare(`INSERT INTO archive_blackboard_fragment_placements(fragment_id,state_id,x_percent,y_percent,width_percent,height_percent,hotspot_mask_media_id,hotspot_recipe_json,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(fragmentId,item.state_id,item.x_percent,item.y_percent,item.width_percent,item.height_percent,item.hotspot_mask_media_id,item.hotspot_recipe_json,item.sort_order),
+    );if(item.hotspot_mask_media_id)statements.push(database.prepare("UPDATE media_assets SET privacy='public',public_presentation='inline',updated_at=datetime('now') WHERE id=?").bind(item.hotspot_mask_media_id))}
+    await database.batch(statements);const record=(await blackboardFragmentAdminRecordsV3(database,{fragmentId}))[0];return json({record,fragment:record,mappings:record.placements});
   }
   if(request.method==="PUT"&&before&&action==="states"){
+    if(!before.record_entity_id)return failure("Choose a Blackboard before linking this fragment to states.",409);
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");const stateIds=[...new Set((body.state_ids??body.stateIds??[]).map(value=>text(value,200)).filter(Boolean))];
-    if(stateIds.length){const valid=(await database.prepare(`SELECT object_state.id FROM archive_object_states object_state JOIN archive_object_versions version ON version.id=object_state.version_id WHERE version.entity_id=? AND object_state.id IN (${stateIds.map(()=>"?").join(",")})`).bind(recordId,...stateIds).all()).results||[];if(valid.length!==stateIds.length)return failure("Every Visible in state must belong to this Blackboard record.",409)}
+    if(stateIds.length){const valid=(await database.prepare(`SELECT object_state.id FROM archive_object_states object_state JOIN archive_object_versions version ON version.id=object_state.version_id WHERE version.entity_id=? AND object_state.id IN (${stateIds.map(()=>"?").join(",")})`).bind(before.record_entity_id,...stateIds).all()).results||[];if(valid.length!==stateIds.length)return failure("Every Visible in state must belong to this Blackboard record.",409)}
     const remove=stateIds.length?database.prepare(`DELETE FROM archive_blackboard_fragment_states WHERE fragment_id=? AND state_id NOT IN (${stateIds.map(()=>"?").join(",")})`).bind(fragmentId,...stateIds):database.prepare("DELETE FROM archive_blackboard_fragment_states WHERE fragment_id=?").bind(fragmentId);
     await database.batch([remove,...stateIds.flatMap((linkedId,index)=>[
       database.prepare("INSERT OR IGNORE INTO archive_blackboard_fragment_states(fragment_id,state_id,sort_order,created_by,created_at) VALUES(?,?,?,'studio',datetime('now'))").bind(fragmentId,linkedId,index+1),
       database.prepare("UPDATE archive_blackboard_fragment_states SET sort_order=? WHERE fragment_id=? AND state_id=?").bind(index+1,fragmentId,linkedId),
-    ])]);return json({ok:true,state_ids:stateIds});
+    ])]);return json({ok:true,state_ids:stateIds,stateIds});
   }
   if(request.method==="PUT"&&before&&action==="placements"){
+    if(!before.record_entity_id)return failure("Choose a Blackboard before placing this fragment.",409);
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");const source=body.placements??[];if(!Array.isArray(source))return failure("Placements must be an array.",409);if(source.length>100)return failure("A fragment may have at most 100 state placements.",409);
     const seen=new Set(),placements=[];
     for(let index=0;index<source.length;index++){
-      const item=source[index]||{},stateId=text(item.state_id??item.stateId,200),x=Number(item.x_percent??item.xPercent??item.x),y=Number(item.y_percent??item.yPercent??item.y),width=Number(item.width_percent??item.widthPercent??item.width),height=Number(item.height_percent??item.heightPercent??item.height);
+      const item=source[index]||{},stateId=text(item.state_id??item.stateId,200),x=Number(item.x_pct??item.x_percent??item.xPercent??item.x),y=Number(item.y_pct??item.y_percent??item.yPercent??item.y),width=Number(item.width_pct??item.width_percent??item.widthPercent??item.width),height=Number(item.height_pct??item.height_percent??item.heightPercent??item.height),maskId=text(item.hotspot_mask_media_id??item.hotspotMaskMediaId,200)||null;
       if(!stateId||seen.has(stateId))return failure("Each placement needs one unique Blackboard state.",409);seen.add(stateId);
       if(![x,y,width,height].every(Number.isFinite)||x<0||y<0||width<=0||height<=0||x+width>100.000001||y+height>100.000001)return failure("Placement coordinates must form a positive rectangle inside the full scan.",409);
-      placements.push({state_id:stateId,x_percent:x,y_percent:y,width_percent:width,height_percent:height,sort_order:Number(item.sort_order??item.sortOrder)||index+1});
+      let hotspotRecipeJson=null;try{hotspotRecipeJson=normalizedBlackboardFragmentJson(item.hotspot_recipe_json??item.hotspotRecipeJson??item.hotspot_recipe??item.hotspotRecipe,"Hotspot recipe",{nullable:true});if(maskId)await blackboardFragmentImage(database,maskId,"Hotspot mask",{mimes:new Set(["image/png"])})}catch(error){return failure(error.message,409)}
+      placements.push({state_id:stateId,x_percent:x,y_percent:y,width_percent:width,height_percent:height,hotspot_mask_media_id:maskId,hotspot_recipe_json:hotspotRecipeJson,sort_order:Number(item.sort_order??item.sortOrder)||index+1});
     }
-    if(placements.length){const ids=placements.map(item=>item.state_id),valid=(await database.prepare(`SELECT link.state_id FROM archive_blackboard_fragment_states link JOIN archive_object_states object_state ON object_state.id=link.state_id JOIN archive_object_versions version ON version.id=object_state.version_id WHERE link.fragment_id=? AND version.entity_id=? AND link.state_id IN (${ids.map(()=>"?").join(",")})`).bind(fragmentId,recordId,...ids).all()).results||[];if(valid.length!==placements.length)return failure("Confirm every placement with a Visible in state match first.",409)}
-    await database.batch([database.prepare("DELETE FROM archive_blackboard_fragment_placements WHERE fragment_id=?").bind(fragmentId),...placements.map(item=>database.prepare(`INSERT INTO archive_blackboard_fragment_placements(fragment_id,state_id,x_percent,y_percent,width_percent,height_percent,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(fragmentId,item.state_id,item.x_percent,item.y_percent,item.width_percent,item.height_percent,item.sort_order))]);
+    if(placements.length){const ids=placements.map(item=>item.state_id),valid=(await database.prepare(`SELECT link.state_id FROM archive_blackboard_fragment_states link JOIN archive_object_states object_state ON object_state.id=link.state_id JOIN archive_object_versions version ON version.id=object_state.version_id WHERE link.fragment_id=? AND version.entity_id=? AND link.state_id IN (${ids.map(()=>"?").join(",")})`).bind(fragmentId,before.record_entity_id,...ids).all()).results||[];if(valid.length!==placements.length)return failure("Confirm every placement with a Visible in state match first.",409)}
+    await database.batch([database.prepare("DELETE FROM archive_blackboard_fragment_placements WHERE fragment_id=?").bind(fragmentId),...placements.flatMap(item=>[
+      database.prepare(`INSERT INTO archive_blackboard_fragment_placements(fragment_id,state_id,x_percent,y_percent,width_percent,height_percent,hotspot_mask_media_id,hotspot_recipe_json,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(fragmentId,item.state_id,item.x_percent,item.y_percent,item.width_percent,item.height_percent,item.hotspot_mask_media_id,item.hotspot_recipe_json,item.sort_order),
+      ...(item.hotspot_mask_media_id?[database.prepare("UPDATE media_assets SET privacy='public',public_presentation='inline',updated_at=datetime('now') WHERE id=?").bind(item.hotspot_mask_media_id)]:[]),
+    ])]);
     return json({ok:true,placements});
   }
-  if(request.method==="PATCH"&&before){
-    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const state=text(body.state??before.state,30),requested=body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible),publicVisible=state==="published"&&requested&&before.derivative_media_id?1:0;
-    await database.batch([
-      database.prepare("UPDATE archive_blackboard_fragments SET slug=?,title=?,caption=?,body=?,occurred_at=?,date_precision=?,date_label=?,state=?,public_visible=?,sort_order=?,published_at=CASE WHEN ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(slug(body.slug??before.slug),text(body.title??before.title,300),text(body.caption??before.caption,5000),text(body.body??before.body,20000),text(body.occurred_at??body.occurredAt??before.occurred_at,80)||null,text(body.date_precision??body.datePrecision??before.date_precision,30),text(body.date_label??body.dateLabel??before.date_label,160),state,publicVisible,Number(body.sort_order??body.sortOrder??before.sort_order)||0,publicVisible,fragmentId),
+  if(request.method==="PATCH"&&before&&!action){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const state=text(body.state??before.state,30),requested=body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible),publicVisible=state==="published"&&requested&&before.derivative_media_id?1:0,nextSlug=slug(body.slug??before.slug);
+    if(!nextSlug)return failure("A fragment slug is required.",409);
+    try{await database.batch([
+      database.prepare("UPDATE archive_blackboard_fragments SET slug=?,title=?,caption=?,body=?,occurred_at=?,date_precision=?,date_label=?,state=?,public_visible=?,sort_order=?,published_at=CASE WHEN ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(nextSlug,text(body.title??before.title,300),text(body.caption??before.caption,5000),text(body.body??before.body,20000),text(body.occurred_at??body.occurredAt??before.occurred_at,80)||null,text(body.date_precision??body.datePrecision??before.date_precision,30),text(body.date_label??body.dateLabel??before.date_label,160),state,publicVisible,Number(body.sort_order??body.sortOrder??before.sort_order)||0,publicVisible,fragmentId),
       database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(publicVisible?"public":"internal",publicVisible,fragmentId),
-    ]);return json({record:await database.prepare("SELECT * FROM archive_blackboard_fragments WHERE id=?").bind(fragmentId).first()});
+      ...(publicVisible?[database.prepare("UPDATE media_assets SET privacy='public',public_presentation='inline',updated_at=datetime('now') WHERE id=?").bind(before.derivative_media_id)]:[]),
+    ])}catch(error){return failure(/archive_blackboard_fragments\.slug|UNIQUE constraint failed/i.test(String(error?.message||error))?"That fragment slug is already in use.":String(error?.message||error),409)}
+    const record=(await blackboardFragmentAdminRecordsV3(database,{fragmentId}))[0];return json({record,fragment:record});
   }
   return failure("Method not allowed.",405);
+}
+
+async function archiveBlackboardFragmentsAdminApiV2(request,env,recordId,fragmentId="",action=""){
+  return archiveBlackboardFragmentsGlobalAdminApi(request,env,fragmentId,action,recordId);
 }
 
 async function archiveBlackboardRecordsAdminApiV2(request,env,recordId="",action=""){
@@ -7667,6 +7920,13 @@ export async function handleConstructApi(request,env){
   const versionMatch=path.match(/^\/api\/admin\/archive-versions(?:\/([^/]+))?$/);if(versionMatch)return archiveVersionsAdminApi(request,env,versionMatch[1]?decodeURIComponent(versionMatch[1]):"");
   const stateMatch=path.match(/^\/api\/admin\/archive-states(?:\/([^/]+))?$/);if(stateMatch)return archiveStatesAdminApi(request,env,stateMatch[1]?decodeURIComponent(stateMatch[1]):"");
   const dossierMatch=path.match(/^\/api\/admin\/archive-dossiers(?:\/([^/]+))?$/);if(dossierMatch)return archiveDossiersAdminApi(request,env,dossierMatch[1]?decodeURIComponent(dossierMatch[1]):"");
+  if(path==="/api/admin/archive-blackboards/fragments")return archiveBlackboardFragmentsGlobalAdminApi(request,env);
+  const blackboardFragmentLibraryActionMatch=path.match(/^\/api\/admin\/archive-blackboards\/fragments\/([^/]+)\/(edits|board|mappings|states|placements)$/);if(blackboardFragmentLibraryActionMatch)return archiveBlackboardFragmentsGlobalAdminApi(request,env,decodeURIComponent(blackboardFragmentLibraryActionMatch[1]),blackboardFragmentLibraryActionMatch[2]);
+  const blackboardFragmentLibraryMatch=path.match(/^\/api\/admin\/archive-blackboards\/fragments\/([^/]+)$/);if(blackboardFragmentLibraryMatch)return archiveBlackboardFragmentsGlobalAdminApi(request,env,decodeURIComponent(blackboardFragmentLibraryMatch[1]));
+  // Temporary aliases for early Fragment Library clients; the canonical base is /api/admin/archive-blackboards/fragments.
+  if(path==="/api/admin/archive-blackboard-fragments")return archiveBlackboardFragmentsGlobalAdminApi(request,env);
+  const globalBlackboardFragmentActionMatch=path.match(/^\/api\/admin\/archive-blackboard-fragments\/([^/]+)\/(edits|board|mappings|states|placements)$/);if(globalBlackboardFragmentActionMatch)return archiveBlackboardFragmentsGlobalAdminApi(request,env,decodeURIComponent(globalBlackboardFragmentActionMatch[1]),globalBlackboardFragmentActionMatch[2]);
+  const globalBlackboardFragmentMatch=path.match(/^\/api\/admin\/archive-blackboard-fragments\/([^/]+)$/);if(globalBlackboardFragmentMatch)return archiveBlackboardFragmentsGlobalAdminApi(request,env,decodeURIComponent(globalBlackboardFragmentMatch[1]));
   const blackboardFragmentPlacementsMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/fragments\/([^/]+)\/placements$/);if(blackboardFragmentPlacementsMatch)return archiveBlackboardFragmentsAdminApiV2(request,env,decodeURIComponent(blackboardFragmentPlacementsMatch[1]),decodeURIComponent(blackboardFragmentPlacementsMatch[2]),"placements");
   const blackboardFragmentStatesMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/fragments\/([^/]+)\/(?:states|captures)$/);if(blackboardFragmentStatesMatch)return archiveBlackboardFragmentsAdminApiV2(request,env,decodeURIComponent(blackboardFragmentStatesMatch[1]),decodeURIComponent(blackboardFragmentStatesMatch[2]),"states");
   const blackboardFragmentMatch=path.match(/^\/api\/admin\/archive-blackboards\/(?:records|surfaces)\/([^/]+)\/fragments(?:\/([^/]+))?$/);if(blackboardFragmentMatch)return archiveBlackboardFragmentsAdminApiV2(request,env,decodeURIComponent(blackboardFragmentMatch[1]),blackboardFragmentMatch[2]?decodeURIComponent(blackboardFragmentMatch[2]):"");
@@ -7698,11 +7958,25 @@ export async function handleConstructApi(request,env){
   const relationshipTypeMatch=path.match(/^\/api\/admin\/relationship-types(?:\/([^/]+))?$/);if(relationshipTypeMatch)return relationshipTypesApi(request,env,relationshipTypeMatch[1]?decodeURIComponent(relationshipTypeMatch[1]):"");
   const relationshipMatch=path.match(/^\/api\/admin\/relationships(?:\/([^/]+))?$/);if(relationshipMatch)return relationshipApi(request,env,relationshipMatch[1]?decodeURIComponent(relationshipMatch[1]):"");
   if(path==="/api/admin/taxonomy")return taxonomyApi(request,env);
-  const entityMediaItemMatch=path.match(/^\/api\/admin\/entities\/([^/]+)\/media\/([^/]+)$/);if(entityMediaItemMatch)return entityMediaApi(request,env,decodeURIComponent(entityMediaItemMatch[1]),decodeURIComponent(entityMediaItemMatch[2]));
-  const entityMediaMatch=path.match(/^\/api\/admin\/entities\/([^/]+)\/media$/);if(entityMediaMatch)return entityMediaApi(request,env,decodeURIComponent(entityMediaMatch[1]));
+  const entityMediaItemMatch=path.match(/^\/api\/admin\/entities\/([^/]+)\/media\/([^/]+)$/);if(entityMediaItemMatch){const entityId=decodeURIComponent(entityMediaItemMatch[1]),response=await entityMediaApi(request,env,entityId,decodeURIComponent(entityMediaItemMatch[2]));if(response.ok&&request.method!=="GET")await enqueueVisualColorEntityById(env,entityId);return response;}
+  const entityMediaMatch=path.match(/^\/api\/admin\/entities\/([^/]+)\/media$/);if(entityMediaMatch){const entityId=decodeURIComponent(entityMediaMatch[1]),response=await entityMediaApi(request,env,entityId);if(response.ok&&request.method!=="GET")await enqueueVisualColorEntityById(env,entityId);return response;}
   if(path==="/api/admin/revisions"&&request.method==="GET"){const rows=(await db(env).prepare("SELECT * FROM entity_revisions ORDER BY created_at DESC LIMIT 250").all()).results||[];return json({records:rows,count:rows.length});}
   if(path==="/api/admin/search/status"&&request.method==="GET"){const counts=await db(env).prepare("SELECT COUNT(*) documents FROM search_documents").first();const failures=await db(env).prepare("SELECT COUNT(*) failures FROM search_index_failures WHERE resolved_at IS NULL").first();return json({...counts,...failures});}
   const reorderMatch=path.match(/^\/api\/admin\/([^/]+)\/reorder$/);if(reorderMatch&&request.method==="POST")return reorder(request,env,canonicalResource(reorderMatch[1]));
   const match=path.match(/^\/api\/admin\/([^/]+)(?:\/([^/]+))?$/);if(!match)return failure("Unknown Construct API route.",404);const resource=match[1],recordId=match[2]?decodeURIComponent(match[2]):"";
-  const canonical=canonicalResource(resource);if(!recordId&&request.method==="GET")return adminList(env,canonical);if(!recordId&&request.method==="POST")return adminCreate(request,env,canonical);if(recordId&&request.method==="PATCH")return adminUpdate(request,env,canonical,recordId);if(recordId&&request.method==="DELETE")return adminUpdate(request,env,canonical,recordId,true);return failure("Method not allowed.",405);
+  const canonical=canonicalResource(resource);if(!recordId&&request.method==="GET")return adminList(env,canonical);
+  if(!recordId&&request.method==="POST"){
+    const response=await adminCreate(request,env,canonical),entityType=RESOURCE_CONFIG[canonical]?.entityType;
+    if(response.ok&&["art_work","flash_item","merch_item"].includes(entityType)){
+      const payload=await response.clone().json().catch(()=>({})),entityId=payload?.record?.id;
+      if(entityId)await enqueueVisualColorEntity(env,entityType,entityId);
+    }
+    return response;
+  }
+  if(recordId&&(request.method==="PATCH"||request.method==="DELETE")){
+    const response=await adminUpdate(request,env,canonical,recordId,request.method==="DELETE"),entityType=RESOURCE_CONFIG[canonical]?.entityType;
+    if(response.ok&&["art_work","flash_item","merch_item"].includes(entityType))await enqueueVisualColorEntity(env,entityType,recordId);
+    return response;
+  }
+  return failure("Method not allowed.",405);
 }

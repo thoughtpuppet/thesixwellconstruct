@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Archive inline viewer visual fixture</title>
+  <link rel="stylesheet" href="/css/archive-web-snapshots.css">
+  <style>
+    :root {
+      --archive-line: #744c20;
+      --archive-faint: #3a2a18;
+      --archive-muted: #b9a994;
+      --archive-text: #f5e7d4;
+      --archive-signal-soft: #b87a32;
+      --font-display: Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px; background: #0e0e0e; color: #f5e7d4; }
+    .archive-document-section { display: grid; grid-template-columns: minmax(10rem,.34fr) minmax(0,.66fr); gap: 48px; }
+    .archive-section-title { margin: 8px 0 0; text-transform: uppercase; }
+    .archive-button { min-height: 44px; border: 5px solid var(--archive-faint); background: #0e0e0e; color: var(--archive-text); }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="archive-document-section" id="website-snapshots">
+      <header class="archive-section-heading"><span>04 / Living source</span><h2 class="archive-section-title">Website snapshots</h2></header>
+      <div class="archive-web-viewer" data-archive-web-viewer data-viewport="desktop">
+        <div class="archive-web-viewer-toolbar">
+          <label class="archive-web-viewer-picker">Documented website state<select><option>First committed landing page · Version 1 · State I</option></select></label>
+          <div class="archive-web-viewer-controls"><button class="archive-button" type="button" data-viewport="desktop" aria-pressed="true">Desktop</button><button class="archive-button" type="button" data-viewport="mobile" aria-pressed="false">390 px</button><button class="archive-button" type="button" data-reset>Reset snapshot</button></div>
+        </div>
+        <article class="archive-web-snapshot-panel">
+          <header class="archive-web-snapshot-heading"><div><span>Interactive historical source</span><h3>First committed landing page</h3></div><p>The original local code runs inside an isolated viewer.</p></header>
+          <p class="archive-web-live-cue"><strong>Live historical page</strong> Scroll and interact inside the frame. Motion, timing, and response are archival evidence.</p>
+          <div class="archive-web-stage"><iframe title="Historical website snapshot" sandbox="allow-scripts" srcdoc="<!doctype html><style>body{min-height:1500px;margin:0;background:#090909;color:#fcb867;font:16px Arial;display:grid;place-items:start center}button{margin-top:80px;padding:20px;border:5px solid #fcb867;background:#111;color:#fcb867}.path{display:none;margin-top:30px}.open .path{display:block}</style><button onclick=&quot;document.body.classList.toggle('open')&quot;>Open nodes</button><div class=&quot;path&quot;>Pathways opened</div><script>let tick=0;setInterval(()=>document.body.dataset.tick=String(++tick),30)</script>"></iframe></div>
+          <section class="archive-web-behaviors"><header><span>Interaction evidence</span><h4>What to watch in this state</h4><p>Motion and response are part of the archived work.</p></header><div class="archive-web-behavior-list"><article class="archive-web-behavior"><div class="archive-web-behavior-heading"><span>Introduced</span><h5>Six living cultures</h5></div><p class="archive-web-authored-meaning"><strong>Authored meaning</strong>The six dots represent live cultures in a six-well petri dish.</p></article></div></section>
+          <details class="archive-web-screenshot"><summary>Captured evidence · generated derivative</summary></details>
+        </article>
+      </div>
+    </section>
+  </main>
+  <script>
+    const viewer = document.querySelector('[data-archive-web-viewer]');
+    document.querySelectorAll('[data-viewport]').forEach((button) => button.addEventListener('click', () => {
+      viewer.dataset.viewport = button.dataset.viewport;
+      document.querySelectorAll('[data-viewport]').forEach((entry) => entry.setAttribute('aria-pressed', String(entry === button)));
+    }));
+    document.querySelector('[data-reset]').addEventListener('click', () => {
+      const frame = document.querySelector('iframe'), source = frame.srcdoc;
+      frame.srcdoc = '';
+      requestAnimationFrame(() => { frame.srcdoc = source; });
+    });
+  </script>
+</body>
+</html>

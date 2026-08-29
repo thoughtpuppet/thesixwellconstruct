@@ -1474,6 +1474,17 @@ function sameEventStart(left, right) {
   return Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime === rightTime;
 }
 
+function distinctSourceEventIdentity(row, proposal) {
+  const rowSourceId = asString(row.source_id ?? row.sourceId);
+  const rowEventId = asString(row.source_event_id ?? row.sourceEventId);
+  return Boolean(
+    proposal.sourceId && proposal.sourceEventId
+    && rowSourceId === proposal.sourceId
+    && rowEventId
+    && rowEventId !== proposal.sourceEventId
+  );
+}
+
 async function findDuplicate(db, proposal, excludeId = "", sensitivity = 0.84) {
   if (proposal.sourceId && proposal.sourceEventId) {
     const exact = await db.prepare(
@@ -1483,10 +1494,11 @@ async function findDuplicate(db, proposal, excludeId = "", sensitivity = 0.84) {
   }
   if (proposal.sourceUrl) {
     const exactUrl = await db.prepare(
-      `SELECT id,status,title,starts_at FROM calendar_candidates
+      `SELECT id,status,title,starts_at,source_id,source_event_id FROM calendar_candidates
        WHERE source_url=? AND id<>? ORDER BY updated_at DESC`
     ).bind(proposal.sourceUrl, excludeId).all();
     for (const row of exactUrl.results || []) {
+      if (distinctSourceEventIdentity(row, proposal)) continue;
       const sameTitleAndDay = normalizeText(row.title) === normalizeText(proposal.title)
         && dateKey(row.starts_at) === dateKey(proposal.startsAt);
       if (sameEventStart(row.starts_at, proposal.startsAt) || sameTitleAndDay) {
@@ -1495,10 +1507,11 @@ async function findDuplicate(db, proposal, excludeId = "", sensitivity = 0.84) {
     }
   }
   const sameDay = await db.prepare(
-    `SELECT id,title,venue_name,starts_at FROM calendar_candidates
+    `SELECT id,title,venue_name,starts_at,source_id,source_event_id FROM calendar_candidates
      WHERE substr(COALESCE(starts_at,''),1,10)=? AND id<>?`
   ).bind(dateKey(proposal.startsAt), excludeId).all();
   for (const row of sameDay.results || []) {
+    if (distinctSourceEventIdentity(row, proposal)) continue;
     const score = similarity(row.title, proposal.title) * 0.75 + similarity(row.venue_name, proposal.venueName) * 0.25;
     if (score >= sensitivity) return { type: "candidate-similarity", id: row.id, score };
   }
@@ -6577,6 +6590,206 @@ function highArchiveRange(label) {
   };
 }
 
+function highClockRange(value) {
+  const match = asString(value).match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)\b/i);
+  if (!match) return null;
+  const meridiem = (input) => asString(input).toLowerCase().replace(/[^apm]/g, "");
+  const endMeridiem = meridiem(match[6]);
+  const explicitStartMeridiem = meridiem(match[3]);
+  const clock = (hour, minute, period) => pastedLocalTime(`${hour}:${minute || "00"}${period}`);
+  let startTime = clock(match[1], match[2], explicitStartMeridiem || endMeridiem);
+  const endTime = clock(match[4], match[5], endMeridiem);
+  if (!startTime || !endTime) return null;
+  const minutes = (input) => Number(input.slice(0, 2)) * 60 + Number(input.slice(3, 5));
+  if (!explicitStartMeridiem && minutes(startTime) >= minutes(endTime)) {
+    startTime = clock(match[1], match[2], endMeridiem === "pm" ? "am" : "pm");
+  }
+  const durationMinutes = minutes(endTime) - minutes(startTime);
+  if (!startTime || durationMinutes <= 0 || durationMinutes > 720) return null;
+  return { index:match.index, text:match[0], startTime, endTime };
+}
+
+function highArtMakingScheduleLine(html) {
+  return htmlBlocks(html)
+    .map(sourceHtmlEntities)
+    .filter((line) => /\b(?:Sun|Mon|Tues?|Wednes|Thurs?|Fri|Satur)days?\b/i.test(line)
+      && /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}/i.test(line)
+      && highClockRange(line))
+    .sort((left, right) => left.length - right.length)[0] || "";
+}
+
+function highExplicitSessionDates(line, startsAt, endsAt) {
+  const startKey = dateKey(startsAt);
+  const endKey = dateKey(endsAt);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey) || !/^\d{4}-\d{2}-\d{2}$/.test(endKey)) return [];
+  const first = new Date(`${startKey}T12:00:00Z`);
+  const last = new Date(`${endKey}T12:00:00Z`);
+  const spanDays = Math.round((last.getTime() - first.getTime()) / 86_400_000);
+  if (!Number.isFinite(spanDays) || spanDays < 1 || spanDays > 370) return [];
+  const clock = highClockRange(line);
+  const weekday = asString(line).match(/\b(Sundays?|Mondays?|Tuesdays?|Wednesdays?|Thursdays?|Fridays?|Saturdays?)\b/i);
+  if (!clock || !weekday || weekday.index >= clock.index) return [];
+  let dateText = asString(line).slice(weekday.index + weekday[0].length, clock.index);
+  const acceptedYears = new Set([first.getUTCFullYear(), last.getUTCFullYear()]);
+  const explicitYears = [...dateText.matchAll(/\b(20\d{2})\b/g)].map((match) => Number(match[1]));
+  if (explicitYears.some((year) => !acceptedYears.has(year))) return [];
+  dateText = dateText.replace(/\b20\d{2}\b/g, " ");
+
+  const monthPattern = "Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?";
+  const tokenPattern = new RegExp(`\\b(?:(${monthPattern})\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\b`, "gi");
+  const tokens = [...dateText.matchAll(tokenPattern)];
+  const remainder = dateText
+    .replace(new RegExp(tokenPattern.source, "gi"), " ")
+    .replace(/\band\b|[,&;|/\s-]/gi, "");
+  if (tokens.length < 2 || remainder) return [];
+
+  const rangeDates = new Map();
+  for (let cursor = first, scanned = 0; cursor <= last && scanned <= 370; scanned += 1) {
+    const key = cursor.toISOString().slice(0, 10);
+    const monthDay = `${cursor.getUTCMonth() + 1}-${cursor.getUTCDate()}`;
+    const values = rangeDates.get(monthDay) || [];
+    values.push(key);
+    rangeDates.set(monthDay, values);
+    cursor = new Date(cursor.getTime() + 86_400_000);
+  }
+
+  const monthNumber = (value) => ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"]
+    .indexOf(asString(value).slice(0, 3).toLowerCase()) + 1;
+  const dates = [];
+  let currentMonth = 0;
+  for (const token of tokens) {
+    if (token[1]) currentMonth = monthNumber(token[1]);
+    const day = Number(token[2]);
+    if (!currentMonth || day < 1 || day > 31) return [];
+    const choices = rangeDates.get(`${currentMonth}-${day}`) || [];
+    const next = choices.find((key) => !dates.length || key > dates.at(-1));
+    if (!next) return [];
+    dates.push(next);
+  }
+  const weekdayNumber = pastedWeekday(weekday[1]);
+  if (dates[0] !== startKey || dates.at(-1) !== endKey
+    || dates.some((key) => new Date(`${key}T12:00:00Z`).getUTCDay() !== weekdayNumber)) return [];
+  return dates;
+}
+
+function highArtMakingSeriesFromDetail(parent, html) {
+  if (asString(parent.dateKind) !== "date_range") return null;
+  const scheduleLine = highArtMakingScheduleLine(html);
+  const clock = highClockRange(scheduleLine);
+  const dates = highExplicitSessionDates(scheduleLine, parent.startsAt, parent.endsAt);
+  if (!clock || dates.length < 2) return null;
+  const timezone = asString(parent.timezone) || TIME_ZONE;
+  const occurrences = dates.map((dayKey, index) => {
+    const startsAt = canonicalCalendarDate(`${dayKey}T${clock.startTime}:00`, timezone);
+    const endsAt = canonicalCalendarDate(`${dayKey}T${clock.endTime}:00`, timezone);
+    return normalizeOccurrenceProposal({
+      sourceEventId: `${parent.sourceEventId}:${dayKey}`,
+      occurrenceType: "workshop",
+      title: highArtMakingOccurrenceTitle({ dateKind:"timed", startsAt, timezone }),
+      factualDescription: parent.factualDescription,
+      accessStatus: parent.accessStatus,
+      accessNotes: parent.accessNotes,
+      audiences: parent.audiences,
+      dateKind: "timed",
+      startsAt,
+      endsAt,
+      timezone,
+      venueName: parent.venueName,
+      venueAddress: parent.venueAddress,
+      sourceUrl: parent.sourceUrl,
+      ticketUrl: parent.ticketUrl,
+      ticketStatus: parent.ticketStatus,
+      ticketOnSaleAt: parent.ticketOnSaleAt,
+      ticketNotes: parent.ticketNotes,
+      status: "scheduled",
+      verificationState: "verified",
+      verificationNotes: "This session date and time were explicitly listed on the High Museum of Art's official course page.",
+      sortOrder: index,
+    }, parent, index);
+  });
+  return {
+    ...parent,
+    eventStructure: "series",
+    dateKind: "date_range",
+    startsAt: dates[0],
+    endsAt: dates.at(-1),
+    timezone,
+    verificationState: "verified",
+    verificationNotes: `${occurrences.length} explicitly listed sessions were retrieved from the High Museum of Art's official course page.`,
+    confidence: Math.max(Number(parent.confidence) || 0, 0.98),
+    occurrences,
+  };
+}
+
+function highArtMakingDetailTarget(event, source) {
+  if (asString(event.dateKind) !== "date_range" || asString(event.eventStructure) === "exhibition") return false;
+  if (!validHttpUrl(event.sourceUrl) || !sameOriginUrl(event.sourceUrl, source.url)) return false;
+  try {
+    const eventUrl = new URL(event.sourceUrl);
+    const sourceUrl = new URL(source.url);
+    return eventUrl.pathname !== sourceUrl.pathname && /^\/event\/[^/]+\/?$/i.test(eventUrl.pathname);
+  } catch {
+    return false;
+  }
+}
+
+async function enrichHighArtMakingEvents(events, source, sourceLimit = 100) {
+  const proposals = Array.isArray(events) ? events : [];
+  const config = parseJson(source.adapter_config_json, {});
+  const configuredLimit = Number(config.maxCourseDetails) || 24;
+  const maximumDetails = Math.min(Math.max(configuredLimit, 1), 40, Math.max(Number(sourceLimit) || 1, 1));
+  const detailTargets = proposals
+    .map((proposal, index) => ({ proposal, index }))
+    .filter(({ proposal }) => highArtMakingDetailTarget(proposal, source));
+  const attempted = detailTargets.slice(0, maximumDetails);
+  const failures = [];
+  const replacements = new Map();
+  let enrichedCount = 0;
+  const needsReview = (proposal) => ({
+    ...proposal,
+    detailScheduleUnavailable: true,
+    verificationState: "needs_verification",
+    verificationNotes: "The official category page supplied a course range, but the detail page did not yield a safe explicit session schedule. Confirm each session date and time in Studio before publication.",
+    confidence: Math.min(Number(proposal.confidence) || 0.55, 0.55),
+  });
+  const results = await mapConcurrent(attempted, 2, async ({ proposal, index }) => {
+    try {
+      const response = await fetchExternalSource(proposal.sourceUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const contentType = asString(response.headers.get("content-type"));
+      if (contentType && !/html|xhtml/i.test(contentType)) throw new Error(`Unsupported content type ${contentType}`);
+      const detail = highArtMakingSeriesFromDetail(proposal, await boundedResponseText(response));
+      if (!detail) throw new Error("The explicit course session schedule could not be parsed.");
+      return { index, proposal: detail };
+    } catch (error) {
+      return { index, fallback: needsReview(proposal), url: proposal.sourceUrl, error: asString(error.message) || "Course detail retrieval failed." };
+    }
+  });
+  for (const result of results) {
+    if (result.proposal) {
+      replacements.set(result.index, result.proposal);
+      enrichedCount += 1;
+    } else {
+      replacements.set(result.index, result.fallback);
+      failures.push({ url: result.url, error: result.error });
+    }
+  }
+  for (const { proposal, index } of detailTargets.slice(maximumDetails)) {
+    replacements.set(index, needsReview(proposal));
+    failures.push({ url: proposal.sourceUrl, error: "Course detail limit reached before this page could be checked." });
+  }
+  return {
+    proposals: proposals.map((proposal, index) => replacements.get(index) || proposal),
+    diagnostics: {
+      detailPagesDiscovered: detailTargets.length,
+      detailPagesAttempted: attempted.length,
+      detailPagesEnriched: enrichedCount,
+      detailPagesSkipped: Math.max(detailTargets.length - attempted.length, 0),
+      detailFailures: failures,
+    },
+  };
+}
+
 function htmlAttribute(tag, name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = asString(tag).match(new RegExp(`\\b${escaped}\\s*=\\s*["']([^"']*)["']`, "i"));
@@ -9491,17 +9704,19 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   }
   if (!existing && proposal.sourceId) {
     const sameSource = await db.prepare(
-      "SELECT id,title,starts_at,venue_name FROM calendar_candidates WHERE source_id=?"
+      "SELECT id,title,starts_at,venue_name,source_id,source_event_id FROM calendar_candidates WHERE source_id=?"
     ).bind(proposal.sourceId).all();
     existing = (sameSource.results || []).find((row) => (
-      normalizeText(row.title) === normalizeText(proposal.title)
+      !distinctSourceEventIdentity(row, proposal)
+      && normalizeText(row.title) === normalizeText(proposal.title)
       && sameEventStart(row.starts_at, proposal.startsAt)
       && (!row.venue_name || !proposal.venueName || similarity(row.venue_name, proposal.venueName) >= 0.5)
     )) || null;
   }
   if (!existing && proposal.sourceUrl) {
-    const rows = await db.prepare("SELECT id,title,starts_at FROM calendar_candidates WHERE source_url=?").bind(proposal.sourceUrl).all();
+    const rows = await db.prepare("SELECT id,title,starts_at,source_id,source_event_id FROM calendar_candidates WHERE source_url=?").bind(proposal.sourceUrl).all();
     existing = (rows.results || []).find((row) => {
+      if (distinctSourceEventIdentity(row, proposal)) return false;
       const sameTitleAndDay = normalizeText(row.title) === normalizeText(proposal.title)
         && dateKey(row.starts_at) === dateKey(proposal.startsAt);
       return sameEventStart(row.starts_at, proposal.startsAt) || sameTitleAndDay;
@@ -9756,9 +9971,22 @@ async function extractCandidateCheckProposal(env, candidate, registered) {
     throw error;
   }
   const staticText = await completeSourcePayload(source, await boundedResponseText(response));
-  const adapterKey = sourceAdapterKey(source);
+  const registeredAdapterKey = registered ? sourceAdapterKey(registered) : "";
+  const adapterKey = registeredAdapterKey === "high_art_making" ? registeredAdapterKey : sourceAdapterKey(source);
   let bundle;
-  if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) {
+  if (adapterKey === "high_art_making" && registered && highArtMakingDetailTarget(candidate, registered)) {
+    const proposal = highArtMakingSeriesFromDetail(candidate, staticText);
+    bundle = {
+      proposals: proposal ? [inferSubjectsAndFormats(proposal)] : [],
+      diagnostics: {
+        retrieval: "static-course-detail",
+        browserMs: 0,
+        detailPagesAttempted: 1,
+        detailPagesEnriched: proposal ? 1 : 0,
+        completeness: proposal ? "complete" : "needs_verification",
+      },
+    };
+  } else if (PLATFORM_SOURCE_ADAPTERS.has(adapterKey)) {
     bundle = await extractTicketPlatformEvents(env, staticText, source, adapterKey, { retrieval: "static", browserMs: 0 });
   } else if (adapterKey === "seven_stages") {
     bundle = await extractSevenStagesPerformanceRuns(staticText, source);
@@ -9883,6 +10111,13 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
         let retrieval = adapterKey === "localist" ? "api" : "static";
         let browserMs = 0;
         let crawlDiagnostics = {};
+        let adapterDiagnostics = {};
+        if (adapterKey === "high_art_making") {
+          const enriched = await enrichHighArtMakingEvents(proposals, source, sourceLimit);
+          proposals = enriched.proposals;
+          adapterDiagnostics = enriched.diagnostics;
+          if (enriched.diagnostics.detailPagesAttempted) retrieval = "static-course-details";
+        }
         if (!proposals.length && officialSiteCrawlEnabled(source)) {
           const crawled = await crawlOfficialSite(source, text);
           proposals = crawled.proposals;
@@ -9898,12 +10133,14 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
         proposals = proposals.map(inferSubjectsAndFormats);
         const hub = proposals.some((proposal) => proposal.eventStructure === "series");
         const childCount = proposals.reduce((sum, proposal) => sum + (proposal.occurrences || []).length, 0);
-        bundle = { proposals, diagnostics: { hubDetected: hub, childLinksDiscovered: childCount, childrenExtracted: childCount, missingChildren: [], retrieval, browserMs, ...crawlDiagnostics, completeness: hub && childCount < 2 ? "needs_verification" : "complete" } };
+        const detailFailures = adapterDiagnostics.detailFailures || [];
+        bundle = { proposals, diagnostics: { hubDetected: hub, childLinksDiscovered: childCount, childrenExtracted: childCount, missingChildren: detailFailures, retrieval, browserMs, ...crawlDiagnostics, ...adapterDiagnostics, completeness: detailFailures.length || (hub && childCount < 2) ? "needs_verification" : "complete" } };
       }
       const proposalFingerprint = JSON.stringify(bundle.proposals.map((proposal) => ({
         id: proposal.sourceEventId, title: proposal.title, startsAt: proposal.startsAt, endsAt: proposal.endsAt,
+        occurrences: (proposal.occurrences || []).map((occurrence) => ({ id:occurrence.sourceEventId, startsAt:occurrence.startsAt, endsAt:occurrence.endsAt })),
       })));
-      const fingerprint = await sha256(adapterKey === "bigtickets" || bundle.diagnostics.retrieval === "site-crawl" ? `${text}\n${proposalFingerprint}` : (text || proposalFingerprint));
+      const fingerprint = await sha256(adapterKey === "bigtickets" || adapterKey === "high_art_making" || bundle.diagnostics.retrieval === "site-crawl" ? `${text}\n${proposalFingerprint}` : (text || proposalFingerprint));
       const proposals = bundle.proposals.slice(0, sourceLimit);
       const renderedEmpty = ["browser-extraction", "beltline-rendered-details"].includes(bundle.diagnostics.retrieval);
       const emptyWarning = proposals.length ? "" : renderedEmpty
@@ -9911,19 +10148,39 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
         : bundle.diagnostics.pagesAttempted > 1
           ? `The source loaded and the Scout checked ${bundle.diagnostics.pagesAttempted} bounded same-site pages, but no event proposals were extracted. Confirm that event links use recognizable calendar, festival, program, exhibition, workshop, performance, schedule, news, or visit labels.`
           : "The source loaded, but no event proposals were extracted from Static/API structured data. Choose Dynamic fallback for JavaScript-rendered event cards, or select the matching calendar, feed, or platform adapter, then run this source again.";
-      if (emptyWarning) warningCount += 1;
+      const detailWarning = bundle.diagnostics.detailFailures?.length
+        ? `${bundle.diagnostics.detailFailures.length} course detail page(s) could not be safely expanded into session dates.`
+        : "";
+      const sourceWarning = emptyWarning || detailWarning;
+      if (sourceWarning) warningCount += 1;
       const sourceOutcome = {
         sourceId: source.id,
         url: source.url,
         adapter: adapterKey,
-        status: emptyWarning ? "warning" : "ok",
+        status: sourceWarning ? "warning" : "ok",
         proposals: proposals.length,
         changed: fingerprint !== source.content_fingerprint,
-        ...(emptyWarning ? { warning: emptyWarning } : {}),
+        ...(sourceWarning ? { warning: sourceWarning } : {}),
         ...bundle.diagnostics,
       };
       const skippedReasons = {};
       for (const proposal of proposals) {
+        if (proposal.detailScheduleUnavailable && proposal.sourceId && proposal.sourceEventId) {
+          const existing = await db.prepare(
+            "SELECT id FROM calendar_candidates WHERE source_id=? AND source_event_id=? LIMIT 1"
+          ).bind(proposal.sourceId, proposal.sourceEventId).first();
+          if (existing) {
+            const candidate = await getCandidate(db, existing.id, false);
+            await recordCandidateCheckFailure(
+              db,
+              candidate,
+              "source_unavailable",
+              "The course category was reachable, but its detail page did not yield a safe explicit session schedule. Existing verified facts were left unchanged.",
+            );
+            skippedReasons.detail_schedule_unavailable = (skippedReasons.detail_schedule_unavailable || 0) + 1;
+            continue;
+          }
+        }
         const needsSourceResolution = leadSource(source) && sourceAuthorityErrors(proposal).length > 0;
         const resolved = needsSourceResolution ? await resolveDiscoveryProposal(env, db, profile, source, proposal) : { proposal, citations: [], audit: null };
         const stored = await upsertScoutProposal(env, db, resolved.proposal, "source_monitor", [

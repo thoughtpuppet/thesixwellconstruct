@@ -200,9 +200,14 @@
 .place-evidence-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: var(--archive-record-gap);
   margin-top: clamp(2rem, 5vw, 3rem);
   scroll-margin-top: 7rem;
+}
+
+.place-evidence-grid--single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .place-evidence-figure {

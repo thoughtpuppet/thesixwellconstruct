@@ -1,10 +1,11 @@
 import { db, failure, id, json, readJson, text } from "../_shared/construct.js";
 import {
-  handleVisualColorAdmin,
-  handleVisualColorPublic,
-  isAtomicFamilyName,
-  runVisualColorAnalysisPass,
-} from "./_visual-colors.js";
+  handleAutomaticVisualColorAdmin,
+  handleAutomaticVisualColorPublic,
+  reconcileVisualColorAnalysis,
+  runAutomaticVisualColorPass,
+} from "./_automatic-visual-colors.js";
+import { isAtomicFamilyName } from "./_visual-colors.js";
 
 const MATERIAL_KINDS = new Set([
   "raw-pigment","art-paint","tattoo-ink","medium-diluent","additive",
@@ -1624,7 +1625,7 @@ async function adminDossierPalette(request,database,stateId="",part="",recordId=
 }
 
 export async function handleArchiveColorMaterialsPublic(request, env, path) {
-  const visual=await handleVisualColorPublic(request,env,path);if(visual)return visual;
+  const visual=await handleAutomaticVisualColorPublic(request,env,path);if(visual)return visual;
   if (path === "/api/archive/colors") return publicColors(request,env);
   const color = path.match(/^\/api\/archive\/colors\/([^/]+)$/);
   if (color) return publicColors(request,env,decodeURIComponent(color[1]));
@@ -1637,7 +1638,7 @@ export async function handleArchiveColorMaterialsPublic(request, env, path) {
 }
 
 export async function handleArchiveColorMaterialsAdmin(request, env, path) {
-  const visual=await handleVisualColorAdmin(request,env,path);if(visual)return visual;
+  const visual=await handleAutomaticVisualColorAdmin(request,env,path);if(visual)return visual;
   const database=db(env);
   const product=path.match(/^\/api\/admin\/archive-color-materials\/products(?:\/([^/]+))?$/);
   if(product)return adminProducts(request,database,product[1]?decodeURIComponent(product[1]):"");
@@ -1658,11 +1659,11 @@ export async function handleArchiveColorMaterialsAdmin(request, env, path) {
   const declared=path.match(/^\/api\/admin\/archive-color-materials\/declared-pigments(?:\/([^/]+))?$/);
   if(declared)return adminDeclaredPigments(request,database,declared[1]?decodeURIComponent(declared[1]):"");
   const family=path.match(/^\/api\/admin\/archive-color-materials\/families(?:\/([^/]+))?$/);
-  if(family)return adminFamilies(request,database,family[1]?decodeURIComponent(family[1]):"");
+  if(family){const response=await adminFamilies(request,database,family[1]?decodeURIComponent(family[1]):"");if(response.ok&&request.method!=="GET")await reconcileVisualColorAnalysis(env);return response;}
   const assignment=path.match(/^\/api\/admin\/archive-color-materials\/family-assignments(?:\/([^/]+))?$/);
   if(assignment)return adminFamilyAssignments(request,database,assignment[1]?decodeURIComponent(assignment[1]):"");
   const referenceColor=path.match(/^\/api\/admin\/archive-color-materials\/reference-colors(?:\/([^/]+))?$/);
-  if(referenceColor)return adminReferenceColors(request,database,referenceColor[1]?decodeURIComponent(referenceColor[1]):"");
+  if(referenceColor){const response=await adminReferenceColors(request,database,referenceColor[1]?decodeURIComponent(referenceColor[1]):"");if(response.ok&&request.method!=="GET")await reconcileVisualColorAnalysis(env);return response;}
   const privateAsset=path.match(/^\/api\/admin\/archive-color-materials\/(batches|equipment-assets)(?:\/([^/]+))?$/);
   if(privateAsset)return adminPrivateAssets(request,database,privateAsset[1],privateAsset[2]?decodeURIComponent(privateAsset[2]):"");
   if(path==="/api/admin/archive-color-materials"&&request.method==="GET")return json(await librarySnapshot(database));
@@ -1671,4 +1672,4 @@ export async function handleArchiveColorMaterialsAdmin(request, env, path) {
   return null;
 }
 
-export { ciede2000, runVisualColorAnalysisPass, srgbHexToReferenceProfile };
+export { ciede2000, runAutomaticVisualColorPass as runVisualColorAnalysisPass, srgbHexToReferenceProfile };

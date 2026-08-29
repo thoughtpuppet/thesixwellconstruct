@@ -273,6 +273,42 @@ test("website starter, immutable R2 source trees, scans, preview tokens, and pub
   assert.equal(sql.prepare("SELECT tree_sha256 FROM archive_web_snapshots WHERE id=?").get(snapshotId).tree_sha256, sourceTreeBeforeCapture);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_web_snapshot_files WHERE snapshot_id=?").get(snapshotId).count, 5);
 
+  const unauthenticatedBehaviors = await handleConstructApi(request(`/api/admin/archive-web-snapshots/${snapshotId}/behaviors`, {
+    method: "PUT", body: { records: [] },
+  }), env);
+  assert.equal(unauthenticatedBehaviors.status, 401);
+  const behaviorRecord = await responseJson(await handleConstructApi(request(`/api/admin/archive-web-snapshots/${snapshotId}/behaviors`, {
+    method: "PUT", admin: true, body: { records: [
+      {
+        behavior_key: "six-living-cultures",
+        title: "Six living cultures",
+        evolution_role: "introduced",
+        interaction_prompt: "Watch the six dots before opening the construct.",
+        observed_behavior: "Six dots orbit and vibrate before becoming six medium nodes.",
+        authored_meaning: "The six dots represent live cultures in a six-well petri dish.",
+        meaning_status: "curator-authored",
+        source_path: "index.html",
+        source_symbol: "drawRing; deployNodes",
+        public_visible: true,
+        sort_order: 10,
+      },
+      {
+        behavior_key: "breathing-eyes",
+        title: "Breathing eyes",
+        evolution_role: "introduced",
+        observed_behavior: "Ten eye rings breathe on a shared sine cycle.",
+        meaning_status: "pending-interpretation",
+        source_path: "index.html",
+        public_visible: false,
+        sort_order: 20,
+      },
+    ] },
+  }), env));
+  assert.equal(behaviorRecord.status, 200, behaviorRecord.body.error);
+  assert.equal(behaviorRecord.body.record.behaviors.length, 2);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_web_snapshot_behaviors WHERE snapshot_id=?").get(snapshotId).count, 2);
+  assert.equal(sql.prepare("SELECT tree_sha256 FROM archive_web_snapshots WHERE id=?").get(snapshotId).tree_sha256, sourceTreeBeforeCapture, "behavior notes do not mutate source evidence");
+
   const preview = await responseJson(await handleConstructApi(request(`/api/admin/archive-web-snapshots/${snapshotId}/preview`, { method: "POST", admin: true, body: {} }), env));
   assert.equal(preview.status, 200, preview.body.error);
   assert.match(preview.body.preview.token, /^v1\.\d+\.[A-Za-z0-9_-]+$/);
@@ -309,6 +345,9 @@ test("website starter, immutable R2 source trees, scans, preview tokens, and pub
   assert.equal(publicDetail.body.web_snapshots.length, 1);
   assert.equal(publicDetail.body.web_snapshots[0].tree_sha256, finalized.body.record.tree_sha256);
   assert.equal(publicDetail.body.web_snapshots[0].screenshot_url, seedCapture.body.capture.public_url);
+  assert.equal(publicDetail.body.web_snapshots[0].behaviors.length, 1, "only explicitly public behavior notes enter the public projection");
+  assert.equal(publicDetail.body.web_snapshots[0].behaviors[0].behavior_key, "six-living-cultures");
+  assert.equal(publicDetail.body.web_snapshots[0].behaviors[0].meaning_status, "curator-authored");
   const publicCapture = await handleArchiveViewerRequest(new Request(seedCapture.body.capture.public_url), env);
   assert.equal(publicCapture.status, 200);
   assert.equal(publicCapture.headers.get("x-archive-derivative-role"), "generated-viewer-capture");
@@ -475,7 +514,7 @@ test("raw imports reject unsafe packages and report srcset, root paths, dynamic 
   <button onclick="if (1 > 0) location.assign.call(location, '/call')">Call</button>
   <button onmouseover='const replace=location.replace.bind(location);replace("/bound")'>Bound</button>
   <button onfocus=loc\\u0061tion.reload()>Escaped</button>
-  <button onkeydown="document.createElement('script')">Script construction</button>
+  <button onkeydown="document.createElement(tagName)">Dynamic script construction</button>
   <button onkeyup="document.body.setAttribute('onmouseover', code)">Handler construction</button><script>
     new URL('./engine.wasm', import.meta.url); import('./views/' + page); const navigationAlias = location;
   </script>`;

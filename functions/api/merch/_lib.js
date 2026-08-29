@@ -2,6 +2,7 @@ import { fetchCatalog as fetchShopifyCatalog, fetchProductByHandle } from "../sh
 import { captureMarketingConsent } from "../outreach/_lib.js";
 import { db, failure, json, readJson, requireStudioAdmin, text } from "../_shared/construct.js";
 import { ensureEditableArchiveDossier } from "../_shared/archive-dossiers.js";
+import { enqueueVisualColorEntity } from "../construct/_automatic-visual-colors.js";
 import {
   publishTemplateDraft,
   saveTemplateDraft,
@@ -617,7 +618,15 @@ export async function handleAdminMerchApi(request, env) {
   const database = db(env);
   if (path === "/api/admin/merch-workflow") {
     if (request.method === "GET") return json(await adminList(database, env));
-    if (request.method === "POST") return createMerch(request, env);
+    if (request.method === "POST") {
+      const response = await createMerch(request, env);
+      if (response.ok) {
+        const payload = await response.clone().json().catch(() => ({}));
+        const entityId = payload?.record?.id || payload?.item?.id || payload?.id;
+        if (entityId) await enqueueVisualColorEntity(env, "merch_item", entityId);
+      }
+      return response;
+    }
   }
   if (path === "/api/admin/merch-workflow/import-shopify" && request.method === "POST") return importShopifyProduct(request, env);
   const templateMatch = path.match(/^\/api\/admin\/merch-workflow\/templates\/([^/]+)(?:\/(publish))?$/);
@@ -633,6 +642,11 @@ export async function handleAdminMerchApi(request, env) {
     return failure("Method not allowed.", 405);
   }
   const itemMatch = path.match(/^\/api\/admin\/merch-workflow\/([^/]+)$/);
-  if (itemMatch && request.method === "PATCH") return updateMerch(request,env,decodeURIComponent(itemMatch[1]));
+  if (itemMatch && request.method === "PATCH") {
+    const entityId = decodeURIComponent(itemMatch[1]);
+    const response = await updateMerch(request,env,entityId);
+    if (response.ok) await enqueueVisualColorEntity(env, "merch_item", entityId);
+    return response;
+  }
   return failure("Unknown Merch Studio route.", 404);
 }

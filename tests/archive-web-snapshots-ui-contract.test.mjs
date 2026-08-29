@@ -22,6 +22,16 @@ test("Studio exposes the Website Inception workspace and keeps creation private"
   assert.match(manager, /Private working boundary/);
   assert.match(manager, /source_kind: "upload"/);
   assert.match(manager, /lineage_role: form\.elements\.lineage_role\.value/);
+  assert.match(manager, /First committed landing page/);
+  assert.match(manager, /Puzzle \/ Entry Room introduced/);
+  assert.match(manager, /Puzzle \/ Entry Room becomes the root/);
+  assert.match(manager, /Interaction evolution/);
+  assert.match(manager, /97aa62f[\s\S]*ring moves to 17% viewport height[\s\S]*shrinks to 62%/);
+  assert.match(manager, /70037f4[\s\S]*current 26% top and 93% bottom positions/);
+  assert.match(manager, /The eyes alternate; they do not blink/);
+  assert.match(manager, /data-snapshot-behaviors/);
+  assert.match(manager, /six-living-cultures/);
+  assert.match(manager, /curator-authored/);
 });
 
 test("Studio stages entry, additional, and folder files with the bounded import contract", () => {
@@ -66,14 +76,18 @@ test("dependency findings and Git candidates stay actionable curatorial gates", 
   assert.doesNotMatch(replacementFlow, /uploadEntries/, "external replacements never enter the immutable source-file uploader");
 });
 
-test("Studio hydrates signed capture URLs for pending candidates and snapshot fallbacks", () => {
+test("Studio keeps captures as secondary evidence beside the inline live specimen", () => {
   const manager = source("studio", "archive-web-snapshots-manager.js");
   assert.match(manager, /\$\{CANDIDATE_ENDPOINT\}\/\$\{encodeURIComponent\(candidateId\)\}\/captures\/\$\{viewport\}\/preview/);
   assert.match(manager, /loadCandidateCapturePreviews/);
   assert.match(manager, /loadSnapshotCapturePreviews/);
   assert.match(manager, /\/captures\/\$\{viewport\}\/preview/);
-  assert.match(manager, /snapshotCaptureUrls\.get\(`\$\{id\}:desktop`\)/);
+  assert.match(manager, /snapshotCaptureUrls\.get\(`\$\{id\}:\$\{viewport\}`\)/);
   assert.match(manager, /Generated viewer derivative/);
+  assert.match(manager, /Inline live specimen/);
+  assert.match(manager, /Live source is paused/);
+  assert.doesNotMatch(manager.slice(manager.indexOf("function previewMarkup"), manager.indexOf("function snapshotCaptureMarkup")), /<img/);
+  assert.match(manager, /Captured evidence · generated derivatives/);
 });
 
 test("the public dossier renders only isolated approved viewer URLs from its projection", () => {
@@ -93,7 +107,10 @@ test("the public dossier renders only isolated approved viewer URLs from its pro
   assert.match(publicJs, /referrerpolicy="no-referrer"/);
   assert.match(publicJs, /data-archive-web-viewport="mobile"/);
   assert.match(publicJs, /Reset snapshot/);
-  assert.match(publicJs, /Generated fallback capture/);
+  assert.match(publicJs, /Live historical page/);
+  assert.match(publicJs, /Captured evidence · generated derivative/);
+  assert.match(publicJs, /frame\.removeAttribute\("src"\)/, "inactive snapshots stop running in the background");
+  assert.match(publicJs, /webSnapshotBehaviorMarkup/);
   assert.match(publicJs, /setupArchiveWebSnapshots\(\)/);
   assert.doesNotMatch(webViewerSource, /preview_url|previewUrl/);
 });
@@ -104,6 +121,8 @@ test("the snapshot surfaces use the Archive five-pixel structural rule", () => {
   assert.match(css, /\.aws-workspace[\s\S]*?border: 5px solid/);
   assert.match(css, /\.archive-web-stage[\s\S]*?border: 5px solid/);
   assert.match(css, /\.archive-web-provenance[\s\S]*?border: 5px solid/);
+  assert.match(css, /#website-snapshots\.archive-document-section[\s\S]*?grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /\.archive-web-stage[\s\S]*?height: clamp\(34rem, 72dvh, 50rem\)/);
   assert.doesNotMatch(css, /border(?:-top|-right|-bottom|-left)?:\s*1px\b/);
   assert.doesNotMatch(css, /(?:html|body)\s*(?:,|\{)/);
 });

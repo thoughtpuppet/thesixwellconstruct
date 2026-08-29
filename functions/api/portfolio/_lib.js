@@ -7,6 +7,7 @@ import {
 } from "../_shared/tattoo-styles.js";
 import { ensureEditableArchiveDossier } from "../_shared/archive-dossiers.js";
 import { serveR2Media } from "../_shared/r2-media.js";
+import { enqueueVisualColorEntity } from "../construct/_automatic-visual-colors.js";
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 const MAX_DELETE_ROLLBACK_BYTES = 60 * 1024 * 1024;
@@ -1194,7 +1195,15 @@ export async function handlePortfolioApi(request, env) {
     }
     if (path === "/api/admin/portfolio") {
       if (method === "GET") return listAdmin(request, env);
-      if (method === "POST") return createUpload(request, env);
+      if (method === "POST") {
+        const response = await createUpload(request, env);
+        if (response.ok) {
+          const payload = await response.clone().json().catch(() => ({}));
+          const entityId = payload?.item?.id || payload?.record?.id || payload?.id;
+          if (entityId) await enqueueVisualColorEntity(env, "portfolio_item", entityId);
+        }
+        return response;
+      }
       return methodNotAllowed(["GET", "POST"]);
     }
     if (path === "/api/admin/portfolio/reorder") {
@@ -1228,22 +1237,34 @@ export async function handlePortfolioApi(request, env) {
     const imageUploadMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/images$/);
     if (imageUploadMatch) {
       if (method !== "POST") return methodNotAllowed(["POST"]);
-      return await createAngleUpload(request, env, decodeURIComponent(imageUploadMatch[1]));
+      const entityId = decodeURIComponent(imageUploadMatch[1]);
+      const response = await createAngleUpload(request, env, entityId);
+      if (response.ok) await enqueueVisualColorEntity(env, "portfolio_item", entityId);
+      return response;
     }
     const imageDocumentationMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/images\/([^/]+)$/);
     if (imageDocumentationMatch) {
       if (method !== "PATCH") return methodNotAllowed(["PATCH"]);
-      return await patchImageDocumentation(request, env, decodeURIComponent(imageDocumentationMatch[1]), decodeURIComponent(imageDocumentationMatch[2]));
+      const entityId = decodeURIComponent(imageDocumentationMatch[1]);
+      const response = await patchImageDocumentation(request, env, entityId, decodeURIComponent(imageDocumentationMatch[2]));
+      if (response.ok) await enqueueVisualColorEntity(env, "portfolio_item", entityId);
+      return response;
     }
     const angleOrderMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/angles\/reorder$/);
     if (angleOrderMatch) {
       if (method !== "POST") return methodNotAllowed(["POST"]);
-      return reorderAngles(request, env, decodeURIComponent(angleOrderMatch[1]));
+      const entityId = decodeURIComponent(angleOrderMatch[1]);
+      const response = await reorderAngles(request, env, entityId);
+      if (response.ok) await enqueueVisualColorEntity(env, "portfolio_item", entityId);
+      return response;
     }
     const angleMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/angles\/([^/]+)$/);
     if (angleMatch) {
       if (method !== "DELETE") return methodNotAllowed(["DELETE"]);
-      return deleteAngle(request, env, decodeURIComponent(angleMatch[1]), decodeURIComponent(angleMatch[2]));
+      const entityId = decodeURIComponent(angleMatch[1]);
+      const response = await deleteAngle(request, env, entityId, decodeURIComponent(angleMatch[2]));
+      if (response.ok) await enqueueVisualColorEntity(env, "portfolio_item", entityId);
+      return response;
     }
     const permanentMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/permanent$/);
     if (permanentMatch) {
@@ -1252,8 +1273,16 @@ export async function handlePortfolioApi(request, env) {
     }
     if (path.startsWith("/api/admin/portfolio/")) {
       const id = decodeURIComponent(path.slice("/api/admin/portfolio/".length));
-      if (method === "PATCH") return await patchItem(request, env, id);
-      if (method === "DELETE") return archiveItem(request, env, id);
+      if (method === "PATCH") {
+        const response = await patchItem(request, env, id);
+        if (response.ok) await enqueueVisualColorEntity(env, "portfolio_item", id);
+        return response;
+      }
+      if (method === "DELETE") {
+        const response = await archiveItem(request, env, id);
+        if (response.ok) await enqueueVisualColorEntity(env, "portfolio_item", id);
+        return response;
+      }
       return methodNotAllowed(["PATCH", "DELETE"]);
     }
     return errorResponse("Unknown portfolio API route.", 404);

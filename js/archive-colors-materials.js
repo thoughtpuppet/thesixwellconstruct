@@ -44,7 +44,7 @@
     return `<button class="archive-color-family" type="button" data-visual-color="${esc(family.slug)}" aria-haspopup="dialog"><span class="archive-color-family-swatch" style="--swatch:${esc(family.swatch_hex)}" aria-hidden="true"></span><span class="archive-color-family-copy"><strong>${esc(family.name)}</strong><span>${Number(family.count || 0)} ${Number(family.count || 0) === 1 ? "work" : "works"}</span></span></button>`;
   }
   function descriptorCard(descriptor) {
-    return `<article class="archive-descriptor-card"><span class="archive-reference-kicker">${esc(label(descriptor.kind))}</span><h3>${esc(descriptor.name)}</h3><p>${Number(descriptor.count || 0)} documented ${Number(descriptor.count || 0) === 1 ? "work" : "works"}</p><div class="archive-reference-meta"><span>${Number(descriptor.painting_count || 0)} paintings</span><span>${Number(descriptor.tattoo_count || 0)} tattoos</span></div></article>`;
+    return `<article class="archive-descriptor-card"><span class="archive-reference-kicker">${esc(label(descriptor.kind))}</span><h3>${esc(descriptor.name)}</h3><p>${Number(descriptor.count || 0)} documented ${Number(descriptor.count || 0) === 1 ? "work" : "works"}</p><div class="archive-reference-meta"><span>${Number(descriptor.painting_count || 0)} paintings</span><span>${Number(descriptor.tattoo_count || 0)} tattoos</span><span>${Number(descriptor.flash_count || 0)} flash</span><span>${Number(descriptor.merch_count || 0)} merch</span></div></article>`;
   }
   function workCard(work) {
     const image = safeUrl(work.image);
@@ -64,7 +64,7 @@
       const colors = colorsPayload.colors || [];
       const materials = materialsPayload.materials || [];
       app.innerHTML = `<header class="archive-reference-hero site-hero site-hero--landing"><div><span class="archive-kicker">Archive reference library</span><h1 class="hero-title">Colors &amp; Materials</h1></div><p class="hero-descriptor">Named mixtures, direct products, declared pigments, finishes, tools, supports, and other reviewed evidence shared across Art and Tattoo.</p></header>
-        <section class="archive-reference-section archive-visual-family-section" aria-labelledby="visual-families-title"><header class="archive-reference-section-head"><div><span class="archive-reference-kicker">General color use</span><h2 id="visual-families-title">Visual color families</h2></div><span class="archive-reference-count">${visualFamilies.length} active families</span></header><p class="archive-reference-section-copy">Broad, reviewed color presence across finished paintings and tattoos. Exact mixtures and products remain documented separately.</p><div class="archive-color-family-grid">${visualFamilies.map(familyButton).join("") || '<div class="archive-reference-empty"><p>No reviewed visual color families are public yet.</p></div>'}</div></section>
+        <section class="archive-reference-section archive-visual-family-section" aria-labelledby="visual-families-title"><header class="archive-reference-section-head"><div><span class="archive-reference-kicker">General color use</span><h2 id="visual-families-title">Visual color families</h2></div><span class="archive-reference-count">${visualFamilies.length} active families</span></header><p class="archive-reference-section-copy">Broad color presence across published paintings, tattoos, flash, and merch. Exact mixtures and products remain documented separately.</p><div class="archive-color-family-grid">${visualFamilies.map(familyButton).join("") || '<div class="archive-reference-empty"><p>No visual color families are public yet.</p></div>'}</div></section>
         <section class="archive-reference-section" aria-labelledby="work-descriptors-title"><header class="archive-reference-section-head"><div><span class="archive-reference-kicker">Reviewed facts</span><h2 id="work-descriptors-title">Mediums &amp; supports</h2></div><span class="archive-reference-count">${descriptors.length} documented terms</span></header><div class="archive-descriptor-grid">${descriptors.map(descriptorCard).join("") || '<div class="archive-reference-empty"><p>No reviewed medium or support facts are public yet.</p></div>'}</div></section>
         <section class="archive-reference-section archive-documented-library" aria-labelledby="documented-library-title"><header class="archive-reference-section-head"><div><span class="archive-reference-kicker">Exact documentation</span><h2 id="documented-library-title">Documented recipe &amp; material library</h2></div></header><form class="archive-reference-tools" data-reference-tools><label>Search documented recipes &amp; materials<input type="search" name="q" autocomplete="off" placeholder="Color, brand, pigment, tool…"></label><label>Material category<select name="kind"><option value="">All categories</option>${[...new Set(materials.map((item) => item.material_kind))].sort().map((kind) => `<option value="${esc(kind)}">${esc(label(kind))}</option>`).join("")}</select></label></form></section>
         <section class="archive-reference-section" aria-labelledby="named-colors-title"><header class="archive-reference-section-head"><h2 id="named-colors-title">Named colors</h2><span class="archive-reference-count" data-color-count>${colors.length} published</span></header><div class="archive-reference-grid" data-color-grid>${colors.map(colorCard).join("") || '<div class="archive-reference-empty"><p>No named colors are public yet.</p></div>'}</div></section>
@@ -99,7 +99,7 @@
       const stateFromUrl = () => {
         const params = new URLSearchParams(location.search);
         const slug = params.get("visual_color") || "";
-        const type = ["all", "painting", "tattoo"].includes(params.get("work_type")) ? params.get("work_type") : "all";
+        const type = ["all", "painting", "tattoo", "flash", "merch"].includes(params.get("work_type")) ? params.get("work_type") : "all";
         return { slug, type };
       };
       const updateUrl = (slug, type, mode = "push") => {
@@ -127,7 +127,7 @@
         hideDialog(true);
       };
       const renderFilters = (slug, type) => {
-        const choices = [["all", "All"], ["painting", "Paintings"], ["tattoo", "Tattoos"]];
+        const choices = [["all", "All"], ["painting", "Paintings"], ["tattoo", "Tattoos"], ["flash", "Flash"], ["merch", "Merch"]];
         const host = dialog.querySelector("[data-dialog-filters]");
         host.innerHTML = choices.map(([value, name]) => `<button type="button" data-dialog-filter="${value}" aria-pressed="${String(value === type)}">${name}</button>`).join("");
         host.querySelectorAll("[data-dialog-filter]").forEach((button) => button.addEventListener("click", () => openFamily(slug, button.dataset.dialogFilter, "push")));

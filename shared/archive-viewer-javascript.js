@@ -29,7 +29,8 @@ function maskJavaScriptNonCode(value, findings = null) {
         for (const expression of literal.matchAll(/\$\{([\s\S]*?)\}/g)) {
           const code = decodeIdentifierEscapes(expression[1]);
           const directNavigation = /\blocation\s*(?:\.|\?\.)\s*(?:assign|replace|reload)\s*(?:\?\.)?\s*\(|\blocation\s*(?:\.|\?\.)\s*(?:href|pathname|search|hash|protocol|host|hostname|port)\s*(?:\|\|=|&&=|\?\?=|\+=|-=|\*=|\/=|%=|=(?!=|>))|\blocation\s*=(?!=|>)|\bnavigation\s*(?:\.|\?\.)\s*(?:navigate|back|forward|reload|traverseTo)\s*(?:\?\.)?\s*\(|\bhistory\s*(?:\.|\?\.)\s*(?:go|back|forward)\s*(?:\?\.)?\s*\(/.test(code);
-          if (directNavigation || unrewritableJavaScriptNavigationFindings(code).length) {
+          const scriptConstruction = /\bcreateElement(?:NS)?\s*\([^)]*["'`]script["'`]/i.test(code);
+          if (directNavigation || scriptConstruction || unrewritableJavaScriptNavigationFindings(code).length) {
             findings.add("template-expression-navigation");
             break;
           }
@@ -93,6 +94,8 @@ function callArguments(source, masked, pattern) {
       else if (character === ")") {
         if (!depth) {
           argumentsFound.push(source.slice(argumentStart, index).trim());
+          argumentsFound.callStart = match.index;
+          argumentsFound.callEnd = index + 1;
           closed = true;
           break;
         }
@@ -126,11 +129,14 @@ function staticJavaScriptString(value) {
 function addDynamicCodeConstructionFindings(source, masked, findings) {
   for (const argumentsFound of callArguments(source, masked, /\bcreateElement\s*\(/g)) {
     const tagName = staticJavaScriptString(argumentsFound[0]);
-    if (tagName === null || tagName.toLowerCase() === "script") findings.add("dynamic-script-construction");
+    // A literal script element is deterministically rewritten to an inert
+    // template element. Dynamic tag names still fail closed because they
+    // cannot be proven safe without executing the historical program.
+    if (tagName === null) findings.add("dynamic-script-construction");
   }
   for (const argumentsFound of callArguments(source, masked, /\bcreateElementNS\s*\(/g)) {
     const tagName = staticJavaScriptString(argumentsFound[1]);
-    if (tagName === null || tagName.toLowerCase() === "script") findings.add("dynamic-script-construction");
+    if (tagName === null) findings.add("dynamic-script-construction");
   }
   for (const argumentsFound of callArguments(source, masked, /\bsetAttribute\s*\(/g)) {
     const attributeName = staticJavaScriptString(argumentsFound[0]);
@@ -216,6 +222,11 @@ function addSupportedGlobalCapabilityFindings(source, masked, findings) {
     }
     const member = /^\s*(?:\?\.|\.)\s*([A-Za-z_$][\w$]*)/.exec(after);
     if (!member) {
+      // `top` is a frequent local geometry binding (`const { top } = rect`).
+      // When the source declares it locally, subsequent bare uses refer to
+      // that binding rather than the cross-frame global. Actual `top.location`
+      // access still follows the global capability path and is rewritten.
+      if (token === "top" && /\b(?:const|let|var)\s*(?:top\b|\{[^}\r\n]{0,1000}\btop\b[^}\r\n]{0,1000}\}\s*=)/.test(masked)) continue;
       findings.add("unsupported-global-capability-context");
       continue;
     }
@@ -296,6 +307,17 @@ export function rewriteJavaScriptForViewer(value) {
   const collect = (pattern, replacement) => {
     for (const match of masked.matchAll(pattern)) replacements.push({ start: match.index, end: match.index + match[0].length, replacement });
   };
+  const collectInertScriptCreations = (pattern, tagArgumentIndex = 0) => {
+    for (const argumentsFound of callArguments(source, masked, pattern)) {
+      const tagName = staticJavaScriptString(argumentsFound[tagArgumentIndex]);
+      if (String(tagName || "").toLowerCase() !== "script") continue;
+      replacements.push({
+        start: argumentsFound.callStart,
+        end: argumentsFound.callEnd,
+        replacement: 'createElement("template")',
+      });
+    }
+  };
   const globalLocation = String.raw`(?<![\w$?.])(?:(?:window|self|globalThis|document|top|parent)\s*(?:\.|\?\.)\s*)?location`;
   const globalHistory = String.raw`(?<![\w$?.])(?:(?:window|self|globalThis)\s*(?:\.|\?\.)\s*)?history`;
   const globalNavigation = String.raw`(?<![\w$?.])(?:(?:window|self|globalThis)\s*(?:\.|\?\.)\s*)?navigation`;
@@ -305,6 +327,8 @@ export function rewriteJavaScriptForViewer(value) {
   collect(new RegExp(String.raw`\b(?:window|self|globalThis|document|top|parent)\s*(?:\.|\?\.)\s*location\s*${assignment}`, "g"), "globalThis.__archiveViewerNavigationTarget =");
   collect(new RegExp(String.raw`\b${globalHistory}\s*(?:\.|\?\.)\s*(?:go|back|forward)\s*(?:\?\.)?\s*\(`, "g"), "globalThis.__archiveViewerBlockNavigation(");
   collect(new RegExp(String.raw`\b${globalNavigation}\s*(?:\.|\?\.)\s*(?:navigate|back|forward|reload|traverseTo)\s*(?:\?\.)?\s*\(`, "g"), "globalThis.__archiveViewerBlockNavigation(");
+  collectInertScriptCreations(/\bcreateElement\s*\(/g);
+  collectInertScriptCreations(/\bcreateElementNS\s*\(/g, 1);
   replacements.sort((left, right) => left.start - right.start || right.end - left.end);
   let output = "", cursor = 0;
   for (const item of replacements) {

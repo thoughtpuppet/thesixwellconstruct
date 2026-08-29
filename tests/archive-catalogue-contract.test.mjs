@@ -911,6 +911,25 @@ test("public Archive media prefers explicit evidence, then explicitly public can
 test("Studio lists Archive People and Places without requiring sortable columns", async () => {
   const db = database();
   const runtime = env(db);
+  const erikson = db.prepare(`
+    SELECT p.name,p.slug,p.public_location,p.private_location,p.privacy,p.state,
+      e.entity_type,e.node_id,e.visibility,e.search_visibility
+    FROM places p
+    JOIN content_entities e ON e.id=p.id
+    WHERE p.id='place-jr-erikson-building'
+  `).get();
+  assert.deepEqual({ ...erikson }, {
+    name: "J.R. Erikson Co. Building",
+    slug: "jr-erikson-building",
+    public_location: "364 Nelson Street SW, Atlanta, GA 30313",
+    private_location: "",
+    privacy: "public",
+    state: "published",
+    entity_type: "place",
+    node_id: "node-archive",
+    visibility: "public",
+    search_visibility: 1,
+  });
   db.exec(`
     INSERT INTO content_entities(id,entity_type,node_id,created_at,updated_at) VALUES
       ('person-alpha-list-test','person','archive',datetime('now'),datetime('now')),
@@ -933,7 +952,7 @@ test("Studio lists Archive People and Places without requiring sortable columns"
   const placesResponse = await handleConstructApi(request("/api/admin/places", { admin: true }), runtime);
   assert.equal(placesResponse.status, 200);
   const places = (await placesResponse.json()).records;
-  assert.deepEqual(places.map((record) => record.name), ["Alpha Place", "Purple Fish Studios", "Zulu Place"]);
+  assert.deepEqual(places.map((record) => record.name), ["Alpha Place", "J.R. Erikson Co. Building", "Purple Fish Studios", "Zulu Place"]);
 });
 
 test("Archive dossier publication state alone controls dossier public visibility", async () => {

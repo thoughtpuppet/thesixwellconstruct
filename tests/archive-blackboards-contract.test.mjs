@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import { handleConstructApi } from "../functions/api/construct/_lib.js";
+import { __blackboardManagerTest as manager } from "../studio/archive-blackboards-manager.js";
 
 const ROOT=dirname(dirname(fileURLToPath(import.meta.url)));
 const TOKEN="archive-blackboard-test-token";
@@ -161,6 +162,25 @@ test("public Blackboard fragment viewer is driven by stored placements and keeps
   const script=readFileSync(join(ROOT,"js","archive-blackboards.js"),"utf8"),styles=readFileSync(join(ROOT,"css","archive-blackboards.css"),"utf8");
   assert.match(script,/statePlacements/);assert.match(script,/data-enter-fragment-view/);assert.match(script,/data-select-board-fragment/);assert.match(script,/data-fragment-full/);assert.match(script,/Return to Blackboard record/);
   assert.match(styles,/\.blackboard-fragment-rail/);assert.match(styles,/border: 5px solid/);assert.match(styles,/data-mode="detail"/);
+});
+
+test("Studio Blackboards opens as a record library before exposing an editor",()=>{
+  const manager=readFileSync(join(ROOT,"studio","archive-blackboards-manager.js"),"utf8"),styles=readFileSync(join(ROOT,"studio","archive-blackboards-manager.css"),"utf8");
+  assert.match(manager,/function selected\(\)\{return records\.find\(record=>record\.id===selectedId\)\|\|null\}/);
+  assert.match(manager,/function libraryMarkup\(items=records\)/);assert.match(manager,/data-select-record/);assert.match(manager,/data-back-record/);
+  assert.match(manager,/value="\$\{esc\(record\.title\|\|""\)\}" placeholder="Studio Blackboard — East Wall"/);
+  assert.doesNotMatch(manager,/record\.title\|\|"Studio Blackboard — South Wall"/);
+  assert.match(manager,/fragment\?fragmentWorkflowMarkup\(fragment\):record\?workspaceMarkup\(record\):libraryView==="fragments"\?fragmentLibraryMarkup\(\):libraryMarkup\(\)/);
+  assert.match(manager,/Fragment Library/);assert.match(manager,/data-library-view="fragments"/);
+  assert.match(styles,/\.bb-record-grid/);assert.match(styles,/\.bb-workspace-panel/);assert.match(styles,/border: 5px solid/);
+});
+
+test("Studio Blackboard library keeps record data out of blank creation fields",()=>{
+  const record={id:"board-south",title:"Studio Blackboard — South Wall",slug:"studio-blackboard-south-wall",catalogue_id:"OBJ-002",studio_location:"Studio",wall_designation:"South Wall",orientation_note:"viewer faces south",summary:"One evolving board.",state:"published",public_visible:1,states:[{id:"state-i",state_roman:"I"}],notebook:[{id:"note-1"}],fragments:[]};
+  const library=manager.libraryMarkup([record]),blank=manager.recordForm(),workspace=manager.workspaceMarkup(record);
+  assert.match(library,/Studio Blackboard — South Wall/);assert.match(library,/data-select-record="board-south"/);
+  assert.doesNotMatch(blank,/value="Studio Blackboard — South Wall"/);assert.doesNotMatch(blank,/value="South Wall"/);assert.doesNotMatch(blank,/viewer faces south/);
+  assert.doesNotMatch(library,/data-record-form data-id="board-south"/);assert.match(workspace,/data-record-form data-id="board-south"/);assert.match(workspace,/data-back-record/);
 });
 
 test("archival master uploads resume, complete privately, and cancel without recreating a board",async()=>{

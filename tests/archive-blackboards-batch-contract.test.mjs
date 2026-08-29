@@ -30,7 +30,7 @@ test("Blackboard batch pairs roles by basename and enforces derivative formats",
   assert.equal(batch.mimeFor(file("scan.jpg",{type:"image/jpg"})),"image/jpeg");
   assert.equal(batch.mimeFor(file("scan.HEIF")),"image/heif");
   assert.equal(batch.needsSuppliedDerivative(file("scan.tiff")),true);
-  assert.equal(batch.needsSuppliedDerivative(file("scan.heic")),true);
+  assert.equal(batch.needsSuppliedDerivative(file("scan.heic")),false);
   assert.equal(batch.needsSuppliedDerivative(file("scan.jpg")),false);
   assert.equal(batch.needsSuppliedDerivative(file("scan.png")),false);
   assert.equal(batch.needsSuppliedDerivative(file("scan.webp")),false);
@@ -66,13 +66,17 @@ test("Blackboard session tray caps logical fragment rows at 50",()=>{
   assert.match(planned.rejected[0],/tray limit is 50/);
 });
 
-test("Blackboard batch upload contract preserves privacy, draft state, checkpoints, and two pipelines",()=>{
+test("Blackboard batch upload contract preserves private sources, independent drafts, checkpoints, and two pipelines",()=>{
   assert.equal(batch.BATCH_CONCURRENCY,2);
   assert.doesNotMatch(SOURCE,/consent_status/);
   assert.match(SOURCE,/uploadKind:"archive-master",privacy:"internal",publicPresentation:"hidden"/);
-  assert.match(SOURCE,/form\.append\("privacy","public"\)/);
-  assert.match(SOURCE,/form\.append\("public_presentation","inline"\)/);
+  assert.match(SOURCE,/uploadFragmentEditSource\(file,alt,output\).*privacy:"internal",presentation:"hidden"/);
+  assert.match(SOURCE,/edit_source_media_id:row\.derivativeMediaId/);
+  assert.match(SOURCE,/collection:"\/api\/admin\/archive-blackboards\/fragments"/);
+  assert.match(SOURCE,/queuedHeicEditProxy/);
+  assert.match(SOURCE,/createHeicEditProxy/);
   assert.match(SOURCE,/state:"draft",public_visible:false/);
+  assert.doesNotMatch(SOURCE,/createBatchRow\(file,recordId/);
   assert.match(SOURCE,/if\(!row\.masterMediaId\)/);
   assert.match(SOURCE,/if\(!row\.derivativeMediaId\)/);
   assert.match(SOURCE,/if\(row\.createAttempted\)/);

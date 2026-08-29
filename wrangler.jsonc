@@ -39,6 +39,23 @@
   "ai": {
     "binding": "AI"
   },
+  "queues": {
+    "producers": [
+      {
+        "binding": "VISUAL_COLOR_QUEUE",
+        "queue": "swc-visual-colors"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "swc-visual-colors",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "swc-visual-colors-dlq"
+      }
+    ]
+  },
   "send_email": [
     {
       "name": "EMAIL"
@@ -77,8 +94,9 @@
     "CALENDAR_SCOUT_MODEL": "gpt-5.6-luna",
     "VISUAL_COLOR_MODEL": "@cf/meta/llama-3.2-11b-vision-instruct",
     "VISUAL_COLOR_MODEL_VERSION": "llama-3.2-11b-vision-instruct",
-    "VISUAL_COLOR_PROMPT_VERSION": "visual-colors-v1",
+    "VISUAL_COLOR_PROMPT_VERSION": "visual-colors-v2",
     "VISUAL_COLOR_WORKS_PER_PASS": "1",
+    "VISUAL_COLOR_RECONCILE_LIMIT": "50",
     "VISUAL_COLOR_MAX_ATTEMPTS": "3"
   },
   "compatibility_flags": [

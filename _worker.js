@@ -149,6 +149,7 @@ import {
 import { handlePortfolioApi } from "./functions/api/portfolio/_lib.js";
 import { handleConstructApi, reapStaleMediaUploads } from "./functions/api/construct/_lib.js";
 import { runVisualColorAnalysisPass } from "./functions/api/construct/_colors-materials.js";
+import { handleVisualColorQueue } from "./functions/api/construct/_automatic-visual-colors.js";
 import { handleAdminCrmApi } from "./functions/api/crm/_lib.js";
 import {
   handleAdminOutreachApi,
@@ -1821,5 +1822,8 @@ export default {
     ctx.waitUntil(runDueCalendarScout(env, controller.scheduledTime));
     ctx.waitUntil(purgeClosedCalendarSubmissions(env, new Date(controller.scheduledTime)));
     ctx.waitUntil(runVisualColorAnalysisPass(env));
+  },
+  async queue(batch, env) {
+    await handleVisualColorQueue(batch, env);
   },
 };

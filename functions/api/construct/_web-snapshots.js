@@ -18,6 +18,9 @@ const SNAPSHOT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,127}$/i;
 const CAPTURE_VIEWPORTS = new Set(["desktop", "mobile"]);
 const CAPTURE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const SNAPSHOT_MUTATION_KINDS = new Set(["upload", "finalize", "review", "dependency", "capture"]);
+const SNAPSHOT_BEHAVIOR_KEYS = new Set(["ring-node-opening", "breathing-eyes", "node-orbits-pathways", "six-living-cultures"]);
+const SNAPSHOT_BEHAVIOR_EVOLUTION_ROLES = new Set(["introduced", "refined", "transformed", "disabled", "restored", "observed"]);
+const SNAPSHOT_BEHAVIOR_MEANING_STATUSES = new Set(["curator-authored", "code-inferred", "pending-interpretation"]);
 const EXTERNAL_REPLACEMENT_NOTE = "local-external-replacement";
 const TREE_HASH_ALGORITHM = "archive-web-tree-v1";
 const JAVASCRIPT_FULL_SCAN_MAX_CHARS = 512 * 1024;
@@ -476,6 +479,38 @@ function presentSnapshot(row, { admin = false, viewerOrigin = DEFAULT_VIEWER_ORI
   return record;
 }
 
+function presentBehavior(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    snapshot_id: row.snapshot_id,
+    snapshotId: row.snapshot_id,
+    behavior_key: row.behavior_key,
+    behaviorKey: row.behavior_key,
+    title: row.title || "",
+    evolution_role: row.evolution_role,
+    evolutionRole: row.evolution_role,
+    interaction_prompt: row.interaction_prompt || "",
+    interactionPrompt: row.interaction_prompt || "",
+    observed_behavior: row.observed_behavior || "",
+    observedBehavior: row.observed_behavior || "",
+    authored_meaning: row.authored_meaning || "",
+    authoredMeaning: row.authored_meaning || "",
+    meaning_status: row.meaning_status,
+    meaningStatus: row.meaning_status,
+    source_path: row.source_path || "",
+    sourcePath: row.source_path || "",
+    source_symbol: row.source_symbol || "",
+    sourceSymbol: row.source_symbol || "",
+    public_visible: Number(row.public_visible) === 1,
+    publicVisible: Number(row.public_visible) === 1,
+    sort_order: Number(row.sort_order || 0),
+    sortOrder: Number(row.sort_order || 0),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
 function snapshotAdminSql(where = "1=1") {
   return `SELECT snapshot.*,version.version_number,version.title version_title,
     state.state_roman,state.title state_title
@@ -515,7 +550,18 @@ export async function loadPublicArchiveWebSnapshots(database, entityId, viewerOr
     JOIN archive_object_versions version ON version.id=state.version_id
     WHERE snapshot.dossier_entity_id=? AND ${ARCHIVE_WEB_SNAPSHOT_PUBLIC_GATE_SQL}
     ORDER BY version.sort_order,version.version_number,state.sort_order,state.state_order,snapshot.sort_order,snapshot.created_at`).bind(entityId).all()).results || [];
-  return rows.map((row) => presentSnapshot(row, { viewerOrigin }));
+  if (!rows.length) return [];
+  const snapshotIds = rows.map((row) => row.id);
+  const behaviorRows = (await database.prepare(`SELECT * FROM archive_web_snapshot_behaviors
+    WHERE public_visible=1 AND snapshot_id IN (${snapshotIds.map(() => "?").join(",")})
+    ORDER BY snapshot_id,sort_order,behavior_key`).bind(...snapshotIds).all()).results || [];
+  const behaviorMap = new Map(snapshotIds.map((snapshotId) => [snapshotId, []]));
+  behaviorRows.forEach((row) => behaviorMap.get(row.snapshot_id)?.push(presentBehavior(row)));
+  return rows.map((row) => ({
+    ...presentSnapshot(row, { viewerOrigin }),
+    behaviors: behaviorMap.get(row.id) || [],
+    interaction_behaviors: behaviorMap.get(row.id) || [],
+  }));
 }
 
 async function snapshotAdminRecord(database, snapshotId) {
@@ -563,7 +609,7 @@ async function failSnapshotFinalization(database, snapshotId, token, message) {
 async function snapshotAdminDetail(database, snapshotId, viewerOrigin = DEFAULT_VIEWER_ORIGIN) {
   const record = await snapshotAdminRecord(database, snapshotId);
   if (!record) return null;
-  const [filesResult, dependenciesResult, candidatesResult, capturesResult, replacementsResult] = await database.batch([
+  const [filesResult, dependenciesResult, candidatesResult, capturesResult, replacementsResult, behaviorsResult] = await database.batch([
     database.prepare(`SELECT id,snapshot_id,normalized_path,mime_type,byte_size,source_sha256,derivative_sha256,
       file_role,viewer_eligible,created_at,updated_at FROM archive_web_snapshot_files
       WHERE snapshot_id=? ORDER BY normalized_path`).bind(snapshotId),
@@ -574,6 +620,8 @@ async function snapshotAdminDetail(database, snapshotId, viewerOrigin = DEFAULT_
     database.prepare("SELECT * FROM archive_web_snapshot_captures WHERE snapshot_id=? ORDER BY CASE viewport WHEN 'desktop' THEN 0 ELSE 1 END,created_at").bind(snapshotId),
     database.prepare(`SELECT id,snapshot_id,dependency_key,local_path,mime_type,byte_size,sha256,derivative_role,created_by,created_at,updated_at
       FROM archive_web_snapshot_replacements WHERE snapshot_id=? ORDER BY local_path,id`).bind(snapshotId),
+    database.prepare(`SELECT * FROM archive_web_snapshot_behaviors
+      WHERE snapshot_id=? ORDER BY sort_order,behavior_key`).bind(snapshotId),
   ]);
   return {
     ...presentSnapshot(record, { admin: true, viewerOrigin }),
@@ -584,7 +632,59 @@ async function snapshotAdminDetail(database, snapshotId, viewerOrigin = DEFAULT_
     capture_derivatives: (capturesResult.results || []).map((capture) => presentCapture(capture, { viewerOrigin })),
     replacements: (replacementsResult.results || []).map(presentReplacement),
     external_replacements: (replacementsResult.results || []).map(presentReplacement),
+    behaviors: (behaviorsResult.results || []).map(presentBehavior),
+    interaction_behaviors: (behaviorsResult.results || []).map(presentBehavior),
   };
+}
+
+async function snapshotBehaviorsApi(request, env, snapshotId) {
+  if (request.method !== "PUT") return failure("Method not allowed.", 405);
+  if (!SNAPSHOT_ID_PATTERN.test(snapshotId)) return failure("Choose a valid website snapshot.", 409);
+  const database = db(env);
+  const snapshot = await snapshotAdminRecord(database, snapshotId);
+  if (!snapshot) return failure("Website snapshot not found.", 404);
+  const payload = await readJson(request);
+  const records = Array.isArray(payload?.records) ? payload.records : Array.isArray(payload?.behaviors) ? payload.behaviors : null;
+  if (!records) return failure("Supply a behavior records array.", 409);
+  const normalized = [];
+  const keys = new Set();
+  for (const [index, record] of records.entries()) {
+    const behaviorKey = text(record?.behavior_key || record?.behaviorKey, 80);
+    const evolutionRole = text(record?.evolution_role || record?.evolutionRole || "observed", 40);
+    const meaningStatus = text(record?.meaning_status || record?.meaningStatus || "pending-interpretation", 40);
+    if (!SNAPSHOT_BEHAVIOR_KEYS.has(behaviorKey)) return failure("Choose a supported archived interaction.", 409);
+    if (keys.has(behaviorKey)) return failure("Each archived interaction can appear only once per snapshot.", 409);
+    if (!SNAPSHOT_BEHAVIOR_EVOLUTION_ROLES.has(evolutionRole)) return failure("Choose a valid interaction evolution role.", 409);
+    if (!SNAPSHOT_BEHAVIOR_MEANING_STATUSES.has(meaningStatus)) return failure("Choose a valid meaning source.", 409);
+    keys.add(behaviorKey);
+    normalized.push({
+      behaviorKey,
+      title: text(record?.title, 160),
+      evolutionRole,
+      interactionPrompt: text(record?.interaction_prompt || record?.interactionPrompt, 1200),
+      observedBehavior: text(record?.observed_behavior || record?.observedBehavior, 6000),
+      authoredMeaning: text(record?.authored_meaning || record?.authoredMeaning, 6000),
+      meaningStatus,
+      sourcePath: text(record?.source_path || record?.sourcePath, 1024),
+      sourceSymbol: text(record?.source_symbol || record?.sourceSymbol, 1000),
+      publicVisible: bool(record?.public_visible ?? record?.publicVisible),
+      sortOrder: Number.isFinite(Number(record?.sort_order ?? record?.sortOrder)) ? Math.trunc(Number(record?.sort_order ?? record?.sortOrder)) : (index + 1) * 10,
+    });
+  }
+  const existingRows = (await database.prepare("SELECT id,behavior_key FROM archive_web_snapshot_behaviors WHERE snapshot_id=?").bind(snapshotId).all()).results || [];
+  const existingIds = new Map(existingRows.map((row) => [row.behavior_key, row.id]));
+  await database.batch([
+    database.prepare("DELETE FROM archive_web_snapshot_behaviors WHERE snapshot_id=?").bind(snapshotId),
+    ...normalized.map((record) => database.prepare(`INSERT INTO archive_web_snapshot_behaviors
+      (id,snapshot_id,behavior_key,title,evolution_role,interaction_prompt,observed_behavior,authored_meaning,
+       meaning_status,source_path,source_symbol,public_visible,sort_order,created_by,updated_by,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(
+      existingIds.get(record.behaviorKey) || id("archive-web-snapshot-behavior"), snapshotId, record.behaviorKey, record.title,
+      record.evolutionRole, record.interactionPrompt, record.observedBehavior, record.authoredMeaning, record.meaningStatus,
+      record.sourcePath, record.sourceSymbol, record.publicVisible ? 1 : 0, record.sortOrder,
+    )),
+  ]);
+  return json({ ok: true, record: await snapshotAdminDetail(database, snapshotId, env.ARCHIVE_VIEWER_ORIGIN) });
 }
 
 function presentCapture(row, { viewerOrigin = DEFAULT_VIEWER_ORIGIN, token = "" } = {}) {
@@ -2082,6 +2182,8 @@ export async function handleArchiveWebSnapshotsAdmin(request, env, path = new UR
     if (actionMatch[2] === "finalize") return finalizeSnapshot(request, env, snapshotId);
     return previewSnapshot(request, env, snapshotId);
   }
+  const behaviorsMatch = path.match(/^\/api\/admin\/archive-web-snapshots\/([^/]+)\/behaviors$/);
+  if (behaviorsMatch) return snapshotBehaviorsApi(request, env, decodeURIComponent(behaviorsMatch[1]));
   const snapshotMatch = path.match(/^\/api\/admin\/archive-web-snapshots\/([^/]+)$/);
   if (snapshotMatch) {
     const snapshotId = decodeURIComponent(snapshotMatch[1]);
