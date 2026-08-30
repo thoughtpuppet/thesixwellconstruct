@@ -61,6 +61,9 @@ test("Art Works stages no more than 50 editable filename-derived drafts and reso
   assert.match(artPanel,/Two records process at a time/);
   assert.match(artPanel,/Drafts only/);
   assert.match(artPanel,/accept="image\/jpeg,image\/png,image\/webp" multiple/);
+  assert.match(artPanel,/data-art-default="medium" value="Acrylic on wood panel"/);
+  assert.match(artPanel,/data-art-default="availability">\$\{artAvailabilityOptions\("unavailable"\)\}/);
+  assert.doesNotMatch(artPanel,/data-art-default="availability" placeholder=/);
   assert.doesNotMatch(artPanel,/data-art-batch-publish/);
 
   assert.match(artStage,/existingKeys\.has\(localFileKey\(file\)\)/);
@@ -85,6 +88,8 @@ test("Art Works creates drafts first, checkpoints every server ID, and retries w
   assert.ok(createIndex>=0&&createIndex<uploadIndex&&uploadIndex<attachIndex,"draft, upload, and attachment checkpoints must run in order");
 
   assert.match(artProcess,/api\("\/api\/admin\/art",\{method:"POST"/);
+  assert.match(artProcess,/availability=value\("availability"\)\|\|"unavailable"/);
+  assert.match(artProcess,/ART_AVAILABILITY_VALUES\.has\(availability\)/);
   assert.match(artProcess,/state:"draft"/);
   assert.match(artProcess,/row\.entityId=created\.record\?\.id/);
   assert.match(artProcess,/upload\.append\("privacy","public"\)/);
@@ -96,6 +101,7 @@ test("Art Works creates drafts first, checkpoints every server ID, and retries w
   assert.doesNotMatch(artProcess,/consent_status|batch-jobs|\/api\/admin\/batch/);
 
   assert.match(artRun,/Promise\.all\(Array\.from\(\{length:Math\.min\(ART_BATCH_CONCURRENCY,pending\.length\)\},worker\)\)/);
+  assert.match(artRun,/row\.status==="queued"\|\|row\.status==="error"/);
   assert.match(artRun,/artBatchSession\.cancelQueued\|\|row\.status==="cancelled"/);
   assert.match(SOURCE,/data-art-batch-cancel[\s\S]*?artBatchSession\.cancelQueued=true/);
   assert.match(SOURCE,/data-art-row-retry[\s\S]*?artRow\.status="queued"[\s\S]*?runArtBatch\(shell,allRecords\)/);

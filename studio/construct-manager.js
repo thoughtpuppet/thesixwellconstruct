@@ -40,6 +40,8 @@
     mediaItem:mediaId=>`/api/admin/media/${encodeURIComponent(mediaId)}`
   };
   const adminPreviewUrls=new Set(),flashBulkJobs=new Map();
+  const ART_AVAILABILITY_OPTIONS=[["unavailable","Unavailable"],["available","Available"],["not-for-sale","Not for sale"],["sold","Sold"]];
+  const ART_AVAILABILITY_VALUES=new Set(ART_AVAILABILITY_OPTIONS.map(([value])=>value));
   const artBatchSession={rows:[],running:false,cancelQueued:false};
   const archiveMaterialBatchSessions=new Map();
   let archiveDossierRequestGeneration=0;
@@ -210,7 +212,7 @@
   }
 
   function field(name,value){
-    const choices={process_category:[["standard","Standard"],["experimental","Experimental"]],session_category:[["artist_review","Artist review"],["one_session","One session"],["multiple_sessions","Multiple sessions"]],split_policy:[["artist_review","Artist review"],["required","Splitting required"],["client_choice","Client choice after estimate"],["not_available","Splitting unavailable"]],print_intent:[["unavailable","Unavailable"],["planned","Future print planned"]],whereabouts_status:[["known","Known"],["unknown","Unknown"]]};
+    const choices={process_category:[["standard","Standard"],["experimental","Experimental"]],session_category:[["artist_review","Artist review"],["one_session","One session"],["multiple_sessions","Multiple sessions"]],split_policy:[["artist_review","Artist review"],["required","Splitting required"],["client_choice","Client choice after estimate"],["not_available","Splitting unavailable"]],availability:ART_AVAILABILITY_OPTIONS,print_intent:[["unavailable","Unavailable"],["planned","Future print planned"]],whereabouts_status:[["known","Known"],["unknown","Unknown"]]};
     const long=/description|statement|meaning|body|notes|note|svg|json|bio/.test(name),numeric=/sort_order|claimable|eligible|enabled|estimated_sessions|estimated_total_minutes/.test(name),label=esc(name==="print_intent"?"Print plan":name.replace(/_/g," "));
     if(choices[name]){const fallback=name==="whereabouts_status"?"known":"unavailable";return `<label>${label}<select name="${name}">${choices[name].map(([option,labelText])=>`<option value="${option}" ${String(value||fallback)===option?"selected":""}>${labelText}</option>`).join("")}</select>${name==="print_intent"?'<span class="cm-field-note">This records intent only. A public connected Merch print uses live Shopify availability.</span>':name==="whereabouts_status"?'<span class="cm-field-note">Physical location is separate from sale availability.</span>':""}</label>`}
     return `<label class="${long?"wide":""}">${label}${long?`<textarea name="${name}">${esc(value)}</textarea>`:`<input name="${name}" ${numeric?'type="number" min="0" step="1" inputmode="numeric"':''} value="${esc(value)}">`}</label>`
@@ -564,14 +566,16 @@
   }
   function uniqueBatchSlug(base,used){let candidate=base,index=2;while(used.has(candidate)){candidate=`${base}-${index++}`}used.add(candidate);return candidate}
 
+  function artAvailabilityOptions(value="",includeShared=false){return `${includeShared?'<option value="">Use shared availability</option>':""}${ART_AVAILABILITY_OPTIONS.map(([option,label])=>`<option value="${option}" ${String(value||"")===option?"selected":""}>${label}</option>`).join("")}`}
+
   function artBatchPanel(){
     return `<section class="cm-batch-panel" data-art-batch hidden>
       <div class="cm-batch-heading"><div><strong>Batch create works</strong><p>Stage up to 50 images. Each image creates one draft Art Work, then becomes its primary public-ready image. Two records process at a time.</p></div><span class="cm-pill">Drafts only</span></div>
       <div class="cm-batch-defaults" data-art-batch-defaults>
         <label>Shared year<input data-art-default="year" inputmode="numeric" placeholder="2026"></label>
-        <label>Shared medium<input data-art-default="medium" placeholder="Oil on canvas"></label>
+        <label>Shared medium<input data-art-default="medium" value="Acrylic on wood panel"></label>
         <label>Shared dimensions<input data-art-default="dimensions" placeholder="24 × 36 in"></label>
-        <label>Availability<input data-art-default="availability" placeholder="available"></label>
+        <label>Availability<select data-art-default="availability">${artAvailabilityOptions("unavailable")}</select></label>
         <label>Whereabouts<select data-art-default="whereabouts_status"><option value="known">Known</option><option value="unknown">Unknown</option></select></label>
         <label>Print plan<select data-art-default="print_intent"><option value="unavailable">Unavailable</option><option value="planned">Future print planned</option></select></label>
       </div>
@@ -587,7 +591,7 @@
     return `<article class="cm-batch-row" data-art-batch-row="${esc(row.id)}" data-state="${esc(row.status)}">
       <div class="cm-batch-preview"><img src="${esc(row.previewUrl)}" alt="" aria-hidden="true"></div>
       <div class="cm-batch-fields"><label>Title<input data-art-row-field="title" value="${esc(row.title)}" ${done||working?"disabled":""}></label><label>Slug<input data-art-row-field="slug" value="${esc(row.slug)}" ${done||working?"disabled":""}></label><label class="wide">Alt text<input data-art-row-field="altText" value="${esc(row.altText)}" ${done||working?"disabled":""}></label>
-        <details><summary>Row overrides</summary><div class="cm-batch-overrides"><label>Year<input data-art-row-field="year" value="${esc(row.year)}" placeholder="Shared"></label><label>Medium<input data-art-row-field="medium" value="${esc(row.medium)}" placeholder="Shared"></label><label>Dimensions<input data-art-row-field="dimensions" value="${esc(row.dimensions)}" placeholder="Shared"></label><label>Availability<input data-art-row-field="availability" value="${esc(row.availability)}" placeholder="Shared"></label></div></details>
+        <details><summary>Row overrides</summary><div class="cm-batch-overrides"><label>Year<input data-art-row-field="year" value="${esc(row.year)}" placeholder="Shared"></label><label>Medium<input data-art-row-field="medium" value="${esc(row.medium)}" placeholder="Shared"></label><label>Dimensions<input data-art-row-field="dimensions" value="${esc(row.dimensions)}" placeholder="Shared"></label><label>Availability<select data-art-row-field="availability">${artAvailabilityOptions(row.availability,true)}</select></label></div></details>
         <div class="cm-meta" data-art-row-status>${esc(row.message||titleCase(row.status))}${row.entityId?` · draft ${esc(row.entityId)}`:""}</div></div>
       <div class="cm-batch-row-actions"><button class="button" type="button" data-art-row-move="up" ${index===0||working?"disabled":""}>↑</button><button class="button" type="button" data-art-row-move="down" ${index===total-1||working?"disabled":""}>↓</button>${canRetry?'<button class="button" type="button" data-art-row-retry>Retry</button>':""}<button class="button danger-button" type="button" data-art-row-remove ${working?"disabled":""}>Remove</button></div>
     </article>`
@@ -595,7 +599,7 @@
   function renderArtBatchTray(shell){
     const tray=shell?.querySelector("[data-art-batch-tray]"),summary=shell?.querySelector("[data-art-batch-summary]");if(!tray)return;
     tray.innerHTML=artBatchSession.rows.length?artBatchSession.rows.map((row,index)=>artBatchRowMarkup(row,index,artBatchSession.rows.length)).join(""):'<div class="cm-empty">No images staged. Local files leave this tray on reload; created drafts and uploaded media remain checkpointed for retry during this session.</div>';
-    const counts=artBatchSession.rows.reduce((map,row)=>(map[row.status]=(map[row.status]||0)+1,map),{});if(summary)summary.textContent=`${artBatchSession.rows.length}/${BATCH_RECORD_LIMIT} staged · ${counts.success||0} complete · ${counts.error||0} failed`;
+    const counts=artBatchSession.rows.reduce((map,row)=>(map[row.status]=(map[row.status]||0)+1,map),{});if(summary)summary.textContent=`${artBatchSession.rows.length}/${BATCH_RECORD_LIMIT} staged · ${counts.success||0} complete · ${counts.error||0} failed`;const start=shell?.querySelector("[data-art-batch-start]");if(start)start.textContent=counts.error?`Retry ${counts.error} failed draft${counts.error===1?"":"s"}`:"Process queued drafts";
   }
   function stageArtBatchFiles(shell,files,allRecords){
     const existingKeys=new Set(artBatchSession.rows.map(row=>row.fileKey)),usedSlugs=new Set([...allRecords.map(record=>record.slug).filter(Boolean),...artBatchSession.rows.map(row=>row.slug).filter(Boolean)]);let duplicates=0,overflow=0;
@@ -606,8 +610,9 @@
   async function processArtBatchRow(row,defaults,shell){
     try{
       validateArtworkImages([row.file]);if(!row.title.trim())throw new Error("Title is required.");if(!row.slug.trim())throw new Error("Slug is required.");
-      const value=key=>String(row[key]||defaults[key]||"").trim();
-      if(!row.entityId){row.status="creating";row.message=`Creating draft for ${row.file.name}…`;renderArtBatchTray(shell);const created=await api("/api/admin/art",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({title:row.title.trim(),slug:row.slug.trim(),statement:"",year:value("year"),medium:value("medium"),dimensions:value("dimensions"),availability:value("availability"),whereabouts_status:value("whereabouts_status")||"known",acquisition_eligible:0,print_intent:value("print_intent")||"unavailable",state:"draft",legacy_path:"",sort_order:0})});row.entityId=created.record?.id;if(!row.entityId)throw new Error("Draft created without an entity ID.")}
+      const value=key=>String(row[key]||defaults[key]||"").trim(),availability=value("availability")||"unavailable";
+      if(!ART_AVAILABILITY_VALUES.has(availability))throw new Error("Availability must be Available, Not for sale, Sold, or Unavailable.");
+      if(!row.entityId){row.status="creating";row.message=`Creating draft for ${row.file.name}…`;renderArtBatchTray(shell);const created=await api("/api/admin/art",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({title:row.title.trim(),slug:row.slug.trim(),statement:"",year:value("year"),medium:value("medium"),dimensions:value("dimensions"),availability,whereabouts_status:value("whereabouts_status")||"known",acquisition_eligible:0,print_intent:value("print_intent")||"unavailable",state:"draft",legacy_path:"",sort_order:0})});row.entityId=created.record?.id;if(!row.entityId)throw new Error("Draft created without an entity ID.")}
       if(!row.mediaId){row.status="uploading";row.message=`Uploading ${row.file.name}…`;renderArtBatchTray(shell);const upload=new FormData();upload.append("file",row.file);upload.append("alt_text",row.altText.trim()||row.title.trim());upload.append("privacy","public");upload.append("public_presentation","inline");const uploaded=await api("/api/admin/media",{method:"POST",body:upload});row.mediaId=uploaded.record?.id;if(!row.mediaId)throw new Error("Image uploaded without a media ID.")}
       if(!row.attached){row.status="attaching";row.message="Attaching primary image…";renderArtBatchTray(shell);await api(`/api/admin/entities/${encodeURIComponent(row.entityId)}/media`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({media_id:row.mediaId,role:"primary",sort_order:1,public_visible:true,alt_text_override:row.altText.trim()||row.title.trim()})});row.attached=true}
       row.status="success";row.message="Draft and primary image ready";
@@ -615,7 +620,7 @@
     renderArtBatchTray(shell)
   }
   async function runArtBatch(shell,allRecords){
-    if(artBatchSession.running)return;resolveArtBatchSlugs(allRecords);const pending=artBatchSession.rows.filter(row=>row.status==="queued");if(!pending.length){renderArtBatchTray(shell);return}artBatchSession.running=true;artBatchSession.cancelQueued=false;const defaults=artBatchDefaults(shell.querySelector("[data-art-batch]"));let cursor=0;
+    if(artBatchSession.running)return;resolveArtBatchSlugs(allRecords);const pending=artBatchSession.rows.filter(row=>row.status==="queued"||row.status==="error");if(!pending.length){renderArtBatchTray(shell);return}pending.forEach(row=>{if(row.status==="error"){row.status="queued";row.message="Queued for retry"}});artBatchSession.running=true;artBatchSession.cancelQueued=false;const defaults=artBatchDefaults(shell.querySelector("[data-art-batch]"));let cursor=0;
     const worker=async()=>{while(cursor<pending.length){const row=pending[cursor++];if(artBatchSession.cancelQueued||row.status==="cancelled"){row.status="cancelled";row.message="Queued record cancelled";renderArtBatchTray(shell);continue}await processArtBatchRow(row,defaults,shell)}};
     await Promise.all(Array.from({length:Math.min(ART_BATCH_CONCURRENCY,pending.length)},worker));artBatchSession.running=false;status("Art Work batch pass complete");renderArtBatchTray(shell)
   }

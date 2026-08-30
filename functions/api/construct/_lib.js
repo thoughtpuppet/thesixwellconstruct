@@ -362,6 +362,7 @@ function archiveCanonicalRoute(row = {}) {
 }
 
 const ART_RESERVED_SLUGS = new Set(["acquisitioninquiry", "detail", "index"]);
+const ART_AVAILABILITY_VALUES = new Set(["available", "not-for-sale", "sold", "unavailable"]);
 
 function catalogOrderBy(config) {
   return config.fields.includes("sort_order") ? "sort_order,id" : "name COLLATE NOCASE,id";
@@ -3785,6 +3786,8 @@ async function adminCreate(request, env, resource) {
   let styleSelection = [];
   if (resource === "art") {
     if ((values.state || "draft") !== "draft") return failure("New artwork must begin as Draft. Attach the primary image before publishing.", 409);
+    values.availability = text(values.availability, 80) || "unavailable";
+    if (!ART_AVAILABILITY_VALUES.has(values.availability)) return failure("Availability must be available, not-for-sale, sold, or unavailable.");
     values.state = "draft";
   }
   if (resource === "archive" && values.record_type === "practice") {
@@ -3836,6 +3839,7 @@ async function adminCreate(request, env, resource) {
 async function adminUpdate(request, env, resource, recordId, archive = false) {
   const config = RESOURCE_CONFIG[resource]; const body = archive ? { state: "archived" } : await readJson(request); if (!config || !body) return failure("Invalid request.");
   if(resource==="art"&&body.print_intent!==undefined&&!["unavailable","planned"].includes(body.print_intent))return failure("Print plan must be unavailable or planned.");
+  if(resource==="art"&&body.availability!==undefined&&!ART_AVAILABILITY_VALUES.has(text(body.availability,80)))return failure("Availability must be available, not-for-sale, sold, or unavailable.");
   const database = db(env); const beforeRow = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first(); if (!beforeRow) return failure("Not found.",404);
   if (resource === "art" && Object.prototype.hasOwnProperty.call(body, "slug")) {
     const publication = await database.prepare("SELECT public_at FROM content_entities WHERE id=?").bind(recordId).first();

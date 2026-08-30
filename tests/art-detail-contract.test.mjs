@@ -477,3 +477,35 @@ test("new artwork stages privately, publishes to its canonical route, locks its 
   const reserved = await worker.fetch(new Request("https://example.test/art/detail/"), workerEnv, {});
   assert.equal(reserved.status, 404);
 });
+
+test("new artwork defaults blank availability safely and rejects unknown availability before D1", async () => {
+  const database = migratedDatabase();
+  const env = environment(database);
+
+  const blank = await jsonResponse(await handleConstructApi(request("/api/admin/art", {
+    method: "POST",
+    admin: true,
+    body: {
+      id: "art-blank-availability",
+      title: "Blank Availability",
+      availability: "",
+      state: "draft",
+    },
+  }), env));
+  assert.equal(blank.response.status, 201);
+  assert.equal(blank.payload.record.availability, "unavailable");
+
+  const invalid = await jsonResponse(await handleConstructApi(request("/api/admin/art", {
+    method: "POST",
+    admin: true,
+    body: {
+      id: "art-invalid-availability",
+      title: "Invalid Availability",
+      availability: "available soon",
+      state: "draft",
+    },
+  }), env));
+  assert.equal(invalid.response.status, 400);
+  assert.match(invalid.payload.error, /Availability must be available, not-for-sale, sold, or unavailable/);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM content_entities WHERE id=?").get("art-invalid-availability").count, 0);
+});
