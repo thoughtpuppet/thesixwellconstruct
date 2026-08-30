@@ -765,16 +765,24 @@
     button.disabled = true;
     button.textContent = "Scouting…";
     status.className = "";
-    status.textContent = "Reading the event page and extracting a private candidate…";
+    status.textContent = "Searching the page and its same-site event paths for private candidates…";
     try {
       var payload = await api("/api/admin/calendar/candidates/from-url", { method:"POST", body:JSON.stringify({ url:pastedUrl }) });
-      var message = payload.existing ? "Existing private candidate refreshed from the pasted link." : "Private candidate created from the pasted link.";
+      var candidates = Array.isArray(payload.candidates) && payload.candidates.length ? payload.candidates : (payload.candidate ? [payload.candidate] : []);
+      var createdCount = Number(payload.createdCount);
+      var refreshedCount = Number(payload.refreshedCount);
+      if (!Number.isFinite(createdCount)) createdCount = payload.existing ? 0 : candidates.length;
+      if (!Number.isFinite(refreshedCount)) refreshedCount = payload.existing ? candidates.length : 0;
+      var message = "Scout saved " + candidates.length + " private candidate" + (candidates.length === 1 ? "" : "s") + " from the submitted site";
+      var counts = [createdCount ? createdCount + " created" : "", refreshedCount ? refreshedCount + " refreshed" : ""].filter(Boolean);
+      if (counts.length) message += " (" + counts.join(", ") + ")";
+      message += ".";
       input.value = "";
       status.className = "is-success";
       status.textContent = message + " Review every extracted field before publishing.";
       toast(message);
       state.filter = "review";
-      await refreshCandidates(payload.candidate.id);
+      await refreshCandidates(candidates[0] && candidates[0].id);
     } catch (error) {
       status.className = "is-error";
       status.textContent = error.message;

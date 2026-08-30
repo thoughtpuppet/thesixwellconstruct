@@ -2118,15 +2118,24 @@ test("Rampant Gallery monitoring extracts the current exhibition, opening occurr
   db.exec("UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_rampant_gallery'");
   const sourceUrl = "https://rampantgallery.com/";
   const flyerUrl = "https://rampantgallery.com/wp-content/uploads/2024/02/POORTREAT-flyer-2.jpg";
+  const startDate = new Date(Date.now() + 30 * 86_400_000);
+  const endDate = new Date(Date.now() + 72 * 86_400_000);
+  const isoDay = (date) => date.toISOString().slice(0, 10);
+  const monthName = (date) => new Intl.DateTimeFormat("en-US", { month:"long", timeZone:"UTC" }).format(date);
+  const startDay = isoDay(startDate);
+  const endDay = isoDay(endDate);
+  const openingOffset = new Intl.DateTimeFormat("en-US", { timeZone:"America/New_York", timeZoneName:"longOffset" })
+    .formatToParts(new Date(`${startDay}T12:00:00Z`))
+    .find((part) => part.type === "timeZoneName").value.replace("GMT", "");
   const html = `<html><body>
     <h2>RAMPANT GALLERY</h2>
     <h2>POORTREAT</h2>
-    <h4>July 18 – August 29, 2026</h4>
+    <h4>${monthName(startDate)} ${startDate.getUTCDate()}, ${startDate.getUTCFullYear()} – ${monthName(endDate)} ${endDate.getUTCDate()}, ${endDate.getUTCFullYear()}</h4>
     <figure><img src="${flyerUrl}" alt=""></figure>
-    <p>Coming to Rampant Gallery 7/18 – <strong>POORTREAT</strong>, a solo exhibition by <strong>David Rojas</strong>.</p>
+    <p>Coming to Rampant Gallery ${startDate.getUTCMonth() + 1}/${startDate.getUTCDate()} – <strong>POORTREAT</strong>, a solo exhibition by <strong>David Rojas</strong>.</p>
     <p>David Rojas builds collage and silkscreen compositions that fragment and recompose found imagery.</p>
     <p><strong>POORTREAT</strong> critically revisits the Baroque portrait through contemporary visual saturation, appropriation, and unstable identity.</p>
-    <p><strong>POORTREAT</strong> will be on display at Rampant Gallery 7/18 – 8/29. Please join us for the opening reception on July 18th from 5-9 PM.</p>
+    <p><strong>POORTREAT</strong> will be on display at Rampant Gallery ${startDate.getUTCMonth() + 1}/${startDate.getUTCDate()} – ${endDate.getUTCMonth() + 1}/${endDate.getUTCDate()}. Please join us for the opening reception on ${monthName(startDate)} ${startDate.getUTCDate()}, ${startDate.getUTCFullYear()} from 5-9 PM.</p>
     <h3>Previous Shows</h3>
     <h3><a href="https://rampantgallery.com/2026/07/08/imperfectionist/">Imperfectionist</a></h3>
   </body></html>`;
@@ -2150,9 +2159,9 @@ test("Rampant Gallery monitoring extracts the current exhibition, opening occurr
       subjects:JSON.parse(candidate.subjects_json), formats:JSON.parse(candidate.formats_json), status:candidate.status,
       verificationState:candidate.verification_state, flyerSourceUrl:candidate.flyer_source_url,
     }, {
-      sourceEventId:"rampant-poortreat-2026-07-18", sourceUrl, organizerUrl:sourceUrl, venueUrl:sourceUrl,
+      sourceEventId:`rampant-poortreat-${startDay}`, sourceUrl, organizerUrl:sourceUrl, venueUrl:sourceUrl,
       sourceAuthority:"venue_event", title:"POORTREAT", eventStructure:"exhibition", dateKind:"date_range",
-      startsAt:"2026-07-18", endsAt:"2026-08-29", venueName:"Rampant Gallery",
+      startsAt:startDay, endsAt:endDay, venueName:"Rampant Gallery",
       venueAddress:"1200 Foster Street NW, Studio 119, Atlanta, GA 30318", subjects:["art"], formats:["exhibition"],
       status:"candidate", verificationState:"verified", flyerSourceUrl:flyerUrl,
     });
@@ -2160,7 +2169,7 @@ test("Rampant Gallery monitoring extracts the current exhibition, opening occurr
     assert.deepEqual(
       db.prepare(`SELECT occurrence_type,title,starts_at,ends_at,source_url,status,verification_state
         FROM calendar_candidate_occurrences WHERE candidate_id=?`).all(candidate.id).map((row) => ({ ...row })),
-      [{ occurrence_type:"opening_reception", title:"Opening Reception", starts_at:"2026-07-18T17:00:00-04:00", ends_at:"2026-07-18T21:00:00-04:00", source_url:sourceUrl, status:"scheduled", verification_state:"verified" }],
+      [{ occurrence_type:"opening_reception", title:"Opening Reception", starts_at:`${startDay}T17:00:00${openingOffset}`, ends_at:`${startDay}T21:00:00${openingOffset}`, source_url:sourceUrl, status:"scheduled", verification_state:"verified" }],
     );
     const notes = db.prepare("SELECT private_rationale,attendance_use,programming_ideas FROM calendar_candidate_notes WHERE candidate_id=?").get(candidate.id);
     assert.match(notes.private_rationale, /art|exhibition/i);
@@ -2269,7 +2278,7 @@ test("official homepage image cards create private review candidates without tre
   }
 });
 
-test("zero-result official sources crawl only bounded same-origin event-like links to depth two", async () => {
+test("zero-result official sources crawl bounded same-origin event paths beyond depth two and dedupe tracking variants", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0");
   db.exec(`UPDATE calendar_scout_profiles
@@ -2277,8 +2286,10 @@ test("zero-result official sources crawl only bounded same-origin event-like lin
     WHERE id='atlanta-default'`);
   db.exec(`INSERT INTO calendar_sources(id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
     VALUES('cal_source_site_crawl_fixture','Official Arts Organization','https://official.example/','official_html','official',1,24,'automatic','static','{"siteCrawlMaxPages":4}',datetime('now'),datetime('now'))`);
-  const root = `<nav><a href="/about">About</a><a href="/programming">Programming</a><a href="https://outside.example/events">External events</a></nav>`;
-  const programming = `<main><a href="/programming/fall-exhibition">Upcoming exhibition</a><a href="/privacy">Privacy</a></main>`;
+  const root = `<nav><a href="/about">About</a><a href="/programming?_gl=one">Programming</a><a href="/programming?_gl=two">Programs</a><a href="https://outside.example/events">External events</a></nav>`;
+  const programming = `<main><a href="/programming/fall">Fall programs</a><a href="/privacy">Privacy</a></main>`;
+  const fallUrl = "https://official.example/programming/fall";
+  const fall = `<main><a href="/programming/fall-exhibition">Upcoming exhibition</a></main>`;
   const detailUrl = "https://official.example/programming/fall-exhibition";
   const detail = `<script type="application/ld+json">${JSON.stringify({
     "@context":"https://schema.org", "@type":"Event", "@id":"fall-exhibition-opening",
@@ -2291,7 +2302,7 @@ test("zero-result official sources crawl only bounded same-origin event-like lin
   globalThis.fetch = async (url) => {
     const value = String(url);
     calls.push(value);
-    const html = value === "https://official.example/" ? root : value === "https://official.example/programming" ? programming : value === detailUrl ? detail : "not found";
+    const html = value === "https://official.example/" ? root : value === "https://official.example/programming" ? programming : value === fallUrl ? fall : value === detailUrl ? detail : "not found";
     return new Response(html, { status:value === "https://official.example/about" ? 404 : 200, headers:{ "content-type":"text/html" } });
   };
   try {
@@ -2300,10 +2311,10 @@ test("zero-result official sources crawl only bounded same-origin event-like lin
     assert.equal(run.candidates, 1);
     const sourceRun = run.outcomes[0].sources[0];
     assert.equal(sourceRun.retrieval, "site-crawl");
-    assert.equal(sourceRun.pagesAttempted, 3);
-    assert.equal(sourceRun.pagesCrawled, 3);
-    assert.equal(sourceRun.crawlDepth, 2);
-    assert.deepEqual(calls, ["https://official.example/", "https://official.example/programming", detailUrl]);
+    assert.equal(sourceRun.pagesAttempted, 4);
+    assert.equal(sourceRun.pagesCrawled, 4);
+    assert.equal(sourceRun.crawlDepth, 3);
+    assert.deepEqual(calls, ["https://official.example/", "https://official.example/programming", fallUrl, detailUrl]);
     assert.equal(calls.every((url) => new URL(url).hostname === "official.example"), true);
     assert.equal(db.prepare("SELECT source_url FROM calendar_candidates WHERE title='Atlanta Fall Art Exhibition Opening'").get().source_url, detailUrl);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
@@ -4534,6 +4545,344 @@ test("Atlanta Loves Art vendor schedule creates dated Creative Exchange occurren
   }
 });
 
+test("a pasted BiblioCommons calendar strips tracking parameters and saves every filtered event privately", async () => {
+  const db = database();
+  const submittedUrl = "https://fulcolibrary.bibliocommons.com/v2/events?locations=AUBURN&_gl=tracking&utm_source=ig&fbclid=tracking";
+  const calendarUrl = "https://fulcolibrary.bibliocommons.com/v2/events?locations=AUBURN";
+  const gatewayUrl = "https://gateway.bibliocommons.com/v2/libraries/fulcolibrary/events/search?locations=AUBURN&limit=50&page=1";
+  const eventIds = ["softness-was-always-ours", ...Array.from({ length:11 }, (_, index) => `auburn-event-${index + 2}`)];
+  const eventEntities = Object.fromEntries(eventIds.map((id, index) => [id, {
+    id,
+    definition:{
+      title:index === 0
+        ? "Softness Was Always Ours: A Tender Tribute to Black Women & Girls Exhibit"
+        : `Auburn Library Program ${index + 1}`,
+      description:index === 0
+        ? "<p>A tender tribute to Black women and girls.</p>"
+        : `<p>Public Auburn Avenue library program ${index + 1}.</p>`,
+      start:index === 0 ? "2026-07-22" : `2026-09-${String(index).padStart(2, "0")}`,
+      end:index === 0 ? "2026-12-30" : `2026-09-${String(index).padStart(2, "0")}`,
+      branchLocationId:"AUBURN",
+      locationDetails:index === 0 ? "1st Floor Children's Gallery" : "Auburn Avenue Research Library",
+      audienceIds:["all"],
+      typeIds:[],
+      isCancelled:false,
+      registrationInfo:{ provider:null, instructions:"", isFull:false },
+    },
+    registrationClosed:false,
+  }]));
+  const gatewayPayload = {
+    entities:{
+      libraries:{ "171":{ fullName:"Fulton County Library System" } },
+      locations:{
+        AUBURN:{
+          name:"Auburn Avenue Research Library",
+          webUrl:"https://www.fulcolibrary.org/locations/AUBURN",
+          address:{ number:"101", street:"Auburn Avenue NE", city:"Atlanta", state:"GA", zip:"30303" },
+        },
+      },
+      eventAudiences:{ all:{ name:"All Ages" } },
+      events:eventEntities,
+    },
+    events:{ results:eventIds, pagination:{ count:12, limit:50, page:1, pages:1 } },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const value = String(url);
+    if (value === calendarUrl) return new Response("<html><body><main>Calendar application shell</main></body></html>", { status:200, headers:{ "content-type":"text/html" } });
+    if (value === gatewayUrl) return Response.json(gatewayPayload);
+    assert.fail(`Unexpected BiblioCommons request: ${value}`);
+  };
+  try {
+    const first = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:submittedUrl }, admin:true }),
+      env(db),
+    );
+    assert.equal(first.status, 201, await first.clone().text());
+    const payload = await first.json();
+    assert.equal(payload.candidates.length, 12);
+    assert.equal(payload.createdCount, 12);
+    assert.equal(payload.refreshedCount, 0);
+    assert.equal(payload.extraction.retrieval, "bibliocommons-api");
+    assert.equal(payload.extraction.proposalsDiscovered, 12);
+    assert.equal(payload.extraction.proposalsSaved, 12);
+    assert.equal(payload.extraction.completeness, "complete");
+    assert.equal(payload.candidates[0].sourceUrl, "https://fulcolibrary.bibliocommons.com/events/softness-was-always-ours");
+    assert.equal(payload.candidates[0].startsAt, "2026-07-22");
+    assert.equal(payload.candidates[0].endsAt, "2026-12-30");
+    assert.equal(payload.candidates[0].sourceAuthority, "official_calendar");
+    assert.equal(payload.candidates[0].status, "needs_verification");
+    assert.equal(payload.candidates[0].verificationState, "needs_verification");
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE discovery_channel='pasted_link'").get().count, 12);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
+    const run = db.prepare("SELECT status,candidate_count,duplicate_count,sources_searched_json,source_results_json FROM calendar_scout_runs WHERE id=?").get(payload.runId);
+    assert.equal(run.status, "completed");
+    assert.equal(run.candidate_count, 12);
+    assert.equal(run.duplicate_count, 0);
+    assert.deepEqual(JSON.parse(run.sources_searched_json), [calendarUrl]);
+    assert.equal(JSON.parse(run.source_results_json)[0].sources[0].candidateIds.length, 12);
+
+    const refreshed = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:submittedUrl }, admin:true }),
+      env(db),
+    );
+    assert.equal(refreshed.status, 200, await refreshed.clone().text());
+    const refreshedPayload = await refreshed.json();
+    assert.equal(refreshedPayload.createdCount, 0);
+    assert.equal(refreshedPayload.refreshedCount, 12);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE discovery_channel='pasted_link'").get().count, 12);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a pasted BiblioCommons calendar follows 50-event pages and stops at the explicit 100-candidate cap", async () => {
+  const db = database();
+  const calendarUrl = "https://fulcolibrary.bibliocommons.com/v2/events?locations=CENTRAL";
+  const firstGatewayUrl = "https://gateway.bibliocommons.com/v2/libraries/fulcolibrary/events/search?locations=CENTRAL&limit=50&page=1";
+  const secondGatewayUrl = "https://gateway.bibliocommons.com/v2/libraries/fulcolibrary/events/search?locations=CENTRAL&limit=50&page=2";
+  const eventIds = Array.from({ length:101 }, (_, index) => `central-event-${String(index + 1).padStart(3, "0")}`);
+  const futureDay = new Date(Date.now() + 45 * 86_400_000).toISOString().slice(0, 10);
+  const eventEntity = (id, index) => ({
+    id,
+    definition:{
+      title:`Central Library Program ${index + 1}`,
+      description:`<p>Public Central Library program ${index + 1}.</p>`,
+      start:futureDay,
+      end:futureDay,
+      branchLocationId:"CENTRAL",
+      locationDetails:"Central Library",
+      audienceIds:["all"],
+      typeIds:[],
+      isCancelled:false,
+      registrationInfo:{ provider:null, instructions:"", isFull:false },
+    },
+    registrationClosed:false,
+  });
+  const gatewayPayload = (page, ids) => ({
+    entities:{
+      libraries:{ "171":{ fullName:"Fulton County Library System" } },
+      locations:{
+        CENTRAL:{
+          name:"Central Library",
+          webUrl:"https://www.fulcolibrary.org/locations/CENTRAL",
+          address:{ number:"1", street:"Margaret Mitchell Square", city:"Atlanta", state:"GA", zip:"30303" },
+        },
+      },
+      eventAudiences:{ all:{ name:"All Ages" } },
+      events:Object.fromEntries(ids.map((id) => [id, eventEntity(id, eventIds.indexOf(id))])),
+    },
+    events:{ results:ids, pagination:{ count:101, limit:50, page, pages:3 } },
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const value = String(url);
+    if (value === calendarUrl) return new Response("<html><body><main>Calendar application shell</main></body></html>", { status:200, headers:{ "content-type":"text/html" } });
+    if (value === firstGatewayUrl) return Response.json(gatewayPayload(1, eventIds.slice(0, 50)));
+    if (value === secondGatewayUrl) return Response.json(gatewayPayload(2, eventIds.slice(50, 100)));
+    assert.fail(`Unexpected paginated BiblioCommons request: ${value}`);
+  };
+  try {
+    const response = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:calendarUrl }, admin:true }),
+      env(db),
+    );
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.equal(payload.candidates.length, 100);
+    assert.equal(payload.createdCount, 100);
+    assert.equal(payload.extraction.pagesCrawled, 2);
+    assert.equal(payload.extraction.pagesAnnounced, 3);
+    assert.equal(payload.extraction.eventsAnnounced, 101);
+    assert.equal(payload.extraction.proposalCapReached, true);
+    assert.equal(payload.extraction.proposalsSaved, 100);
+    assert.equal(payload.extraction.completeness, "needs_verification");
+    assert.equal(payload.candidates.at(-1).sourceUrl, "https://fulcolibrary.bibliocommons.com/events/central-event-100");
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE discovery_channel='pasted_link'").get().count, 100);
+    assert.equal(db.prepare("SELECT status FROM calendar_scout_runs WHERE id=?").get(payload.runId).status, "partial");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a pasted BiblioCommons batch reports mixed refreshes and creations as a created response", async () => {
+  const db = database();
+  const calendarUrl = "https://fulcolibrary.bibliocommons.com/v2/events?locations=WEST";
+  const gatewayUrl = "https://gateway.bibliocommons.com/v2/libraries/fulcolibrary/events/search?locations=WEST&limit=50&page=1";
+  const futureDay = new Date(Date.now() + 50 * 86_400_000).toISOString().slice(0, 10);
+  const allIds = ["west-existing", "west-new"];
+  let activeIds = allIds.slice(0, 1);
+  const payload = () => ({
+    entities:{
+      libraries:{ "171":{ fullName:"Fulton County Library System" } },
+      locations:{
+        WEST:{
+          name:"West End Library",
+          webUrl:"https://www.fulcolibrary.org/locations/WEST",
+          address:{ number:"525", street:"Peeples Street SW", city:"Atlanta", state:"GA", zip:"30310" },
+        },
+      },
+      eventAudiences:{ all:{ name:"All Ages" } },
+      events:Object.fromEntries(activeIds.map((id, index) => [id, {
+        id,
+        definition:{
+          title:index === 0 ? "West End Existing Program" : "West End New Program",
+          description:"<p>A public West End Library program.</p>",
+          start:futureDay,
+          end:futureDay,
+          branchLocationId:"WEST",
+          locationDetails:"West End Library",
+          audienceIds:["all"],
+          typeIds:[],
+          isCancelled:false,
+          registrationInfo:{ provider:null, instructions:"", isFull:false },
+        },
+        registrationClosed:false,
+      }])),
+    },
+    events:{ results:activeIds, pagination:{ count:activeIds.length, limit:50, page:1, pages:1 } },
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const value = String(url);
+    if (value === calendarUrl) return new Response("<html><body>Calendar shell</body></html>", { status:200, headers:{ "content-type":"text/html" } });
+    if (value === gatewayUrl) return Response.json(payload());
+    assert.fail(`Unexpected mixed BiblioCommons request: ${value}`);
+  };
+  try {
+    const first = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:calendarUrl }, admin:true }),
+      env(db),
+    );
+    assert.equal(first.status, 201, await first.clone().text());
+    activeIds = allIds;
+    const mixed = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:calendarUrl }, admin:true }),
+      env(db),
+    );
+    assert.equal(mixed.status, 201, await mixed.clone().text());
+    const payloadBody = await mixed.json();
+    assert.equal(payloadBody.existing, false);
+    assert.equal(payloadBody.createdCount, 1);
+    assert.equal(payloadBody.refreshedCount, 1);
+    const run = db.prepare("SELECT status,candidate_count,duplicate_count,failure_count,source_results_json FROM calendar_scout_runs WHERE id=?").get(payloadBody.runId);
+    assert.equal(run.status, "completed");
+    assert.equal(run.candidate_count, 1);
+    assert.equal(run.duplicate_count, 0);
+    assert.equal(run.failure_count, 0);
+    const sourceResult = JSON.parse(run.source_results_json)[0].sources[0];
+    assert.equal(sourceResult.existing, false);
+    assert.equal(sourceResult.created, 1);
+    assert.equal(sourceResult.refreshed, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a partial BiblioCommons page failure saves recovered events and marks Run History partial", async () => {
+  const db = database();
+  const calendarUrl = "https://fulcolibrary.bibliocommons.com/v2/events?locations=EAST";
+  const firstGatewayUrl = "https://gateway.bibliocommons.com/v2/libraries/fulcolibrary/events/search?locations=EAST&limit=50&page=1";
+  const secondGatewayUrl = "https://gateway.bibliocommons.com/v2/libraries/fulcolibrary/events/search?locations=EAST&limit=50&page=2";
+  const futureDay = new Date(Date.now() + 55 * 86_400_000).toISOString().slice(0, 10);
+  const firstPage = {
+    entities:{
+      libraries:{ "171":{ fullName:"Fulton County Library System" } },
+      locations:{
+        EAST:{
+          name:"East Atlanta Library",
+          webUrl:"https://www.fulcolibrary.org/locations/EAST",
+          address:{ number:"400", street:"Flat Shoals Avenue SE", city:"Atlanta", state:"GA", zip:"30316" },
+        },
+      },
+      eventAudiences:{ all:{ name:"All Ages" } },
+      events:{
+        "east-recovered":{
+          id:"east-recovered",
+          definition:{
+            title:"East Atlanta Recovered Program",
+            description:"<p>A public East Atlanta Library program.</p>",
+            start:futureDay,
+            end:futureDay,
+            branchLocationId:"EAST",
+            locationDetails:"East Atlanta Library",
+            audienceIds:["all"],
+            typeIds:[],
+            isCancelled:false,
+            registrationInfo:{ provider:null, instructions:"", isFull:false },
+          },
+          registrationClosed:false,
+        },
+      },
+    },
+    events:{ results:["east-recovered"], pagination:{ count:51, limit:50, page:1, pages:2 } },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const value = String(url);
+    if (value === calendarUrl) return new Response("<html><body>Calendar shell</body></html>", { status:200, headers:{ "content-type":"text/html" } });
+    if (value === firstGatewayUrl) return Response.json(firstPage);
+    if (value === secondGatewayUrl) return new Response("Unavailable", { status:503 });
+    assert.fail(`Unexpected partial BiblioCommons request: ${value}`);
+  };
+  try {
+    const response = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:calendarUrl }, admin:true }),
+      env(db),
+    );
+    assert.equal(response.status, 201, await response.clone().text());
+    const payloadBody = await response.json();
+    assert.equal(payloadBody.candidates.length, 1);
+    assert.equal(payloadBody.extraction.completeness, "needs_verification");
+    assert.equal(payloadBody.extraction.missingChildren.length, 1);
+    const run = db.prepare("SELECT status,candidate_count,failure_count,source_results_json FROM calendar_scout_runs WHERE id=?").get(payloadBody.runId);
+    assert.equal(run.status, "partial");
+    assert.equal(run.candidate_count, 1);
+    assert.equal(run.failure_count, 1);
+    assert.match(JSON.parse(run.source_results_json)[0].sources[0].warning, /incomplete/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a pasted aggregator page remains an unresolved discovery lead instead of becoming an official calendar", async () => {
+  const db = database();
+  const eventUrl = "https://atlanta-roundup.example/posts/gallery-night";
+  const futureDay = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10);
+  const sourceHtml = `<script type="application/ld+json">${JSON.stringify({
+    "@context":"https://schema.org",
+    "@type":"Event",
+    name:"Roundup Gallery Night",
+    description:"An Atlanta visual art exhibition listed by a local roundup blog.",
+    startDate:futureDay,
+    endDate:futureDay,
+    url:eventUrl,
+    organizer:{ "@type":"Organization", name:"Unknown Gallery Organizer" },
+    location:{ "@type":"Place", name:"Unknown Gallery", address:{ streetAddress:"100 Art Way", addressLocality:"Atlanta", addressRegion:"GA" } },
+  })}</script>`;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), eventUrl);
+    return new Response(sourceHtml, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const response = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }),
+      env(db),
+    );
+    assert.equal(response.status, 201, await response.clone().text());
+    const payloadBody = await response.json();
+    assert.equal(payloadBody.candidate.sourceAuthority, "unresolved");
+    assert.equal(payloadBody.candidate.discoveryUrl, eventUrl);
+    assert.equal(payloadBody.candidate.sourceUrl, eventUrl);
+    assert.equal(payloadBody.candidate.status, "needs_verification");
+    assert.match(payloadBody.candidate.sourceResolutionNotes, /original event source has not yet been resolved/i);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payloadBody.candidate.id).count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("a pasted event link creates or refreshes one private candidate from structured facts", async () => {
   const db = database();
   const eventUrl = "https://paste-intake.example/events/one-night-exhibition";
@@ -5322,6 +5671,92 @@ test("Instagram intake keeps an unresolved undated lead private instead of disca
   }
 });
 
+test("Instagram exhibition intake does not mistake an unscheduled summer opening phrase for a missing program", async () => {
+  const db = database();
+  const eventUrl = "https://www.instagram.com/p/DayCUd3CvIU/";
+  const caption = "We are incredibly proud to announce our upcoming exhibition, Softness Was Always Ours, opening this summer. The exhibition runs from Wednesday, July 22, 2026, through Wednesday, December 30, 2026. Admission is free and open to the public.";
+  const renderedHtml = `<html><head><meta property="og:description" content="aarl_atl on July 14, 2026: &quot;${caption}&quot;"></head><body><article><p>${caption}</p></article></body></html>`;
+  const visionEvent = {
+    title:"Softness Was Always Ours: A Tender Tribute to Black Women & Girls Exhibit",
+    description:"A tender tribute to Black women and girls.",
+    caption,
+    organizer:"Auburn Avenue Research Library",
+    organizerUrl:"",
+    venueName:"Auburn Avenue Research Library",
+    venueAddress:"101 Auburn Avenue NE, Atlanta, GA 30303",
+    venueUrl:"",
+    city:"Atlanta",
+    region:"GA",
+    startsAt:"2026-07-22",
+    endsAt:"2026-12-30",
+    eventUrl,
+    ticketUrl:"",
+    imageUrl:"",
+    imageAlt:"",
+    accessStatus:"public",
+    accessNotes:"Admission is free and open to the public.",
+    audiences:["Public"],
+    eventStructure:"exhibition",
+    dateKind:"date_range",
+    timezone:"America/New_York",
+    subjects:["art"],
+    formats:["exhibition"],
+    experimental:false,
+    authorHandle:"aarl_atl",
+    authorDisplayName:"Auburn Avenue Research Library",
+    authorIsVerified:false,
+    postedAt:"2026-07-14",
+    mediaType:"text",
+    extractionNotes:[],
+    conflicts:[],
+    carouselImages:[],
+    occurrences:[],
+    recurringOccurrences:[],
+  };
+  const browser = {
+    async quickAction(action, options) {
+      assert.equal(action, "content");
+      assert.equal(options.url, eventUrl);
+      return new Response(renderedHtml, { status:200, headers:{ "content-type":"text/html" } });
+    },
+  };
+  let resolutionCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    const value = String(url);
+    if (value === eventUrl) return new Response("<main>Instagram post</main>", { status:200, headers:{ "content-type":"text/html" } });
+    if (value === "https://api.openai.com/v1/responses") {
+      const body = JSON.parse(options.body);
+      if (body.text?.format?.name === "pasted_social_event") return Response.json({ output_text:JSON.stringify({ events:[visionEvent] }), usage:{} });
+      resolutionCalls += 1;
+      return Response.json({ output_text:JSON.stringify({ events:[] }), usage:{} });
+    }
+    assert.fail(`Unexpected Instagram exhibition request: ${value}`);
+  };
+  try {
+    const response = await handleCalendarAdminApi(
+      request("/api/admin/calendar/candidates/from-url", { method:"POST", body:{ url:eventUrl }, admin:true }),
+      env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }),
+    );
+    assert.equal(response.status, 201, await response.clone().text());
+    const payload = await response.json();
+    assert.equal(resolutionCalls, 4);
+    assert.equal("scheduleWarning" in payload.extraction, false);
+    assert.equal(payload.candidate.title, visionEvent.title);
+    assert.equal(payload.candidate.startsAt, "2026-07-22");
+    assert.equal(payload.candidate.endsAt, "2026-12-30");
+    assert.equal(payload.candidate.occurrences.length, 0);
+    assert.equal(payload.candidate.status, "needs_verification");
+    assert.equal(payload.candidate.verificationState, "needs_verification");
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(payload.candidate.id).count, 0);
+    const run = db.prepare("SELECT status,failure_count FROM calendar_scout_runs WHERE id=?").get(payload.runId);
+    assert.equal(run.status, "completed");
+    assert.equal(run.failure_count, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Instagram vision failures persist bounded extraction diagnostics in Run History", async () => {
   const db = database();
   const sharedUrl = "https://www.instagram.com/p/NoEventFacts123/?igsi=tracking-value";
@@ -5491,15 +5926,19 @@ test("Instagram intake returns Browser's actual 422 detail when both extraction 
   }
 });
 
-test("Calendar Studio exposes one paste-and-scout link intake", () => {
+test("Calendar Studio exposes batch paste-and-scout site discovery", () => {
   const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
   const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
   assert.match(studioHtml,/id="linkIntakeForm"/);
   assert.match(studioHtml,/id="eventLinkInput" type="url"/);
   assert.match(studioHtml,/>Scout Link<\/button>/);
+  assert.match(studioHtml,/event, calendar, or organization link/);
+  assert.match(studioHtml,/same-site event paths/);
   assert.match(studio,/\/api\/admin\/calendar\/candidates\/from-url/);
-  assert.match(studio,/Private candidate created from the pasted link/);
+  assert.match(studio,/payload\.candidates/);
+  assert.match(studio,/Scout saved.*private candidate/);
+  assert.match(studio,/same-site event paths/);
   assert.match(studioCss,/\.link-intake \{ display:grid;/);
   assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.link-intake \{ grid-template-columns:minmax\(0,1fr\); \}/);
 });

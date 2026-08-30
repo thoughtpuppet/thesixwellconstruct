@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="An isolated concept for a card-grid redesign of the Six.Well Archive Blackboards landing page.">
+  <meta name="theme-color" content="#0e0e0e">
+  <title>Blackboards Field Concept · the six.well construct</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/transitions.css">
+  <link rel="stylesheet" href="/css/archive-public.css">
+  <link rel="stylesheet" href="/css/site-typography.css">
+  <link rel="stylesheet" href="/css/hero.css">
+  <style>
+    .blackboards-concept {
+      --concept-accent: var(--color-archive, #fcb867);
+      --concept-ink: var(--color-body, #fbd19d);
+      --concept-muted: rgba(252, 184, 103, .58);
+      --concept-faint: rgba(252, 184, 103, .18);
+      --board: #090d0a;
+      min-width: 0;
+      background: var(--color-bg);
+      color: var(--concept-ink);
+    }
+
+    .blackboards-concept *,
+    .blackboards-concept *::before,
+    .blackboards-concept *::after {
+      box-sizing: border-box;
+    }
+
+    .prototype-symbols {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+
+    .blackboards-concept .archive-blackboards-hero {
+      padding: clamp(72px, 11vw, 144px) 0 44px;
+      border-bottom: 5px solid var(--concept-accent);
+    }
+
+    .blackboards-concept .archive-blackboards-hero h1 {
+      max-width: 12ch;
+      margin: 0 0 20px;
+    }
+
+    .concept-note {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px 24px;
+      margin-top: 28px;
+      padding: 16px;
+      border: 5px solid var(--concept-faint);
+      color: var(--concept-muted);
+      font: 700 10px/1.5 Inter, sans-serif;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .concept-note strong {
+      color: var(--concept-accent);
+      font-weight: 900;
+    }
+
+    .concept-intro {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr);
+      gap: 16px;
+      padding: 56px 0;
+      border-bottom: 5px solid var(--concept-faint);
+    }
+
+    .concept-intro h2 {
+      max-width: 10ch;
+      margin: 0;
+      color: var(--concept-accent);
+      font-size: clamp(38px, 6.5vw, 82px);
+      font-weight: 900;
+      line-height: .9;
+      letter-spacing: -.055em;
+      text-transform: uppercase;
+    }
+
+    .concept-intro-copy {
+      align-self: end;
+      max-width: 540px;
+    }
+
+    .concept-intro-copy p {
+      margin: 0;
+      font: 15px/1.75 Georgia, serif;
+    }
+
+    .concept-intro-copy p + p {
+      margin-top: 14px;
+      color: var(--concept-muted);
+      font-size: 13px;
+    }
+
+    .field-jump {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin: 0 0 56px;
+      border: 5px solid var(--concept-accent);
+    }
+
+    .field-jump a {
+      display: flex;
+      min-height: 58px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 16px;
+      color: var(--concept-accent);
+      font: 900 11px/1.2 Inter, sans-serif;
+      letter-spacing: .14em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .field-jump a + a {
+      border-left: 5px solid var(--concept-accent);
+    }
+
+    .field-jump a:hover,
+    .field-jump a:focus-visible {
+      background: var(--concept-accent);
+      color: var(--color-bg);
+    }
+
+    .field-jump a:focus-visible,
+    .card-action:focus-visible {
+      outline: 5px solid #fff;
+      outline-offset: -10px;
+    }
+
+    .archive-field-section {
+      scroll-margin-top: 24px;
+    }
+
+    .archive-field-section + .archive-field-section {
+      margin-top: 88px;
+      padding-top: 52px;
+      border-top: 5px solid var(--concept-accent);
+    }
+
+    .section-heading {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+      gap: 16px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+
+    .section-heading h2,
+    .section-heading p {
+      margin: 0;
+    }
+
+    .section-heading h2 {
+      max-width: 11ch;
+      font-size: clamp(36px, 5.5vw, 72px);
+      line-height: .9;
+      letter-spacing: -.045em;
+      text-transform: uppercase;
+    }
+
+    .section-heading p {
+      color: var(--concept-muted);
+      font: 13px/1.7 Georgia, serif;
+    }
+
+    .board-grid,
+    .fragment-grid,
+    .field-logic-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .board-card,
+    .fragment-card,
+    .field-logic-grid article {
+      min-width: 0;
+      border: 5px solid var(--concept-faint);
+      background: var(--color-bg);
+    }
+
+    .board-card,
+    .fragment-card {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .board-card:hover,
+    .fragment-card:hover {
+      border-color: var(--concept-accent);
+    }
+
+    .board-media,
+    .fragment-media {
+      position: relative;
+      overflow: hidden;
+      border-bottom: 5px solid var(--concept-faint);
+      background: var(--board);
+      color: #d7dfcb;
+    }
+
+    .board-card:hover .board-media,
+    .fragment-card:hover .fragment-media {
+      border-color: var(--concept-accent);
+    }
+
+    .board-media {
+      aspect-ratio: 16 / 10;
+    }
+
+    .fragment-media {
+      aspect-ratio: 4 / 3;
+    }
+
+    .board-media svg,
+    .fragment-media svg {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .fragment-card:nth-child(2) .fragment-media svg {
+      width: 155%;
+      height: 155%;
+      transform: translate(-28%, -8%);
+    }
+
+    .fragment-card:nth-child(3) .fragment-media svg {
+      width: 170%;
+      height: 170%;
+      transform: translate(-12%, -44%);
+    }
+
+    .fragment-card:nth-child(4) .fragment-media svg {
+      width: 165%;
+      height: 165%;
+      transform: translate(-48%, -28%);
+    }
+
+    .fragment-card:nth-child(5) .fragment-media svg {
+      width: 180%;
+      height: 180%;
+      transform: translate(-34%, -4%);
+    }
+
+    .media-label {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 1;
+      padding: 8px 10px;
+      background: var(--concept-accent);
+      color: var(--color-bg);
+      font: 900 9px/1 Inter, sans-serif;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+
+    .board-card-copy,
+    .fragment-card-copy {
+      display: flex;
+      min-height: 0;
+      flex: 1;
+      flex-direction: column;
+      padding: 20px;
+    }
+
+    .card-meta,
+    .fragment-coordinate {
+      margin: 0 0 10px;
+      color: var(--concept-accent);
+      font: 900 10px/1.45 Inter, sans-serif;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .board-card h3,
+    .fragment-card h3 {
+      margin: 0;
+      text-transform: uppercase;
+    }
+
+    .board-card h3 {
+      font-size: clamp(23px, 2.4vw, 34px);
+      line-height: .96;
+      letter-spacing: -.035em;
+    }
+
+    .fragment-card h3 {
+      font-size: 20px;
+      line-height: 1.05;
+    }
+
+    .card-description {
+      margin: 14px 0 0;
+      color: var(--concept-muted);
+      font: 12px/1.65 Georgia, serif;
+    }
+
+    .card-register {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 22px 0 0;
+      padding: 16px 0 0;
+      border-top: 5px solid var(--concept-faint);
+    }
+
+    .card-register div {
+      min-width: 0;
+    }
+
+    .card-register dt {
+      margin: 0 0 5px;
+      color: var(--concept-muted);
+      font: 900 8px/1.3 Inter, sans-serif;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .card-register dd {
+      margin: 0;
+      font: 700 13px/1.4 Inter, sans-serif;
+      overflow-wrap: anywhere;
+    }
+
+    .relationship-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .relationship-list span {
+      padding: 7px 8px;
+      border: 5px solid var(--concept-faint);
+      color: var(--concept-muted);
+      font: 900 8px/1 Inter, sans-serif;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+
+    .card-action {
+      display: flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: auto;
+      padding: 18px 0 0;
+      color: var(--concept-accent);
+      font: 900 9px/1.2 Inter, sans-serif;
+      letter-spacing: .12em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .card-action::after {
+      content: "↗";
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .empty-card .fragment-media {
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      color: var(--concept-muted);
+      font: 900 10px/1.65 Inter, sans-serif;
+      letter-spacing: .13em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .field-logic {
+      margin-top: 88px;
+      padding: 52px 0 20px;
+      border-top: 5px solid var(--concept-faint);
+    }
+
+    .field-logic > h2 {
+      max-width: 10ch;
+      margin: 0 0 24px;
+      font-size: clamp(34px, 5vw, 64px);
+      line-height: .92;
+      text-transform: uppercase;
+    }
+
+    .field-logic-grid article {
+      padding: 24px;
+    }
+
+    .field-logic-grid span {
+      color: var(--concept-accent);
+      font: 900 11px/1 Inter, sans-serif;
+      letter-spacing: .16em;
+    }
+
+    .field-logic-grid h3 {
+      margin: 36px 0 10px;
+      font-size: 18px;
+      text-transform: uppercase;
+    }
+
+    .field-logic-grid p {
+      margin: 0;
+      color: var(--concept-muted);
+      font: 12px/1.65 Georgia, serif;
+    }
+
+    @media (max-width: 900px) {
+      .concept-intro,
+      .section-heading {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .concept-intro-copy {
+        max-width: none;
+      }
+
+      .board-grid,
+      .fragment-grid,
+      .field-logic-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 620px) {
+      .concept-note {
+        display: block;
+      }
+
+      .concept-note span {
+        display: block;
+        margin-top: 8px;
+      }
+
+      .field-jump {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .field-jump a + a {
+        border-top: 5px solid var(--concept-accent);
+        border-left: 0;
+      }
+
+      .board-grid,
+      .fragment-grid,
+      .field-logic-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .archive-field-section + .archive-field-section,
+      .field-logic {
+        margin-top: 64px;
+      }
+
+      .board-card h3 {
+        font-size: clamp(25px, 9vw, 36px);
+      }
+    }
+  </style>
+</head>
+<body class="archive-public blackboards-concept" data-venture="archive">
+  <svg class="prototype-symbols" aria-hidden="true">
+    <symbol id="chalk-a" viewBox="0 0 900 560">
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M54 104 C172 36 282 48 382 122 S598 202 768 86" stroke-width="12" opacity=".72"/>
+        <path d="M92 218 L332 208 L248 338 L464 320" stroke-width="8" opacity=".58"/>
+        <path d="M492 122 C626 164 650 276 578 366 C524 436 638 498 820 438" stroke-width="10" opacity=".64"/>
+        <path d="M82 458 L208 372 L330 470 L454 374" stroke-width="6" opacity=".52"/>
+        <circle cx="734" cy="262" r="74" stroke-width="9" opacity=".56"/>
+        <path d="M698 262 L770 262 M734 226 L734 298" stroke-width="7" opacity=".5"/>
+      </g>
+      <g fill="currentColor" font-family="Georgia, serif" opacity=".68">
+        <text x="76" y="174" font-size="25">surface / thought / return</text>
+        <text x="498" y="412" font-size="21">what moves outward?</text>
+      </g>
+    </symbol>
+    <symbol id="chalk-b" viewBox="0 0 900 560">
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M68 92 L302 76 L226 244 L468 216" stroke-width="11" opacity=".68"/>
+        <path d="M516 82 C656 126 736 218 804 354" stroke-width="9" opacity=".58"/>
+        <path d="M74 404 C192 314 308 346 450 466" stroke-width="8" opacity=".56"/>
+        <circle cx="614" cy="350" r="88" stroke-width="10" opacity=".52"/>
+        <path d="M554 350 C594 294 650 294 688 350 C652 410 592 410 554 350Z" stroke-width="7" opacity=".5"/>
+      </g>
+      <g fill="currentColor" font-family="Georgia, serif" opacity=".66">
+        <text x="84" y="304" font-size="24">repeat until the system speaks</text>
+        <text x="516" y="486" font-size="20">loop / witness / revise</text>
+      </g>
+    </symbol>
+    <symbol id="chalk-c" viewBox="0 0 900 560">
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M66 128 C182 72 292 80 418 154 S680 240 828 132" stroke-width="10" opacity=".66"/>
+        <path d="M94 288 L270 198 L426 294 L590 184 L790 284" stroke-width="8" opacity=".56"/>
+        <path d="M116 434 L366 410 M486 420 L780 396" stroke-width="7" opacity=".52"/>
+        <circle cx="456" cy="300" r="132" stroke-width="7" opacity=".45"/>
+      </g>
+      <g fill="currentColor" font-family="Georgia, serif" opacity=".66">
+        <text x="98" y="370" font-size="23">thresholds are also structures</text>
+      </g>
+    </symbol>
+  </svg>
+
+  <a class="archive-skip-link" href="#archive-main">Skip to Blackboards concept</a>
+  <main class="archive-app entrance-fade" id="archive-main" tabindex="-1">
+    <nav class="construct-breadcrumb" aria-label="Breadcrumb"><a href="/home/">Construct</a><span class="construct-breadcrumb-sep" aria-hidden="true">/</span><a href="/archive/">Archive</a><span class="construct-breadcrumb-sep" aria-hidden="true">/</span><span class="construct-breadcrumb-current" aria-current="page">Blackboards concept</span></nav>
+
+    <header class="archive-blackboards-hero site-hero site-hero--supporting">
+      <p class="archive-kicker">Archive lens · redesign study</p>
+      <h1 class="hero-title">Blackboards</h1>
+      <p class="hero-descriptor">Surfaces for thinking, preserved as evolving states and connected fragments.</p>
+      <div class="concept-note" role="note"><strong>Isolated prototype</strong><span>Drawings, future-board slots, fragment titles, and counts are illustrative—not live Archive records.</span></div>
+    </header>
+
+    <section class="concept-intro" aria-labelledby="concept-thesis">
+      <h2 id="concept-thesis">One field. Two scales.</h2>
+      <div class="concept-intro-copy">
+        <p>First, browse the complete Blackboards as evolving physical records. Then move deeper into the fragments that left those surfaces and entered the wider Construct.</p>
+        <p>Both inventories use the same card language, but each card answers a different question: “Which board is this?” and “Where did this thought travel?”</p>
+      </div>
+    </section>
+
+    <nav class="field-jump" aria-label="Browse this Blackboard field">
+      <a href="#boards"><span>01 · Browse boards</span><span aria-hidden="true">↓</span></a>
+      <a href="#fragments"><span>02 · Browse fragments</span><span aria-hidden="true">↓</span></a>
+    </nav>
+
+    <section class="archive-field-section" id="boards" aria-labelledby="boards-title">
+      <div class="section-heading">
+        <h2 id="boards-title">The Field</h2>
+        <p>Every card is one physical Blackboard with a permanent catalogue identity. Its newest public state leads; earlier states remain inside the record.</p>
+      </div>
+
+      <div class="board-grid">
+        <article class="board-card">
+          <div class="board-media">
+            <span class="media-label">Public record · illustrative scan</span>
+            <svg viewBox="0 0 900 560" role="img" aria-label="Illustrative chalk drawing for the South Wall Blackboard"><use href="#chalk-a"/></svg>
+          </div>
+          <div class="board-card-copy">
+            <p class="card-meta">OBJ-002 · Studio · South Wall</p>
+            <h3>Studio Blackboard — South Wall</h3>
+            <p class="card-description">The real record label shown with a prototype-only drawing. The newest captured state is the visual entry point.</p>
+            <dl class="card-register"><div><dt>Current state</dt><dd>State III</dd></div><div><dt>Captured states</dt><dd>03</dd></div></dl>
+            <a class="card-action" href="#prototype-note">Open record concept</a>
+          </div>
+        </article>
+
+        <article class="board-card">
+          <div class="board-media">
+            <span class="media-label">Prototype slot · not live</span>
+            <svg viewBox="0 0 900 560" role="img" aria-label="Illustrative chalk drawing for a future Blackboard card"><use href="#chalk-b"/></svg>
+          </div>
+          <div class="board-card-copy">
+            <p class="card-meta">Illustrative record · Board B</p>
+            <h3>Future Blackboard record</h3>
+            <p class="card-description">A second card demonstrates how the field expands without changing the page anatomy.</p>
+            <dl class="card-register"><div><dt>Current state</dt><dd>State II</dd></div><div><dt>Captured states</dt><dd>02</dd></div></dl>
+            <a class="card-action" href="#prototype-note">Open record concept</a>
+          </div>
+        </article>
+
+        <article class="board-card">
+          <div class="board-media">
+            <span class="media-label">Prototype slot · not live</span>
+            <svg viewBox="0 0 900 560" role="img" aria-label="Illustrative chalk drawing for a future Blackboard card"><use href="#chalk-c"/></svg>
+          </div>
+          <div class="board-card-copy">
+            <p class="card-meta">Illustrative record · Board C</p>
+            <h3>Future Blackboard record</h3>
+            <p class="card-description">Complete surfaces remain visually equal members of one Archive field rather than becoming a list.</p>
+            <dl class="card-register"><div><dt>Current state</dt><dd>State I</dd></div><div><dt>Captured states</dt><dd>01</dd></div></dl>
+            <a class="card-action" href="#prototype-note">Open record concept</a>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="archive-field-section" id="fragments" aria-labelledby="fragments-title">
+      <div class="section-heading">
+        <h2 id="fragments-title">Fragment Index</h2>
+        <p>Fragments are close readings of the field. Each card identifies its board context and foregrounds the work, record, or Origin Thread the thought became part of.</p>
+      </div>
+
+      <div class="fragment-grid">
+        <article class="fragment-card">
+          <div class="fragment-media"><span class="media-label">Illustrative fragment · A</span><svg viewBox="0 0 900 560" role="img" aria-label="Illustrative fragment crop"><use href="#chalk-a"/></svg></div>
+          <div class="fragment-card-copy"><p class="fragment-coordinate">South Wall · State III · Region 01</p><h3>Question becomes structure</h3><p class="card-description">The card leads with what the fragment connects to, not merely where it was cropped.</p><div class="relationship-list"><span>Source for</span><span>Origin Thread</span></div><a class="card-action" href="#prototype-note">Trace connections</a></div>
+        </article>
+
+        <article class="fragment-card">
+          <div class="fragment-media"><span class="media-label">Illustrative fragment · B</span><svg viewBox="0 0 900 560" role="img" aria-label="Illustrative fragment crop"><use href="#chalk-b"/></svg></div>
+          <div class="fragment-card-copy"><p class="fragment-coordinate">South Wall · State III · Region 02</p><h3>Process loop</h3><p class="card-description">State membership gives the fragment temporal context while its manifestations show where it traveled.</p><div class="relationship-list"><span>Visible in state</span><span>Source for</span></div><a class="card-action" href="#prototype-note">Trace connections</a></div>
+        </article>
+
+        <article class="fragment-card">
+          <div class="fragment-media"><span class="media-label">Illustrative fragment · C</span><svg viewBox="0 0 900 560" role="img" aria-label="Illustrative fragment crop"><use href="#chalk-c"/></svg></div>
+          <div class="fragment-card-copy"><p class="fragment-coordinate">Board B · State II · Region 01</p><h3>Material note</h3><p class="card-description">A compact card can expose several relationship types without turning the index into dossier detail.</p><div class="relationship-list"><span>Origin Thread</span><span>Notebook</span></div><a class="card-action" href="#prototype-note">Trace connections</a></div>
+        </article>
+
+        <article class="fragment-card">
+          <div class="fragment-media"><span class="media-label">Illustrative fragment · D</span><svg viewBox="0 0 900 560" role="img" aria-label="Illustrative fragment crop"><use href="#chalk-b"/></svg></div>
+          <div class="fragment-card-copy"><p class="fragment-coordinate">Board B · State I · Region 03</p><h3>Repeated mark</h3><p class="card-description">Repeated visual language becomes browsable across boards while the Digital Asset remains deduplicated.</p><div class="relationship-list"><span>Visible in state</span><span>Related record</span></div><a class="card-action" href="#prototype-note">Trace connections</a></div>
+        </article>
+
+        <article class="fragment-card">
+          <div class="fragment-media"><span class="media-label">Illustrative fragment · E</span><svg viewBox="0 0 900 560" role="img" aria-label="Illustrative fragment crop"><use href="#chalk-c"/></svg></div>
+          <div class="fragment-card-copy"><p class="fragment-coordinate">Board C · State I · Region 02</p><h3>Threshold sketch</h3><p class="card-description">Fragments accumulate into a second, finer-grained way of entering the same creative ecosystem.</p><div class="relationship-list"><span>Source for</span><span>Making practice</span></div><a class="card-action" href="#prototype-note">Trace connections</a></div>
+        </article>
+
+        <article class="fragment-card empty-card">
+          <div class="fragment-media">When a board has no reviewed public fragments, the field says so plainly instead of inventing inventory.</div>
+          <div class="fragment-card-copy"><p class="fragment-coordinate">Honest empty state</p><h3>Nothing forced</h3><p class="card-description">The grid remains structurally ready while publication and privacy gates stay intact.</p></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="field-logic" aria-labelledby="logic-title">
+      <h2 id="logic-title">Field logic</h2>
+      <div class="field-logic-grid">
+        <article><span>01</span><h3>Boards establish place</h3><p>The first grid answers where thinking happened and how each physical surface evolved.</p></article>
+        <article><span>02</span><h3>Fragments establish travel</h3><p>The second grid answers what moved outward and where that thought entered the Construct.</p></article>
+        <article id="prototype-note"><span>03</span><h3>One system underneath</h3><p>The prototype changes hierarchy and browsing—not the existing record, state, relationship, or publication models.</p></article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="archive-site-footer construct-wayfinding-footer"><p>© the six.well construct</p><nav aria-label="Footer"><a href="/archive/">Archive</a><a href="/about/">About</a><a href="/studio/">Studio</a><a href="/home/">Return to construct</a></nav></footer>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>

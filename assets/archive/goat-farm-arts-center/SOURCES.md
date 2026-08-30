@@ -110,6 +110,80 @@ the visible image was not cropped or otherwise altered.
 - Bytes: 107690
 - SHA-256: `fbd0914d54f69180c48981619593cb1efba972186ccc7aa0980fe68e34aca45e`
 
+## Saiel Dauhn Solehman personal archive
+
+Added to the dossier on 2026-08-30. Saiel Dauhn Solehman supplied the four
+original files and authorized their use in her own Six.Well Archive record and
+the related Goat Farm place dossier. The photographs and all visible artworks
+are © Saiel Dauhn Solehman. No Creative Commons or other third-party reuse
+license is granted.
+
+Required credit for each photograph and its visible artworks:
+
+> Saiel Dauhn Solehman · personal archive · © Saiel Dauhn Solehman · no third-party reuse license.
+
+The chapter dates and image dates are deliberately separate. The work-only
+studio was established in 2018, but the two supplied photographs from that
+phase were captured in 2019. Solehman entered the live/work studio later in
+2019; its supplied photographs were captured in 2020 and 2021. Exact studio
+move dates remain unverified.
+
+### Work-only studio wide view
+
+- Original file: `IMG_7607_Original.JPG`
+- Original capture date: 2019-09-24 19:39 local time
+- Original dimensions: 4032 x 3024 pixels
+- Original bytes: 792421
+- Original SHA-256: `d39fde57591d4b6b395b8fc9a0421c87b2ed17b7e66c456fd58eeba457392a6d`
+- Publication derivative: `saiel-goat-farm-work-studio-2019-09-24.jpg`
+- Derivative dimensions: 2400 x 1800 pixels
+- Derivative bytes: 592496
+- Derivative SHA-256: `6f8dfb3eb459d9c066bc571adefa51c057f7ff878223e9c3cdc3ee2efe8c2ea2`
+
+### Work-only studio Open Studio detail
+
+- Original file: `IMG_9038_Original.JPG`
+- Original capture date: 2019-11-13 18:31 local time
+- Original dimensions: 3024 x 4032 pixels
+- Original bytes: 681132
+- Original SHA-256: `63740cf89b2b89a4cd73664450ab00e921633708a859a168000238979e3cb46e`
+- Publication derivative: `saiel-goat-farm-work-studio-2019-11-13.jpg`
+- Derivative dimensions: 1800 x 2400 pixels
+- Derivative bytes: 501153
+- Derivative SHA-256: `cf99ee6af689e77ab1bf5016f54b82c97c61e2ad587daf388af57171a814b49e`
+
+### Live/work studio wide night view
+
+- Original file: `IMG_1784.HEIC`
+- Original capture date: 2020-01-25 22:47:16 -05:00
+- Original dimensions: 4032 x 3024 pixels
+- Original bytes: 1606288
+- Original SHA-256: `ad13484db6f66c345ea864953641eac613dc77a5bdfc51e8cadc66d60445f8a5`
+- Publication derivative: `saiel-goat-farm-live-work-studio-2020-01-25.jpg`
+- Derivative dimensions: 2400 x 1800 pixels
+- Derivative bytes: 370154
+- Derivative SHA-256: `51d17cdfa2b506ae38b8dbaa0ea647c5a5a7c82b220eb320b3226e9ae65625fb`
+
+### Live/work studio working view
+
+- Original file: `IMG_9533_Original.JPG`
+- Original capture date: 2021-05-11 22:17 local time
+- Original dimensions: 4032 x 3024 pixels
+- Original bytes: 873307
+- Original SHA-256: `79edcf4d3e20aa04b342b7d3cf68b9a0cfa16a751114390af47d88caf3870a08`
+- Publication derivative: `saiel-goat-farm-live-work-studio-2021-05-11.jpg`
+- Derivative dimensions: 2400 x 1800 pixels
+- Derivative bytes: 587173
+- Derivative SHA-256: `1a8085446b774e0c61871679d8cd956124047022ae6dc08f667ced491461f379`
+
+All four publication derivatives were auto-oriented, resized without cropping
+to a maximum 2400-pixel long edge, and encoded as progressive JPEGs. EXIF, XMP,
+IPTC, capture-date, camera, and location metadata were not carried into the
+public files. The HEIC source was decoded to a temporary full-resolution JPEG
+before the same final derivative process because the publication encoder's
+HEIC safety limits rejected the source container. The visible image was not
+otherwise altered.
+
 ## Interpretive constraints
 
 The 2011 photograph documents the complex before its recent redevelopment. It
@@ -120,6 +194,12 @@ The 2012 evening photograph documents the arts-center period before the recent
 redevelopment. It records visitors and illuminated historic buildings during
 an event, not current building condition, circulation, occupancy, landscape,
 or site configuration.
+
+Solehman's four photographs document only her work-only and live/work studios.
+They do not establish campus-wide condition, tenant counts, vacancy,
+circulation, or the experience of other residents. They support a firsthand
+personal chronology and the distinction between an announced 2019 departure
+schedule and Solehman's own documented occupancy through 2021.
 
 The 1898 image is a historic guidebook reproduction of the Van Winkle Gin &
 Machine Company plant. It is evidence of the industrial complex as represented

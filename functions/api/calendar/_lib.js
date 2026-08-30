@@ -15,7 +15,7 @@ const SOURCE_AUTHORITIES = new Set(["organizer_event", "venue_event", "official_
 const LINK_ROLES = new Set(["organizer", "venue", "ticket", "artist", "participant", "supporting", "discovery"]);
 const CALENDAR_CREDIT_ROLE_CACHE = new WeakMap();
 const PLATFORM_SOURCE_ADAPTERS = new Set(["eventbrite", "posh", "bigtickets", "partiful"]);
-const INTERNAL_SOURCE_ADAPTERS = new Set(["atlanta_loves_art", "beltline", "eyedrum", "high_art_making", "rampant", "seven_stages", "squarespace"]);
+const INTERNAL_SOURCE_ADAPTERS = new Set(["atlanta_loves_art", "beltline", "bibliocommons", "eyedrum", "high_art_making", "rampant", "seven_stages", "squarespace"]);
 const STORED_SOURCE_ADAPTERS = new Set(["automatic", "wix", "localist", "out_of_hand", "json", "icalendar", "rss"]);
 const SOURCE_ADAPTERS = new Set([...STORED_SOURCE_ADAPTERS, ...PLATFORM_SOURCE_ADAPTERS, ...INTERNAL_SOURCE_ADAPTERS]);
 const SOURCE_RENDER_MODES = new Set(["static", "dynamic-fallback"]);
@@ -39,8 +39,8 @@ const SOURCE_TIMEOUT_MS = 20_000;
 const OPENAI_TIMEOUT_MS = 60_000;
 const DEFAULT_SITE_CRAWL_PAGES = 8;
 const MAX_SITE_CRAWL_PAGES = 20;
-const MAX_SITE_CRAWL_DEPTH = 2;
 const SITE_CRAWL_CONCURRENCY = 2;
+const MAX_PASTED_LINK_PROPOSALS = 100;
 const SOCIAL_PLATFORMS = new Set(["threads", "instagram", "tiktok"]);
 const CONNECTOR_IDS = new Set(["direct", "general_web", "threads_api", "instagram_api", "threads_web", "instagram_web", "tiktok_web"]);
 const SOCIAL_DOMAINS = { threads: "threads.net", instagram: "instagram.com", tiktok: "tiktok.com" };
@@ -4335,39 +4335,55 @@ async function beginPastedLinkRun(db, pastedUrl) {
   await db.prepare(
     `INSERT INTO calendar_scout_runs (id,run_kind,status,model,started_at,sources_searched_json,queries_json)
      VALUES (?,'manual','running','pasted-link',?,?,?)`
-  ).bind(runId, isoNow(), JSON.stringify([pastedUrl]), JSON.stringify(["Pasted event link extraction"])).run();
+  ).bind(runId, isoNow(), JSON.stringify([pastedUrl]), JSON.stringify(["Pasted link site discovery"])).run();
   return runId;
 }
 
 async function completePastedLinkRun(db, runId, pastedUrl, result) {
   const incompleteFields = (Array.isArray(result?.extraction?.incompleteFields) ? result.extraction.incompleteFields : []).map(asString).filter(Boolean);
+  const proposalFailures = Array.isArray(result?.extraction?.proposalFailures) ? result.extraction.proposalFailures : [];
+  const crawlFailures = Array.isArray(result?.extraction?.crawlFailures) ? result.extraction.crawlFailures : [];
+  const missingChildren = Array.isArray(result?.extraction?.missingChildren) ? result.extraction.missingChildren : [];
+  const extractionFailureCount = proposalFailures.length + crawlFailures.length + missingChildren.length;
+  const incompleteExtraction = asString(result?.extraction?.completeness) === "needs_verification";
   const warning = asString(result?.extraction?.scheduleWarning)
+    || (proposalFailures.length ? `${proposalFailures.length} discovered event${proposalFailures.length === 1 ? " was" : "s were"} not saved; review the extraction diagnostics.` : "")
+    || (result?.extraction?.capReached ? "The site exposed more events or event paths than this run could safely process; saved candidates are marked for review." : "")
+    || (incompleteExtraction ? "The site discovery run was incomplete; every recovered candidate was saved privately and the missing paths are recorded for review." : "")
     || (incompleteFields.length ? `A private candidate was saved for Studio review with unresolved fields: ${incompleteFields.join(", ")}.` : "");
+  const createdCount = Math.max(0, Number(result?.createdCount) || (result?.existing ? 0 : 1));
+  const refreshedCount = Math.max(0, Number(result?.refreshedCount) || (result?.existing ? 1 : 0));
+  const candidateIds = (Array.isArray(result?.candidates) ? result.candidates : [result?.candidate]).map((candidate) => asString(candidate?.id)).filter(Boolean);
   const sourceResult = {
     url: pastedUrl,
     sourceId: "",
     status: warning ? "warning" : "ok",
     candidateId: asString(result?.candidate?.id),
-    existing: Boolean(result?.existing),
+    candidateIds,
+    existing: createdCount === 0 && refreshedCount > 0,
+    created: createdCount,
+    refreshed: refreshedCount,
+    skipped: proposalFailures.length,
     extraction: result?.extraction || {},
     ...(warning ? { warning } : {}),
   };
   const outcome = {
     channel: "pasted_link",
     status: warning ? "partial" : "ok",
-    candidates: result?.existing ? 0 : 1,
+    candidates: createdCount,
     duplicates: 0,
     warnings: warning ? 1 : 0,
-    failures: 0,
+    failures: extractionFailureCount,
     sources: [sourceResult],
   };
   await db.prepare(
-    `UPDATE calendar_scout_runs SET status=?,completed_at=?,candidate_count=?,duplicate_count=0,failure_count=0,
+    `UPDATE calendar_scout_runs SET status=?,completed_at=?,candidate_count=?,duplicate_count=0,failure_count=?,
        source_results_json=?,openai_usage_json=?,error_message='' WHERE id=?`
   ).bind(
     warning ? "partial" : "completed",
     isoNow(),
-    result?.existing ? 0 : 1,
+    createdCount,
+    extractionFailureCount,
     JSON.stringify([outcome]),
     JSON.stringify(result?.extraction?.openaiUsage || {}),
     runId,
@@ -4413,9 +4429,9 @@ async function handleCandidates(request, env, parts) {
     const pastedUrl = canonicalPastedLinkUrl(submittedUrl);
     const runId = await beginPastedLinkRun(db, pastedUrl);
     try {
-      const result = await createCandidateFromUrl(env, db, pastedUrl);
+      const result = await createCandidatesFromUrl(env, db, pastedUrl);
       await completePastedLinkRun(db, runId, pastedUrl, result);
-      return json({ ...result, runId }, { status: result.existing ? 200 : 201 });
+      return json({ ...result, runId }, { status: result.createdCount > 0 ? 201 : 200 });
     } catch (error) {
       await failPastedLinkRun(db, runId, pastedUrl, error);
       const message = error.message || "The Scout could not extract an event from that link.";
@@ -5715,6 +5731,203 @@ function extractWixEvents(html, source) {
   }
 }
 
+function bibliocommonsPayloads(text) {
+  const payloads = [];
+  try {
+    const direct = JSON.parse(asString(text));
+    if (direct && typeof direct === "object") payloads.push(direct);
+  } catch {
+    // HTML responses expose the normalized event state in application/json scripts.
+  }
+  const pattern = /<script\b(?=[^>]*\btype=["']application\/json["'])[^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  let inspected = 0;
+  while ((match = pattern.exec(asString(text))) && inspected < 30) {
+    inspected += 1;
+    try {
+      const payload = JSON.parse(match[1]);
+      if (payload && typeof payload === "object") payloads.push(payload);
+    } catch {
+      // Ignore unrelated application/json scripts that are not standalone payloads.
+    }
+  }
+  return payloads.filter((payload) => {
+    const search = payload?.events?.eventsSearch || payload?.events;
+    return payload?.entities?.events && Array.isArray(search?.results);
+  });
+}
+
+function bibliocommonsAddress(location) {
+  const address = location?.address && typeof location.address === "object" ? location.address : {};
+  const street = [asString(address.number), asString(address.street)].filter(Boolean).join(" ");
+  const locality = [asString(address.city), asString(address.state), asString(address.zip)].filter(Boolean).join(" ");
+  return [street, locality].filter(Boolean).join(", ");
+}
+
+function bibliocommonsRegistrationUrl(definition) {
+  const html = sourceHtmlEntities(definition?.registrationInfo?.instructions);
+  const href = html.match(/<a\b[^>]*href=["']([^"']+)["']/i)?.[1] || "";
+  return validHttpUrl(href) ? href : "";
+}
+
+function bibliocommonsEventProposal(payload, eventId, source) {
+  const event = payload?.entities?.events?.[eventId];
+  const definition = event?.definition || {};
+  const location = payload?.entities?.locations?.[definition.branchLocationId] || {};
+  const library = Object.values(payload?.entities?.libraries || {})[0] || {};
+  const audienceNames = (Array.isArray(definition.audienceIds) ? definition.audienceIds : [])
+    .map((id) => payload?.entities?.eventAudiences?.[id]?.name)
+    .map(asString)
+    .filter(Boolean);
+  const rawStart = asString(definition.start || event?.indexStart);
+  const rawEnd = asString(definition.end || event?.indexEnd);
+  const startsAt = canonicalCalendarDate(rawStart, TIME_ZONE);
+  const endsAt = canonicalCalendarDate(rawEnd, TIME_ZONE) || null;
+  const allDay = /^\d{4}-\d{2}-\d{2}$/.test(rawStart);
+  const range = allDay && /^\d{4}-\d{2}-\d{2}$/.test(rawEnd) && rawEnd !== rawStart;
+  const title = cleanSourceText(definition.title);
+  const description = cleanSourceText(sourceHtmlEntities(definition.description));
+  const locationDetail = cleanSourceText(definition.locationDetails);
+  const locationUrl = validHttpUrl(location.webUrl) ? asString(location.webUrl) : "";
+  const sourceUrl = new URL(`/events/${encodeURIComponent(eventId)}`, source.url).toString();
+  const registrationUrl = bibliocommonsRegistrationUrl(definition);
+  const registrationRequired = Boolean(definition?.registrationInfo?.provider || registrationUrl);
+  const eventStructure = /\b(?:exhibit|exhibition|gallery|installation)\b/i.test(`${title} ${description}`) && range ? "exhibition" : "single";
+  const organizer = asString(library.fullName || library.longName) || "Fulton County Library System";
+  const venueName = asString(location.name) || cleanSourceText(definition.branchLocationId);
+  return {
+    sourceId: source.id,
+    sourceEventId: asString(event.id || eventId),
+    sourceUrl,
+    ticketUrl: registrationUrl,
+    discoveryUrl: source.url,
+    organizerUrl: locationUrl,
+    venueUrl: locationUrl,
+    sourceAuthority: "official_calendar",
+    sourceResolutionNotes: "The event was retrieved from the library system's public BiblioCommons calendar data.",
+    relatedLinks: locationUrl ? [{ label: venueName, url: locationUrl, role: "venue", includePublic:false }] : [],
+    title,
+    organizer,
+    factualDescription: description,
+    eventStructure,
+    accessStatus: "public",
+    accessNotes: registrationRequired ? "Advance registration is required." : "",
+    audiences: audienceNames.length ? audienceNames : ["Public"],
+    dateKind: range ? "date_range" : allDay ? "all_day" : "timed",
+    startsAt,
+    endsAt,
+    timezone: TIME_ZONE,
+    venueName,
+    venueAddress: bibliocommonsAddress(location),
+    city: asString(location?.address?.city) || "Atlanta",
+    region: asString(location?.address?.state) || "GA",
+    subjects: [],
+    formats: [],
+    experimental: false,
+    scheduleStatus: definition.isCancelled ? "cancelled" : "scheduled",
+    ticketStatus: registrationRequired ? (event.registrationClosed || definition?.registrationInfo?.isFull ? "registration_closed" : "registration_open") : "not_required",
+    planningNotes: locationDetail ? `Library room: ${locationDetail}` : "",
+    verificationState: "verified",
+    verificationNotes: "Title, schedule, venue, description, and access facts were retrieved from the official BiblioCommons event record.",
+    confidence: 0.96,
+  };
+}
+
+function extractBibliocommonsEvents(text, source) {
+  const events = [];
+  const seen = new Set();
+  for (const payload of bibliocommonsPayloads(text)) {
+    const search = payload?.events?.eventsSearch || payload?.events || {};
+    for (const eventId of search.results || []) {
+      if (seen.has(eventId)) continue;
+      const event = bibliocommonsEventProposal(payload, eventId, source);
+      if (!event.title || !validDate(event.startsAt)) continue;
+      seen.add(eventId);
+      events.push(event);
+    }
+  }
+  return events;
+}
+
+function bibliocommonsSearchUrl(sourceUrl, page = 1) {
+  const source = new URL(sourceUrl);
+  const library = source.hostname.toLowerCase().split(".")[0];
+  const target = new URL(`https://gateway.bibliocommons.com/v2/libraries/${encodeURIComponent(library)}/events/search`);
+  const functionalFilters = new Set(["locations", "programs", "types", "audiences", "languages", "startDate", "endDate", "q"]);
+  for (const [key, value] of source.searchParams) {
+    if (functionalFilters.has(key)) target.searchParams.append(key, value);
+  }
+  target.searchParams.set("limit", "50");
+  target.searchParams.set("page", String(page));
+  return target.toString();
+}
+
+async function extractBibliocommonsListing(source, staticText = "") {
+  const config = parseJson(source.adapter_config_json, {});
+  const maximumPages = Math.min(Math.max(Number(config.maxPages) || 10, 1), 20);
+  const maximumChildren = Math.min(Math.max(Number(config.maxChildren) || MAX_PASTED_LINK_PROPOSALS, 1), MAX_PASTED_LINK_PROPOSALS);
+  const proposals = [];
+  const seen = new Set();
+  let announcedPages = 1;
+  let announcedCount = 0;
+  let pagesCrawled = 0;
+  const failures = [];
+  for (let page = 1; page <= Math.min(announcedPages, maximumPages) && proposals.length < maximumChildren; page += 1) {
+    try {
+      const response = await fetchExternalSource(bibliocommonsSearchUrl(source.url, page));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const text = await boundedResponseText(response);
+      const payload = bibliocommonsPayloads(text)[0];
+      if (!payload) throw new Error("The event-search response did not contain normalized event data.");
+      const search = payload?.events?.eventsSearch || payload?.events || {};
+      announcedPages = Math.max(1, Number(search?.pagination?.pages) || 1);
+      announcedCount = Math.max(announcedCount, Number(search?.pagination?.count) || 0);
+      pagesCrawled += 1;
+      for (const event of extractBibliocommonsEvents(text, source)) {
+        if (proposals.length >= maximumChildren) break;
+        if (seen.has(event.sourceEventId)) continue;
+        seen.add(event.sourceEventId);
+        proposals.push(event);
+      }
+    } catch (error) {
+      failures.push({ page, url:bibliocommonsSearchUrl(source.url, page), error:asString(error.message) });
+      break;
+    }
+  }
+  if (!proposals.length && staticText) {
+    for (const event of extractBibliocommonsEvents(staticText, source)) {
+      if (proposals.length >= maximumChildren) break;
+      if (seen.has(event.sourceEventId)) continue;
+      seen.add(event.sourceEventId);
+      proposals.push(event);
+    }
+  }
+  const proposalCapReached = proposals.length >= maximumChildren
+    && (announcedCount > proposals.length || announcedPages > pagesCrawled);
+  const pageCapReached = announcedPages > maximumPages;
+  const capReached = proposalCapReached || pageCapReached;
+  return {
+    proposals,
+    diagnostics: {
+      retrieval: pagesCrawled ? "bibliocommons-api" : "static",
+      browserMs: 0,
+      adapter: "bibliocommons",
+      hubDetected: true,
+      pagesCrawled,
+      pagesAnnounced: announcedPages,
+      eventsAnnounced: announcedCount,
+      proposalLimit: maximumChildren,
+      proposalCapReached,
+      pageCapReached,
+      capReached,
+      childLinksDiscovered: proposals.length,
+      childrenExtracted: proposals.length,
+      missingChildren: failures,
+      completeness: failures.length || capReached ? "needs_verification" : "complete",
+    },
+  };
+}
+
 function extractJsonEvents(text, source) {
   try {
     const parsed = JSON.parse(text);
@@ -5992,6 +6205,7 @@ function sourceAdapterKey(source) {
   if (host === "eventbrite.com" || host.endsWith(".eventbrite.com")) return "eventbrite";
   if (host === "posh.vip" || host.endsWith(".posh.vip")) return "posh";
   if (host === "partiful.com" || host.endsWith(".partiful.com")) return "partiful";
+  if (host === "bibliocommons.com" || host.endsWith(".bibliocommons.com")) return "bibliocommons";
   if (host === "atlantalovesart.com" || host.endsWith(".atlantalovesart.com")) return "atlanta_loves_art";
   if (host === "7stages.org" || host.endsWith(".7stages.org")) return "seven_stages";
   if (host === "eyedrum.org") return "eyedrum";
@@ -7681,9 +7895,21 @@ function pastedOccurrenceType(item) {
   return "other";
 }
 
+function trackingQueryKey(key) {
+  return /^(?:utm_|fbclid$|gclid$|mc_|_gl$|igshid$|igsi$)/i.test(asString(key));
+}
+
 function canonicalPastedLinkUrl(value) {
   const raw = asString(value);
-  if (!validHttpUrl(raw) || !isInstagramUrl(raw)) return raw;
+  if (!validHttpUrl(raw)) return raw;
+  if (!isInstagramUrl(raw)) {
+    const parsed = new URL(raw);
+    parsed.hash = "";
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (trackingQueryKey(key)) parsed.searchParams.delete(key);
+    }
+    return parsed.toString();
+  }
   const parsed = new URL(raw);
   const post = parsed.pathname.match(/\/(p|reel)\/([A-Za-z0-9_-]+)/i);
   if (!post) return raw;
@@ -8029,7 +8255,8 @@ function pastedSocialChildScheduleExpected(value, events = []) {
   if (/\bevery\s+(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)\b/i.test(text)) return true;
   const hasParentStructure = events.some((item) => ["exhibition", "series"].includes(asString(item?.eventStructure)) || asString(item?.dateKind) === "date_range");
   if (!hasParentStructure) return false;
-  return /\b(?:opening|reception|artist talk|tournament|mixer|screening|performance|workshop|studio visits?)\b/i.test(text);
+  if (/\b(?:opening reception|closing reception|artist talk|tournament|mixer|screening|performance|workshop|studio visits?)\b/i.test(text)) return true;
+  return /\bopening\b(?=[^.!?\n]{0,80}\b(?:sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|at\s+\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)))\b/i.test(text);
 }
 
 function pastedSocialEvidenceTitle(value) {
@@ -8553,10 +8780,10 @@ async function browserPlatformEvents(env, source, adapterKey, url, maximum, mode
     ...(Array.isArray(primaryEvent?.occurrences) ? primaryEvent.occurrences : []),
     ...(Array.isArray(primaryEvent?.recurringOccurrences) ? primaryEvent.recurringOccurrences : []),
   ];
-  const scheduleSignal = fallbackUsed
-    || ["exhibition", "series"].includes(asString(primaryEvent?.eventStructure))
-    || asString(primaryEvent?.dateKind) === "date_range"
-    || /\b(?:opening|reception|artist talk|tournament|mixer|screening|performance|showings?|performances?|workshop|studio visits?)\b/i.test(`${asString(primaryEvent?.caption)} ${asString(primaryEvent?.description)}`);
+  const scheduleSignal = fallbackUsed || pastedSocialChildScheduleExpected(
+    `${asString(primaryEvent?.caption)} ${asString(primaryEvent?.description)}`,
+    primaryEvent ? [primaryEvent] : [],
+  );
   if (socialDetail && scheduleSignal && primaryEvent?.title && validDate(primaryEvent.startsAt) && currentSchedule.length === 0) {
     scheduleScanUsed = true;
     const scheduleResponse = await env.BROWSER.quickAction("json", {
@@ -8714,7 +8941,7 @@ function pastedLinkSource(pastedUrl) {
     trust_level: "discovery",
     adapter_key: "automatic",
     render_mode: "dynamic-fallback",
-    adapter_config_json: JSON.stringify({ ...(platform ? { platform } : {}), maxChildren: 1, eventUrls: [pastedUrl] }),
+    adapter_config_json: JSON.stringify({ ...(platform ? { platform } : {}), maxChildren: platform ? 1 : MAX_PASTED_LINK_PROPOSALS, siteCrawlMaxPages:20, eventUrls: [pastedUrl] }),
   };
 }
 
@@ -8726,11 +8953,14 @@ function pastedLinkAuthority(sourceUrl, organizerUrl, venueUrl) {
 }
 
 function holdPastedLinkForReview(proposal, pastedUrl) {
+  const eventSourceUrl = validHttpUrl(proposal.sourceUrl) ? asString(proposal.sourceUrl) : pastedUrl;
   const organizerUrl = asString(proposal.organizerUrl)
     || asString((proposal.relatedLinks || []).find((link) => link.role === "organizer")?.url);
   const venueUrl = asString(proposal.venueUrl)
     || asString((proposal.relatedLinks || []).find((link) => link.role === "venue")?.url);
-  const sourceAuthority = pastedLinkAuthority(pastedUrl, organizerUrl, venueUrl);
+  const proposedAuthority = SOURCE_AUTHORITIES.has(asString(proposal.sourceAuthority)) ? asString(proposal.sourceAuthority) : "unresolved";
+  const inferredAuthority = pastedLinkAuthority(eventSourceUrl, organizerUrl, venueUrl);
+  const sourceAuthority = inferredAuthority === "unresolved" ? proposedAuthority : inferredAuthority;
   const notes = [
     asString(proposal.verificationNotes),
     sourceAuthority === "unresolved"
@@ -8741,24 +8971,25 @@ function holdPastedLinkForReview(proposal, pastedUrl) {
   return {
     ...proposal,
     sourceId: "",
-    sourceUrl: pastedUrl,
-    discoveryUrl: sourceAuthority === "unresolved" ? pastedUrl : "",
+    sourceUrl: eventSourceUrl,
+    discoveryUrl: eventSourceUrl === pastedUrl && sourceAuthority !== "unresolved" ? "" : pastedUrl,
     organizerUrl: validHttpUrl(organizerUrl) ? organizerUrl : "",
     venueUrl: validHttpUrl(venueUrl) ? venueUrl : "",
     sourceAuthority,
     sourceResolutionNotes: sourceAuthority === "unresolved"
       ? "The Scout extracted facts from a pasted event link. Source authority still requires Studio review."
       : "The pasted event page and its official organization link share the same website. Studio review is still required.",
-    flyerProvenanceUrl: proposal.flyerUrl ? pastedUrl : "",
+    flyerProvenanceUrl: proposal.flyerUrl ? (asString(proposal.flyerProvenanceUrl) || eventSourceUrl) : "",
     verificationState: "needs_verification",
     verificationNotes: [...new Set(notes)].join("\n"),
     discoveryChannel: "pasted_link",
   };
 }
 
-async function extractPastedLinkProposal(env, pastedUrl) {
+async function extractPastedLinkProposals(env, pastedUrl) {
   const source = pastedLinkSource(pastedUrl);
   const adapterKey = sourceAdapterKey(source);
+  const socialPlatform = socialPlatformFromUrl(pastedUrl);
   let staticText = "";
   let sourceFailure = "";
   try {
@@ -8777,7 +9008,7 @@ async function extractPastedLinkProposal(env, pastedUrl) {
       throw error;
     }
     const extracted = await ticketPlatformDetail(env, source, adapterKey, detail, staticText);
-    return { proposal: { ...extracted.proposal, discoveryChannel: "pasted_link" }, diagnostics: { retrieval: extracted.retrieval, browserMs: extracted.browserMs, adapter: adapterKey } };
+    return { proposals: [{ ...extracted.proposal, discoveryChannel: "pasted_link" }], diagnostics: { retrieval: extracted.retrieval, browserMs: extracted.browserMs, adapter: adapterKey } };
   }
 
   if (adapterKey === "seven_stages" && staticText) {
@@ -8789,16 +9020,40 @@ async function extractPastedLinkProposal(env, pastedUrl) {
       throw error;
     }
     return {
-      proposal: { ...proposal, discoveryChannel:"pasted_link" },
+      proposals: [{ ...proposal, discoveryChannel:"pasted_link" }],
       diagnostics: { ...extracted.diagnostics, adapter:adapterKey },
     };
   }
 
+  if (adapterKey === "bibliocommons") {
+    const extracted = await extractBibliocommonsListing(source, staticText);
+    if (extracted.proposals.length) {
+      return {
+        proposals: extracted.proposals.map(inferSubjectsAndFormats).map((proposal) => holdPastedLinkForReview(proposal, pastedUrl)),
+        diagnostics: extracted.diagnostics,
+      };
+    }
+  }
+
   if (staticText) {
-    const proposals = extractCalendarSourceEvents(staticText, source).map(inferSubjectsAndFormats);
-    const exact = proposals.find((proposal) => proposal.sourceUrl === pastedUrl) || (proposals.length === 1 ? proposals[0] : null);
-    if (exact?.title && validDate(exact.startsAt)) {
-      return { proposal: holdPastedLinkForReview(exact, pastedUrl), diagnostics: { retrieval: "static", browserMs: 0, adapter: sourceAdapterKey(source) } };
+    const rootProposals = extractCalendarSourceEvents(staticText, source).map(inferSubjectsAndFormats);
+    let proposals = [...rootProposals];
+    let diagnostics = { retrieval: "static", browserMs: 0, adapter:sourceAdapterKey(source), hubDetected:rootProposals.length > 1 };
+    if (!socialPlatform && adapterKey === "automatic") {
+      const crawled = await crawlOfficialSite(source, staticText);
+      diagnostics = {
+        ...diagnostics,
+        ...crawled.diagnostics,
+        retrieval: crawled.proposals.length ? "site-crawl" : diagnostics.retrieval,
+      };
+      proposals.push(...crawled.proposals.map(inferSubjectsAndFormats));
+    }
+    proposals = proposals.filter((proposal, index, events) => proposal?.title && validDate(proposal.startsAt) && events.findIndex((candidate) => (
+      (proposal.sourceEventId && candidate.sourceEventId === proposal.sourceEventId)
+      || `${candidate.sourceUrl}|${normalizeText(candidate.title)}|${candidate.startsAt}` === `${proposal.sourceUrl}|${normalizeText(proposal.title)}|${proposal.startsAt}`
+    )) === index);
+    if (proposals.length) {
+      return { proposals: proposals.map((proposal) => holdPastedLinkForReview(proposal, pastedUrl)), diagnostics };
     }
   }
 
@@ -8807,7 +9062,6 @@ async function extractPastedLinkProposal(env, pastedUrl) {
     error.httpStatus = 422;
     throw error;
   }
-  const socialPlatform = socialPlatformFromUrl(pastedUrl);
   if (socialPlatform && env.OPENAI_API_KEY) {
     try {
       const renderedPage = await browserContent(env, pastedUrl, "", { includeImages: true });
@@ -8815,6 +9069,7 @@ async function extractPastedLinkProposal(env, pastedUrl) {
       const item = extracted.events[0];
       const scheduleCount = (Array.isArray(item?.occurrences) ? item.occurrences.length : 0)
         + (Array.isArray(item?.recurringOccurrences) ? item.recurringOccurrences.length : 0);
+      let scheduleWarning = "";
       if (!item?.title) {
         const error = new Error("The rendered Instagram evidence did not produce a confirmed event title.");
         error.diagnostics = {
@@ -8827,18 +9082,11 @@ async function extractPastedLinkProposal(env, pastedUrl) {
         throw error;
       }
       if (extracted.scheduleExpected && scheduleCount === 0) {
-        const error = new Error("The Instagram caption announces related programs, but none were recovered. The candidate was not changed.");
-        error.diagnostics = {
-          stage: "rendered-social-vision",
-          canonicalUrl: pastedUrl,
-          evidenceCharacters: extracted.evidenceCharacters,
-          mediaInspected: extracted.mediaCount,
-          missingFields: ["occurrences"],
-        };
-        throw error;
+        scheduleWarning = "The social post may mention a related schedule that was not recovered; the private candidate was saved for Studio review.";
+        item.extractionNotes = [...(Array.isArray(item.extractionNotes) ? item.extractionNotes : []), scheduleWarning];
       }
       return {
-        proposal: browserPastedLinkProposal(item, source),
+        proposals: [browserPastedLinkProposal(item, source)],
         diagnostics: {
           retrieval: "rendered-social-vision",
           browserMs: renderedPage.browserMs,
@@ -8846,6 +9094,7 @@ async function extractPastedLinkProposal(env, pastedUrl) {
           mediaInspected: extracted.mediaCount,
           evidenceCharacters: extracted.evidenceCharacters,
           ...(!validDate(item.startsAt) ? { incompleteFields: ["startsAt"] } : {}),
+          ...(scheduleWarning ? { scheduleWarning } : {}),
           openaiUsage: extracted.usage,
         },
       };
@@ -8877,7 +9126,7 @@ async function extractPastedLinkProposal(env, pastedUrl) {
     throw error;
   }
   return {
-    proposal: browserPastedLinkProposal(item, source),
+    proposals: [browserPastedLinkProposal(item, source)],
     diagnostics: {
       retrieval: "browser",
       browserMs: rendered.browserMs,
@@ -8889,30 +9138,74 @@ async function extractPastedLinkProposal(env, pastedUrl) {
   };
 }
 
-async function createCandidateFromUrl(env, db, pastedUrl) {
-  const extracted = await extractPastedLinkProposal(env, pastedUrl);
+async function createCandidatesFromUrl(env, db, pastedUrl) {
+  const extracted = await extractPastedLinkProposals(env, pastedUrl);
+  const pastedConfig = parseJson(pastedLinkSource(pastedUrl).adapter_config_json, {});
+  const proposalLimit = Math.min(Math.max(Number(pastedConfig.maxChildren) || MAX_PASTED_LINK_PROPOSALS, 1), MAX_PASTED_LINK_PROPOSALS);
+  const discoveredProposals = Array.isArray(extracted.proposals) ? extracted.proposals : [];
+  const proposals = discoveredProposals.slice(0, proposalLimit);
+  const proposalCapReached = discoveredProposals.length > proposals.length;
   const profileRow = await db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first();
   const profile = normalizeProfile(profileRow);
-  const needsSourceResolution = sourceAuthorityErrors(extracted.proposal).length > 0;
-  const resolved = needsSourceResolution
-    ? await resolveDiscoveryProposal(env, db, profile, { name: "Pasted link", url: pastedUrl, source_type: "discovery", trust_level: "discovery" }, extracted.proposal)
-    : { proposal: extracted.proposal, citations: [], audit: null };
-  const result = await upsertScoutProposal(
-    env,
-    db,
-    resolved.proposal,
-    "manual",
-    [{ url: pastedUrl, role: "pasted_link", retrievedAt: isoNow(), diagnostics: extracted.diagnostics }, ...resolved.citations],
-    profile,
-    { bypassEligibility: true, allowIncompleteCandidate: true },
-  );
-  if (result.skipped) {
-    const error = new Error(`The Scout could not safely create a candidate from that link (${result.skipped}).`);
+  const results = [];
+  const failures = [];
+  for (const proposal of proposals) {
+    try {
+      const needsSourceResolution = sourceAuthorityErrors(proposal).length > 0;
+      const resolved = needsSourceResolution
+        ? await resolveDiscoveryProposal(env, db, profile, { name: "Pasted link", url: pastedUrl, source_type: "discovery", trust_level: "discovery" }, proposal)
+        : { proposal, citations: [], audit: null };
+      const provenance = [
+        { url: pastedUrl, role: "pasted_link", retrievedAt: isoNow(), diagnostics: extracted.diagnostics },
+        ...(resolved.proposal.sourceUrl && resolved.proposal.sourceUrl !== pastedUrl ? [{ url:resolved.proposal.sourceUrl, role:"event_detail", retrievedAt:isoNow() }] : []),
+        ...resolved.citations,
+      ];
+      const result = await upsertScoutProposal(
+        env,
+        db,
+        resolved.proposal,
+        "manual",
+        provenance,
+        profile,
+        { bypassEligibility: true, allowIncompleteCandidate: true },
+      );
+      if (result.skipped) {
+        failures.push({ title:asString(proposal.title), sourceUrl:asString(proposal.sourceUrl), error:`Skipped: ${result.skipped}` });
+        continue;
+      }
+      await recordSourceResolutionAttempt(db, resolved.audit, result.candidate?.id || "");
+      results.push(result);
+    } catch (error) {
+      failures.push({ title:asString(proposal.title), sourceUrl:asString(proposal.sourceUrl), error:asString(error.message) || "Candidate persistence failed." });
+    }
+  }
+  if (!results.length) {
+    const detail = failures[0]?.error || "No complete event proposals were recovered.";
+    const error = new Error(`The Scout could not safely create a candidate from that link (${detail}).`);
     error.httpStatus = 422;
     throw error;
   }
-  await recordSourceResolutionAttempt(db, resolved.audit, result.candidate?.id || "");
-  return { ...result, extraction: extracted.diagnostics };
+  const first = results[0];
+  const createdCount = results.filter((result) => !result.existing).length;
+  const refreshedCount = results.filter((result) => result.existing).length;
+  return {
+    ...first,
+    existing: createdCount === 0 && refreshedCount > 0,
+    candidates: results.map((result) => result.candidate),
+    candidateCount: results.length,
+    createdCount,
+    refreshedCount,
+    skippedCount: failures.length,
+    extraction: {
+      ...extracted.diagnostics,
+      ...(proposalCapReached ? { proposalCapReached:true, proposalLimit, capReached:true, completeness:"needs_verification" } : {}),
+      ...(discoveredProposals.length > 1 || failures.length ? {
+        proposalsDiscovered:discoveredProposals.length,
+        proposalsSaved:results.length,
+      } : {}),
+      ...(failures.length ? { proposalFailures:failures } : {}),
+    },
+  };
 }
 
 function sevenStagesShowTitle(html) {
@@ -9443,6 +9736,7 @@ export function extractCalendarSourceEvents(text, source) {
   const adapterKey = sourceAdapterKey(source);
   if (adapterKey === "atlanta_loves_art") return extractAtlantaLovesArtEvents(text, source);
   if (adapterKey === "beltline") return extractBeltlineRenderedEvents(text, source);
+  if (adapterKey === "bibliocommons") return extractBibliocommonsEvents(text, source);
   if (adapterKey === "eyedrum") return extractEyedrumEvents(text, source);
   if (adapterKey === "squarespace") return extractSquarespaceEvents(text, source);
   if (adapterKey === "high_art_making") return extractHighArtMakingEvents(text, source);
@@ -9465,7 +9759,7 @@ function canonicalSiteCrawlUrl(value, baseUrl) {
     if (!validHttpUrl(url.toString()) || !sameOriginUrl(url.toString(), baseUrl)) return "";
     url.hash = "";
     for (const key of [...url.searchParams.keys()]) {
-      if (/^(?:utm_|fbclid$|gclid$|mc_)/i.test(key)) url.searchParams.delete(key);
+      if (trackingQueryKey(key)) url.searchParams.delete(key);
     }
     return url.toString();
   } catch {
@@ -9527,6 +9821,7 @@ async function crawlOfficialSite(source, firstText) {
   const proposals = [];
   let pagesCrawled = 1;
   let linksDiscovered = 0;
+  let crawlDepth = 0;
   let frontier = siteCrawlLinks(firstText, registryUrl, registryUrl, visited).map((item) => ({ ...item, depth: 1 }));
   frontier.forEach((item) => queued.add(item.url));
   linksDiscovered += frontier.length;
@@ -9537,18 +9832,21 @@ async function crawlOfficialSite(source, firstText) {
     const batch = frontier.filter((item) => item.depth === depth).slice(0, available);
     frontier = frontier.filter((item) => !batch.includes(item));
     batch.forEach((item) => visited.add(item.url));
+    crawlDepth = Math.max(crawlDepth, depth);
     const results = await mapConcurrent(batch, SITE_CRAWL_CONCURRENCY, async (item) => {
       try {
         const response = await fetchExternalSource(item.url);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const finalUrl = validHttpUrl(response.url) ? response.url : item.url;
+        if (!sameOriginUrl(finalUrl, registryUrl)) throw new Error("The event link redirected outside the submitted site boundary.");
         const contentType = asString(response.headers.get("content-type"));
         if (contentType && !/html|xhtml/i.test(contentType)) throw new Error(`Unsupported content type ${contentType}`);
         const text = await boundedResponseText(response);
-        const pageSource = { ...source, url: item.url, registry_url: registryUrl };
+        const pageSource = { ...source, url: finalUrl, registry_url: registryUrl };
         return {
           item,
           proposals: extractCalendarSourceEvents(text, pageSource).map(inferSubjectsAndFormats),
-          links: item.depth < MAX_SITE_CRAWL_DEPTH ? siteCrawlLinks(text, item.url, registryUrl, visited) : [],
+          links: siteCrawlLinks(text, finalUrl, registryUrl, visited),
         };
       } catch (error) {
         return { item, proposals: [], links: [], error: asString(error.message) || "Page retrieval failed." };
@@ -9572,14 +9870,17 @@ async function crawlOfficialSite(source, firstText) {
     (candidate.sourceEventId && candidate.sourceEventId === event.sourceEventId)
       || `${normalizeText(candidate.title)}|${candidate.startsAt}` === `${normalizeText(event.title)}|${event.startsAt}`
   )) === index);
+  const capReached = frontier.length > 0 && visited.size >= maximumPages;
   return {
     proposals: unique,
     diagnostics: {
       pagesAttempted: visited.size,
       pagesCrawled,
       linksDiscovered,
-      crawlDepth: MAX_SITE_CRAWL_DEPTH,
+      crawlDepth,
       crawlFailures: failures,
+      capReached,
+      completeness: failures.length || capReached ? "needs_verification" : "complete",
     },
   };
 }
@@ -10215,6 +10516,8 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
       let bundle;
       if (adapterKey === "beltline") {
         bundle = await extractBeltlineEvents(env, source, sourceLimit);
+      } else if (adapterKey === "bibliocommons") {
+        bundle = await extractBibliocommonsListing(source, text);
       } else if (adapterKey === "seven_stages") {
         bundle = await extractSevenStagesPerformanceRuns(text, source);
       } else if (adapterKey === "out_of_hand") {

@@ -17,7 +17,26 @@ const EXPECTED_ASSET_HASHES = Object.freeze({
   "goat-farm-exterior-2011.jpg": "0d0efdf518a45fc0e1cae15976680f7b5e99a633bc2987737a630bb4811ce5d6",
   "goat-farm-evening-event-2012.jpg": "cfb04bd975961be51bfbe71d33320c6ed113c8abd76d5c005d78729f572c49f9",
   "van-winkle-plant-1898.jpg": "fbd0914d54f69180c48981619593cb1efba972186ccc7aa0980fe68e34aca45e",
+  "saiel-goat-farm-work-studio-2019-09-24.jpg": "6f8dfb3eb459d9c066bc571adefa51c057f7ff878223e9c3cdc3ee2efe8c2ea2",
+  "saiel-goat-farm-work-studio-2019-11-13.jpg": "cf99ee6af689e77ab1bf5016f54b82c97c61e2ad587daf388af57171a814b49e",
+  "saiel-goat-farm-live-work-studio-2020-01-25.jpg": "51d17cdfa2b506ae38b8dbaa0ea647c5a5a7c82b220eb320b3226e9ae65625fb",
+  "saiel-goat-farm-live-work-studio-2021-05-11.jpg": "1a8085446b774e0c61871679d8cd956124047022ae6dc08f667ced491461f379",
 });
+
+const PLACE_PAGE_ASSETS = new Set([
+  "goat-farm-exterior-2011.jpg",
+  "goat-farm-evening-event-2012.jpg",
+  "van-winkle-plant-1898.jpg",
+  "saiel-goat-farm-work-studio-2019-09-24.jpg",
+  "saiel-goat-farm-live-work-studio-2020-01-25.jpg",
+]);
+
+const PERSONAL_ARCHIVE_ASSETS = new Set([
+  "saiel-goat-farm-work-studio-2019-09-24.jpg",
+  "saiel-goat-farm-work-studio-2019-11-13.jpg",
+  "saiel-goat-farm-live-work-studio-2020-01-25.jpg",
+  "saiel-goat-farm-live-work-studio-2021-05-11.jpg",
+]);
 
 function text(path) {
   return readFileSync(path, "utf8");
@@ -102,6 +121,33 @@ test("Goat Farm claims preserve the industrial, ownership, redevelopment, and cu
   assert.doesNotMatch(copy, /who paid for what/i);
 });
 
+test("firsthand studio history distinguishes phase dates, capture dates, and individual scope", () => {
+  const page = text(pagePath);
+  const section = page.match(/<section class="archive-document-section" id="lived-studio">([\s\S]*?)<\/section>/)?.[1] || "";
+  const copy = prose(section);
+
+  assert.match(section, /06 \/ Firsthand/);
+  assert.match(section, /A lived studio thread, 2018–2021/);
+  assert.match(copy, /work-only studio[^.]{0,160}2018/i);
+  assert.match(copy, /September 24[^.]{0,120}November 13[^.]{0,80}2019/i);
+  assert.match(copy, /live\/work studio[^.]{0,160}2019/i);
+  assert.match(copy, /January 25, 2020[^.]{0,120}May 11, 2021/i);
+  assert.match(copy, /J\.R\. Erikson Co\. Building[^.]{0,120}364 Nelson Street/i);
+  assert.match(copy, /one artist[\s\S]{0,320}(?:not|without)[\s\S]{0,220}(?:every tenant|every part|campus-wide)/i);
+  assert.match(section, /saiel-goat-farm-work-studio-2019-09-24\.jpg/);
+  assert.match(section, /saiel-goat-farm-live-work-studio-2020-01-25\.jpg/);
+  assert.doesNotMatch(section, /saiel-goat-farm-work-studio-2019-11-13\.jpg/);
+  assert.doesNotMatch(section, /saiel-goat-farm-live-work-studio-2021-05-11\.jpg/);
+  assert.match(section, /Saiel Dauhn Solehman · personal archive · © Saiel Dauhn Solehman · no third-party reuse license\./);
+  assert.match(section, /href="\/archive\/records\/saiel-goat-farm-studio-years\/"/);
+  assert.match(section, /href="\/archive\/timelines\/saiel-dauhn-solehman\/"/);
+  assert.match(section, /href="\/archive\/places\/jr-erikson-building\/"/);
+
+  const redevelopment = prose(page.match(/<section class="archive-document-section" id="redevelopment">([\s\S]*?)<\/section>/)?.[1] || "");
+  assert.match(redevelopment, /announced transition[^.]{0,220}(?:not|rather than) proof that every tenant vacated/i);
+  assert.match(redevelopment, /firsthand archive[^.]{0,160}occupancy through 2021/i);
+});
+
 test("claims expose a contiguous numbered source register with safe external links", () => {
   const page = text(pagePath);
   const ids = [...page.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
@@ -149,16 +195,21 @@ test("public Goat Farm visual evidence is locally archived with exact rights and
 
   for (const [filename, expectedHash] of Object.entries(EXPECTED_ASSET_HASHES)) {
     const assetPath = join(assetRoot, filename);
+    const asset = readFileSync(assetPath);
     assert.ok(existsSync(assetPath), `${filename} must be stored in the public evidence folder`);
     assert.match(expectedHash, /^[a-f0-9]{64}$/, `${filename} still needs its final SHA-256 contract value`);
     assert.equal(sha256(assetPath), expectedHash);
     assert.ok(statSync(assetPath).size < 2 * 1024 * 1024, `${filename} must remain below 2 MB`);
     assert.equal(
-      readFileSync(assetPath).includes(Buffer.from([0x45, 0x78, 0x69, 0x66, 0x00, 0x00])),
+      asset.includes(Buffer.from([0x45, 0x78, 0x69, 0x66, 0x00, 0x00])),
       false,
       `${filename} must not contain an EXIF segment`,
     );
-    assert.match(page, new RegExp(filename.replaceAll(".", "\\.")));
+    assert.equal(asset.includes(Buffer.from("http://ns.adobe.com/xap/1.0/")), false, `${filename} must not contain XMP metadata`);
+    if (PERSONAL_ARCHIVE_ASSETS.has(filename)) {
+      assert.equal(asset.includes(Buffer.from([0xff, 0xc2])), true, `${filename} must remain a progressive JPEG`);
+    }
+    if (PLACE_PAGE_ASSETS.has(filename)) assert.match(page, new RegExp(filename.replaceAll(".", "\\.")));
     assert.match(manifest, new RegExp(filename.replaceAll(".", "\\.")));
   }
 
@@ -183,6 +234,14 @@ test("public Goat Farm visual evidence is locally archived with exact rights and
   assert.match(manifest, /XMP/i);
   assert.match(manifest, /(?:GPS|location) metadata/i);
   assert.match(manifest, /SHA-256/i);
+  assert.match(manifest, /Saiel Dauhn Solehman personal archive/);
+  assert.match(manifest, /IMG_7607_Original\.JPG[\s\S]*d39fde57591d4b6b395b8fc9a0421c87b2ed17b7e66c456fd58eeba457392a6d/i);
+  assert.match(manifest, /IMG_9038_Original\.JPG[\s\S]*63740cf89b2b89a4cd73664450ab00e921633708a859a168000238979e3cb46e/i);
+  assert.match(manifest, /IMG_1784\.HEIC[\s\S]*2020-01-25 22:47:16 -05:00[\s\S]*ad13484db6f66c345ea864953641eac613dc77a5bdfc51e8cadc66d60445f8a5/i);
+  assert.match(manifest, /IMG_9533_Original\.JPG[\s\S]*79edcf4d3e20aa04b342b7d3cf68b9a0cfa16a751114390af47d88caf3870a08/i);
+  assert.match(manifest, /no Creative Commons or other third-party reuse\s+license is granted/i);
+  assert.match(manifest, /Saiel Dauhn Solehman · personal archive · © Saiel Dauhn Solehman · no third-party reuse license\./);
+  assert.match(manifest, /maximum 2400-pixel long edge[\s\S]*progressive JPEGs/i);
 });
 
 test("Archive Places index discovers the Goat Farm dossier", () => {
