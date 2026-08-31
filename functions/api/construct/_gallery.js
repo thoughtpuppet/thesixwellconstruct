@@ -64,6 +64,7 @@ const ADMIN_MEDIA_SQL = `SELECT
   gallery.rights_status,gallery.date_precision gallery_date_precision,gallery.date_label gallery_date_label,
   gallery.occurred_at gallery_occurred_at,gallery.ended_at gallery_ended_at,gallery.focal_x,gallery.focal_y,
   gallery.state gallery_state,gallery.published_at gallery_published_at,gallery.updated_at gallery_updated_at,
+  (SELECT derivative_media_id FROM media_asset_variants WHERE master_media_id=m.id AND purpose='public-display') variant_derivative_media_id,
   (SELECT COUNT(*) FROM entity_media attachment WHERE attachment.media_id=m.id) attachment_count,
   (SELECT COUNT(*) FROM entity_relationships relation WHERE relation.source_entity_id=catalogue.entity_id OR relation.target_entity_id=catalogue.entity_id) relationship_count
 FROM media_assets m
@@ -72,11 +73,12 @@ LEFT JOIN gallery_entries gallery ON gallery.media_id=m.id`;
 
 function presentAdminMedia(row) {
   if (!row) return null;
+  const previewMediaId = row.display_media_id || row.variant_derivative_media_id || row.id;
   const record = {
     ...row,
     accession: accession(row.catalogue_id),
     media_type: mediaType(row.mime_type),
-    admin_url: `/api/admin/media/${encodeURIComponent(row.id)}/file`,
+    admin_url: `/api/admin/media/${encodeURIComponent(previewMediaId)}/file`,
     raw_metadata: safeJson(row.raw_metadata_json),
     gallery: row.gallery_state ? {
       media_id: row.id,
@@ -283,12 +285,17 @@ async function replaceGalleryAssignments(database, mediaId, lensIds, setIds) {
 async function publishGallerySelection(database, mediaIds) {
   const published = [], failed = [];
   for (const mediaId of mediaIds) {
-    const entry = await database.prepare(`SELECT gallery.media_id,gallery.display_media_id,gallery.title,media.original_filename,media.mime_type,catalogue.catalogue_id
+    const entry = await database.prepare(`SELECT gallery.media_id,gallery.display_media_id,gallery.title,media.original_filename,media.mime_type,
+        media.archive_catalogue_eligible,catalogue.catalogue_id,catalogue.source_class
       FROM gallery_entries gallery
       JOIN media_assets media ON media.id=gallery.media_id
       JOIN media_catalogue_entries catalogue ON catalogue.media_id=gallery.media_id
       WHERE gallery.media_id=?`).bind(mediaId).first();
     if (!entry) { failed.push({ media_id: mediaId, error: "Gallery entry not found." }); continue; }
+    if (entry.source_class !== "creative" || Number(entry.archive_catalogue_eligible) !== 1) {
+      failed.push({ media_id: mediaId, error: "Only creative Archive media can be published to Gallery." });
+      continue;
+    }
     const derivative = await database.prepare("SELECT derivative_media_id FROM media_asset_variants WHERE master_media_id=? AND purpose='public-display'").bind(entry.display_media_id).first();
     const displayMediaId = derivative?.derivative_media_id || entry.display_media_id;
     const title = text(entry.title,300) || fileStem(entry.original_filename) || `Untitled ${mediaType(entry.mime_type)} ${accession(entry.catalogue_id)}`;
@@ -382,9 +389,11 @@ export async function handleGalleryAdmin(request, env, path) {
   if (request.method === "POST" && !action && !mediaId) {
     const body = await readJson(request), sourceMediaId = text(body?.media_id,200); if (!sourceMediaId) return failure("Choose a Media Asset.");
     const source = await adminMediaRow(database,sourceMediaId); if (!source) return failure("Media Asset not found.",404);
+    if (source.source_class !== "creative" || Number(source.archive_catalogue_eligible) !== 1) return failure("Only creative Archive media can be added to Public Gallery.",409);
     const suggestedTitle = text(source.public_title,300) || fileStem(source.original_filename) || `Untitled ${mediaType(source.mime_type)} ${accession(source.catalogue_id)}`;
+    const variant = await database.prepare("SELECT derivative_media_id FROM media_asset_variants WHERE master_media_id=? AND purpose='public-display'").bind(sourceMediaId).first();
     await database.prepare(`INSERT OR IGNORE INTO gallery_entries(media_id,display_media_id,title,accessibility_text,caption,credit,state,created_by,updated_by,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,'draft','studio','studio',datetime('now'),datetime('now'))`).bind(sourceMediaId,sourceMediaId,suggestedTitle,text(source.alt_text,1000),text(source.caption,3000),text(source.credit,500)).run();
+      VALUES(?,?,?,?,?,?,'draft','studio','studio',datetime('now'),datetime('now'))`).bind(sourceMediaId,variant?.derivative_media_id||sourceMediaId,suggestedTitle,text(source.alt_text,1000),text(source.caption,3000),text(source.credit,500)).run();
     const record = presentAdminMedia(await adminMediaRow(database,sourceMediaId));
     return json({ record:(await hydrateAdminAssociations(database,[record]))[0], created:!source.gallery_state },{status:source.gallery_state?200:201});
   }
@@ -429,8 +438,8 @@ const PUBLIC_GALLERY_SQL = `SELECT gallery.*,media.mime_type,media.width,media.h
   poster.mime_type poster_mime_type,poster.byte_size poster_byte_size,poster.original_filename poster_filename,
   catalogue.catalogue_id,catalogue.entity_id media_entity_id
 FROM gallery_entries gallery
-JOIN media_assets media ON media.id=gallery.media_id AND media.state='active'
-JOIN media_catalogue_entries catalogue ON catalogue.media_id=gallery.media_id
+JOIN media_assets media ON media.id=gallery.media_id AND media.state='active' AND media.archive_catalogue_eligible=1
+JOIN media_catalogue_entries catalogue ON catalogue.media_id=gallery.media_id AND catalogue.source_class='creative'
 JOIN media_assets display ON display.id=gallery.display_media_id AND display.state='active' AND display.privacy='public' AND display.public_presentation='inline'
 LEFT JOIN media_assets poster ON poster.id=gallery.poster_media_id AND poster.state='active' AND poster.privacy='public' AND poster.public_presentation='inline'
 WHERE gallery.state='published'`;

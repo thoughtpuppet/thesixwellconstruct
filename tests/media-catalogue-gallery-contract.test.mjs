@@ -94,12 +94,12 @@ async function api(env, path, options) {
 test("catalogue backfill is complete, launch-published, unique, and relational", () => {
   const sql = database();
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_assets WHERE archive_catalogue_eligible=1").get().count, sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries").get().count);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='published'").get().count, sql.prepare("SELECT COUNT(*) count FROM media_assets WHERE state='active' AND archive_catalogue_eligible=1").get().count);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='published'").get().count, sql.prepare(`SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE media.state='active' AND media.archive_catalogue_eligible=1 AND catalogue.source_class='creative'`).get().count);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='draft'").get().count, 0);
   assert.ok(sql.prepare("SELECT COUNT(*) count FROM media_assets WHERE archive_catalogue_eligible=0").get().count>0);
   assert.equal(sql.prepare(`SELECT COUNT(*) count FROM media_catalogue_entries catalogue
     JOIN gallery_entries gallery ON gallery.media_id=catalogue.media_id
-    WHERE catalogue.source_class='site_asset' AND gallery.state='published'`).get().count,sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE source_class='site_asset'").get().count);
+    WHERE catalogue.source_class='site_asset'`).get().count,0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE media.archive_catalogue_eligible=0").get().count,0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries gallery JOIN media_assets media ON media.id=gallery.media_id WHERE media.archive_catalogue_eligible=0").get().count,0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(media.original_filename) IN ('ring-ripple-reference.mov','ring-ripple-reference.mp4') OR lower(replace(media.source_url,'\\','/')) LIKE '/assets/events/%'").get().count,0);
@@ -146,7 +146,7 @@ test("catalogue backfill is complete, launch-published, unique, and relational",
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_dossiers WHERE entity_id=?").get(created.entity_id).count, 0);
 });
 
-test("operational media never receives or retains an Archive catalogue identity", () => {
+test("operational media stays outside the Archive catalogue and site assets stay outside Public Gallery", async () => {
   const sql=database();
   sql.prepare(`INSERT INTO media_assets(id,source_url,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)
     VALUES('media-private-reference','/assets/private/reference.png','reference.png','image/png',1,'internal','active','test',datetime('now'),datetime('now'),'hidden',0)`).run();
@@ -164,6 +164,27 @@ test("operational media never receives or retains an Archive catalogue identity"
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE media_id='media-calendar-bound'").get().count,0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id='media-calendar-bound'").get().count,0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM content_entities WHERE id='media-catalogue-media-calendar-bound'").get().count,0);
+
+  const env=environment(sql),siteAsset=sql.prepare("SELECT media_id,catalogue_id FROM media_catalogue_entries WHERE source_class='site_asset' ORDER BY catalogue_id LIMIT 1").get();
+  assert.ok(siteAsset);
+  const rejected=await api(env,"/api/admin/gallery",{method:"POST",admin:true,body:{media_id:siteAsset.media_id}});
+  assert.equal(rejected.response.status,409);
+  assert.match(rejected.payload.error,/creative Archive media/i);
+
+  // The public query remains defensive even if a legacy/corrupt row bypasses
+  // the durable insert guard.
+  sql.exec("DROP TRIGGER gallery_entry_creative_insert_guard");
+  sql.prepare("UPDATE media_assets SET state='active',privacy='public',public_presentation='inline' WHERE id=?").run(siteAsset.media_id);
+  sql.prepare(`INSERT INTO gallery_entries(media_id,display_media_id,title,date_precision,state,published_at,created_by,updated_by,created_at,updated_at)
+    VALUES(?,?,'Operational site asset','undated','published',datetime('now'),'test','test',datetime('now'),datetime('now'))`).run(siteAsset.media_id,siteAsset.media_id);
+  const publicIndex=await api(env,"/api/gallery");
+  assert.equal(publicIndex.response.status,200);
+  assert.ok(!publicIndex.payload.records.some((record)=>record.accession===`MED-${String(siteAsset.catalogue_id).padStart(6,"0")}`));
+
+  const creative=sql.prepare("SELECT media_id FROM media_catalogue_entries WHERE source_class='creative' AND media_id IN (SELECT media_id FROM gallery_entries) ORDER BY catalogue_id LIMIT 1").get();
+  assert.ok(creative);
+  sql.prepare("UPDATE media_catalogue_entries SET source_class='site_asset' WHERE media_id=?").run(creative.media_id);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id=?").get(creative.media_id).count,0);
 });
 
 test("Studio draft creation is idempotent and one-click publication does not require rights or accessibility review", async () => {
@@ -420,6 +441,7 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studio, /data-draft-preview/);
   assert.match(studio, /data-gallery-select-all/);
   assert.match(studio, /data-gallery-publish-selected/);
+  assert.match(studio, /Site asset · not part of Public Gallery/);
   assert.match(studio, /\/api\/admin\/gallery\/batch/);
   assert.match(studio, /display_media_id/);
   assert.match(studio, /poster_media_id/);
