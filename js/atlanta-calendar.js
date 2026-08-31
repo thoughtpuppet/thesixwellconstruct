@@ -113,8 +113,12 @@
   }
 
   function isPast(event) {
-    var end = validDate(event.endsAt) || validDate(event.confirmedThrough) || validDate(event.startsAt);
-    return end ? end.getTime() < Date.now() : false;
+    return window.AtlantaCalendarRecord.isPast(event);
+  }
+
+  function classificationEndValue(event) {
+    var end = window.AtlantaCalendarRecord.classificationEnd(event);
+    return end ? end.toISOString() : event.endsAt || event.confirmedThrough || event.startsAt;
   }
 
   function checkedValues(root) {
@@ -413,7 +417,7 @@
     return filtered.filter(function (event) {
       if (isOnViewExhibition(event)) return false;
       var start = dateKey(event.startsAt);
-      var end = dateKey(event.endsAt || event.confirmedThrough || event.startsAt);
+      var end = dateKey(classificationEndValue(event));
       if (event.dateKind === "date_range") return key === start;
       return key >= start && key <= end;
     });
@@ -502,7 +506,7 @@
     var monthEnd = monthEndDate.getFullYear() + "-" + String(monthEndDate.getMonth() + 1).padStart(2, "0") + "-" + String(monthEndDate.getDate()).padStart(2, "0");
     filtered = allEvents.filter(matches).filter(function (event) {
       var start = dateKey(event.startsAt);
-      var end = dateKey(event.endsAt || event.confirmedThrough || event.startsAt);
+      var end = dateKey(classificationEndValue(event));
       return start && start <= monthEnd && end >= monthStart;
     });
     var selectedFilters = checkedValues(subjectRoot).length + checkedValues(formatRoot).length + checkedValues(admissionRoot).length + checkedValues(affiliationRoot).length + checkedValues(modeRoot).length;

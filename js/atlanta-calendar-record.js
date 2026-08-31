@@ -52,6 +52,24 @@
     return event.eventStructure === "exhibition" || (formats.includes("exhibition") && spansMultipleDates);
   }
 
+  function classificationEnd(event) {
+    var start = validDate(event.startsAt);
+    var end = validDate(event.endsAt) || validDate(event.confirmedThrough) || start;
+    var isAmbiguousTimedRange = event.dateKind === "timed"
+      && event.eventStructure === "single"
+      && !event.isOccurrence
+      && start
+      && end
+      && end.getTime() - start.getTime() > 86400000;
+    return isAmbiguousTimedRange ? start : end;
+  }
+
+  function isPast(event, now) {
+    var end = classificationEnd(event);
+    var current = now instanceof Date ? now.getTime() : Number.isFinite(Number(now)) ? Number(now) : Date.now();
+    return end ? end.getTime() < current : false;
+  }
+
   function eventDate(event) {
     if (event.dateKind === "all_day") return new Intl.DateTimeFormat("en-US", { weekday:"short", month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(new Date(event.startsAt + "T12:00:00Z"));
     if (event.dateKind === "date_range" || isOnViewExhibition(event)) {
@@ -267,6 +285,8 @@
     eventAnchor:eventAnchor,
     eventDate:eventDate,
     eventMedia:eventMedia,
+    classificationEnd:classificationEnd,
+    isPast:isPast,
     renderEvent:renderEvent,
   };
 })();
