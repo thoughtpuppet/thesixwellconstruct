@@ -4,6 +4,9 @@
 .gallery-kicker { display: block; margin-bottom: .7rem; color: var(--archive-signal-soft); font-size: .67rem; font-weight: 900; letter-spacing: .18em; text-transform: uppercase; }
 .gallery-title { margin: 0; color: var(--archive-ink); }
 .gallery-count { color: var(--archive-signal-soft); font-size: .72rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.gallery-featured-sets { display: grid; gap: 16px; padding: 16px; border: 5px solid var(--archive-line); background: var(--archive-panel); }
+.gallery-section-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; }
+.gallery-section-head h2 { margin: 0; color: var(--archive-ink); }
 .gallery-filters { display: grid; grid-template-columns: minmax(14rem,2fr) repeat(4,minmax(9rem,1fr)); gap: 16px; padding: 16px; border: 5px solid var(--archive-line); background: var(--archive-panel); }
 .gallery-filters label { display: grid; gap: .45rem; color: var(--archive-signal-soft); font-size: .62rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
 .gallery-filters input,.gallery-filters select { min-height: 3rem; border: 5px solid var(--archive-line); border-radius: 0; padding: .55rem .7rem; background: var(--archive-paper); color: var(--archive-ink); }

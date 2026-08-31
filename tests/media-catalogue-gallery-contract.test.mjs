@@ -91,100 +91,56 @@ async function api(env, path, options) {
   return { response, payload: response.headers.get("content-type")?.includes("json") ? await response.json() : null };
 }
 
-test("catalogue backfill is complete, launch-published, unique, and relational", () => {
+function admitFixture(sql, mediaId, { title = "Fixture media", originality = "sixwell_original", role = "creative_master", basis = "direct", sourceEntityId = null, state = "published" } = {}) {
+  sql.prepare("UPDATE media_asset_provenance SET originality=?,asset_role=?,creator_credit='Six.Well' WHERE media_id=?").run(originality, role, mediaId);
+  sql.prepare(`INSERT OR IGNORE INTO content_entities(id,entity_type,node_id,visibility,search_visibility,featured,internal_notes,created_by,updated_by,created_at,updated_at)
+    VALUES(?,'media_asset',NULL,'internal',0,0,'','test','test',datetime('now'),datetime('now'))`).run(`media-catalogue-${mediaId}`);
+  sql.prepare(`INSERT OR IGNORE INTO media_catalogue_entries(media_id,entity_id,source_class,catalogue_state,admission_basis,source_entity_id,manual_gallery_approved,created_by,updated_by,created_at,updated_at)
+    VALUES(?,?,'creative','active',?,?,?,'test','test',datetime('now'),datetime('now'))`).run(mediaId, `media-catalogue-${mediaId}`, basis, sourceEntityId, originality === "collaborative_original" ? 1 : 0);
+  sql.prepare(`INSERT OR REPLACE INTO gallery_entries(media_id,display_media_id,title,date_precision,state,published_at,publication_basis,source_entity_id,created_by,updated_by,created_at,updated_at)
+    VALUES(?,?,?,'undated',?,CASE WHEN ?='published' THEN datetime('now') ELSE NULL END,?,?,'test','test',datetime('now'),datetime('now'))`).run(mediaId, mediaId, title, state, state, basis, sourceEntityId);
+}
+
+test("only confirmed original media is renumbered into a contiguous public catalogue", () => {
   const sql = database();
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_assets WHERE archive_catalogue_eligible=1").get().count, sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries").get().count);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='published'").get().count, sql.prepare(`SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE media.state='active' AND media.archive_catalogue_eligible=1 AND catalogue.source_class='creative'`).get().count);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='draft'").get().count, 0);
-  assert.ok(sql.prepare("SELECT COUNT(*) count FROM media_assets WHERE archive_catalogue_eligible=0").get().count>0);
-  assert.equal(sql.prepare(`SELECT COUNT(*) count FROM media_catalogue_entries catalogue
-    JOIN gallery_entries gallery ON gallery.media_id=catalogue.media_id
-    WHERE catalogue.source_class='site_asset'`).get().count,0);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE media.archive_catalogue_eligible=0").get().count,0);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries gallery JOIN media_assets media ON media.id=gallery.media_id WHERE media.archive_catalogue_eligible=0").get().count,0);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(media.original_filename) IN ('ring-ripple-reference.mov','ring-ripple-reference.mp4') OR lower(replace(media.source_url,'\\','/')) LIKE '/assets/events/%'").get().count,0);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_blackboard_fragment_edits edit JOIN media_catalogue_entries catalogue ON catalogue.media_id=edit.alpha_mask_media_id").get().count,0);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_blackboard_fragment_placements placement JOIN media_catalogue_entries catalogue ON catalogue.media_id=placement.hotspot_mask_media_id").get().count,0);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM (SELECT catalogue_id FROM media_catalogue_entries GROUP BY catalogue_id HAVING COUNT(*)>1)").get().count, 0);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM (SELECT sha256 FROM media_catalogue_entries WHERE sha256 IS NOT NULL GROUP BY sha256 HAVING COUNT(*)>1)").get().count, 0);
+  const catalogue = sql.prepare(`SELECT catalogue.catalogue_id,catalogue.media_id,provenance.originality,provenance.asset_role
+    FROM media_catalogue_entries catalogue JOIN media_asset_provenance provenance ON provenance.media_id=catalogue.media_id
+    WHERE catalogue.catalogue_state='active' ORDER BY catalogue.catalogue_id`).all();
+  assert.equal(catalogue.length, 3, "two Peer Amid originals plus the Current Works center video");
+  assert.deepEqual(catalogue.map((row) => row.catalogue_id), [1, 2, 3]);
+  assert.ok(catalogue.every((row) => row.originality === "sixwell_original"));
+  assert.ok(catalogue.every((row) => ["creative_master", "editorial_fragment"].includes(row.asset_role)));
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='published'").get().count, 3);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(media.original_filename) LIKE '%poster%'").get().count, 0);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(media.original_filename) IN ('ring-ripple-reference.mov','ring-ripple-reference.mp4') OR lower(replace(media.source_url,'\\','/')) LIKE '/assets/events/%'").get().count, 0);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_blackboard_fragment_edits edit JOIN media_catalogue_entries catalogue ON catalogue.media_id=edit.alpha_mask_media_id").get().count, 0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM pragma_foreign_key_check").get().count, 0);
-  const peerAmid = sql.prepare(`SELECT printf('MED-%06d',catalogue.catalogue_id) accession,catalogue.entity_id,catalogue.sha256,catalogue.import_source,
-    catalogue.editing_software,catalogue.raw_metadata_json,media.storage_key,media.width,media.height,media.privacy,media.public_presentation,gallery.state gallery_state
-    FROM media_catalogue_entries catalogue
-    JOIN media_assets media ON media.id=catalogue.media_id
-    JOIN gallery_entries gallery ON gallery.media_id=media.id
-    WHERE media.storage_key LIKE 'gallery/masters/peer-amid/%'
-    ORDER BY catalogue.catalogue_id`).all();
-  assert.equal(peerAmid.length, 2);
-  assert.deepEqual(peerAmid.map((row) => row.sha256), [
-    "f063b9839fe6cfbc1908edbaa907971849ddf950bbd38ac1adec7c59f24dbde8",
-    "291c661aadc94bd6c55a70db5926c82faad94394b98e21c6f7be268e0f84280d",
-  ]);
-  for (const row of peerAmid) {
-    assert.match(row.accession, /^MED-\d{6}$/);
-    assert.equal(row.import_source, "user-provided-original");
-    assert.match(row.editing_software, /Adobe XMP Core 5\.6/);
-    assert.equal(row.width, 5472);
-    assert.equal(row.height, 3648);
-    assert.equal(row.privacy, "public");
-    assert.equal(row.public_presentation, "inline");
-    assert.equal(row.gallery_state, "published");
-    assert.match(row.storage_key, /^gallery\/masters\/peer-amid\/[a-f0-9]{64}\.png$/);
-    const evidence = JSON.parse(row.raw_metadata_json);
-    assert.match(evidence.originalSourcePath, /^E:\\From HP All-In-One/);
-    assert.equal(evidence.metadataEvidence.embeddedArtworkDatePresent, false);
-    assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_dossiers WHERE entity_id=?").get(row.entity_id).count, 0);
-  }
+  assert.equal(sql.prepare("SELECT state FROM gallery_sets WHERE id='gallery-set-peer-amid-versions'").get().state, "published");
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_set_items WHERE set_id='gallery-set-peer-amid-versions'").get().count, 2);
-  assert.equal(sql.prepare("SELECT state FROM gallery_sets WHERE id='gallery-set-peer-amid-versions'").get().state, "draft");
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_relationships WHERE id='relationship-peer-amid-black-tan-alternate' AND relationship_type_id='rel-alternate-of' AND public_visible=0").get().count, 1);
+
+  const audit = sql.prepare("SELECT COUNT(*) count FROM media_catalogue_renumber_audit WHERE run_id='0215-original-media-rebuild'").get().count;
+  assert.ok(audit > catalogue.length);
   sql.prepare(`INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation)
     VALUES('media-trigger-check','','test/trigger-check.png','trigger-check.png','image/png',1,'internal','active','test',datetime('now'),datetime('now'),'hidden')`).run();
-  const created = sql.prepare("SELECT catalogue_id,entity_id FROM media_catalogue_entries WHERE media_id='media-trigger-check'").get();
-  assert.ok(created.catalogue_id > 0);
-  assert.equal(sql.prepare("SELECT entity_type FROM content_entities WHERE id=?").get(created.entity_id).entity_type, "media_asset");
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_dossiers WHERE entity_id=?").get(created.entity_id).count, 0);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE media_id='media-trigger-check'").get().count, 0);
+  assert.equal(sql.prepare("SELECT originality FROM media_asset_provenance WHERE media_id='media-trigger-check'").get().originality, "unknown");
 });
 
-test("operational media stays outside the Archive catalogue and site assets stay outside Public Gallery", async () => {
+test("operational, site, external, and unknown managed media stays outside the Gallery catalogue", async () => {
   const sql=database();
   sql.prepare(`INSERT INTO media_assets(id,source_url,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)
     VALUES('media-private-reference','/assets/private/reference.png','reference.png','image/png',1,'internal','active','test',datetime('now'),datetime('now'),'hidden',0)`).run();
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE media_id='media-private-reference'").get().count,0);
 
   sql.prepare(`INSERT INTO media_assets(id,source_url,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation)
-    VALUES('media-calendar-bound','/assets/test/calendar-bound.png','calendar-bound.png','image/png',1,'public','active','test',datetime('now'),datetime('now'),'inline')`).run();
-  sql.prepare(`INSERT INTO gallery_entries(media_id,display_media_id,title,date_precision,state,created_by,updated_by,created_at,updated_at)
-    VALUES('media-calendar-bound','media-calendar-bound','Calendar-bound test','undated','published','test','test',datetime('now'),datetime('now'))`).run();
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE media_id='media-calendar-bound'").get().count,1);
-  const candidate=sql.prepare("SELECT id FROM calendar_candidates ORDER BY id LIMIT 1").get();
-  assert.ok(candidate);
-  sql.prepare("UPDATE calendar_candidates SET flyer_media_id=? WHERE id=?").run("media-calendar-bound",candidate.id);
-  assert.equal(sql.prepare("SELECT archive_catalogue_eligible FROM media_assets WHERE id='media-calendar-bound'").get().archive_catalogue_eligible,0);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE media_id='media-calendar-bound'").get().count,0);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id='media-calendar-bound'").get().count,0);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM content_entities WHERE id='media-catalogue-media-calendar-bound'").get().count,0);
-
-  const env=environment(sql),siteAsset=sql.prepare("SELECT media_id,catalogue_id FROM media_catalogue_entries WHERE source_class='site_asset' ORDER BY catalogue_id LIMIT 1").get();
-  assert.ok(siteAsset);
-  const rejected=await api(env,"/api/admin/gallery",{method:"POST",admin:true,body:{media_id:siteAsset.media_id}});
+    VALUES('media-unknown','/assets/test/unknown.png','unknown.png','image/png',1,'internal','active','test',datetime('now'),datetime('now'),'hidden')`).run();
+  const env=environment(sql);
+  const rejected=await api(env,"/api/admin/gallery",{method:"POST",admin:true,body:{media_id:"media-unknown"}});
   assert.equal(rejected.response.status,409);
-  assert.match(rejected.payload.error,/creative Archive media/i);
-
-  // The public query remains defensive even if a legacy/corrupt row bypasses
-  // the durable insert guard.
-  sql.exec("DROP TRIGGER gallery_entry_creative_insert_guard");
-  sql.prepare("UPDATE media_assets SET state='active',privacy='public',public_presentation='inline' WHERE id=?").run(siteAsset.media_id);
-  sql.prepare(`INSERT INTO gallery_entries(media_id,display_media_id,title,date_precision,state,published_at,created_by,updated_by,created_at,updated_at)
-    VALUES(?,?,'Operational site asset','undated','published',datetime('now'),'test','test',datetime('now'),datetime('now'))`).run(siteAsset.media_id,siteAsset.media_id);
-  const publicIndex=await api(env,"/api/gallery");
-  assert.equal(publicIndex.response.status,200);
-  assert.ok(!publicIndex.payload.records.some((record)=>record.accession===`MED-${String(siteAsset.catalogue_id).padStart(6,"0")}`));
-
-  const creative=sql.prepare("SELECT media_id FROM media_catalogue_entries WHERE source_class='creative' AND media_id IN (SELECT media_id FROM gallery_entries) ORDER BY catalogue_id LIMIT 1").get();
-  assert.ok(creative);
-  sql.prepare("UPDATE media_catalogue_entries SET source_class='site_asset' WHERE media_id=?").run(creative.media_id);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id=?").get(creative.media_id).count,0);
+  assert.match(rejected.payload.error,/classify.*original/i);
+  const review=await api(env,"/api/admin/media-admission-review",{admin:true});
+  assert.equal(review.response.status,200);
+  assert.ok(review.payload.records.every((record)=>!record.accession));
 });
 
 test("generated masks stay operational and HEIC masters publish through one automatic JPEG display pair", async () => {
@@ -200,16 +156,20 @@ test("generated masks stay operational and HEIC masters publish through one auto
     VALUES('media-heic-display','','test/studio-fragment.edit-proxy.jpg','studio-fragment.edit-proxy.jpg','image/jpeg',8,'Studio fragment','internal','active','test',datetime('now'),datetime('now'),'hidden')`).run();
   const paired=await api(env,"/api/admin/media/media-heic-master/variants",{method:"POST",admin:true,body:{derivative_media_id:"media-heic-display",activate_derivative:false}});
   assert.equal(paired.response.status,201);
-  assert.equal(sql.prepare("SELECT source_class FROM media_catalogue_entries WHERE media_id='media-heic-display'").get().source_class,"site_asset");
+  assert.equal(sql.prepare("SELECT asset_role FROM media_asset_provenance WHERE media_id='media-heic-display'").get().asset_role,"technical_derivative");
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE media_id='media-heic-display'").get().count,0);
+
+  const admitted=await api(env,"/api/admin/media-admission-review",{method:"POST",admin:true,body:{action:"admit",media_ids:["media-heic-master"],originality:"sixwell_original",asset_role:"creative_master",publish:true}});
+  assert.equal(admitted.payload.failed.length,0);
 
   const draft=await api(env,"/api/admin/gallery",{method:"POST",admin:true,body:{media_id:"media-heic-master"}});
-  assert.equal(draft.response.status,201);
+  assert.equal(draft.response.status,200);
   assert.equal(draft.payload.record.gallery.display_media_id,"media-heic-display");
   assert.match(draft.payload.record.admin_url,/media-heic-display\/file$/);
   const published=await api(env,"/api/admin/gallery/media-heic-master/publish",{method:"POST",admin:true});
   assert.equal(published.response.status,200);
   assert.deepEqual({...sql.prepare("SELECT privacy,public_presentation FROM media_assets WHERE id='media-heic-master'").get()},{privacy:"internal",public_presentation:"hidden"});
-  assert.deepEqual({...sql.prepare("SELECT privacy,public_presentation FROM media_assets WHERE id='media-heic-display'").get()},{privacy:"public",public_presentation:"inline"});
+  assert.deepEqual({...sql.prepare("SELECT privacy,public_presentation FROM media_assets WHERE id='media-heic-display'").get()},{privacy:"internal",public_presentation:"hidden"});
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id='media-heic-display'").get().count,0);
   const publicIndex=await api(env,"/api/gallery");
   const accession=`MED-${String(sql.prepare("SELECT catalogue_id FROM media_catalogue_entries WHERE media_id='media-heic-master'").get().catalogue_id).padStart(6,"0")}`;
@@ -240,7 +200,7 @@ test("Studio draft creation is idempotent and one-click publication does not req
 
 test("batch publication accepts multiple Gallery selections and publishes each in one action", async () => {
   const sql = database(), env = environment(sql);
-  const entries = sql.prepare("SELECT media_id,display_media_id FROM gallery_entries ORDER BY media_id LIMIT 2").all();
+  const entries = sql.prepare("SELECT gallery.media_id,gallery.display_media_id FROM gallery_entries gallery JOIN media_catalogue_entries catalogue ON catalogue.media_id=gallery.media_id AND catalogue.catalogue_state='active' ORDER BY catalogue.catalogue_id LIMIT 2").all();
   assert.equal(entries.length,2);
   for (const entry of entries) {
     sql.prepare("UPDATE gallery_entries SET state='draft',date_precision='unreviewed',accessibility_text='',accessibility_status='unreviewed',rights_status='unreviewed' WHERE media_id=?").run(entry.media_id);
@@ -248,7 +208,7 @@ test("batch publication accepts multiple Gallery selections and publishes each i
   }
   const result = await api(env,"/api/admin/gallery/batch",{ method:"POST",admin:true,body:{ action:"publish",media_ids:entries.map(entry=>entry.media_id) } });
   assert.equal(result.response.status,200);
-  assert.equal(result.payload.count,2);
+  assert.equal(result.payload.count,2,JSON.stringify(result.payload));
   assert.deepEqual(result.payload.failed,[]);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id IN (?,?) AND state='published' AND date_precision='undated'").get(...entries.map(entry=>entry.media_id)).count,2);
 });
@@ -257,9 +217,7 @@ test("public and Studio Gallery hydration returns catalogues larger than one SQL
   const sql=database(),env=environment(sql);
   const insertMedia=sql.prepare(`INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation)
     VALUES(?,?,?,?, 'image/png',1,'public','active','test',datetime('now'),datetime('now'),'inline')`);
-  const insertGallery=sql.prepare(`INSERT INTO gallery_entries(media_id,display_media_id,title,date_precision,state,created_by,updated_by,created_at,updated_at)
-    VALUES(?,?,?,'undated','published','test','test',datetime('now'),datetime('now'))`);
-  for(let index=0;index<120;index+=1){const mediaId=`media-large-gallery-${index}`,filename=`large-gallery-${index}.png`;insertMedia.run(mediaId,`/assets/test/${filename}`,"",filename);insertGallery.run(mediaId,mediaId,`Large Gallery ${index}`)}
+  for(let index=0;index<120;index+=1){const mediaId=`media-large-gallery-${index}`,filename=`large-gallery-${index}.png`;insertMedia.run(mediaId,`/assets/test/${filename}`,"",filename);admitFixture(sql,mediaId,{title:`Large Gallery ${index}`})}
   const expected=sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='published'").get().count;
   assert.ok(expected>100);
   const publicIndex=await api(env,"/api/gallery");
@@ -353,7 +311,7 @@ test("published Gallery entries support optional lenses, several sets, public-sa
   });
   assert.equal(linked.response.status, 201);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_media WHERE media_id=? AND entity_id=? AND role='documentation'").get(row.media_id, target.id).count, 1);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_relationships WHERE source_entity_id=? AND target_entity_id=?").get(row.entity_id, target.id).count, 1);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_relationships WHERE source_entity_id=? AND target_entity_id=? AND relationship_type_id='rel-depicts'").get(row.entity_id, target.id).count, 1);
 
   const published = await api(env, `/api/admin/gallery/${encodeURIComponent(row.media_id)}/publish`, { method: "POST", admin: true });
   assert.equal(published.response.status, 200);
@@ -365,7 +323,7 @@ test("published Gallery entries support optional lenses, several sets, public-sa
   assert.ok(publicRecord);
   assert.equal(Object.hasOwn(publicRecord, "sha256"), false);
   assert.equal(Object.hasOwn(publicRecord, "raw_metadata"), false);
-  assert.equal(publicRecord.sets.length, 1, "only the published set is exposed");
+  assert.ok(publicRecord.sets.some((set)=>set.slug==="peer-amid-editorial-test"));
   const publicSet = await api(env, "/api/gallery/sets/peer-amid-editorial-test");
   assert.equal(publicSet.response.status, 200);
   assert.equal(publicSet.payload.set.cover.accession, publicRecord.accession);
@@ -380,7 +338,7 @@ test("published Gallery entries support optional lenses, several sets, public-sa
   assert.equal((await api(env, `/api/gallery/items/${publicRecord.accession}`)).response.status, 404);
   assert.ok(sql.prepare("SELECT id FROM media_assets WHERE id=?").get(row.media_id));
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_set_items WHERE media_id=?").get(row.media_id).count, 2);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_relationships WHERE source_entity_id=?").get(row.entity_id).count, 1);
+  assert.ok(sql.prepare("SELECT COUNT(*) count FROM entity_relationships WHERE source_entity_id=? AND target_entity_id=?").get(row.entity_id,target.id).count >= 1);
 });
 
 test("rights, accessibility, and timed-media transcripts are optional while document delivery remains public-safe", async () => {
@@ -388,8 +346,7 @@ test("rights, accessibility, and timed-media transcripts are optional while docu
   await bucket.put("gallery-test/audio.wav", new TextEncoder().encode("audio"));
   sql.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation,transcript_status)
     VALUES('media-gallery-audio','gallery-test/audio.wav','process.wav','audio/wav',5,'public','active','test',datetime('now'),datetime('now'),'inline','not-requested')`).run();
-  sql.prepare(`INSERT INTO gallery_entries(media_id,display_media_id,title,accessibility_text,accessibility_status,credit,rights_status,date_precision,state,created_by,updated_by,created_at,updated_at)
-    VALUES('media-gallery-audio','media-gallery-audio','Screen-printing ambience','','unreviewed','SIX.WELL','unreviewed','undated','draft','test','test',datetime('now'),datetime('now'))`).run();
+  admitFixture(sql,"media-gallery-audio",{title:"Screen-printing ambience",state:"draft"});
   const publishedAudio = await api(env, "/api/admin/gallery/media-gallery-audio/publish", { method: "POST", admin: true });
   assert.equal(publishedAudio.response.status, 200);
   const audioAccession = `MED-${String(sql.prepare("SELECT catalogue_id FROM media_catalogue_entries WHERE media_id='media-gallery-audio'").get().catalogue_id).padStart(6,"0")}`;
@@ -399,8 +356,7 @@ test("rights, accessibility, and timed-media transcripts are optional while docu
   await bucket.put("gallery-test/process-notes.docx", new TextEncoder().encode("document"));
   sql.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation)
     VALUES('media-gallery-document','gallery-test/process-notes.docx','process-notes.docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document',8,'public','active','test',datetime('now'),datetime('now'),'inline')`).run();
-  sql.prepare(`INSERT INTO gallery_entries(media_id,display_media_id,title,accessibility_text,accessibility_status,credit,rights_status,date_precision,state,created_by,updated_by,created_at,updated_at)
-    VALUES('media-gallery-document','media-gallery-document','Process notes','A downloadable document containing studio process notes.','described','SIX.WELL','owned','undated','published','test','test',datetime('now'),datetime('now'))`).run();
+  admitFixture(sql,"media-gallery-document",{title:"Process notes"});
   const documentAccession = `MED-${String(sql.prepare("SELECT catalogue_id FROM media_catalogue_entries WHERE media_id='media-gallery-document'").get().catalogue_id).padStart(6,"0")}`;
   const documentResponse = await handleConstructApi(request(`/api/gallery/media/${documentAccession}`), env);
   assert.equal(documentResponse.status, 200);

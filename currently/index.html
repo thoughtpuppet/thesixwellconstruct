@@ -36,8 +36,14 @@
     </header>
     <div class="current-constellation-stage" data-current-projects aria-live="polite">
       <figure class="current-constellation-photo">
-        <img src="/assets/images/current-works/artpill-studio.jpg" alt="Tattooing in progress inside Art.Pill Tattoo House" data-current-anchor-image>
+        <div class="current-anchor-media" data-current-anchor-media>
+          <video autoplay muted loop playsinline preload="metadata" poster="/assets/images/current-works/current-works-center-loop-poster.jpg" aria-label="Artist gesturing toward paintings installed inside a studio" data-current-anchor-video>
+            <source src="/assets/video/current-works/current-works-center-loop.mp4" type="video/mp4">
+            <img src="/assets/images/current-works/current-works-center-loop-poster.jpg" alt="Artist gesturing toward paintings installed inside a studio">
+          </video>
+        </div>
         <figcaption>Art.Pill Tattoo House · Active</figcaption>
+        <button class="current-anchor-toggle" type="button" aria-pressed="false" data-current-anchor-toggle>Pause motion</button>
       </figure>
       <p class="current-loading">Opening the current record…</p>
     </div>

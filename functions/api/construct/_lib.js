@@ -3618,16 +3618,17 @@ function entityVisibilityStatement(database, resource, row) {
   return database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,archived_at=?,public_at=CASE WHEN ?=1 THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(visible ? "public" : "internal", searchVisible ? 1 : 0, row.state === "archived" ? new Date().toISOString() : null, visible ? 1 : 0, row.id);
 }
 
-async function currentProjectHasEligibleImage(database, entityId) {
+async function currentProjectHasEligibleMedia(database, entityId, collageSlot) {
   const row = await database.prepare(`SELECT 1 ok
     FROM entity_media em
     JOIN media_assets m ON m.id=em.media_id
     WHERE em.entity_id=? AND em.public_visible=1
       AND m.state='active' AND m.privacy='public'
-      AND m.public_presentation='inline' AND m.mime_type LIKE 'image/%'
+      AND m.public_presentation='inline'
+      AND (m.mime_type LIKE 'image/%' OR (?=1 AND lower(m.mime_type) IN ('video/mp4','video/webm')))
       AND ${mediaIsNotVariantMasterSql("m")}
       AND TRIM(COALESCE(NULLIF(em.alt_text_override,''),m.alt_text))<>''
-    LIMIT 1`).bind(entityId).first();
+    LIMIT 1`).bind(entityId, Number(collageSlot) || 0).first();
   return Boolean(row);
 }
 
@@ -3639,7 +3640,11 @@ async function publicCurrentProjects(env) {
     ORDER BY p.sort_order,p.id`).all()).results || [];
   const mediaByEntity = await publicEntityMedia(database, rows.map((row) => row.id));
   const projects = rows.map((row) => {
-    const media = (mediaByEntity.get(row.id) || []).filter((item) => item.mimeType?.startsWith("image/") && text(item.alt, 1000));
+    const collageSlot = Number(row.collage_slot) || 0;
+    const media = (mediaByEntity.get(row.id) || []).filter((item) => {
+      const mimeType = String(item.mimeType || "").toLowerCase();
+      return text(item.alt, 1000) && (mimeType.startsWith("image/") || (collageSlot === 1 && ["video/mp4","video/webm"].includes(mimeType)));
+    });
     const items = parseJson(row.items_json).slice(0, 6).map((entry) => ({
       title: text(entry?.title, 160),
       description: text(entry?.description, 1200),
@@ -3657,7 +3662,7 @@ async function publicCurrentProjects(env) {
       status: row.status_label,
       accent: row.medium_key,
       links,
-      collageSlot: Number(row.collage_slot) || 0,
+      collageSlot,
       focal: { x: Number.isFinite(Number(row.focal_x)) ? Number(row.focal_x) : 50, y: Number.isFinite(Number(row.focal_y)) ? Number(row.focal_y) : 50 },
       media,
       sortOrder: Number(row.sort_order) || 0,
@@ -3673,6 +3678,8 @@ async function publicCurrentProjects(env) {
       projectTitle: project.title,
       src: project.media[0].url,
       alt: project.media[0].alt,
+      mimeType: project.media[0].mimeType,
+      kind: project.media[0].mimeType?.startsWith("video/") ? "video" : "image",
       focal: project.focal,
     }));
   return json({ revision: rows.reduce((value, row) => row.updated_at > value ? row.updated_at : value, ""), projects, collage }, { cache: "public, max-age=60" });
@@ -3794,7 +3801,7 @@ async function adminCreate(request, env, resource) {
   if(resource==="art"&&body.print_intent!==undefined&&!["unavailable","planned"].includes(body.print_intent))return failure("Print plan must be unavailable or planned.");
   const database = db(env); const recordId = text(body.id, 160) || id(config.entityType); let values;
   try { values = normalizeRecord(config, body); } catch (error) { return failure(error.message, 400); }
-  if (resource === "current-projects" && Number(values.collage_slot) > 0) return failure("Create the entry, attach an eligible public image with alt text, then assign its collage slot.", 409);
+  if (resource === "current-projects" && Number(values.collage_slot) > 0) return failure("Create the entry, attach eligible public media with descriptive text, then assign its collage slot.", 409);
   let styleSelection = [];
   if (resource === "art") {
     if ((values.state || "draft") !== "draft") return failure("New artwork must begin as Draft. Attach the primary image before publishing.", 409);
@@ -3888,7 +3895,7 @@ async function adminUpdate(request, env, resource, recordId, archive = false) {
   const projectedRow = { ...beforeRow, ...values, id: recordId };
   const projected = resource === "flash" ? { ...projectedRow, ...tattooStylePayload(nextStyleSelection) } : projectedRow;
   if (resource === "current-projects" && Number(projected.collage_slot) > 0) {
-    if (!await currentProjectHasEligibleImage(database, recordId)) return failure("A collage slot requires an active public image with alt text and inline presentation.", 409);
+    if (!await currentProjectHasEligibleMedia(database, recordId, projected.collage_slot)) return failure("A collage slot requires active public inline media with alt text. Video is supported for the center anchor only.", 409);
     const conflict = await database.prepare("SELECT id FROM about_current_projects WHERE collage_slot=? AND id<>? AND state<>'archived' LIMIT 1").bind(Number(projected.collage_slot), recordId).first();
     if (conflict) return failure(`Collage slot ${Number(projected.collage_slot)} is already assigned.`, 409);
   }
@@ -4320,7 +4327,7 @@ async function mediaUploadsApi(request,env,sessionId="",action="",partNumber=0){
     if(!MEDIA_TRANSCRIPT_STATUSES.has(transcriptStatus))return failure("Invalid transcript status.");
     if(!MEDIA_PRESENTATIONS.has(presentation))return failure("Invalid public presentation.");
     if(suppliedHash){
-      const duplicate=await database.prepare("SELECT media_id FROM media_catalogue_entries WHERE sha256=?").bind(suppliedHash).first();
+      const duplicate=await database.prepare("SELECT media_id FROM media_asset_provenance WHERE sha256=?").bind(suppliedHash).first();
       if(duplicate){
         const record=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(duplicate.media_id).first();
         if(record)return json({record:presentMediaRecord(record),deduplicated:true,sha256:suppliedHash});
@@ -4398,7 +4405,7 @@ async function mediaUploadsApi(request,env,sessionId="",action="",partNumber=0){
           session.transcript,session.transcript_status,session.transcript_language,session.public_title,session.public_description,session.public_presentation),
       database.prepare("UPDATE media_upload_sessions SET state='completed',completed_at=datetime('now'),error_message='',updated_at=datetime('now') WHERE id=?").bind(sessionId),
     ]);
-    if(session.sha256||session.source_class!=="creative")await database.prepare("UPDATE media_catalogue_entries SET sha256=?,source_class=?,updated_by='studio',updated_at=datetime('now') WHERE media_id=?").bind(session.sha256||null,session.source_class||"creative",session.media_id).run();
+    if(session.sha256)await database.prepare("UPDATE media_asset_provenance SET sha256=?,updated_by='studio',updated_at=datetime('now') WHERE media_id=?").bind(session.sha256,session.media_id).run();
     const completed=await uploadSession(database,sessionId),record=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(session.media_id).first();
     return json({record:presentMediaRecord(record),upload:presentUploadSession(completed,uploadedParts),completed:true});
   }
@@ -4489,11 +4496,11 @@ async function mediaApi(request, env, mediaId="") {
   if(!MEDIA_PRIVACIES.has(privacy))return failure("Invalid media privacy.");if(!MEDIA_TRANSCRIPT_STATUSES.has(transcriptStatus))return failure("Invalid transcript status.");if(!MEDIA_PRESENTATIONS.has(presentation))return failure("Invalid public presentation.");
   if(!["creative","site_asset"].includes(sourceClass))return failure("Invalid media source class.");
   const fileBytes=await file.arrayBuffer();if(archivalSvg&&!hasSvgDocumentRoot(fileBytes))return failure("The selected file is not a valid SVG document.",415);
-  const hash=digestHex(await crypto.subtle.digest("SHA-256",fileBytes)),duplicate=await database.prepare("SELECT media_id FROM media_catalogue_entries WHERE sha256=?").bind(hash).first();
+  const hash=digestHex(await crypto.subtle.digest("SHA-256",fileBytes)),duplicate=await database.prepare("SELECT media_id FROM media_asset_provenance WHERE sha256=?").bind(hash).first();
   if(duplicate){const existing=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(duplicate.media_id).first();if(archivalSvg&&(!isArchivalSvgMedia(existing)||existing.privacy!=="internal"||existing.public_presentation!=="hidden"))return failure("A matching file already exists but is not a protected archival SVG.",409);return json({record:presentMediaRecord(existing),deduplicated:true});}
   const newId=id("media");const key=`construct/${newId}/${file.name.replace(/[^a-zA-Z0-9._-]/g,"-")}`;await env.SUBMISSION_FILES.put(key,fileBytes,{httpMetadata:{contentType:mime,cacheControl:"private, no-store"}});
   try{await database.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,rights_notes,privacy,state,created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_title,public_description,public_presentation,archive_catalogue_eligible)
-    VALUES(?,?,?,?,?,?,?,?,?,'active','studio',datetime('now'),datetime('now'),?,?,?,?,?,?,?)`).bind(newId,key,file.name,mime,file.size,text(form.get("alt_text"),1000),text(form.get("caption"),3000),text(form.get("rights_notes"),10000),privacy,text(form.get("transcript"),100000),transcriptStatus,text(form.get("transcript_language"),40),text(form.get("public_title"),300),text(form.get("public_description"),3000),presentation,archiveCatalogueEligible?1:0).run();await database.prepare("UPDATE media_catalogue_entries SET sha256=?,source_class=?,updated_by='studio',updated_at=datetime('now') WHERE media_id=?").bind(hash,sourceClass,newId).run();}catch(error){await database.prepare("DELETE FROM media_assets WHERE id=?").bind(newId).run().catch(()=>{});await env.SUBMISSION_FILES.delete(key);throw error;}
+    VALUES(?,?,?,?,?,?,?,?,?,'active','studio',datetime('now'),datetime('now'),?,?,?,?,?,?,?)`).bind(newId,key,file.name,mime,file.size,text(form.get("alt_text"),1000),text(form.get("caption"),3000),text(form.get("rights_notes"),10000),privacy,text(form.get("transcript"),100000),transcriptStatus,text(form.get("transcript_language"),40),text(form.get("public_title"),300),text(form.get("public_description"),3000),presentation,archiveCatalogueEligible?1:0).run();await database.prepare("UPDATE media_asset_provenance SET sha256=?,asset_role=CASE WHEN ?='site_asset' THEN 'site_asset' ELSE asset_role END,updated_by='studio',updated_at=datetime('now') WHERE media_id=?").bind(hash,sourceClass,newId).run();}catch(error){await database.prepare("DELETE FROM media_assets WHERE id=?").bind(newId).run().catch(()=>{});await env.SUBMISSION_FILES.delete(key);throw error;}
   return json({record:presentMediaRecord(await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(newId).first())},{status:201});
 }
 

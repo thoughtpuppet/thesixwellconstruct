@@ -25,8 +25,56 @@
   const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[character]);
   const safeUrl = (value) => { const url=String(value||""); return url.startsWith("/") || /^https:\/\//i.test(url) ? url : ""; };
   const constellation = document.querySelector("[data-current-projects]");
-  const anchorImage = document.querySelector("[data-current-anchor-image]");
+  const anchorMedia = document.querySelector("[data-current-anchor-media]");
   const anchorCaption = document.querySelector(".current-constellation-photo figcaption");
+  const anchorToggle = document.querySelector("[data-current-anchor-toggle]");
+  const anchorPoster = "/assets/images/current-works/current-works-center-loop-poster.jpg";
+
+  function currentAnchorVideo() {
+    return anchorMedia?.querySelector("video") || null;
+  }
+
+  function syncAnchorToggle() {
+    const video=currentAnchorVideo();
+    if(!anchorToggle)return;
+    anchorToggle.hidden=!video;
+    if(!video)return;
+    const paused=video.paused;
+    anchorToggle.textContent=paused?"Play motion":"Pause motion";
+    anchorToggle.setAttribute("aria-pressed",String(paused));
+  }
+
+  function createAnchorMedia(item) {
+    const src=safeUrl(item?.src),alt=String(item?.alt||"");
+    if(!src)return null;
+    const focalX=Number(item.focal?.x),focalY=Number(item.focal?.y);
+    const media=document.createElement(item.kind==="video"||String(item.mimeType||"").startsWith("video/")?"video":"img");
+    media.style.setProperty("--anchor-focal-x",`${Number.isFinite(focalX)?focalX:50}%`);
+    media.style.setProperty("--anchor-focal-y",`${Number.isFinite(focalY)?focalY:50}%`);
+    if(media instanceof HTMLVideoElement){
+      media.autoplay=true;
+      media.muted=true;
+      media.defaultMuted=true;
+      media.loop=true;
+      media.playsInline=true;
+      media.preload="metadata";
+      media.poster=anchorPoster;
+      media.setAttribute("aria-label",alt);
+      const source=document.createElement("source");
+      source.src=src;
+      source.type=String(item.mimeType||"video/mp4");
+      const fallback=document.createElement("img");
+      fallback.src=anchorPoster;
+      fallback.alt=alt;
+      media.append(source,fallback);
+      media.addEventListener("play",syncAnchorToggle);
+      media.addEventListener("pause",syncAnchorToggle);
+    }else{
+      media.src=src;
+      media.alt=alt;
+    }
+    return media;
+  }
 
   function projectLinks(project) {
     const links=Array.isArray(project.links)?[...project.links]:[];
@@ -65,12 +113,26 @@
     const src=safeUrl(item?.src);
     if (!src) return;
     const project=projects.find((candidate)=>candidate.slug===item.projectSlug);
-    const focalX=Number(item.focal?.x),focalY=Number(item.focal?.y);
-    anchorImage.src=src;
-    anchorImage.alt=String(item.alt||"");
-    anchorImage.style.setProperty("--anchor-focal-x",`${Number.isFinite(focalX)?focalX:50}%`);
-    anchorImage.style.setProperty("--anchor-focal-y",`${Number.isFinite(focalY)?focalY:50}%`);
+    const media=createAnchorMedia({...item,src});
+    if(!media)return;
+    anchorMedia.replaceChildren(media);
+    if(media instanceof HTMLVideoElement)media.play().catch(()=>syncAnchorToggle());
+    syncAnchorToggle();
     if (project) anchorCaption.textContent=`${project.title} · ${project.status}`;
+  }
+
+  if(anchorToggle){
+    anchorToggle.addEventListener("click",()=>{
+      const video=currentAnchorVideo();
+      if(!video)return;
+      if(video.paused)video.play().catch(()=>{});else video.pause();
+      syncAnchorToggle();
+    });
+    const initialVideo=currentAnchorVideo();
+    initialVideo?.addEventListener("play",syncAnchorToggle);
+    initialVideo?.addEventListener("pause",syncAnchorToggle);
+    initialVideo?.play().catch(()=>syncAnchorToggle());
+    syncAnchorToggle();
   }
 
   renderProjects(fallbackProjects);

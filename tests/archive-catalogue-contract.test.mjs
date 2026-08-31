@@ -976,7 +976,7 @@ test("Studio lists Archive People and Places without requiring sortable columns"
   const placesResponse = await handleConstructApi(request("/api/admin/places", { admin: true }), runtime);
   assert.equal(placesResponse.status, 200);
   const places = (await placesResponse.json()).records;
-  assert.deepEqual(places.map((record) => record.name), ["Alpha Place", "J.R. Erikson Co. Building", "Purple Fish Studios", "Zulu Place"]);
+  assert.deepEqual(places.map((record) => record.name), ["Alpha Place", "Goat Farm Arts Center", "Guardian Studios at Echo Street West", "J.R. Erikson Co. Building", "Purple Fish Studios", "Zulu Place"]);
 });
 
 test("Archive dossier publication state alone controls dossier public visibility", async () => {

@@ -2810,7 +2810,7 @@ async function deleteOrphanedScoutMedia(db, mediaId) {
   const guards = [];
   for (const table of tables.results || []) {
     const tableName = asString(table.name);
-    if (!tableName || tableName === "media_assets") continue;
+    if (!tableName || tableName === "media_assets" || tableName === "media_asset_provenance" || tableName === "media_archive_admission_reviews") continue;
     const foreignKeys = await db.prepare(`PRAGMA foreign_key_list(${quotedSqlIdentifier(tableName)})`).all();
     for (const foreignKey of foreignKeys.results || []) {
       if (foreignKey.table !== "media_assets" || !foreignKey.from) continue;

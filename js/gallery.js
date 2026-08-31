@@ -1,16 +1,96 @@
-(function(){
+(function () {
   "use strict";
-  const app=document.querySelector("[data-gallery-app]"),breadcrumb=document.querySelector("[data-gallery-breadcrumb]");if(!app)return;
-  const esc=value=>String(value==null?"":value).replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
-  const path=location.pathname.replace(/\/+$/,"")||"/gallery",parts=path.split("/").filter(Boolean),itemAccession=parts[0]==="gallery"&&/^MED-\d{6,}$/i.test(parts[1]||"")?parts[1].toUpperCase():"",setSlug=parts[1]==="sets"?parts[2]||"":"";
-  const dateLabel=record=>record.dateLabel||record.occurredAt||((record.datePrecision||"")==="undated"?"Undated":"");
-  function media(record,detail=false){const attrs=`src="${esc(record.mediaUrl)}"`;if(record.mediaType==="image")return `<img ${attrs} alt="${esc(record.accessibilityText)}" style="object-position:${Number(record.focalX||.5)*100}% ${Number(record.focalY||.5)*100}%">`;if(record.mediaType==="video")return `<video ${attrs} ${record.posterUrl?`poster="${esc(record.posterUrl)}"`:""} ${detail?"controls playsinline":"muted playsinline preload=metadata"} aria-label="${esc(record.accessibilityText)}"></video>`;if(record.mediaType==="audio")return `<div class="gallery-type-tile">Audio</div>${detail?`<audio ${attrs} controls aria-label="${esc(record.accessibilityText)}"></audio>`:""}`;if(record.mediaType==="pdf")return detail?`<div class="gallery-document-card"><div><strong>PDF / scan</strong><p>${esc(record.accessibilityText)}</p><a class="gallery-chip" href="${esc(record.mediaUrl)}">Open approved PDF</a></div></div>`:`<div class="gallery-type-tile">PDF</div>`;return detail?`<div class="gallery-document-card"><div><strong>Document</strong><p>${esc(record.accessibilityText)}</p><a class="gallery-chip" href="${esc(record.mediaUrl)}" download>Download approved file</a></div></div>`:`<div class="gallery-type-tile">File</div>`}
-  function card(record){return `<article class="archive-record-card-shell"><a class="archive-record-card" href="${esc(record.route)}"><span class="archive-record-card-media gallery-card-media">${media(record)}</span><span class="archive-record-card-meta gallery-card-meta"><span class="archive-record-card-medium">${esc(record.mediaType)}${dateLabel(record)?` · ${esc(dateLabel(record))}`:""}</span><h3>${esc(record.title)}</h3>${record.lenses.length?`<span class="archive-record-card-date">${record.lenses.map(lens=>esc(lens.name)).join(" · ")}</span>`:""}</span></a></article>`}
-  function crumb(current){breadcrumb.innerHTML=`<a href="/home/">Construct</a><span class="construct-breadcrumb-sep" aria-hidden="true">/</span><a href="/gallery/">Gallery</a>${current?`<span class="construct-breadcrumb-sep" aria-hidden="true">/</span><span class="construct-breadcrumb-current" aria-current="page">${esc(current)}</span>`:""}`}
-  function hero(title,descriptor,kicker,count){return `<header class="gallery-hero site-hero site-hero--supporting"><div><span class="gallery-kicker">${esc(kicker)}</span><h1 class="hero-title gallery-title">${esc(title)}</h1></div><div><p class="hero-descriptor">${esc(descriptor)}</p>${count!==undefined?`<span class="gallery-count">${count} ${count===1?"entry":"entries"}</span>`:""}</div></header>`}
-  async function get(url){const response=await fetch(url,{headers:{accept:"application/json"}}),payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||"The Gallery could not be opened.");return payload}
-  async function index(){crumb("");const data=await get(`/api/gallery${location.search}`),params=new URLSearchParams(location.search),filters=data.filters||{},nodes=filters.nodes||[];app.innerHTML=`<div class="gallery-shell">${hero("Gallery.","Images, moving image, sound, process, studio life, and ephemera from the SIX.WELL creative ecosystem.","A relational image field",data.count)}<form class="gallery-filters" data-gallery-filters><label>Search titles<input name="q" value="${esc(params.get("q")||"")}" placeholder="Search this view"></label><label>Lens<select name="lens"><option value="">All lenses</option>${(filters.lenses||[]).map(lens=>`<option value="${esc(lens.slug)}" ${params.get("lens")===lens.slug?"selected":""}>${esc(lens.name)}</option>`).join("")}</select></label><label>Media<select name="type"><option value="">All media</option>${["image","video","audio","pdf","document"].map(type=>`<option value="${type}" ${params.get("type")===type?"selected":""}>${type[0].toUpperCase()+type.slice(1)}</option>`).join("")}</select></label><label>Connected node<select name="node"><option value="">All nodes</option>${nodes.map(node=>`<option value="${esc(node.id)}" ${params.get("node")===node.id?"selected":""}>${esc(node.name)}</option>`).join("")}</select></label><label>Set<select name="set"><option value="">All sets</option>${(filters.sets||[]).map(set=>`<option value="${esc(set.slug)}" ${params.get("set")===set.slug?"selected":""}>${esc(set.title)}</option>`).join("")}</select></label></form><section class="archive-record-card-grid" aria-label="Public Gallery entries" data-gallery-grid>${data.records.map(card).join("")||`<div class="gallery-empty"><h2>No published entries match this view.</h2></div>`}</section></div>`;const form=app.querySelector("[data-gallery-filters]"),search=form.elements.q;form.addEventListener("change",()=>{const next=new URLSearchParams(new FormData(form));if(!next.get("q"))next.delete("q");for(const key of ["lens","type","node","set"])if(!next.get(key))next.delete(key);location.search=next});search.addEventListener("input",()=>{const value=search.value.trim().toLowerCase();app.querySelectorAll(".archive-record-card-shell").forEach(shell=>shell.hidden=value&&!shell.textContent.toLowerCase().includes(value))})}
-  async function detail(){const data=await get(`/api/gallery/items/${encodeURIComponent(itemAccession)}`),record=data.record;crumb(record.title);document.title=`${record.title} · Gallery · the six.well construct`;const facts=[["Catalogue",record.accession],["Date",dateLabel(record)],["Credit",record.credit],["Media",record.mediaType],["Dimensions",record.width&&record.height?`${record.width} × ${record.height}`:record.durationSeconds?`${record.durationSeconds} seconds`:""]].filter(([,value])=>value);app.innerHTML=`<article class="gallery-detail">${hero(record.title,record.accessibilityText,"Gallery entry")}<div class="gallery-detail-media">${media(record,true)}</div><div class="gallery-detail-grid"><section class="gallery-detail-copy"><span class="gallery-kicker">Public description</span>${record.caption?`<p>${esc(record.caption)}</p>`:""}${record.transcript?`<details class="gallery-transcript"><summary>Transcript / captions${record.transcriptLanguage?` · ${esc(record.transcriptLanguage)}`:""}</summary><p>${esc(record.transcript)}</p></details>`:""}${record.lenses.length?`<div class="gallery-chip-list">${record.lenses.map(lens=>`<a class="gallery-chip" href="/gallery/?lens=${encodeURIComponent(lens.slug)}">${esc(lens.name)}</a>`).join("")}</div>`:""}${record.sets.length?`<h2>Sets</h2><div class="gallery-chip-list">${record.sets.map(set=>`<a class="gallery-chip" href="${esc(set.route)}">${esc(set.title)}</a>`).join("")}</div>`:""}${record.connections.length?`<h2>Connections</h2><div class="gallery-chip-list">${record.connections.map(link=>`<a class="gallery-chip" href="${esc(link.route)}">${esc(link.label)} · ${esc(link.title)}</a>`).join("")}</div>`:""}</section><dl class="gallery-facts">${facts.map(([label,value])=>`<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join("")}</dl></div></article>`}
-  async function setView(){const data=await get(`/api/gallery/sets/${encodeURIComponent(setSlug)}`);crumb(data.set.title);document.title=`${data.set.title} · Gallery · the six.well construct`;app.innerHTML=`<div class="gallery-shell">${hero(data.set.title,data.set.summary||"A curated sequence from the Gallery.",data.set.set_type||"Gallery set",data.count)}${data.set.cover?`<div class="gallery-detail-media gallery-set-cover">${media(data.set.cover,true)}</div>`:""}<section class="archive-record-card-grid" aria-label="Gallery set entries">${data.records.map(card).join("")||`<div class="gallery-empty"><h2>This set has no published entries.</h2></div>`}</section></div>`}
-  (itemAccession?detail():setSlug?setView():index()).catch(error=>{app.innerHTML=`<section class="gallery-empty"><span class="gallery-kicker">Gallery unavailable</span><h1>${esc(error.message)}</h1><p><a class="gallery-chip" href="/gallery/">Return to Gallery</a></p></section>`});
+  const app = document.querySelector("[data-gallery-app]");
+  const breadcrumb = document.querySelector("[data-gallery-breadcrumb]");
+  if (!app) return;
+
+  const esc = (value) => String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+  const parts = (location.pathname.replace(/\/+$/, "") || "/gallery").split("/").filter(Boolean);
+  const itemAccession = parts[0] === "gallery" && /^MED-\d{6,}$/i.test(parts[1] || "") ? parts[1].toUpperCase() : "";
+  const setSlug = parts[1] === "sets" ? parts[2] || "" : "";
+  const dateLabel = (record) => record.dateLabel || record.occurredAt || (record.datePrecision === "undated" ? "Undated" : "");
+
+  function media(record, detail = false) {
+    const attrs = `src="${esc(record.mediaUrl)}"`;
+    if (record.mediaType === "image") return `<img ${attrs} alt="${esc(record.accessibilityText)}" style="object-position:${Number(record.focalX || 0.5) * 100}% ${Number(record.focalY || 0.5) * 100}%">`;
+    if (record.mediaType === "video") return `<video ${attrs} ${record.posterUrl ? `poster="${esc(record.posterUrl)}"` : ""} ${detail ? "controls playsinline" : "muted playsinline preload=metadata"} aria-label="${esc(record.accessibilityText)}"></video>`;
+    if (record.mediaType === "audio") return `<div class="gallery-type-tile">Audio</div>${detail ? `<audio ${attrs} controls aria-label="${esc(record.accessibilityText)}"></audio>` : ""}`;
+    if (record.mediaType === "pdf") return detail ? `<div class="gallery-document-card"><div><strong>PDF / scan</strong><p>${esc(record.accessibilityText)}</p><a class="gallery-chip" href="${esc(record.mediaUrl)}">Open PDF</a></div></div>` : `<div class="gallery-type-tile">PDF</div>`;
+    return detail ? `<div class="gallery-document-card"><div><strong>Document</strong><p>${esc(record.accessibilityText)}</p><a class="gallery-chip" href="${esc(record.mediaUrl)}" download>Download file</a></div></div>` : `<div class="gallery-type-tile">File</div>`;
+  }
+
+  function card(record) {
+    return `<article class="archive-record-card-shell"><a class="archive-record-card" href="${esc(record.route)}"><span class="archive-record-card-media gallery-card-media">${media(record)}</span><span class="archive-record-card-meta gallery-card-meta"><span class="archive-record-card-medium">${esc(record.mediaType)}${dateLabel(record) ? ` · ${esc(dateLabel(record))}` : ""}</span><h3>${esc(record.title)}</h3>${record.lenses.length ? `<span class="archive-record-card-date">${record.lenses.map((lens) => esc(lens.name)).join(" · ")}</span>` : ""}</span></a></article>`;
+  }
+
+  function setCard(set) {
+    return `<article class="archive-record-card-shell"><a class="archive-record-card" href="${esc(set.route)}"><span class="archive-record-card-media gallery-card-media">${set.cover ? media(set.cover) : `<span class="gallery-type-tile">Set</span>`}</span><span class="archive-record-card-meta gallery-card-meta"><span class="archive-record-card-medium">${esc(set.set_type || "set")}</span><h3>${esc(set.title)}</h3>${set.summary ? `<span class="archive-record-card-date">${esc(set.summary)}</span>` : ""}</span></a></article>`;
+  }
+
+  function crumb(current) {
+    breadcrumb.innerHTML = `<a href="/home/">Construct</a><span class="construct-breadcrumb-sep" aria-hidden="true">/</span><a href="/gallery/">Gallery</a>${current ? `<span class="construct-breadcrumb-sep" aria-hidden="true">/</span><span class="construct-breadcrumb-current" aria-current="page">${esc(current)}</span>` : ""}`;
+  }
+
+  function hero(title, descriptor, kicker, count) {
+    return `<header class="gallery-hero site-hero site-hero--supporting"><div><span class="gallery-kicker">${esc(kicker)}</span><h1 class="hero-title gallery-title">${esc(title)}</h1></div><div><p class="hero-descriptor">${esc(descriptor)}</p>${count !== undefined ? `<span class="gallery-count">${count} ${count === 1 ? "entry" : "entries"}</span>` : ""}</div></header>`;
+  }
+
+  async function get(url) {
+    const response = await fetch(url, { headers: { accept: "application/json" } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "The Gallery could not be opened.");
+    return payload;
+  }
+
+  async function index() {
+    crumb("");
+    const [data, setData] = await Promise.all([get(`/api/gallery${location.search}`), get("/api/gallery/sets")]);
+    const params = new URLSearchParams(location.search);
+    const filters = data.filters || {};
+    const nodes = filters.nodes || [];
+    const featuredSets = setData.records || [];
+    app.innerHTML = `<div class="gallery-shell">
+      ${hero("Gallery.", "Images, moving image, sound, process, studio life, and ephemera from the SIX.WELL creative ecosystem.", "A relational image field", data.count)}
+      ${featuredSets.length ? `<section class="gallery-featured-sets" aria-labelledby="gallery-sets-title"><div class="gallery-section-head"><span class="gallery-kicker">Sequences and sessions</span><h2 id="gallery-sets-title">Featured sets</h2></div><div class="archive-record-card-grid">${featuredSets.map(setCard).join("")}</div></section>` : ""}
+      <form class="gallery-filters" data-gallery-filters>
+        <label>Search titles<input name="q" value="${esc(params.get("q") || "")}" placeholder="Search this view"></label>
+        <label>Lens<select name="lens"><option value="">All lenses</option>${(filters.lenses || []).map((lens) => `<option value="${esc(lens.slug)}" ${params.get("lens") === lens.slug ? "selected" : ""}>${esc(lens.name)}</option>`).join("")}</select></label>
+        <label>Media<select name="type"><option value="">All media</option>${["image", "video", "audio", "pdf", "document"].map((type) => `<option value="${type}" ${params.get("type") === type ? "selected" : ""}>${type[0].toUpperCase() + type.slice(1)}</option>`).join("")}</select></label>
+        <label>Connected node<select name="node"><option value="">All nodes</option>${nodes.map((node) => `<option value="${esc(node.id)}" ${params.get("node") === node.id ? "selected" : ""}>${esc(node.name)}</option>`).join("")}</select></label>
+        <label>Set<select name="set"><option value="">All sets</option>${(filters.sets || []).map((set) => `<option value="${esc(set.slug)}" ${params.get("set") === set.slug ? "selected" : ""}>${esc(set.title)}</option>`).join("")}</select></label>
+      </form>
+      <section class="archive-record-card-grid" aria-label="Public Gallery entries" data-gallery-grid>${data.records.map(card).join("") || `<div class="gallery-empty"><h2>No published entries match this view.</h2></div>`}</section>
+    </div>`;
+    const form = app.querySelector("[data-gallery-filters]");
+    const search = form.elements.q;
+    form.addEventListener("change", () => {
+      const next = new URLSearchParams(new FormData(form));
+      if (!next.get("q")) next.delete("q");
+      for (const key of ["lens", "type", "node", "set"]) if (!next.get(key)) next.delete(key);
+      location.search = next;
+    });
+    search.addEventListener("input", () => {
+      const value = search.value.trim().toLowerCase();
+      app.querySelectorAll("[data-gallery-grid] .archive-record-card-shell").forEach((shell) => { shell.hidden = Boolean(value && !shell.textContent.toLowerCase().includes(value)); });
+    });
+  }
+
+  async function detail() {
+    const { record } = await get(`/api/gallery/items/${encodeURIComponent(itemAccession)}`);
+    crumb(record.title);
+    document.title = `${record.title} · Gallery · the six.well construct`;
+    const facts = [["Catalogue", record.accession], ["Date", dateLabel(record)], ["Credit", record.credit], ["Media", record.mediaType], ["Dimensions", record.width && record.height ? `${record.width} × ${record.height}` : record.durationSeconds ? `${record.durationSeconds} seconds` : ""]].filter(([, value]) => value);
+    app.innerHTML = `<article class="gallery-detail">${hero(record.title, record.accessibilityText, "Gallery entry")}<div class="gallery-detail-media">${media(record, true)}</div><div class="gallery-detail-grid"><section class="gallery-detail-copy"><span class="gallery-kicker">Public description</span>${record.caption ? `<p>${esc(record.caption)}</p>` : ""}${record.transcript ? `<details class="gallery-transcript"><summary>Transcript / captions${record.transcriptLanguage ? ` · ${esc(record.transcriptLanguage)}` : ""}</summary><p>${esc(record.transcript)}</p></details>` : ""}${record.lenses.length ? `<div class="gallery-chip-list">${record.lenses.map((lens) => `<a class="gallery-chip" href="/gallery/?lens=${encodeURIComponent(lens.slug)}">${esc(lens.name)}</a>`).join("")}</div>` : ""}${record.sets.length ? `<h2>Sets</h2><div class="gallery-chip-list">${record.sets.map((set) => `<a class="gallery-chip" href="${esc(set.route)}">${esc(set.title)}</a>`).join("")}</div>` : ""}${record.connections.length ? `<h2>Connections</h2><div class="gallery-chip-list">${record.connections.map((link) => `<a class="gallery-chip" href="${esc(link.route)}">${esc(link.label)} · ${esc(link.title)}</a>`).join("")}</div>` : ""}</section><dl class="gallery-facts">${facts.map(([label, value]) => `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join("")}</dl></div></article>`;
+  }
+
+  async function setView() {
+    const data = await get(`/api/gallery/sets/${encodeURIComponent(setSlug)}`);
+    crumb(data.set.title);
+    document.title = `${data.set.title} · Gallery · the six.well construct`;
+    app.innerHTML = `<div class="gallery-shell">${hero(data.set.title, data.set.summary || "A curated sequence from the Gallery.", data.set.set_type || "Gallery set", data.count)}${data.set.cover ? `<div class="gallery-detail-media gallery-set-cover">${media(data.set.cover, true)}</div>` : ""}<section class="archive-record-card-grid" aria-label="Gallery set entries">${data.records.map(card).join("") || `<div class="gallery-empty"><h2>This set has no published entries.</h2></div>`}</section></div>`;
+  }
+
+  (itemAccession ? detail() : setSlug ? setView() : index()).catch((error) => {
+    app.innerHTML = `<section class="gallery-empty"><span class="gallery-kicker">Gallery unavailable</span><h1>${esc(error.message)}</h1><p><a class="gallery-chip" href="/gallery/">Return to Gallery</a></p></section>`;
+  });
 })();
