@@ -1736,6 +1736,9 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
   const inferredStructure = dateKind === "date_range" && formats.includes("exhibition") ? "exhibition" : "single";
   const requestedStructure = asString(value("eventStructure", inferredStructure));
   const eventStructure = EVENT_STRUCTURES.has(requestedStructure) ? requestedStructure : "single";
+  const confirmedThrough = eventStructure === "exhibition" && dateKind === "date_range"
+    ? value("confirmedThrough")
+    : "";
   const access = accessDetails(value("accessStatus", "public"), value("accessNotes"), value("audiences", ["Public"]), {
     ...current,
     verificationNotes: value("verificationNotes"),
@@ -1795,7 +1798,7 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
     startsAt: canonicalCalendarDate(value("startsAt"), asString(value("timezone", TIME_ZONE)) || TIME_ZONE) || null,
     endsAt: canonicalCalendarDate(value("endsAt"), asString(value("timezone", TIME_ZONE)) || TIME_ZONE) || null,
     ...visitingDetails({
-      confirmedThrough:value("confirmedThrough"),
+      confirmedThrough,
       visitingHours:visitingHoursInput,
       visitingHoursNote:value("visitingHoursNote"),
       visitingHoursSourceUrl:value("visitingHoursSourceUrl"),
@@ -1872,8 +1875,8 @@ function publicationErrors(proposal) {
   if (proposal.endsAt && !validDate(proposal.endsAt)) errors.push("End date is invalid.");
   if (proposal.confirmedThrough && (!validDate(proposal.confirmedThrough) || !/^\d{4}-\d{2}-\d{2}$/.test(proposal.confirmedThrough))) errors.push("Confirmed-through date must use YYYY-MM-DD.");
   if (proposal.endsAt && validDate(proposal.startsAt) && Date.parse(proposal.endsAt) < Date.parse(proposal.startsAt)) errors.push("End date cannot be before the start date.");
-  if (proposal.confirmedThrough && validDate(proposal.startsAt) && Date.parse(proposal.confirmedThrough) < Date.parse(proposal.startsAt)) errors.push("Confirmed-through date cannot be before the start date.");
-  if (proposal.endsAt && proposal.confirmedThrough && Date.parse(proposal.confirmedThrough) > Date.parse(proposal.endsAt)) errors.push("Confirmed-through date cannot be after the confirmed closing date.");
+  if (proposal.confirmedThrough && validDate(proposal.startsAt) && dateKey(proposal.confirmedThrough) < dateKey(proposal.startsAt)) errors.push("Confirmed-through date cannot be before the start date.");
+  if (proposal.endsAt && proposal.confirmedThrough && dateKey(proposal.confirmedThrough) > dateKey(proposal.endsAt)) errors.push("Confirmed-through date cannot be after the confirmed closing date.");
   errors.push(...visitingHoursInputErrors(proposal.visitingHours));
   if (!validTimeZone(proposal.timezone)) errors.push("A valid IANA time zone is required.");
   if (!proposal.venueName && !delayedLocation) errors.push(virtual ? "A confirmed virtual venue label is required." : "A confirmed venue name is required.");
@@ -6834,6 +6837,7 @@ function buildEventiveFestivalProposals(events, films, source) {
   core.sort((left, right) => asString(left.startsAt).localeCompare(asString(right.startsAt)) || left.title.localeCompare(right.title));
   core.forEach((occurrence, index) => { occurrence.sortOrder = index; });
   const parentSourceEventId = asString(config.parentSourceEventId) || `eventive-bucket-${asString(config.eventBucketId)}`;
+  const singleDayFestival = festivalStart === festivalEnd;
   const parent = {
     sourceId: source.id,
     sourceEventId: parentSourceEventId,
@@ -6850,9 +6854,9 @@ function buildEventiveFestivalProposals(events, films, source) {
     accessStatus: "public",
     accessNotes: "Admission and availability vary by program.",
     audiences: ["Public"],
-    dateKind: "date_range",
+    dateKind: singleDayFestival ? "all_day" : "date_range",
     startsAt: festivalStart,
-    endsAt: festivalEnd,
+    endsAt: singleDayFestival ? null : festivalEnd,
     timezone: TIME_ZONE,
     venueName: "Multiple Atlanta venues",
     venueAddress: "",
@@ -10970,9 +10974,11 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
     ].sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt));
     const occurrenceDates = proposal.occurrences.map((occurrence) => wixLocalDate(occurrence.startsAt, occurrence.timezone || proposal.timezone)).filter(Boolean);
     if (occurrenceDates.length) {
-      proposal.startsAt = occurrenceDates[0];
-      proposal.endsAt = occurrenceDates.at(-1);
-      proposal.dateKind = "date_range";
+      const firstDate = occurrenceDates[0];
+      const lastDate = occurrenceDates.at(-1);
+      proposal.startsAt = firstDate;
+      proposal.endsAt = firstDate === lastDate ? null : lastDate;
+      proposal.dateKind = firstDate === lastDate ? "all_day" : "date_range";
     }
   }
   proposal.flyerMediaId = current.flyerMediaId;
@@ -11760,7 +11766,7 @@ async function requestOpenAiEvents(env, profile, { query, domains = [], sourceDa
       "Capture any stated attendance restriction as a public fact. Default accessStatus to public with a Public audience when no restriction is stated. Use restricted when attendance is explicitly limited to students, alumni, faculty, staff, members, registrants, invitees, or another named group; use unknown only when sources genuinely conflict about eligibility. Performer, vendor, applicant, workshop, or competition eligibility is separate from audience attendance unless spectators or attendees are also limited. Copy named eligible groups into audiences and write a concise factual accessNotes sentence for restricted or conflicting access.",
       "Every public-facing string, including factualDescription, accessNotes, ticketNotes, planningNotes, and occurrence equivalents, must state the event fact directly. Never write that a caption, flyer, post, page, listing, source, extraction, verification, or research process says, lists, confirms, or shows something. Keep that evidence narration only in private evidence, sourceResolutionNotes, verificationNotes, citations, or private Studio intelligence.",
       "Classify eventStructure as single, series, or exhibition. Keep one exhibition or multi-program series as the parent proposal. Put its opening receptions, artist talks, mixers, screenings, performances, workshops, panels, and lectures in occurrences instead of returning duplicate top-level events. A date marked TBD may be retained only as an occurrence with status tbd and empty startsAt. A series parent range is metadata, never a continuous public event.",
-      "Recognize a named festival with many separately scheduled or ticketed programs across multiple dates as collectionKind festival and eventStructure series. Return the festival parent instead of flattening the schedule into unrelated top-level events. Keep films inside a shorts block as program metadata rather than separate calendar events. Put a visibly linked Eventive schedule in scheduleUrl and return eventBucketId only when the exact stable bucket ID is explicitly established by the official organizer-to-schedule relationship; never guess or derive an ID from cadence. Use collectionKind none and collectionRelation none for ordinary events.",
+      "Recognize a named festival with separately scheduled or ticketed programs on one date or across multiple dates as collectionKind festival and eventStructure series. Festival describes the collection, not its duration: use all_day or timed for a one-day festival and date_range only when it actually spans dates. Return the festival parent instead of flattening the schedule into unrelated top-level events. Keep films inside a shorts block as program metadata rather than separate calendar events. Put a visibly linked Eventive schedule in scheduleUrl and return eventBucketId only when the exact stable bucket ID is explicitly established by the official organizer-to-schedule relationship; never guess or derive an ID from cadence. Use collectionKind none and collectionRelation none for ordinary events.",
       "For an exhibition whose closing date has not been announced, leave endsAt empty and put only the last explicitly guaranteed on-view date in confirmedThrough. Never represent a confirmed-through horizon as a closing date. Capture recurring gallery or visitor availability in visitingHours using weekday numbers 0 Sunday through 6 Saturday and HH:MM local opening and closing times; these hours are not related-program occurrences.",
       "For every exhibition, identify each credited artist and search for the artist's official website and official Instagram profile. Add both verified destinations to relatedLinks with role artist and labels that name the artist and destination. If neither official destination can be verified, add a Google search URL labeled Search for followed by the artist's name. Never substitute an Instagram post, gallery page, article, fan account, or similarly named person for an artist identity link.",
       "Treat participatory public art programs as art-making: sip-and-paint programs, live or figure drawing, critique groups, open studios, hands-on workshops, and art classes open to the public. Classify these with the art-making subject and workshop format when supported by the source.",

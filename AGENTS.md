@@ -30,6 +30,21 @@ Guide and its Page Anatomy section as the implementation reference. Do not use
 the direct `file://` rendering as an authoritative preview. The source file is
 `tools/ui-guide.html`, and `css/tokens.css` remains the palette source of truth.
 
+## Publication default
+
+Content the user asks to add to the site defaults to public unless the user
+explicitly requests a draft, private record, staged review, or delayed release.
+Publishing a record includes the media, evidence, relationships, timeline
+components, and other presentation dependencies intentionally supplied for that
+record; do not require separate publication approval for each child component.
+
+Use private or internal visibility only for sensitive evidence, credentials,
+precise location or device data, operational records, and material the user has
+specifically asked to withhold. A private technical-metadata layer must not make
+the artwork or its approved public documentation private. When a parent record
+is made public, reconcile its intended child records and assets into a coherent
+public state and report any item that genuinely must remain restricted.
+
 ## Image provenance and technical metadata
 
 Whenever an image enters the site or Archive, extract and retain the available

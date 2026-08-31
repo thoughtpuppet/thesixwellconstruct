@@ -51,6 +51,9 @@ tmp
 tmp/**
 *.log
 *.pid
+*.complete
+entry-room-physics-refine.png
+tools/*-screenshot.png
 assets/entry-room/ring-ripple-reference.mov
 assets/entry-room/ring-ripple-reference.mp4
 **/.DS_Store

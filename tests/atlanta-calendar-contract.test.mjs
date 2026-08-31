@@ -6832,6 +6832,7 @@ test("public and Studio exhibition interfaces distinguish closing dates, confirm
   const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
   const publicRecord = readFileSync(join(ROOT,"js","atlanta-calendar-record.js"),"utf8");
   assert.match(studio,/candidateConfirmedThrough/);
+  assert.match(studio,/structure==="exhibition"&&kind==="date_range"/);
   assert.match(studio,/Exhibition visiting hours/);
   assert.match(studio,/Gallery availability/);
   assert.match(publicRecord,/closing date TBA/);
@@ -6927,6 +6928,58 @@ async function runOutOnFilmSource(db, fetcher, includeKey = true) {
   assert.equal(response.status, 200, await response.clone().text());
   return response.json();
 }
+
+test("one-day festivals and virtual programs publish without artificial ranges or street addresses", async () => {
+  const db = database();
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"One-Day Virtual Film Festival", organizer:"Atlanta Virtual Film", factualDescription:"A one-day festival of separately scheduled online screenings.",
+      sourceUrl:"https://virtual-film.example/festival", organizerUrl:"https://virtual-film.example/", sourceAuthority:"organizer_event",
+      eventStructure:"series", collectionKind:"festival", dateKind:"all_day", startsAt:"2026-11-14", endsAt:"",
+      confirmedThrough:"2026-11-14", timezone:"America/New_York", venueName:"Virtual Cinema", venueAddress:"",
+      city:"Atlanta", region:"GA", accessStatus:"public", accessNotes:"Programs stream online.", audiences:["Public"],
+      subjects:["film"], formats:["screening"], verificationState:"verified",
+      occurrences:[{
+        sourceEventId:"virtual-program-1", occurrenceType:"screening", title:"Virtual Program One",
+        factualDescription:"An online festival screening.", accessStatus:"public", accessNotes:"Streams online.", audiences:["Public"],
+        dateKind:"timed", startsAt:"2026-11-14T19:00:00-05:00", endsAt:"2026-11-14T21:00:00-05:00",
+        timezone:"America/New_York", venueName:"Virtual Cinema", venueAddress:"", sourceUrl:"https://virtual-film.example/program-one",
+        ticketStatus:"not_required", status:"scheduled", verificationState:"verified", includePublic:true,
+      }],
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const candidate = (await created.json()).candidate;
+  assert.equal(candidate.collectionKind, "festival");
+  assert.equal(candidate.dateKind, "all_day");
+  assert.equal(candidate.endsAt, null);
+  assert.equal(candidate.confirmedThrough, null);
+  const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
+  assert.equal(approved.status, 200, await approved.clone().text());
+  const publicFestival = (await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json()).series.find((event) => event.title === candidate.title);
+  assert.ok(publicFestival);
+  assert.equal(publicFestival.dateKind, "all_day");
+  assert.equal(publicFestival.venueAddress, "");
+  assert.equal(Object.hasOwn(publicFestival.relatedOccurrences[0], "venueAddress"), false);
+});
+
+test("Eventive maps a one-day festival window to one all-day parent", async () => {
+  const db = database();
+  const source = db.prepare("SELECT adapter_config_json FROM calendar_sources WHERE id='cal_source_out_on_film_2026'").get();
+  const config = JSON.parse(source.adapter_config_json);
+  config.festivalStart = "2026-09-24";
+  config.festivalEnd = "2026-09-24";
+  config.virtualEnd = "2026-09-24";
+  db.prepare("UPDATE calendar_sources SET adapter_config_json=? WHERE id='cal_source_out_on_film_2026'").run(JSON.stringify(config));
+  const fixture = eventiveFestivalFixture();
+  const oneDayFixture = { events:fixture.events.filter((event) => String(event.start_time).startsWith("2026-09-24")), films:fixture.films };
+  await runOutOnFilmSource(db, eventiveFixtureFetch(oneDayFixture));
+  assert.deepEqual(
+    { ...db.prepare("SELECT date_kind,starts_at,ends_at,collection_kind FROM calendar_candidates WHERE source_id='cal_source_out_on_film_2026' AND collection_kind='festival'").get() },
+    { date_kind:"all_day", starts_at:"2026-09-24", ends_at:null, collection_kind:"festival" },
+  );
+});
 
 test("Eventive festival automation keeps 68 core programs, six shorts as metadata, and two previews as related candidates", async () => {
   const db = database();
@@ -7097,6 +7150,9 @@ test("festival interfaces expose digest, exception queue, Eventive controls, and
   assert.match(studio,/sourceAutomationMode-/);
   assert.match(studio,/Include this program publicly/);
   assert.match(studio,/seriesUsesOccurrenceVenues/);
+  assert.match(studio,/A festival may run for one day/);
+  assert.match(studio,/function onlineOnlyRecord\(record\)/);
+  assert.match(studio,/Venue address \(not required for online \/ virtual events\)/);
   assert.match(studioCss,/\.festival-digest \{[^}]*border:5px solid var\(--accent\);/);
   assert.match(studioCss,/\.festival-exceptions \{[^}]*border:5px solid var\(--line\);/);
   assert.match(publicRecord,/event\.collectionKind === "festival" \? \["Festival"\]/);

@@ -12,11 +12,21 @@ Sequence 01_1.gif
 # Local Playwright capture artifacts and local test outputs
 .playwright-cli/
 output/
+*.log
+*.pid
+*.complete
+entry-room-physics-refine.png
+tools/*-screenshot.png
 mobile-preview-*.err.log
 mobile-preview-*.out.log
 portfolio-*-dev.*.log
 .claude/settings.local.json
 tools/entry-room-3d-viewport-checks.ps1
+
+# Local deployment bundles and Codex scratch repositories
+/tmp/deploy-*/
+/tmp/deploy-*.zip
+/.codex-tmp/
 
 # Private Gallery masters are uploaded to protected R2, never Git/static assets.
 assets/gallery/peer-amid/
