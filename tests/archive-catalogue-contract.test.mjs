@@ -140,6 +140,26 @@ test("migration assigns every existing cultural object an identity from the exac
   assert.ok(db.prepare("SELECT id FROM relationship_types WHERE slug='executed-as'").get());
 });
 
+test("original-media rebuild assigns blank material references after existing state references", () => {
+  const db = databaseBefore("0215_original_media_gallery_rebuild.sql");
+  const existing = db.prepare(`SELECT material.dossier_entity_id,material.state_id
+    FROM archive_materials material
+    WHERE material.state_id IS NOT NULL AND material.material_reference='M01'
+    ORDER BY material.created_at,material.id LIMIT 1`).get();
+  assert.ok(existing);
+  db.prepare(`INSERT INTO archive_materials(
+      id,dossier_entity_id,role,material_type,title,body,visibility,state,sort_order,state_id,material_reference,
+      created_by,updated_by,created_at,updated_at
+    ) VALUES('archive-material-reference-collision',?,'process','process-photo','Reference collision fixture','Fixture body',
+      'internal','draft',0,NULL,'','test','test',datetime('now','-1 day'),datetime('now'))`).run(existing.dossier_entity_id);
+  db.exec(readFileSync(join(ROOT,"migrations","0215_original_media_gallery_rebuild.sql"),"utf8"));
+  const repaired = db.prepare("SELECT state_id,material_reference FROM archive_materials WHERE id='archive-material-reference-collision'").get();
+  assert.ok(repaired.state_id);
+  assert.notEqual(repaired.material_reference,"M01");
+  assert.match(repaired.material_reference,/^M\d{2,}$/);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM pragma_foreign_key_check").get().count,0);
+});
+
 test("future tattoo dossier shells automatically receive a catalogue version and state", () => {
   const db = database();
   const previousMaximum = Number(db.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix='TAT-EXE'").get().maximum);

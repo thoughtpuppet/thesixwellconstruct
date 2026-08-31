@@ -474,14 +474,24 @@ WHERE state_id IS NULL AND EXISTS(
   SELECT 1 FROM archive_object_versions version WHERE version.entity_id=archive_materials.dossier_entity_id
 );
 
-WITH referenced AS (
-  SELECT material.id,
+WITH candidates AS (
+  SELECT material.id,material.state_id,
     CASE WHEN material.material_type='note' THEN 'N' WHEN material.material_type='document' THEN 'D' ELSE 'M' END prefix,
-    ROW_NUMBER() OVER(
-      PARTITION BY material.state_id,CASE WHEN material.material_type='note' THEN 'N' WHEN material.material_type='document' THEN 'D' ELSE 'M' END
-      ORDER BY material.sort_order,material.created_at,material.id
-    ) reference_number
+    material.sort_order,material.created_at
   FROM archive_materials material
+  WHERE material.material_reference=''
+), referenced AS (
+  SELECT candidate.id,candidate.prefix,
+    COALESCE((
+      SELECT MAX(CAST(substr(existing.material_reference,2) AS INTEGER))
+      FROM archive_materials existing
+      WHERE existing.state_id IS candidate.state_id
+        AND substr(existing.material_reference,1,1)=candidate.prefix
+    ),0)+ROW_NUMBER() OVER(
+      PARTITION BY candidate.state_id,candidate.prefix
+      ORDER BY candidate.sort_order,candidate.created_at,candidate.id
+    ) reference_number
+  FROM candidates candidate
 )
 UPDATE archive_materials
 SET material_reference=(SELECT prefix||printf('%02d',reference_number) FROM referenced WHERE referenced.id=archive_materials.id)
