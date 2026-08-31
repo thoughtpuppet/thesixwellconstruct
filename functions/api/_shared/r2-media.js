@@ -1,10 +1,10 @@
-function rangeResponse(total) {
+function rangeResponse(total, cacheControl = "private, no-store") {
   return new Response(null, {
     status: 416,
     headers: {
       "accept-ranges": "bytes",
       "content-range": `bytes */${total}`,
-      "cache-control": "private, no-store",
+      "cache-control": cacheControl,
     },
   });
 }
@@ -26,13 +26,15 @@ function requestedRange(value, total) {
   return { offset: start, length: end - start + 1 };
 }
 
-export async function serveR2Media(request, bucket, row, missingResponse) {
+export async function serveR2Media(request, bucket, row, missingResponse, options = {}) {
+  const cacheControl = String(options.cacheControl || "private, no-store");
+  const disposition = options.disposition === "attachment" ? "attachment" : "inline";
   if (row.source_url) {
     return new Response(null, {
       status: 302,
       headers: {
         location: new URL(row.source_url, request.url).href,
-        "cache-control": "private, no-store",
+        "cache-control": cacheControl,
       },
     });
   }
@@ -42,14 +44,14 @@ export async function serveR2Media(request, bucket, row, missingResponse) {
 
   const total = Number(head.size ?? row.byte_size ?? 0);
   const range = requestedRange(request.headers.get("range"), total);
-  if (range === false) return rangeResponse(total);
+  if (range === false) return rangeResponse(total, cacheControl);
 
   const headers = new Headers();
   head.writeHttpMetadata?.(headers);
   const filename = String(row.original_filename || "media").replace(/[\r\n"]/g, "-");
   headers.set("content-type", row.mime_type || row.content_type || headers.get("content-type") || "application/octet-stream");
-  headers.set("content-disposition", `inline; filename="${filename}"`);
-  headers.set("cache-control", "private, no-store");
+  headers.set("content-disposition", `${disposition}; filename="${filename}"`);
+  headers.set("cache-control", cacheControl);
   headers.set("x-content-type-options", "nosniff");
   headers.set("accept-ranges", "bytes");
   headers.set("content-length", String(range ? range.length : total));

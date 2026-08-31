@@ -11,6 +11,7 @@ import { serveR2Media } from "../_shared/r2-media.js";
 import { loadPublicCalendarSearchEvents } from "../calendar/_lib.js";
 import { handleArchiveWebSnapshotsAdmin, loadPublicArchiveWebSnapshots } from "./_web-snapshots.js";
 import { enqueueVisualColorEntity, enqueueVisualColorEntityById } from "./_automatic-visual-colors.js";
+import { handleGalleryAdmin, handleGalleryPublic, handleMediaCatalogueAdmin } from "./_gallery.js";
 import {
   ArchiveDossierEnsureError,
   archiveDossierEligibleOwner,
@@ -583,10 +584,13 @@ async function publicLegendCategories(env) {
 
 async function publicNavigation(env) {
   const database = db(env);
-  const nodes = (await database.prepare("SELECT id,name,slug,route,color,sort_order,updated_at FROM construct_nodes WHERE state='published' AND homepage_enabled=1 ORDER BY sort_order").all()).results || [];
-  const paths = (await database.prepare("SELECT id,node_id,name,route,color,sort_order,updated_at FROM construct_pathways WHERE state='published' AND homepage_enabled=1 ORDER BY node_id,sort_order").all()).results || [];
+  const [nodeResult,pathResult,utilityResult]=await Promise.all([
+    database.prepare("SELECT id,name,slug,route,color,sort_order,updated_at FROM construct_nodes WHERE state='published' AND homepage_enabled=1 ORDER BY sort_order").all(),
+    database.prepare("SELECT id,node_id,name,route,color,sort_order,updated_at FROM construct_pathways WHERE state='published' AND homepage_enabled=1 ORDER BY node_id,sort_order").all(),
+    database.prepare("SELECT id,label,route,color,sort_order,updated_at FROM construct_utility_links WHERE state='published' ORDER BY sort_order,label").all(),
+  ]),nodes=nodeResult.results||[],paths=pathResult.results||[],utilityLinks=utilityResult.results||[];
   for (const node of nodes) node.pathways = paths.filter((p) => p.node_id === node.id);
-  return json({ revision: nodes.reduce((v,n) => n.updated_at > v ? n.updated_at : v, ""), nodes });
+  return json({ revision: [...nodes,...utilityLinks].reduce((value,item) => item.updated_at > value ? item.updated_at : value, ""), nodes, utilityLinks });
 }
 
 function compositionRuleRecord(row, members = []) {
@@ -4263,6 +4267,8 @@ function presentMediaRecord(row){
   return record;
 }
 
+function digestHex(value){return [...new Uint8Array(value)].map(byte=>byte.toString(16).padStart(2,"0")).join("")}
+
 function isArchivalSvgMedia(row){return String(row?.mime_type||row?.content_type||"").toLowerCase()===ARCHIVAL_SVG_MIME}
 
 function hasSvgDocumentRoot(value){
@@ -4298,11 +4304,21 @@ async function mediaUploadsApi(request,env,sessionId="",action="",partNumber=0){
     if(!Number.isSafeInteger(byteSize)||byteSize<=0)return failure("A valid media size is required.");
     if(byteSize>RESUMABLE_MEDIA_MAX_BYTES)return failure("Resumable media must be 2 GiB or smaller.",413);
     const privacy=uploadKind==="archive-master"?"internal":text(body.privacy,30)||"internal";
+    const sourceClass=text(body.sourceClass??body.source_class,40)||"creative",suppliedHash=text(body.sha256,64).toLowerCase();
     const transcriptStatus=uploadKind==="archive-master"?"not-requested":text(body.transcriptStatus??body.transcript_status,30)||"not-requested";
     const presentation=uploadKind==="archive-master"?"hidden":text(body.publicPresentation??body.public_presentation,30)||"inline";
     if(!MEDIA_PRIVACIES.has(privacy))return failure("Invalid media privacy.");
+    if(!["creative","site_asset"].includes(sourceClass))return failure("Invalid media source class.");
+    if(suppliedHash&&!/^[0-9a-f]{64}$/.test(suppliedHash))return failure("SHA-256 must contain 64 lowercase hexadecimal characters.");
     if(!MEDIA_TRANSCRIPT_STATUSES.has(transcriptStatus))return failure("Invalid transcript status.");
     if(!MEDIA_PRESENTATIONS.has(presentation))return failure("Invalid public presentation.");
+    if(suppliedHash){
+      const duplicate=await database.prepare("SELECT media_id FROM media_catalogue_entries WHERE sha256=?").bind(suppliedHash).first();
+      if(duplicate){
+        const record=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(duplicate.media_id).first();
+        if(record)return json({record:presentMediaRecord(record),deduplicated:true,sha256:suppliedHash});
+      }
+    }
     const sessionNewId=id("media-upload"),mediaId=id("media"),filename=text(body.filename??body.original_filename,255)||"media",storageFilename=resumableUploadFilename(filename);
     const archiveScope=text(body.archiveScope??body.archive_scope,40).toLowerCase();
     const genericArchiveMaster=new Set(["archive","creative-identity","cultural-object"]).has(archiveScope);
@@ -4324,6 +4340,7 @@ async function mediaUploadsApi(request,env,sessionId="",action="",partNumber=0){
           text(body.altText??body.alt_text,1000),text(body.caption,3000),text(body.rightsNotes??body.rights_notes,10000),privacy,text(body.transcript,100000),
           transcriptStatus,text(body.transcriptLanguage??body.transcript_language,40)||"en",text(body.publicTitle??body.public_title,300),
           text(body.publicDescription??body.public_description,3000),presentation).run();
+      if(suppliedHash||sourceClass!=="creative")await database.prepare("UPDATE media_upload_sessions SET sha256=?,source_class=?,updated_at=datetime('now') WHERE id=?").bind(suppliedHash||null,sourceClass,sessionNewId).run();
     }catch(error){try{await upload.abort();}catch{}throw error;}
     const created=await uploadSession(database,sessionNewId);
     return json({upload:presentUploadSession(created)},{status:201});
@@ -4374,6 +4391,7 @@ async function mediaUploadsApi(request,env,sessionId="",action="",partNumber=0){
           session.transcript,session.transcript_status,session.transcript_language,session.public_title,session.public_description,session.public_presentation),
       database.prepare("UPDATE media_upload_sessions SET state='completed',completed_at=datetime('now'),error_message='',updated_at=datetime('now') WHERE id=?").bind(sessionId),
     ]);
+    if(session.sha256||session.source_class!=="creative")await database.prepare("UPDATE media_catalogue_entries SET sha256=?,source_class=?,updated_by='studio',updated_at=datetime('now') WHERE media_id=?").bind(session.sha256||null,session.source_class||"creative",session.media_id).run();
     const completed=await uploadSession(database,sessionId),record=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(session.media_id).first();
     return json({record:presentMediaRecord(record),upload:presentUploadSession(completed,uploadedParts),completed:true});
   }
@@ -4460,12 +4478,15 @@ async function mediaApi(request, env, mediaId="") {
   if(request.method!=="POST"||mediaId)return failure("Method not allowed.",405);
   const form=await request.formData();const file=form.get("file");if(!(file instanceof File)||!file.size)return failure("A file is required.");
   const mime=(file.type||"application/octet-stream").toLowerCase(),archivalSvg=mime===ARCHIVAL_SVG_MIME;const image=["image/jpeg","image/png","image/webp","image/gif"].includes(mime);const doc=["application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"].includes(mime);const audio=mime.startsWith("audio/"),video=RESUMABLE_UPLOAD_MIMES.video.has(mime);const av=audio||video,max=av?50*1024*1024:15*1024*1024;if(mime.startsWith("video/")&&!video)return failure("Use an MP4 or WebM video.",415);if(!(image||archivalSvg||doc||av))return failure("Unsupported media type.",415);if(file.size>max)return failure("File exceeds the allowed size.",413);if(!env.SUBMISSION_FILES)return failure("Media storage is unavailable.",503);
-  const requestedPrivacy=text(form.get("privacy"),30)||"internal",transcriptStatus=text(form.get("transcript_status"),30)||"not-requested",requestedPresentation=text(form.get("public_presentation"),30)||"inline",privacy=archivalSvg?"internal":requestedPrivacy,presentation=archivalSvg?"hidden":requestedPresentation;
+  const requestedPrivacy=text(form.get("privacy"),30)||"internal",transcriptStatus=text(form.get("transcript_status"),30)||"not-requested",requestedPresentation=text(form.get("public_presentation"),30)||(requestedPrivacy==="public"?"inline":"hidden"),sourceClass=text(form.get("source_class"),40)||"creative",privacy=archivalSvg?"internal":requestedPrivacy,presentation=archivalSvg?"hidden":requestedPresentation;
   if(!MEDIA_PRIVACIES.has(privacy))return failure("Invalid media privacy.");if(!MEDIA_TRANSCRIPT_STATUSES.has(transcriptStatus))return failure("Invalid transcript status.");if(!MEDIA_PRESENTATIONS.has(presentation))return failure("Invalid public presentation.");
+  if(!["creative","site_asset"].includes(sourceClass))return failure("Invalid media source class.");
   const fileBytes=await file.arrayBuffer();if(archivalSvg&&!hasSvgDocumentRoot(fileBytes))return failure("The selected file is not a valid SVG document.",415);
+  const hash=digestHex(await crypto.subtle.digest("SHA-256",fileBytes)),duplicate=await database.prepare("SELECT media_id FROM media_catalogue_entries WHERE sha256=?").bind(hash).first();
+  if(duplicate){const existing=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(duplicate.media_id).first();if(archivalSvg&&(!isArchivalSvgMedia(existing)||existing.privacy!=="internal"||existing.public_presentation!=="hidden"))return failure("A matching file already exists but is not a protected archival SVG.",409);return json({record:presentMediaRecord(existing),deduplicated:true});}
   const newId=id("media");const key=`construct/${newId}/${file.name.replace(/[^a-zA-Z0-9._-]/g,"-")}`;await env.SUBMISSION_FILES.put(key,fileBytes,{httpMetadata:{contentType:mime,cacheControl:"private, no-store"}});
   try{await database.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,rights_notes,privacy,state,created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_title,public_description,public_presentation)
-    VALUES(?,?,?,?,?,?,?,?,?,'active','studio',datetime('now'),datetime('now'),?,?,?,?,?,?)`).bind(newId,key,file.name,mime,file.size,text(form.get("alt_text"),1000),text(form.get("caption"),3000),text(form.get("rights_notes"),10000),privacy,text(form.get("transcript"),100000),transcriptStatus,text(form.get("transcript_language"),40),text(form.get("public_title"),300),text(form.get("public_description"),3000),presentation).run();}catch(error){await env.SUBMISSION_FILES.delete(key);throw error;}
+    VALUES(?,?,?,?,?,?,?,?,?,'active','studio',datetime('now'),datetime('now'),?,?,?,?,?,?)`).bind(newId,key,file.name,mime,file.size,text(form.get("alt_text"),1000),text(form.get("caption"),3000),text(form.get("rights_notes"),10000),privacy,text(form.get("transcript"),100000),transcriptStatus,text(form.get("transcript_language"),40),text(form.get("public_title"),300),text(form.get("public_description"),3000),presentation).run();await database.prepare("UPDATE media_catalogue_entries SET sha256=?,source_class=?,updated_by='studio',updated_at=datetime('now') WHERE media_id=?").bind(hash,sourceClass,newId).run();}catch(error){await database.prepare("DELETE FROM media_assets WHERE id=?").bind(newId).run().catch(()=>{});await env.SUBMISSION_FILES.delete(key);throw error;}
   return json({record:presentMediaRecord(await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(newId).first())},{status:201});
 }
 
@@ -7941,6 +7962,7 @@ async function eventArchive(request,env,eventId){
 
 export async function handleConstructApi(request,env){
   const url=new URL(request.url);const path=url.pathname;
+  const galleryPublic=await handleGalleryPublic(request,env,path);if(galleryPublic)return galleryPublic;
   const colorMaterialsPublic=await handleArchiveColorMaterialsPublic(request,env,path);if(colorMaterialsPublic)return colorMaterialsPublic;
   if(path==="/api/site/navigation")return publicNavigation(env);
   if(path==="/api/current-projects"&&request.method==="GET")return publicCurrentProjects(env);
@@ -7967,6 +7989,8 @@ export async function handleConstructApi(request,env){
   if(path==="/api/legend/composition-rules")return publicCompositionRules(request,env);
   const publicMatch=path.match(/^\/api\/(flash|legend|visual-language|art|archive|archive-collections|appearances)(?:\/([^/]+))?$/);if(publicMatch)return publicCatalog(request,env,canonicalResource(publicMatch[1]),publicMatch[2]?decodeURIComponent(publicMatch[2]):"");
   const auth=requireStudioAdmin(request,env);if(auth)return auth;
+  const mediaCatalogueAdmin=await handleMediaCatalogueAdmin(request,env,path);if(mediaCatalogueAdmin)return mediaCatalogueAdmin;
+  const galleryAdmin=await handleGalleryAdmin(request,env,path);if(galleryAdmin)return galleryAdmin;
   const colorMaterialsAdmin=await handleArchiveColorMaterialsAdmin(request,env,path);if(colorMaterialsAdmin)return colorMaterialsAdmin;
   const archiveWebSnapshotsAdmin=await handleArchiveWebSnapshotsAdmin(request,env,path);if(archiveWebSnapshotsAdmin)return archiveWebSnapshotsAdmin;
   if(path==="/api/admin/identities")return adminIdentitiesApi(request,env);

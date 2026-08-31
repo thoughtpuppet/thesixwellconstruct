@@ -17,3 +17,6 @@ mobile-preview-*.out.log
 portfolio-*-dev.*.log
 .claude/settings.local.json
 tools/entry-room-3d-viewport-checks.ps1
+
+# Private Gallery masters are uploaded to protected R2, never Git/static assets.
+assets/gallery/peer-amid/

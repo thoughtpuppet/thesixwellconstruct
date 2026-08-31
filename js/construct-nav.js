@@ -1700,6 +1700,30 @@
       try { payload = JSON.parse(localStorage.getItem(snapshotKey) || 'null'); } catch (ignored) { payload = null; }
     }
     if (!payload || !Array.isArray(payload.nodes) || !payload.nodes.length) return;
+    var utilityLinks = Array.isArray(payload.utilityLinks) ? payload.utilityLinks : [];
+    var existingUtilityBar = document.querySelector('[data-construct-utility-links]');
+    if (existingUtilityBar) existingUtilityBar.remove();
+    if (utilityLinks.length) {
+      var utilityStyle = document.getElementById('construct-utility-link-styles');
+      if (!utilityStyle) {
+        utilityStyle = document.createElement('style');
+        utilityStyle.id = 'construct-utility-link-styles';
+        utilityStyle.textContent = '.construct-utility-links{position:fixed;z-index:9997;top:58px;right:16px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;pointer-events:none}.construct-utility-links a{pointer-events:auto;display:inline-flex;min-height:34px;align-items:center;padding:6px 10px;border:5px solid color-mix(in srgb,var(--utility-accent,#b87a32) 55%,transparent);background:var(--color-bg,#0e0e0e);color:var(--utility-accent,#b87a32);font:900 10px/1 Inter,Arial,sans-serif;letter-spacing:.12em;text-decoration:none;text-transform:uppercase}.construct-utility-links a:hover,.construct-utility-links a:focus-visible{border-color:var(--utility-accent,#b87a32)}@media(max-width:700px){.construct-utility-links{top:12px;right:12px;bottom:auto;left:auto;justify-content:flex-end}.construct-utility-links a{min-height:38px;background:var(--color-bg,#0e0e0e)}}';
+        document.head.appendChild(utilityStyle);
+      }
+      var utilityBar = document.createElement('nav');
+      utilityBar.className = 'construct-utility-links';
+      utilityBar.setAttribute('data-construct-utility-links', '');
+      utilityBar.setAttribute('aria-label', 'Construct resources');
+      utilityLinks.forEach(function(link) {
+        var anchor = document.createElement('a');
+        anchor.href = link.route;
+        anchor.textContent = link.label;
+        anchor.style.setProperty('--utility-accent', link.color || 'var(--color-archive-bright,#b87a32)');
+        utilityBar.appendChild(anchor);
+      });
+      document.body.appendChild(utilityBar);
+    }
     var keyBySlug = { tattoos: 'tattooing', 'art-making': 'art', merch: 'merch', about: 'about', events: 'events', music: 'music', writings: 'writings', archive: 'archive', film: 'film' };
     var byKey = {};
     VENTURES.forEach(function(venture) { byKey[venture.key] = venture; });

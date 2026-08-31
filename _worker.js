@@ -1424,6 +1424,7 @@ export default {
 
     if (
       url.pathname === "/api/search" ||
+      url.pathname === "/api/gallery" || url.pathname.startsWith("/api/gallery/") ||
       url.pathname === "/api/site/explore" ||
       url.pathname === "/api/site/navigation" ||
       url.pathname === "/api/current-projects" ||
@@ -1454,6 +1455,7 @@ export default {
       url.pathname.startsWith("/api/admin/nodes") ||
       url.pathname.startsWith("/api/admin/pathways") ||
       url.pathname.startsWith("/api/admin/media") ||
+      url.pathname.startsWith("/api/admin/gallery") ||
       url.pathname.startsWith("/api/admin/relationships") ||
       url.pathname.startsWith("/api/admin/relationship-types") ||
       url.pathname === "/api/admin/entities" ||
@@ -1709,6 +1711,15 @@ export default {
     }
 
     const normalizedPublicPath = normalizePath(url.pathname);
+    if (/^\/gallery\/(?:MED-\d{6,}|sets\/[a-z0-9-]+)$/i.test(normalizedPublicPath)) {
+      if (!url.pathname.endsWith("/")) {
+        const canonicalUrl = new URL(request.url);
+        canonicalUrl.pathname = `${normalizedPublicPath}/`;
+        canonicalUrl.search = "";
+        return Response.redirect(canonicalUrl, 308);
+      }
+      return servePublicAsset(request, env, "/gallery/index.html");
+    }
     if (normalizedPublicPath === "/tattoos/special-projects/apply") {
       const reference = url.searchParams.get("project") || "";
       if (!reference) return Response.redirect(new URL("/tattoos/special-projects/", request.url), 308);

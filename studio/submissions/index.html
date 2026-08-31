@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/css/tokens.css?v=dual-system-contract">
 <link rel="stylesheet" href="/studio/console-system.css?v=dual-system-contract">
 <link rel="stylesheet" href="/studio/construct-manager.css?v=20260821-studio-visibility">
+<link rel="stylesheet" href="/studio/media-catalogue-manager.css?v=20260830-relational-gallery">
 <link rel="stylesheet" href="/studio/archive-notes-manager.css?v=1">
 <link rel="stylesheet" href="/studio/archive-catalogue.css?v=1">
 <link rel="stylesheet" href="/studio/archive-colors-materials.css?v=5">
@@ -2302,7 +2303,7 @@
     } else if (activeTab === "site") {
       html = [["pathways","Homepage Pathways"],["nodes","Construct Nodes"],["navigation","Navigation"],["search","Search"],["visibility","Public Visibility"],["settings","Site Settings"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "shared") {
-      html = [["media","Media Library"],["relationships","Connections"],["taxonomy","Tags and Themes"],["revisions","Revision History"],["search-index","Search Index Status"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["media","Media Library"],["gallery","Public Gallery"],["relationships","Connections"],["taxonomy","Tags and Themes"],["revisions","Revision History"],["search-index","Search Index Status"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     }
     subnavEl.innerHTML = html;
   }
@@ -4829,6 +4830,22 @@
     schedulePeriodDraft = null;
     renderActiveTab();
   }
+
+  window.addEventListener("studio:navigate", (event) => {
+    const destination = event.detail || {};
+    if (!destination.tab || !destination.view) return;
+    activeTab = destination.tab;
+    subView = destination.view;
+    activePortfolioItemId = "";
+    activeId = "";
+    activeAppointmentId = "";
+    const url = new URL(location.href);
+    for (const key of ["media", "sourceMedia"]) url.searchParams.delete(key);
+    if (destination.mediaId) url.searchParams.set("media", destination.mediaId);
+    if (destination.sourceMedia) url.searchParams.set("sourceMedia", destination.sourceMedia);
+    history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    renderActiveTab();
+  });
 
   /* ---- Events tab (events list -> RSVPs) ---- */
 

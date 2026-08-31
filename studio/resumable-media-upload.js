@@ -51,11 +51,17 @@
       const created=await request("/api/admin/media/uploads",token,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
         uploadKind,filename:file.name,mimeType:file.type,byteSize:file.size,
         altText:options.altText||"",caption:options.caption||"",privacy:options.privacy||"internal",
+        sha256:options.sha256||"",sourceClass:options.sourceClass||"creative",
         transcript:options.transcript||"",
         transcriptStatus:options.transcriptStatus||"not-requested",transcriptLanguage:options.transcriptLanguage||"en",
         publicTitle:options.publicTitle||"",publicDescription:options.publicDescription||"",
-        publicPresentation:options.publicPresentation||"inline",
+        publicPresentation:options.publicPresentation||"hidden",
       })});
+      if(created.deduplicated&&created.record){
+        options.onStatus?.("Reused the existing Media Asset with this checksum.");
+        options.onProgress?.({uploadedBytes:file.size,totalBytes:file.size,percent:100,sessionId:"",resumed:false,deduplicated:true});
+        return created.record;
+      }
       session=created.upload;records[key]=session.id;persist(records);
     }
     options.onSession?.(session);
