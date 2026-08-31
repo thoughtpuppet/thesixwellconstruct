@@ -187,6 +187,35 @@ test("operational media stays outside the Archive catalogue and site assets stay
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id=?").get(creative.media_id).count,0);
 });
 
+test("generated masks stay operational and HEIC masters publish through one automatic JPEG display pair", async () => {
+  const sql=database(),env=environment(sql);
+  sql.prepare(`INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('media-orphan-mask','','test/fragment-hotspot-old.png','fragment-hotspot-old.png','image/png',1,'Interaction mask for an old fragment','internal','active','test',datetime('now'),datetime('now'),'hidden')`).run();
+  assert.equal(sql.prepare("SELECT archive_catalogue_eligible FROM media_assets WHERE id='media-orphan-mask'").get().archive_catalogue_eligible,0);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE media_id='media-orphan-mask'").get().count,0);
+
+  sql.prepare(`INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('media-heic-master','','test/studio-fragment.heic','studio-fragment.heic','image/heic',10,'internal','active','test',datetime('now'),datetime('now'),'hidden')`).run();
+  sql.prepare(`INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('media-heic-display','','test/studio-fragment.edit-proxy.jpg','studio-fragment.edit-proxy.jpg','image/jpeg',8,'Studio fragment','internal','active','test',datetime('now'),datetime('now'),'hidden')`).run();
+  const paired=await api(env,"/api/admin/media/media-heic-master/variants",{method:"POST",admin:true,body:{derivative_media_id:"media-heic-display",activate_derivative:false}});
+  assert.equal(paired.response.status,201);
+  assert.equal(sql.prepare("SELECT source_class FROM media_catalogue_entries WHERE media_id='media-heic-display'").get().source_class,"site_asset");
+
+  const draft=await api(env,"/api/admin/gallery",{method:"POST",admin:true,body:{media_id:"media-heic-master"}});
+  assert.equal(draft.response.status,201);
+  assert.equal(draft.payload.record.gallery.display_media_id,"media-heic-display");
+  assert.match(draft.payload.record.admin_url,/media-heic-display\/file$/);
+  const published=await api(env,"/api/admin/gallery/media-heic-master/publish",{method:"POST",admin:true});
+  assert.equal(published.response.status,200);
+  assert.deepEqual({...sql.prepare("SELECT privacy,public_presentation FROM media_assets WHERE id='media-heic-master'").get()},{privacy:"internal",public_presentation:"hidden"});
+  assert.deepEqual({...sql.prepare("SELECT privacy,public_presentation FROM media_assets WHERE id='media-heic-display'").get()},{privacy:"public",public_presentation:"inline"});
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id='media-heic-display'").get().count,0);
+  const publicIndex=await api(env,"/api/gallery");
+  const accession=`MED-${String(sql.prepare("SELECT catalogue_id FROM media_catalogue_entries WHERE media_id='media-heic-master'").get().catalogue_id).padStart(6,"0")}`;
+  assert.ok(publicIndex.payload.records.some(record=>record.accession===accession&&record.mimeType==="image/jpeg"));
+});
+
 test("Studio draft creation is idempotent and one-click publication does not require rights or accessibility review", async () => {
   const sql = database(), env = environment(sql);
   const media = sql.prepare("SELECT media_id FROM media_catalogue_entries WHERE source_class='creative' ORDER BY catalogue_id LIMIT 1").get().media_id;
@@ -416,6 +445,7 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   const publicScript = readFileSync(join(ROOT, "js", "gallery.js"), "utf8");
   const publicStyles = readFileSync(join(ROOT, "css", "gallery.css"), "utf8");
   const studio = readFileSync(join(ROOT, "studio", "media-catalogue-manager.js"), "utf8");
+  const studioStyles = readFileSync(join(ROOT, "studio", "media-catalogue-manager.css"), "utf8");
   const studioShell = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
   const navigation = readFileSync(join(ROOT, "js", "construct-nav.js"), "utf8");
   const blackboardStudio = readFileSync(join(ROOT,"studio","archive-blackboards-manager.js"),"utf8");
@@ -437,6 +467,9 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studio, /media-catalogue\/preflight/);
   assert.match(studio, /XMLHttpRequest/);
   assert.match(studio, /StudioResumableMedia\.upload/);
+  assert.match(studio, /createHeicEditProxy/);
+  assert.match(studio, /isHeicUpload/);
+  assert.match(studio, /activate_derivative/);
   assert.match(studio, /AbortController/);
   assert.match(studio, /data-draft-preview/);
   assert.match(studio, /data-gallery-select-all/);
@@ -449,6 +482,11 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studio, /media-handoffs/);
   assert.doesNotMatch(studio, /crypto\.subtle\.digest\('SHA-256',b\)/);
   assert.match(studioShell, /\["gallery","Public Gallery"\]/);
+  assert.match(studioStyles,/height:\s*clamp\(34rem,72vh,56rem\)/);
+  assert.match(studioStyles,/\.mcm-workspace\s*>\s*\.mcm-editor[\s\S]{0,180}overflow:\s*auto/);
+  assert.match(studioStyles,/@media \(max-width:900px\)[\s\S]{0,180}height:auto/);
+  assert.match(studioStyles,/\.mcm-workspace\s*>\s*\.mcm-editor[\s\S]{0,80}grid-row:1/);
+  assert.match(studioStyles,/\.mcm-list\{grid-row:2;max-height:70vh;overflow:auto/);
   assert.match(navigation, /utilityLinks/);
   assert.doesNotMatch(navigation, /node-gallery/);
   assert.match(blackboardStudio,/archiveCatalogueEligible:false/);

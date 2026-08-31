@@ -433,6 +433,7 @@ export async function handleGalleryAdmin(request, env, path) {
 const PUBLIC_GALLERY_SQL = `SELECT gallery.*,media.mime_type,media.width,media.height,media.duration_seconds,
   media.original_filename,display.id display_id,display.source_url display_source_url,display.storage_key display_storage_key,
   display.mime_type display_mime_type,display.byte_size display_byte_size,display.original_filename display_filename,
+  display.width display_width,display.height display_height,display.duration_seconds display_duration_seconds,
   display.transcript display_transcript,display.transcript_status display_transcript_status,display.transcript_language display_transcript_language,
   poster.id poster_id,poster.source_url poster_source_url,poster.storage_key poster_storage_key,
   poster.mime_type poster_mime_type,poster.byte_size poster_byte_size,poster.original_filename poster_filename,
@@ -442,7 +443,8 @@ JOIN media_assets media ON media.id=gallery.media_id AND media.state='active' AN
 JOIN media_catalogue_entries catalogue ON catalogue.media_id=gallery.media_id AND catalogue.source_class='creative'
 JOIN media_assets display ON display.id=gallery.display_media_id AND display.state='active' AND display.privacy='public' AND display.public_presentation='inline'
 LEFT JOIN media_assets poster ON poster.id=gallery.poster_media_id AND poster.state='active' AND poster.privacy='public' AND poster.public_presentation='inline'
-WHERE gallery.state='published'`;
+WHERE gallery.state='published'
+  AND NOT EXISTS(SELECT 1 FROM media_asset_variants variant WHERE variant.derivative_media_id=gallery.media_id)`;
 
 async function publicAssociations(database, rows) {
   if (!rows.length) return rows;
@@ -476,11 +478,11 @@ async function publicAssociations(database, rows) {
 }
 
 function presentPublicGallery(row) {
-  const humanId=accession(row.catalogue_id),type=mediaType(row.mime_type);
+  const humanId=accession(row.catalogue_id),resolvedMime=row.display_mime_type||row.mime_type,type=mediaType(resolvedMime);
   return {
     accession:humanId,title:row.title,accessibilityText:row.accessibility_text,caption:row.caption,credit:row.credit,
     datePrecision:row.date_precision,dateLabel:row.date_label,occurredAt:row.occurred_at,endedAt:row.ended_at,
-    mediaType:type,mimeType:row.mime_type,width:row.width,height:row.height,durationSeconds:row.duration_seconds,
+    mediaType:type,mimeType:resolvedMime,width:row.display_width??row.width,height:row.display_height??row.height,durationSeconds:row.display_duration_seconds??row.duration_seconds,
     focalX:Number(row.focal_x??0.5),focalY:Number(row.focal_y??0.5),publishedAt:row.published_at,
     transcript:row.display_transcript_status==="ready"?row.display_transcript:"",transcriptLanguage:row.display_transcript_status==="ready"?row.display_transcript_language:"",
     route:`/gallery/${humanId}/`,mediaUrl:`/api/gallery/media/${humanId}`,

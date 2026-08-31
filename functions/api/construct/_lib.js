@@ -2915,14 +2915,16 @@ async function createCulturalObjectAdminApi(request,env){
 async function mediaVariantsAdminApi(request,env,masterMediaId){
   if(request.method!=="POST")return failure("Method not allowed.",405);
   const body=await readJson(request);if(!body)return failure("Send a JSON object.");
-  const database=db(env),derivativeMediaId=text(body.derivative_media_id??body.derivativeMediaId,200),purpose=text(body.purpose,80)||"public-display";
+  const database=db(env),derivativeMediaId=text(body.derivative_media_id??body.derivativeMediaId,200),purpose=text(body.purpose,80)||"public-display",activateDerivative=body.activate_derivative!==false&&body.activateDerivative!==false;
   if(!masterMediaId||!derivativeMediaId||masterMediaId===derivativeMediaId)return failure("Choose distinct archival-master and derivative assets.");
   if(purpose!=="public-display")return failure("Only the public-display variant purpose is supported.",409);
   const [master,derivative]=await Promise.all([database.prepare("SELECT * FROM media_assets WHERE id=?").bind(masterMediaId).first(),database.prepare("SELECT * FROM media_assets WHERE id=?").bind(derivativeMediaId).first()]);
   if(!master||!derivative)return failure("One of the selected Digital Assets does not exist.",404);
-  if(!String(master.mime_type||"").startsWith("image/")||!String(derivative.mime_type||"").startsWith("image/"))return failure("Public-display pairing requires two image assets.",409);
+  if(!String(master.mime_type||"").startsWith("image/")||!["image/jpeg","image/png","image/webp"].includes(String(derivative.mime_type||"").toLowerCase()))return failure("Public-display pairing requires an image master and a browser-safe JPEG, PNG, or WebP derivative.",409);
   if(master.state!=="active"||!["internal","private"].includes(master.privacy)||master.public_presentation!=="hidden")return failure("The archival master must remain active, private or internal, and hidden.",409);
-  if(derivative.state!=="active"||derivative.privacy!=="public"||derivative.public_presentation!=="inline"||!text(derivative.alt_text,1000))return failure("Prepare an active, public, inline derivative with alt text before pairing it.",409);
+  if(derivative.state!=="active")return failure("The derivative must be active.",409);
+  if(activateDerivative&&(derivative.privacy!=="public"||derivative.public_presentation!=="inline"||!text(derivative.alt_text,1000)))return failure("Prepare an active, public, inline derivative with alt text before pairing it.",409);
+  if(!activateDerivative&&(!["internal","private","unlisted"].includes(derivative.privacy)||derivative.public_presentation!=="hidden"))return failure("An automatic derivative must remain non-public and hidden until its record is published.",409);
   if(await database.prepare("SELECT 1 paired FROM media_asset_variants WHERE master_media_id=? LIMIT 1").bind(derivativeMediaId).first())return failure("An archival master cannot also serve as a public derivative.",409);
   try{await database.prepare(`INSERT INTO media_asset_variants(master_media_id,derivative_media_id,purpose,created_by,created_at,updated_at)
     VALUES(?,?,?,'studio',datetime('now'),datetime('now')) ON CONFLICT(master_media_id,purpose) DO UPDATE SET derivative_media_id=excluded.derivative_media_id,updated_at=datetime('now')`).bind(masterMediaId,derivativeMediaId,purpose).run()}catch(error){return failure(String(error?.message||error),409)}
@@ -6859,6 +6861,8 @@ async function archiveBlackboardFragmentsGlobalAdminApi(request,env,fragmentId="
       if(editSourceId&&legacyDerivativeId&&editSourceId===legacyDerivativeId)throw new Error("The private edit source and public derivative must be different Digital Assets.");
       if(legacyDerivativeId){const pair=await blackboardMediaPair(database,masterId,legacyDerivativeId,{derivativeRequired:true});if(pair instanceof Response)return pair;await prepareBlackboardMediaPair(database,masterId,legacyDerivativeId);if(editSourceId&&editSourceId!==masterId)mediaStatements.push(database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(editSourceId))}
       else for(const mediaId of new Set([masterId,editSourceId].filter(Boolean)))mediaStatements.push(database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=datetime('now') WHERE id=?").bind(mediaId));
+      if(master&&editSourceId&&["image/heic","image/heif"].includes(String(master.mime_type||"").toLowerCase()))mediaStatements.push(database.prepare(`INSERT INTO media_asset_variants(master_media_id,derivative_media_id,purpose,created_by,created_at,updated_at)
+        VALUES(?,?,'public-display','studio',datetime('now'),datetime('now')) ON CONFLICT(master_media_id,purpose) DO UPDATE SET derivative_media_id=excluded.derivative_media_id,updated_at=datetime('now')`).bind(masterId,editSourceId));
     }catch(error){return failure(error.message,409)}
     const state=text(body.state,30)||"draft",requested=truthy(body.public_visible??body.publicVisible),publicVisible=state==="published"&&requested&&legacyDerivativeId?1:0,newId=text(body.id,200)||id("blackboard-fragment");
     try{await database.batch([...mediaStatements,
