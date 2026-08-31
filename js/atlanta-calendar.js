@@ -11,6 +11,7 @@
   var TICKET_LABELS = { not_required:"No Ticket Required", not_yet_on_sale:"Tickets Not Yet On Sale", on_sale:"Tickets On Sale", sold_out:"Sold Out", registration_open:"Registration Open", registration_closed:"Registration Closed" };
   var TIME_ZONE = "America/New_York";
   var allEvents = [];
+  var matchedEvents = [];
   var filtered = [];
   var activeView = "upcoming";
   var viewBuckets = { upcoming:[], onView:[], past:[] };
@@ -368,7 +369,7 @@
   function updateResultCount() {
     var count = activeView === "on-view" ? viewBuckets.onView.length : activeView === "month" ? filtered.length : viewBuckets.upcoming.length;
     var label = activeView === "on-view" ? " exhibition" : activeView === "month" ? " event" : " upcoming event";
-    resultCount.textContent = count + label + (count === 1 ? "" : "s") + " in " + currentMonthName;
+    resultCount.textContent = count + label + (count === 1 ? "" : "s") + (activeView === "upcoming" ? "" : " in " + currentMonthName);
   }
 
   function renderVisibleCollections() {
@@ -400,7 +401,7 @@
   function renderLists() {
     var onView = filtered.filter(isOnViewExhibition);
     var dated = filtered.filter(function (event) { return !isOnViewExhibition(event); });
-    var upcoming = dated.filter(function (event) { return !isPast(event); });
+    var upcoming = window.AtlantaCalendarRecord.nextUpcoming(matchedEvents, 10);
     var past = dated.filter(isPast).reverse();
     var monthName = new Intl.DateTimeFormat("en-US", { month:"long", year:"numeric" }).format(activeMonth);
     currentMonthName = monthName;
@@ -504,7 +505,8 @@
     var monthStart = activeMonth.getFullYear() + "-" + String(activeMonth.getMonth() + 1).padStart(2, "0") + "-01";
     var monthEndDate = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 0);
     var monthEnd = monthEndDate.getFullYear() + "-" + String(monthEndDate.getMonth() + 1).padStart(2, "0") + "-" + String(monthEndDate.getDate()).padStart(2, "0");
-    filtered = allEvents.filter(matches).filter(function (event) {
+    matchedEvents = allEvents.filter(matches);
+    filtered = matchedEvents.filter(function (event) {
       var start = dateKey(event.startsAt);
       var end = dateKey(classificationEndValue(event));
       return start && start <= monthEnd && end >= monthStart;

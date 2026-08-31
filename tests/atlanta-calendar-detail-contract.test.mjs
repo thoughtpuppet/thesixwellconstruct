@@ -194,7 +194,7 @@ test("calendar detail UI keeps titles plain and replaces new in-page event ancho
   assert.doesNotMatch(detail, /syncDescriptionToggles|data-tag-toggle|data-description-toggle/);
   assert.match(html, /data-calendar-event-canonical/);
   assert.match(html, /data-calendar-event-og-title/);
-  assert.match(html, /atlanta-calendar-record\.js\?v=20260831-temporal-buckets/);
+  assert.match(html, /atlanta-calendar-record\.js\?v=20260831-next-10/);
   assert.match(css, /\.calendar-day-agenda-item>a \{ min-height:44px/);
   assert.match(css, /\.calendar-event-card\[data-calendar-card-href\] \{ cursor:pointer; \}/);
   assert.match(css, /\.calendar-event-detail-record/);

@@ -70,6 +70,16 @@
     return end ? end.getTime() < current : false;
   }
 
+  function nextUpcoming(events, limit, now) {
+    var maximum = Math.max(0, Number(limit) || 0);
+    return (Array.isArray(events) ? events : [])
+      .filter(function (event) { return !isOnViewExhibition(event) && !isPast(event, now); })
+      .sort(function (left, right) {
+        return Date.parse(left.startsAt) - Date.parse(right.startsAt) || String(left.title || "").localeCompare(String(right.title || ""));
+      })
+      .slice(0, maximum);
+  }
+
   function eventDate(event) {
     if (event.dateKind === "all_day") return new Intl.DateTimeFormat("en-US", { weekday:"short", month:"short", day:"numeric", year:"numeric", timeZone:"UTC" }).format(new Date(event.startsAt + "T12:00:00Z"));
     if (event.dateKind === "date_range" || isOnViewExhibition(event)) {
@@ -287,6 +297,7 @@
     eventMedia:eventMedia,
     classificationEnd:classificationEnd,
     isPast:isPast,
+    nextUpcoming:nextUpcoming,
     renderEvent:renderEvent,
   };
 })();
