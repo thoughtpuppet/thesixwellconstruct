@@ -10,7 +10,7 @@ const source = readFileSync(join(ROOT, "js", "atlanta-calendar-record.js"), "utf
 const context = { window:{} };
 runInNewContext(source, context);
 
-const { classificationEnd, isPast, nextUpcoming } = context.window.AtlantaCalendarRecord;
+const { classificationEnd, isPast, startsTodayOrLater, nextUpcoming } = context.window.AtlantaCalendarRecord;
 const NOW = Date.parse("2026-08-31T13:00:00-04:00");
 
 test("legacy single timed ranges expire from Upcoming at their original occurrence", () => {
@@ -53,7 +53,7 @@ test("date ranges and exhibitions retain their full active window", () => {
   assert.equal(isPast(exhibition, NOW), false);
 });
 
-test("same-day timed events stay Upcoming until they end", () => {
+test("same-day timed events remain not past until they end", () => {
   const sameDay = {
     dateKind:"timed",
     eventStructure:"single",
@@ -62,6 +62,42 @@ test("same-day timed events stay Upcoming until they end", () => {
   };
   assert.equal(isPast(sameDay, NOW), false);
   assert.equal(isPast(sameDay, Date.parse("2026-08-31T14:01:00-04:00")), true);
+});
+
+test("Upcoming uses the Atlanta start day rather than the event end or clock time", () => {
+  const priorDayRange = {
+    id:"prior-day-range",
+    title:"Already started range",
+    dateKind:"date_range",
+    eventStructure:"single",
+    startsAt:"2026-08-25",
+    endsAt:"2026-09-15",
+    formats:["workshop"],
+  };
+  const earlierToday = {
+    id:"earlier-today",
+    title:"Earlier today",
+    dateKind:"timed",
+    eventStructure:"single",
+    startsAt:"2026-08-31T09:00:00-04:00",
+    endsAt:"2026-08-31T10:00:00-04:00",
+    formats:["workshop"],
+  };
+  const tomorrow = {
+    id:"tomorrow",
+    title:"Tomorrow",
+    dateKind:"timed",
+    eventStructure:"single",
+    startsAt:"2026-09-01T09:00:00-04:00",
+    endsAt:"2026-09-01T10:00:00-04:00",
+    formats:["workshop"],
+  };
+  assert.equal(startsTodayOrLater(priorDayRange, NOW), false);
+  assert.equal(startsTodayOrLater(earlierToday, NOW), true);
+  assert.deepEqual(
+    Array.from(nextUpcoming([priorDayRange, tomorrow, earlierToday], 10, NOW), function (event) { return event.id; }),
+    ["earlier-today", "tomorrow"],
+  );
 });
 
 test("Upcoming returns the next ten matching events across month boundaries", () => {

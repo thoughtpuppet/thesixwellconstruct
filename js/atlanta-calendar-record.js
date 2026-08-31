@@ -70,10 +70,17 @@
     return end ? end.getTime() < current : false;
   }
 
+  function startsTodayOrLater(event, now) {
+    var startKey = dateKey(event && event.startsAt);
+    var current = now instanceof Date ? now : Number.isFinite(Number(now)) ? Number(now) : Date.now();
+    var currentKey = dateKey(current);
+    return Boolean(startKey && currentKey && startKey >= currentKey);
+  }
+
   function nextUpcoming(events, limit, now) {
     var maximum = Math.max(0, Number(limit) || 0);
     return (Array.isArray(events) ? events : [])
-      .filter(function (event) { return !isOnViewExhibition(event) && !isPast(event, now); })
+      .filter(function (event) { return !isOnViewExhibition(event) && startsTodayOrLater(event, now); })
       .sort(function (left, right) {
         return Date.parse(left.startsAt) - Date.parse(right.startsAt) || String(left.title || "").localeCompare(String(right.title || ""));
       })
@@ -297,6 +304,7 @@
     eventMedia:eventMedia,
     classificationEnd:classificationEnd,
     isPast:isPast,
+    startsTodayOrLater:startsTodayOrLater,
     nextUpcoming:nextUpcoming,
     renderEvent:renderEvent,
   };
