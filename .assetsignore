@@ -29,6 +29,8 @@ node_modules/**
 .hidden-pages/**
 assets/gallery/peer-amid
 assets/gallery/peer-amid/**
+tools/gallery-preview-server.mjs
+tools/media-catalogue-backfill.mjs
 functions
 functions/**
 migrations
