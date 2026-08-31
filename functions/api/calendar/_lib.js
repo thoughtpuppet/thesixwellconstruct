@@ -3613,6 +3613,73 @@ function researchValue(value) {
   try { return JSON.parse(value); } catch { return value; }
 }
 
+function normalizedResearchVisitingHours(value) {
+  const rows = Array.isArray(value) ? value : parseJson(value, null);
+  if (!Array.isArray(rows)) return { error:"Visiting hours must be a list of weekday opening and closing times." };
+  const dayNumbers = new Map([
+    ["sunday",0],["sun",0],["monday",1],["mon",1],["tuesday",2],["tue",2],
+    ["wednesday",3],["wed",3],["thursday",4],["thu",4],["friday",5],["fri",5],
+    ["saturday",6],["sat",6],
+  ]);
+  const expanded = [];
+  for (const item of rows) {
+    const rawDays = Array.isArray(item?.days) ? item.days : [item?.day];
+    for (const rawDay of rawDays.length ? rawDays : [undefined]) {
+      const numericDay = Number(rawDay);
+      const day = Number.isInteger(numericDay) ? numericDay : dayNumbers.get(asString(rawDay).toLowerCase());
+      expanded.push({
+        day,
+        opens:asString(item?.opens ?? item?.opensAt),
+        closes:asString(item?.closes ?? item?.closesAt),
+      });
+    }
+  }
+  const errors = visitingHoursInputErrors(expanded);
+  return errors.length ? { error:errors.join(" ") } : { value:normalizeVisitingHours(expanded) };
+}
+
+function normalizedResearchChangeValue(path, value) {
+  if (path !== "visitingHours") return { value };
+  return normalizedResearchVisitingHours(value);
+}
+
+function uniqueResearchChangeIds(changes) {
+  const idCounts = new Map();
+  for (const change of changes) {
+    const id = asString(change?.id);
+    if (id) idCounts.set(id,(idCounts.get(id)||0)+1);
+  }
+  const used = new Set();
+  return changes.map((change,index) => {
+    const originalId = asString(change?.id);
+    if (originalId && idCounts.get(originalId) === 1 && !used.has(originalId)) {
+      used.add(originalId);
+      return change;
+    }
+    const path = asString(change?.path).replace(/[^a-z0-9]+/gi,"_").replace(/^_+|_+$/g,"").toLowerCase() || `change_${index+1}`;
+    const stem = `research_change_${path}`;
+    let id = stem;
+    let suffix = 2;
+    while (used.has(id)) id = `${stem}_${suffix++}`;
+    used.add(id);
+    return { ...change, id };
+  });
+}
+
+function canonicalResearchChanges(changes) {
+  return uniqueResearchChangeIds(changes.map((change) => {
+    const normalizedValue=normalizedResearchChangeValue(change?.path,change?.value);
+    return normalizedValue.error ? change : { ...change, value:normalizedValue.value };
+  }));
+}
+
+function canonicalResearchAppliedIds(rawChanges, canonicalChanges, value) {
+  const applied=new Set((Array.isArray(value)?value:[]).map(asString).filter(Boolean));
+  return canonicalChanges.flatMap((change,index) => (
+    applied.has(asString(rawChanges[index]?.id)) || applied.has(change.id) ? [change.id] : []
+  ));
+}
+
 function researchChangeLabel(path) {
   if (path === "media:add") return "Add private media";
   return CANDIDATE_CHANGE_LABELS[path] || PRIVATE_INTELLIGENCE_LABELS[path] || path.replace(/([A-Z])/g," $1").replace(/^./,(letter)=>letter.toUpperCase());
@@ -3656,7 +3723,10 @@ function resolveResearchCitations(values, allowedCitations) {
 function normalizeResearchChange(item, candidate, allowedCitations) {
   if (!item || typeof item !== "object" || !RESEARCH_CHANGE_PATHS.has(asString(item.path))) return null;
   const path = asString(item.path);
-  const value = researchValue(item.valueJson);
+  const proposedValue = researchValue(item.valueJson);
+  const normalizedValue = normalizedResearchChangeValue(path,proposedValue);
+  if (normalizedValue.error) return null;
+  const value = normalizedValue.value;
   if (path === "media:add") {
     if (!value || typeof value !== "object" || !validHttpUrl(value.mediaUrl || value.url) || !validHttpUrl(value.provenanceUrl)) return null;
   }
@@ -3684,10 +3754,12 @@ async function ensureResearchThread(db, candidateId) {
 }
 
 function normalizeResearchProposal(row) {
+  const rawChanges=parseJson(row.changes_json,[]);
+  const changes=canonicalResearchChanges(rawChanges);
   return {
     id:row.id, state:RESEARCH_PROPOSAL_STATES.has(row.state)?row.state:"pending",
     assistantMessageId:row.assistant_message_id, findings:parseJson(row.findings_json,[]),
-    changes:parseJson(row.changes_json,[]), appliedChangeIds:parseJson(row.applied_change_ids_json,[]),
+    changes, appliedChangeIds:canonicalResearchAppliedIds(rawChanges,changes,parseJson(row.applied_change_ids_json,[])),
     provenance:parseJson(row.provenance_json,[]), createdAt:row.created_at, reviewedAt:row.reviewed_at||null,
   };
 }
@@ -3983,6 +4055,7 @@ async function requestCandidateResearch(env, db, candidate, thread, instruction)
       };
     }
   }
+  changes=uniqueResearchChangeIds(changes);
   return {
     model,payload:{...payload,usage},reply:asString(parsed.reply).slice(0,12_000),findings,changes,citations:webCitations,
     eventMemories:(Array.isArray(parsed.eventMemories)?parsed.eventMemories:[]).map(asString).filter(Boolean).slice(0,12),
@@ -4060,12 +4133,19 @@ async function applyResearchProposal(env,db,candidate,proposalId,selectedIds) {
   ).bind(proposalId,candidate.id).first();
   if (!row) return {error:"Research proposal not found.",status:404};
   if (row.state==="dismissed" || row.state==="applied") return {error:"This research proposal is already closed.",status:409};
-  const changes=parseJson(row.changes_json,[]);
-  const already=new Set(parseJson(row.applied_change_ids_json,[]));
+  const rawChanges=parseJson(row.changes_json,[]);
+  const changes=canonicalResearchChanges(rawChanges);
+  const already=new Set(canonicalResearchAppliedIds(rawChanges,changes,parseJson(row.applied_change_ids_json,[])));
   const requested=new Set((Array.isArray(selectedIds)?selectedIds:[]).map(asString).filter(Boolean));
   if (!requested.size) return {error:"Select at least one proposed change.",status:400};
-  const selected=changes.filter((change)=>requested.has(change.id)&&!already.has(change.id));
-  if (!selected.length) return {error:"No unapplied selected changes were found.",status:409};
+  const selectedRaw=changes.filter((change)=>requested.has(change.id)&&!already.has(change.id));
+  if (!selectedRaw.length) return {error:"No unapplied selected changes were found.",status:409};
+  const selected=[];
+  for (const change of selectedRaw) {
+    const normalizedValue=normalizedResearchChangeValue(change.path,change.value);
+    if (normalizedValue.error) return {error:`${change.label||researchChangeLabel(change.path)} is invalid: ${normalizedValue.error}`,status:409};
+    selected.push({ ...change, value:normalizedValue.value });
+  }
   const draft={...candidate};
   const mediaChanges=[];
   for (const change of selected) {
@@ -4073,12 +4153,16 @@ async function applyResearchProposal(env,db,candidate,proposalId,selectedIds) {
     if (change.path==="media:add") mediaChanges.push(change);
     else draft[change.path]=change.value;
   }
-  const profileRow=await db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first();
-  const profile=normalizeProfile(profileRow);
-  const normalized=proposalFromBody(draft,candidate,{allowVerifiedInstagramSource:true});
-  if (!geographicMatch(normalized,profile.geographicRules)) return {error:"The selected changes move this event outside the Scout's configured geography.",status:409};
-  const duplicate=await findDuplicate(db,normalized,candidate.id,profile.duplicateSensitivity);
-  if (duplicate) return {error:`The selected changes match existing candidate ${duplicate.id}.`,status:409};
+  try {
+    const profileRow=await db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first();
+    const profile=normalizeProfile(profileRow);
+    const normalized=proposalFromBody(draft,candidate,{allowVerifiedInstagramSource:true});
+    if (!geographicMatch(normalized,profile.geographicRules)) return {error:"The selected changes move this event outside the Scout's configured geography.",status:409};
+    const duplicate=await findDuplicate(db,normalized,candidate.id,profile.duplicateSensitivity);
+    if (duplicate) return {error:`The selected changes match existing candidate ${duplicate.id}.`,status:409};
+  } catch(error) {
+    return {error:error.message||"The selected candidate changes were invalid.",status:409};
+  }
   const factual=selected.filter((change)=>change.path!=="media:add");
   const succeeded=[];
   const failures=[];
@@ -4100,9 +4184,10 @@ async function applyResearchProposal(env,db,candidate,proposalId,selectedIds) {
   await appendRevision(db,candidate.id,candidateSnapshot(refreshed),row.provenance_json?parseJson(row.provenance_json,[]):[],changeSummary(revisionChanges,"Scout research applied"),"studio-research",revisionChanges);
   succeeded.forEach((change)=>already.add(change.id));
   const state=changes.every((change)=>already.has(change.id))?"applied":"partially_applied";
-  await db.prepare("UPDATE calendar_candidate_research_proposals SET state=?,applied_change_ids_json=?,reviewed_at=? WHERE id=?")
-    .bind(state,JSON.stringify([...already]),isoNow(),proposalId).run();
-  return {candidate:await getCandidate(db,candidate.id),proposal:normalizeResearchProposal({...row,state,applied_change_ids_json:JSON.stringify([...already]),reviewed_at:isoNow()}),failures};
+  const canonicalChangesJson=JSON.stringify(changes);
+  await db.prepare("UPDATE calendar_candidate_research_proposals SET state=?,changes_json=?,applied_change_ids_json=?,reviewed_at=? WHERE id=?")
+    .bind(state,canonicalChangesJson,JSON.stringify([...already]),isoNow(),proposalId).run();
+  return {candidate:await getCandidate(db,candidate.id),proposal:normalizeResearchProposal({...row,state,changes_json:canonicalChangesJson,applied_change_ids_json:JSON.stringify([...already]),reviewed_at:isoNow()}),failures};
 }
 
 async function handleCandidateResearch(request,env,db,candidate,parts) {

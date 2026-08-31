@@ -3540,6 +3540,98 @@ test("candidate research stores citations and memories, then applies only select
   }
 });
 
+test("candidate research repairs duplicate change ids and grouped visiting hours before selective apply", async () => {
+  const db = database();
+  const candidateId = "cal_candidate_sound_vision";
+  const runtime = env(db, { OPENAI_API_KEY:"test-key" });
+  const sourceUrl = "https://www.atlantafilmsociety.org/upcoming-events/sound-vision";
+  const before = db.prepare("SELECT venue_address,visiting_hours_json FROM calendar_candidates WHERE id=?").get(candidateId);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), "https://api.openai.com/v1/responses");
+    return Response.json({
+      id:"resp_candidate_research_duplicate_ids",
+      output:[
+        { type:"web_search_call", action:{ sources:[{ url:sourceUrl, title:"Official event page" }] } },
+        { type:"message", content:[{ type:"output_text", text:JSON.stringify({
+          reply:"I confirmed more precise venue details and public hours.",
+          findings:[{ text:"The venue publishes Thursday through Saturday public hours.", status:"confirmed", citations:[sourceUrl] }],
+          changes:[
+            { id:candidateId, path:"venueAddress", label:"Venue address", valueJson:JSON.stringify("123 Test Street, Atlanta, GA 30303"), rationale:"The official page supplies an address.", confidence:.98, citations:[sourceUrl] },
+            { id:candidateId, path:"visitingHours", label:"Regular gallery hours", valueJson:JSON.stringify([{days:["Thursday","Friday","Saturday"],opensAt:"12:00",closesAt:"17:00"}]), rationale:"The official page supplies regular public hours.", confidence:.98, citations:[sourceUrl] },
+          ],
+          eventMemories:[], sourceRuleSuggestions:[],
+        }) }] },
+      ],
+      usage:{ input_tokens:120, output_tokens:80 },
+    });
+  };
+  try {
+    const response = await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/messages`, {
+      method:"POST", admin:true, body:{ message:"Confirm the venue details and public hours." },
+    }), runtime);
+    assert.equal(response.status, 201, await response.clone().text());
+    const result = await response.json();
+    const proposal = result.research.proposals[0];
+    assert.equal(proposal.changes.length, 2);
+    assert.equal(new Set(proposal.changes.map((change) => change.id)).size, 2);
+    assert.deepEqual(proposal.changes.find((change) => change.path === "visitingHours").value, [
+      {day:4,opens:"12:00",closes:"17:00"},
+      {day:5,opens:"12:00",closes:"17:00"},
+      {day:6,opens:"12:00",closes:"17:00"},
+    ]);
+
+    const hoursChange = proposal.changes.find((change) => change.path === "visitingHours");
+    const applied = await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/proposals/${proposal.id}/apply`, {
+      method:"POST", admin:true, body:{ changeIds:[hoursChange.id] },
+    }), runtime);
+    assert.equal(applied.status, 200, await applied.clone().text());
+    const candidate = (await applied.json()).candidate;
+    assert.equal(candidate.venueAddress, before.venue_address);
+    assert.deepEqual(candidate.visitingHours, [
+      {day:4,opens:"12:00",closes:"17:00"},
+      {day:5,opens:"12:00",closes:"17:00"},
+      {day:6,opens:"12:00",closes:"17:00"},
+    ]);
+
+    const duplicateLegacy = [
+      {id:"legacy-duplicate",path:"venueAddress",label:"Venue address",before:candidate.venueAddress,value:"456 Test Street, Atlanta, GA 30303"},
+      {id:"legacy-duplicate",path:"visitingHours",label:"Regular gallery hours",before:candidate.visitingHours,value:candidate.visitingHours},
+    ];
+    db.prepare("UPDATE calendar_candidate_research_proposals SET state='pending',applied_change_ids_json='[]',changes_json=? WHERE id=?")
+      .run(JSON.stringify(duplicateLegacy),proposal.id);
+    const legacyRead = await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research`, {admin:true}),runtime);
+    assert.equal(legacyRead.status,200);
+    const legacyProposal=(await legacyRead.json()).research.proposals.find((item)=>item.id===proposal.id);
+    assert.equal(new Set(legacyProposal.changes.map((change)=>change.id)).size,2);
+    const legacyVenueChange=legacyProposal.changes.find((change)=>change.path==="venueAddress");
+    const duplicateApply = await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/proposals/${proposal.id}/apply`, {
+      method:"POST",admin:true,body:{changeIds:[legacyVenueChange.id]},
+    }),runtime);
+    assert.equal(duplicateApply.status,200,await duplicateApply.clone().text());
+    const legacyCandidate=(await duplicateApply.json()).candidate;
+    assert.equal(legacyCandidate.venueAddress,"456 Test Street, Atlanta, GA 30303");
+    assert.deepEqual(legacyCandidate.visitingHours,candidate.visitingHours);
+    const storedLegacyChanges=JSON.parse(db.prepare("SELECT changes_json FROM calendar_candidate_research_proposals WHERE id=?").get(proposal.id).changes_json);
+    assert.equal(new Set(storedLegacyChanges.map((change)=>change.id)).size,2);
+
+    const invalidLegacy = [
+      {id:"legacy-invalid-hours",path:"visitingHours",label:"Regular gallery hours",before:candidate.visitingHours,value:[{days:["Thursday"],opensAt:"noon",closesAt:"17:00"}]},
+    ];
+    db.prepare("UPDATE calendar_candidate_research_proposals SET state='pending',applied_change_ids_json='[]',changes_json=? WHERE id=?")
+      .run(JSON.stringify(invalidLegacy),proposal.id);
+    const invalidApply = await handleCalendarAdminApi(request(`/api/admin/calendar/candidates/${candidateId}/research/proposals/${proposal.id}/apply`, {
+      method:"POST",admin:true,body:{changeIds:["legacy-invalid-hours"]},
+    }),runtime);
+    assert.equal(invalidApply.status,409);
+    assert.match((await invalidApply.json()).error,/Regular gallery hours is invalid.*HH:MM/i);
+    assert.equal(db.prepare("SELECT venue_address FROM calendar_candidates WHERE id=?").get(candidateId).venue_address,"456 Test Street, Atlanta, GA 30303");
+    assert.deepEqual(JSON.parse(db.prepare("SELECT visiting_hours_json FROM calendar_candidates WHERE id=?").get(candidateId).visiting_hours_json),candidate.visitingHours);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("candidate research preserves field changes when equivalent official citation URLs differ", async () => {
   const db = database();
   const candidateId = "cal_candidate_sound_vision";
