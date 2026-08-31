@@ -825,6 +825,7 @@ async function replaceMaterialOriginThreads(database,materialId,ids){
 const MEDIA_PRIVACIES = new Set(["public","unlisted","internal","private"]);
 const MEDIA_TRANSCRIPT_STATUSES = new Set(["not-requested","pending","ready","failed"]);
 const MEDIA_PRESENTATIONS = new Set(["inline","hidden"]);
+const ARCHIVAL_SVG_MIME = "image/svg+xml";
 const RESUMABLE_UPLOAD_MIMES = {
   video:new Set(["video/mp4","video/webm"]),
   "archive-master":new Set(["image/tiff","image/jpeg","image/png","image/webp","image/heic","image/heif"]),
@@ -4215,6 +4216,7 @@ async function publicEntityMediaApi(request,env,mediaId){
 }
 
 async function servePublicMedia(row,request,env){
+  if(isArchivalSvgMedia(row))return failure("Media unavailable.",404);
   return serveR2Media(request,env.SUBMISSION_FILES,row,()=>failure("Media unavailable.",404));
 }
 
@@ -4222,7 +4224,13 @@ async function adminMediaFileApi(request,env,mediaId){
   if(!["GET","HEAD"].includes(request.method))return failure("Method not allowed.",405);
   const row=await db(env).prepare("SELECT * FROM media_assets WHERE id=? AND state='active'").bind(mediaId).first();
   if(!row)return failure("Media not found.",404);
-  return servePublicMedia(row,request,env);
+  const response=await serveR2Media(request,env.SUBMISSION_FILES,row,()=>failure("Media unavailable.",404));
+  if(!isArchivalSvgMedia(row)||response.status>=300)return response;
+  const headers=new Headers(response.headers),filename=String(row.original_filename||"archive.svg").replace(/[\r\n"]/g,"-");
+  headers.set("content-disposition",`attachment; filename="${filename}"`);
+  headers.set("content-security-policy","sandbox; default-src 'none'; script-src 'none'; object-src 'none'; base-uri 'none'");
+  headers.set("x-content-type-options","nosniff");
+  return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
 }
 
 function resumableUploadFilename(value){
@@ -4253,6 +4261,14 @@ function presentMediaRecord(row){
   const record={...row};
   delete record[["consent","status"].join("_")];
   return record;
+}
+
+function isArchivalSvgMedia(row){return String(row?.mime_type||row?.content_type||"").toLowerCase()===ARCHIVAL_SVG_MIME}
+
+function hasSvgDocumentRoot(value){
+  const source=new TextDecoder("utf-8").decode(value);
+  if(!source||source.includes("\0"))return false;
+  return source.match(/<([a-zA-Z][\w:.-]*)\b/)?.[1]?.toLowerCase()==="svg";
 }
 
 async function uploadSession(database,sessionId){
@@ -4422,6 +4438,7 @@ async function mediaApi(request, env, mediaId="") {
     if(!MEDIA_PRIVACIES.has(next.privacy))return failure("Invalid media privacy.");
     if(!MEDIA_TRANSCRIPT_STATUSES.has(next.transcript_status))return failure("Invalid transcript status.");
     if(!MEDIA_PRESENTATIONS.has(next.public_presentation))return failure("Invalid public presentation.");
+    if(isArchivalSvgMedia(before)&&(next.privacy!=="internal"||next.public_presentation!=="hidden"))return failure("Archival SVG media must remain internal and hidden.",409);
     const pairedAsMaster=await database.prepare("SELECT 1 paired FROM media_asset_variants WHERE master_media_id=? LIMIT 1").bind(mediaId).first();
     if(pairedAsMaster&&(next.state!=="active"||!["internal","private"].includes(next.privacy)||next.public_presentation!=="hidden"))return failure("A paired archival master must remain active, private or internal, and hidden.",409);
     const eligibilityChanged=["state","privacy","public_presentation"].some(field=>Object.prototype.hasOwnProperty.call(body,field));
@@ -4442,10 +4459,11 @@ async function mediaApi(request, env, mediaId="") {
   }
   if(request.method!=="POST"||mediaId)return failure("Method not allowed.",405);
   const form=await request.formData();const file=form.get("file");if(!(file instanceof File)||!file.size)return failure("A file is required.");
-  const mime=(file.type||"application/octet-stream").toLowerCase();const image=["image/jpeg","image/png","image/webp","image/gif"].includes(mime);const doc=["application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"].includes(mime);const audio=mime.startsWith("audio/"),video=RESUMABLE_UPLOAD_MIMES.video.has(mime);const av=audio||video,max=av?50*1024*1024:15*1024*1024;if(mime.startsWith("video/")&&!video)return failure("Use an MP4 or WebM video.",415);if(!(image||doc||av))return failure("Unsupported media type.",415);if(file.size>max)return failure("File exceeds the allowed size.",413);if(!env.SUBMISSION_FILES)return failure("Media storage is unavailable.",503);
-  const privacy=text(form.get("privacy"),30)||"internal",transcriptStatus=text(form.get("transcript_status"),30)||"not-requested",presentation=text(form.get("public_presentation"),30)||"inline";
+  const mime=(file.type||"application/octet-stream").toLowerCase(),archivalSvg=mime===ARCHIVAL_SVG_MIME;const image=["image/jpeg","image/png","image/webp","image/gif"].includes(mime);const doc=["application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"].includes(mime);const audio=mime.startsWith("audio/"),video=RESUMABLE_UPLOAD_MIMES.video.has(mime);const av=audio||video,max=av?50*1024*1024:15*1024*1024;if(mime.startsWith("video/")&&!video)return failure("Use an MP4 or WebM video.",415);if(!(image||archivalSvg||doc||av))return failure("Unsupported media type.",415);if(file.size>max)return failure("File exceeds the allowed size.",413);if(!env.SUBMISSION_FILES)return failure("Media storage is unavailable.",503);
+  const requestedPrivacy=text(form.get("privacy"),30)||"internal",transcriptStatus=text(form.get("transcript_status"),30)||"not-requested",requestedPresentation=text(form.get("public_presentation"),30)||"inline",privacy=archivalSvg?"internal":requestedPrivacy,presentation=archivalSvg?"hidden":requestedPresentation;
   if(!MEDIA_PRIVACIES.has(privacy))return failure("Invalid media privacy.");if(!MEDIA_TRANSCRIPT_STATUSES.has(transcriptStatus))return failure("Invalid transcript status.");if(!MEDIA_PRESENTATIONS.has(presentation))return failure("Invalid public presentation.");
-  const newId=id("media");const key=`construct/${newId}/${file.name.replace(/[^a-zA-Z0-9._-]/g,"-")}`;await env.SUBMISSION_FILES.put(key,file.stream(),{httpMetadata:{contentType:mime}});
+  const fileBytes=await file.arrayBuffer();if(archivalSvg&&!hasSvgDocumentRoot(fileBytes))return failure("The selected file is not a valid SVG document.",415);
+  const newId=id("media");const key=`construct/${newId}/${file.name.replace(/[^a-zA-Z0-9._-]/g,"-")}`;await env.SUBMISSION_FILES.put(key,fileBytes,{httpMetadata:{contentType:mime,cacheControl:"private, no-store"}});
   try{await database.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,rights_notes,privacy,state,created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_title,public_description,public_presentation)
     VALUES(?,?,?,?,?,?,?,?,?,'active','studio',datetime('now'),datetime('now'),?,?,?,?,?,?)`).bind(newId,key,file.name,mime,file.size,text(form.get("alt_text"),1000),text(form.get("caption"),3000),text(form.get("rights_notes"),10000),privacy,text(form.get("transcript"),100000),transcriptStatus,text(form.get("transcript_language"),40),text(form.get("public_title"),300),text(form.get("public_description"),3000),presentation).run();}catch(error){await env.SUBMISSION_FILES.delete(key);throw error;}
   return json({record:presentMediaRecord(await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(newId).first())},{status:201});
@@ -5269,6 +5287,18 @@ async function archiveOwnerPublicationStatements(database,owner,state){
   return statements;
 }
 
+async function enrichArchiveDossierAdminCounts(database,rows){
+  const entityIds=[...new Set(rows.map(row=>String(row.entity_id||"")).filter(Boolean))];
+  if(!entityIds.length)return rows;
+  const chunks=[];for(let index=0;index<entityIds.length;index+=80)chunks.push(entityIds.slice(index,index+80));
+  const groupedResults=await Promise.all(chunks.flatMap(ids=>{const placeholders=ids.map(()=>"?").join(",");return[
+    database.prepare(`SELECT dossier_entity_id entity_id,COUNT(*) count FROM archive_materials WHERE dossier_entity_id IN (${placeholders}) GROUP BY dossier_entity_id`).bind(...ids).all(),
+    database.prepare(`SELECT entity_id,COUNT(*) count FROM entity_activity WHERE entity_id IN (${placeholders}) GROUP BY entity_id`).bind(...ids).all(),
+  ]})),materialCounts=new Map(),activityCounts=new Map();
+  groupedResults.forEach((result,index)=>{const counts=index%2?activityCounts:materialCounts;(result.results||[]).forEach(row=>counts.set(row.entity_id,Number(row.count)||0))});
+  return rows.map(row=>({...row,material_count:materialCounts.get(row.entity_id)||0,activity_count:activityCounts.get(row.entity_id)||0}));
+}
+
 async function archiveDossiersAdminApi(request,env,entityId=""){
   const database=db(env);
   if(request.method==="GET"){
@@ -5276,7 +5306,7 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
       (SELECT MAX(identity_change.created_at) FROM archive_catalogue_identity_changes identity_change WHERE identity_change.entity_id=ad.entity_id),
       ace.created_at,aei.created_at,ad.created_at
     ) DESC,COALESCE(ace.catalogue_prefix,'EVT'),COALESCE(ace.catalogue_number,aei.event_number,0) DESC,ad.entity_id`;
-    const statement=database.prepare(`${archiveEntitySql(where)} ORDER BY ${order}`);const result=entityId?await statement.bind(entityId).all():await statement.all();const records=(result.results||[]).map(row=>({...row,...presentArchiveItem(row)}));
+    const statement=database.prepare(`${archiveEntitySql(where)} ORDER BY ${order}`);const result=entityId?await statement.bind(entityId).all():await statement.all();const countedRows=await enrichArchiveDossierAdminCounts(database,result.results||[]),records=countedRows.map(row=>({...row,...presentArchiveItem(row)}));
     if(entityId&&!records[0])return failure("Dossier not found.",404);
     if(entityId){
       const [originResult,contextResult,themeResult,versionResult,stateResult,documentationResult,collectionResult]=await database.batch([

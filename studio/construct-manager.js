@@ -1038,7 +1038,7 @@
           <p>The uploaded file that represents or documents this material. Its shared privacy, presentation, and transcript controls remain separate from the material’s publication controls.</p>
           <div class="cm-digital-asset-grid">
             <label>Existing Digital asset<select name="media_id">${mediaOptionList(media,mediaId)}</select></label>
-            <label>${isNew?"Upload new Digital asset":"Replace Digital asset"}<input type="file" name="material_file" accept="image/*,audio/*,video/*,.pdf,.doc,.docx"></label>
+            <label>${isNew?"Upload new Digital asset":"Replace Digital asset"}<input type="file" name="material_file" accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml,.svg,audio/*,video/mp4,video/webm,.pdf,.doc,.docx"><span class="cm-field-note">SVG files remain exact archival artifacts: Studio forces them to Internal + Hidden and never substitutes them for canonical Legend markup.</span></label>
             <label>Alt text<input name="alt_text" value="${esc(firstValue(material,"alt_text","altText"))}" placeholder="Describe visual material"></label>
             <label>Shared Digital asset privacy<select name="media_privacy">${[["internal","Internal"],["public","Public"],["unlisted","Unlisted"],["private","Private"]].map(([value,label])=>option(value,label,mediaPrivacy)).join("")}</select></label>
             <label>Public presentation<select name="public_presentation">${[["inline","Show inline"],["hidden","Hide file publicly"]].map(([value,label])=>option(value,label,firstValue(material,"public_presentation","publicPresentation")||"inline")).join("")}</select></label>
@@ -1145,7 +1145,7 @@
     shell.querySelectorAll("[data-material-form]").forEach(form=>{
       const fileInput=form.querySelector('[name="material_file"]');
       if(fileInput){
-        fileInput.accept="image/*,audio/*,video/mp4,video/webm,.pdf,.doc,.docx";
+        fileInput.accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml,.svg,audio/*,video/mp4,video/webm,.pdf,.doc,.docx";
         if(!fileInput.parentElement.querySelector("[data-video-upload-note]"))fileInput.insertAdjacentHTML("afterend",'<span class="cm-meta" data-video-upload-note>MP4 (H.264/AAC recommended) or WebM video, up to 2 GiB. Interrupted video uploads resume when the same file is selected again.</span>');
       }
       const submit=form.querySelector('[type="submit"]');

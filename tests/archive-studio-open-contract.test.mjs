@@ -46,5 +46,5 @@ test("direct links survive authentication and browser history restores the sourc
   assert.match(studio, /data-archive-all-dossiers>All dossiers<\/button>/);
   assert.match(studio, /renderArchiveOpenError\(canonicalId, error\)/);
   assert.match(studio, /if \(error\?\.status === 401 \|\| error\?\.status === 403\) throw error/);
-  assert.match(studio, /construct-manager\.js\?v=20260829-publication-invariant/);
+  assert.match(studio, /construct-manager\.js\?v=20260830-svg-archive-counts/);
 });

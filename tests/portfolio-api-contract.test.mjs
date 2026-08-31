@@ -1440,3 +1440,51 @@ test("Studio Portfolio loads the pre-upload organizer and resumable retry contro
   assert.match(studio, /data-batch-public/);
   assert.doesNotMatch(studio, /PORTFOLIO_CONSENT_STATUSES|Publication permission|name="consentStatus"|consentStatus:\s*"unknown"/);
 });
+
+test("Studio ingests SVG as an exact protected archival artifact", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  const environment = env(database, bucket);
+  const source = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10H0z"/></svg>`;
+  const bytes = new TextEncoder().encode(source);
+  const form = new FormData();
+  form.set("file", new File([bytes], "alternate legend.svg", { type: "image/svg+xml" }));
+  form.set("privacy", "public");
+  form.set("public_presentation", "inline");
+
+  let response = await handleConstructApi(new Request("https://example.test/api/admin/media", {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN}` },
+    body: form,
+  }), environment);
+  assert.equal(response.status, 201, await response.clone().text());
+  const record = (await response.json()).record;
+  assert.equal(record.mime_type, "image/svg+xml");
+  assert.equal(record.privacy, "internal");
+  assert.equal(record.public_presentation, "hidden");
+  assert.equal(new TextDecoder().decode(bucket.objects.get(record.storage_key).body), source);
+
+  response = await handleConstructApi(request(`/api/admin/media/${record.id}`, {
+    method: "PATCH", admin: true, body: { privacy: "public", public_presentation: "inline" },
+  }), environment);
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /must remain internal and hidden/i);
+
+  response = await handleConstructApi(request(`/api/construct/media/${record.id}`), environment);
+  assert.equal(response.status, 404);
+  response = await handleConstructApi(request(`/api/admin/media/${record.id}/file`, { admin: true }), environment);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-disposition"), /^attachment;/);
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.match(response.headers.get("content-security-policy"), /sandbox/);
+
+  const invalid = new FormData();
+  invalid.set("file", new File(["not svg markup"], "false.svg", { type: "image/svg+xml" }));
+  response = await handleConstructApi(new Request("https://example.test/api/admin/media", {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN}` },
+    body: invalid,
+  }), environment);
+  assert.equal(response.status, 415);
+  assert.match((await response.json()).error, /not a valid SVG document/i);
+});

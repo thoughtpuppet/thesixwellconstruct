@@ -210,6 +210,30 @@ test("Archive presentation uses Tattoo and Tattoo Design without erasing interna
   assert.equal(tattooDesign.cultural_object_type, "Tattoo Design");
 });
 
+test("Studio dossier summaries include the Material and activity counts shown in dossier detail", async () => {
+  const db = database();
+  const runtime = env(db);
+  const entityId = "art-marbles";
+
+  db.prepare(`INSERT INTO entity_activity(
+    id,entity_id,activity_type,title,occurred_at,public_visible,created_by,created_at,updated_at
+  ) VALUES('activity-dossier-summary-count',?,'documentation','Counted history entry','2026-08-30',0,'test',datetime('now'),datetime('now'))`).run(entityId);
+
+  const expectedMaterialCount = db.prepare("SELECT COUNT(*) count FROM archive_materials WHERE dossier_entity_id=?").get(entityId).count;
+  const expectedActivityCount = db.prepare("SELECT COUNT(*) count FROM entity_activity WHERE entity_id=?").get(entityId).count;
+  const listResponse = await handleConstructApi(request("/api/admin/archive-dossiers", { admin: true }), runtime);
+  const listRecord = (await listResponse.json()).records.find((record) => record.entity_id === entityId);
+  const detailResponse = await handleConstructApi(request(`/api/admin/archive-dossiers/${entityId}`, { admin: true }), runtime);
+  const detailRecord = (await detailResponse.json()).record;
+
+  assert.equal(listResponse.status, 200);
+  assert.equal(detailResponse.status, 200);
+  assert.equal(listRecord.material_count, expectedMaterialCount);
+  assert.equal(listRecord.activity_count, expectedActivityCount);
+  assert.equal(detailRecord.material_count, expectedMaterialCount);
+  assert.equal(detailRecord.activity_count, expectedActivityCount);
+});
+
 test("0088 normalizes an existing Portfolio Item dossier label without changing its identity", () => {
   const migrationName = "0088_archive_tattoo_record_type_consistency.sql";
   const db = databaseBefore(migrationName);
@@ -1026,6 +1050,9 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(studio, /Merch sample \/ prototype/);
   assert.match(studio, /The uploaded file that represents or documents this material/);
   assert.match(studio, /Shared Digital asset privacy/);
+  assert.match(materialEditor, /image\/svg\+xml,\.svg/);
+  assert.match(materialEditor, /Studio forces them to Internal \+ Hidden/);
+  assert.match(studio, /fileInput\.accept="image\/jpeg,image\/png,image\/webp,image\/gif,image\/svg\+xml,\.svg/);
   assert.match(studio, /Source materials/);
   assert.match(studio, /Add client correspondence/);
 
