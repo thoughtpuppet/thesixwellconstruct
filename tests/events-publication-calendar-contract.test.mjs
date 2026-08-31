@@ -482,6 +482,8 @@ test("Events board contracts retain the shared shell, 5px cards, calendar, and s
   assert.match(page, /\.event-card:hover,\.event-card:focus-within\s*\{\s*border-color:var\(--color-events\)/);
   assert.match(page, /Upcoming Events[\s\S]*Event Calendar[\s\S]*Past Events/);
   for (const label of ["Announced", "Reserve a seat", "RSVP", "Sold out", "Booking closed", "Cancelled", "View event"]) assert.match(page, new RegExp(label, "i"));
+  assert.match(page, /href="\/events\/kinmarking\/">KINMARKING series<\/a>/);
+  assert.match(page, /Announced<\/button><a class="event-action is-secondary" href="' \+ href \+ '">View event<\/a>/);
   assert.match(page, /has-multiple[\s\S]*event-day-agenda/);
   assert.match(studio, /Public stage[\s\S]*Event operations/);
   assert.match(studio, /\["draft", "announced", "published"\]/);

@@ -108,6 +108,7 @@
           <a class="venture-link" href="#upcoming">upcoming</a>
           <a class="venture-link" href="#calendar">calendar</a>
           <a class="venture-link" href="#past">past events</a>
+          <a class="venture-link" href="/events/kinmarking/">KINMARKING series</a>
         </div>
       </div>
     </section>
@@ -213,7 +214,7 @@
     function actionMarkup(ev, past) {
       var href = eventHref(ev);
       if (past) return '<a class="event-action" href="' + href + '">View event</a>';
-      if (ev.publicationState === "announced") return '<button class="event-action" type="button" disabled>Announced</button>';
+      if (ev.publicationState === "announced") return '<button class="event-action" type="button" disabled>Announced</button><a class="event-action is-secondary" href="' + href + '">View event</a>';
       if (occurrencesForEvent(ev).length > 1) return '<a class="event-action" href="' + href + '">View dates</a>';
       if (ev.status === "cancelled") return '<button class="event-action" type="button" disabled>Cancelled</button><a class="event-action is-secondary" href="' + href + '">View event</a>';
       if (ev.soldOut) {
