@@ -92,6 +92,15 @@ test("calendar migrations preserve seeded private candidates, verified official 
     { status:"needs_verification", starts_at:null, verification_state:"needs_verification" },
   );
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
+  assert.deepEqual(
+    { ...db.prepare("SELECT adapter_key,cadence_hours,adapter_config_json FROM calendar_sources WHERE id='cal_source_out_on_film_2026'").get(), adapter_config_json:JSON.parse(db.prepare("SELECT adapter_config_json FROM calendar_sources WHERE id='cal_source_out_on_film_2026'").get().adapter_config_json) },
+    { adapter_key:"automatic", cadence_hours:24, adapter_config_json:{ internalAdapter:"eventive", eventBucketId:"69b97b21d5d2bc69903d9694", parentSourceEventId:"eventive-bucket-69b97b21d5d2bc69903d9694", festivalTitle:"Out on Film 2026", organizer:"Out on Film", organizerUrl:"https://outonfilm.org/", festivalStart:"2026-09-24", festivalEnd:"2026-10-04", virtualEnd:"2026-10-11", maxPrograms:200, automationMode:"shadow_then_auto", requiredStableRuns:2 } },
+  );
+  assert.deepEqual(
+    { ...db.prepare("SELECT automation_mode,automation_state,required_stable_runs FROM calendar_source_automation WHERE source_id='cal_source_out_on_film_2026'").get() },
+    { automation_mode:"shadow_then_auto", automation_state:"shadow", required_stable_runs:2 },
+  );
+  assert.equal(db.prepare("SELECT cadence_hours FROM calendar_scout_connectors WHERE id='direct'").get().cadence_hours, 6);
   for (const table of ["calendar_candidates","calendar_entries","calendar_candidate_occurrences","calendar_entry_occurrences"]) {
     assert.equal(db.prepare(`SELECT COUNT(*) count FROM ${table} WHERE planning_eligible<>1`).get().count, 0);
   }
@@ -1411,6 +1420,7 @@ test("direct monitoring remains safe without an OpenAI key and scheduler due gat
   const runtime = env(db);
   const originalFetch = globalThis.fetch;
   const enabledSourceCount = db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE enabled=1").get().count;
+  const keyGatedSourceCount = db.prepare("SELECT COUNT(*) count FROM calendar_sources WHERE enabled=1 AND json_extract(adapter_config_json,'$.internalAdapter')='eventive'").get().count;
   let sourceCalls = 0;
   globalThis.fetch = async (url) => {
     sourceCalls += 1;
@@ -1428,7 +1438,7 @@ test("direct monitoring remains safe without an OpenAI key and scheduler due gat
     const directLane = JSON.parse(db.prepare("SELECT source_results_json FROM calendar_scout_runs WHERE id=?").get(run.runId).source_results_json)[0];
     assert.equal(directLane.sources.filter((item) => item.status === "failed").length, 1);
     assert.match(directLane.sources.find((item) => item.status === "failed").error, /Browser rendering is unavailable/);
-    assert.equal(sourceCalls, enabledSourceCount);
+    assert.equal(sourceCalls, enabledSourceCount - keyGatedSourceCount);
     const candidate = db.prepare(`SELECT c.status,c.factual_description,n.private_rationale,n.attendance_use,n.programming_ideas,n.potential_collaborators,n.internal_notes
       FROM calendar_candidates c JOIN calendar_candidate_notes n ON n.candidate_id=c.id
       WHERE c.title='Creative Technology Lecture' LIMIT 1`).get();
@@ -1445,7 +1455,7 @@ test("direct monitoring remains safe without an OpenAI key and scheduler due gat
 
     const due = await runDueCalendarScout(runtime, Date.now());
     assert.equal(due.skipped, "not-due");
-    assert.equal(sourceCalls, enabledSourceCount);
+    assert.equal(sourceCalls, enabledSourceCount - keyGatedSourceCount);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -5489,7 +5499,7 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
   </section></body></html>`;
   const visionEvent = {
     title:"Game Night", description:"A phone-free game night with table games, video-game tournaments, and a karaoke contest.", caption,
-    organizer:"Lil Yachty", organizerUrl:"https://www.instagram.com/lilyachty/", venueName:"", venueAddress:"", venueUrl:"",
+    organizer:"Lil Yachty", organizerUrl:"https://www.instagram.com/lilyachty/", venueName:"", venueAddress:"", locationDisclosure:"after_registration", venueUrl:"",
     city:"Atlanta", region:"GA", startsAt:"2026-08-29", endsAt:"",
     confirmedThrough:"", visitingHours:[], visitingHoursNote:"", visitingHoursSourceUrl:"", eventUrl, ticketUrl:"",
     imageUrl:flyerUrl, imageAlt:"Poster for Lil Yachty Presents Game Night", accessStatus:"public", accessNotes:"Open to the public.", audiences:["Public"],
@@ -5506,7 +5516,7 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     factualDescription:"Lil Yachty presents a public game night with table games, video-game tournaments, and karaoke.",
     eventStructure:"single", accessStatus:"public", accessNotes:"Public audience; no attendance restriction has been established.", audiences:["Public"],
     dateKind:"timed", startsAt:"2026-08-29T19:00:00-04:00", endsAt:"", confirmedThrough:"", timezone:"America/New_York",
-    venueName:"", venueAddress:"", city:"Atlanta", region:"GA", subjects:[], formats:[], experimental:false,
+    venueName:"", venueAddress:"", locationDisclosure:"after_registration", city:"Atlanta", region:"GA", subjects:[], formats:[], experimental:false,
     scheduleStatus:"scheduled", ticketStatus:"unknown", ticketOnSaleAt:"", ticketNotes:"Ticket availability is not established.", planningNotes:"",
     verificationState:"needs_verification", verificationNotes:"The ticket listing does not provide an end time.", confidence:0.8,
     occurrences:[], socialEvidence:[], privateRationale:"", attendanceUse:"", programmingIdeas:"", potentialCollaborators:"", internalNotes:"",
@@ -5561,6 +5571,7 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     assert.equal(payload.candidate.accessStatus, "restricted");
     assert.deepEqual(payload.candidate.audiences, ["Ages 21+"]);
     assert.equal(payload.candidate.ticketNotes, "Admission is $5. The event address is sent after ticket purchase.");
+    assert.equal(payload.candidate.locationDisclosure, "after_registration");
     assert.match(payload.candidate.verificationNotes, /date and time range were recovered deterministically/i);
     assert.equal(payload.candidate.sourceUrl, eventUrl);
     assert.equal(payload.candidate.discoveryUrl, eventUrl);
@@ -5592,6 +5603,7 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     assert.equal(snapshot.accessStatus, "restricted");
     assert.deepEqual(snapshot.audiences, ["Ages 21+"]);
     assert.equal(snapshot.ticketNotes, "Admission is $5. The event address is sent after ticket purchase.");
+    assert.equal(snapshot.locationDisclosure, "after_registration");
     assert.deepEqual(snapshot.subjects, ["poetry-music"]);
     assert.deepEqual(snapshot.formats, ["experimental-event"]);
     assert.equal(snapshot.experimental, true);
@@ -5607,7 +5619,27 @@ test("Instagram game-night intake keeps same-night tournaments on one event and 
     assert.equal(finalCandidate.accessStatus, "restricted");
     assert.deepEqual(finalCandidate.subjects, ["poetry-music"]);
     assert.deepEqual(finalCandidate.formats, ["experimental-event"]);
+    assert.equal(finalCandidate.locationDisclosure, "after_registration");
     assert.equal(finalCandidate.publicEntryId, "");
+
+    const verified = await admin(db, `/candidates/${payload.candidate.id}`, {
+      method:"PATCH",
+      body:{ verificationState:"verified", verificationNotes:"Studio confirmed the official ticket listing and delayed address policy." },
+    });
+    assert.equal(verified.status, 200, await verified.clone().text());
+    const approved = await admin(db, `/candidates/${payload.candidate.id}/approve`, { method:"POST", body:{} });
+    assert.equal(approved.status, 200, await approved.clone().text());
+    const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+    const publicEvent = publicPayload.events.find((event) => event.title === "Lil Yachty Presents: Game Night");
+    assert.ok(publicEvent);
+    assert.equal(publicEvent.locationDisclosure, "after_registration");
+    assert.equal(publicEvent.venueName, "");
+    assert.equal(publicEvent.venueAddress, "");
+    assert.equal(publicEvent.planning.eligible, false);
+    assert.ok(publicEvent.planning.ineligibleReasons.includes("address_after_registration"));
+    const ics = await (await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEvent.id)}.ics`), env(db))).text();
+    assert.match(ics, /LOCATION:Location revealed after registration/);
+    assert.match(ics, /X-SIXWELL-LOCATION-DISCLOSURE:AFTER-REGISTRATION/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -6390,6 +6422,9 @@ test("Calendar Studio shows publication blockers and defaults events and occurre
   assert.doesNotMatch(calendarLib,/errors\.push\(\.\.\.publicCopyErrors/);
   assert.match(studio,/accessStatus:"public", accessNotes:"", audiences:\["Public"\]/);
   assert.match(studio,/Conflicting access information/);
+  assert.match(studio,/candidateLocationDisclosure/);
+  assert.match(studio,/Revealed after registration/);
+  assert.match(studio,/address_after_registration:"Location revealed after registration"/);
   assert.match(studio,/Not ready to publish/);
   assert.match(studio,/data-action="approve"' \+ \(canPublish\?'':' disabled'\)/);
   assert.match(studio,/Every event and related schedule item is eligible by default/);
@@ -6711,6 +6746,12 @@ test("public and Studio exhibition interfaces distinguish closing dates, confirm
   assert.match(publicRecord,/Gallery hours/);
 });
 
+test("public calendar renders delayed venue disclosure without a map link", () => {
+  const publicRecord = readFileSync(join(ROOT,"js","atlanta-calendar-record.js"),"utf8");
+  assert.match(publicRecord,/event\.locationDisclosure === "after_registration"/);
+  assert.match(publicRecord,/Location revealed after registration/);
+});
+
 test("migration 0169 consolidates duplicate Where Being Takes Root public records without inventing a closing date", async () => {
   const db = databaseThrough("0168_calendar_closing_reception_occurrences.sql");
   for (const id of ["cal_candidate_sound_vision","cal_candidate_lost_shadows"]) {
@@ -6728,4 +6769,243 @@ test("migration 0169 consolidates duplicate Where Being Takes Root public record
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE lower(title)='where being takes root'").get().count, 1);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE lower(title)='where being takes root' AND status='duplicate' AND duplicate_of=?").get(survivor.id).count, 1);
   assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+});
+
+function eventiveFestivalFixture() {
+  const venues = [
+    { id:"venue-plaza", name:"Plaza Theatre", address:{ street_address:"1049 Ponce De Leon Ave NE", city:"Atlanta", region:"GA", postal_code:"30306" } },
+    { id:"venue-landmark", name:"Landmark Midtown Art Cinema", address:{ street_address:"931 Monroe Dr NE", city:"Atlanta", region:"GA", postal_code:"30308" } },
+  ];
+  const films = Array.from({ length:6 }, (_, index) => ({
+    id:`film-${index + 1}`, name:`Short Film ${index + 1}`,
+    details:{ runtime:8 + index, year:"2026", country:"US" },
+    credits:{ director:`Director ${index + 1}` }, tags:[{ name:index % 2 ? "Comedy" : "Drama" }],
+  }));
+  const core = Array.from({ length:67 }, (_, index) => {
+    const day = 24 + (index % 7);
+    const venue = venues[index % venues.length];
+    return {
+      id:`core-${index + 1}`, name:index === 0 ? "Opening Night Shorts" : `Festival Program ${index + 1}`,
+      short_description:index === 0 ? "A ticketed shorts block." : "An Out on Film festival screening.",
+      start_time:`2026-09-${String(day).padStart(2,"0")}T${String(12 + (index % 8)).padStart(2,"0")}:00:00-04:00`,
+      end_time:`2026-09-${String(day).padStart(2,"0")}T${String(13 + (index % 8)).padStart(2,"0")}:30:00-04:00`,
+      timezone:"America/New_York", venue, tickets_available:true,
+      public_url:`https://festival.outonfilm.org/schedule/core-${index + 1}`,
+      film_ids:index === 0 ? films.map((film) => film.id) : [], tags:[{ name:"Festival" }], status:"scheduled",
+    };
+  });
+  core.push({
+    id:"core-68", name:"Extended Virtual Program", short_description:"A distinct virtual availability window.",
+    start_time:"2026-10-06T00:00:00-04:00", end_time:"2026-10-09T23:59:00-04:00", timezone:"America/New_York",
+    venue:{ id:"venue-online", name:"Out on Film Virtual Cinema" }, virtual:true, tickets_available:true,
+    public_url:"https://festival.outonfilm.org/schedule/core-68", tags:[{ name:"Virtual" }], status:"scheduled",
+  });
+  const previews = [1,2].map((number) => ({
+    id:`preview-${number}`, name:`Out on Film Preview ${number}`, short_description:"A separately ticketed festival preview.",
+    start_time:`2026-09-${number === 1 ? "10" : "17"}T19:00:00-04:00`, end_time:`2026-09-${number === 1 ? "10" : "17"}T21:00:00-04:00`,
+    timezone:"America/New_York", venue:venues[number - 1], tickets_available:true,
+    public_url:`https://festival.outonfilm.org/schedule/preview-${number}`, tags:[{ name:"Preview" }], status:"scheduled",
+  }));
+  return { events:[...previews, ...core], films };
+}
+
+function eventiveFixtureFetch(fixture, options = {}) {
+  return async (input, init = {}) => {
+    const url = new URL(String(input));
+    assert.equal(init.headers.authorization, `Basic ${btoa("eventive-test-key:")}`);
+    if (options.authenticationFailure) return Response.json({ error:"invalid API key" }, { status:401 });
+    const resource = url.pathname.endsWith("/films") ? "films" : "events";
+    const values = fixture[resource];
+    const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+    if (options.pageFailure?.resource === resource && options.pageFailure?.page === page) {
+      return Response.json({ error:`simulated ${resource} page ${page} failure` }, { status:502 });
+    }
+    const pageSize = resource === "events" ? 50 : 4;
+    const pages = Math.max(1, Math.ceil(values.length / pageSize));
+    const slice = values.slice((page - 1) * pageSize, page * pageSize);
+    return Response.json({ [resource]:slice, pagination:{ page, pages, has_more:page < pages } });
+  };
+}
+
+async function runOutOnFilmSource(db, fetcher, includeKey = true) {
+  const response = await handleCalendarAdminApi(request("/api/admin/calendar/sources/cal_source_out_on_film_2026/run", { method:"POST", admin:true, body:{} }), env(db, {
+    ...(includeKey ? { EVENTIVE_API_KEY:"eventive-test-key" } : {}),
+    EVENTIVE_FETCH:fetcher,
+  }));
+  assert.equal(response.status, 200, await response.clone().text());
+  return response.json();
+}
+
+test("Eventive festival automation keeps 68 core programs, six shorts as metadata, and two previews as related candidates", async () => {
+  const db = database();
+  const fixture = eventiveFestivalFixture();
+  const fetcher = eventiveFixtureFetch(fixture);
+
+  await runOutOnFilmSource(db, fetcher);
+  assert.deepEqual(
+    { ...db.prepare("SELECT automation_state,complete_run_streak,last_program_count FROM calendar_source_automation WHERE source_id='cal_source_out_on_film_2026'").get() },
+    { automation_state:"shadow", complete_run_streak:1, last_program_count:68 },
+  );
+  const parent = db.prepare("SELECT id,status,collection_kind FROM calendar_candidates WHERE source_id='cal_source_out_on_film_2026' AND collection_kind='festival'").get();
+  assert.ok(parent);
+  assert.equal(parent.status, "candidate");
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id=?").get(parent.id).count, 68);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE source_id='cal_source_out_on_film_2026'").get().count, 3);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(parent.id).count, 0);
+  const shorts = db.prepare("SELECT program_items_json FROM calendar_candidate_occurrences WHERE candidate_id=? AND source_event_id='eventive-event-core-1'").get(parent.id);
+  assert.equal(JSON.parse(shorts.program_items_json).length, 6);
+  assert.deepEqual(
+    db.prepare("SELECT collection_relation,parent_collection_candidate_id FROM calendar_candidates WHERE source_id='cal_source_out_on_film_2026' AND collection_relation='preview' ORDER BY title").all().map((row) => ({ ...row })),
+    [{ collection_relation:"preview", parent_collection_candidate_id:parent.id }, { collection_relation:"preview", parent_collection_candidate_id:parent.id }],
+  );
+
+  await runOutOnFilmSource(db, fetcher);
+  assert.deepEqual(
+    { ...db.prepare("SELECT automation_state,complete_run_streak,last_program_count FROM calendar_source_automation WHERE source_id='cal_source_out_on_film_2026'").get() },
+    { automation_state:"active", complete_run_streak:2, last_program_count:68 },
+  );
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=? AND status='published'").get(parent.id).count, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entry_occurrences WHERE entry_id=(SELECT id FROM calendar_entries WHERE candidate_id=?) AND status='published'").get(parent.id).count, 68);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE collection_relation='preview' AND status='published'").get().count, 2);
+
+  const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+  const publicFestival = publicPayload.series.find((event) => event.collectionKind === "festival");
+  assert.ok(publicFestival);
+  assert.equal(publicFestival.relatedOccurrences.length, 68);
+  assert.equal(publicFestival.relatedOccurrences.find((item) => item.title.includes("Opening Night Shorts")).programItems.length, 6);
+
+  await runOutOnFilmSource(db, fetcher);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE source_id='cal_source_out_on_film_2026'").get().count, 3);
+  assert.equal(db.prepare("SELECT COUNT(DISTINCT source_event_id) count FROM calendar_candidate_occurrences WHERE candidate_id=?").get(parent.id).count, 68);
+});
+
+test("Eventive incomplete, missing-key, and authentication snapshots freeze canonical and public festival data", async () => {
+  const db = database();
+  const fixture = eventiveFestivalFixture();
+  const fetcher = eventiveFixtureFetch(fixture);
+  await runOutOnFilmSource(db, fetcher);
+  await runOutOnFilmSource(db, fetcher);
+  const parent = db.prepare("SELECT id,public_entry_id FROM calendar_candidates WHERE source_id='cal_source_out_on_film_2026' AND collection_kind='festival'").get();
+  const sequence = db.prepare("SELECT sequence FROM calendar_entries WHERE id=?").get(parent.public_entry_id).sequence;
+
+  await runOutOnFilmSource(db, fetcher, false);
+  assert.equal(db.prepare("SELECT authoritative_access FROM calendar_source_automation WHERE source_id='cal_source_out_on_film_2026'").get().authoritative_access, "missing");
+  assert.equal(db.prepare("SELECT sequence FROM calendar_entries WHERE id=?").get(parent.public_entry_id).sequence, sequence);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entry_occurrences WHERE entry_id=? AND status='published'").get(parent.public_entry_id).count, 68);
+
+  await runOutOnFilmSource(db, eventiveFixtureFetch(fixture, { authenticationFailure:true }));
+  assert.equal(db.prepare("SELECT authoritative_access FROM calendar_source_automation WHERE source_id='cal_source_out_on_film_2026'").get().authoritative_access, "failed");
+  assert.equal(db.prepare("SELECT sequence FROM calendar_entries WHERE id=?").get(parent.public_entry_id).sequence, sequence);
+
+  db.prepare("UPDATE calendar_sources SET adapter_config_json=json_set(adapter_config_json,'$.maxPrograms',70) WHERE id='cal_source_out_on_film_2026'").run();
+  await runOutOnFilmSource(db, fetcher);
+  const snapshot = db.prepare("SELECT authoritative,completeness,program_count FROM calendar_source_sync_snapshots WHERE source_id='cal_source_out_on_film_2026' ORDER BY created_at DESC,id DESC LIMIT 1").get();
+  assert.deepEqual({ ...snapshot }, { authoritative:1, completeness:"needs_verification", program_count:68 });
+  assert.equal(db.prepare("SELECT sequence FROM calendar_entries WHERE id=?").get(parent.public_entry_id).sequence, sequence);
+});
+
+test("Eventive page-two failure after 50 programs preserves the 68-program last-known-good schedule", async () => {
+  const db = database();
+  const fixture = eventiveFestivalFixture();
+  const completeFetcher = eventiveFixtureFetch(fixture);
+  await runOutOnFilmSource(db, completeFetcher);
+  await runOutOnFilmSource(db, completeFetcher);
+  const parent = db.prepare("SELECT id,public_entry_id FROM calendar_candidates WHERE source_id='cal_source_out_on_film_2026' AND collection_kind='festival'").get();
+  const before = {
+    sequence:db.prepare("SELECT sequence FROM calendar_entries WHERE id=?").get(parent.public_entry_id).sequence,
+    candidatePrograms:db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id=?").get(parent.id).count,
+    publicPrograms:db.prepare("SELECT COUNT(*) count FROM calendar_entry_occurrences WHERE entry_id=? AND status='published'").get(parent.public_entry_id).count,
+  };
+
+  const partial = await runOutOnFilmSource(db, eventiveFixtureFetch(fixture, {
+    pageFailure:{ resource:"events", page:2 },
+  }));
+  const outcome = partial.outcomes.find((item) => item.channel === "direct").sources
+    .find((source) => source.sourceId === "cal_source_out_on_film_2026");
+  assert.equal(outcome.status, "warning");
+  assert.equal(outcome.completeness, "needs_verification");
+  assert.match(outcome.warning, /page 2 failure/i);
+  assert.deepEqual({
+    sequence:db.prepare("SELECT sequence FROM calendar_entries WHERE id=?").get(parent.public_entry_id).sequence,
+    candidatePrograms:db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id=?").get(parent.id).count,
+    publicPrograms:db.prepare("SELECT COUNT(*) count FROM calendar_entry_occurrences WHERE entry_id=? AND status='published'").get(parent.public_entry_id).count,
+  }, before);
+  assert.deepEqual(
+    { ...db.prepare("SELECT authoritative,completeness,program_count FROM calendar_source_sync_snapshots WHERE source_id='cal_source_out_on_film_2026' ORDER BY created_at DESC,id DESC LIMIT 1").get() },
+    { authoritative:0, completeness:"needs_verification", program_count:0 },
+  );
+});
+
+test("Eventive holds one invalid program privately without blocking 67 eligible programs", async () => {
+  const db = database();
+  const fixture = eventiveFestivalFixture();
+  fixture.events.find((event) => event.id === "core-2").venue = { id:"venue-incomplete", name:"Venue to be announced" };
+  const fetcher = eventiveFixtureFetch(fixture);
+  await runOutOnFilmSource(db, fetcher);
+  await runOutOnFilmSource(db, fetcher);
+  const parent = db.prepare("SELECT id,public_entry_id FROM calendar_candidates WHERE source_id='cal_source_out_on_film_2026' AND collection_kind='festival'").get();
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id=? AND include_public=0").get(parent.id).count, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entry_occurrences WHERE entry_id=? AND status='published'").get(parent.public_entry_id).count, 67);
+  const publicFestival = (await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json()).series.find((event) => event.collectionKind === "festival");
+  assert.equal(publicFestival.relatedOccurrences.length, 67);
+  const ics = await (await handleCalendarFeed(request("/api/calendar.ics"), env(db))).text();
+  assert.doesNotMatch(ics, /Festival Program 2/);
+});
+
+test("Eventive applies ticket changes and explicit cancellations, confirms disappearance twice, and pauses large topology drops", async () => {
+  const db = database();
+  const fixture = eventiveFestivalFixture();
+  let fetcher = eventiveFixtureFetch(fixture);
+  await runOutOnFilmSource(db, fetcher);
+  await runOutOnFilmSource(db, fetcher);
+  const parent = db.prepare("SELECT id,public_entry_id FROM calendar_candidates WHERE source_id='cal_source_out_on_film_2026' AND collection_kind='festival'").get();
+
+  const soldOut = fixture.events.find((event) => event.id === "core-3");
+  soldOut.tickets_available = false;
+  soldOut.ticket_buckets = [{ public:true, quantity_remaining:0, unlimited:false }];
+  fixture.events.find((event) => event.id === "core-4").status = "cancelled";
+  await runOutOnFilmSource(db, fetcher);
+  assert.equal(db.prepare("SELECT ticket_status FROM calendar_entry_occurrences WHERE entry_id=? AND candidate_occurrence_id=(SELECT id FROM calendar_candidate_occurrences WHERE candidate_id=? AND source_event_id='eventive-event-core-3')").get(parent.public_entry_id,parent.id).ticket_status, "sold_out");
+  assert.equal(db.prepare("SELECT status FROM calendar_entry_occurrences WHERE entry_id=? AND candidate_occurrence_id=(SELECT id FROM calendar_candidate_occurrences WHERE candidate_id=? AND source_event_id='eventive-event-core-4')").get(parent.public_entry_id,parent.id).status, "cancelled");
+  assert.match(db.prepare("SELECT latest_exception_summary FROM calendar_source_automation WHERE source_id='cal_source_out_on_film_2026'").get().latest_exception_summary, /cancellation has been applied/i);
+
+  fixture.events = fixture.events.filter((event) => event.id !== "core-10");
+  fetcher = eventiveFixtureFetch(fixture);
+  await runOutOnFilmSource(db, fetcher);
+  assert.deepEqual(
+    { ...db.prepare("SELECT source_presence_state,missing_complete_runs,status FROM calendar_candidate_occurrences WHERE candidate_id=? AND source_event_id='eventive-event-core-10'").get(parent.id) },
+    { source_presence_state:"missing_once", missing_complete_runs:1, status:"scheduled" },
+  );
+  await runOutOnFilmSource(db, fetcher);
+  assert.deepEqual(
+    { ...db.prepare("SELECT source_presence_state,missing_complete_runs,status FROM calendar_candidate_occurrences WHERE candidate_id=? AND source_event_id='eventive-event-core-10'").get(parent.id) },
+    { source_presence_state:"confirmed_removed", missing_complete_runs:2, status:"cancelled" },
+  );
+
+  const guardDb = database();
+  const guardFixture = eventiveFestivalFixture();
+  await runOutOnFilmSource(guardDb, eventiveFixtureFetch(guardFixture));
+  await runOutOnFilmSource(guardDb, eventiveFixtureFetch(guardFixture));
+  guardFixture.events = guardFixture.events.filter((event) => !["core-1","core-2","core-3","core-4","core-5","core-6","core-7"].includes(event.id));
+  await runOutOnFilmSource(guardDb, eventiveFixtureFetch(guardFixture));
+  assert.equal(db.prepare("SELECT automation_state FROM calendar_source_automation WHERE source_id='cal_source_out_on_film_2026'").get().automation_state, "active");
+  assert.equal(guardDb.prepare("SELECT automation_state FROM calendar_source_automation WHERE source_id='cal_source_out_on_film_2026'").get().automation_state, "paused");
+  const guardParent = guardDb.prepare("SELECT id FROM calendar_candidates WHERE source_id='cal_source_out_on_film_2026' AND collection_kind='festival'").get();
+  assert.equal(guardDb.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id=?").get(guardParent.id).count, 68);
+});
+
+test("festival interfaces expose digest, exception queue, Eventive controls, and semantic public labels", () => {
+  const studioHtml = readFileSync(join(ROOT,"studio","calendar","index.html"),"utf8");
+  const studio = readFileSync(join(ROOT,"studio","calendar","calendar.js"),"utf8");
+  const studioCss = readFileSync(join(ROOT,"studio","calendar","calendar.css"),"utf8");
+  const publicRecord = readFileSync(join(ROOT,"js","atlanta-calendar-record.js"),"utf8");
+  assert.match(studioHtml,/id="festivalExceptionList"/);
+  assert.match(studio,/function festivalDigest\(candidate\)/);
+  assert.match(studio,/Eventive festival/);
+  assert.match(studio,/sourceAutomationMode-/);
+  assert.match(studio,/Include this program publicly/);
+  assert.match(studio,/seriesUsesOccurrenceVenues/);
+  assert.match(studioCss,/\.festival-digest \{[^}]*border:5px solid var\(--accent\);/);
+  assert.match(studioCss,/\.festival-exceptions \{[^}]*border:5px solid var\(--line\);/);
+  assert.match(publicRecord,/event\.collectionKind === "festival" \? \["Festival"\]/);
 });

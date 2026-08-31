@@ -96,7 +96,7 @@ approved public record.
 Report in the scheduled chat only when the handoff returns at least one item in
 `strongPicks`. For each returned title, present the event name, date and time,
 venue, announcement or ticket link, concise fit explanation, and its best use as
-Inspiration, Attend/Network, Future Cult.ATL Programming, Future Six.Well
+Inspiration, Attend/Network, Future GREEN[FIELD] Programming, Future Six.Well
 Programming, or a combination. Call out unusually strong programming models and
 potential collaborators. Clearly label candidates returned with
 `verificationState: "needs_verification"` and summarize what Saiel must confirm

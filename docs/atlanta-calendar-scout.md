@@ -37,6 +37,35 @@ Each scheduled run has two independent lanes:
 If the OpenAI secret is absent, the direct-source lane continues and the Studio
 reports broad discovery as disabled.
 
+## Festival automation
+
+Registered festival sources use the same candidate and occurrence boundary as
+other series, with `collectionKind: festival` preserving the public semantic.
+One festival parent owns separately ticketed programs as occurrences. Films
+inside a shorts program remain `programItems` metadata, while previews and
+other events outside the core festival window remain separate related
+candidates.
+
+The Eventive connector reads `EVENTIVE_API_KEY` only from the Worker secret
+environment. The value is never written to D1, returned by an API, or rendered
+in Studio; Studio receives only an availability boolean. API snapshots are
+authoritative only when authentication, pagination, topology validation, and
+the configured program bound all complete. Browser extraction is diagnostic
+only and cannot change candidates or public entries.
+
+Festival sources start in shadow mode. Two complete API snapshots with the same
+hierarchy fingerprint activate automatic promotion. Missing or malformed rows
+are held with occurrence-level `includePublic: false`; valid programs may still
+publish. Explicit cancellations apply on the next complete run. A disappeared
+program is cancelled only after two complete absences, and a drop larger than
+five programs or ten percent pauses promotion for admin review.
+
+The direct connector wakes every six hours. Eventive sources are filtered to a
+weekly off-season cadence, daily after a complete schedule is available or
+inside 45 days, and every six hours from three days before opening through the
+physical and virtual festival window. Routine admin check-ins use Studio's
+Festival Exceptions queue rather than reviewing healthy sources.
+
 ## Approval boundary
 
 Every result becomes a private `calendar_candidate`. Private notes live in a
@@ -89,7 +118,9 @@ arguments.
 
 ## Release gate
 
-Migration `0129_atlanta_calendar.sql`, the `OPENAI_API_KEY` Worker secret, the
+Migration `0129_atlanta_calendar.sql`, migration
+`0201_calendar_festival_automation.sql`, the `OPENAI_API_KEY` and
+`EVENTIVE_API_KEY` Worker secrets, the
 dedicated `CALENDAR_SCOUT_INGEST_TOKEN`, and the Worker/static deployment must be
 released only after explicit production approval. Keys must be configured as
 Worker secrets and must never be added to `wrangler.jsonc`, source code, logs,

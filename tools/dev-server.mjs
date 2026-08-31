@@ -102,7 +102,7 @@ const checkRoutes = [
   ["/events/calendar/", 200],
   ["/calendar/", 200],
   ["/studio/calendar/", 200],
-  ["/events/cultandshift/", 200],
+  ["/events/greenfield/", 200],
   ["/events/open-studios/", 200],
   ["/events/solehmans-new-year/", 200],
   ["/events/signal-symbol/", 200],

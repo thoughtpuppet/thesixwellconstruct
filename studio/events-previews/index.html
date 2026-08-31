@@ -119,26 +119,26 @@
         </div>
       </div>
       <div class="page-card">
-        <h3>Cult &amp; Shift Ticket Page</h3>
+        <h3>GREEN[FIELD] Ticket Page</h3>
         <p>Recurring showcase page with the audience ticket lane beside the performer request lane.</p>
         <div class="state-links">
-          <a href="/events/cultandshift/?preview=1">Open / Booking</a>
-          <a href="/events/cultandshift/?preview=1&amp;state=free">Free Registration</a>
-          <a href="/events/cultandshift/?preview=1&amp;state=soldout">Sold Out</a>
-          <a href="/events/cultandshift/?preview=1&amp;state=closed">Tickets Closed</a>
-          <a href="/events/cultandshift/?preview=1&amp;state=error">Load Error</a>
-          <a href="/events/cultandshift/">Open Live Page</a>
+          <a href="/events/greenfield/?preview=1">Open / Booking</a>
+          <a href="/events/greenfield/?preview=1&amp;state=free">Free Registration</a>
+          <a href="/events/greenfield/?preview=1&amp;state=soldout">Sold Out</a>
+          <a href="/events/greenfield/?preview=1&amp;state=closed">Tickets Closed</a>
+          <a href="/events/greenfield/?preview=1&amp;state=error">Load Error</a>
+          <a href="/events/greenfield/">Open Live Page</a>
         </div>
       </div>
       <div class="page-card">
-        <h3>Cult &amp; Shift Open Mic Request</h3>
+        <h3>GREEN[FIELD] Open Mic Request</h3>
         <p>Public performer lane: request form, preferred slot field, success copy, and failure copy.</p>
         <div class="state-links">
-          <a href="/events/cultandshift/?preview=1#open-mic">Blank Form</a>
-          <a href="/events/cultandshift/?preview=1&amp;mic=filled#open-mic">Filled Form</a>
-          <a href="/events/cultandshift/?preview=1&amp;mic=success#open-mic">Success State</a>
-          <a href="/events/cultandshift/?preview=1&amp;mic=error#open-mic">Error State</a>
-          <a href="/events/cultandshift/#open-mic">Open Live Page</a>
+          <a href="/events/greenfield/?preview=1#open-mic">Blank Form</a>
+          <a href="/events/greenfield/?preview=1&amp;mic=filled#open-mic">Filled Form</a>
+          <a href="/events/greenfield/?preview=1&amp;mic=success#open-mic">Success State</a>
+          <a href="/events/greenfield/?preview=1&amp;mic=error#open-mic">Error State</a>
+          <a href="/events/greenfield/#open-mic">Open Live Page</a>
         </div>
       </div>
     </div>
@@ -164,13 +164,13 @@
         </div>
       </div>
       <div class="page-card">
-        <h3>Cult &amp; Shift Confirmation</h3>
-        <p>The same confirmation states rendered as a Cult &amp; Shift ticket.</p>
+        <h3>GREEN[FIELD] Confirmation</h3>
+        <p>The same confirmation states rendered as a GREEN[FIELD] ticket.</p>
         <div class="state-links">
-          <a href="/events/confirmed/?preview=1&amp;event=cultandshift&amp;state=paid">Paid</a>
-          <a href="/events/confirmed/?preview=1&amp;event=cultandshift&amp;state=pending">Pending</a>
-          <a href="/events/confirmed/?preview=1&amp;event=cultandshift&amp;state=cancelled">Cancelled</a>
-          <a href="/events/confirmed/?preview=1&amp;event=cultandshift&amp;state=error">Error</a>
+          <a href="/events/confirmed/?preview=1&amp;event=greenfield&amp;state=paid">Paid</a>
+          <a href="/events/confirmed/?preview=1&amp;event=greenfield&amp;state=pending">Pending</a>
+          <a href="/events/confirmed/?preview=1&amp;event=greenfield&amp;state=cancelled">Cancelled</a>
+          <a href="/events/confirmed/?preview=1&amp;event=greenfield&amp;state=error">Error</a>
         </div>
       </div>
     </div>
@@ -192,12 +192,12 @@
         </div>
       </div>
       <div class="page-card">
-        <h3>Cult &amp; Shift Operator Lane</h3>
+        <h3>GREEN[FIELD] Operator Lane</h3>
         <p>Events console view with attendee RSVPs and the separate open-mic signup panel.</p>
         <div class="state-links">
           <a href="/studio/submissions/">Open Events Console</a>
-          <a href="/events/cultandshift/?preview=1&amp;mic=filled#open-mic">Seed Request Preview</a>
-          <a href="/events/cultandshift/">Open Live Page</a>
+          <a href="/events/greenfield/?preview=1&amp;mic=filled#open-mic">Seed Request Preview</a>
+          <a href="/events/greenfield/">Open Live Page</a>
         </div>
       </div>
     </div>
@@ -218,15 +218,15 @@
 (function(){
   const NAME = "Jordan Rivera";
   const EVENT_TITLE = "Signal & Symbol";
-  const CULT_TITLE = "Cult & Shift";
+  const GREENFIELD_TITLE = "GREEN[FIELD]";
   const WHEN = "Saturday, July 25, 2026 at 7:00 PM EDT";
-  const CULT_WHEN = "Saturday, August 8, 2026 at 8:00 PM EDT";
-  const CULT_SLOT = "Saturday, August 8, 2026 at 8:45 PM EDT";
+  const GREENFIELD_WHEN = "Saturday, August 8, 2026 at 8:00 PM EDT";
+  const GREENFIELD_SLOT = "Saturday, August 8, 2026 at 8:45 PM EDT";
   const LOCATION = "the six.well construct — location shared after booking";
   const SEATS = 2;
   const TICKET_URL = "https://thesixwellconstruct.com/events/confirmed/?ticket=demo-ticket";
   const CALENDAR_URL = "https://thesixwellconstruct.com/api/events/tickets/demo-ticket/calendar";
-  const CULT_URL = "https://thesixwellconstruct.com/events/cultandshift/";
+  const GREENFIELD_URL = "https://thesixwellconstruct.com/events/greenfield/";
 
   const templates = [
     {
@@ -305,20 +305,20 @@
     },
     {
       key: "event_open_mic_slot",
-      subject: `${CULT_TITLE} open mic slot`,
+      subject: `${GREENFIELD_TITLE} open mic slot`,
       body: [
         `Hi ${NAME},`,
         "",
-        `Your open-mic slot for ${CULT_TITLE} is scheduled.`,
+        `Your open-mic slot for ${GREENFIELD_TITLE} is scheduled.`,
         "",
-        `Event: ${CULT_WHEN}`,
-        `Your slot: ${CULT_SLOT}`,
+        `Event: ${GREENFIELD_WHEN}`,
+        `Your slot: ${GREENFIELD_SLOT}`,
         "Planned slot length: 5 minutes",
         `Where: ${LOCATION}`,
         "",
         "Please arrive early enough to check in before your slot. Bring anything you need for your piece, and reply to this email if your setup changes.",
         "",
-        `Event page: ${CULT_URL}`,
+        `Event page: ${GREENFIELD_URL}`,
         "",
         "See you there,",
         "the six.well construct",

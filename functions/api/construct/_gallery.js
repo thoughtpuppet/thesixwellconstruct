@@ -277,16 +277,50 @@ async function replaceGalleryAssignments(database, mediaId, lensIds, setIds) {
   await database.batch(statements);
 }
 
+async function publishGallerySelection(database, mediaIds) {
+  const published = [], failed = [];
+  for (const mediaId of mediaIds) {
+    const entry = await database.prepare(`SELECT gallery.media_id,gallery.display_media_id,gallery.title,media.original_filename,media.mime_type,catalogue.catalogue_id
+      FROM gallery_entries gallery
+      JOIN media_assets media ON media.id=gallery.media_id
+      JOIN media_catalogue_entries catalogue ON catalogue.media_id=gallery.media_id
+      WHERE gallery.media_id=?`).bind(mediaId).first();
+    if (!entry) { failed.push({ media_id: mediaId, error: "Gallery entry not found." }); continue; }
+    const derivative = await database.prepare("SELECT derivative_media_id FROM media_asset_variants WHERE master_media_id=? AND purpose='public-display'").bind(entry.display_media_id).first();
+    const displayMediaId = derivative?.derivative_media_id || entry.display_media_id;
+    const title = text(entry.title,300) || fileStem(entry.original_filename) || `Untitled ${mediaType(entry.mime_type)} ${accession(entry.catalogue_id)}`;
+    try {
+      await database.batch([
+        database.prepare("UPDATE media_assets SET state='active',privacy='public',public_presentation='inline',updated_at=datetime('now') WHERE id=?").bind(displayMediaId),
+        database.prepare(`UPDATE gallery_entries SET display_media_id=?,title=?,date_precision=CASE WHEN date_precision='unreviewed' THEN 'undated' ELSE date_precision END,state='published',published_at=COALESCE(published_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE media_id=?`).bind(displayMediaId,title,mediaId),
+      ]);
+      published.push(mediaId);
+    } catch (error) {
+      failed.push({ media_id: mediaId, error: /published gallery entry requires/i.test(String(error?.message||error)) ? "A title and eligible display asset are required." : "Publishing failed." });
+    }
+  }
+  return { published, failed };
+}
+
 export async function handleGalleryAdmin(request, env, path) {
   const setItemsMatch = path.match(/^\/api\/admin\/gallery-sets\/([^/]+)\/items$/);
   const setMatch = path.match(/^\/api\/admin\/gallery-sets(?:\/([^/]+))?$/);
+  const batchMatch = path === "/api/admin/gallery/batch";
   const entryMatch = path.match(/^\/api\/admin\/gallery(?:\/([^/]+))?(?:\/(publish|hide|archive))?$/);
-  if (!setItemsMatch && !setMatch && !entryMatch && path !== "/api/admin/gallery-lenses") return null;
+  if (!setItemsMatch && !setMatch && !entryMatch && !batchMatch && path !== "/api/admin/gallery-lenses") return null;
   const database = db(env);
   if (path === "/api/admin/gallery-lenses") {
     if (request.method !== "GET") return failure("Method not allowed.", 405);
     const records = (await database.prepare("SELECT * FROM gallery_lenses WHERE state='active' ORDER BY sort_order,name").all()).results || [];
     return json({ records, count: records.length });
+  }
+  if (batchMatch) {
+    if (request.method !== "POST") return failure("Method not allowed.",405);
+    const body = await readJson(request), mediaIds = uniqueIds(body?.media_ids,500);
+    if (!mediaIds.length) return failure("Select at least one Gallery entry.");
+    if (text(body?.action,40) !== "publish") return failure("Choose the publish batch action.");
+    const result = await publishGallerySelection(database,mediaIds);
+    return json({ ok:result.failed.length===0, ...result, count:result.published.length });
   }
   if (setItemsMatch) {
     if (request.method !== "PUT") return failure("Method not allowed.", 405);
@@ -354,9 +388,14 @@ export async function handleGalleryAdmin(request, env, path) {
   if (!mediaId) return failure("Choose a Gallery entry.");
   const before = await database.prepare("SELECT * FROM gallery_entries WHERE media_id=?").bind(mediaId).first(); if (!before) return failure("Gallery entry not found.",404);
   if (request.method === "POST" && action) {
-    const state = action === "publish" ? "published" : action === "hide" ? "hidden" : "archived";
+    if (action === "publish") {
+      const result = await publishGallerySelection(database,[mediaId]);
+      if (result.failed.length) return failure(result.failed[0].error,409);
+      return json({ record:presentAdminMedia(await adminMediaRow(database,mediaId)) });
+    }
+    const state = action === "hide" ? "hidden" : "archived";
     try { await database.prepare(`UPDATE gallery_entries SET state=?,published_at=CASE WHEN ?='published' THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE media_id=?`).bind(state,state,mediaId).run(); }
-    catch (error) { if (/published gallery entry requires/i.test(String(error?.message||error))) return failure("Complete the title, accessibility, rights, date review, and public display asset before publishing.",409); throw error; }
+    catch (error) { if (/published gallery entry requires/i.test(String(error?.message||error))) return failure("Complete the title, date review, and public display asset before publishing.",409); throw error; }
     return json({ record:presentAdminMedia(await adminMediaRow(database,mediaId)) });
   }
   if (request.method === "PATCH" && !action) {
@@ -372,7 +411,7 @@ export async function handleGalleryAdmin(request, env, path) {
         const existingSets = setIds || (await database.prepare("SELECT set_id FROM gallery_set_items WHERE media_id=? ORDER BY sort_order").bind(mediaId).all()).results.map((row)=>row.set_id);
         await replaceGalleryAssignments(database,mediaId,existingLenses,existingSets);
       }
-    } catch (error) { if (/published gallery entry requires/i.test(String(error?.message||error))) return failure("Complete the title, accessibility, rights, date review, and public display asset before publishing.",409); throw error; }
+    } catch (error) { if (/published gallery entry requires/i.test(String(error?.message||error))) return failure("Complete the title, date review, and public display asset before publishing.",409); throw error; }
     const record=presentAdminMedia(await adminMediaRow(database,mediaId));
     return json({record:(await hydrateAdminAssociations(database,[record]))[0]});
   }

@@ -3169,13 +3169,13 @@ export async function notifyEventOpenMicSlotAssigned(env, request, signupRow, ev
   if (!email) return { ok: false, skipped: true };
 
   const event = eventRow || {};
-  const title = event.title || event.event_title || "Cult & Shift";
+  const title = event.title || event.event_title || "GREEN[FIELD]";
   const eventWhen = event.starts_at || event.startsAt || "";
   const eventLocation = event.location || "";
   const assignedSlot = signupRow.assigned_slot || signupRow.assignedSlot || "";
   const duration = Number(signupRow.slot_duration_minutes || signupRow.slotDurationMinutes || 5);
   const performerName = signupRow.performer_name || signupRow.performerName || "there";
-  const showUrl = publicUrl(env, request, `/events/${encodeURIComponent(event.slug || "cultandshift")}/`);
+  const showUrl = publicUrl(env, request, `/events/${encodeURIComponent(event.slug || "greenfield")}/`);
   const message = buildEventOpenMicSlotEmail({
     subject: `${title} open mic slot`,
     title,

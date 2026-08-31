@@ -37,6 +37,9 @@ ARCHIVE_VIEWER_ORIGIN=http://127.0.0.1:8788
 # scheduled handoffs. Never reuse the full Studio admin token here.
 CALENDAR_SCOUT_INGEST_TOKEN=replace-with-a-different-long-random-token
 CALENDAR_SCOUT_INGEST_URL=https://thesixwellconstruct.com/api/admin/calendar/strong-picks
+# Authenticated Eventive festival API access. Production must use a Worker
+# secret; Studio receives only a configured/not-configured boolean.
+EVENTIVE_API_KEY=replace-with-your-private-eventive-api-key
 # Studio site analytics reads the existing Cloudflare Web Analytics RUM data
 # and the custom swc_site_analytics Analytics Engine dataset with one narrowly
 # scoped Account Analytics Read token. The site tag is the public token already

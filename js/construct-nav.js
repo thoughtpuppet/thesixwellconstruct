@@ -59,7 +59,7 @@
     ],
     merch: [
       ['six.well clothing', '/merch/?filter=six.well'], ['art.pill tattoo supply', '/merch/?filter=art.pill'],
-      ['thoughtpuppet artifacts', '/merch/?filter=thoughtpuppet'], ['CULT[&SHIFT] merch', '/merch/?filter=cultiv'],
+      ['thoughtpuppet artifacts', '/merch/?filter=thoughtpuppet'], ['GREEN[FIELD] merch', '/merch/?filter=greenfield'],
       ['all merch', '/merch/'],
     ],
     about: [
@@ -69,7 +69,7 @@
       ['method', '/about/#library'], ['faq', '/about/#faq'], ['Legend', '/about/legend/'],
     ],
     events: [
-      ['CULT[&SHIFT]', '/events/cultandshift/'], ['Signal & Symbol', '/events/signal-symbol/'],
+      ['GREEN[FIELD]', '/events/greenfield/'], ['Signal & Symbol', '/events/signal-symbol/'],
       ['Atlanta calendar', '/calendar/'], ['rent the studio', '/booking/studio/'],
       ['archive', '/archive/events/'], ["solehman's new years", '/events/solehmans-new-year/'],
       ['SS&F live audience', '/events/ss-and-f-live-audience/'], ['open studios', '/events/open-studios/'],

@@ -38,6 +38,26 @@ test("construct Archive opening delegates to Studio history and keeps a direct f
   assert.match(manager, /archiveButton\.dataset\.openArchiveRecord=entityId;archiveButton\.hidden=false/);
 });
 
+test("Archive dossier lists support review-first bulk publication without exposing private media", () => {
+  const manager = source("studio", "construct-manager.js");
+  const styles = source("studio", "construct-manager.css");
+  const studio = source("studio", "submissions", "index.html");
+
+  assert.match(manager, /bulkDossierPublication:"\/api\/admin\/archive-dossiers\/bulk-publication"/);
+  assert.match(manager, /data-dossier-select-visible>Select visible drafts/);
+  assert.match(manager, /data-dossier-select-all>Select all drafts/);
+  assert.match(manager, /data-dossier-review disabled>Review selected/);
+  assert.match(manager, /data-dossier-publish disabled>Publish ready/);
+  assert.match(manager, /mode:"preflight",entity_ids:\[\.\.\.selected\]/);
+  assert.match(manager, /mode:"publish",entity_ids:ids/);
+  assert.match(manager, /Blocked records and private Digital assets will remain unchanged/);
+  assert.match(manager, /reviewedSelectionKey!==selectionKey\(\)/);
+  assert.match(styles, /\.cm-dossier-bulk\{[^}]*border:5px solid/);
+  assert.match(styles, /\.cm-dossier-bulk-result\{[^}]*border:5px solid/);
+  assert.match(studio, /construct-manager\.css\?v=20260831-bulk-archive-publication/);
+  assert.match(studio, /construct-manager\.js\?v=20260831-bulk-archive-publication/);
+});
+
 test("Merch cards preserve their existing controls and add the same Archive action", () => {
   const manager = source("studio", "merch-manager.js");
   const constructManager = source("studio", "construct-manager.js");

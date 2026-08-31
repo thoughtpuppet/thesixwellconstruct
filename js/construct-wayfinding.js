@@ -27,6 +27,7 @@
     custom: 'Custom inquiry',
     day: 'Day-of prep',
     flash: 'Flash',
+    greenfield: 'GREEN[FIELD]',
     inquire: 'Inquire',
     location: 'Location',
     parking: 'Parking',

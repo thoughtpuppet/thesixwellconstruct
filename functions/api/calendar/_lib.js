@@ -3,9 +3,13 @@ const FORMATS = new Set(["exhibition", "screening", "performance", "experimental
 const CANDIDATE_STATUSES = new Set(["candidate", "published", "rejected", "cancelled", "duplicate", "needs_verification"]);
 const DATE_KINDS = new Set(["timed", "all_day", "date_range"]);
 const EVENT_STRUCTURES = new Set(["single", "series", "exhibition"]);
+const COLLECTION_KINDS = new Set(["none", "festival"]);
+const COLLECTION_RELATIONS = new Set(["none", "preview", "related_event"]);
 const OCCURRENCE_TYPES = new Set(["opening_reception", "closing_reception", "artist_talk", "mixer", "screening", "performance", "workshop", "panel", "lecture", "other"]);
 const OCCURRENCE_STATUSES = new Set(["scheduled", "tbd", "cancelled"]);
 const ACCESS_STATUSES = new Set(["public", "restricted", "unknown"]);
+const LOCATION_DISCLOSURES = new Set(["public", "after_registration"]);
+const AFTER_REGISTRATION_LOCATION_LABEL = "Location revealed after registration";
 const SCHEDULE_STATUSES = new Set(["scheduled", "postponed", "rescheduled", "cancelled", "moved_online"]);
 const TICKET_STATUSES = new Set(["unknown", "not_required", "not_yet_on_sale", "on_sale", "sold_out", "registration_open", "registration_closed"]);
 const ATTENDANCE_MODES = new Set(["inferred", "fixed_start", "flexible_window", "drop_in"]);
@@ -15,7 +19,7 @@ const SOURCE_AUTHORITIES = new Set(["organizer_event", "venue_event", "official_
 const LINK_ROLES = new Set(["organizer", "venue", "ticket", "artist", "participant", "supporting", "discovery"]);
 const CALENDAR_CREDIT_ROLE_CACHE = new WeakMap();
 const PLATFORM_SOURCE_ADAPTERS = new Set(["eventbrite", "posh", "bigtickets", "partiful"]);
-const INTERNAL_SOURCE_ADAPTERS = new Set(["atlanta_loves_art", "beltline", "bibliocommons", "eyedrum", "high_art_making", "rampant", "seven_stages", "squarespace"]);
+const INTERNAL_SOURCE_ADAPTERS = new Set(["atlanta_loves_art", "beltline", "bibliocommons", "eventive", "eyedrum", "high_art_making", "rampant", "seven_stages", "squarespace"]);
 const STORED_SOURCE_ADAPTERS = new Set(["automatic", "wix", "localist", "out_of_hand", "json", "icalendar", "rss"]);
 const SOURCE_ADAPTERS = new Set([...STORED_SOURCE_ADAPTERS, ...PLATFORM_SOURCE_ADAPTERS, ...INTERNAL_SOURCE_ADAPTERS]);
 const SOURCE_RENDER_MODES = new Set(["static", "dynamic-fallback"]);
@@ -27,7 +31,7 @@ const FLYER_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "imag
 const CALENDAR_MEDIA_ROLES = new Set(["primary", "flyer", "gallery", "supporting"]);
 const RESEARCH_PROPOSAL_STATES = new Set(["pending", "partially_applied", "applied", "dismissed"]);
 const RESEARCH_CHANGE_PATHS = new Set([
-  "title", "organizer", "factualDescription", "eventStructure", "accessStatus", "accessNotes", "audiences",
+  "title", "organizer", "factualDescription", "eventStructure", "accessStatus", "accessNotes", "audiences", "locationDisclosure",
   "dateKind", "startsAt", "endsAt", "confirmedThrough", "timezone", "venueName", "venueAddress", "visitingHours",
   "visitingHoursNote", "visitingHoursSourceUrl", "visitingHoursVerifiedAt", "city", "region", "subjects",
   "formats", "experimental", "sourceUrl", "ticketUrl", "scheduleStatus", "ticketStatus", "ticketOnSaleAt",
@@ -41,6 +45,8 @@ const DEFAULT_SITE_CRAWL_PAGES = 8;
 const MAX_SITE_CRAWL_PAGES = 20;
 const SITE_CRAWL_CONCURRENCY = 2;
 const MAX_PASTED_LINK_PROPOSALS = 100;
+const DEFAULT_FESTIVAL_PROGRAM_LIMIT = 200;
+const MAX_FESTIVAL_PROGRAM_LIMIT = 500;
 const SOCIAL_PLATFORMS = new Set(["threads", "instagram", "tiktok"]);
 const CONNECTOR_IDS = new Set(["direct", "general_web", "threads_api", "instagram_api", "threads_web", "instagram_web", "tiktok_web"]);
 const SOCIAL_DOMAINS = { threads: "threads.net", instagram: "instagram.com", tiktok: "tiktok.com" };
@@ -135,6 +141,26 @@ function statedRestrictionEvidence(...values) {
   ].filter(Boolean);
   const eligible = audiences.length ? audiences : ["Eligible attendees"];
   return { audiences: eligible, accessNotes: `Attendance is restricted to: ${eligible.join(", ")}.` };
+}
+
+function delayedLocationEvidence(...values) {
+  const text = values.map(asString).filter(Boolean).join(" ");
+  return /\b(?:address|location|venue)\b.{0,120}\b(?:email(?:ed)?|sent|given|provided|revealed|shared|released)\b.{0,120}\b(?:after|upon|on|with|when)\b.{0,80}\b(?:purchas(?:e|ing)|tickets?|register(?:ed|ing)?|registration|rsvp|confirmation|booking)\b|\b(?:email(?:ed)?|sent|given|provided|revealed|shared|released)\b.{0,120}\b(?:address|location|venue)\b.{0,120}\b(?:after|upon|on|with|when)\b.{0,80}\b(?:purchas(?:e|ing)|tickets?|register(?:ed|ing)?|registration|rsvp|confirmation|booking)\b/i.test(text);
+}
+
+function locationDisclosure(value = {}, fallback = {}) {
+  const explicit = asString(value.locationDisclosure || value.location_disclosure);
+  if (LOCATION_DISCLOSURES.has(explicit)) return explicit;
+  if (delayedLocationEvidence(
+    value.factualDescription, value.factual_description, value.accessNotes, value.access_notes,
+    value.ticketNotes, value.ticket_notes, value.planningNotes, value.planning_notes,
+  )) return "after_registration";
+  const inherited = asString(fallback.locationDisclosure || fallback.location_disclosure);
+  return LOCATION_DISCLOSURES.has(inherited) ? inherited : "public";
+}
+
+function delayedLocationAllowed(value, fallback = {}) {
+  return locationDisclosure(value, fallback) === "after_registration";
 }
 
 function accessConflictEvidence(...values) {
@@ -725,6 +751,76 @@ async function persistEntryVisitingDetails(db, entryId, value) {
   }
 }
 
+async function persistLocationDisclosure(db, table, id, value) {
+  try {
+    await db.prepare(`UPDATE ${table} SET location_disclosure=? WHERE id=?`)
+      .bind(locationDisclosure(value), id).run();
+  } catch (error) {
+    if (!/no such column:\s*location_disclosure/i.test(asString(error?.message))) throw error;
+  }
+}
+
+function collectionKind(value) {
+  const requested = asString(value?.collectionKind ?? value?.collection_kind);
+  return COLLECTION_KINDS.has(requested) ? requested : "none";
+}
+
+function collectionRelation(value) {
+  const requested = asString(value?.collectionRelation ?? value?.collection_relation);
+  return COLLECTION_RELATIONS.has(requested) ? requested : "none";
+}
+
+async function persistCandidateCollection(db, candidateId, value) {
+  try {
+    await db.prepare(
+      "UPDATE calendar_candidates SET collection_kind=?,parent_collection_candidate_id=?,collection_relation=? WHERE id=?"
+    ).bind(
+      collectionKind(value),
+      asString(value?.parentCollectionCandidateId ?? value?.parent_collection_candidate_id),
+      collectionRelation(value),
+      candidateId,
+    ).run();
+  } catch (error) {
+    if (!/no such column:\s*(?:collection_kind|parent_collection_candidate_id|collection_relation)/i.test(asString(error?.message))) throw error;
+  }
+}
+
+async function persistEntryCollection(db, entryId, value) {
+  try {
+    let parentEntryId = "";
+    const parentCandidateId = asString(value?.parentCollectionCandidateId);
+    if (parentCandidateId) {
+      const parent = await db.prepare("SELECT id FROM calendar_entries WHERE candidate_id=? AND status='published'")
+        .bind(parentCandidateId).first();
+      parentEntryId = parent?.id || "";
+    }
+    await db.prepare(
+      "UPDATE calendar_entries SET collection_kind=?,parent_collection_entry_id=?,collection_relation=? WHERE id=?"
+    ).bind(collectionKind(value), parentEntryId, collectionRelation(value), entryId).run();
+  } catch (error) {
+    if (!/no such column:\s*(?:collection_kind|parent_collection_entry_id|collection_relation)/i.test(asString(error?.message))) throw error;
+  }
+}
+
+function normalizeProgramItems(value) {
+  const parsed = typeof value === "string" ? parseJson(value, []) : value;
+  if (!Array.isArray(parsed)) return [];
+  return parsed.slice(0, 100).map((item) => {
+    const record = item && typeof item === "object" ? item : {};
+    const details = record.details && typeof record.details === "object" && !Array.isArray(record.details) ? record.details : {};
+    const credits = record.credits && typeof record.credits === "object" && !Array.isArray(record.credits) ? record.credits : {};
+    return {
+      id: asString(record.id),
+      title: asString(record.title || record.name),
+      runtimeMinutes: optionalNumber(record.runtimeMinutes ?? record.runtime ?? details.runtime, 0, 1440),
+      year: asString(record.year ?? details.year),
+      country: asString(record.country ?? details.country),
+      director: asString(record.director ?? credits.director),
+      tags: [...new Set((Array.isArray(record.tags) ? record.tags : []).map((tag) => asString(tag?.name || tag)).filter(Boolean))].slice(0, 20),
+    };
+  }).filter((item) => item.id || item.title);
+}
+
 function normalizeCandidate(row) {
   if (!row) return null;
   const access = accessDetails(row.access_status, row.access_notes, row.audiences_json, {
@@ -757,6 +853,9 @@ function normalizeCandidate(row) {
     factualDescription: directPublicCopy(row.factual_description),
     ...access,
     eventStructure: EVENT_STRUCTURES.has(row.event_structure) ? row.event_structure : "single",
+    collectionKind: collectionKind(row),
+    parentCollectionCandidateId: row.parent_collection_candidate_id || "",
+    collectionRelation: collectionRelation(row),
     dateKind: row.date_kind || "timed",
     startsAt: canonicalCalendarDate(row.starts_at, row.timezone || TIME_ZONE) || null,
     endsAt: canonicalCalendarDate(row.ends_at, row.timezone || TIME_ZONE) || null,
@@ -764,6 +863,7 @@ function normalizeCandidate(row) {
     timezone: row.timezone || TIME_ZONE,
     venueName: row.venue_name || "",
     venueAddress: row.venue_address || "",
+    locationDisclosure: locationDisclosure(row),
     ...planningDetails(row),
     city: row.city || "Atlanta",
     region: row.region || "GA",
@@ -853,6 +953,7 @@ function normalizeOccurrence(row, parent = {}) {
     timezone: row.timezone || TIME_ZONE,
     venueName: row.venue_name || row.venueName || "",
     venueAddress: row.venue_address || row.venueAddress || "",
+    locationDisclosure: locationDisclosure(row, parent),
     ...planningDetails(row),
     sourceUrl: row.source_url || row.sourceUrl || "",
     ticketUrl: row.ticket_url || row.ticketUrl || "",
@@ -864,6 +965,12 @@ function normalizeOccurrence(row, parent = {}) {
     status: row.status || "scheduled",
     verificationState: row.verification_state || row.verificationState || "unverified",
     verificationNotes: row.verification_notes || row.verificationNotes || "",
+    includePublic: row.include_public === undefined ? true : row.include_public === 1 || row.includePublic === true,
+    programItems: normalizeProgramItems(row.program_items_json ?? row.programItems),
+    sourcePresenceState: ["present", "missing_once", "confirmed_removed"].includes(asString(row.source_presence_state ?? row.sourcePresenceState))
+      ? asString(row.source_presence_state ?? row.sourcePresenceState) : "present",
+    missingCompleteRuns: Math.max(0, Number(row.missing_complete_runs ?? row.missingCompleteRuns) || 0),
+    lastSourceSeenAt: row.last_source_seen_at || row.lastSourceSeenAt || null,
     sortOrder: Number(row.sort_order ?? row.sortOrder) || 0,
     createdAt: row.created_at || row.createdAt || null,
     updatedAt: row.updated_at || row.updatedAt || null,
@@ -897,6 +1004,7 @@ function normalizeOccurrenceProposal(item, parent = {}, index = 0, { allowVerifi
     timezone: asString(value.timezone) || parent.timezone || TIME_ZONE,
     venueName: asString(value.venueName),
     venueAddress: asString(value.venueAddress),
+    locationDisclosure: locationDisclosure(value, parent),
     ...planningDetails(value, parent),
     sourceUrl,
     ticketUrl,
@@ -908,6 +1016,12 @@ function normalizeOccurrenceProposal(item, parent = {}, index = 0, { allowVerifi
       : instagramSource && !asString(value.verificationNotes).includes(reliabilityNote)
         ? [asString(value.verificationNotes), reliabilityNote].filter(Boolean).join("\n")
         : asString(value.verificationNotes),
+    includePublic: value.includePublic === undefined ? true : value.includePublic === true || value.includePublic === 1,
+    programItems: normalizeProgramItems(value.programItems),
+    sourcePresenceState: ["present", "missing_once", "confirmed_removed"].includes(asString(value.sourcePresenceState))
+      ? asString(value.sourcePresenceState) : "present",
+    missingCompleteRuns: Math.max(0, Number(value.missingCompleteRuns) || 0),
+    lastSourceSeenAt: asString(value.lastSourceSeenAt) || null,
     sortOrder: Number.isFinite(Number(value.sortOrder)) ? Number(value.sortOrder) : index,
   };
 }
@@ -998,6 +1112,17 @@ function normalizeSource(row) {
     reviewedCount: reviewed,
     acceptedCount: accepted,
     acceptanceRate: reviewed ? accepted / reviewed : null,
+    automationMode: ["review", "shadow_then_auto", "auto"].includes(row.automation_mode) ? row.automation_mode : "review",
+    automationState: ["shadow", "active", "paused"].includes(row.automation_state) ? row.automation_state : "shadow",
+    requiredStableRuns: Math.max(1, Number(row.required_stable_runs) || 2),
+    completeRunStreak: Math.max(0, Number(row.complete_run_streak) || 0),
+    lastHierarchyFingerprint: row.last_hierarchy_fingerprint || "",
+    lastProgramCount: Math.max(0, Number(row.last_program_count) || 0),
+    lastSnapshotId: row.last_snapshot_id || "",
+    lastPromotedSnapshotId: row.last_promoted_snapshot_id || "",
+    latestExceptionSummary: row.latest_exception_summary || "",
+    authoritativeAccess: row.authoritative_access || "unknown",
+    eventiveApiConfigured: row.eventive_api_configured === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1062,6 +1187,9 @@ function candidateSnapshot(candidate) {
     organizer: candidate.organizer,
     factualDescription: candidate.factualDescription,
     eventStructure: candidate.eventStructure,
+    collectionKind: candidate.collectionKind,
+    parentCollectionCandidateId: candidate.parentCollectionCandidateId || "",
+    collectionRelation: candidate.collectionRelation || "none",
     accessStatus: candidate.accessStatus,
     accessNotes: candidate.accessNotes,
     audiences: candidate.audiences,
@@ -1076,6 +1204,7 @@ function candidateSnapshot(candidate) {
     timezone: candidate.timezone,
     venueName: candidate.venueName,
     venueAddress: candidate.venueAddress,
+    locationDisclosure: candidate.locationDisclosure,
     planningNotes: candidate.planningNotes || "",
     city: candidate.city,
     region: candidate.region,
@@ -1134,6 +1263,7 @@ function candidateSnapshot(candidate) {
       timezone: occurrence.timezone,
       venueName: occurrence.venueName,
       venueAddress: occurrence.venueAddress,
+      locationDisclosure: occurrence.locationDisclosure,
       sourceUrl: occurrence.sourceUrl,
       ticketUrl: occurrence.ticketUrl,
       ticketStatus: occurrence.ticketStatus,
@@ -1143,6 +1273,11 @@ function candidateSnapshot(candidate) {
       status: occurrence.status,
       verificationState: occurrence.verificationState,
       verificationNotes: occurrence.verificationNotes,
+      includePublic: occurrence.includePublic !== false,
+      programItems: normalizeProgramItems(occurrence.programItems),
+      sourcePresenceState: occurrence.sourcePresenceState || "present",
+      missingCompleteRuns: occurrence.missingCompleteRuns || 0,
+      lastSourceSeenAt: occurrence.lastSourceSeenAt || null,
       sortOrder: occurrence.sortOrder,
     })),
   };
@@ -1150,8 +1285,9 @@ function candidateSnapshot(candidate) {
 
 const CANDIDATE_CHANGE_LABELS = {
   title: "Title", organizer: "Organizer", factualDescription: "Description", eventStructure: "Event structure",
+  collectionKind: "Collection type", parentCollectionCandidateId: "Parent collection", collectionRelation: "Collection relationship",
   accessStatus: "Attendance access", accessNotes: "Access note", audiences: "Audiences", dateKind: "Date type",
-  startsAt: "Start", endsAt: "End", confirmedThrough: "Confirmed through", timezone: "Time zone", venueName: "Venue", venueAddress: "Venue address",
+  startsAt: "Start", endsAt: "End", confirmedThrough: "Confirmed through", timezone: "Time zone", venueName: "Venue", venueAddress: "Venue address", locationDisclosure: "Location visibility",
   visitingHours: "Visiting hours", visitingHoursNote: "Visiting-hours note", visitingHoursSourceUrl: "Visiting-hours source",
   visitingHoursVerifiedAt: "Visiting hours verified",
   city: "City", region: "Region", subjects: "Subjects", formats: "Formats", experimental: "Experimental attribute",
@@ -1180,7 +1316,7 @@ function changeSummary(changeSet, fallback = "Source checked") {
 }
 
 const STRONG_PICK_MATERIAL_FIELDS = new Set([
-  "title", "organizer", "factualDescription", "startsAt", "endsAt", "confirmedThrough", "visitingHours", "venueName", "venueAddress",
+  "title", "organizer", "factualDescription", "startsAt", "endsAt", "confirmedThrough", "visitingHours", "venueName", "venueAddress", "locationDisclosure",
   "scheduleStatus", "ticketUrl", "ticketStatus", "ticketOnSaleAt", "ticketNotes", "occurrences",
   "privateRationale", "attendanceUse", "programmingIdeas", "potentialCollaborators",
 ]);
@@ -1213,6 +1349,7 @@ function strongPickSnapshot(candidate) {
     timezone: candidate.timezone,
     venueName: candidate.venueName,
     venueAddress: candidate.venueAddress,
+    locationDisclosure: candidate.locationDisclosure,
     sourceUrl: candidate.sourceUrl,
     ticketUrl: candidate.ticketUrl,
     ticketStatus: candidate.ticketStatus,
@@ -1229,6 +1366,7 @@ function strongPickSnapshot(candidate) {
       startsAt: occurrence.startsAt,
       endsAt: occurrence.endsAt,
       venueName: occurrence.venueName,
+      locationDisclosure: occurrence.locationDisclosure,
       ticketStatus: occurrence.ticketStatus,
       status: occurrence.status,
     })),
@@ -1251,6 +1389,69 @@ function normalizeStrongPick(row) {
     verificationState: row.verification_state || "needs_verification",
     publicEntryId: row.public_entry_id || "",
   };
+}
+
+function presentSource(row, env) {
+  return normalizeSource({ ...row, eventive_api_configured: asString(env?.EVENTIVE_API_KEY) ? 1 : 0 });
+}
+
+async function listSourceRegistry(db, env) {
+  try {
+    const result = await db.prepare(
+      `SELECT s.*,a.automation_mode,a.automation_state,a.required_stable_runs,a.complete_run_streak,
+              a.last_hierarchy_fingerprint,a.last_program_count,a.last_snapshot_id,a.last_promoted_snapshot_id,
+              a.latest_exception_summary,a.authoritative_access,
+              SUM(CASE WHEN c.status IN ('published','rejected','cancelled','duplicate') THEN 1 ELSE 0 END) reviewed_count,
+              SUM(CASE WHEN c.status IN ('published','cancelled') THEN 1 ELSE 0 END) accepted_count
+       FROM calendar_sources s
+       LEFT JOIN calendar_candidates c ON c.source_id=s.id
+       LEFT JOIN calendar_source_automation a ON a.source_id=s.id
+       GROUP BY s.id ORDER BY s.name`
+    ).all();
+    return (result.results || []).map((row) => presentSource(row, env));
+  } catch (error) {
+    if (!/no such table:\s*calendar_source_automation/i.test(asString(error?.message))) throw error;
+    const result = await db.prepare(
+      `SELECT s.*,
+              SUM(CASE WHEN c.status IN ('published','rejected','cancelled','duplicate') THEN 1 ELSE 0 END) reviewed_count,
+              SUM(CASE WHEN c.status IN ('published','cancelled') THEN 1 ELSE 0 END) accepted_count
+       FROM calendar_sources s LEFT JOIN calendar_candidates c ON c.source_id=s.id
+       GROUP BY s.id ORDER BY s.name`
+    ).all();
+    return (result.results || []).map((row) => presentSource(row, env));
+  }
+}
+
+async function sourceWithAutomation(db, sourceId, env) {
+  try {
+    const row = await db.prepare(
+      `SELECT s.*,a.automation_mode,a.automation_state,a.required_stable_runs,a.complete_run_streak,
+              a.last_hierarchy_fingerprint,a.last_program_count,a.last_snapshot_id,a.last_promoted_snapshot_id,
+              a.latest_exception_summary,a.authoritative_access
+       FROM calendar_sources s LEFT JOIN calendar_source_automation a ON a.source_id=s.id WHERE s.id=?`
+    ).bind(sourceId).first();
+    return presentSource(row, env);
+  } catch (error) {
+    if (!/no such table:\s*calendar_source_automation/i.test(asString(error?.message))) throw error;
+    return presentSource(await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(sourceId).first(), env);
+  }
+}
+
+async function ensureSourceAutomation(db, sourceId, adapterKey, adapterConfig, body = {}) {
+  if (adapterKey !== "eventive" && asString(adapterConfig?.internalAdapter) !== "eventive") return;
+  const mode = ["review", "shadow_then_auto", "auto"].includes(asString(body.automationMode || adapterConfig.automationMode))
+    ? asString(body.automationMode || adapterConfig.automationMode) : "shadow_then_auto";
+  const required = Math.min(Math.max(Number(body.requiredStableRuns || adapterConfig.requiredStableRuns) || 2, 1), 10);
+  try {
+    await db.prepare(
+      `INSERT INTO calendar_source_automation(source_id,automation_mode,automation_state,required_stable_runs,updated_at)
+       VALUES (?,?,CASE WHEN ?='auto' THEN 'active' ELSE 'shadow' END,?,?)
+       ON CONFLICT(source_id) DO UPDATE SET automation_mode=excluded.automation_mode,
+         required_stable_runs=excluded.required_stable_runs,updated_at=excluded.updated_at`
+    ).bind(sourceId, mode, mode, required, isoNow()).run();
+  } catch (error) {
+    if (!/no such table:\s*calendar_source_automation/i.test(asString(error?.message))) throw error;
+  }
 }
 
 async function recordStrongPick(db, runId, result, detectedAt = isoNow()) {
@@ -1585,6 +1786,10 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
     organizer: asString(value("organizer")),
     factualDescription: directPublicCopy(value("factualDescription")),
     eventStructure,
+    collectionKind: collectionKind({ collectionKind:value("collectionKind", "none") }),
+    parentCollectionCandidateId: asString(value("parentCollectionCandidateId")),
+    parentCollectionSourceEventId: asString(value("parentCollectionSourceEventId")),
+    collectionRelation: collectionRelation({ collectionRelation:value("collectionRelation", "none") }),
     ...access,
     dateKind,
     startsAt: canonicalCalendarDate(value("startsAt"), asString(value("timezone", TIME_ZONE)) || TIME_ZONE) || null,
@@ -1599,6 +1804,13 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
     timezone: asString(value("timezone", TIME_ZONE)) || TIME_ZONE,
     venueName: asString(value("venueName")),
     venueAddress: asString(value("venueAddress")),
+    locationDisclosure: locationDisclosure({
+      locationDisclosure: value("locationDisclosure"),
+      factualDescription: value("factualDescription"),
+      accessNotes: value("accessNotes"),
+      ticketNotes: value("ticketNotes"),
+      planningNotes: value("planningNotes"),
+    }, current),
     ...planningDetails(planningInput, current),
     city: asString(value("city", "Atlanta")) || "Atlanta",
     region: asString(value("region", "GA")) || "GA",
@@ -1622,6 +1834,12 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
       .map((item, index) => normalizeOccurrenceProposal(item, {
         timezone: asString(value("timezone", TIME_ZONE)) || TIME_ZONE,
         verificationState: asString(value("verificationState")),
+        locationDisclosure: locationDisclosure({
+          locationDisclosure: value("locationDisclosure"),
+          factualDescription: value("factualDescription"),
+          accessNotes: value("accessNotes"),
+          ticketNotes: value("ticketNotes"),
+        }, current),
         ...access,
       }, index, { allowVerifiedInstagramSource })),
   }, current, { allowVerifiedInstagramSource });
@@ -1630,14 +1848,18 @@ function proposalFromBody(body, current = {}, { allowVerifiedInstagramSource = f
 function publicationErrors(proposal) {
   const errors = [];
   const virtual = onlineOnlyEvent(proposal);
-  const scheduledOccurrences = (proposal.occurrences || []).filter((occurrence) => occurrence.status !== "tbd");
+  const delayedLocation = delayedLocationAllowed(proposal);
+  const validRegistrationUrl = validHttpUrl(proposal.ticketUrl) && !socialPlatformFromUrl(proposal.ticketUrl);
+  const scheduledOccurrences = (proposal.occurrences || []).filter((occurrence) => occurrence.status !== "tbd" && occurrence.includePublic !== false);
   const seriesUsesOccurrenceVenues = proposal.eventStructure === "series"
     && scheduledOccurrences.length > 0
     && !proposal.formats.includes("exhibition")
     && scheduledOccurrences.every((occurrence) => {
       const venueName = occurrence.venueName || proposal.venueName;
       const venueAddress = occurrence.venueAddress || proposal.venueAddress;
-      return venueName && (onlineOnlyEvent({ venueName, venueAddress }) || venueAddress);
+      const occurrenceRegistrationUrl = occurrence.ticketUrl || proposal.ticketUrl;
+      return (venueName && (onlineOnlyEvent({ venueName, venueAddress }) || venueAddress))
+        || (delayedLocationAllowed(occurrence, proposal) && validHttpUrl(occurrenceRegistrationUrl) && !socialPlatformFromUrl(occurrenceRegistrationUrl));
     });
   if (!proposal.title) errors.push("A title is required.");
   if (!proposal.organizer) errors.push("An organizer is required.");
@@ -1654,8 +1876,9 @@ function publicationErrors(proposal) {
   if (proposal.endsAt && proposal.confirmedThrough && Date.parse(proposal.confirmedThrough) > Date.parse(proposal.endsAt)) errors.push("Confirmed-through date cannot be after the confirmed closing date.");
   errors.push(...visitingHoursInputErrors(proposal.visitingHours));
   if (!validTimeZone(proposal.timezone)) errors.push("A valid IANA time zone is required.");
-  if (!proposal.venueName) errors.push(virtual ? "A confirmed virtual venue label is required." : "A confirmed venue name is required.");
-  else if (!virtual && !proposal.venueAddress && !seriesUsesOccurrenceVenues) errors.push("A confirmed venue address is required.");
+  if (!proposal.venueName && !delayedLocation) errors.push(virtual ? "A confirmed virtual venue label is required." : "A confirmed venue name is required.");
+  else if (!virtual && !proposal.venueAddress && !seriesUsesOccurrenceVenues && !delayedLocation) errors.push("A confirmed venue address is required.");
+  if (delayedLocation && !validRegistrationUrl && !seriesUsesOccurrenceVenues) errors.push("An event whose location is revealed after registration requires a valid ticket or registration URL.");
   if ((proposal.latitude === null) !== (proposal.longitude === null)) errors.push("Planning coordinates require both latitude and longitude.");
   if (proposal.minimumVisitMinutes && proposal.recommendedVisitMinutes && proposal.recommendedVisitMinutes < proposal.minimumVisitMinutes) {
     errors.push("Recommended visit time cannot be shorter than the minimum visit time.");
@@ -1692,7 +1915,7 @@ function publicationErrors(proposal) {
 }
 
 function occurrencePublicationErrors(occurrence, parent) {
-  if (occurrence.status === "tbd") return [];
+  if (occurrence.status === "tbd" || occurrence.includePublic === false) return [];
   const label = occurrence.title || occurrenceTypeLabel(occurrence.occurrenceType);
   const errors = [];
   if (!occurrence.startsAt || !validDate(occurrence.startsAt)) errors.push(`${label} requires a confirmed valid start date.`);
@@ -1704,8 +1927,12 @@ function occurrencePublicationErrors(occurrence, parent) {
   const venueName = occurrence.venueName || parent.venueName;
   const venueAddress = occurrence.venueAddress || parent.venueAddress;
   const virtual = onlineOnlyEvent({ venueName, venueAddress });
-  if (!venueName) errors.push(virtual ? `${label} requires a confirmed virtual venue label.` : `${label} requires a confirmed venue name.`);
-  else if (!virtual && !venueAddress) errors.push(`${label} requires a confirmed venue address.`);
+  const delayedLocation = delayedLocationAllowed(occurrence, parent);
+  const registrationUrl = occurrence.ticketUrl || parent.ticketUrl;
+  const validRegistrationUrl = validHttpUrl(registrationUrl) && !socialPlatformFromUrl(registrationUrl);
+  if (!venueName && !delayedLocation) errors.push(virtual ? `${label} requires a confirmed virtual venue label.` : `${label} requires a confirmed venue name.`);
+  else if (!virtual && !venueAddress && !delayedLocation) errors.push(`${label} requires a confirmed venue address.`);
+  if (delayedLocation && !validRegistrationUrl) errors.push(`${label} requires a valid ticket or registration URL because its location is revealed after registration.`);
   if ((occurrence.latitude === null) !== (occurrence.longitude === null)) errors.push(`${label} planning coordinates require both latitude and longitude.`);
   if (occurrence.minimumVisitMinutes && occurrence.recommendedVisitMinutes && occurrence.recommendedVisitMinutes < occurrence.minimumVisitMinutes) {
     errors.push(`${label} recommended visit time cannot be shorter than its minimum visit time.`);
@@ -1725,7 +1952,11 @@ function occurrencePublicationErrors(occurrence, parent) {
 }
 
 async function syncCandidateOccurrences(db, candidateId, values, parent, { allowVerifiedInstagramSource = false } = {}) {
-  const occurrences = (Array.isArray(values) ? values : []).slice(0, 50)
+  const occurrenceLimit = Math.min(Math.max(
+    Number(parent.occurrenceLimit) || (parent.collectionKind === "festival" ? DEFAULT_FESTIVAL_PROGRAM_LIMIT : 100),
+    1,
+  ), MAX_FESTIVAL_PROGRAM_LIMIT);
+  const occurrences = (Array.isArray(values) ? values : []).slice(0, occurrenceLimit)
     .map((item, index) => normalizeOccurrenceProposal(item, parent, index, { allowVerifiedInstagramSource }));
   let currentRows;
   try {
@@ -1775,6 +2006,33 @@ async function syncCandidateOccurrences(db, candidateId, values, parent, { allow
     );
   });
   if (statements.length) await db.batch(statements);
+  if (keep.length) {
+    try {
+      await db.batch(keep.map((id, index) => db.prepare(
+        `UPDATE calendar_candidate_occurrences
+         SET include_public=?,program_items_json=?,source_presence_state=?,missing_complete_runs=?,last_source_seen_at=?
+         WHERE id=?`
+      ).bind(
+        occurrences[index].includePublic ? 1 : 0,
+        JSON.stringify(occurrences[index].programItems),
+        occurrences[index].sourcePresenceState,
+        occurrences[index].missingCompleteRuns,
+        occurrences[index].lastSourceSeenAt,
+        id,
+      )));
+    } catch (error) {
+      if (!/no such column:\s*(?:include_public|program_items_json|source_presence_state|missing_complete_runs|last_source_seen_at)/i.test(asString(error?.message))) throw error;
+    }
+  }
+  if (keep.length) {
+    try {
+      await db.batch(keep.map((id, index) => db.prepare(
+        "UPDATE calendar_candidate_occurrences SET location_disclosure=? WHERE id=?"
+      ).bind(occurrences[index].locationDisclosure, id)));
+    } catch (error) {
+      if (!/no such column:\s*location_disclosure/i.test(asString(error?.message))) throw error;
+    }
+  }
   const stale = (currentRows.results || []).filter((row) => !keep.includes(row.id));
   for (const row of stale) {
     const published = await db.prepare(
@@ -2052,6 +2310,8 @@ async function createCandidate(env, body, discoveredBy = "manual", provenance = 
     proposal.monitoringEnabled ? nextSourceCheckAt(proposal.monitoringCadenceHours) : null,
   ).run();
   await persistCandidateVisitingDetails(db, id, proposal);
+  await persistLocationDisclosure(db, "calendar_candidates", id, proposal);
+  await persistCandidateCollection(db, id, proposal);
   await db.prepare(
     `INSERT INTO calendar_candidate_notes
       (candidate_id,private_rationale,attendance_use,programming_ideas,potential_collaborators,internal_notes,updated_at)
@@ -2173,6 +2433,8 @@ async function saveCandidate(env, id, body, { appendChangeRevision = true, allow
     id
   ).run();
   await persistCandidateVisitingDetails(db, id, proposal);
+  await persistLocationDisclosure(db, "calendar_candidates", id, proposal);
+  await persistCandidateCollection(db, id, proposal);
   await db.prepare(
     `INSERT INTO calendar_candidate_notes
        (candidate_id,private_rationale,attendance_use,programming_ideas,potential_collaborators,internal_notes,updated_at)
@@ -2255,7 +2517,7 @@ async function syncEntryOccurrences(db, entryId, candidate, now) {
   const existingByCandidate = new Map((existingRows.results || []).map((row) => [row.candidate_occurrence_id, row]));
   const activeCandidateIds = [];
   for (const occurrence of candidate.occurrences || []) {
-    if (occurrence.status === "tbd") continue;
+    if (occurrence.status === "tbd" || occurrence.includePublic === false) continue;
     activeCandidateIds.push(occurrence.id);
     const existing = existingByCandidate.get(occurrence.id);
     const id = existing?.id || `cal_entry_occurrence_${crypto.randomUUID()}`;
@@ -2305,6 +2567,13 @@ async function syncEntryOccurrences(db, entryId, candidate, now) {
         occurrence.ticketStatus, occurrence.ticketOnSaleAt, occurrence.ticketNotes,
         now, now, occurrence.verificationState === "verified" ? now : null,
       ).run();
+    }
+    await persistLocationDisclosure(db, "calendar_entry_occurrences", id, occurrence);
+    try {
+      await db.prepare("UPDATE calendar_entry_occurrences SET program_items_json=? WHERE id=?")
+        .bind(JSON.stringify(normalizeProgramItems(occurrence.programItems)), id).run();
+    } catch (error) {
+      if (!/no such column:\s*program_items_json/i.test(asString(error?.message))) throw error;
     }
   }
   for (const existing of existingRows.results || []) {
@@ -2410,6 +2679,7 @@ async function approveCandidate(env, id) {
   }
   const errors = publicationErrors(candidate);
   for (const occurrence of candidate.occurrences || []) {
+    if (occurrence.includePublic === false) continue;
     errors.push(...occurrencePublicationErrors(occurrence, candidate));
   }
   let flyer = null;
@@ -2475,6 +2745,8 @@ async function approveCandidate(env, id) {
     ).run();
   }
   await persistEntryVisitingDetails(db, entryId, candidate);
+  await persistLocationDisclosure(db, "calendar_entries", entryId, candidate);
+  await persistEntryCollection(db, entryId, candidate);
   await db.prepare("DELETE FROM calendar_entry_links WHERE entry_id=?").bind(entryId).run();
   const publicLinks = (candidate.relatedLinks || []).filter((link) => link.includePublic);
   const creditRolesEnabled = await calendarCreditRolesEnabled(db);
@@ -2711,7 +2983,7 @@ function publicPlanningDetails(row, { formats = [], occurrenceType = "", title =
   if (status !== "scheduled" && status !== "published") reasons.push("schedule_unavailable");
   const routableExhibition = eventStructure === "exhibition" && dateKind === "date_range" && visiting.visitingHours.length > 0;
   if (dateKind !== "timed" && !routableExhibition) reasons.push("not_timed");
-  if (!asString(row.venue_address)) reasons.push("missing_address");
+  if (!asString(row.venue_address)) reasons.push(locationDisclosure(row) === "after_registration" ? "address_after_registration" : "missing_address");
   return {
     eligible: reasons.length === 0,
     ineligibleReasons: reasons,
@@ -2748,6 +3020,9 @@ function curatedPublicView(row, relatedLinks = [], media = []) {
     isOccurrence: false,
     isSeriesParent: false,
     eventStructure: EVENT_STRUCTURES.has(row.event_structure) ? row.event_structure : "single",
+    collectionKind: collectionKind(row),
+    collectionRelation: collectionRelation(row),
+    parentCollectionEntryId: row.parent_collection_entry_id || "",
     parentUid: "",
     relatedOccurrences: [],
     origin: "curated",
@@ -2764,6 +3039,7 @@ function curatedPublicView(row, relatedLinks = [], media = []) {
     timezone: row.timezone || TIME_ZONE,
     venueName: row.venue_name || "",
     venueAddress: row.venue_address || "",
+    locationDisclosure: locationDisclosure(row),
     virtual,
     city: row.city || "Atlanta",
     region: row.region || "GA",
@@ -2810,6 +3086,7 @@ function curatedOccurrencePublicView(row, parent) {
   const titlePrefix = `${parent.title} — `;
   const venueName = row.venue_name || parent.venueName;
   const venueAddress = row.venue_address || parent.venueAddress;
+  const disclosure = locationDisclosure(row, parent);
   const access = accessDetails(row.access_status, row.access_notes, row.audiences_json, parent);
   const formats = formatsForOccurrence(parent.formats, row.occurrence_type);
   const virtual = onlineOnlyEvent({ venueName, venueAddress });
@@ -2819,6 +3096,10 @@ function curatedOccurrencePublicView(row, parent) {
     parentTitle: parent.title,
     occurrenceId: row.id,
     occurrenceType: row.occurrence_type,
+    collectionKind: parent.collectionKind,
+    collectionRelation: "none",
+    parentCollectionEntryId: parent.parentCollectionEntryId || "",
+    programItems: normalizeProgramItems(row.program_items_json),
     occurrenceLabel: row.title.startsWith(titlePrefix) ? row.title.slice(titlePrefix.length) : row.title,
     isOccurrence: true,
     isSeriesParent: false,
@@ -2838,12 +3119,13 @@ function curatedOccurrencePublicView(row, parent) {
     timezone: row.timezone || parent.timezone || TIME_ZONE,
     venueName,
     venueAddress,
+    locationDisclosure: disclosure,
     virtual,
     city: parent.city,
     region: parent.region,
     subjects: parent.subjects,
     formats,
-    planning: publicPlanningDetails({ ...row, venue_address: venueAddress }, { formats, occurrenceType: row.occurrence_type, title:row.title, virtual, status: row.status, dateKind: row.date_kind }),
+    planning: publicPlanningDetails({ ...row, venue_address: venueAddress, location_disclosure: disclosure }, { formats, occurrenceType: row.occurrence_type, title:row.title, virtual, status: row.status, dateKind: row.date_kind }),
     experimental: parent.experimental,
     status: row.status,
     sourceUrl: row.source_url || parent.sourceUrl,
@@ -2908,6 +3190,9 @@ async function loadCuratedEvents(db) {
       id: occurrence.id,
       title: parent.eventStructure === "series" ? occurrence.title : (occurrence.occurrenceLabel || occurrence.title),
       occurrenceType: occurrence.occurrenceType,
+      collectionKind: occurrence.collectionKind,
+      collectionRelation: occurrence.collectionRelation,
+      programItems: occurrence.programItems,
       startsAt: occurrence.startsAt,
       endsAt: occurrence.endsAt,
       dateKind: occurrence.dateKind,
@@ -3082,7 +3367,8 @@ function eventIcsLines(event) {
     lines.push(`DTSTART:${icsTimestamp(event.startsAt)}`);
     if (event.endsAt) lines.push(`DTEND:${icsTimestamp(event.endsAt)}`);
   }
-  const location = [event.venueName, event.venueAddress].filter((value, index, list) => value && list.indexOf(value) === index).join(", ");
+  const delayedLocation = event.locationDisclosure === "after_registration";
+  const location = delayedLocation ? AFTER_REGISTRATION_LOCATION_LABEL : [event.venueName, event.venueAddress].filter((value, index, list) => value && list.indexOf(value) === index).join(", ");
   if (location) lines.push(`LOCATION:${escapeIcs(location)}`);
   const accessLine = event.accessStatus === "restricted" ? `Access: ${event.accessNotes}` : "";
   const scheduleLine = event.scheduleStatus && event.scheduleStatus !== "scheduled" ? `Schedule: ${event.scheduleStatus.replace(/_/g, " ")}` : "";
@@ -3090,11 +3376,13 @@ function eventIcsLines(event) {
     ? `Tickets: ${event.ticketStatus.replace(/_/g, " ")}${event.ticketOnSaleAt ? ` (${event.ticketOnSaleAt})` : ""}${event.ticketNotes ? `. ${event.ticketNotes}` : ""}` : "";
   const horizonLine = event.confirmedThrough && !event.endsAt ? `Closing date not announced. Confirmed on view through ${event.confirmedThrough}.` : "";
   const hoursLine = event.visitingHoursLabel ? `Visiting hours: ${event.visitingHoursLabel}${event.visitingHoursNote ? `. ${event.visitingHoursNote}` : ""}` : "";
-  const description = [event.description, horizonLine, hoursLine, scheduleLine, ticketLine, accessLine].filter(Boolean).join("\n\n");
+  const locationLine = delayedLocation ? `${AFTER_REGISTRATION_LOCATION_LABEL}. Use the ticket or registration link to receive the address.` : "";
+  const description = [event.description, locationLine, horizonLine, hoursLine, scheduleLine, ticketLine, accessLine].filter(Boolean).join("\n\n");
   if (description) lines.push(`DESCRIPTION:${escapeIcs(description)}`);
   lines.push(`X-SIXWELL-ACCESS:${escapeIcs(event.accessStatus || "public")}`);
   lines.push(`X-SIXWELL-SCHEDULE-STATUS:${escapeIcs(event.scheduleStatus || "scheduled")}`);
   lines.push(`X-SIXWELL-TICKET-STATUS:${escapeIcs(event.ticketStatus || "unknown")}`);
+  lines.push(`X-SIXWELL-LOCATION-DISCLOSURE:${escapeIcs(event.locationDisclosure === "after_registration" ? "AFTER-REGISTRATION" : "PUBLIC")}`);
   if (event.confirmedThrough && !event.endsAt) lines.push(`X-SIXWELL-CONFIRMED-THROUGH:${icsDate(event.confirmedThrough)}`);
   if (event.actionUrl) lines.push(`URL:${escapeIcs(new URL(event.actionUrl, "https://thesixwellconstruct.com").toString())}`);
   lines.push("END:VEVENT");
@@ -4516,14 +4804,7 @@ async function handleSources(request, env, parts) {
   const db = requireDb(env);
   const id = parts[1] ? decodeURIComponent(parts[1]) : "";
   if (request.method === "GET" && !id) {
-    const result = await db.prepare(
-      `SELECT s.*,
-        SUM(CASE WHEN c.status IN ('published','rejected','cancelled','duplicate') THEN 1 ELSE 0 END) reviewed_count,
-        SUM(CASE WHEN c.status IN ('published','cancelled') THEN 1 ELSE 0 END) accepted_count
-       FROM calendar_sources s LEFT JOIN calendar_candidates c ON c.source_id=s.id
-       GROUP BY s.id ORDER BY s.name`
-    ).all();
-    return json({ sources: (result.results || []).map(normalizeSource) });
+    return json({ sources: await listSourceRegistry(db, env) });
   }
   if (request.method === "POST" && id && parts[2] === "run") {
     const source = await db.prepare("SELECT id FROM calendar_sources WHERE id=?").bind(id).first();
@@ -4565,7 +4846,8 @@ async function handleSources(request, env, parts) {
       if (/unique/i.test(asString(error.message))) return errorResponse("This source URL is already registered. Open the existing source below to edit it.", 409);
       throw error;
     }
-    return json({ source: normalizeSource(await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(sourceId).first()) }, { status: 201 });
+    await ensureSourceAutomation(db, sourceId, adapterKey, storedAdapter.adapterConfig, body);
+    return json({ source: await sourceWithAutomation(db, sourceId, env) }, { status: 201 });
   }
   if (request.method === "PATCH" && id) {
     const current = await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(id).first();
@@ -4588,7 +4870,8 @@ async function handleSources(request, env, parts) {
       body.enabled === undefined ? current.enabled : body.enabled ? 1 : 0,
       body.cadenceHours === undefined ? current.cadence_hours : Math.max(1, Number(body.cadenceHours) || 24), storedAdapter.adapterKey, renderMode, JSON.stringify(storedAdapter.adapterConfig), now, id
     ).run();
-    return json({ source: normalizeSource(await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(id).first()) });
+    await ensureSourceAutomation(db, id, adapterKey, storedAdapter.adapterConfig, body);
+    return json({ source: await sourceWithAutomation(db, id, env) });
   }
   return errorResponse("Method not allowed.", 405);
 }
@@ -6205,6 +6488,7 @@ function sourceAdapterKey(source) {
   if (host === "eventbrite.com" || host.endsWith(".eventbrite.com")) return "eventbrite";
   if (host === "posh.vip" || host.endsWith(".posh.vip")) return "posh";
   if (host === "partiful.com" || host.endsWith(".partiful.com")) return "partiful";
+  if (host === "eventive.org" || host.endsWith(".eventive.org")) return "eventive";
   if (host === "bibliocommons.com" || host.endsWith(".bibliocommons.com")) return "bibliocommons";
   if (host === "atlantalovesart.com" || host.endsWith(".atlantalovesart.com")) return "atlanta_loves_art";
   if (host === "7stages.org" || host.endsWith(".7stages.org")) return "seven_stages";
@@ -6216,6 +6500,358 @@ function sourceAdapterKey(source) {
   if (source.source_type === "json") return isGsuLocalistSource(source.url) ? "localist" : "json";
   if (source.source_type === "rss") return "rss";
   return "automatic";
+}
+
+function eventiveProgramLimit(source) {
+  const configured = Number(parseJson(source.adapter_config_json, {}).maxPrograms) || DEFAULT_FESTIVAL_PROGRAM_LIMIT;
+  return Math.min(Math.max(configured, 1), MAX_FESTIVAL_PROGRAM_LIMIT);
+}
+
+function eventiveValues(payload, resource) {
+  if (Array.isArray(payload?.[resource])) return payload[resource];
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
+function eventiveNextUrl(payload, currentUrl, resource) {
+  const direct = payload?.next || payload?.next_url || payload?.pagination?.next || payload?.meta?.next;
+  if (typeof direct === "string" && direct) return new URL(direct, currentUrl).toString();
+  const page = Number(payload?.pagination?.page ?? payload?.meta?.page);
+  const pages = Number(payload?.pagination?.pages ?? payload?.meta?.pages);
+  const hasMore = payload?.pagination?.has_more === true || payload?.meta?.has_more === true || (page && pages && page < pages);
+  if (!hasMore) return "";
+  const next = new URL(currentUrl);
+  next.searchParams.set("page", String((page || Number(next.searchParams.get("page")) || 1) + 1));
+  return next.toString();
+}
+
+async function fetchEventiveResource(env, bucketId, resource, apiKey, maximum) {
+  const fetcher = env.EVENTIVE_FETCH || fetch;
+  let url = `https://api.eventive.org/event_buckets/${encodeURIComponent(bucketId)}/${resource}`;
+  if (resource === "events") url += "?upcoming_only=true";
+  const values = [];
+  let pages = 0;
+  let lastStatus = 0;
+  let capped = false;
+  while (url && pages < 20) {
+    const response = await fetcher(url, {
+      headers: {
+        authorization: `Basic ${btoa(`${apiKey}:`)}`,
+        "accept-version": "~1",
+        "content-type": "application/json",
+        accept: "application/json",
+        "user-agent": "SixWell-Atlanta-Calendar-Scout/1.0",
+      },
+      signal: AbortSignal.timeout(SOURCE_TIMEOUT_MS),
+    });
+    lastStatus = response.status;
+    if (!response.ok) {
+      const detail = cleanSourceText(await boundedResponseText(response).catch(() => "")).slice(0, 300);
+      const error = new Error(`Eventive ${resource} request returned HTTP ${response.status}${detail ? `: ${detail}` : "."}`);
+      error.code = [401, 403].includes(response.status) ? "eventive_authentication_failed" : "eventive_api_failed";
+      error.httpStatus = response.status;
+      throw error;
+    }
+    const payload = parseJson(await boundedResponseText(response), {});
+    const pageValues = eventiveValues(payload, resource);
+    values.push(...pageValues);
+    pages += 1;
+    const next = eventiveNextUrl(payload, url, resource);
+    if (values.length >= maximum) {
+      capped = values.length > maximum || Boolean(next) || values.length === maximum;
+      break;
+    }
+    url = next;
+  }
+  if (url && pages >= 20) capped = true;
+  return { values:values.slice(0, maximum), pages, capped, status:lastStatus };
+}
+
+function eventiveTags(value) {
+  return [...new Set((Array.isArray(value) ? value : []).map((tag) => asString(tag?.name || tag)).filter(Boolean))];
+}
+
+function eventiveAddress(value) {
+  if (typeof value === "string") return cleanSourceText(value);
+  const address = value && typeof value === "object" ? value : {};
+  const nested = address.address && typeof address.address === "object" ? address.address : {};
+  return [
+    address.street_address || address.streetAddress || address.address_line_1 || address.line1 || nested.street_address || nested.streetAddress,
+    address.city || address.addressLocality || nested.city || nested.addressLocality,
+    address.region || address.state || address.addressRegion || nested.region || nested.state || nested.addressRegion,
+    address.postal_code || address.zip || address.postalCode || nested.postal_code || nested.zip || nested.postalCode,
+  ].map(asString).filter(Boolean).join(", ");
+}
+
+function eventiveVenue(event, config) {
+  const venue = event?.venue && typeof event.venue === "object" ? event.venue : {};
+  const configured = config.venueAddresses && typeof config.venueAddresses === "object" ? config.venueAddresses : {};
+  const name = asString(venue.name || event?.venue_name);
+  return {
+    id: asString(venue.id || event?.venue_id),
+    name,
+    address: eventiveAddress(venue.address || venue) || asString(configured[asString(venue.id)] || configured[name]),
+  };
+}
+
+function eventiveFilmIds(event) {
+  const values = [
+    ...(Array.isArray(event?.films) ? event.films : []),
+    ...(Array.isArray(event?.film_ids) ? event.film_ids : []),
+    ...(Array.isArray(event?.filmIds) ? event.filmIds : []),
+    ...(event?.film ? [event.film] : []),
+    ...(event?.film_id ? [event.film_id] : []),
+  ];
+  return [...new Set(values.map((item) => asString(item?.id || item)).filter(Boolean))];
+}
+
+function eventiveProgramItems(event, filmById) {
+  const inline = (Array.isArray(event?.films) ? event.films : []).filter((item) => item && typeof item === "object");
+  const values = [...inline, ...eventiveFilmIds(event).map((id) => filmById.get(id)).filter(Boolean)];
+  return normalizeProgramItems([...new Map(values.map((film) => [asString(film.id || film.name), {
+    id: asString(film.id),
+    title: asString(film.name || film.title),
+    details: film.details,
+    credits: film.credits,
+    tags: eventiveTags(film.tags),
+  }])).values()]);
+}
+
+function eventiveEventStatus(event) {
+  const value = normalizeText(`${event?.status || ""} ${event?.event_status || ""} ${event?.visibility || ""}`);
+  return /cancelled|canceled/.test(value) ? "cancelled" : "scheduled";
+}
+
+function eventiveTicketState(event) {
+  if (eventiveEventStatus(event) === "cancelled") return { ticketStatus:"registration_closed", ticketNotes:"This program is cancelled." };
+  if (event?.tickets_available === true) return { ticketStatus:"on_sale", ticketNotes:"Tickets are available from the official festival program page." };
+  const buckets = Array.isArray(event?.ticket_buckets) ? event.ticket_buckets.filter((item) => item?.public !== false) : [];
+  if (buckets.length && buckets.every((item) => Number(item.quantity_remaining) <= 0 && item.unlimited !== true)) {
+    return { ticketStatus:"sold_out", ticketNotes:"The official festival ticket inventory is sold out." };
+  }
+  if (event?.hide_tickets_button === true || event?.standalone_ticket_sales_enabled === false) return { ticketStatus:"unknown", ticketNotes:"See the official festival program page for admission details." };
+  return { ticketStatus:"unknown", ticketNotes:"See the official festival program page for current ticket availability." };
+}
+
+function eventivePublicUrl(event, source) {
+  const direct = asString(event?.public_url || event?.publicUrl || event?.url);
+  if (validHttpUrl(direct)) return direct;
+  const id = asString(event?.id);
+  return id ? new URL(`/schedule/${encodeURIComponent(id)}`, source.url).toString() : source.url;
+}
+
+function eventiveVirtual(event, venue, tags) {
+  return event?.virtual === true || event?.is_virtual === true
+    || /virtual|online|stream/.test(normalizeText(`${venue.name} ${event?.name || event?.title || ""} ${tags.join(" ")}`));
+}
+
+function eventiveOccurrence(event, source, config, filmById, index, seenAt) {
+  const tags = eventiveTags(event?.tags);
+  const venue = eventiveVenue(event, config);
+  const virtual = eventiveVirtual(event, venue, tags);
+  const sourceUrl = eventivePublicUrl(event, source);
+  const startsAt = asString(event?.start_time || event?.starts_at || event?.startTime);
+  const endsAt = asString(event?.end_time || event?.ends_at || event?.endTime) || null;
+  const title = asString(event?.name || event?.title);
+  const status = eventiveEventStatus(event);
+  const ready = Boolean(title && validDate(startsAt) && validHttpUrl(sourceUrl) && (virtual || (venue.name && venue.address)));
+  return {
+    sourceEventId: `eventive-event-${asString(event?.id)}`,
+    occurrenceType: "screening",
+    title,
+    factualDescription: cleanSourceText(event?.short_description || event?.description),
+    accessStatus: "public",
+    accessNotes: "Admission terms vary by festival program.",
+    audiences: ["Public"],
+    dateKind: "timed",
+    startsAt,
+    endsAt,
+    timezone: asString(event?.timezone) || TIME_ZONE,
+    venueName: virtual ? (venue.name || "Out on Film Virtual Cinema") : venue.name,
+    venueAddress: virtual ? "Online" : venue.address,
+    attendanceMode: virtual ? "flexible_window" : "fixed_start",
+    recommendedArrivalMinutes: virtual ? 0 : 15,
+    planningEligible: !virtual,
+    sourceUrl,
+    ticketUrl: sourceUrl,
+    ...eventiveTicketState(event),
+    status,
+    verificationState: ready ? "verified" : "needs_verification",
+    verificationNotes: ready
+      ? "Program identity, schedule, venue, and ticket facts were retrieved from the authenticated Eventive festival API."
+      : "The authenticated Eventive program is held privately until its time, event URL, and attendance location are complete.",
+    includePublic: ready,
+    programItems: eventiveProgramItems(event, filmById),
+    sourcePresenceState: "present",
+    missingCompleteRuns: 0,
+    lastSourceSeenAt: seenAt,
+    sortOrder: index,
+  };
+}
+
+function buildEventiveFestivalProposals(events, films, source) {
+  const config = parseJson(source.adapter_config_json, {});
+  const festivalStart = asString(config.festivalStart);
+  const festivalEnd = asString(config.festivalEnd);
+  const virtualEnd = asString(config.virtualEnd) || festivalEnd;
+  const seenAt = isoNow();
+  const filmById = new Map(films.map((film) => [asString(film?.id), film]));
+  const core = [];
+  const related = [];
+  for (const [index, event] of events.entries()) {
+    const occurrence = eventiveOccurrence(event, source, config, filmById, index, seenAt);
+    const localDay = wixLocalDate(occurrence.startsAt, occurrence.timezone);
+    const isVirtual = onlineOnlyEvent({ venueName:occurrence.venueName, venueAddress:occurrence.venueAddress });
+    if (localDay && ((localDay >= festivalStart && localDay <= festivalEnd) || (isVirtual && localDay <= virtualEnd))) {
+      core.push(occurrence);
+      continue;
+    }
+    const relation = localDay && localDay < festivalStart ? "preview" : "related_event";
+    related.push({
+      sourceId: source.id,
+      sourceEventId: occurrence.sourceEventId,
+      sourceUrl: occurrence.sourceUrl,
+      ticketUrl: occurrence.ticketUrl,
+      ...directSourceFields(source, occurrence.sourceUrl, asString(config.organizerUrl)),
+      relatedLinks: [{ label:`Part of ${asString(config.festivalTitle) || source.name}`, url:source.url, provenanceUrl:occurrence.sourceUrl, role:"supporting", includePublic:true }],
+      title: occurrence.title,
+      organizer: asString(config.organizer) || source.name,
+      factualDescription: occurrence.factualDescription,
+      eventStructure: "single",
+      collectionKind: "none",
+      parentCollectionSourceEventId: asString(config.parentSourceEventId) || `eventive-bucket-${asString(config.eventBucketId)}`,
+      collectionRelation: relation,
+      accessStatus: occurrence.accessStatus,
+      accessNotes: occurrence.accessNotes,
+      audiences: occurrence.audiences,
+      dateKind: occurrence.dateKind,
+      startsAt: occurrence.startsAt,
+      endsAt: occurrence.endsAt,
+      timezone: occurrence.timezone,
+      venueName: occurrence.venueName,
+      venueAddress: occurrence.venueAddress,
+      attendanceMode: occurrence.attendanceMode,
+      recommendedArrivalMinutes: occurrence.recommendedArrivalMinutes,
+      planningEligible: occurrence.planningEligible,
+      city: "Atlanta",
+      region: "GA",
+      subjects: ["film"],
+      formats: ["screening"],
+      scheduleStatus: occurrence.status === "cancelled" ? "cancelled" : "scheduled",
+      ticketStatus: occurrence.ticketStatus,
+      ticketNotes: occurrence.ticketNotes,
+      verificationState: occurrence.includePublic ? "verified" : "needs_verification",
+      verificationNotes: occurrence.verificationNotes,
+      confidence: occurrence.includePublic ? 0.99 : 0.8,
+    });
+  }
+  core.sort((left, right) => asString(left.startsAt).localeCompare(asString(right.startsAt)) || left.title.localeCompare(right.title));
+  core.forEach((occurrence, index) => { occurrence.sortOrder = index; });
+  const parentSourceEventId = asString(config.parentSourceEventId) || `eventive-bucket-${asString(config.eventBucketId)}`;
+  const parent = {
+    sourceId: source.id,
+    sourceEventId: parentSourceEventId,
+    sourceUrl: source.url,
+    ticketUrl: source.url,
+    ...directSourceFields(source, source.url, asString(config.organizerUrl)),
+    relatedLinks: asString(config.organizerUrl) ? [{ label:"Out on Film", url:asString(config.organizerUrl), provenanceUrl:source.url, role:"organizer", includePublic:true }] : [],
+    title: asString(config.festivalTitle) || source.name,
+    organizer: asString(config.organizer) || source.name,
+    factualDescription: asString(config.festivalDescription) || "Atlanta's annual LGBTQ+ film festival presents feature films, shorts programs, filmmaker conversations, and virtual cinema.",
+    eventStructure: "series",
+    collectionKind: "festival",
+    collectionRelation: "none",
+    accessStatus: "public",
+    accessNotes: "Admission and availability vary by program.",
+    audiences: ["Public"],
+    dateKind: "date_range",
+    startsAt: festivalStart,
+    endsAt: festivalEnd,
+    timezone: TIME_ZONE,
+    venueName: "Multiple Atlanta venues",
+    venueAddress: "",
+    city: "Atlanta",
+    region: "GA",
+    subjects: ["film"],
+    formats: ["screening"],
+    scheduleStatus: "scheduled",
+    ticketStatus: "on_sale",
+    ticketNotes: "Program tickets and festival passes are available from the official schedule.",
+    verificationState: "verified",
+    verificationNotes: "The festival window and complete program hierarchy were retrieved from the registered official organizer and authenticated Eventive schedule.",
+    confidence: 0.99,
+    monitoringEnabled: true,
+    monitoringCadenceHours: 24,
+    occurrenceLimit: eventiveProgramLimit(source),
+    occurrences: core,
+  };
+  return [parent, ...related];
+}
+
+async function extractEventiveFestival(env, source) {
+  const config = parseJson(source.adapter_config_json, {});
+  const bucketId = asString(config.eventBucketId);
+  const maximum = eventiveProgramLimit(source);
+  if (!bucketId) {
+    return { proposals:[], authoritative:false, diagnostics:{ retrieval:"eventive-configuration", completeness:"needs_verification", exceptionCode:"eventive_bucket_missing", exceptionSummary:"Eventive source needs an eventBucketId before it can be monitored." } };
+  }
+  const apiKey = asString(env.EVENTIVE_API_KEY);
+  if (!apiKey) {
+    let proposals = [];
+    let browserMs = 0;
+    try {
+      const rendered = await browserPlatformEvents(env, source, "eventive", source.url, maximum, "index");
+      proposals = rendered.events.map((event) => registeredBrowserProposal(event, source));
+      browserMs = rendered.browserMs;
+    } catch { /* The missing key remains the actionable exception. */ }
+    return { proposals, authoritative:false, diagnostics:{ retrieval:"browser-diagnostic", browserMs, completeness:"needs_verification", exceptionCode:"eventive_key_missing", exceptionSummary:"EVENTIVE_API_KEY is not configured; browser output is diagnostic only." } };
+  }
+  try {
+    const eventPage = await fetchEventiveResource(env, bucketId, "events", apiKey, maximum);
+    const filmPage = await fetchEventiveResource(env, bucketId, "films", apiKey, Math.min(maximum * 5, 1000));
+    const capReached = eventPage.capped || filmPage.capped;
+    const proposals = buildEventiveFestivalProposals(eventPage.values, filmPage.values, source);
+    const parent = proposals[0];
+    const heldCount = (parent?.occurrences || []).filter((occurrence) => occurrence.includePublic === false).length;
+    return {
+      proposals,
+      authoritative:true,
+      httpStatus:eventPage.status,
+      diagnostics:{
+        retrieval:"eventive-api",
+        completeness:capReached || !parent || !(parent.occurrences || []).length ? "needs_verification" : "complete",
+        eventPages:eventPage.pages,
+        filmPages:filmPage.pages,
+        capReached,
+        childLinksDiscovered:eventPage.values.length,
+        childrenExtracted:(parent?.occurrences || []).length,
+        relatedCandidates:Math.max(0, proposals.length - 1),
+        heldCount,
+        missingChildren:[],
+      },
+    };
+  } catch (error) {
+    let proposals = [];
+    let browserMs = 0;
+    try {
+      const rendered = await browserPlatformEvents(env, source, "eventive", source.url, maximum, "index");
+      proposals = rendered.events.map((event) => registeredBrowserProposal(event, source));
+      browserMs = rendered.browserMs;
+    } catch { /* Preserve the API exception below. */ }
+    return {
+      proposals,
+      authoritative:false,
+      httpStatus:Number(error.httpStatus) || 0,
+      diagnostics:{
+        retrieval:"browser-diagnostic",
+        browserMs,
+        completeness:"needs_verification",
+        exceptionCode:error.code || "eventive_api_failed",
+        exceptionSummary:asString(error.message).slice(0, 500),
+      },
+    };
+  }
 }
 
 function sourceHtmlEntities(value) {
@@ -8015,6 +8651,7 @@ function browserPastedLinkProposal(item, source) {
       timezone: occurrenceTimezone,
       venueName: asString(occurrence.venueName) || asString(item.venueName),
       venueAddress: asString(occurrence.venueAddress) || asString(item.venueAddress),
+      locationDisclosure: locationDisclosure(occurrence, item),
       sourceUrl: validHttpUrl(occurrence.sourceUrl) ? asString(occurrence.sourceUrl) : sourceUrl,
       ticketUrl: validHttpUrl(occurrence.ticketUrl) && !socialPlatformFromUrl(occurrence.ticketUrl) ? asString(occurrence.ticketUrl) : parentTicketUrl,
       ...ticketDetails(occurrence.ticketStatus, occurrence.ticketOnSaleAt, occurrence.ticketNotes, item),
@@ -8115,6 +8752,7 @@ function browserPastedLinkProposal(item, source) {
     timezone,
     venueName: asString(item.venueName),
     venueAddress: asString(item.venueAddress),
+    locationDisclosure: locationDisclosure(item),
     city: asString(item.city) || "Atlanta",
     region: asString(item.region) || "GA",
     flyerUrl: imageUrl,
@@ -8348,7 +8986,7 @@ function pastedSocialTicketFacts(value) {
   const admissionNote = Number.isFinite(amount) && amount >= 0
     ? `Admission is $${Number.isInteger(amount) ? amount : amount.toFixed(2)}.`
     : "";
-  const delayedAddress = /\b(?:address|location)\b.{0,100}\b(?:email(?:ed)?|sent|given|provided)\b.{0,100}\b(?:purchase|ticket|confirmation)\b|\b(?:email(?:ed)?|sent|given|provided)\b.{0,100}\b(?:address|location)\b.{0,100}\b(?:purchase|ticket|confirmation)\b/i.test(text);
+  const delayedAddress = delayedLocationEvidence(text);
   return {
     admissionNote,
     locationNote: delayedAddress ? "The event address is sent after ticket purchase." : "",
@@ -8429,6 +9067,7 @@ function enrichPastedSocialEvent(item, sourceUrl, renderedHtml, media) {
     organizer,
     organizerUrl: asString(item?.organizerUrl) || (contextHandle ? `https://www.instagram.com/${contextHandle}/` : ""),
     venueName: asString(item?.venueName) || (virtual ? "Online" : ""),
+    locationDisclosure: ticketFacts.locationNote ? "after_registration" : locationDisclosure(item),
     startsAt: hasTimedStart ? asString(item.startsAt) : timedFallback?.startsAt || asString(item?.startsAt),
     endsAt: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(asString(item?.endsAt)) ? asString(item.endsAt) : labeledSchedule?.endsAt || timedFallback?.endsAt || asString(item?.endsAt),
     eventUrl: sourceUrl,
@@ -8453,7 +9092,7 @@ function enrichPastedSocialEvent(item, sourceUrl, renderedHtml, media) {
 function pastedSocialVisionSchema() {
   const occurrenceProperties = {
     sourceEventId: { type: "string" }, title: { type: "string" }, occurrenceType: { type: "string", enum: [...OCCURRENCE_TYPES] }, factualDescription: { type: "string" },
-    startsAt: { type: "string" }, endsAt: { type: "string" }, timezone: { type: "string" }, venueName: { type: "string" }, venueAddress: { type: "string" },
+    startsAt: { type: "string" }, endsAt: { type: "string" }, timezone: { type: "string" }, venueName: { type: "string" }, venueAddress: { type: "string" }, locationDisclosure: { type: "string", enum: [...LOCATION_DISCLOSURES] },
     accessStatus: { type: "string", enum: [...ACCESS_STATUSES] }, accessNotes: { type: "string" }, audiences: { type: "array", items: { type: "string" } },
     sourceUrl: { type: "string" }, ticketUrl: { type: "string" }, ticketStatus: { type: "string", enum: [...TICKET_STATUSES] },
     ticketOnSaleAt: { type: "string" }, ticketNotes: { type: "string" }, status: { type: "string", enum: [...OCCURRENCE_STATUSES] },
@@ -8461,7 +9100,7 @@ function pastedSocialVisionSchema() {
   const recurringProperties = {
     title: { type: "string" }, occurrenceType: { type: "string", enum: [...OCCURRENCE_TYPES] }, factualDescription: { type: "string" },
     daysOfWeek: { type: "array", items: { type: "string" } }, startsOn: { type: "string" }, endsOn: { type: "string" },
-    startTime: { type: "string" }, endTime: { type: "string" }, timezone: { type: "string" }, venueName: { type: "string" }, venueAddress: { type: "string" },
+    startTime: { type: "string" }, endTime: { type: "string" }, timezone: { type: "string" }, venueName: { type: "string" }, venueAddress: { type: "string" }, locationDisclosure: { type: "string", enum: [...LOCATION_DISCLOSURES] },
     accessStatus: { type: "string", enum: [...ACCESS_STATUSES] }, accessNotes: { type: "string" }, audiences: { type: "array", items: { type: "string" } },
   };
   const carouselProperties = {
@@ -8470,7 +9109,7 @@ function pastedSocialVisionSchema() {
   };
   const eventProperties = {
     title: { type: "string" }, description: { type: "string" }, caption: { type: "string" }, organizer: { type: "string" },
-    organizerUrl: { type: "string" }, venueName: { type: "string" }, venueAddress: { type: "string" }, venueUrl: { type: "string" },
+    organizerUrl: { type: "string" }, venueName: { type: "string" }, venueAddress: { type: "string" }, locationDisclosure: { type: "string", enum: [...LOCATION_DISCLOSURES] }, venueUrl: { type: "string" },
     city: { type: "string" }, region: { type: "string" }, startsAt: { type: "string" }, endsAt: { type: "string" }, confirmedThrough: { type: "string" },
     visitingHours: { type: "array", items: { type:"object", additionalProperties:false, properties:{ day:{type:"integer",minimum:0,maximum:6}, opens:{type:"string"}, closes:{type:"string"} }, required:["day","opens","closes"] } },
     visitingHoursNote: { type:"string" }, visitingHoursSourceUrl: { type:"string" },
@@ -8517,6 +9156,7 @@ async function openAiPastedSocialEvents(env, sourceUrl, renderedHtml, maximum = 
       "Read the complete rendered caption and perform OCR on every supplied post image. Never invent, autocorrect, or infer a person, venue name, date, time, URL, or attendance fact that is not visibly supported.",
       "For an exhibition, keep its on-view date range on the parent using YYYY-MM-DD values and dateKind date_range. If the actual closing date is unknown, leave endsAt empty and place the last explicitly guaranteed on-view date in confirmedThrough; never turn that guarantee into a closing date. Capture recurring visitor or gallery hours in visitingHours using weekday numbers 0 Sunday through 6 Saturday and 24-hour HH:MM times. Gallery hours are availability, not occurrences. Put separately dated programs in occurrences. Put repeated weekly event programs in recurringOccurrences so the application can expand every actual program date deterministically.",
       "A street address is not a venue name. Leave venueName empty when the post names only an address. Keep curator credits in the factual description; do not replace the named exhibiting artist with the curator or social account.",
+      "When the evidence explicitly says the venue or address is provided only after ticket purchase, registration, RSVP, booking, or confirmation, set locationDisclosure to after_registration and leave any undisclosed venue fields empty. Otherwise set it to public. Never guess the hidden location.",
       "Use only supplied image URLs for imageUrl and carouselImages. Choose the event flyer as imageUrl when one is present. Return empty values rather than guesses and put genuine source disagreements in conflicts.",
       "Default accessStatus to public with a Public audience when no attendance restriction is stated. Use restricted only for an explicit limitation and unknown only when the caption, flyer, or other supplied evidence genuinely conflicts about who may attend. Performer, vendor, applicant, workshop, or competition eligibility is separate from audience attendance unless spectators or attendees are also limited.",
       "Write every public-facing description and note as a direct event fact. Never say that a caption, flyer, post, page, listing, source, extraction, or verification says, lists, confirms, or shows something. Evidence narration belongs only in private evidence or conflicts.",
@@ -10184,7 +10824,9 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
     if (index >= 0) occurrenceBaseline[index] = { ...occurrenceBaseline[index], ...pendingOccurrence, id:occurrenceBaseline[index].id || pendingOccurrence.id };
     else occurrenceBaseline.push(pendingOccurrence);
   }
-  const retainMissingSeriesOccurrences = proposal.sourceEventId === "eyedrum-series-monday-night-creative-music"
+  const festivalCollection = proposal.collectionKind === "festival";
+  const retainMissingSeriesOccurrences = festivalCollection
+    || proposal.sourceEventId === "eyedrum-series-monday-night-creative-music"
     || asString(proposal.sourceEventId).startsWith("seven-stages-vbo-");
   const matchedBaselineOccurrences = new Set();
   proposal.occurrences = proposal.occurrences.length
@@ -10199,6 +10841,19 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
           && normalizeText(item.venueName) === normalizeText(occurrence.venueName)
       ));
       if (currentOccurrence) matchedBaselineOccurrences.add(currentOccurrence);
+      const preserveLastPublishableFestivalFacts = festivalCollection
+        && occurrence.includePublic === false
+        && currentOccurrence?.includePublic !== false;
+      if (preserveLastPublishableFestivalFacts) {
+        return {
+          ...currentOccurrence,
+          id:currentOccurrence.id || occurrence.id,
+          sourcePresenceState:"present",
+          missingCompleteRuns:0,
+          lastSourceSeenAt:occurrence.lastSourceSeenAt,
+          verificationNotes:"The latest authoritative festival row is incomplete. The last publishable program facts are preserved while this program remains in the private exceptions queue.",
+        };
+      }
       return {
         ...occurrence,
         id: currentOccurrence?.id || occurrence.id,
@@ -10211,9 +10866,22 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
     })
     : current.occurrences;
   if (retainMissingSeriesOccurrences && proposal.occurrences.length) {
+    const missingOccurrences = occurrenceBaseline.filter((occurrence) => !matchedBaselineOccurrences.has(occurrence)).map((occurrence) => {
+      if (!festivalCollection) return occurrence;
+      const missingCompleteRuns = Math.max(0, Number(occurrence.missingCompleteRuns) || 0) + 1;
+      return {
+        ...occurrence,
+        sourcePresenceState: missingCompleteRuns >= 2 ? "confirmed_removed" : "missing_once",
+        missingCompleteRuns,
+        status: missingCompleteRuns >= 2 ? "cancelled" : occurrence.status,
+        verificationNotes: missingCompleteRuns >= 2
+          ? "The program was absent from two consecutive complete authoritative festival schedules."
+          : "The program was absent from one complete authoritative festival schedule; the last public facts are preserved pending confirmation.",
+      };
+    });
     proposal.occurrences = [
       ...proposal.occurrences,
-      ...occurrenceBaseline.filter((occurrence) => !matchedBaselineOccurrences.has(occurrence)),
+      ...missingOccurrences,
     ].sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt));
     const occurrenceDates = proposal.occurrences.map((occurrence) => wixLocalDate(occurrence.startsAt, occurrence.timezone || proposal.timezone)).filter(Boolean);
     if (occurrenceDates.length) {
@@ -10489,13 +11157,143 @@ async function monitorDueCandidates(env, db, scheduledTime) {
   return { checked: outcomes.length, outcomes };
 }
 
-async function monitorSources(env, db, profile, sourceId = "", runId = "", sourceScope = "") {
+function sourceEffectiveCadenceHours(source, now = Date.now()) {
+  const config = parseJson(source.adapter_config_json, {});
+  if (asString(config.internalAdapter) !== "eventive") return Math.max(1, Number(source.cadence_hours) || 24);
+  const start = Date.parse(`${asString(config.festivalStart)}T00:00:00Z`);
+  const end = Date.parse(`${asString(config.virtualEnd || config.festivalEnd)}T23:59:59Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return Math.max(1, Number(source.cadence_hours) || 24);
+  if (now >= start - 3 * 86_400_000 && now <= end) return 6;
+  if (source.last_success_at && now <= end) return 24;
+  if (now >= start - 45 * 86_400_000 && now <= end + 7 * 86_400_000) return 24;
+  return 168;
+}
+
+function sourceDue(source, now = Date.now()) {
+  return !source.last_attempt_at || now - Date.parse(source.last_attempt_at) >= sourceEffectiveCadenceHours(source, now) * 3_600_000;
+}
+
+function festivalHierarchyShape(proposals) {
+  return proposals.map((proposal) => ({
+    sourceEventId:asString(proposal.sourceEventId),
+    collectionKind:collectionKind(proposal),
+    collectionRelation:collectionRelation(proposal),
+    parentCollectionSourceEventId:asString(proposal.parentCollectionSourceEventId),
+    occurrences:(proposal.occurrences || []).map((occurrence) => asString(occurrence.sourceEventId)).filter(Boolean).sort(),
+  })).sort((left, right) => left.sourceEventId.localeCompare(right.sourceEventId));
+}
+
+async function sourceAutomationRow(db, source) {
+  try {
+    let row = await db.prepare("SELECT * FROM calendar_source_automation WHERE source_id=?").bind(source.id).first();
+    if (row) return row;
+    const config = parseJson(source.adapter_config_json, {});
+    await ensureSourceAutomation(db, source.id, sourceAdapterKey(source), config, {});
+    row = await db.prepare("SELECT * FROM calendar_source_automation WHERE source_id=?").bind(source.id).first();
+    return row;
+  } catch (error) {
+    if (/no such table:\s*calendar_source_automation/i.test(asString(error?.message))) return null;
+    throw error;
+  }
+}
+
+async function recordSourceSyncSnapshot(db, source, runId, adapterKey, bundle) {
+  const automation = await sourceAutomationRow(db, source);
+  if (!automation) return { canonicalEligible:true, autoPublish:false, automationState:"shadow", snapshotId:"" };
+  const now = isoNow();
+  const diagnostics = bundle.diagnostics || {};
+  const authoritativeComplete = bundle.authoritative === true && diagnostics.completeness === "complete";
+  const hierarchyFingerprint = await sha256(JSON.stringify(festivalHierarchyShape(bundle.proposals || [])));
+  const parent = (bundle.proposals || []).find((proposal) => proposal.collectionKind === "festival");
+  const occurrences = parent?.occurrences || [];
+  const programCount = occurrences.length;
+  const heldCount = occurrences.filter((occurrence) => occurrence.includePublic === false).length;
+  const explicitCancellationCount = occurrences.filter((occurrence) => occurrence.status === "cancelled").length;
+  const priorCount = Math.max(0, Number(automation.last_program_count) || 0);
+  const removedCount = Math.max(0, priorCount - programCount);
+  const unexpectedDrop = authoritativeComplete && automation.automation_state === "active" && removedCount > 0
+    && explicitCancellationCount < removedCount
+    && (removedCount > 5 || removedCount / Math.max(1, priorCount) > 0.1);
+  const sameHierarchy = hierarchyFingerprint === asString(automation.last_hierarchy_fingerprint);
+  const streak = authoritativeComplete ? (sameHierarchy ? Number(automation.complete_run_streak || 0) + 1 : 1) : 0;
+  const mode = automation.automation_mode || "review";
+  let state = automation.automation_state || "shadow";
+  if (unexpectedDrop) state = "paused";
+  else if (state !== "paused" && mode === "auto") state = "active";
+  else if (state !== "paused" && mode === "shadow_then_auto" && streak >= Number(automation.required_stable_runs || 2)) state = "active";
+  const exceptionSummary = unexpectedDrop
+    ? `Automation paused because ${removedCount} programs disappeared from a complete schedule without matching explicit cancellations.`
+    : authoritativeComplete ? "" : asString(diagnostics.exceptionSummary) || "The latest extraction is not authoritative and complete; canonical calendar data was frozen.";
+  const authoritativeAccess = authoritativeComplete ? "configured"
+    : diagnostics.exceptionCode === "eventive_key_missing" ? "missing"
+      : diagnostics.exceptionCode ? "failed" : automation.authoritative_access || "unknown";
+  const snapshotId = `cal_source_snapshot_${crypto.randomUUID()}`;
+  await db.prepare(
+    `INSERT INTO calendar_source_sync_snapshots
+      (id,source_id,run_id,adapter_key,retrieval,completeness,authoritative,hierarchy_fingerprint,proposal_count,
+       program_count,held_count,missing_count,payload_json,diagnostics_json,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(
+    snapshotId,source.id,runId || "",adapterKey,asString(diagnostics.retrieval) || "unknown",
+    diagnostics.completeness === "complete" ? "complete" : "needs_verification",bundle.authoritative ? 1 : 0,
+    hierarchyFingerprint,(bundle.proposals || []).length,programCount,heldCount,removedCount,
+    JSON.stringify(bundle.proposals || []),JSON.stringify({ ...diagnostics, removedCount, unexpectedDrop }),now,
+  ).run();
+  await db.prepare(
+    `UPDATE calendar_source_automation SET automation_state=?,complete_run_streak=?,last_hierarchy_fingerprint=?,
+       last_program_count=?,last_snapshot_id=?,latest_exception_summary=?,authoritative_access=?,updated_at=? WHERE source_id=?`
+  ).bind(
+    state,streak,authoritativeComplete && !unexpectedDrop ? hierarchyFingerprint : automation.last_hierarchy_fingerprint || "",
+    authoritativeComplete && !unexpectedDrop ? programCount : priorCount,snapshotId,exceptionSummary,authoritativeAccess,now,source.id,
+  ).run();
+  return {
+    canonicalEligible:authoritativeComplete && !unexpectedDrop,
+    autoPublish:authoritativeComplete && !unexpectedDrop && state === "active" && mode !== "review",
+    automationState:state,
+    snapshotId,
+    hierarchyFingerprint,
+    completeRunStreak:streak,
+    requiredStableRuns:Number(automation.required_stable_runs || 2),
+    unexpectedDrop,
+    exceptionSummary,
+  };
+}
+
+async function markSourceSnapshotPromoted(db, sourceId, snapshotId) {
+  if (!snapshotId) return;
+  try {
+    await db.prepare("UPDATE calendar_source_automation SET last_promoted_snapshot_id=?,updated_at=? WHERE source_id=?")
+      .bind(snapshotId, isoNow(), sourceId).run();
+  } catch (error) {
+    if (!/no such table:\s*calendar_source_automation/i.test(asString(error?.message))) throw error;
+  }
+}
+
+async function autoPublishScoutCandidate(env, db, stored) {
+  const candidate = stored?.candidate;
+  if (!candidate || ["rejected", "duplicate", "cancelled"].includes(candidate.status)) return { published:false };
+  let current = await getCandidate(db, candidate.id, false);
+  if (current.pendingRevisionId && current.status === "published") {
+    const revision = await db.prepare("SELECT change_set_json FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'")
+      .bind(current.pendingRevisionId, current.id).first();
+    const fields = parseJson(revision?.change_set_json, []).filter((change) => !change.applied && Object.hasOwn(CANDIDATE_CHANGE_LABELS, change.field)).map((change) => change.field);
+    if (fields.length) {
+      const applied = await applyCandidateRevision(env, db, current.id, current.pendingRevisionId, { fields });
+      if (applied.error) return { published:false, error:applied.error };
+      current = await getCandidate(db, current.id, false);
+    }
+  }
+  const approved = await approveCandidate(env, current.id);
+  return approved.error ? { published:false, error:approved.error, errors:approved.errors || [] } : { published:true, entryId:approved.entryId };
+}
+
+async function monitorSources(env, db, profile, sourceId = "", runId = "", sourceScope = "", scheduled = false) {
   const result = sourceId
     ? await db.prepare("SELECT * FROM calendar_sources WHERE id=?").bind(sourceId).all()
     : sourceScope === "strong-picks"
       ? await db.prepare("SELECT * FROM calendar_sources WHERE enabled=1 AND COALESCE(json_extract(adapter_config_json,'$.strongPicksIntake'),0)=1 ORDER BY name").all()
       : await db.prepare("SELECT * FROM calendar_sources WHERE enabled=1 ORDER BY name").all();
-  const sources = result.results || [];
+  const sources = (result.results || []).filter((source) => sourceId || !scheduled || sourceDue(source));
   const outcomes = [];
   let candidateCount = 0;
   let duplicateCount = 0;
@@ -10509,12 +11307,20 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
       const adapterKey = sourceAdapterKey(source);
       const sourceConfig = parseJson(source.adapter_config_json, {});
       const sourceLimit = Math.min(Math.max(Number(sourceConfig.perRunLimit) || profile.perRunLimit, 1), 100);
-      const response = await fetchExternalSource(source.url);
-      const platformFallback = PLATFORM_SOURCE_ADAPTERS.has(adapterKey) && source.render_mode === "dynamic-fallback";
-      if (!response.ok && !platformFallback) throw new Error(`HTTP ${response.status}`);
-      const text = response.ok ? await completeSourcePayload(source, await boundedResponseText(response)) : "";
       let bundle;
-      if (adapterKey === "beltline") {
+      let response = null;
+      let text = "";
+      if (adapterKey === "eventive") {
+        bundle = await extractEventiveFestival(env, source);
+      } else {
+        response = await fetchExternalSource(source.url);
+        const platformFallback = PLATFORM_SOURCE_ADAPTERS.has(adapterKey) && source.render_mode === "dynamic-fallback";
+        if (!response.ok && !platformFallback) throw new Error(`HTTP ${response.status}`);
+        text = response.ok ? await completeSourcePayload(source, await boundedResponseText(response)) : "";
+      }
+      if (adapterKey === "eventive") {
+        // The adapter owns API authentication and browser-diagnostic fallback.
+      } else if (adapterKey === "beltline") {
         bundle = await extractBeltlineEvents(env, source, sourceLimit);
       } else if (adapterKey === "bibliocommons") {
         bundle = await extractBibliocommonsListing(source, text);
@@ -10562,8 +11368,12 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
         occurrences: (proposal.occurrences || []).map((occurrence) => ({ id:occurrence.sourceEventId, startsAt:occurrence.startsAt, endsAt:occurrence.endsAt })),
       })));
       const fingerprint = await sha256(adapterKey === "bigtickets" || adapterKey === "high_art_making" || bundle.diagnostics.retrieval === "site-crawl" ? `${text}\n${proposalFingerprint}` : (text || proposalFingerprint));
-      const proposals = bundle.proposals.slice(0, sourceLimit);
-      const renderedEmpty = ["browser-extraction", "beltline-rendered-details"].includes(bundle.diagnostics.retrieval);
+      const automation = adapterKey === "eventive"
+        ? await recordSourceSyncSnapshot(db, source, runId, adapterKey, bundle)
+        : { canonicalEligible:true, autoPublish:false, automationState:"shadow", snapshotId:"", completeRunStreak:0, requiredStableRuns:0 };
+      const proposalLimit = adapterKey === "eventive" ? eventiveProgramLimit(source) + 10 : sourceLimit;
+      const proposals = automation.canonicalEligible ? bundle.proposals.slice(0, proposalLimit) : [];
+      const renderedEmpty = ["browser-extraction", "beltline-rendered-details", "browser-diagnostic"].includes(bundle.diagnostics.retrieval);
       const emptyWarning = proposals.length ? "" : renderedEmpty
         ? "The source loaded and dynamic extraction ran, but no upcoming Atlanta event cards were found. Confirm that the URL is the exact events or calendar page and that its source type and adapter match the page."
         : bundle.diagnostics.pagesAttempted > 1
@@ -10572,7 +11382,7 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
       const detailWarning = bundle.diagnostics.detailFailures?.length
         ? `${bundle.diagnostics.detailFailures.length} course detail page(s) could not be safely expanded into session dates.`
         : "";
-      const sourceWarning = emptyWarning || detailWarning;
+      const sourceWarning = automation.exceptionSummary || emptyWarning || detailWarning;
       if (sourceWarning) warningCount += 1;
       const sourceOutcome = {
         sourceId: source.id,
@@ -10580,12 +11390,25 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
         adapter: adapterKey,
         status: sourceWarning ? "warning" : "ok",
         proposals: proposals.length,
+        observedProposals: bundle.proposals.length,
         changed: fingerprint !== source.content_fingerprint,
+        automationState: automation.automationState,
+        completeRunStreak: automation.completeRunStreak,
+        requiredStableRuns: automation.requiredStableRuns,
+        snapshotId: automation.snapshotId,
         ...(sourceWarning ? { warning: sourceWarning } : {}),
         ...bundle.diagnostics,
       };
       const skippedReasons = {};
+      let autoPublished = 0;
+      const automationErrors = [];
       for (const proposal of proposals) {
+        if (proposal.parentCollectionSourceEventId && !proposal.parentCollectionCandidateId) {
+          const parent = await db.prepare(
+            "SELECT id FROM calendar_candidates WHERE source_id=? AND source_event_id=? LIMIT 1"
+          ).bind(source.id, proposal.parentCollectionSourceEventId).first();
+          proposal.parentCollectionCandidateId = parent?.id || "";
+        }
         if (proposal.detailScheduleUnavailable && proposal.sourceId && proposal.sourceEventId) {
           const existing = await db.prepare(
             "SELECT id FROM calendar_candidates WHERE source_id=? AND source_event_id=? LIMIT 1"
@@ -10617,12 +11440,68 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
         if (stored.candidate && !stored.existing) candidateCount += 1;
         if (stored.duplicate) duplicateCount += 1;
         if (stored.skipped) skippedReasons[stored.skipped] = (skippedReasons[stored.skipped] || 0) + 1;
+        if (automation.autoPublish && stored.candidate && !stored.duplicate && !stored.skipped
+          && stored.candidate.verificationState === "verified") {
+          const publication = await autoPublishScoutCandidate(env, db, stored);
+          if (publication.published) autoPublished += 1;
+          else if (publication.error) automationErrors.push(`${stored.candidate.title}: ${publication.error}${publication.errors?.length ? ` ${publication.errors.join(" ")}` : ""}`);
+        }
+      }
+      if (adapterKey === "eventive" && automation.canonicalEligible && !automationErrors.length) {
+        const festivalState = await db.prepare(
+          `SELECT
+             SUM(CASE WHEN o.include_public=0 THEN 1 ELSE 0 END) held_count,
+             SUM(CASE WHEN o.source_presence_state='missing_once' THEN 1 ELSE 0 END) first_disappearance_count,
+             SUM(CASE WHEN o.status='cancelled' THEN 1 ELSE 0 END) cancellation_count
+           FROM calendar_candidate_occurrences o
+           JOIN calendar_candidates c ON c.id=o.candidate_id
+           WHERE c.source_id=? AND c.collection_kind='festival'`
+        ).bind(source.id).first();
+        sourceOutcome.heldCount = Math.max(Number(bundle.diagnostics.heldCount) || 0, Number(festivalState?.held_count) || 0);
+        sourceOutcome.firstDisappearanceCount = Number(festivalState?.first_disappearance_count) || 0;
+        sourceOutcome.cancellationCount = Number(festivalState?.cancellation_count) || 0;
+        const operationalNotice = sourceOutcome.firstDisappearanceCount
+          ? `${sourceOutcome.firstDisappearanceCount} festival program${sourceOutcome.firstDisappearanceCount === 1 ? " is" : "s are"} absent for the first complete API run; last public facts are frozen pending confirmation.`
+          : sourceOutcome.heldCount
+            ? `${sourceOutcome.heldCount} festival program${sourceOutcome.heldCount === 1 ? " is" : "s are"} held privately because required facts are incomplete.`
+            : sourceOutcome.cancellationCount
+              ? `${sourceOutcome.cancellationCount} festival program cancellation${sourceOutcome.cancellationCount === 1 ? " has" : "s have"} been applied to the public schedule.`
+              : "";
+        if (operationalNotice) {
+          await db.prepare(
+            "UPDATE calendar_source_automation SET latest_exception_summary=?,updated_at=? WHERE source_id=?"
+          ).bind(operationalNotice, isoNow(), source.id).run();
+          sourceOutcome.status = "warning";
+          sourceOutcome.warning = operationalNotice;
+          warningCount += 1;
+        }
       }
       sourceOutcome.skipped = Object.values(skippedReasons).reduce((sum, count) => sum + count, 0);
       sourceOutcome.skipReasons = skippedReasons;
+      sourceOutcome.autoPublished = autoPublished;
+      if (automationErrors.length) {
+        sourceOutcome.status = "warning";
+        sourceOutcome.warning = automationErrors.join(" ").slice(0, 1000);
+        sourceOutcome.automationErrors = automationErrors;
+        warningCount += 1;
+        try {
+          await db.prepare(
+            "UPDATE calendar_source_automation SET automation_state='paused',latest_exception_summary=?,updated_at=? WHERE source_id=?"
+          ).bind(sourceOutcome.warning, isoNow(), source.id).run();
+          sourceOutcome.automationState = "paused";
+        } catch (error) {
+          if (!/no such table:\s*calendar_source_automation/i.test(asString(error?.message))) throw error;
+        }
+      }
+      if (automation.canonicalEligible && !automationErrors.length) await markSourceSnapshotPromoted(db, source.id, automation.snapshotId);
+      const successful = adapterKey !== "eventive" || automation.canonicalEligible;
       await db.prepare(
-        "UPDATE calendar_sources SET last_attempt_at=?,last_success_at=?,last_error='',last_http_status=?,content_fingerprint=?,updated_at=? WHERE id=?"
-      ).bind(now, now, response.status, fingerprint, now, source.id).run();
+        `UPDATE calendar_sources SET last_attempt_at=?,last_success_at=CASE WHEN ?=1 THEN ? ELSE last_success_at END,
+         last_error=?,last_http_status=?,content_fingerprint=?,updated_at=? WHERE id=?`
+      ).bind(
+        now,successful ? 1 : 0,now,successful && !automationErrors.length ? "" : (sourceOutcome.warning || sourceWarning || "Source needs verification").slice(0,500),
+        Number(response?.status || bundle.httpStatus) || null,fingerprint,now,source.id,
+      ).run();
       outcomes.push(sourceOutcome);
     } catch (error) {
       failureCount += 1;
@@ -10665,7 +11544,7 @@ function scoutSchema() {
     sourceEventId: { type: "string" }, occurrenceType: { type: "string", enum: [...OCCURRENCE_TYPES] },
     title: { type: "string" }, factualDescription: { type: "string" }, dateKind: { type: "string", enum: ["timed", "all_day"] },
     startsAt: { type: "string" }, endsAt: { type: "string" }, timezone: { type: "string" }, venueName: { type: "string" },
-    venueAddress: { type: "string" }, sourceUrl: { type: "string" }, ticketUrl: { type: "string" },
+    venueAddress: { type: "string" }, locationDisclosure: { type: "string", enum: [...LOCATION_DISCLOSURES] }, sourceUrl: { type: "string" }, ticketUrl: { type: "string" },
     ticketStatus: { type: "string", enum: [...TICKET_STATUSES] }, ticketOnSaleAt: { type: "string" }, ticketNotes: { type: "string" },
     accessStatus: { type: "string", enum: [...ACCESS_STATUSES] }, accessNotes: { type: "string" },
     audiences: { type: "array", items: { type: "string" } },
@@ -10674,17 +11553,18 @@ function scoutSchema() {
   };
   const eventProperties = {
     sourceUrl: { type: "string" }, ticketUrl: { type: "string" }, discoveryUrl: { type: "string" }, organizerUrl: { type: "string" }, venueUrl: { type: "string" },
+    scheduleUrl: { type: "string" }, eventBucketId: { type: "string" },
     scheduleStatus: { type: "string", enum: [...SCHEDULE_STATUSES] }, ticketStatus: { type: "string", enum: [...TICKET_STATUSES] }, ticketOnSaleAt: { type: "string" }, ticketNotes: { type: "string" },
     sourceAuthority: { type: "string", enum: [...SOURCE_AUTHORITIES] }, sourceResolutionNotes: { type: "string" }, sourceEventId: { type: "string" }, title: { type: "string" },
     relatedLinks: { type: "array", items: { type: "object", properties: { label: { type: "string" }, url: { type: "string" }, role: { type: "string", enum: [...LINK_ROLES] } }, required: ["label", "url", "role"], additionalProperties: false } },
     flyerUrl: { type: "string" },
-    organizer: { type: "string" }, factualDescription: { type: "string" }, eventStructure: { type: "string", enum: [...EVENT_STRUCTURES] }, dateKind: { type: "string", enum: [...DATE_KINDS] },
+    organizer: { type: "string" }, factualDescription: { type: "string" }, eventStructure: { type: "string", enum: [...EVENT_STRUCTURES] }, collectionKind: { type: "string", enum: [...COLLECTION_KINDS] }, collectionRelation: { type: "string", enum: [...COLLECTION_RELATIONS] }, dateKind: { type: "string", enum: [...DATE_KINDS] },
     accessStatus: { type: "string", enum: [...ACCESS_STATUSES] }, accessNotes: { type: "string" },
     audiences: { type: "array", items: { type: "string" } },
     startsAt: { type: "string" }, endsAt: { type: "string" }, confirmedThrough: { type:"string" }, timezone: { type: "string" }, venueName: { type: "string" },
     visitingHours: { type:"array", items:{ type:"object", additionalProperties:false, properties:{ day:{type:"integer",minimum:0,maximum:6}, opens:{type:"string"}, closes:{type:"string"} }, required:["day","opens","closes"] } },
     visitingHoursNote:{type:"string"}, visitingHoursSourceUrl:{type:"string"},
-    venueAddress: { type: "string" }, city: { type: "string" }, region: { type: "string" }, subjects: { type: "array", items: { type: "string", enum: [...SUBJECTS] } },
+    venueAddress: { type: "string" }, locationDisclosure: { type: "string", enum: [...LOCATION_DISCLOSURES] }, city: { type: "string" }, region: { type: "string" }, subjects: { type: "array", items: { type: "string", enum: [...SUBJECTS] } },
     formats: { type: "array", items: { type: "string", enum: [...FORMATS] } }, experimental: { type: "boolean" },
     verificationState: { type: "string", enum: ["verified", "needs_verification"] }, verificationNotes: { type: "string" }, confidence: { type: "number" },
     privateRationale: { type: "string" }, attendanceUse: { type: "string" }, programmingIdeas: { type: "string" }, potentialCollaborators: { type: "string" },
@@ -10791,9 +11671,11 @@ async function requestOpenAiEvents(env, profile, { query, domains = [], sourceDa
       organizationGuidance,
       "A social verification badge is informational and never establishes trust. Preserve the original post identity and a short factual caption excerpt as private evidence.",
       "Use explicit UTC offsets for timed dates and YYYY-MM-DD for all-day dates. Omit anything without a confirmable date.",
+      "When an authoritative event or ticket source explicitly withholds the venue or address until ticket purchase, registration, RSVP, booking, or confirmation, set locationDisclosure to after_registration and leave undisclosed venue fields empty. Otherwise set it to public. Preserve the ticket or registration URL and never invent the hidden address.",
       "Capture any stated attendance restriction as a public fact. Default accessStatus to public with a Public audience when no restriction is stated. Use restricted when attendance is explicitly limited to students, alumni, faculty, staff, members, registrants, invitees, or another named group; use unknown only when sources genuinely conflict about eligibility. Performer, vendor, applicant, workshop, or competition eligibility is separate from audience attendance unless spectators or attendees are also limited. Copy named eligible groups into audiences and write a concise factual accessNotes sentence for restricted or conflicting access.",
       "Every public-facing string, including factualDescription, accessNotes, ticketNotes, planningNotes, and occurrence equivalents, must state the event fact directly. Never write that a caption, flyer, post, page, listing, source, extraction, verification, or research process says, lists, confirms, or shows something. Keep that evidence narration only in private evidence, sourceResolutionNotes, verificationNotes, citations, or private Studio intelligence.",
       "Classify eventStructure as single, series, or exhibition. Keep one exhibition or multi-program series as the parent proposal. Put its opening receptions, artist talks, mixers, screenings, performances, workshops, panels, and lectures in occurrences instead of returning duplicate top-level events. A date marked TBD may be retained only as an occurrence with status tbd and empty startsAt. A series parent range is metadata, never a continuous public event.",
+      "Recognize a named festival with many separately scheduled or ticketed programs across multiple dates as collectionKind festival and eventStructure series. Return the festival parent instead of flattening the schedule into unrelated top-level events. Keep films inside a shorts block as program metadata rather than separate calendar events. Put a visibly linked Eventive schedule in scheduleUrl and return eventBucketId only when the exact stable bucket ID is explicitly established by the official organizer-to-schedule relationship; never guess or derive an ID from cadence. Use collectionKind none and collectionRelation none for ordinary events.",
       "For an exhibition whose closing date has not been announced, leave endsAt empty and put only the last explicitly guaranteed on-view date in confirmedThrough. Never represent a confirmed-through horizon as a closing date. Capture recurring gallery or visitor availability in visitingHours using weekday numbers 0 Sunday through 6 Saturday and HH:MM local opening and closing times; these hours are not related-program occurrences.",
       "For every exhibition, identify each credited artist and search for the artist's official website and official Instagram profile. Add both verified destinations to relatedLinks with role artist and labels that name the artist and destination. If neither official destination can be verified, add a Google search URL labeled Search for followed by the artist's name. Never substitute an Instagram post, gallery page, article, fan account, or similarly named person for an artist identity link.",
       "Treat participatory public art programs as art-making: sip-and-paint programs, live or figure drawing, critique groups, open studios, hands-on workshops, and art classes open to the public. Classify these with the art-making subject and workshop format when supported by the source.",
@@ -11096,6 +11978,80 @@ async function resolveDiscoveryProposal(env, db, profile, source, proposal) {
   }
 }
 
+function eventiveOnboardingException(event) {
+  if (collectionKind(event) !== "festival") return "";
+  const scheduleUrl = asString(event.scheduleUrl);
+  const bucketId = asString(event.eventBucketId);
+  if (!validHttpUrl(scheduleUrl)) return "Festival onboarding exception: an official multi-program schedule URL has not been proven.";
+  if (!/^[a-f0-9]{24}$/i.test(bucketId)) return "Festival onboarding exception: the official schedule is visible, but its stable Eventive event-bucket ID has not been proven.";
+  if (!validHttpUrl(event.organizerUrl || event.sourceUrl)) return "Festival onboarding exception: the official organizer-to-schedule relationship has not been proven.";
+  if (!["organizer_event", "venue_event", "official_calendar"].includes(asString(event.sourceAuthority))) return "Festival onboarding exception: the organizer-to-schedule relationship came from a secondary or unresolved source.";
+  return "";
+}
+
+async function maybeRegisterEventiveFestivalSource(db, rawEvent) {
+  const event = { ...rawEvent };
+  if (collectionKind(event) !== "festival") return { event, registered:false };
+  event.eventStructure = "series";
+  event.collectionKind = "festival";
+  event.collectionRelation = "none";
+  const exception = eventiveOnboardingException(event);
+  if (exception) {
+    event.verificationState = "needs_verification";
+    event.verificationNotes = [asString(event.verificationNotes), exception].filter(Boolean).join(" ");
+    return { event, registered:false, exception };
+  }
+  const scheduleUrl = asString(event.scheduleUrl);
+  const bucketId = asString(event.eventBucketId).toLowerCase();
+  const organizerUrl = asString(event.organizerUrl || event.sourceUrl);
+  const existing = await db.prepare(
+    "SELECT * FROM calendar_sources WHERE url=? OR json_extract(adapter_config_json,'$.eventBucketId')=? ORDER BY enabled DESC LIMIT 1"
+  ).bind(scheduleUrl, bucketId).first();
+  const sourceId = existing?.id || `cal_source_eventive_${(await sha256(bucketId)).slice(0, 16)}`;
+  const festivalStart = wixLocalDate(event.startsAt, event.timezone || TIME_ZONE);
+  const festivalEnd = wixLocalDate(event.endsAt || event.startsAt, event.timezone || TIME_ZONE);
+  const config = {
+    internalAdapter:"eventive",
+    eventBucketId:bucketId,
+    parentSourceEventId:`eventive-bucket-${bucketId}`,
+    festivalTitle:asString(event.title),
+    festivalDescription:asString(event.factualDescription),
+    organizer:asString(event.organizer),
+    organizerUrl,
+    festivalStart,
+    festivalEnd,
+    virtualEnd:festivalEnd,
+    maxPrograms:DEFAULT_FESTIVAL_PROGRAM_LIMIT,
+    automationMode:"shadow_then_auto",
+    requiredStableRuns:2,
+  };
+  const now = isoNow();
+  if (existing) {
+    await db.prepare(
+      "UPDATE calendar_sources SET name=?,url=?,enabled=1,cadence_hours=24,adapter_key='automatic',render_mode='dynamic-fallback',adapter_config_json=?,updated_at=? WHERE id=?"
+    ).bind(`${asString(event.title)} — Eventive`, scheduleUrl, JSON.stringify(config), now, sourceId).run();
+  } else {
+    await db.prepare(
+      `INSERT INTO calendar_sources
+       (id,name,url,source_type,trust_level,enabled,cadence_hours,adapter_key,render_mode,adapter_config_json,created_at,updated_at)
+       VALUES (?,?,?,'official_html','official',1,24,'automatic','dynamic-fallback',?,?,?)`
+    ).bind(sourceId, `${asString(event.title)} — Eventive`, scheduleUrl, JSON.stringify(config), now, now).run();
+  }
+  await ensureSourceAutomation(db, sourceId, "eventive", config, {
+    automationMode:"shadow_then_auto",
+    requiredStableRuns:2,
+  });
+  event.sourceId = sourceId;
+  event.sourceEventId = `eventive-bucket-${bucketId}`;
+  event.sourceUrl = scheduleUrl;
+  event.verificationState = "needs_verification";
+  event.verificationNotes = [
+    asString(event.verificationNotes),
+    "A shadow Eventive source was created from the proven official organizer-to-schedule relationship. Two complete stable API runs are required before automatic publication.",
+  ].filter(Boolean).join(" ");
+  return { event, registered:true, sourceId };
+}
+
 async function storeOpenAiEvents(env, db, profile, events, { provenance = [], platform = "", channel = "general_web", allowNativeFlyer = false, nativePosts = [], limit = 20, runId = "" } = {}) {
   let candidates = 0;
   let duplicates = 0;
@@ -11107,6 +12063,7 @@ async function storeOpenAiEvents(env, db, profile, events, { provenance = [], pl
     try {
       let event = platform ? await prepareSocialProposal(db, rawEvent, platform, channel, allowNativeFlyer, nativePosts) : { ...rawEvent, discoveryChannel: channel };
       if (platform && !event.socialEvidence.length) { failures += 1; continue; }
+      if (!platform) event = (await maybeRegisterEventiveFestivalSource(db, event)).event;
       const leadUrl = event.discoveryUrl || event.socialEvidence?.[0]?.postUrl || (event.sourceAuthority === "unresolved" ? event.sourceUrl : "");
       const needsSourceResolution = Boolean(leadUrl && sourceAuthorityErrors(proposalFromBody(event)).length);
       const resolved = needsSourceResolution
@@ -11475,7 +12432,7 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
     try {
       let result;
       if (id === "direct") {
-        const direct = await monitorSources(env, db, profile, sourceId, runId, sourceScope);
+        const direct = await monitorSources(env, db, profile, sourceId, runId, sourceScope, runKind === "scheduled");
         result = { candidates: direct.candidateCount, duplicates: direct.duplicateCount, suppressed: direct.suppressedCount, failures: direct.failureCount, warnings: direct.warningCount, strongPicks: direct.strongPickCount, materialUpdates: direct.materialUpdateCount, citations: [], usage: {}, queries: [], postsInspected: 0, details: direct.outcomes };
         searched.push(...direct.sourceIds);
       } else if (id === "general_web") result = await runOpenAiDiscovery(env, db, profile, connector.perRunLimit, runId);
@@ -11542,7 +12499,7 @@ export async function runDueCalendarScout(env, scheduledTime = Date.now()) {
     const connectors = (await db.prepare("SELECT * FROM calendar_scout_connectors WHERE enabled=1").all()).results || [];
     const due = connectors.filter((connector) => !connector.last_attempt_at || now - Date.parse(connector.last_attempt_at) >= Number(connector.cadence_hours || 24) * 3_600_000).map((connector) => connector.id);
     if (!due.length) return monitoring.checked ? { status: "completed", monitoring } : { skipped: "not-due" };
-    const result = await runCalendarScout(env, { runKind: "scheduled", channels: due, sourceScope: "strong-picks" });
+    const result = await runCalendarScout(env, { runKind: "scheduled", channels: due });
     return { ...result, monitoring };
   } catch (error) {
     console.error(JSON.stringify({ event: "calendar_scout_schedule_failed", error: asString(error.message) }));
@@ -11562,20 +12519,14 @@ export async function handleCalendarAdminApi(request, env) {
       const db = requireDb(env);
       const [candidates, sources, profile, socialSources, connectors, knownOrganizations, strongPicks] = await Promise.all([
         listCandidates(db, ""),
-        db.prepare(
-          `SELECT s.*,
-            SUM(CASE WHEN c.status IN ('published','rejected','cancelled','duplicate') THEN 1 ELSE 0 END) reviewed_count,
-            SUM(CASE WHEN c.status IN ('published','cancelled') THEN 1 ELSE 0 END) accepted_count
-           FROM calendar_sources s LEFT JOIN calendar_candidates c ON c.source_id=s.id
-           GROUP BY s.id ORDER BY s.name`
-        ).all(),
+        listSourceRegistry(db, env),
         db.prepare("SELECT * FROM calendar_scout_profiles WHERE id='atlanta-default'").first(),
         listSocialSources(db),
         listConnectors(db, env),
         listKnownOrganizations(db),
         listStrongPicks(db),
       ]);
-      return json({ candidates, sources: (sources.results || []).map(normalizeSource), socialSources, connectors, knownOrganizations, strongPicks, profile: normalizeProfile(profile), broadDiscoveryEnabled: Boolean(env.OPENAI_API_KEY) });
+      return json({ candidates, sources, socialSources, connectors, knownOrganizations, strongPicks, profile: normalizeProfile(profile), broadDiscoveryEnabled: Boolean(env.OPENAI_API_KEY) });
     }
     if (parts[0] === "day") return handleCalendarDay(request, env);
     if (parts[0] === "planner") return handleStudioPlanner(request, env);

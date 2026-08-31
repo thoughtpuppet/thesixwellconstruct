@@ -1463,7 +1463,6 @@ test("Studio ingests SVG as an exact protected archival artifact", async () => {
   assert.equal(record.privacy, "internal");
   assert.equal(record.public_presentation, "hidden");
   assert.equal(new TextDecoder().decode(bucket.objects.get(record.storage_key).body), source);
-
   response = await handleConstructApi(request(`/api/admin/media/${record.id}`, {
     method: "PATCH", admin: true, body: { privacy: "public", public_presentation: "inline" },
   }), environment);

@@ -756,6 +756,7 @@ const ARCHIVE_MATERIAL_TYPES = new Set(["final-image","sketch","process-photo","
 const ARCHIVE_DATE_PRECISIONS = new Set(["exact","approximate","year","range","undated"]);
 const ARCHIVE_VISIBILITIES = new Set(["public","unlisted","internal","private"]);
 const ARCHIVE_STATES = new Set(["draft","published","archived"]);
+const ARCHIVE_BULK_PUBLICATION_LIMIT = 100;
 function publicationPublicFlag(state){return state==="published"?1:0}
 function publicationVisibility(state){return state==="published"?"public":"internal"}
 const ARCHIVE_TIMELINE_STATES = new Set(["draft","published","archived"]);
@@ -5308,6 +5309,69 @@ async function archiveOwnerPublicationStatements(database,owner,state){
   return statements;
 }
 
+async function archiveDossierPublicationReview(database,entityId){
+  const dossier=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();
+  if(!dossier)return{entity_id:entityId,ready:false,status:"blocked",reason:"Archive dossier not found."};
+  const owner=await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(entityId).first();
+  if(!owner)return{entity_id:entityId,archive_slug:dossier.archive_slug,state:dossier.state,ready:false,status:"blocked",reason:"The item attached to this Archive record no longer exists."};
+  const base={entity_id:entityId,entity_type:owner.entity_type,archive_slug:dossier.archive_slug,state:dossier.state};
+  if(dossier.state==="published")return{...base,ready:true,status:"already-published",reason:"Already published."};
+  if(dossier.state==="archived")return{...base,ready:false,status:"blocked",reason:"Restore this Archive dossier to Draft before bulk publishing."};
+  if(owner.entity_type==="organization")return{...base,ready:false,status:"blocked",reason:"Publish this Creative Identity from its coordinated Studio editor."};
+  const ownerPublicationProblem=await validateArchiveOwnerPublication(database,owner,"published");
+  if(ownerPublicationProblem)return{...base,ready:false,status:"blocked",reason:ownerPublicationProblem};
+  return{...base,ready:true,status:"ready",reason:"Ready to publish."};
+}
+
+function archiveBulkPublicationSummary(results){
+  return results.reduce((summary,result)=>{
+    summary.requested+=1;
+    if(result.status==="ready")summary.ready+=1;
+    else if(result.status==="published")summary.published+=1;
+    else if(result.status==="already-published")summary.already_published+=1;
+    else if(result.status==="failed")summary.failed+=1;
+    else summary.blocked+=1;
+    return summary;
+  },{requested:0,ready:0,published:0,already_published:0,blocked:0,failed:0});
+}
+
+async function archiveDossierBulkPublicationApi(request,env){
+  if(request.method!=="POST")return failure("Method not allowed.",405);
+  const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+  const mode=text(body.mode,30)||"preflight";
+  if(!["preflight","publish"].includes(mode))return failure("Mode must be preflight or publish.");
+  const submittedIds=body.entity_ids??body.entityIds;
+  if(!Array.isArray(submittedIds))return failure("entity_ids must be an array.");
+  const entityIds=[...new Set(submittedIds.map(value=>text(value,200)).filter(Boolean))];
+  if(!entityIds.length)return failure("Choose at least one Archive dossier.");
+  if(entityIds.length>ARCHIVE_BULK_PUBLICATION_LIMIT)return failure(`Choose no more than ${ARCHIVE_BULK_PUBLICATION_LIMIT} Archive dossiers at once.`,409);
+  const database=db(env),results=[];
+  for(const entityId of entityIds){
+    const review=await archiveDossierPublicationReview(database,entityId);
+    if(mode==="preflight"||!review.ready||review.status==="already-published"){
+      results.push(review);
+      continue;
+    }
+    try{
+      const before=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();
+      const owner=await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(entityId).first();
+      await ensureArchiveEventStructure(database,owner);
+      await ensureArchiveCatalogueEntry(database,owner);
+      await database.batch([
+        database.prepare("UPDATE archive_dossiers SET state='published',public_visible=1,published_at=COALESCE(published_at,datetime('now')),updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(entityId),
+        ...await archiveOwnerPublicationStatements(database,owner,"published"),
+      ]);
+      const after=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();
+      await nextRevision(database,entityId,"archive-dossier-update",before,after);
+      results.push({...review,state:"published",status:"published",reason:"Published."});
+    }catch(error){
+      console.error(JSON.stringify({message:"Bulk Archive dossier publication failed.",entityId,error:String(error?.message||error)}));
+      results.push({...review,ready:false,status:"failed",reason:text(error?.message||error,1000)||"Publication failed."});
+    }
+  }
+  return json({mode,results,summary:archiveBulkPublicationSummary(results)});
+}
+
 async function enrichArchiveDossierAdminCounts(database,rows){
   const entityIds=[...new Set(rows.map(row=>String(row.entity_id||"")).filter(Boolean))];
   if(!entityIds.length)return rows;
@@ -8017,6 +8081,7 @@ export async function handleConstructApi(request,env){
   const eventIdentifierMatch=path.match(/^\/api\/admin\/archive-event-identifiers\/([^/]+)$/);if(eventIdentifierMatch)return archiveEventIdentifierAdminApi(request,env,decodeURIComponent(eventIdentifierMatch[1]));
   const versionMatch=path.match(/^\/api\/admin\/archive-versions(?:\/([^/]+))?$/);if(versionMatch)return archiveVersionsAdminApi(request,env,versionMatch[1]?decodeURIComponent(versionMatch[1]):"");
   const stateMatch=path.match(/^\/api\/admin\/archive-states(?:\/([^/]+))?$/);if(stateMatch)return archiveStatesAdminApi(request,env,stateMatch[1]?decodeURIComponent(stateMatch[1]):"");
+  if(path==="/api/admin/archive-dossiers/bulk-publication")return archiveDossierBulkPublicationApi(request,env);
   const dossierMatch=path.match(/^\/api\/admin\/archive-dossiers(?:\/([^/]+))?$/);if(dossierMatch)return archiveDossiersAdminApi(request,env,dossierMatch[1]?decodeURIComponent(dossierMatch[1]):"");
   if(path==="/api/admin/archive-blackboards/fragments")return archiveBlackboardFragmentsGlobalAdminApi(request,env);
   const blackboardFragmentEditMatch=path.match(/^\/api\/admin\/archive-blackboards\/fragments\/([^/]+)\/edits\/([^/]+)$/);if(blackboardFragmentEditMatch)return archiveBlackboardFragmentsGlobalAdminApi(request,env,decodeURIComponent(blackboardFragmentEditMatch[1]),`edits/${encodeURIComponent(decodeURIComponent(blackboardFragmentEditMatch[2]))}`);

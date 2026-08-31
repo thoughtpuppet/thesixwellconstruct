@@ -370,7 +370,7 @@ test("People UI groups customer-facing Construct milestones by node", () => {
       source_id: "ticket-1",
       interaction_type: "event_ticket_purchase",
       node_id: "node-events",
-      label: "Cult & Shift",
+      label: "GREEN[FIELD]",
       status: "paid",
       quantity: 2,
       occurred_at: "2026-07-12T15:00:00.000Z",
@@ -417,7 +417,7 @@ test("People UI groups customer-facing Construct milestones by node", () => {
   assert.match(html, /data-people-node="node-tattoos"[\s\S]*Inquired[\s\S]*Booked/);
   assert.match(html, /&lt;Dragon inquiry&gt;/);
   assert.match(html, /data-people-node="node-merch"[\s\S]*Ordered[\s\S]*#1001[\s\S]*2 items/);
-  assert.match(html, /data-people-node="node-events"[\s\S]*Ticketed[\s\S]*Cult &amp; Shift[\s\S]*2 tickets[\s\S]*Attended/);
+  assert.match(html, /data-people-node="node-events"[\s\S]*Ticketed[\s\S]*GREEN\[FIELD\][\s\S]*2 tickets[\s\S]*Attended/);
   assert.match(html, /data-people-activity-node="studio"[\s\S]*Studio planning call/);
   assert.doesNotMatch(html, /Newsletter|Deposit payment|shopify|square|beehiiv/i);
   assert.doesNotMatch(html, /\bpaid\b/i);
@@ -729,7 +729,7 @@ test("public customer forms collect the optional People profile answers", () => 
     ["booking", "studio", "index.html"],
     ["booking", "studio-visit", "index.html"],
     ["art", "acquisitioninquiry.html"],
-    ["events", "cultandshift", "index.html"],
+    ["events", "greenfield", "index.html"],
     ["events", "signal-symbol", "index.html"],
   ];
   for (const parts of formFiles) {

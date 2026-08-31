@@ -130,10 +130,10 @@
   // read from the API; the confirmation flow renders exactly as it would live.
   function previewTicket(state) {
     const start = new Date(Date.now() + 26 * 60 * 60 * 1000);
-    const previewEvent = params.get("event") === "cultandshift"
+    const previewEvent = params.get("event") === "greenfield"
       ? {
-          title: "Cult & Shift",
-          slug: "cultandshift",
+          title: "GREEN[FIELD]",
+          slug: "greenfield",
           amountFormatted: "$40.00",
           location: "the six.well construct - location shared after booking",
         }

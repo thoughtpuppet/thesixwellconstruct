@@ -107,8 +107,10 @@
   .slot-picker,.cal-wrap,.booking-window-option,.change-window-button,.time-option,.cal-next-btn{--calendar-control-height:44px;}
   .cal-day,.cal-nav,.time-trigger,.time-add-btn,.cal-next-btn{min-height:44px;font-size:16px;}
   .time-option,.booking-window-option{min-height:44px;}
-  .cal-month-nav{width:100%;}
+  .cal-month-nav{width:100%;display:grid;grid-template-columns:var(--calendar-control-height) minmax(0,1fr) var(--calendar-control-height);}
   .cal-month-select{flex:1;max-width:none;}
+  .cal-wrap .cal-month-nav > .custom-select{width:100%;max-width:none;min-width:0;}
+  .cal-wrap .cal-month-nav > .custom-select > .custom-select-trigger{gap:6px;padding-left:10px;padding-right:8px;font-size:clamp(10px,3.4vw,14px);letter-spacing:.04em!important;}
   .cal-day.today{font-size:12px;}
   .cal-weekdays span,.cal-next-tag{font-size:10px;}
 }

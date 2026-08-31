@@ -271,7 +271,7 @@
 
   function legacyEventCard(event) {
     var primarySubject = event.subjects[0] || "";
-    var labels = event.subjects.map(function (value) { return SUBJECT_LABELS[value] || value; }).concat(event.formats.map(function (value) { return FORMAT_LABELS[value] || value; }), (event.affiliations || []).map(function (value) { return AFFILIATION_LABELS[value] || value; }), event.virtual ? [MODE_LABELS.virtual] : []);
+    var labels = event.subjects.map(function (value) { return SUBJECT_LABELS[value] || value; }).concat(event.formats.map(function (value) { return FORMAT_LABELS[value] || value; }), (event.affiliations || []).map(function (value) { return AFFILIATION_LABELS[value] || value; }), event.collectionKind === "festival" ? ["Festival"] : [], event.collectionRelation === "preview" ? ["Festival Preview"] : event.collectionRelation === "related_event" ? ["Festival Related"] : [], event.virtual ? [MODE_LABELS.virtual] : []);
     var sourceLabel = event.origin === "sixwell" ? "Six.Well event" : (event.affiliations || []).includes("gsu") ? "Georgia State University event" : "";
     var relatedLinks = Array.isArray(event.relatedLinks) ? event.relatedLinks : [];
     var artistLinks = relatedLinks.filter(function (link) { return link.role === "artist"; });

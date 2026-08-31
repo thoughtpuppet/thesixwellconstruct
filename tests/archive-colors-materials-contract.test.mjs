@@ -353,6 +353,19 @@ test("automatic analysis activates without approval while Studio edits remain pr
   await handleVisualColorQueue({messages:[{body:{run_id:run.id},ack(){}}]},runtime);
   assert.equal(sql.prepare("SELECT status FROM archive_visual_analysis_runs WHERE id=?").get(run.id).status,"active");
   assert.equal(sql.prepare("SELECT origin FROM archive_visual_color_entity_assignments WHERE entity_id='art-marbles'").get().origin,"automatic");
+  const liveInventory=await admin(runtime,"/api/admin/archive-color-materials/visual-analysis?filter=live",undefined,"GET");
+  assert.equal(liveInventory.status,200,liveInventory.body.error);
+  assert.equal(liveInventory.body.items.some(item=>item.id==="art-marbles"&&item.status==="live"),true);
+  sql.prepare(`INSERT INTO archive_visual_analysis_runs(
+    id,entity_type,entity_id,source_manifest_json,source_fingerprint,model_name,model_version,prompt_version,status,
+    attempts,descriptor_suggestions_json,created_at,updated_at
+  ) SELECT 'dismissed-refresh',entity_type,entity_id,source_manifest_json,source_fingerprint||'-dismissed',model_name,
+    model_version,prompt_version,'rejected',attempts,descriptor_suggestions_json,datetime('now'),datetime('now')
+    FROM archive_visual_analysis_runs WHERE id=?`).run(run.id);
+  const liveAfterDismissedRefresh=await admin(runtime,"/api/admin/archive-color-materials/visual-analysis?filter=live",undefined,"GET");
+  assert.equal(liveAfterDismissedRefresh.body.items.some(item=>item.id==="art-marbles"&&item.status==="live"),true);
+  const staleQueue=await admin(runtime,"/api/admin/archive-color-materials/visual-analysis?filter=queued",undefined,"GET");
+  assert.equal(staleQueue.body.items.some(item=>item.id==="art-marbles"),false);
 
   const blue=sql.prepare("SELECT id FROM archive_color_families WHERE slug='blue'").get();
   const edited=await admin(runtime,"/api/admin/archive-color-materials/visual-analysis/items/art_work/art-marbles",{
@@ -980,6 +993,10 @@ test("Studio SVG import owns transforms and public map interactions use privacy-
   assert.match(studioSource,/data-archive-material/);
   assert.match(studioSource,/Color analysis/);
   assert.match(studioSource,/data-analysis-item/);
+  assert.match(studioSource,/data-open-analysis-editor/);
+  assert.match(studioSource,/Edit color source/);
+  assert.match(studioSource,/acm-analysis-grid/);
+  assert.match(studioSource,/aria-labelledby="analysis-dialog-title-/);
   assert.match(studioSource,/Save Studio edit/);
   assert.match(studioSource,/Gold, Ochre, Burgundy, and Red remain separate labels/);
   assert.match(studioSource,/Restore automatic/);

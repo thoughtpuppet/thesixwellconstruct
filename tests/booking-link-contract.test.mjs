@@ -70,3 +70,16 @@ test("single-session booking collapses availability around the selected window",
   assert.match(calendarCss, /\.window-list\{scroll-margin-top:120px;\}/);
   assert.match(bookingPage, /changeWindowBtn\.addEventListener\("click", \(\) => \{\s*windowSelectionExpanded = true/);
 });
+
+test("private booking offers clearly labeled responsive scheduling paths", () => {
+  const bookingPage = readFileSync("booking/index.html", "utf8");
+  const calendarCss = readFileSync("css/booking-calendar.css", "utf8");
+
+  assert.match(bookingPage, /id="specificTimeHeading"[^>]*>Choose a specific day &amp; time<\/p>/);
+  assert.match(bookingPage, /id="nextAvailableHeading"[^>]*>Choose next available slot<\/p>/);
+  assert.match(bookingPage, /specificTimeHeadingEl\.classList\.toggle\("hidden", !monthKeys\.length \|\| windowSelectionCollapsed\)/);
+  assert.match(bookingPage, /nextAvailableHeadingEl\.classList\.toggle\("hidden", windowSelectionCollapsed \|\| !visibleWindows\.length \|\| Boolean\(selectedMonthKey\)\)/);
+  assert.match(calendarCss, /\.cal-month-nav\{width:100%;display:grid;grid-template-columns:var\(--calendar-control-height\) minmax\(0,1fr\) var\(--calendar-control-height\);\}/);
+  assert.match(calendarCss, /\.cal-wrap \.cal-month-nav > \.custom-select\{width:100%;max-width:none;min-width:0;\}/);
+  assert.match(calendarCss, /font-size:clamp\(10px,3\.4vw,14px\)/);
+});

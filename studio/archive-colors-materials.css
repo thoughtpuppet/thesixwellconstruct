@@ -84,11 +84,20 @@
 .acm-public-preview { max-height:360px; overflow:auto; border:5px solid var(--ring-faint); padding:12px; white-space:pre-wrap; font-size:11px; }
 .acm-review-filters { display:flex; flex-wrap:wrap; gap:12px; }
 .acm-review-filters .is-active { border-color:var(--accent); color:var(--accent); }
-.acm-review-grid { display:grid; gap:16px; }
-.acm-review-card { border:5px solid var(--ring-faint); padding:14px; display:grid; gap:14px; }
-.acm-review-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
-.acm-review-card-head h4 { margin:8px 0 4px; font-size:24px; }
-.acm-review-card-head p { margin:0; color:var(--dim); }
+.acm-analysis-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr)); gap:16px; }
+.acm-analysis-card { min-width:0; border:5px solid var(--ring-faint); display:grid; align-content:start; background:var(--panel); }
+.acm-analysis-card-image { aspect-ratio:4/3; min-height:180px; display:grid; place-items:center; overflow:hidden; background:#171717; }
+.acm-analysis-card-image img { display:block; width:100%; height:100%; object-fit:cover; }
+.acm-analysis-card-image span { padding:16px; color:var(--dim); text-align:center; }
+.acm-analysis-card-body { padding:12px; display:grid; gap:10px; }
+.acm-analysis-card-body h4 { margin:0; font-size:20px; }
+.acm-analysis-card-body .button { width:100%; }
+.acm-analysis-dialog { width:min(1080px,calc(100vw - 32px)); max-height:calc(100vh - 32px); overflow:auto; border:5px solid var(--accent); background:var(--bg); color:var(--text); padding:16px; }
+.acm-analysis-dialog::backdrop { background:rgba(0,0,0,.82); }
+.acm-analysis-dialog-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:16px; }
+.acm-analysis-dialog-head h3 { margin:4px 0; }
+.acm-analysis-dialog-head p { margin:0; color:var(--dim); }
+.acm-analysis-dialog form { display:grid; gap:14px; margin-top:14px; }
 .acm-review-images { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
 .acm-review-images img { display:block; width:100%; height:180px; object-fit:cover; border:5px solid var(--ring-faint); }
 .acm-review-color-list { display:grid; gap:10px; }
@@ -159,7 +168,7 @@
   .acm-dossier-columns,.acm-map-inspector { grid-template-columns:1fr; }
   .acm-import-list label { grid-template-columns:1fr; }
   .acm-record-details { grid-template-columns:1fr; }
-  .acm-review-card-head { display:grid; }
+  .acm-analysis-dialog-head { display:grid; }
   .acm-review-images,.acm-review-color-row,.acm-review-term-grid { grid-template-columns:1fr; }
   .acm-review-images img { height:auto; max-height:360px; }
   .acm-vocabulary-item { grid-template-columns:auto minmax(0,1fr); }

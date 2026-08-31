@@ -9,11 +9,11 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
 <link rel="stylesheet" href="/css/tokens.css?v=dual-system-contract">
 <link rel="stylesheet" href="/studio/console-system.css?v=dual-system-contract">
-<link rel="stylesheet" href="/studio/construct-manager.css?v=20260821-studio-visibility">
+<link rel="stylesheet" href="/studio/construct-manager.css?v=20260831-bulk-archive-publication">
 <link rel="stylesheet" href="/studio/media-catalogue-manager.css?v=20260830-relational-gallery">
 <link rel="stylesheet" href="/studio/archive-notes-manager.css?v=1">
 <link rel="stylesheet" href="/studio/archive-catalogue.css?v=1">
-<link rel="stylesheet" href="/studio/archive-colors-materials.css?v=5">
+<link rel="stylesheet" href="/studio/archive-colors-materials.css?v=6">
 <link rel="stylesheet" href="/studio/archive-failed-experiments.css?v=1">
 <link rel="stylesheet" href="/css/archive-web-snapshots.css?v=1">
 <link rel="stylesheet" href="/studio/connections-manager.css?v=1">
@@ -4865,8 +4865,8 @@
     ));
   }
 
-  function isCultAndShift(ev) {
-    return ev && ev.slug === "cultandshift";
+  function isGreenfield(ev) {
+    return ev && ev.slug === "greenfield";
   }
 
   function generatedOpenMicSlot(startsAt, index) {
@@ -4923,7 +4923,7 @@
     `;
   }
 
-  async function renderCultAndShiftOpenMic(slug) {
+  async function renderGreenfieldOpenMic(slug) {
     const container = document.getElementById("openMicPanel");
     if (!container) return;
     container.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">Loading open mic requests.</p>';
@@ -5013,14 +5013,14 @@
         <div class="review-card-header">Waitlist</div>
         <p class="empty" style="font-family:var(--sans);font-size:11px;">Loading waitlist.</p>
       </div>
-      ${isCultAndShift(ev) ? `
+      ${isGreenfield(ev) ? `
         <div class="review-card">
           <div class="review-card-header">Open Mic Signups</div>
-          <p class="contact" style="margin-top:0;">Separate performer lane for Cult & Shift. Generate an assigned time, save it, then email the performer once the run is set.</p>
+          <p class="contact" style="margin-top:0;">Separate performer lane for GREEN[FIELD]. Generate an assigned time, save it, then email the performer once the run is set.</p>
           <div id="openMicPanel" class="availability-list"></div>
         </div>` : ""}`;
     renderEventWaitlist(ev.slug);
-    if (isCultAndShift(ev)) renderCultAndShiftOpenMic(ev.slug);
+    if (isGreenfield(ev)) renderGreenfieldOpenMic(ev.slug);
   }
 
   async function renderEventWaitlist(slug) {
@@ -10953,7 +10953,7 @@ ${meetingLines}
     const openMicForm = event.target.closest("[data-open-mic-form]");
     if (openMicForm) {
       event.preventDefault();
-      const slug = openMicForm.dataset.eventSlug || selectedEventSlug || "cultandshift";
+      const slug = openMicForm.dataset.eventSlug || selectedEventSlug || "greenfield";
       const id = openMicForm.dataset.openMicForm;
       const fieldValue = (name) => openMicForm.querySelector(`[data-open-mic-field="${name}"]`)?.value ?? "";
       const sendEmail = event.submitter?.dataset.sendOpenMicEmail === "1";
@@ -10970,7 +10970,7 @@ ${meetingLines}
             sendEmail,
           }),
         });
-        await renderCultAndShiftOpenMic(slug);
+        await renderGreenfieldOpenMic(slug);
         setStatus(sendEmail ? "Performer emailed" : "Open mic slot saved");
       } catch (error) {
         setStatus(error.message || "Could not save open mic slot");
@@ -11471,10 +11471,10 @@ ${meetingLines}
 </script>
 <script src="/studio/origin-thread-manager.js?v=1"></script>
 <script src="/studio/connections-manager.js?v=3"></script>
-<script src="/studio/archive-colors-materials.js?v=5"></script>
+<script src="/studio/archive-colors-materials.js?v=6"></script>
 <script src="/studio/archive-failed-experiments.js?v=1"></script>
 <script src="/js/archive-note-markdown.js?v=1"></script>
-<script src="/studio/construct-manager.js?v=20260830-svg-archive-counts"></script>
+<script src="/studio/construct-manager.js?v=20260831-bulk-archive-publication"></script>
 <script src="/studio/people-manager.js?v=11"></script>
 </body>
 </html>

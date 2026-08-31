@@ -567,6 +567,19 @@ async function itemAssignments(database, item) {
   return { colors: colors.results || [], descriptors: descriptors.results || [] };
 }
 
+function inventoryStatus(item, control = {}, run = null) {
+  if (control.analysis_mode === "paused") return "paused";
+  if (!item.analysis_ready) return "waiting_for_image";
+  if (bool(control.has_studio_edits) && control.pending_confirmation_run_id) return "needs_confirmation";
+  if (bool(control.has_studio_edits)) return "studio_edited";
+  if (run?.status === "pending") return "queued";
+  if (run?.status === "running") return "analyzing";
+  if (run?.status === "needs_confirmation") return "needs_confirmation";
+  if (run?.status === "active" || control.active_run_id) return "live";
+  if (run?.status === "failed") return "failed";
+  return "queued";
+}
+
 async function analysisInventory(request, env) {
   if (request.method !== "GET") return failure("Method not allowed.", 405);
   const database = db(env); const inventory = await discoverVisualColorInventory(database);
@@ -583,9 +596,7 @@ async function analysisInventory(request, env) {
   for (const item of inventory.values()) {
     const key = `${item.entity_type}:${item.id}`; const control = controlMap.get(key) || {}; const run = runMap.get(key) || null;
     const assignments = await itemAssignments(database, item);
-    const status = control.analysis_mode === "paused" ? "paused" : !item.analysis_ready ? "waiting_for_image"
-      : bool(control.has_studio_edits) && control.pending_confirmation_run_id ? "needs_confirmation"
-      : bool(control.has_studio_edits) ? "studio_edited" : ({ pending: "queued", running: "analyzing", active: "live", failed: "failed", needs_confirmation: "needs_confirmation" }[run?.status] || "queued");
+    const status = inventoryStatus(item, control, run);
     const type = publicTypeFor(item.entity_type);
     if (filter !== "all" && filter !== status && filter !== type && !(filter === "art" && type === "painting") && !(filter === "tattoos" && type === "tattoo")) continue;
     const images = item.images.map((image) => ({

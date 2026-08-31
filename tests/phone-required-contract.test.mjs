@@ -18,8 +18,8 @@ const PUBLIC_PHONE_FIELDS = [
   ["booking/studio-visit/index.html", "phone"],
   ["booking/index.html", "clientPhoneInput"],
   ["art/acquisitioninquiry.html", "phone"],
-  ["events/cultandshift/index.html", "phone"],
-  ["events/cultandshift/index.html", "performerPhone"],
+  ["events/greenfield/index.html", "phone"],
+  ["events/greenfield/index.html", "performerPhone"],
   ["events/signal-symbol/index.html", "phone"],
   ["events/signal-symbol/index.html", "waitPhone"],
   ["tattoos/specials/index.html", "specialsPhone"],
@@ -47,9 +47,9 @@ test("public APIs reject missing phone numbers", () => {
 });
 
 test("custom event submit handlers surface a missing-phone error before fetch", () => {
-  const cultAndShift = read("events", "cultandshift", "index.html");
+  const greenfield = read("events", "greenfield", "index.html");
   const signalSymbol = read("events", "signal-symbol", "index.html");
 
-  assert.equal((cultAndShift.match(/Please enter your phone number\./g) || []).length, 2);
+  assert.equal((greenfield.match(/Please enter your phone number\./g) || []).length, 2);
   assert.equal((signalSymbol.match(/Please enter your phone number\./g) || []).length, 2);
 });

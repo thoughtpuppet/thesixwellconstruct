@@ -29,9 +29,15 @@ export const SOURCES = {
     logo: "/assets/brand/art-pill-tattoo-house.svg.svg",
     logoAlt: "art.pill Tattoo House logo",
   },
+  greenfield: {
+    label: "GREEN[FIELD]",
+    color: tokenColor("--color-events", "#005D25"),
+    brightColor: tokenColor("--color-events-bright", "#2E8B57"),
+    statement: "event artifacts from the construct's live gathering field",
+  },
 };
 
-export const SOURCE_ORDER = ["six.well", "thoughtpuppet", "art.pill"];
+export const SOURCE_ORDER = ["six.well", "thoughtpuppet", "art.pill", "greenfield"];
 
 const SOURCE_ALIASES = {
   "six well": "six.well",
@@ -46,6 +52,8 @@ const SOURCE_ALIASES = {
   "art.pill tattoo supply": "art.pill",
   "art pill tattoo house": "art.pill",
   "art pill tattoo supply": "art.pill",
+  "green[field]": "greenfield",
+  "green field": "greenfield",
   tattooing: "art.pill",
   tattoo: "art.pill",
   art: "thoughtpuppet",

@@ -151,8 +151,9 @@ async function run() {
 
   const items = await jsonApi(env, "/api/archive/items?limit=100");
   assert.equal(items.response.status, 200);
-  assert.equal(items.payload.pagination.total, 24);
+  assert.ok(items.payload.pagination.total >= 25, "the public Archive must retain its established records and the Guardian Studios history");
   assert.equal(items.payload.items.filter((item) => item.entity_id === "art-marbles").length, 1);
+  assert.equal(items.payload.items.filter((item) => item.entity_id === "archive-record-saiel-guardian-studios-years").length, 1);
   assert.ok(items.payload.facets.material_type.some((facet) => facet.slug === "note"));
 
   const detail = await jsonApi(env, "/api/archive/items/lostmarbles");

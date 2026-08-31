@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
-<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260825-readable-schedule-diffs">
+<link rel="stylesheet" href="/studio/calendar/calendar.css?v=20260830-readable-schedule-diffs-festival-automation">
 </head>
 <body>
   <header class="studio-header">
@@ -125,6 +125,11 @@
 
     <section class="studio-view" data-panel="sources" hidden>
       <header class="view-header"><div><p class="eyebrow">Approved inputs</p><h2>Source Registry</h2></div></header>
+      <section class="festival-exceptions" aria-labelledby="festivalExceptionsTitle">
+        <header class="subview-header"><div><p class="eyebrow">Admin check-in</p><h3 id="festivalExceptionsTitle">Festival Exceptions</h3></div></header>
+        <p class="view-note">Weekly or bi-weekly review starts here. Healthy active festival sources require no action.</p>
+        <div id="festivalExceptionList"></div>
+      </section>
       <form class="source-create-form" id="sourceCreateForm" novalidate>
         <div class="source-create-heading">
           <div><p class="eyebrow">New registry source</p><h3>Add a source</h3></div>
@@ -187,6 +192,6 @@
     </form>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="/studio/calendar/calendar.js?v=20260825-readable-schedule-diffs"></script>
+<script src="/studio/calendar/calendar.js?v=20260830-readable-schedule-diffs-festival-automation"></script>
 </body>
 </html>

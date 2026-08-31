@@ -141,7 +141,7 @@ Source chain:
 - `archive/writings/index.html`
 - `construct-map/index.html`
 - `events/calendar/index.html`
-- `events/cultandshift/index.html`
+- `events/greenfield/index.html`
 - `events/index.html`
 - `events/open-studios/index.html`
 - `events/signal-symbol/index.html`

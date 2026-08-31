@@ -12,6 +12,8 @@
 .mcm-accession { color: var(--color-archive-bright,#b87a32); font-weight: 900; letter-spacing: .08em; }
 .mcm-meta { color: var(--muted,#aaa); font-size: .75rem; line-height: 1.45; }
 .mcm-actions,.mcm-checks,.mcm-pills { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.mcm-bulk { position: sticky; top: .5rem; z-index: 3; display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; padding: .75rem 1rem; border: 5px solid var(--color-archive-bright,#b87a32); background: var(--panel,#171717); }
+.mcm-bulk label,.mcm-select { display: flex; gap: .45rem; align-items: center; font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .mcm-pill { padding: .35rem .5rem; border: 3px solid var(--border,#585858); font-size: .62rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .mcm-workspace { display: grid; grid-template-columns: minmax(18rem,.8fr) minmax(0,1.2fr); gap: 1rem; }
 .mcm-editor-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .8rem; }

@@ -68,6 +68,15 @@
   padding: clamp(1.25rem, 4vw, 2.5rem);
 }
 
+.place-index-card--text-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.place-index-card--text-only .place-index-card-copy {
+  min-height: 23rem;
+  border-left: 0;
+}
+
 .place-index-card-title {
   color: var(--archive-ink);
   font-family: var(--font-display, Inter, Arial, sans-serif);

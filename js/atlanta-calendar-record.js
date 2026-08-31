@@ -134,6 +134,9 @@
   }
 
   function addressFact(event, expanded) {
+    if (event.locationDisclosure === "after_registration") {
+      return '<span><strong>location:</strong> Location revealed after registration</span>';
+    }
     var address = String(event.venueAddress || "").trim();
     var venue = String(event.venueName || "").trim();
     var movedOnline = event.scheduleStatus === "moved_online";
@@ -170,7 +173,8 @@
     var peopleCount = artistLinks.length + participantLinks.length + organizerLinks.length + otherRelatedLinks.length;
     var scheduleContent = relatedOccurrences.map(function (occurrence) {
       var href = occurrence.detailUrl || ("#" + eventAnchor(occurrence));
-      return '<a href="' + escapeHtml(href) + '"' + (occurrence.detailUrl ? ' data-calendar-detail-link' : '') + '><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small></a>';
+      var programItems = Array.isArray(occurrence.programItems) ? occurrence.programItems : [];
+      return '<a href="' + escapeHtml(href) + '"' + (occurrence.detailUrl ? ' data-calendar-detail-link' : '') + '><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small>' + (programItems.length ? '<small>' + escapeHtml(programItems.map(function(item){return item.title;}).filter(Boolean).join(" / ")) + '</small>' : '') + '</a>';
     }).join("");
     var peopleContent =
       (artistLinks.length ? '<div class="calendar-related-links calendar-artist-links"><span>Artists</span>' + artistLinks.map(creditedLink).join("") + '</div>' : '') +
@@ -199,7 +203,7 @@
     var includeViewEvent = options.includeViewEvent !== false;
     var primarySubject = (event.subjects || [])[0] || "";
     var labels = (event.subjects || []).map(function (value) { return SUBJECT_LABELS[value] || value; })
-      .concat((event.formats || []).map(function (value) { return FORMAT_LABELS[value] || value; }), (event.affiliations || []).map(function (value) { return AFFILIATION_LABELS[value] || value; }), event.virtual ? ["Virtual"] : []);
+      .concat((event.formats || []).map(function (value) { return FORMAT_LABELS[value] || value; }), (event.affiliations || []).map(function (value) { return AFFILIATION_LABELS[value] || value; }), event.collectionKind === "festival" ? ["Festival"] : [], event.collectionRelation === "preview" ? ["Festival Preview"] : event.collectionRelation === "related_event" ? ["Festival Related"] : [], event.virtual ? ["Virtual"] : []);
     var sourceLabel = event.origin === "sixwell" ? "Six.Well event" : (event.affiliations || []).includes("gsu") ? "Georgia State University event" : "";
     function creditedLink(link) { return '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(link.label) + (link.creditRole ? ' / ' + escapeHtml(link.creditRole) : '') + '</a>'; }
     var media = eventMedia(event);

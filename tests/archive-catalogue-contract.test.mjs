@@ -1006,6 +1006,67 @@ test("Archive dossier publication state alone controls dossier public visibility
   assert.deepEqual({ ...db.prepare("SELECT state,public_visible FROM archive_dossiers WHERE entity_id='art-marbles'").get() }, { state: "published", public_visible: 1 });
 });
 
+test("bulk Archive publication preflights every dossier, publishes only ready records, and preserves private layers", async () => {
+  const db = database();
+  const runtime = env(db);
+  const readyId = "art-marbles";
+  const blockedId = "art-lust";
+  const identityId = "org-thoughtpuppet";
+
+  db.prepare("UPDATE archive_dossiers SET state='draft',public_visible=0 WHERE entity_id IN (?,?,?)").run(readyId, blockedId, identityId);
+  db.prepare("UPDATE content_entities SET visibility='internal',search_visibility=0 WHERE id=?").run(blockedId);
+  db.prepare(`INSERT OR IGNORE INTO archive_dossier_subjects(
+    dossier_entity_id,subject_entity_id,role,public_visible,sort_order,created_at
+  ) VALUES(?,?,'bulk-test-context',0,99,datetime('now'))`).run(readyId, "person-saiel-dauhn-solehman");
+  const termId = db.prepare("SELECT id FROM taxonomy_terms ORDER BY id LIMIT 1").get().id;
+  db.prepare("INSERT OR IGNORE INTO entity_terms(entity_id,term_id,created_at) VALUES(?,?,datetime('now'))").run(readyId, termId);
+
+  const contextBefore = db.prepare("SELECT COUNT(*) count FROM archive_dossier_subjects WHERE dossier_entity_id=?").get(readyId).count;
+  const themesBefore = db.prepare("SELECT COUNT(*) count FROM entity_terms WHERE entity_id=?").get(readyId).count;
+  const mediaBefore = db.prepare("SELECT m.id,m.privacy,m.public_presentation,em.public_visible FROM entity_media em JOIN media_assets m ON m.id=em.media_id WHERE em.entity_id=? ORDER BY m.id").all(readyId);
+  const materialsBefore = db.prepare("SELECT id,state,visibility FROM archive_materials WHERE dossier_entity_id=? ORDER BY id").all(readyId);
+
+  const unauthorized = await handleConstructApi(request("/api/admin/archive-dossiers/bulk-publication", {
+    method: "POST",
+    body: { mode: "preflight", entity_ids: [readyId] },
+  }), runtime);
+  assert.equal(unauthorized.status, 401);
+
+  let response = await handleConstructApi(request("/api/admin/archive-dossiers/bulk-publication", {
+    method: "POST",
+    admin: true,
+    body: { mode: "preflight", entity_ids: [readyId, blockedId, identityId, readyId] },
+  }), runtime);
+  assert.equal(response.status, 200);
+  let payload = await response.json();
+  assert.equal(payload.summary.requested, 3, "duplicate IDs are reviewed once");
+  assert.equal(payload.summary.ready, 1);
+  assert.equal(payload.summary.blocked, 2);
+  assert.equal(payload.results.find((item) => item.entity_id === readyId).status, "ready");
+  assert.match(payload.results.find((item) => item.entity_id === blockedId).reason, /Publish the item from its Studio editor/);
+  assert.match(payload.results.find((item) => item.entity_id === identityId).reason, /coordinated Studio editor/);
+  assert.equal(db.prepare("SELECT state FROM archive_dossiers WHERE entity_id=?").get(readyId).state, "draft", "preflight is read-only");
+
+  response = await handleConstructApi(request("/api/admin/archive-dossiers/bulk-publication", {
+    method: "POST",
+    admin: true,
+    body: { mode: "publish", entity_ids: [readyId, blockedId, identityId] },
+  }), runtime);
+  assert.equal(response.status, 200);
+  payload = await response.json();
+  assert.equal(payload.summary.published, 1);
+  assert.equal(payload.summary.blocked, 2);
+  assert.equal(payload.results.find((item) => item.entity_id === readyId).status, "published");
+  assert.deepEqual({ ...db.prepare("SELECT state,public_visible FROM archive_dossiers WHERE entity_id=?").get(readyId) }, { state: "published", public_visible: 1 });
+  assert.deepEqual({ ...db.prepare("SELECT state,public_visible FROM archive_dossiers WHERE entity_id=?").get(blockedId) }, { state: "draft", public_visible: 0 });
+  assert.equal(db.prepare("SELECT visibility FROM content_entities WHERE id=?").get(blockedId).visibility, "internal");
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_dossier_subjects WHERE dossier_entity_id=?").get(readyId).count, contextBefore);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM entity_terms WHERE entity_id=?").get(readyId).count, themesBefore);
+  assert.deepEqual(db.prepare("SELECT m.id,m.privacy,m.public_presentation,em.public_visible FROM entity_media em JOIN media_assets m ON m.id=em.media_id WHERE em.entity_id=? ORDER BY m.id").all(readyId), mediaBefore);
+  assert.deepEqual(db.prepare("SELECT id,state,visibility FROM archive_materials WHERE dossier_entity_id=? ORDER BY id").all(readyId), materialsBefore);
+  assert.ok(db.prepare("SELECT COUNT(*) count FROM entity_revisions WHERE entity_id=? AND action='archive-dossier-update'").get(readyId).count > 0);
+});
+
 test("Studio and public Archive surfaces expose the catalogue system", () => {
   const studio = readFileSync(join(ROOT, "studio", "construct-manager.js"), "utf8");
   const publicScript = readFileSync(join(ROOT, "js", "archive-public.js"), "utf8");

@@ -171,7 +171,7 @@ test("Archive brands resolve to their own medium colors across filters and dossi
     'thoughtpuppet: "art"',
     '"six-well": "merch"',
     '"art-pill-tattoo-house": "tattoos"',
-    '"cult-shift": "events"',
+    'greenfield: "events"',
     'milowalksonwater: "music"',
     '"mindful-darkness": "writings"',
     'sloth99: "film"',

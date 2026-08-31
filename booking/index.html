@@ -33,6 +33,7 @@
   .badge { display:inline-flex; align-items:center; gap:8px; border:5px solid var(--ring-soft); color:var(--ring); padding:5px 12px; margin-bottom:48px; font-size:10px; letter-spacing:0.22em; text-transform:uppercase; }
   .badge-dot { width:5px; height:5px; border-radius:50%; background:var(--ring); }
   .section-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--muted); }
+  .booking-option-heading { margin:0 0 10px; color:var(--color-body); font-family:var(--sans); font-size:11px; font-weight:900; line-height:1.4; letter-spacing:.12em; text-transform:uppercase; }
   h1 { max-width:720px; margin:16px 0 24px; }
   .booking-context-copy { max-width:720px; margin:0 0 24px; color:var(--text); font-size:16px; line-height:1.8; }
   .status { max-width:720px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:22px 0; color:var(--muted); line-height:1.7; }
@@ -193,6 +194,7 @@
       <section class="section">
         <p class="section-label">Available Windows</p>
         <div class="cal-wrap" data-live-edit-ignore="true">
+          <p id="specificTimeHeading" class="booking-option-heading hidden">Choose a specific day &amp; time</p>
           <div id="windowTools" class="cal-header hidden">
             <div class="cal-month-nav">
               <button id="prevMonthBtn" class="cal-nav" type="button" aria-label="Previous month">&lt;</button>
@@ -203,6 +205,7 @@
           </div>
           <div id="calendar" class="hidden"></div>
         </div>
+        <p id="nextAvailableHeading" class="booking-option-heading hidden">Choose next available slot</p>
         <div id="windowList" class="window-list"></div>
         <button id="changeWindowBtn" class="change-window-button hidden" type="button" aria-controls="windowTools calendar windowList">Change date/time</button>
       </section>
@@ -265,6 +268,8 @@
   const appointmentSelection = document.getElementById("appointmentSelection");
   const extendedPricing = document.getElementById("extendedPricing");
   const windowListEl = document.getElementById("windowList");
+  const specificTimeHeadingEl = document.getElementById("specificTimeHeading");
+  const nextAvailableHeadingEl = document.getElementById("nextAvailableHeading");
   const changeWindowBtn = document.getElementById("changeWindowBtn");
   const windowToolsEl = document.getElementById("windowTools");
   const monthSelectEl = document.getElementById("monthSelect");
@@ -1268,6 +1273,7 @@
     appEl.classList.toggle("window-selection-collapsed", windowSelectionCollapsed);
 
     windowToolsEl.classList.toggle("hidden", !monthKeys.length || windowSelectionCollapsed);
+    specificTimeHeadingEl.classList.toggle("hidden", !monthKeys.length || windowSelectionCollapsed);
     monthSelectEl.innerHTML = `<option value="">Choose a month</option>${monthKeys.map((key) => `<option value="${escapeHtml(key)}">${escapeHtml(monthLabel(key))}</option>`).join("")}`;
     monthSelectEl.value = selectedMonthKey;
     prevMonthBtn.disabled = monthIndex <= 0;
@@ -1289,6 +1295,7 @@
     } else {
       windowListEl.innerHTML = dayWindows.length ? dayWindows.map((windowItem) => renderWindowButton(windowItem)).join("") : '<div class="status">No open time slots remain for that day.</div>';
     }
+    nextAvailableHeadingEl.classList.toggle("hidden", windowSelectionCollapsed || !visibleWindows.length || Boolean(selectedMonthKey));
     changeWindowBtn.classList.toggle("hidden", !windowSelectionCollapsed);
 
     clientDetailsSection.classList.toggle("hidden", !context.requiresClientDetails);

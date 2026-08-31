@@ -1370,17 +1370,18 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       where: SAMPLE.eventWhere,
       seats: "2",
       calendarUrl: SAMPLE.eventCalendarUrl,
+      eventUrl: "https://thesixwellconstruct.com/events/example/",
     });
   } else if (key === "event_open_mic_slot") {
     rendered = buildEventOpenMicSlotEmail({
-      subject: "Cult & Shift open mic slot",
-      title: "Cult & Shift",
+      subject: "GREEN[FIELD] open mic slot",
+      title: "GREEN[FIELD]",
       performerName: SAMPLE.clientName,
       eventWhen: "Saturday, August 8, 2026 at 8:00 PM EDT",
       slot: "Saturday, August 8, 2026 at 8:45 PM EDT",
       duration: 5,
       where: SAMPLE.eventWhere,
-      eventUrl: "https://thesixwellconstruct.com/events/cultandshift/",
+      eventUrl: "https://thesixwellconstruct.com/events/greenfield/",
     });
   } else if (key === "crm_relationship_followup") {
     rendered = buildCrmFollowupEmail({
