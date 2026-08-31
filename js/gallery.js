@@ -2,6 +2,7 @@
   "use strict";
   const app = document.querySelector("[data-gallery-app]");
   const breadcrumb = document.querySelector("[data-gallery-breadcrumb]");
+  const API_REVISION = "20260831-original-media-rebuild-r2";
   if (!app) return;
 
   const esc = (value) => String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
@@ -36,7 +37,9 @@
   }
 
   async function get(url) {
-    const response = await fetch(url, { headers: { accept: "application/json" } });
+    const endpoint = new URL(url, location.origin);
+    endpoint.searchParams.set("view", API_REVISION);
+    const response = await fetch(`${endpoint.pathname}${endpoint.search}`, { headers: { accept: "application/json" } });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "The Gallery could not be opened.");
     return payload;

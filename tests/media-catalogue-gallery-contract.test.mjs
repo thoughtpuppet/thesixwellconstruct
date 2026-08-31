@@ -173,7 +173,9 @@ test("generated masks stay operational and HEIC masters publish through one auto
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id='media-heic-display'").get().count,0);
   const publicIndex=await api(env,"/api/gallery");
   const accession=`MED-${String(sql.prepare("SELECT catalogue_id FROM media_catalogue_entries WHERE media_id='media-heic-master'").get().catalogue_id).padStart(6,"0")}`;
-  assert.ok(publicIndex.payload.records.some(record=>record.accession===accession&&record.mimeType==="image/jpeg"));
+  const publicRecord=publicIndex.payload.records.find(record=>record.accession===accession&&record.mimeType==="image/jpeg");
+  assert.ok(publicRecord);
+  assert.match(publicRecord.mediaUrl,/\?asset=media-heic-display$/);
 });
 
 test("Studio draft creation is idempotent and one-click publication does not require rights or accessibility review", async () => {

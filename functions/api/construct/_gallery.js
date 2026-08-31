@@ -629,14 +629,16 @@ async function publicAssociations(database, rows) {
 
 function presentPublicGallery(row) {
   const humanId=accession(row.catalogue_id),resolvedMime=row.display_mime_type||row.mime_type,type=mediaType(resolvedMime);
+  const mediaVersion=encodeURIComponent(row.display_id||row.media_id);
+  const posterVersion=row.poster_id?encodeURIComponent(row.poster_id):"";
   return {
     accession:humanId,title:row.title,accessibilityText:row.accessibility_text,caption:row.caption,credit:row.credit,
     datePrecision:row.date_precision,dateLabel:row.date_label,occurredAt:row.occurred_at,endedAt:row.ended_at,
     mediaType:type,mimeType:resolvedMime,width:row.display_width??row.width,height:row.display_height??row.height,durationSeconds:row.display_duration_seconds??row.duration_seconds,
     focalX:Number(row.focal_x??0.5),focalY:Number(row.focal_y??0.5),publishedAt:row.published_at,
     transcript:row.display_transcript_status==="ready"?row.display_transcript:"",transcriptLanguage:row.display_transcript_status==="ready"?row.display_transcript_language:"",
-    route:`/gallery/${humanId}/`,mediaUrl:`/api/gallery/media/${humanId}`,
-    posterUrl:row.poster_id?`/api/gallery/media/${humanId}?variant=poster`:"",
+    route:`/gallery/${humanId}/`,mediaUrl:`/api/gallery/media/${humanId}?asset=${mediaVersion}`,
+    posterUrl:row.poster_id?`/api/gallery/media/${humanId}?variant=poster&asset=${posterVersion}`:"",
     lenses:(row.lenses||[]).map(({slug:recordSlug,name})=>({slug:recordSlug,name})),
     sets:(row.sets||[]).map(({slug:recordSlug,title,set_type})=>({slug:recordSlug,title,setType:set_type,route:`/gallery/sets/${recordSlug}/`})),
     connections:(row.connections||[]).map(({entity_id,label,title,route})=>({entityId:entity_id,label,title,route})),
