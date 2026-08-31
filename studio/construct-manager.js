@@ -130,16 +130,16 @@
     const documentNode=new DOMParser().parseFromString(source,"image/svg+xml");
     if(documentNode.querySelector("parsererror")||documentNode.documentElement.localName!=="svg")throw new Error("Choose a valid SVG file.");
     const svg=documentNode.documentElement;
-    const allowed=new Set(["svg","g","path","rect","circle","ellipse","line","polyline","polygon","defs","symbol","use","clipPath","mask","linearGradient","radialGradient","stop","title","desc"]);
-    const paintProperties=new Set(["fill","stroke","stroke-width","stroke-linecap","stroke-linejoin","stroke-miterlimit","fill-rule","clip-rule","opacity","fill-opacity","stroke-opacity","stop-color","stop-opacity"]);
+    const allowed=new Set(["svg","g","path","rect","circle","ellipse","line","polyline","polygon","defs","symbol","use","clipPath","mask","linearGradient","radialGradient","stop","title","desc","text","tspan"]);
+    const paintProperties=new Set(["fill","stroke","stroke-width","stroke-linecap","stroke-linejoin","stroke-miterlimit","fill-rule","clip-rule","opacity","fill-opacity","stroke-opacity","stop-color","stop-opacity","font-family","font-size","font-style","font-weight","letter-spacing","text-anchor"]);
     const classRules=new Map();
     documentNode.querySelectorAll("style").forEach(style=>{
-      const rulePattern=/\.([a-zA-Z][\w-]*)\s*\{([^}]*)\}/g;
+      const rulePattern=/([^{}]+)\{([^}]*)\}/g;
       let match;
       while((match=rulePattern.exec(style.textContent||""))){
         const declarations={};
         match[2].split(";").forEach(declaration=>{const [rawName,...rawValue]=declaration.split(":");const name=rawName?.trim(),value=rawValue.join(":").trim();if(paintProperties.has(name)&&value)declarations[name]=value});
-        classRules.set(match[1],declarations);
+        match[1].split(",").map(selector=>selector.trim()).forEach(selector=>{const className=selector.match(/^\.([a-zA-Z][\w-]*)$/)?.[1];if(!className)return;classRules.set(className,{...(classRules.get(className)||{}),...declarations})});
       }
     });
     [...svg.querySelectorAll("*")].forEach(element=>{
@@ -162,7 +162,7 @@
     svg.removeAttribute("width");svg.removeAttribute("height");svg.removeAttribute("style");svg.setAttribute("xmlns","http://www.w3.org/2000/svg");
     if(recolor){
       svg.setAttribute("fill","currentColor");
-      svg.querySelectorAll("path,rect,circle,ellipse,line,polyline,polygon,g").forEach(element=>{
+      svg.querySelectorAll("path,rect,circle,ellipse,line,polyline,polygon,g,text,tspan").forEach(element=>{
         for(const paint of ["fill","stroke"]){const value=element.getAttribute(paint);if(value&&value!=="none")element.setAttribute(paint,"currentColor")}
       });
     }
@@ -321,7 +321,8 @@
 
   function variantRow(entry={}){
     let preview="";try{preview=entry.svg_markup?safeSvgMarkup(entry.svg_markup):""}catch{}
-    return `<article class="cm-layer-row" data-layer-row="variant"><div class="cm-layer-preview cm-layer-preview--variant" data-svg-preview aria-hidden="true">${preview||entry.image_url?preview||`<img src="${esc(entry.image_url)}" alt="">`:""}</div><div class="cm-layer-fields"><label>Upload variant image<input type="file" accept=".svg,image/svg+xml,image/jpeg,image/png,image/webp,image/gif" data-svg-file="variant"></label><label>Variant name<input data-field="name" value="${esc(entry.name)}" placeholder="Maze version, chrome form…"></label><label>Style family<input data-field="style" value="${esc(entry.style)}" placeholder="Flat, 3D, color, maze, carved…"></label><label>Variant note<textarea data-field="note" placeholder="What changes formally while the identity stays recognizable">${esc(entry.note)}</textarea></label><label>Or image URL<input data-field="image_url" value="${esc(entry.image_url)}" placeholder="/assets/… or https://…"></label><label>Related page<input data-field="href" value="${esc(entry.href)}" placeholder="/home/"></label><textarea class="cm-visually-hidden" data-field="svg_markup" tabindex="-1" aria-hidden="true">${esc(entry.svg_markup)}</textarea></div><button class="button danger-button cm-remove-layer" type="button" data-remove-layer>Remove</button></article>`
+    const mediaId=entry.media_id||entry.mediaId||"",imageMarkup=mediaId?`<img data-admin-media-preview="${esc(mediaId)}" alt="">`:entry.image_url?`<img src="${esc(entry.image_url)}" alt="">`:"";
+    return `<article class="cm-layer-row" data-layer-row="variant"><div class="cm-layer-preview cm-layer-preview--variant" data-svg-preview aria-hidden="true">${preview||imageMarkup}</div><div class="cm-layer-fields"><label>Upload variant image<input type="file" accept=".svg,image/svg+xml,image/jpeg,image/png,image/webp,image/gif" data-svg-file="variant"></label><label>Variant name<input data-field="name" value="${esc(entry.name)}" placeholder="Maze version, chrome form…"></label><label>Style family<input data-field="style" value="${esc(entry.style)}" placeholder="Flat, 3D, color, maze, carved…"></label><label>Variant note<textarea data-field="note" placeholder="What changes formally while the identity stays recognizable">${esc(entry.note)}</textarea></label><label>Or image URL<input data-field="image_url" value="${esc(entry.image_url)}" placeholder="/assets/… or https://…"></label><label>Related page<input data-field="href" value="${esc(entry.href)}" placeholder="/home/"></label><input type="hidden" data-field="media_id" value="${esc(mediaId)}"><input type="hidden" data-field="publication_state" value="${esc(entry.publication_state||"draft")}"><input type="hidden" data-field="public_visible" value="${entry.public_visible===1||entry.public_visible===true?"1":"0"}"><textarea class="cm-visually-hidden" data-field="svg_markup" tabindex="-1" aria-hidden="true">${esc(entry.svg_markup)}</textarea></div><button class="button danger-button cm-remove-layer" type="button" data-remove-layer>Remove</button></article>`
   }
 
   function appearanceRow(entry={}){
@@ -452,7 +453,7 @@
         const preview=row?row.querySelector("[data-svg-preview]"):input.closest(".cm-symbol-section")?.querySelector("[data-svg-preview]");
         if(input.dataset.svgFile==="variant"&&!isSvgFile(file)){
           validateLegendVariantImage(file);clearLegendVariantPreviewUrl(row);
-          const imageUrl=row.querySelector('[data-field="image_url"]');if(destination)destination.value="";if(imageUrl)imageUrl.value="";
+          const imageUrl=row.querySelector('[data-field="image_url"]'),mediaId=row.querySelector('[data-field="media_id"]');if(destination)destination.value="";if(imageUrl)imageUrl.value="";if(mediaId)mediaId.value="";
           const objectUrl=URL.createObjectURL(file);row.dataset.variantPreviewUrl=objectUrl;if(preview)preview.innerHTML=`<img src="${esc(objectUrl)}" alt="">`;
           if(output)output.textContent=`${file.name} is ready to upload when you save the symbol.`;
           return;
@@ -495,9 +496,9 @@
     const applications=layerValues(form,"application",["title","meaning","note","svg_markup"]);
     for(const item of applications){if(Object.values(item).some(Boolean)&&(!item.title||!item.meaning))throw new Error("Every application needs a name and its changed meaning.");if(item.svg_markup)item.svg_markup=safeSvgMarkup(item.svg_markup,{recolor:true})}
     values.applications_json=JSON.stringify(applications.filter(item=>item.title&&item.meaning));
-    const variantRows=[...form.querySelectorAll('[data-layer-row="variant"]')],variants=layerValues(form,"variant",["name","style","note","svg_markup","image_url","href"]);
-    for(const [index,item] of variants.entries()){const pendingFile=variantRows[index]?.querySelector('[data-svg-file="variant"]')?.files?.[0],hasPendingImage=allowPendingVariantImages&&pendingFile&&!isSvgFile(pendingFile);if(Object.values(item).some(Boolean)||hasPendingImage){if(!item.name||(!item.svg_markup&&!item.image_url&&!hasPendingImage))throw new Error("Every variant needs a name and an SVG or image.");if(item.image_url&&!safeLegendUrl(item.image_url))throw new Error(`${item.name||"A variant"} needs a valid public or site image URL.`);if(item.href&&!safeLegendUrl(item.href))throw new Error(`${item.name||"A variant"} needs a valid related page URL.`)}if(item.svg_markup)item.svg_markup=safeSvgMarkup(item.svg_markup)}
-    values.variants_json=JSON.stringify(variants.filter(item=>item.name&&(item.svg_markup||item.image_url)));
+    const variantRows=[...form.querySelectorAll('[data-layer-row="variant"]')],variants=layerValues(form,"variant",["name","style","note","svg_markup","image_url","media_id","href","publication_state","public_visible"]);
+    for(const [index,item] of variants.entries()){const pendingFile=variantRows[index]?.querySelector('[data-svg-file="variant"]')?.files?.[0],hasPendingImage=allowPendingVariantImages&&pendingFile&&!isSvgFile(pendingFile);if(Object.values(item).some(Boolean)||hasPendingImage){if(!item.name||(!item.svg_markup&&!item.image_url&&!item.media_id&&!hasPendingImage))throw new Error("Every variant needs a name and an SVG or image.");if(item.image_url&&!safeLegendUrl(item.image_url))throw new Error(`${item.name||"A variant"} needs a valid public or site image URL.`);if(item.href&&!safeLegendUrl(item.href))throw new Error(`${item.name||"A variant"} needs a valid related page URL.`)}if(item.svg_markup)item.svg_markup=safeSvgMarkup(item.svg_markup)}
+    values.variants_json=JSON.stringify(variants.filter(item=>item.name&&(item.svg_markup||item.image_url||item.media_id)));
     const appearances=layerValues(form,"appearance",["title","medium","caption","src","href"]);
     for(const item of appearances){if(Object.values(item).some(Boolean)&&(!item.title||(!item.src&&!item.href)))throw new Error("Every appearance needs a title and an image or page URL.")}
     values.examples_json=JSON.stringify(appearances.filter(item=>item.title&&(item.src||item.href)));
@@ -728,16 +729,16 @@
   async function uploadLegendVariantImages(form,entityId,output){
     const pending=pendingLegendVariantImages(form);if(!pending.length)return;
     if(!entityId)throw new Error("Save the Legend symbol before attaching variant images.");
-    const symbolName=String(form.elements.name?.value||"Legend symbol").trim()||"Legend symbol";
+    const symbolName=String(form.elements.name?.value||"Legend symbol").trim()||"Legend symbol",publishNow=form.elements.state?.value==="published";
     for(const [uploadIndex,{row,input,file,index}] of pending.entries()){
       validateLegendVariantImage(file);
       const variantName=String(row.querySelector('[data-field="name"]')?.value||"Variant").trim()||"Variant",altText=`${symbolName} — ${variantName} variant`;
       if(output)output.textContent=`Uploading variant ${uploadIndex+1} of ${pending.length}: ${file.name}`;
-      const upload=new FormData();upload.append("file",file);upload.append("alt_text",altText);upload.append("privacy","public");upload.append("public_presentation","inline");
+      const upload=new FormData();upload.append("file",file);upload.append("alt_text",altText);upload.append("privacy",publishNow?"public":"internal");upload.append("public_presentation",publishNow?"inline":"hidden");
       const uploaded=await api("/api/admin/media",{method:"POST",body:upload}),mediaId=uploaded.record?.id;
       if(!mediaId)throw new Error(`${file.name} uploaded without a media ID.`);
-      await api(`/api/admin/entities/${encodeURIComponent(entityId)}/media`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({media_id:mediaId,role:"legend-variant",sort_order:index+1,public_visible:true,alt_text_override:altText})});
-      const imageUrl=row.querySelector('[data-field="image_url"]'),svgMarkup=row.querySelector('[data-field="svg_markup"]');if(imageUrl)imageUrl.value=`/api/construct/entity-media/${encodeURIComponent(mediaId)}`;if(svgMarkup)svgMarkup.value="";if(input)input.value="";
+      await api(`/api/admin/entities/${encodeURIComponent(entityId)}/media`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({media_id:mediaId,role:"legend-variant",sort_order:index+1,public_visible:publishNow,alt_text_override:altText})});
+      const imageUrl=row.querySelector('[data-field="image_url"]'),storedMediaId=row.querySelector('[data-field="media_id"]'),publicationState=row.querySelector('[data-field="publication_state"]'),publicVisible=row.querySelector('[data-field="public_visible"]'),svgMarkup=row.querySelector('[data-field="svg_markup"]');if(imageUrl)imageUrl.value=publishNow?`/api/construct/entity-media/${encodeURIComponent(mediaId)}`:"";if(storedMediaId)storedMediaId.value=publishNow?"":mediaId;if(publicationState)publicationState.value=publishNow?"published":"draft";if(publicVisible)publicVisible.value=publishNow?"1":"0";if(svgMarkup)svgMarkup.value="";if(input)input.value="";
     }
     if(output)output.textContent=`${pending.length} variant image${pending.length===1?"":"s"} uploaded and attached.`;
   }

@@ -113,7 +113,10 @@ function publicLegendEntries(value) {
 }
 
 function publicLegendInlineEntries(value){
-  return publicLegendEntries(value).filter(entry=>!text(entry?.record_entity_id??entry?.recordEntityId,200));
+  return publicLegendEntries(value).filter(entry=>
+    !text(entry?.record_entity_id??entry?.recordEntityId,200)
+    && !text(entry?.media_id??entry?.mediaId,200)
+  );
 }
 
 function normalizeLegendLayers(out) {
@@ -181,10 +184,11 @@ function normalizeLegendLayers(out) {
       note: text(entry?.note, 3000),
       svg_markup: entry?.svg_markup ? sanitizeLegendSvg(entry.svg_markup) : "",
       image_url: safeLegendUrl(entry?.image_url),
+      media_id: text(entry?.media_id ?? entry?.mediaId, 200),
       href: safeLegendUrl(entry?.href),
       record_entity_id: text(entry?.record_entity_id ?? entry?.recordEntityId, 200),
       ...normalizeLegendEntryPublication(entry),
-    })).filter((entry) => entry.name && (entry.svg_markup || entry.image_url || entry.href));
+    })).filter((entry) => entry.name && (entry.svg_markup || entry.image_url || entry.media_id || entry.href));
     out.variants_json = JSON.stringify(variants);
   }
   if ("examples_json" in out) {
