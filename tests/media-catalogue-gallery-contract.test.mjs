@@ -93,10 +93,18 @@ async function api(env, path, options) {
 
 test("catalogue backfill is complete, launch-published, unique, and relational", () => {
   const sql = database();
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_assets").get().count, sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries").get().count);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='published'").get().count, 53);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_assets WHERE archive_catalogue_eligible=1").get().count, sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries").get().count);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='published'").get().count, sql.prepare("SELECT COUNT(*) count FROM media_assets WHERE state='active' AND archive_catalogue_eligible=1").get().count);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='draft'").get().count, 0);
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE source_class='site_asset'").get().count, 26);
+  assert.ok(sql.prepare("SELECT COUNT(*) count FROM media_assets WHERE archive_catalogue_eligible=0").get().count>0);
+  assert.equal(sql.prepare(`SELECT COUNT(*) count FROM media_catalogue_entries catalogue
+    JOIN gallery_entries gallery ON gallery.media_id=catalogue.media_id
+    WHERE catalogue.source_class='site_asset' AND gallery.state='published'`).get().count,sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE source_class='site_asset'").get().count);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE media.archive_catalogue_eligible=0").get().count,0);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries gallery JOIN media_assets media ON media.id=gallery.media_id WHERE media.archive_catalogue_eligible=0").get().count,0);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(media.original_filename) IN ('ring-ripple-reference.mov','ring-ripple-reference.mp4') OR lower(replace(media.source_url,'\\','/')) LIKE '/assets/events/%'").get().count,0);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_blackboard_fragment_edits edit JOIN media_catalogue_entries catalogue ON catalogue.media_id=edit.alpha_mask_media_id").get().count,0);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_blackboard_fragment_placements placement JOIN media_catalogue_entries catalogue ON catalogue.media_id=placement.hotspot_mask_media_id").get().count,0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM (SELECT catalogue_id FROM media_catalogue_entries GROUP BY catalogue_id HAVING COUNT(*)>1)").get().count, 0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM (SELECT sha256 FROM media_catalogue_entries WHERE sha256 IS NOT NULL GROUP BY sha256 HAVING COUNT(*)>1)").get().count, 0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM pragma_foreign_key_check").get().count, 0);
@@ -138,6 +146,26 @@ test("catalogue backfill is complete, launch-published, unique, and relational",
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_dossiers WHERE entity_id=?").get(created.entity_id).count, 0);
 });
 
+test("operational media never receives or retains an Archive catalogue identity", () => {
+  const sql=database();
+  sql.prepare(`INSERT INTO media_assets(id,source_url,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)
+    VALUES('media-private-reference','/assets/private/reference.png','reference.png','image/png',1,'internal','active','test',datetime('now'),datetime('now'),'hidden',0)`).run();
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE media_id='media-private-reference'").get().count,0);
+
+  sql.prepare(`INSERT INTO media_assets(id,source_url,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('media-calendar-bound','/assets/test/calendar-bound.png','calendar-bound.png','image/png',1,'public','active','test',datetime('now'),datetime('now'),'inline')`).run();
+  sql.prepare(`INSERT INTO gallery_entries(media_id,display_media_id,title,date_precision,state,created_by,updated_by,created_at,updated_at)
+    VALUES('media-calendar-bound','media-calendar-bound','Calendar-bound test','undated','published','test','test',datetime('now'),datetime('now'))`).run();
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE media_id='media-calendar-bound'").get().count,1);
+  const candidate=sql.prepare("SELECT id FROM calendar_candidates ORDER BY id LIMIT 1").get();
+  assert.ok(candidate);
+  sql.prepare("UPDATE calendar_candidates SET flyer_media_id=? WHERE id=?").run("media-calendar-bound",candidate.id);
+  assert.equal(sql.prepare("SELECT archive_catalogue_eligible FROM media_assets WHERE id='media-calendar-bound'").get().archive_catalogue_eligible,0);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE media_id='media-calendar-bound'").get().count,0);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id='media-calendar-bound'").get().count,0);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM content_entities WHERE id='media-catalogue-media-calendar-bound'").get().count,0);
+});
+
 test("Studio draft creation is idempotent and one-click publication does not require rights or accessibility review", async () => {
   const sql = database(), env = environment(sql);
   const media = sql.prepare("SELECT media_id FROM media_catalogue_entries WHERE source_class='creative' ORDER BY catalogue_id LIMIT 1").get().media_id;
@@ -173,6 +201,23 @@ test("batch publication accepts multiple Gallery selections and publishes each i
   assert.equal(result.payload.count,2);
   assert.deepEqual(result.payload.failed,[]);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id IN (?,?) AND state='published' AND date_precision='undated'").get(...entries.map(entry=>entry.media_id)).count,2);
+});
+
+test("public and Studio Gallery hydration returns catalogues larger than one SQL parameter batch", async () => {
+  const sql=database(),env=environment(sql);
+  const insertMedia=sql.prepare(`INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation)
+    VALUES(?,?,?,?, 'image/png',1,'public','active','test',datetime('now'),datetime('now'),'inline')`);
+  const insertGallery=sql.prepare(`INSERT INTO gallery_entries(media_id,display_media_id,title,date_precision,state,created_by,updated_by,created_at,updated_at)
+    VALUES(?,?,?,'undated','published','test','test',datetime('now'),datetime('now'))`);
+  for(let index=0;index<120;index+=1){const mediaId=`media-large-gallery-${index}`,filename=`large-gallery-${index}.png`;insertMedia.run(mediaId,`/assets/test/${filename}`,"",filename);insertGallery.run(mediaId,mediaId,`Large Gallery ${index}`)}
+  const expected=sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='published'").get().count;
+  assert.ok(expected>100);
+  const publicIndex=await api(env,"/api/gallery");
+  assert.equal(publicIndex.response.status,200);
+  assert.equal(publicIndex.payload.records.length,expected);
+  const studioIndex=await api(env,"/api/admin/gallery",{admin:true});
+  assert.equal(studioIndex.response.status,200);
+  assert.equal(studioIndex.payload.records.length,expected);
 });
 
 test("checksum preflight and resumable creation reuse an existing Media Asset before uploading bytes", async () => {
@@ -338,6 +383,11 @@ test("repository scanner emits deterministic provenance and a private-master R2 
     assert.match(migration,new RegExp(`gallery/masters/peer-amid/${hash}\\.png`));
     assert.match(migration,new RegExp(`sha256='${hash}'`));
   }
+  const rippleReferences=inventory.records.filter((record)=>/^assets\/entry-room\/ring-ripple-reference\.(?:mov|mp4)$/i.test(record.relative));
+  const rippleSourcesPresent=[join(ROOT,"assets","entry-room","ring-ripple-reference.mov"),join(ROOT,"assets","entry-room","ring-ripple-reference.mp4")].every(existsSync);
+  assert.equal(rippleReferences.length,rippleSourcesPresent?2:0);
+  assert.ok(rippleReferences.every((record)=>record.archiveCatalogueEligible===false));
+  assert.ok(inventory.records.filter((record)=>record.relative.startsWith("assets/events/")).every((record)=>record.archiveCatalogueEligible===false));
 });
 
 test("Gallery surfaces preserve the shared shell and expose the complete relational workflow", () => {
@@ -347,6 +397,9 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   const studio = readFileSync(join(ROOT, "studio", "media-catalogue-manager.js"), "utf8");
   const studioShell = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
   const navigation = readFileSync(join(ROOT, "js", "construct-nav.js"), "utf8");
+  const blackboardStudio = readFileSync(join(ROOT,"studio","archive-blackboards-manager.js"),"utf8");
+  const calendarApi = readFileSync(join(ROOT,"functions","api","calendar","_lib.js"),"utf8");
+  const calendarSubmissionsApi = readFileSync(join(ROOT,"functions","api","calendar-submissions","_lib.js"),"utf8");
 
   assert.match(publicScript, /hero-descriptor/);
   assert.match(page, /construct-nav\.js/);
@@ -376,4 +429,7 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studioShell, /\["gallery","Public Gallery"\]/);
   assert.match(navigation, /utilityLinks/);
   assert.doesNotMatch(navigation, /node-gallery/);
+  assert.match(blackboardStudio,/archiveCatalogueEligible:false/);
+  assert.match(calendarApi,/archive_catalogue_eligible\)\s*\n?\s*VALUES[\s\S]{0,180}'calendar-scout'/);
+  assert.match(calendarSubmissionsApi,/archive_catalogue_eligible\)\s*\n?\s*VALUES[\s\S]{0,180}'calendar-public-submission'/);
 });

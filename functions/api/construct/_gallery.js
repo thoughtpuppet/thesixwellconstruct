@@ -109,27 +109,30 @@ async function adminMediaRow(database, mediaId) {
 
 async function hydrateAdminAssociations(database, records) {
   if (!records.length) return records;
-  const mediaIds = records.map((record) => record.id);
-  const placeholders = mediaIds.map(() => "?").join(",");
-  const [lensRows, setRows, relationRows] = await Promise.all([
-    database.prepare(`SELECT assignment.media_id,lens.id,lens.slug,lens.name,lens.sort_order
-      FROM gallery_entry_lenses assignment JOIN gallery_lenses lens ON lens.id=assignment.lens_id
-      WHERE assignment.media_id IN (${placeholders}) ORDER BY assignment.media_id,assignment.sort_order,lens.sort_order`).bind(...mediaIds).all(),
-    database.prepare(`SELECT item.media_id,set_record.id,set_record.slug,set_record.title,set_record.set_type,set_record.state,item.sort_order
-      FROM gallery_set_items item JOIN gallery_sets set_record ON set_record.id=item.set_id
-      WHERE item.media_id IN (${placeholders}) ORDER BY item.media_id,item.sort_order,set_record.title`).bind(...mediaIds).all(),
-    database.prepare(`SELECT catalogue.media_id,relation.id,relation.source_entity_id,relation.target_entity_id,
-        relation.relationship_type_id,relation.public_visible,relation.sort_order,
-        type.forward_label,type.reverse_label,
-        CASE WHEN relation.source_entity_id=catalogue.entity_id THEN relation.target_entity_id ELSE relation.source_entity_id END connected_entity_id
-      FROM media_catalogue_entries catalogue JOIN entity_relationships relation
-        ON relation.source_entity_id=catalogue.entity_id OR relation.target_entity_id=catalogue.entity_id
-      JOIN relationship_types type ON type.id=relation.relationship_type_id
-      WHERE catalogue.media_id IN (${placeholders}) ORDER BY catalogue.media_id,relation.sort_order,relation.created_at`).bind(...mediaIds).all(),
-  ]);
+  const lensRows=[],setRows=[],relationRows=[];
+  for(let offset=0;offset<records.length;offset+=75){
+    const mediaIds=records.slice(offset,offset+75).map((record)=>record.id),placeholders=mediaIds.map(()=>"?").join(",");
+    const [lensResult,setResult,relationResult]=await Promise.all([
+      database.prepare(`SELECT assignment.media_id,lens.id,lens.slug,lens.name,lens.sort_order
+        FROM gallery_entry_lenses assignment JOIN gallery_lenses lens ON lens.id=assignment.lens_id
+        WHERE assignment.media_id IN (${placeholders}) ORDER BY assignment.media_id,assignment.sort_order,lens.sort_order`).bind(...mediaIds).all(),
+      database.prepare(`SELECT item.media_id,set_record.id,set_record.slug,set_record.title,set_record.set_type,set_record.state,item.sort_order
+        FROM gallery_set_items item JOIN gallery_sets set_record ON set_record.id=item.set_id
+        WHERE item.media_id IN (${placeholders}) ORDER BY item.media_id,item.sort_order,set_record.title`).bind(...mediaIds).all(),
+      database.prepare(`SELECT catalogue.media_id,relation.id,relation.source_entity_id,relation.target_entity_id,
+          relation.relationship_type_id,relation.public_visible,relation.sort_order,
+          type.forward_label,type.reverse_label,
+          CASE WHEN relation.source_entity_id=catalogue.entity_id THEN relation.target_entity_id ELSE relation.source_entity_id END connected_entity_id
+        FROM media_catalogue_entries catalogue JOIN entity_relationships relation
+          ON relation.source_entity_id=catalogue.entity_id OR relation.target_entity_id=catalogue.entity_id
+        JOIN relationship_types type ON type.id=relation.relationship_type_id
+        WHERE catalogue.media_id IN (${placeholders}) ORDER BY catalogue.media_id,relation.sort_order,relation.created_at`).bind(...mediaIds).all(),
+    ]);
+    lensRows.push(...(lensResult.results||[]));setRows.push(...(setResult.results||[]));relationRows.push(...(relationResult.results||[]));
+  }
   const byMedia = (rows) => {
     const map = new Map();
-    for (const row of rows.results || []) {
+    for (const row of rows) {
       const list = map.get(row.media_id) || [];
       list.push(row);
       map.set(row.media_id, list);
@@ -434,28 +437,32 @@ WHERE gallery.state='published'`;
 
 async function publicAssociations(database, rows) {
   if (!rows.length) return rows;
-  const mediaIds=rows.map((row)=>row.media_id),entities=rows.map((row)=>row.media_entity_id),mediaPlaceholders=mediaIds.map(()=>"?").join(","),entityPlaceholders=entities.map(()=>"?").join(",");
-  const [lensResult,setResult,connectionResult]=await Promise.all([
-    database.prepare(`SELECT assignment.media_id,lens.slug,lens.name FROM gallery_entry_lenses assignment JOIN gallery_lenses lens ON lens.id=assignment.lens_id WHERE lens.state='active' AND assignment.media_id IN (${mediaPlaceholders}) ORDER BY assignment.sort_order,lens.sort_order`).bind(...mediaIds).all(),
-    database.prepare(`SELECT item.media_id,set_record.slug,set_record.title,set_record.set_type FROM gallery_set_items item JOIN gallery_sets set_record ON set_record.id=item.set_id WHERE set_record.state='published' AND item.media_id IN (${mediaPlaceholders}) ORDER BY item.sort_order,set_record.sort_order`).bind(...mediaIds).all(),
-    database.prepare(`SELECT catalogue.media_id,relation.id,type.forward_label,type.reverse_label,
-        CASE WHEN relation.source_entity_id=catalogue.entity_id THEN relation.target_entity_id ELSE relation.source_entity_id END entity_id,
-        CASE WHEN relation.source_entity_id=catalogue.entity_id THEN type.forward_label ELSE type.reverse_label END label,
-        COALESCE(document.title,person.name,organization.name,place.name,target.id) title,
-        COALESCE(NULLIF(document.route,''),CASE WHEN organization.slug<>'' THEN '/about/identities/'||organization.slug||'/' WHEN place.slug<>'' THEN '/archive/places/'||place.slug||'/' ELSE '' END) route
-      FROM media_catalogue_entries catalogue
-      JOIN entity_relationships relation ON relation.source_entity_id=catalogue.entity_id OR relation.target_entity_id=catalogue.entity_id
-      JOIN relationship_types type ON type.id=relation.relationship_type_id AND type.public_visible=1
-      JOIN content_entities target ON target.id=CASE WHEN relation.source_entity_id=catalogue.entity_id THEN relation.target_entity_id ELSE relation.source_entity_id END AND target.visibility='public'
-      LEFT JOIN search_documents document ON document.entity_id=target.id AND document.state='published'
-      LEFT JOIN people person ON person.id=target.id AND person.state='published' AND person.privacy='public'
-      LEFT JOIN organizations organization ON organization.id=target.id AND organization.state='published'
-      LEFT JOIN places place ON place.id=target.id AND place.state='published' AND place.privacy='public'
-      WHERE relation.public_visible=1 AND catalogue.entity_id IN (${entityPlaceholders})
-      ORDER BY relation.sort_order,relation.created_at`).bind(...entities).all(),
-  ]);
-  const group=(result)=>{const map=new Map();for(const row of result.results||[]){const list=map.get(row.media_id)||[];list.push(row);map.set(row.media_id,list)}return map};
-  const lenses=group(lensResult),sets=group(setResult),connections=group(connectionResult);
+  const lensRows=[],setRows=[],connectionRows=[];
+  for(let offset=0;offset<rows.length;offset+=75){
+    const chunk=rows.slice(offset,offset+75),mediaIds=chunk.map((row)=>row.media_id),entities=chunk.map((row)=>row.media_entity_id),mediaPlaceholders=mediaIds.map(()=>"?").join(","),entityPlaceholders=entities.map(()=>"?").join(",");
+    const [lensResult,setResult,connectionResult]=await Promise.all([
+      database.prepare(`SELECT assignment.media_id,lens.slug,lens.name FROM gallery_entry_lenses assignment JOIN gallery_lenses lens ON lens.id=assignment.lens_id WHERE lens.state='active' AND assignment.media_id IN (${mediaPlaceholders}) ORDER BY assignment.sort_order,lens.sort_order`).bind(...mediaIds).all(),
+      database.prepare(`SELECT item.media_id,set_record.slug,set_record.title,set_record.set_type FROM gallery_set_items item JOIN gallery_sets set_record ON set_record.id=item.set_id WHERE set_record.state='published' AND item.media_id IN (${mediaPlaceholders}) ORDER BY item.sort_order,set_record.sort_order`).bind(...mediaIds).all(),
+      database.prepare(`SELECT catalogue.media_id,relation.id,type.forward_label,type.reverse_label,
+          CASE WHEN relation.source_entity_id=catalogue.entity_id THEN relation.target_entity_id ELSE relation.source_entity_id END entity_id,
+          CASE WHEN relation.source_entity_id=catalogue.entity_id THEN type.forward_label ELSE type.reverse_label END label,
+          COALESCE(document.title,person.name,organization.name,place.name,target.id) title,
+          COALESCE(NULLIF(document.route,''),CASE WHEN organization.slug<>'' THEN '/about/identities/'||organization.slug||'/' WHEN place.slug<>'' THEN '/archive/places/'||place.slug||'/' ELSE '' END) route
+        FROM media_catalogue_entries catalogue
+        JOIN entity_relationships relation ON relation.source_entity_id=catalogue.entity_id OR relation.target_entity_id=catalogue.entity_id
+        JOIN relationship_types type ON type.id=relation.relationship_type_id AND type.public_visible=1
+        JOIN content_entities target ON target.id=CASE WHEN relation.source_entity_id=catalogue.entity_id THEN relation.target_entity_id ELSE relation.source_entity_id END AND target.visibility='public'
+        LEFT JOIN search_documents document ON document.entity_id=target.id AND document.state='published'
+        LEFT JOIN people person ON person.id=target.id AND person.state='published' AND person.privacy='public'
+        LEFT JOIN organizations organization ON organization.id=target.id AND organization.state='published'
+        LEFT JOIN places place ON place.id=target.id AND place.state='published' AND place.privacy='public'
+        WHERE relation.public_visible=1 AND catalogue.entity_id IN (${entityPlaceholders})
+        ORDER BY relation.sort_order,relation.created_at`).bind(...entities).all(),
+    ]);
+    lensRows.push(...(lensResult.results||[]));setRows.push(...(setResult.results||[]));connectionRows.push(...(connectionResult.results||[]));
+  }
+  const group=(records)=>{const map=new Map();for(const row of records){const list=map.get(row.media_id)||[];list.push(row);map.set(row.media_id,list)}return map};
+  const lenses=group(lensRows),sets=group(setRows),connections=group(connectionRows);
   return rows.map((row)=>({...row,lenses:lenses.get(row.media_id)||[],sets:sets.get(row.media_id)||[],connections:(connections.get(row.media_id)||[]).filter((item)=>item.route)}));
 }
 
@@ -507,7 +514,7 @@ export async function handleGalleryPublic(request,env,path){
   if(type){const prefix={image:"image/%",video:"video/%",audio:"audio/%"}[type];if(prefix){conditions.push("media.mime_type LIKE ?");values.push(prefix)}else if(type==="pdf")conditions.push("media.mime_type='application/pdf'");else if(type==="document")conditions.push("media.mime_type NOT LIKE 'image/%' AND media.mime_type NOT LIKE 'video/%' AND media.mime_type NOT LIKE 'audio/%' AND media.mime_type<>'application/pdf'")}
   if(node){conditions.push(`EXISTS(SELECT 1 FROM media_catalogue_entries link_catalogue JOIN entity_relationships relation ON relation.source_entity_id=link_catalogue.entity_id OR relation.target_entity_id=link_catalogue.entity_id JOIN content_entities target ON target.id=CASE WHEN relation.source_entity_id=link_catalogue.entity_id THEN relation.target_entity_id ELSE relation.source_entity_id END WHERE link_catalogue.media_id=gallery.media_id AND relation.public_visible=1 AND target.visibility='public' AND target.node_id=?)`);values.push(node)}
   if(setSlug){conditions.push("EXISTS(SELECT 1 FROM gallery_set_items member JOIN gallery_sets set_record ON set_record.id=member.set_id WHERE member.media_id=gallery.media_id AND set_record.slug=? AND set_record.state='published')");values.push(setSlug)}
-  const rows=(await database.prepare(`${PUBLIC_GALLERY_SQL}${conditions.length?` AND ${conditions.join(" AND ")}`:""} ORDER BY gallery.published_at DESC,catalogue.catalogue_id DESC LIMIT 250`).bind(...values).all()).results||[];
+  const rows=(await database.prepare(`${PUBLIC_GALLERY_SQL}${conditions.length?` AND ${conditions.join(" AND ")}`:""} ORDER BY gallery.published_at DESC,catalogue.catalogue_id DESC LIMIT 500`).bind(...values).all()).results||[];
   const records=(await publicAssociations(database,rows)).map(presentPublicGallery),lenses=(await database.prepare("SELECT slug,name FROM gallery_lenses WHERE state='active' ORDER BY sort_order").all()).results||[],sets=(await database.prepare("SELECT slug,title,set_type FROM gallery_sets WHERE state='published' ORDER BY published_at DESC,sort_order").all()).results||[],nodes=(await database.prepare(`SELECT DISTINCT node.id,node.name
     FROM construct_nodes node
     JOIN content_entities target ON target.node_id=node.id AND target.visibility='public'

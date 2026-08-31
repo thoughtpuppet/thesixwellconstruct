@@ -51,6 +51,8 @@ tmp
 tmp/**
 *.log
 *.pid
+assets/entry-room/ring-ripple-reference.mov
+assets/entry-room/ring-ripple-reference.mp4
 **/.DS_Store
 .assetsignore
 .gitignore

@@ -7,7 +7,12 @@ import { fileURLToPath } from "node:url";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MEDIA_ROOT = path.join(REPO, "assets");
 const SUPPORTED = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".mp4", ".mov", ".webm", ".wav", ".mp3", ".m4a", ".ogg", ".pdf", ".doc", ".docx", ".txt"]);
-const SITE_PREFIXES = ["assets/entry-room/", "assets/audio/", "assets/home-ghost/", "assets/previews/"];
+const SITE_PREFIXES = ["assets/entry-room/", "assets/audio/", "assets/home-ghost/", "assets/previews/", "assets/events/"];
+const ARCHIVE_EXCLUDED_PREFIXES = ["assets/events/"];
+const ARCHIVE_EXCLUDED_FILES = new Set([
+  "assets/entry-room/ring-ripple-reference.mov",
+  "assets/entry-room/ring-ripple-reference.mp4",
+]);
 const KNOWN_PROVENANCE = new Map([
   ["assets/gallery/peer-amid/avery peer amid black.png", {
     importSource: "user-provided-original",
@@ -162,8 +167,9 @@ async function inventory() {
   const records = [];
   for (const absolute of files) {
     const buffer = await readFile(absolute), extension = path.extname(absolute).toLowerCase(), relative = path.relative(REPO, absolute).split(path.sep).join("/"), provenance = KNOWN_PROVENANCE.get(relative) || {}, sourceUrl = provenance.storageKey ? "" : `/${relative}`;
-    const hash = createHash("sha256").update(buffer).digest("hex"), sourceClass = SITE_PREFIXES.some((prefix) => relative.toLowerCase().startsWith(prefix)) ? "site_asset" : "creative";
-    records.push({ relative, sourceUrl, storageKey:provenance.storageKey||"", filename: path.basename(absolute), extension: extension.slice(1), mimeType: MIME.get(extension), byteSize: buffer.length, sha256: hash, sourceClass, durationSeconds:mediaDuration(buffer,extension), ...dimensions(buffer, extension), ...technicalEvidence(buffer,extension) });
+    const normalizedRelative=relative.toLowerCase(),hash = createHash("sha256").update(buffer).digest("hex"), sourceClass = SITE_PREFIXES.some((prefix) => normalizedRelative.startsWith(prefix)) ? "site_asset" : "creative";
+    const archiveCatalogueEligible = !ARCHIVE_EXCLUDED_FILES.has(normalizedRelative) && !ARCHIVE_EXCLUDED_PREFIXES.some((prefix)=>normalizedRelative.startsWith(prefix));
+    records.push({ relative, sourceUrl, storageKey:provenance.storageKey||"", filename: path.basename(absolute), extension: extension.slice(1), mimeType: MIME.get(extension), byteSize: buffer.length, sha256: hash, sourceClass, archiveCatalogueEligible, durationSeconds:mediaDuration(buffer,extension), ...dimensions(buffer, extension), ...technicalEvidence(buffer,extension) });
   }
   return records;
 }
@@ -192,13 +198,17 @@ function sql(records) {
     };
     const predicate=identityPredicate(record),order=locatorOrder(record),editingSoftware=provenance.editingSoftware||record.editingSoftware||"";
     lines.push(
-      `INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,width,height,duration_seconds,alt_text,caption,credit,rights_notes,privacy,state,created_by,created_at,updated_at,public_presentation)`,
-      `SELECT ${quoted(mediaId)},${quoted(record.sourceUrl)},${quoted(record.storageKey)},${quoted(record.filename)},${quoted(record.mimeType)},${record.byteSize},${nullable(record.width)},${nullable(record.height)},${nullable(record.durationSeconds)},'','','','','internal','active','migration-0203',datetime('now'),datetime('now'),'hidden'`,
+      `INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,width,height,duration_seconds,alt_text,caption,credit,rights_notes,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)`,
+      `SELECT ${quoted(mediaId)},${quoted(record.sourceUrl)},${quoted(record.storageKey)},${quoted(record.filename)},${quoted(record.mimeType)},${record.byteSize},${nullable(record.width)},${nullable(record.height)},${nullable(record.durationSeconds)},'','','','','internal','active','migration-0203',datetime('now'),datetime('now'),'hidden',${record.archiveCatalogueEligible?1:0}`,
       `WHERE NOT EXISTS(SELECT 1 FROM media_assets existing LEFT JOIN media_catalogue_entries catalogue ON catalogue.media_id=existing.id WHERE ${predicate});`,
-      `UPDATE media_catalogue_entries SET sha256=${quoted(record.sha256)},source_class=${quoted(record.sourceClass)},original_format=${quoted(record.extension)},import_source=${quoted(provenance.importSource || "repository-backfill")},embedded_capture_at=${nullable(record.embeddedCaptureAt)},camera_make=${quoted(record.cameraMake||"")},camera_model=${quoted(record.cameraModel||"")},editing_software=${quoted(editingSoftware)},orientation=${quoted(record.orientation||"")},color_profile=${quoted(record.colorProfile||"")},raw_metadata_json=${quoted(JSON.stringify(rawMetadata))},updated_by='migration-0203',updated_at=datetime('now')`,
-      `WHERE media_id=(SELECT existing.id FROM media_assets existing LEFT JOIN media_catalogue_entries catalogue ON catalogue.media_id=existing.id WHERE ${predicate} ORDER BY CASE WHEN ${order} THEN 0 ELSE 1 END LIMIT 1);`,
+      ...(!record.archiveCatalogueEligible ? [
+        `UPDATE media_assets SET archive_catalogue_eligible=0 WHERE id=(SELECT existing.id FROM media_assets existing LEFT JOIN media_catalogue_entries catalogue ON catalogue.media_id=existing.id WHERE ${predicate} ORDER BY CASE WHEN ${order} THEN 0 ELSE 1 END LIMIT 1);`,
+      ] : [
+        `UPDATE media_catalogue_entries SET sha256=${quoted(record.sha256)},source_class=${quoted(record.sourceClass)},original_format=${quoted(record.extension)},import_source=${quoted(provenance.importSource || "repository-backfill")},embedded_capture_at=${nullable(record.embeddedCaptureAt)},camera_make=${quoted(record.cameraMake||"")},camera_model=${quoted(record.cameraModel||"")},editing_software=${quoted(editingSoftware)},orientation=${quoted(record.orientation||"")},color_profile=${quoted(record.colorProfile||"")},raw_metadata_json=${quoted(JSON.stringify(rawMetadata))},updated_by='migration-0203',updated_at=datetime('now')`,
+        `WHERE media_id=(SELECT existing.id FROM media_assets existing LEFT JOIN media_catalogue_entries catalogue ON catalogue.media_id=existing.id WHERE ${predicate} ORDER BY CASE WHEN ${order} THEN 0 ELSE 1 END LIMIT 1);`,
+      ]),
     );
-    if (record.sourceClass === "creative") lines.push(
+    if (record.archiveCatalogueEligible && record.sourceClass === "creative") lines.push(
       `INSERT OR IGNORE INTO gallery_entries(media_id,display_media_id,title,accessibility_text,accessibility_status,caption,credit,rights_status,date_precision,state,created_by,updated_by,created_at,updated_at)`,
       `SELECT existing.id,existing.id,${quoted(title)},existing.alt_text,'unreviewed',existing.caption,existing.credit,'unreviewed','unreviewed','draft','migration-0203','migration-0203',datetime('now'),datetime('now') FROM media_assets existing LEFT JOIN media_catalogue_entries catalogue ON catalogue.media_id=existing.id WHERE ${predicate} ORDER BY CASE WHEN ${order} THEN 0 ELSE 1 END LIMIT 1;`,
     );

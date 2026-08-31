@@ -5446,8 +5446,8 @@ async function captureCandidateFlyer(env, db, candidateId, flyerUrl, provenanceU
     await db.prepare(
       `INSERT INTO media_assets
         (id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,credit,rights_notes,
-         privacy,state,created_by,created_at,updated_at,public_presentation)
-       VALUES (?,?,?,?,?,?,?,?,?,'internal','active','calendar-scout',?,?, 'hidden')`
+         privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)
+       VALUES (?,?,?,?,?,?,?,?,?,'internal','active','calendar-scout',?,?, 'hidden',0)`
     ).bind(
       mediaId, storageKey, filename, fetched.mimeType, fetched.bytes.byteLength, asString(altText).slice(0, 1000), "", "",
       `Captured from ${provenanceUrl}`, now, now,
@@ -5492,8 +5492,8 @@ async function captureCandidateMedia(env, db, candidateId, value) {
       db.prepare(
         `INSERT INTO media_assets
           (id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,credit,rights_notes,
-           privacy,state,created_by,created_at,updated_at,public_presentation)
-         VALUES (?,?,?,?,?,?,?,?,?,'internal','active','calendar-scout',?,?,'hidden')`
+           privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)
+         VALUES (?,?,?,?,?,?,?,?,?,'internal','active','calendar-scout',?,?,'hidden',0)`
       ).bind(mediaId,storageKey,filename,fetched.mimeType,fetched.bytes.byteLength,altText,caption,"",`Captured from ${provenanceUrl}`,now,now),
       db.prepare(
         `INSERT INTO calendar_candidate_media

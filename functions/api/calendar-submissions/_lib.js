@@ -316,8 +316,8 @@ async function storeFiles(env, db, submissionId, reference, files, payload, star
       stored.push({ mediaId, key });
       const altText = `${payload.title} event ${index === 0 && startOrder === 0 ? "flyer" : "image"}`;
       await db.prepare(`INSERT INTO media_assets
-        (id,storage_key,original_filename,mime_type,byte_size,alt_text,rights_notes,privacy,state,created_by,created_at,updated_at,public_presentation)
-        VALUES (?,?,?,?,?,?,?,'internal','active','calendar-public-submission',?,?, 'hidden')`)
+        (id,storage_key,original_filename,mime_type,byte_size,alt_text,rights_notes,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)
+        VALUES (?,?,?,?,?,?,?,'internal','active','calendar-public-submission',?,?, 'hidden',0)`)
         .bind(mediaId,key,safeFilename(item.file.name),item.mimeType,item.file.size,altText,`Submitted under event-material permission confirmation for ${reference}.`,now,now).run();
       await db.prepare(`INSERT INTO calendar_public_submission_media
         (id,submission_id,media_id,media_role,alt_text,caption,sort_order,created_at,updated_at)
