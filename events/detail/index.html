@@ -28,6 +28,7 @@
   .event-date.is-past { opacity:.55; }
   .event-status { margin:0 0 18px; color:var(--color-events-bright); font-family:var(--font-display); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
   .event-form { display:grid; gap:14px; }
+  .event-form[hidden],.kinmarking-experience[hidden],.kinmarking-flyer[hidden],.venture-link[hidden] { display:none !important; }
   .event-form label { display:grid; gap:7px; color:var(--text-dim); font-family:var(--font-display); font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
   .event-form input,.event-form select,.event-form textarea { width:100%; min-width:0; border:5px solid var(--ring-faint); padding:12px; background:var(--color-bg); color:var(--text); font:inherit; }
   .event-form input:focus,.event-form select:focus,.event-form textarea:focus { border-color:var(--color-events); outline:none; }
@@ -39,20 +40,39 @@
   .event-message[data-state="ok"] { color:var(--color-events-bright); }
   .event-waitlist { margin-top:22px; padding-top:22px; border-top:5px solid var(--ring-faint); }
   .event-honeypot { position:absolute; left:-10000px; }
-  @media (max-width:760px) { .event-detail-grid { grid-template-columns:minmax(0,1fr); gap:12px; } .event-panel { padding:22px; } }
+  .kinmarking-flyer { margin:24px 0 0; border:5px solid var(--color-events-dim); padding:12px; background:var(--color-bg); }
+  .kinmarking-flyer img { display:block; width:100%; height:auto; }
+  .kinmarking-experience { display:grid; gap:16px; }
+  .kinmarking-guide-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .kinmarking-guide-card { min-width:0; border:5px solid var(--ring-faint); padding:24px; background:var(--color-bg); }
+  .kinmarking-guide-card h3 { margin:0; color:var(--text); font-size:clamp(20px,2.5vw,28px); }
+  .kinmarking-guide-card p,.kinmarking-guide-card li { color:var(--text-muted); line-height:1.7; }
+  .kinmarking-guide-card ul { margin:16px 0 0; padding-left:20px; }
+  .kinmarking-edition-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .kinmarking-edition-link { min-width:0; display:grid; gap:7px; border:5px solid var(--ring-faint); padding:16px; color:var(--text); text-decoration:none; }
+  .kinmarking-edition-link:hover,.kinmarking-edition-link:focus-visible,.kinmarking-edition-link.is-current { border-color:var(--color-events); outline:none; }
+  .kinmarking-edition-link span,.kinmarking-edition-link small { color:var(--color-events-bright); font-family:var(--font-display); font-size:9px; font-weight:900; letter-spacing:.14em; line-height:1.5; text-transform:uppercase; }
+  .kinmarking-edition-link strong { font-size:16px; line-height:1.25; }
+  .kinmarking-edition-link small { color:var(--text-dim); }
+  .kinmarking-empty { border:5px solid var(--color-events-dim); padding:16px; color:var(--text-dim); }
+  @media (max-width:760px) {
+    .event-detail-grid,.kinmarking-guide-grid,.kinmarking-edition-links { grid-template-columns:minmax(0,1fr); gap:12px; }
+    .event-panel,.kinmarking-guide-card { padding:22px; }
+  }
 </style>
 </head>
 <body class="venture-page" data-venture="events" data-landing-family="events-program">
   <main class="venture-shell entrance-fade">
     <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="eventTitle">
       <div><span class="venture-kicker">event record</span><h1 class="venture-title hero-title" id="eventTitle">Loading event.</h1></div>
-      <div class="hero-copy"><p class="hero-descriptor hero-lede" id="eventDescription">Loading the public event record.</p><div class="hero-actions"><a class="venture-link" href="/events/">all events</a><a class="venture-link" href="#eventDates">dates</a></div></div>
+      <div class="hero-copy"><p class="hero-descriptor hero-lede" id="eventDescription">Loading the public event record.</p><div class="hero-actions"><a class="venture-link" href="/events/">all events</a><a class="venture-link" href="#eventDates">dates</a><a class="venture-link" id="kinmarkingSeriesLink" href="/events/kinmarking/" hidden>KINMARKING series</a></div></div>
     </section>
 
     <section class="section event-detail-grid" aria-live="polite">
       <article class="event-panel">
         <span class="section-kicker">schedule</span><h2 class="section-title">Event Dates</h2>
         <p class="event-copy" id="eventDetails"></p>
+        <figure class="kinmarking-flyer" id="kinmarkingFlyer" hidden><img id="kinmarkingFlyerImage" alt=""></figure>
         <div class="event-dates" id="eventDates"></div>
       </article>
       <aside class="event-panel" id="registrationPanel">
@@ -72,8 +92,28 @@
         </div>
       </aside>
     </section>
+
+    <section class="section kinmarking-experience" id="kinmarkingExperience" hidden>
+      <header class="section-head">
+        <div><span class="section-kicker">participant guide</span><h2 class="section-title">Bring a history into conversation.</h2></div>
+        <p class="section-copy">The participating archivist and tattoo artist help distinguish what is known, remembered, inherited, uncertain, and possible to carry forward.</p>
+      </header>
+      <div class="kinmarking-guide-grid">
+        <article class="kinmarking-guide-card"><h3>What to bring</h3><ul><li>Bring one to three photographs, scans, documents, objects, stories, inherited symbols, or other references.</li><li>Identify what is known and what remains uncertain.</li><li>Leave irreplaceable originals at home when a photograph or scan will work.</li><li>Consider permission and privacy when the material involves other people.</li></ul></article>
+        <article class="kinmarking-guide-card"><h3>How it works</h3><p>No finished tattoo design is required. Begin with conversation: consider the material with an archivist, then explore with the tattoo artist how—or whether—it may become a mark in the skin.</p></article>
+        <article class="kinmarking-guide-card"><h3>Possible outcomes</h3><p>Participation does not require getting tattooed. Small, resolved tattoos may be possible that day as time and technical readiness allow. Developing work may move into a future appointment secured by a separate tattoo deposit.</p></article>
+        <article class="kinmarking-guide-card"><h3>Same-day readiness</h3><p>Same-day tattooing is not guaranteed. Anyone hoping for possible same-day work should eat beforehand, hydrate, arrive sober, and bring government-issued photo identification.</p></article>
+        <article class="kinmarking-guide-card"><h3>Privacy + consent</h3><p>Materials, conversations, photographs, scans, recordings, and tattoo images are not retained or published without separate consent. Bringing material does not place it in the public Archive.</p></article>
+        <article class="kinmarking-guide-card"><h3>RSVP + walk-ins</h3><p>RSVP is optional and provides event correspondence, calendar details, and a reminder. Walk-ins remain welcome. An RSVP is not a tattoo appointment and does not reserve same-day tattoo time.</p></article>
+      </div>
+      <div>
+        <header class="section-head"><div><span class="section-kicker">first cycle</span><h2 class="section-title">Connected Editions</h2></div><a class="venture-link" href="/events/kinmarking/">series overview</a></header>
+        <div class="kinmarking-edition-links" id="kinmarkingEditionLinks" aria-live="polite"><p class="kinmarking-empty">Loading connected editions.</p></div>
+      </div>
+    </section>
     <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">events</a><a href="/home/">return to construct</a></div></footer>
   </main>
+<script src="/js/kinmarking-series.js"></script>
 <script>
 (function () {
   var parts = location.pathname.split("/").filter(Boolean);
@@ -82,6 +122,8 @@
   var occurrenceId = params.get("occurrence") || "";
   var eventData = null;
   var selected = null;
+  var kinmarking = window.KinmarkingSeries;
+  var isKinmarking = kinmarking && kinmarking.isKinmarkingSlug(slug);
   var title = document.getElementById("eventTitle");
   var description = document.getElementById("eventDescription");
   var details = document.getElementById("eventDetails");
@@ -93,10 +135,34 @@
   var seats = document.getElementById("eventSeats");
   var waitlistPanel = document.getElementById("waitlistPanel");
   var waitlistButton = document.getElementById("waitlistButton");
+  var kinmarkingExperience = document.getElementById("kinmarkingExperience");
+  var kinmarkingSeriesLink = document.getElementById("kinmarkingSeriesLink");
+  var kinmarkingFlyer = document.getElementById("kinmarkingFlyer");
+  var kinmarkingFlyerImage = document.getElementById("kinmarkingFlyerImage");
+  var kinmarkingEditionLinks = document.getElementById("kinmarkingEditionLinks");
+  if (isKinmarking) form.hidden = true;
   function esc(value) { return String(value == null ? "" : value).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c];}); }
   function when(value) { if (!value) return "Date to be announced"; return new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"long",month:"long",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short"}).format(new Date(value)); }
   function href(occurrence) { return params.get("event") ? "/events/detail/?event=" + encodeURIComponent(slug) + "&occurrence=" + encodeURIComponent(occurrence.id) : "/events/" + encodeURIComponent(slug) + "/?occurrence=" + encodeURIComponent(occurrence.id); }
   function setMessage(text,state) { message.textContent=text || ""; message.dataset.state=state || ""; }
+  function renderKinmarking(event) {
+    if (!isKinmarking) return;
+    kinmarkingExperience.hidden = false;
+    kinmarkingSeriesLink.hidden = false;
+    if (event.imageUrl) {
+      kinmarkingFlyerImage.src = event.imageUrl;
+      kinmarkingFlyerImage.alt = event.title + " event flyer";
+      kinmarkingFlyer.hidden = false;
+    } else {
+      kinmarkingFlyer.hidden = true;
+      kinmarkingFlyerImage.removeAttribute("src");
+      kinmarkingFlyerImage.alt = "";
+    }
+    fetch("/api/events")
+      .then(function(response){return response.json().then(function(data){return {ok:response.ok,data:data};});})
+      .then(function(result){if(!result.ok) throw new Error(result.data.error||"Unable to load connected editions."); kinmarkingEditionLinks.innerHTML=kinmarking.editionLinksMarkup(result.data.events||[],slug);})
+      .catch(function(){kinmarkingEditionLinks.innerHTML=kinmarking.editionLinksMarkup([],slug);});
+  }
   function render(data) {
     eventData = data.event;
     selected = data.occurrence || eventData.occurrences.find(function(item){return item.id === occurrenceId;}) || (eventData.occurrences.length === 1 ? eventData.occurrences[0] : null);
@@ -104,24 +170,28 @@
     document.title = eventData.title + " — the six.well construct";
     description.textContent = eventData.description || "A public event attached to the construct.";
     details.textContent = eventData.details || eventData.included || "Choose a date to view registration availability.";
+    renderKinmarking(eventData);
     dates.innerHTML = eventData.occurrences.length ? eventData.occurrences.map(function(item){
       var past = item.status === "completed" || new Date(item.endsAt || item.startsAt).getTime() < Date.now();
       return '<a class="event-date' + (selected && selected.id === item.id ? ' is-selected' : '') + (past ? ' is-past' : '') + '" href="' + href(item) + '"><strong>' + esc(when(item.startsAt)) + '</strong><span>' + esc((item.location || eventData.location || "Location to be announced") + " · " + item.status + (item.capacity > 0 ? " · " + item.seatsRemaining + " seats left" : "")) + '</span></a>';
     }).join("") : '<p class="event-message">The date has not been announced yet.</p>';
     waitlistPanel.hidden = true;
     if (!selected) {
+      if (isKinmarking) form.hidden = true;
       status.textContent = eventData.publicationState === "announced" ? "Announced" : "Choose a date";
       button.textContent = eventData.publicationState === "announced" ? "Announced" : "Choose a date";
       button.disabled = true;
       return;
     }
     if (eventData.publicationState === "announced") {
+      if (isKinmarking) form.hidden = true;
       status.textContent = "Announced · " + when(selected.startsAt);
       button.textContent = "Announced"; button.disabled = true;
       setMessage("Registration has not opened for this announced event."); return;
     }
     var past = selected.status === "completed" || new Date(selected.endsAt || selected.startsAt).getTime() < Date.now();
     var available = selected.status === "open" && !selected.soldOut && !past;
+    if (isKinmarking) form.hidden = !available;
     status.textContent = when(selected.startsAt) + " · " + (selected.location || eventData.location || "Location to be announced");
     button.disabled = !available;
     button.textContent = past ? "Event completed" : selected.status === "cancelled" ? "Cancelled" : selected.soldOut ? "Sold out" : selected.status !== "open" ? "Booking closed" : eventData.free ? "RSVP" : "Reserve a seat";

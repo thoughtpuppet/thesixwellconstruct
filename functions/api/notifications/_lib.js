@@ -3072,6 +3072,7 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
 
   const seats = Number(ticketRow.seats) || 1;
   const title = event?.title || "the event";
+  const freeRsvp = Number(ticketRow.amount_cents || 0) <= 0;
   const whenLine = event?.starts_at ? `When: ${formatDate(event.starts_at)}` : null;
   const whereLine = event?.location ? `Where: ${event.location}` : null;
   const confirmationPath =
@@ -3083,8 +3084,14 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
     request,
     `/api/events/tickets/${encodeURIComponent(ticketRow.id)}/calendar`
   );
+  const eventUrl = event?.slug
+    ? publicUrl(env, request, `/events/${encodeURIComponent(event.slug)}/`)
+    : "";
+  const kinmarking = String(event?.slug || "").startsWith("kinmarking-");
   const message = buildEventTicketPaidEmail({
-    subject: `You're booked — ${title}`,
+    variant: freeRsvp ? "rsvp" : "default",
+    free: freeRsvp,
+    subject: freeRsvp ? `RSVP confirmed — ${title}` : `You're booked — ${title}`,
     title,
     clientName: ticketRow.contact_name,
     seats: String(seats),
@@ -3092,6 +3099,10 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
     where: whereLine ? whereLine.replace(/^Where:\s*/, "") : "",
     ticketUrl: confirmationUrl,
     calendarUrl: event?.starts_at ? calendarUrl : "",
+    eventUrl,
+    preparationNote: kinmarking
+      ? "Review what to bring, privacy and consent, and same-day readiness before attending. An RSVP does not reserve tattoo time."
+      : "",
   });
 
   return sendTransactionalEmail(env, {
@@ -3200,6 +3211,7 @@ export async function sendDueEventTicketReminders(env) {
       .prepare(
         `SELECT t.*,
                 CASE WHEN a.id IS NULL THEN e.title ELSE e.title||' — '||a.title END AS event_title,
+                e.slug AS event_slug,
                 COALESCE(a.starts_at,o.starts_at,e.starts_at) AS event_starts_at,
                 COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS event_location
          FROM event_tickets t
@@ -3229,6 +3241,10 @@ export async function sendDueEventTicketReminders(env) {
         null,
         `/api/events/tickets/${encodeURIComponent(row.id)}/calendar`
       );
+      const eventUrl = row.event_slug
+        ? publicUrl(env, null, `/events/${encodeURIComponent(row.event_slug)}/`)
+        : "";
+      const kinmarking = String(row.event_slug || "").startsWith("kinmarking-");
       const message = buildEventReminderEmail({
         subject: `Reminder: ${title} is tomorrow`,
         title,
@@ -3237,6 +3253,10 @@ export async function sendDueEventTicketReminders(env) {
         where: row.event_location || "",
         seats: String(seats),
         calendarUrl,
+        eventUrl,
+        preparationNote: kinmarking
+          ? "Bring one to three references. If you hope for possible same-day work, eat beforehand, hydrate, arrive sober, and bring government-issued photo identification. Same-day tattooing is not guaranteed."
+          : "",
       });
       const delivery = await sendTransactionalEmail(env, {
         to: row.contact_email,

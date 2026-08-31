@@ -642,27 +642,32 @@ export function buildAppointmentReminderEmail(data) {
 }
 
 export function buildEventTicketPaidEmail(data) {
+  const freeRsvp = data.free === true;
   return renderClientEmail({
     templateKey: "event_ticket_paid",
-    templateVariant: data.variant || "default",
+    templateVariant: data.variant || (freeRsvp ? "rsvp" : "default"),
     variables: { client_name: data.clientName || "there", event_title: data.title },
     theme: "construct_event",
     subject: data.subject,
-    preheader: `Your admission details for ${data.title}.`,
-    classification: "EVENT ADMISSION",
-    headline: `You're booked for ${data.title}.`,
+    preheader: freeRsvp ? `Your RSVP details for ${data.title}.` : `Your admission details for ${data.title}.`,
+    classification: freeRsvp ? "EVENT RSVP" : "EVENT ADMISSION",
+    headline: freeRsvp ? `Your RSVP is confirmed for ${data.title}.` : `You're booked for ${data.title}.`,
     greeting: `Hi ${data.clientName || "there"},`,
     details: [
-      { label: "Seats reserved", value: data.seats },
+      { label: freeRsvp ? "People attending" : "Seats reserved", value: data.seats },
       data.when ? { label: "When", value: data.when } : null,
       data.where ? { label: "Where", value: data.where } : null,
     ],
-    primaryAction: { label: "View ticket", href: data.ticketUrl },
+    notice: data.preparationNote ? [data.preparationNote] : [],
+    primaryAction: { label: freeRsvp ? "View RSVP" : "View ticket", href: data.ticketUrl },
     secondaryActions: [
+      data.eventUrl ? { label: "Event guide", href: data.eventUrl } : null,
       data.calendarUrl ? { label: "Add to calendar", href: data.calendarUrl } : null,
     ],
     outro: [
-      "Your spot is confirmed and paid. Reply to this email if anything changes or you have questions before the night.",
+      freeRsvp
+        ? "This RSVP is for event correspondence and planning only. Reply to this email if anything changes or you have questions before the event."
+        : "Your spot is confirmed and paid. Reply to this email if anything changes or you have questions before the event.",
     ],
     signature: constructSignature("See you there,"),
   });
@@ -731,7 +736,9 @@ export function buildEventReminderEmail(data) {
       data.where ? { label: "Where", value: data.where } : null,
       { label: "Seats reserved", value: data.seats },
     ],
+    notice: data.preparationNote ? [data.preparationNote] : [],
     secondaryActions: [
+      data.eventUrl ? { label: "Event guide", href: data.eventUrl } : null,
       { label: "Add to calendar", href: data.calendarUrl },
     ],
     outro: [
@@ -876,6 +883,7 @@ const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "appointment_cancelled", variant: "studio", label: "Legacy generic studio cancellation", brand: "studio", stage: "legacy" },
   { templateKey: "appointment_reminder_24h", variant: "studio", label: "Legacy generic studio reminder", brand: "studio", stage: "legacy" },
   { templateKey: "event_ticket_paid", variant: "default", label: "Event ticket confirmed", brand: "events", stage: "events" },
+  { templateKey: "event_ticket_paid", variant: "rsvp", label: "Free event RSVP confirmed", brand: "events", stage: "events" },
   { templateKey: "event_ticket_cancelled", variant: "refunded", label: "Event ticket cancelled and refunded", brand: "events", stage: "events" },
   { templateKey: "event_ticket_cancelled", variant: "no_refund", label: "Event ticket cancelled without refund", brand: "events", stage: "events" },
   { templateKey: "event_ticket_reminder_24h", variant: "default", label: "Event reminder", brand: "events", stage: "events" },
@@ -1327,8 +1335,11 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
         : "Your deposit goes toward the final tattoo cost. At the start of your appointment, after the final design, placement, and session price are confirmed, the remaining balance must be paid before tattooing begins. Personalized aftercare instructions will be provided at your appointment.",
     });
   } else if (key === "event_ticket_paid") {
+    const freeRsvp = mode === "rsvp";
     rendered = buildEventTicketPaidEmail({
-      subject: `You're booked - ${SAMPLE.eventTitle}`,
+      variant: mode || "default",
+      free: freeRsvp,
+      subject: freeRsvp ? `RSVP confirmed - ${SAMPLE.eventTitle}` : `You're booked - ${SAMPLE.eventTitle}`,
       title: SAMPLE.eventTitle,
       clientName: SAMPLE.clientName,
       seats: "2",
@@ -1336,6 +1347,8 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       where: SAMPLE.eventWhere,
       ticketUrl: SAMPLE.ticketUrl,
       calendarUrl: SAMPLE.eventCalendarUrl,
+      eventUrl: "https://thesixwellconstruct.com/events/example/",
+      preparationNote: freeRsvp ? "Review the event guide before attending. An RSVP does not reserve tattoo time." : "",
     });
   } else if (key === "event_ticket_cancelled") {
     rendered = buildEventTicketCancelledEmail({

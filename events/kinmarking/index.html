@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KINMARKING — the six.well construct</title>
+<meta name="description" content="KINMARKING is a participatory memory, archive, and tattoo practice presented through connected editions at art.pill Tattoo House.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
+<link rel="stylesheet" href="/css/landing-family.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
+<style>
+  :root { --venture-color:var(--color-events); --venture-accent:var(--color-events); --venture-dim:var(--color-events-dim); }
+  html,body { background:var(--color-bg); }
+  .kinmarking-intro { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr); gap:16px; }
+  .kinmarking-panel { min-width:0; border:5px solid var(--ring-faint); padding:28px; background:var(--color-bg); }
+  .kinmarking-panel p { margin:0; color:var(--text-muted); line-height:1.75; }
+  .kinmarking-panel p + p { margin-top:16px; }
+  .kinmarking-editions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .kinmarking-edition-card { min-width:0; display:flex; flex-direction:column; border:5px solid var(--ring-faint); padding:28px; background:var(--color-bg); }
+  .kinmarking-edition-card:hover,.kinmarking-edition-card:focus-within { border-color:var(--color-events); }
+  .kinmarking-edition-card .edition-state { margin:0 0 16px; color:var(--color-events-bright); font-family:var(--font-display); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
+  .kinmarking-edition-card h3 { margin:0; color:var(--text); font-size:clamp(23px,3vw,34px); line-height:1.08; }
+  .kinmarking-edition-card .edition-date { margin:18px 0 0; color:var(--text-dim); font-family:var(--font-display); font-size:10px; font-weight:800; letter-spacing:.12em; line-height:1.65; text-transform:uppercase; }
+  .kinmarking-edition-card .edition-copy { margin:16px 0 0; color:var(--text-muted); line-height:1.68; }
+  .kinmarking-edition-card .venture-link { align-self:flex-start; margin-top:auto; padding-top:24px; }
+  .kinmarking-empty { grid-column:1/-1; border:5px solid var(--color-events-dim); padding:22px; color:var(--text-dim); }
+  @media (max-width:760px) {
+    .kinmarking-intro,.kinmarking-editions { grid-template-columns:minmax(0,1fr); gap:12px; }
+    .kinmarking-panel,.kinmarking-edition-card { padding:22px; }
+  }
+</style>
+</head>
+<body class="venture-page" data-venture="events" data-landing-family="events-program">
+  <main class="venture-shell entrance-fade">
+    <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="pageTitle">
+      <div><span class="venture-kicker">participatory practice</span><h1 class="venture-title hero-title" id="pageTitle">KINMARKING</h1></div>
+      <div class="hero-copy">
+        <p class="hero-descriptor hero-lede">Memory, archive + tattoo sessions.</p>
+        <div class="hero-actions"><a class="venture-link" href="#editions">editions</a><a class="venture-link" href="/events/">all events</a></div>
+      </div>
+    </section>
+
+    <section class="section kinmarking-intro" aria-labelledby="seriesTitle">
+      <article class="kinmarking-panel">
+        <span class="section-kicker">the series</span><h2 class="section-title" id="seriesTitle">Marks carried forward.</h2>
+        <p>KINMARKING is a participatory memory, archive, and tattoo practice exploring how photographs, documents, objects, stories, inherited symbols, and family histories may be interpreted as marks carried in the skin.</p>
+      </article>
+      <aside class="kinmarking-panel">
+        <span class="section-kicker">the interval</span><h2 class="section-title">Every four months.</h2>
+        <p>Each edition holds its own theme, archival questions, participating archivist, and tattoo possibilities while remaining connected to the wider KINMARKING practice.</p>
+      </aside>
+    </section>
+
+    <section class="section" id="editions">
+      <header class="section-head">
+        <div><span class="section-kicker">first cycle</span><h2 class="section-title">KINMARKING Editions</h2></div>
+        <p class="section-copy">Four Saturday sessions at art.pill Tattoo House, each held from 2–7 PM.</p>
+      </header>
+      <div class="kinmarking-editions" id="kinmarkingEditions" aria-live="polite"><p class="kinmarking-empty">Loading the KINMARKING editions.</p></div>
+    </section>
+
+    <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">events</a><a href="/home/">return to construct</a></div></footer>
+  </main>
+<script src="/js/kinmarking-series.js"></script>
+<script>
+(function () {
+  var root = document.getElementById("kinmarkingEditions");
+  var series = window.KinmarkingSeries;
+  function render(events) {
+    var editions = series.orderedEvents(events);
+    if (!editions.length) throw new Error("KINMARKING edition records are unavailable.");
+    root.innerHTML = editions.map(function (event) {
+      return '<article class="kinmarking-edition-card">' +
+        '<p class="edition-state">KINMARKING ' + series.escapeHtml(event.number) + ' · ' + series.escapeHtml(series.stateLabel(event)) + '</p>' +
+        '<h3>' + series.escapeHtml(event.title || event.fallbackTitle) + '</h3>' +
+        '<p class="edition-date">' + series.escapeHtml(series.formatDate(event.startsAt)) + '</p>' +
+        '<p class="edition-copy">' + series.escapeHtml(event.description || "Theme and participant guidance will be announced closer to the date.") + '</p>' +
+        '<a class="venture-link" href="' + series.eventHref(event.slug) + '">view edition</a>' +
+      '</article>';
+    }).join("");
+  }
+  fetch("/api/events")
+    .then(function (response) { return response.json().then(function (data) { return { ok:response.ok, data:data }; }); })
+    .then(function (result) { if (!result.ok) throw new Error(result.data.error || "Unable to load KINMARKING."); render(result.data.events || []); })
+    .catch(function (error) { root.innerHTML = '<p class="kinmarking-empty">' + series.escapeHtml(error.message) + ' <a href="/events/">View all events</a>.</p>'; });
+})();
+</script>
+<script src="/js/transition.js"></script>
+<script src="/js/construct-corner.js"></script>
+<script src="/js/construct-nav.js"></script>
+</body>
+</html>

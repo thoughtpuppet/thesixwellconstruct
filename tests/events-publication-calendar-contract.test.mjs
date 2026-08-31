@@ -16,6 +16,10 @@ import {
   handleEventsList,
 } from "../functions/api/events/_lib.js";
 import { sendDueEventTicketReminders } from "../functions/api/notifications/_lib.js";
+import {
+  buildEventReminderEmail,
+  buildEventTicketPaidEmail,
+} from "../functions/api/notifications/_email-templates.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TOKEN = "events-publication-contract-token";
@@ -337,6 +341,137 @@ test("event reminders follow the selected admission time and title", async () =>
   assert.match(sent[0].subject, /SOLEHMAN'S NEW YEAR I/);
   assert.match(sent[0].subject, /Artist Talk/);
   assert.ok(database.prepare("SELECT reminder_sent_at FROM event_tickets WHERE id='reminder-admission-ticket'").get().reminder_sent_at);
+});
+
+test("KINMARKING records remain four independent announced and closed editions", async () => {
+  const database = databaseThrough();
+  const env = runtime(database);
+  const location = "art.pill Tattoo House, 364 Nelson Street SW, Atlanta, GA 30313";
+  const editions = [
+    {
+      title:"KINMARKING 01: Skin As Archive",
+      slug:"kinmarking-01-skin-as-archive",
+      description:"The first edition of KINMARKING, a participatory memory, archive, and tattoo practice.",
+      startsAt:"2026-11-21T14:00:00-05:00",
+      endsAt:"2026-11-21T19:00:00-05:00",
+    },
+    { title:"KINMARKING 02", slug:"kinmarking-02", description:"Theme to be announced.", startsAt:"2027-03-20T14:00:00-04:00", endsAt:"2027-03-20T19:00:00-04:00" },
+    { title:"KINMARKING 03", slug:"kinmarking-03", description:"Theme to be announced.", startsAt:"2027-07-17T14:00:00-04:00", endsAt:"2027-07-17T19:00:00-04:00" },
+    { title:"KINMARKING 04", slug:"kinmarking-04", description:"Theme to be announced.", startsAt:"2027-11-20T14:00:00-05:00", endsAt:"2027-11-20T19:00:00-05:00" },
+  ];
+  for (const edition of editions) {
+    const response = await handleAdminEventCreate(request("/api/admin/events", {
+      method:"POST",
+      admin:true,
+      body:{
+        ...edition,
+        publicationState:"announced",
+        status:"closed",
+        location,
+        priceCents:0,
+        capacity:0,
+        maxSeatsPerOrder:1,
+        waitlistEnabled:false,
+        imageUrl:"",
+        occurrences:[{
+          startsAt:edition.startsAt,
+          endsAt:edition.endsAt,
+          location,
+          capacity:0,
+          maxSeatsPerOrder:1,
+          status:"closed",
+        }],
+      },
+    }), env);
+    assert.equal(response.status, 201, await response.clone().text());
+  }
+
+  const rows = database.prepare(
+    `SELECT slug,title,publication_state,status,is_recurring,image_url,waitlist_enabled,max_seats_per_order
+     FROM events WHERE slug LIKE 'kinmarking-%' ORDER BY starts_at`
+  ).all();
+  assert.deepEqual(rows.map((row) => row.slug), editions.map((edition) => edition.slug));
+  rows.forEach((row) => {
+    assert.deepEqual({
+      publication_state:row.publication_state,
+      status:row.status,
+      is_recurring:row.is_recurring,
+      image_url:row.image_url,
+      waitlist_enabled:row.waitlist_enabled,
+      max_seats_per_order:row.max_seats_per_order,
+    }, {
+      publication_state:"announced",
+      status:"closed",
+      is_recurring:0,
+      image_url:"",
+      waitlist_enabled:0,
+      max_seats_per_order:1,
+    });
+  });
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM event_occurrences WHERE event_id IN (SELECT id FROM events WHERE slug LIKE 'kinmarking-%') AND capacity=0 AND max_seats_per_order=1 AND status='closed'").get().count, 4);
+
+  const publicList = await (await handleEventsList(request("/api/events"), env)).json();
+  assert.deepEqual(
+    publicList.events.filter((event) => event.slug.startsWith("kinmarking-")).map((event) => event.slug),
+    editions.map((edition) => edition.slug),
+  );
+  const blocked = await handleEventCheckout(request("/api/events/kinmarking-01-skin-as-archive/checkout", {
+    method:"POST",
+    body:{ name:"Archive Guest", email:"archive@example.test", phone:"404-555-0123", seats:1 },
+  }), env, "kinmarking-01-skin-as-archive");
+  assert.equal(blocked.status, 409);
+});
+
+test("free event correspondence uses RSVP language and links the preparation guide", () => {
+  const confirmation = buildEventTicketPaidEmail({
+    free:true,
+    title:"KINMARKING 01: Skin As Archive",
+    clientName:"Archive Guest",
+    seats:"1",
+    when:"Saturday, November 21, 2026 at 2:00 PM EST",
+    where:"art.pill Tattoo House",
+    ticketUrl:"https://example.test/events/confirmed/",
+    calendarUrl:"https://example.test/calendar.ics",
+    eventUrl:"https://example.test/events/kinmarking-01-skin-as-archive/",
+    preparationNote:"Review the event guide. An RSVP does not reserve tattoo time.",
+    subject:"RSVP confirmed — KINMARKING 01: Skin As Archive",
+  });
+  assert.match(confirmation.text, /Your RSVP is confirmed/);
+  assert.match(confirmation.text, /Event guide/);
+  assert.match(confirmation.text, /does not reserve tattoo time/);
+  assert.doesNotMatch(confirmation.text, /confirmed and paid|ticket purchased/i);
+
+  const reminder = buildEventReminderEmail({
+    title:"KINMARKING 01: Skin As Archive",
+    clientName:"Archive Guest",
+    when:"Saturday, November 21, 2026 at 2:00 PM EST",
+    where:"art.pill Tattoo House",
+    seats:"1",
+    calendarUrl:"https://example.test/calendar.ics",
+    eventUrl:"https://example.test/events/kinmarking-01-skin-as-archive/",
+    preparationNote:"Bring one to three references. Same-day tattooing is not guaranteed.",
+    subject:"Reminder: KINMARKING 01 is tomorrow",
+  });
+  assert.match(reminder.text, /Event guide/);
+  assert.match(reminder.text, /Bring one to three references/);
+  assert.doesNotMatch(reminder.text, /paid|ticket purchased/i);
+});
+
+test("KINMARKING public pages retain the event shell, conditional flyer, guidance, and connected editions", () => {
+  const hub = readFileSync(join(ROOT, "events", "kinmarking", "index.html"), "utf8");
+  const detail = readFileSync(join(ROOT, "events", "detail", "index.html"), "utf8");
+  const series = readFileSync(join(ROOT, "js", "kinmarking-series.js"), "utf8");
+  assert.match(hub, /class="venture-hero site-hero site-hero--supporting"/);
+  assert.match(hub, /html,body \{ background:var\(--color-bg\); \}/);
+  assert.match(hub, /border:5px solid/);
+  assert.match(hub, /Every four months/);
+  assert.match(detail, /id="kinmarkingFlyer" hidden/);
+  assert.match(detail, /\.event-form\[hidden\][\s\S]*display:none !important/);
+  assert.match(detail, /event\.imageUrl[\s\S]*kinmarkingFlyer\.hidden = false/);
+  assert.match(detail, /What to bring[\s\S]*How it works[\s\S]*Possible outcomes[\s\S]*Privacy \+ consent[\s\S]*RSVP \+ walk-ins/);
+  assert.match(detail, /if \(isKinmarking\) form\.hidden = true/);
+  assert.match(series, /kinmarking-01-skin-as-archive[\s\S]*kinmarking-02[\s\S]*kinmarking-03[\s\S]*kinmarking-04/);
+  assert.match(series, /aria-current="page"/);
 });
 
 test("Events board contracts retain the shared shell, 5px cards, calendar, and state actions", () => {
