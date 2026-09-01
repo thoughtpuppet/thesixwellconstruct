@@ -449,6 +449,7 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studio, /StudioResumableMedia\.upload/);
   assert.match(studio, /IntersectionObserver/);
   assert.match(studio, /rootMargin:"600px 0px"/);
+  assert.match(studio, /note\.textContent!==simplifiedGalleryNote/);
   assert.match(studio, /createHeicEditProxy/);
   assert.match(studio, /isHeicUpload/);
   assert.match(studio, /activate_derivative/);

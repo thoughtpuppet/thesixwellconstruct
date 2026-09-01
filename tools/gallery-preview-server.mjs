@@ -39,6 +39,7 @@ const types = new Map([[".html","text/html; charset=utf-8"],[".css","text/css; c
 function localAsset(request) {
   const url = new URL(request.url);
   let pathname = decodeURIComponent(url.pathname);
+  if (pathname === "/__gallery-studio-acceptance") return new Response(`<!doctype html><html><head><meta charset="utf-8"><title>Gallery Studio Acceptance</title><link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/studio/construct-manager.css"><link rel="stylesheet" href="/studio/media-catalogue-manager.css"></head><body><main id="acceptance-root"></main><p id="acceptance-status" role="status"></p><script type="module">const token="${TOKEN}",root=document.querySelector("#acceptance-root"),status=document.querySelector("#acceptance-status");async function api(path,options={}){const headers=new Headers(options.headers||{});headers.set("authorization","Bearer "+token);const response=await fetch(path,{...options,headers});const payload=response.headers.get("content-type")?.includes("json")?await response.json():null;if(!response.ok)throw new Error(payload?.error||("Request failed ("+response.status+")"));return payload}window.addEventListener("studio:navigate",event=>{document.body.dataset.navigation=JSON.stringify(event.detail||{});const detail=event.detail||{};status.textContent="Navigated to "+(detail.tab||"")+" / "+(detail.view||"")});const {mountMediaCatalogue}=await import("/studio/media-catalogue-manager.js?v=acceptance");void mountMediaCatalogue(root,api,message=>{status.textContent=message},{view:new URLSearchParams(location.search).get("view")==="media"?"media":"gallery"}).catch(error=>{status.textContent=error.message;document.body.dataset.error=error.stack||error.message});</script></body></html>`,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
   if (pathname === "/js/live-text-editor.js") pathname = "/tools/live-text-editor.js";
   if (pathname.endsWith("/")) pathname += "index.html";
   const target = normalize(join(ROOT, pathname.replace(/^\/+/, "")));
@@ -77,7 +78,9 @@ createServer(async (incoming,outgoing)=>{
     const url=`http://127.0.0.1:${PORT}${incoming.url}`;
     const init={method:incoming.method,headers:incoming.headers};
     if(!["GET","HEAD"].includes(incoming.method))init.body=Readable.toWeb(incoming),init.duplex="half";
-    const response=await worker.fetch(new Request(url,init),env,{waitUntil(){}});
+    const response=new URL(url).pathname==="/__gallery-studio-acceptance"
+      ? localAsset(new Request(url,init))
+      : await worker.fetch(new Request(url,init),env,{waitUntil(){}});
     outgoing.writeHead(response.status,Object.fromEntries(response.headers));
     if(!response.body)return outgoing.end();
     Readable.fromWeb(response.body).pipe(outgoing);

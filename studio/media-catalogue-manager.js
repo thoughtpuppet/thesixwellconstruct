@@ -28,9 +28,10 @@ export async function mountMediaCatalogue(root,api,setStatus,{view="media"}={}){
   const token=localStorage.getItem("swc_submissions_admin_token")||"";
   root.innerHTML=`<section class="construct-manager mcm-shell"><div class="cm-head"><div><h2>${view==="gallery"?"Public Gallery":"Media Library"}</h2><p class="cm-summary">${view==="gallery"?"Curate original Six.Well media, sets, and connections independently from fuller Archive records.":"Managed files stay reusable. Only admitted original creative media receives a MED identity and enters Gallery."}</p></div><div class="mcm-actions"><a class="button" href="/gallery/" target="_blank" rel="noopener">Open public Gallery</a></div></div><div data-mcm-app role="region" aria-live="polite">Loading…</div></section>`;
   const app=root.querySelector("[data-mcm-app]");
+  const simplifiedGalleryNote="Rights, accessibility text, dates, and transcripts are optional context. A title and active display file are enough to publish.";
   const simplifyGalleryEditor=()=>{
     app.querySelector("[data-approve-display]")?.remove();
-    for(const note of app.querySelectorAll(".mcm-meta"))if(note.textContent.startsWith("Rights, accessibility text"))note.textContent="Rights, accessibility text, dates, and transcripts are optional context. A title and active display file are enough to publish.";
+    for(const note of app.querySelectorAll(".mcm-meta"))if(note.textContent.startsWith("Rights, accessibility text")&&note.textContent!==simplifiedGalleryNote)note.textContent=simplifiedGalleryNote;
   };
   new MutationObserver(simplifyGalleryEditor).observe(app,{childList:true,subtree:true});
   const protectedBlobCache=new Map();
