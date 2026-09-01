@@ -1011,11 +1011,13 @@
         '<p class="source-meta is-wide-mobile">Last success: ' + escapeHtml(displayDate(source.lastSuccessAt)) + '<br>Acceptance: ' + (source.acceptanceRate===null?'No decisions yet':Math.round(source.acceptanceRate*100)+'%') + (source.lastError?'<br>Error: '+escapeHtml(source.lastError):'') + '</p></div></details>';
     }).join('') : '<p class="empty-state">No social accounts registered. New accounts remain paused until you enable them.</p>';
   }
-  function connectorLabel(id) { return ({direct:"Official sources",general_web:"General web search",threads_api:"Threads API",instagram_api:"Instagram API",threads_web:"Threads web search",instagram_web:"Instagram web search",tiktok_web:"TikTok web search"})[id] || id; }
+  function connectorLabel(id) { return ({direct:"Official sources",general_web:"General web search",threads_api:"Threads API",instagram_api:"Instagram API",threads_web:"Threads web search",instagram_web:"Instagram account + web discovery",tiktok_web:"TikTok web search"})[id] || id; }
+  function connectorDescription(id) { return ({instagram_web:"Opens enabled Instagram profiles and inspects their newest visible posts first. Public web-index search is supplemental and does not count as account coverage."})[id] || ""; }
   function renderConnectors() {
     document.getElementById("connectorList").innerHTML = state.connectors.map(function (connector) {
       var id=connector.id;
       return '<article class="connector-card" data-connector-id="' + escapeHtml(id) + '"><div class="connector-title"><strong>' + escapeHtml(connectorLabel(id)) + '</strong><span class="connector-status is-' + escapeHtml(connector.status) + '">' + escapeHtml(connector.status.replace(/_/g,' ')) + '</span></div>' +
+        (connectorDescription(id)?'<p class="source-meta">'+escapeHtml(connectorDescription(id))+'</p>':'') +
         '<label class="field"><span>Enabled</span><select id="connectorEnabled-' + id + '"><option value="1"'+(connector.enabled?' selected':'')+'>Enabled</option><option value="0"'+(!connector.enabled?' selected':'')+'>Disabled</option></select></label>' +
         field("connectorCadence-"+id,"Cadence hours",connector.cadenceHours,{type:"number"}) + field("connectorLimit-"+id,"Per-run limit",connector.perRunLimit,{type:"number"}) +
         '<div class="connector-actions"><button type="button" data-save-connector>Save</button><button type="button" data-run-connector>Run Now</button></div>' +

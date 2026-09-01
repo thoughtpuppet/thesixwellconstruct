@@ -1063,6 +1063,10 @@ function connectorAvailability(row, env) {
     status = "unavailable";
     reason = "OPENAI_API_KEY is not configured.";
   }
+  if (row.enabled === 1 && row.id === "instagram_web" && !env.BROWSER?.quickAction) {
+    status = "unavailable";
+    reason = "Cloudflare Browser rendering is required to inspect registered Instagram accounts.";
+  }
   if (row.enabled === 1 && row.id === "threads_api" && (!env.THREADS_ACCESS_TOKEN || !env.OPENAI_API_KEY)) {
     status = "unavailable";
     reason = !env.THREADS_ACCESS_TOKEN ? "THREADS_ACCESS_TOKEN is not configured." : "OPENAI_API_KEY is required to extract event facts from posts.";
@@ -8191,6 +8195,7 @@ async function browserContent(env, url, waitForSelector = "", { includeImages = 
     ...(waitForSelector ? { waitForSelector: { selector: waitForSelector, timeout: 30_000, visible: true } } : {}),
     waitForTimeout: 1_000,
     rejectResourceTypes: includeImages ? ["media", "font"] : ["image", "media", "font"],
+    cacheTTL: 0,
   });
   if (!response?.ok) throw new Error(`Browser rendering returned HTTP ${response?.status || "unknown"}.`);
   const contentType = asString(response.headers.get("content-type"));
@@ -12143,20 +12148,25 @@ async function maybeRegisterEventiveFestivalSource(db, rawEvent) {
   return { event, registered:true, sourceId };
 }
 
-async function storeOpenAiEvents(env, db, profile, events, { provenance = [], platform = "", channel = "general_web", allowNativeFlyer = false, nativePosts = [], limit = 20, runId = "" } = {}) {
+async function storeOpenAiEvents(env, db, profile, events, { provenance = [], platform = "", channel = "general_web", allowNativeFlyer = false, allowRenderedFlyer = false, resolveSources = true, nativePosts = [], limit = 20, runId = "" } = {}) {
   let candidates = 0;
   let duplicates = 0;
   let suppressed = 0;
   let failures = 0;
   let strongPicks = 0;
   let materialUpdates = 0;
+  const details = [];
   for (const rawEvent of events.slice(0, limit)) {
     try {
-      let event = platform ? await prepareSocialProposal(db, rawEvent, platform, channel, allowNativeFlyer, nativePosts) : { ...rawEvent, discoveryChannel: channel };
-      if (platform && !event.socialEvidence.length) { failures += 1; continue; }
+      let event = platform ? await prepareSocialProposal(db, rawEvent, platform, channel, allowNativeFlyer, nativePosts, allowRenderedFlyer) : { ...rawEvent, discoveryChannel: channel };
+      if (platform && !event.socialEvidence.length) {
+        failures += 1;
+        details.push({ status:"skipped", title:asString(rawEvent?.title), sourceUrl:asString(rawEvent?.sourceUrl), reason:"missing-social-evidence" });
+        continue;
+      }
       if (!platform) event = (await maybeRegisterEventiveFestivalSource(db, event)).event;
       const leadUrl = event.discoveryUrl || event.socialEvidence?.[0]?.postUrl || (event.sourceAuthority === "unresolved" ? event.sourceUrl : "");
-      const needsSourceResolution = Boolean(leadUrl && sourceAuthorityErrors(proposalFromBody(event)).length);
+      const needsSourceResolution = Boolean(resolveSources && leadUrl && sourceAuthorityErrors(proposalFromBody(event)).length);
       const resolved = needsSourceResolution
         ? await resolveDiscoveryProposal(env, db, profile, { name: platform ? `${platform} discovery` : "Web discovery", url: leadUrl, source_type: "discovery", trust_level: "discovery" }, event)
         : { proposal:event, citations:[], audit:null };
@@ -12171,9 +12181,13 @@ async function storeOpenAiEvents(env, db, profile, events, { provenance = [], pl
       if (stored.candidate && !stored.existing) candidates += 1;
       if (stored.duplicate) duplicates += 1;
       if (stored.skipped === "suppressed") suppressed += 1;
-    } catch { failures += 1; }
+      else if (stored.skipped) details.push({ status:"skipped", title:asString(event.title), sourceUrl:asString(event.sourceUrl), reason:stored.skipped });
+    } catch (error) {
+      failures += 1;
+      details.push({ status:"failed", title:asString(rawEvent?.title), sourceUrl:asString(rawEvent?.sourceUrl), error:asString(error?.message || error).slice(0, 300) });
+    }
   }
-  return { candidates, duplicates, suppressed, failures, strongPicks, materialUpdates };
+  return { candidates, duplicates, suppressed, failures, strongPicks, materialUpdates, details };
 }
 
 async function runOpenAiDiscovery(env, db, profile, limit = profile.perRunLimit, runId = "") {
@@ -12190,7 +12204,7 @@ function externalCorroborationUrl(value, platform) {
   return host !== socialDomain && !host.endsWith(`.${socialDomain}`);
 }
 
-async function prepareSocialProposal(db, event, platform, channel, allowNativeFlyer = false, nativePosts = []) {
+async function prepareSocialProposal(db, event, platform, channel, allowNativeFlyer = false, nativePosts = [], allowRenderedFlyer = false) {
   const evidence = (Array.isArray(event.socialEvidence) ? event.socialEvidence : [])
     .map((item) => {
       if (!allowNativeFlyer) return item;
@@ -12212,7 +12226,9 @@ async function prepareSocialProposal(db, event, platform, channel, allowNativeFl
       authorHandle: normalizeHandle(item.authorHandle),
       evidenceRole: official ? "official" : "discovery",
       corroborated: official || externalCorroborationUrl(event.sourceUrl, platform) || externalCorroborationUrl(event.ticketUrl, platform),
-      provenance: [{ channel, postUrl: item.postUrl, retrievedAt: isoNow() }],
+      provenance: Array.isArray(item.provenance) && item.provenance.length
+        ? item.provenance.map((entry) => ({ ...entry, channel:entry.channel === "pasted_link" ? channel : entry.channel }))
+        : [{ channel, postUrl: item.postUrl, retrievedAt: isoNow() }],
     };
   });
   const proposal = { ...event, socialEvidence, discoveryChannel: channel };
@@ -12224,6 +12240,13 @@ async function prepareSocialProposal(db, event, platform, channel, allowNativeFl
   }
   if (!proposal.sourceEventId && evidence[0]?.postId) proposal.sourceEventId = `${platform}:${evidence[0].postId}`;
   proposal.flyerUrl = "";
+  if (allowRenderedFlyer) {
+    const renderedEvidence = socialEvidence.find((item) => validHttpUrl(item.mediaUrl)
+      && item.mediaUrl === event.flyerUrl
+      && item.postUrl === event.flyerProvenanceUrl);
+    proposal.flyerUrl = renderedEvidence?.mediaUrl || "";
+    proposal.flyerProvenanceUrl = renderedEvidence?.postUrl || "";
+  }
   if (allowNativeFlyer && hasOfficialEvidence) {
     const officialEvidence = socialEvidence.find((item) => item.evidenceRole === "official");
     const image = nativePosts.find((item) => (item.postId && item.postId === officialEvidence?.postId) || item.postUrl === officialEvidence?.postUrl);
@@ -12232,6 +12255,59 @@ async function prepareSocialProposal(db, event, platform, channel, allowNativeFl
     proposal.flyerProvenanceUrl = eligibleImage?.postUrl || "";
   }
   return proposal;
+}
+
+async function instagramProfilePostLinks(env, source) {
+  const profileUrl = asString(source.profile_url);
+  const result = await browserRenderedLinks(env, profileUrl, 'a[href*="/p/"],a[href*="/reel/"]');
+  const links = [];
+  const seen = new Set();
+  for (const rawLink of result.links) {
+    let absolute = "";
+    try { absolute = new URL(rawLink, profileUrl).toString(); } catch { continue; }
+    const url = canonicalPastedLinkUrl(absolute);
+    if (!isInstagramUrl(url) || !pastedSocialPostId(url, "instagram") || seen.has(url)) continue;
+    seen.add(url);
+    links.push(url);
+  }
+  return { links, browserMs:result.browserMs };
+}
+
+function roundRobinInstagramPosts(scans, maximum) {
+  const selected = [];
+  const longest = Math.max(0, ...scans.map((scan) => scan.links.length));
+  for (let postIndex = 0; postIndex < longest && selected.length < maximum; postIndex += 1) {
+    for (const scan of scans) {
+      if (scan.links[postIndex]) selected.push({ source:scan.source, url:scan.links[postIndex] });
+      if (selected.length >= maximum) break;
+    }
+  }
+  return selected;
+}
+
+async function inspectRegisteredInstagramPost(env, source, postUrl, channel) {
+  const rendered = await browserContent(env, postUrl, "", { includeImages:true });
+  const extracted = await openAiPastedSocialEvents(env, postUrl, rendered.text, 1);
+  const event = extracted.events[0];
+  if (!event) return { event:null, browserMs:rendered.browserMs, usage:extracted.usage || {} };
+  const proposal = browserPastedLinkProposal(event, { name:source.name || `@${source.handle}`, url:postUrl });
+  const postId = pastedSocialPostId(postUrl, "instagram");
+  return {
+    event: inferSubjectsAndFormats({
+      ...proposal,
+      sourceEventId:`instagram:${postId}`,
+      discoveryChannel:channel,
+      verificationState:"needs_verification",
+      socialEvidence:(proposal.socialEvidence || []).map((evidence) => ({
+        ...evidence,
+        authorHandle:evidence.authorHandle || source.handle,
+        authorDisplayName:evidence.authorDisplayName || source.name,
+        provenance:(evidence.provenance || []).map((entry) => ({ ...entry, channel:entry.channel === "pasted_link" ? channel : entry.channel })),
+      })),
+    }),
+    browserMs:rendered.browserMs,
+    usage:extracted.usage || {},
+  };
 }
 
 async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
@@ -12246,26 +12322,102 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
     : "";
   const query = `${exactAccountInstruction} Search ${platform} for newly announced public Atlanta metro creative events and virtual programs from Atlanta-based organizers: lectures, panels, workshops, screenings, exhibitions, performances, technology, AI, and experimental programs in the next ${profile.dateHorizonDays} days. Prioritize ${[...terms, ...tags, "Atlanta", "ATL"].join(", ")}. Return the original post URL and author handle for every proposal.`;
   const limit = Math.min(connector.perRunLimit, settings.perRunLimit);
-  let result;
+  const sourceDetails = [];
+  let exactEvents = [];
+  let postsInspected = 0;
+  let scanFailures = 0;
+  let browserMs = 0;
+  if (platform === "instagram" && registered.length) {
+    const scans = await mapConcurrent(registered, 2, async (source) => {
+      try {
+        const result = await instagramProfilePostLinks(env, source);
+        browserMs += result.browserMs;
+        return { source, links:result.links, error:"" };
+      } catch (error) {
+        scanFailures += 1;
+        return { source, links:[], error:asString(error?.message || error) };
+      }
+    });
+    const selected = roundRobinInstagramPosts(scans, limit);
+    const inspected = await mapConcurrent(selected, 2, async ({ source, url }) => {
+      try {
+        const result = await inspectRegisteredInstagramPost(env, source, url, connector.id);
+        browserMs += result.browserMs;
+        return { source, url, inspected:true, event:result.event, error:"" };
+      } catch (error) {
+        scanFailures += 1;
+        return { source, url, inspected:false, event:null, error:asString(error?.message || error) };
+      }
+    });
+    exactEvents = inspected.map((item) => item.event).filter(Boolean);
+    postsInspected = inspected.filter((item) => item.inspected).length;
+    for (const scan of scans) {
+      const attempts = inspected.filter((item) => item.source.id === scan.source.id);
+      const successful = attempts.filter((item) => item.inspected).length;
+      const failed = attempts.length - successful;
+      const eventCount = attempts.filter((item) => item.event).length;
+      const error = scan.error || attempts.find((item) => item.error)?.error || "";
+      const warning = successful ? "" : error || (scan.links.length
+        ? "No post from this account fit within the connector limit or completed inspection."
+        : "No visible post or reel links were found on the rendered profile.");
+      sourceDetails.push({
+        status:successful ? (failed ? "partial" : "ok") : "warning",
+        sourceId:scan.source.id,
+        account:`@${scan.source.handle}`,
+        profileUrl:scan.source.profile_url,
+        profileLinksFound:scan.links.length,
+        postsAttempted:attempts.length,
+        postsInspected:successful,
+        postsFailed:failed,
+        eventsExtracted:eventCount,
+        ...(warning ? { warning } : {}),
+      });
+      await updateSocialSourceResult(db, scan.source.id, successful
+        ? { success:true, httpStatus:200 }
+        : { error:warning, httpStatus:null });
+    }
+  }
+  const exactStored = await storeOpenAiEvents(env, db, profile, exactEvents, {
+    platform,
+    channel:connector.id,
+    allowRenderedFlyer:true,
+    resolveSources:false,
+    limit,
+    runId,
+  });
+  let result = { events:[], citations:[], usage:{} };
+  let webFailure = null;
   try {
     result = await requestOpenAiEvents(env, profile, { query, domains: [SOCIAL_DOMAINS[platform]], limit, platform });
-    await Promise.all(registered.map((source) => updateSocialSourceResult(db, source.id, { success: true, httpStatus: 200 })));
   } catch (error) {
-    await Promise.all(registered.map((source) => updateSocialSourceResult(db, source.id, { error: error.message, httpStatus: error.httpStatus || null })));
-    throw error;
+    webFailure = error;
   }
-  const stored = await storeOpenAiEvents(env, db, profile, result.events, { provenance: result.citations, platform, channel: connector.id, limit, runId });
-  const warning = registered.length && !result.events.length
-    ? `No posts were inspected for ${registered.length} registered ${platform} account${registered.length === 1 ? "" : "s"}; the account scan was inconclusive.`
-    : "";
+  const webStored = webFailure
+    ? { candidates:0, duplicates:0, suppressed:0, failures:1, strongPicks:0, materialUpdates:0, details:[{ status:"failed", source:"public-web-index", error:asString(webFailure.message) }] }
+    : await storeOpenAiEvents(env, db, profile, result.events, { provenance: result.citations, platform, channel: connector.id, limit, runId });
+  const uncovered = sourceDetails.filter((detail) => detail.postsInspected === 0);
+  const coverageConfirmed = !registered.length || (platform === "instagram" && uncovered.length === 0);
+  const coverageError = uncovered.length
+    ? `Registered account inspection was inconclusive for ${uncovered.map((detail) => detail.account).join(", ")}.`
+    : platform !== "instagram" && registered.length
+      ? `Registered ${platform} accounts were not directly inspected by this connector.`
+      : "";
   return {
-    ...stored,
-    warnings: warning ? 1 : 0,
-    details: warning ? [{ status: "warning", warning, registeredAccounts: registered.map((source) => `@${source.handle}`) }] : [],
+    candidates:exactStored.candidates + webStored.candidates,
+    duplicates:exactStored.duplicates + webStored.duplicates,
+    suppressed:exactStored.suppressed + webStored.suppressed,
+    failures:scanFailures + exactStored.failures + webStored.failures,
+    strongPicks:exactStored.strongPicks + webStored.strongPicks,
+    materialUpdates:exactStored.materialUpdates + webStored.materialUpdates,
+    warnings:coverageConfirmed ? 0 : 1,
+    details:[...sourceDetails, ...exactStored.details, ...webStored.details],
     citations: result.citations,
     usage: result.usage,
     queries: [query],
-    postsInspected: result.events.length,
+    postsInspected,
+    browserMs,
+    coverageConfirmed,
+    coverageError,
   };
 }
 
@@ -12540,8 +12692,12 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
       citations.push(...(result.citations || []));
       if (result.usage && Object.keys(result.usage).length) usage.push({ channel: id, ...result.usage });
       searched.push(id);
-      outcomes.push({ channel: id, status: result.failures || result.warnings ? "partial" : "ok", candidates: result.candidates, duplicates: result.duplicates, suppressed: Number(result.suppressed) || 0, strongPicks: Number(result.strongPicks) || 0, materialUpdates: Number(result.materialUpdates) || 0, failures: result.failures, warnings: Number(result.warnings) || 0, retries: result.retries || 0, postsInspected: result.postsInspected || 0, ...(result.details ? { sources: result.details } : {}) });
-      await writeConnectorState(db, id, { status: "ready", success: true });
+      outcomes.push({ channel: id, status: result.failures || result.warnings ? "partial" : "ok", candidates: result.candidates, duplicates: result.duplicates, suppressed: Number(result.suppressed) || 0, strongPicks: Number(result.strongPicks) || 0, materialUpdates: Number(result.materialUpdates) || 0, failures: result.failures, warnings: Number(result.warnings) || 0, retries: result.retries || 0, postsInspected: result.postsInspected || 0, browserMs:result.browserMs || 0, ...(result.details ? { sources: result.details } : {}) });
+      await writeConnectorState(db, id, {
+        status:"ready",
+        success:result.coverageConfirmed !== false,
+        error:result.coverageConfirmed === false ? result.coverageError || "Registered account inspection was inconclusive." : "",
+      });
     } catch (error) {
       failureCount += 1;
       const connectorStatus = connectorErrorStatus(error);

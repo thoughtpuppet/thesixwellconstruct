@@ -342,6 +342,11 @@ test("social scout preserves calendar data, stages connectors disabled, and list
     enabled:source.enabled,
   })), [{
     platform:"instagram",
+    handle:"artistforumatlanta",
+    profileUrl:"https://www.instagram.com/artistforumatlanta/",
+    enabled:true,
+  },{
+    platform:"instagram",
     handle:"culturexcanvasartshow",
     profileUrl:"https://www.instagram.com/culturexcanvasartshow/",
     enabled:true,
@@ -1275,7 +1280,8 @@ test("LOOP's embedded BigTickets calendar creates complete private event candida
     });
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id=?)").get(`bigtickets-${eventToken.toLowerCase()}`).count, 0);
     db.exec("UPDATE calendar_scout_connectors SET enabled=1 WHERE id='instagram_web'");
-    const socialRun = await runCalendarScout(env(db, { OPENAI_API_KEY:"test-key" }), { runKind:"manual", channels:["instagram_web"] });
+    const browser = { async quickAction(action) { assert.equal(action, "links"); return Response.json({ result:[] }); } };
+    const socialRun = await runCalendarScout(env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }), { runKind:"manual", channels:["instagram_web"] });
     assert.equal(socialRun.failures, 0);
     assert.equal(socialRun.candidates, 0);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE title='Art in Transit: Research, Innovation & Global Exchange'").get().count, 1);
@@ -3256,12 +3262,20 @@ test("TikTok web discovery is domain-filtered, ignores thumbnails, and remains a
   }
 });
 
-test("registered social web scouting names exact accounts, surfaces zero-inspection warnings, and closes stale runs", async () => {
+test("registered Instagram scouting reports zero profile coverage honestly and closes stale runs", async () => {
   const db = database();
   db.exec("UPDATE calendar_scout_connectors SET enabled=1 WHERE id='instagram_web'");
   db.prepare(`INSERT INTO calendar_scout_runs(id,run_kind,status,model,started_at) VALUES('cal_run_stale_loop','scheduled','running','test','2026-08-21T12:00:00.000Z')`).run();
   const originalFetch = globalThis.fetch;
   let requestBody = "";
+  const browser = {
+    async quickAction(action, options) {
+      assert.equal(action, "links");
+      assert.equal(options.visibleLinksOnly, true);
+      assert.equal(options.excludeExternalLinks, true);
+      return Response.json({ result:[] }, { headers:{ "x-browser-ms-used":"5" } });
+    },
+  };
   globalThis.fetch = async (url, init = {}) => {
     assert.match(String(url), /api\.openai\.com/);
     requestBody = String(init.body || "");
@@ -3271,19 +3285,91 @@ test("registered social web scouting names exact accounts, surfaces zero-inspect
     });
   };
   try {
-    const run = await runCalendarScout(env(db, { OPENAI_API_KEY:"test-key" }), { runKind:"manual", channels:["instagram_web"] });
+    const run = await runCalendarScout(env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }), { runKind:"manual", channels:["instagram_web"] });
     assert.equal(run.status, "partial");
     assert.equal(run.warnings, 1);
     assert.match(requestBody, /@loop\.atl/);
     assert.match(requestBody, /https:\/\/www\.instagram\.com\/loop\.atl\//);
     const outcome = run.outcomes[0];
     assert.equal(outcome.postsInspected, 0);
-    assert.match(outcome.sources[0].warning, /inconclusive/);
+    assert.equal(outcome.sources.filter((source) => source.profileLinksFound === 0).length, 3);
+    assert.match(outcome.sources[0].warning, /No visible post or reel links/);
     assert.deepEqual(
       { ...db.prepare("SELECT status,failure_count,error_message FROM calendar_scout_runs WHERE id='cal_run_stale_loop'").get() },
       { status:"failed", failure_count:1, error_message:"Scout run exceeded 15 minutes and was closed as failed." },
     );
-    assert.ok(db.prepare("SELECT last_success_at FROM calendar_social_sources WHERE handle='loop.atl'").get().last_success_at);
+    assert.equal(db.prepare("SELECT last_success_at FROM calendar_social_sources WHERE handle='loop.atl'").get().last_success_at, null);
+    assert.equal(db.prepare("SELECT last_success_at FROM calendar_scout_connectors WHERE id='instagram_web'").get().last_success_at, null);
+    assert.match(db.prepare("SELECT last_error FROM calendar_scout_connectors WHERE id='instagram_web'").get().last_error, /inconclusive/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("registered Instagram scouting opens profile posts and stages the missed Artist Forum event", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_scout_connectors SET enabled=1,per_run_limit=2 WHERE id='instagram_web'");
+  db.exec("UPDATE calendar_social_sources SET enabled=0 WHERE handle<>'artistforumatlanta'");
+  const pinnedUrl = "https://www.instagram.com/p/C-VgFdOuhPI/";
+  const eventUrl = "https://www.instagram.com/p/Dcv1EDKnPs_/";
+  const flyerUrl = "https://scontent-atl3-2.cdninstagram.com/assemblage-of-selves.jpg";
+  const caption = "Assemblage of Selves opens September 5, 2026 from 6–9 PM at Artist Forum Atlanta, 100 Broad Street SW, Atlanta, GA.";
+  const renderedHtml = `<html><head><meta property="og:description" content="${caption}"></head><body><article><p>${caption}</p><img src="${flyerUrl}" alt="Assemblage of Selves September 5, 2026 6–9 PM"></article></body></html>`;
+  const visionEvent = {
+    title:"Assemblage of Selves", description:"Assemblage of Selves is a public Atlanta exhibition opening.", caption,
+    organizer:"Artist Forum Atlanta", organizerUrl:"", venueName:"Artist Forum Atlanta", venueAddress:"100 Broad Street SW, Atlanta, GA", locationDisclosure:"public", venueUrl:"",
+    city:"Atlanta", region:"GA", startsAt:"2026-09-05T18:00:00-04:00", endsAt:"2026-09-05T21:00:00-04:00", confirmedThrough:"",
+    visitingHours:[], visitingHoursNote:"", visitingHoursSourceUrl:"", eventUrl, ticketUrl:"", imageUrl:flyerUrl, imageAlt:"Assemblage of Selves event flyer",
+    accessStatus:"public", accessNotes:"", audiences:["Public"], eventStructure:"single", dateKind:"timed", timezone:"America/New_York",
+    subjects:["art"], formats:["exhibition"], experimental:true, authorHandle:"artistforumatlanta", authorDisplayName:"Artist Forum Atlanta", authorIsVerified:false,
+    postedAt:"2026-09-01T14:01:43Z", mediaType:"image", extractionNotes:[], conflicts:[],
+    carouselImages:[{ url:flyerUrl, altText:"Assemblage of Selves event flyer", extractedText:"Assemblage of Selves September 5, 2026 6–9 PM", role:"flyer" }],
+    occurrences:[], recurringOccurrences:[],
+  };
+  const browserCalls = [];
+  const browser = {
+    async quickAction(action, options) {
+      browserCalls.push({ action, options });
+      if (action === "links") return Response.json({ result:[pinnedUrl,eventUrl] }, { headers:{ "x-browser-ms-used":"8" } });
+      assert.equal(action, "content");
+      assert.equal(options.cacheTTL, 0);
+      return new Response(options.url === eventUrl ? renderedHtml : "<html><body>Older pinned artwork post.</body></html>", { status:200, headers:{ "content-type":"text/html", "x-browser-ms-used":"11" } });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  const bucket = new MemoryBucket();
+  let webSearchCalls = 0;
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url) === flyerUrl) return new Response(new Uint8Array([1,2,3]), { status:200, headers:{ "content-type":"image/jpeg" } });
+    assert.equal(String(url), "https://api.openai.com/v1/responses");
+    const body = JSON.parse(init.body);
+    if (body.text?.format?.name === "pasted_social_event") {
+      const input = body.input[0].content.find((item) => item.type === "input_text").text;
+      return Response.json({ output_text:JSON.stringify({ events:input.includes("Dcv1EDKnPs_") ? [visionEvent] : [] }), usage:{} });
+    }
+    webSearchCalls += 1;
+    return Response.json({ output_text:JSON.stringify({ events:[] }), usage:{} });
+  };
+  try {
+    const run = await runCalendarScout(env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key", SUBMISSION_FILES:bucket }), { runKind:"manual", channels:["instagram_web"] });
+    assert.equal(run.status, "completed");
+    assert.equal(run.candidates, 1);
+    assert.equal(run.warnings, 0);
+    assert.equal(run.outcomes[0].postsInspected, 2);
+    assert.equal(run.outcomes[0].sources.find((source) => source.account === "@artistforumatlanta").eventsExtracted, 1);
+    assert.equal(browserCalls.filter((call) => call.action === "links").length, 1);
+    assert.deepEqual(browserCalls.filter((call) => call.action === "content").map((call) => call.options.url).slice(0, 2), [pinnedUrl,eventUrl]);
+    assert.ok(webSearchCalls >= 1, "public web-index discovery remains supplemental");
+    const candidate = db.prepare("SELECT id,status,source_event_id,discovery_channel,flyer_media_id FROM calendar_candidates WHERE title='Assemblage of Selves'").get();
+    assert.equal(candidate.status, "needs_verification");
+    assert.equal(candidate.source_event_id, "instagram:Dcv1EDKnPs_");
+    assert.equal(candidate.discovery_channel, "instagram_web");
+    assert.ok(candidate.flyer_media_id);
+    const evidence = db.prepare("SELECT post_id,author_handle,media_url,provenance_json FROM calendar_candidate_social_evidence WHERE candidate_id=?").get(candidate.id);
+    assert.deepEqual({ postId:evidence.post_id, authorHandle:evidence.author_handle, mediaUrl:evidence.media_url }, { postId:"Dcv1EDKnPs_", authorHandle:"artistforumatlanta", mediaUrl:flyerUrl });
+    assert.ok(JSON.parse(evidence.provenance_json).some((item) => item.channel === "instagram_web"));
+    assert.ok(db.prepare("SELECT last_success_at FROM calendar_social_sources WHERE handle='artistforumatlanta'").get().last_success_at);
+    assert.ok(db.prepare("SELECT last_success_at FROM calendar_scout_connectors WHERE id='instagram_web'").get().last_success_at);
   } finally {
     globalThis.fetch = originalFetch;
   }
