@@ -12257,20 +12257,32 @@ async function prepareSocialProposal(db, event, platform, channel, allowNativeFl
   return proposal;
 }
 
-async function instagramProfilePostLinks(env, source) {
-  const profileUrl = asString(source.profile_url);
-  const result = await browserRenderedLinks(env, profileUrl, 'a[href*="/p/"],a[href*="/reel/"]');
+async function instagramRenderedPostLinks(env, sourceUrl) {
+  const result = await browserRenderedLinks(env, sourceUrl, 'a[href*="/p/"],a[href*="/reel/"]');
   const links = [];
   const seen = new Set();
   for (const rawLink of result.links) {
     let absolute = "";
-    try { absolute = new URL(rawLink, profileUrl).toString(); } catch { continue; }
+    try { absolute = new URL(rawLink, sourceUrl).toString(); } catch { continue; }
     const url = canonicalPastedLinkUrl(absolute);
     if (!isInstagramUrl(url) || !pastedSocialPostId(url, "instagram") || seen.has(url)) continue;
     seen.add(url);
     links.push(url);
   }
   return { links, browserMs:result.browserMs };
+}
+
+async function instagramProfilePostLinks(env, source) {
+  return instagramRenderedPostLinks(env, asString(source.profile_url));
+}
+
+function instagramTopicTag(value) {
+  return normalizeHandle(value).replace(/[^a-z0-9_]/g, "").slice(0, 80);
+}
+
+async function instagramTopicPostLinks(env, tag) {
+  const topicUrl = `https://www.instagram.com/explore/tags/${encodeURIComponent(tag)}/`;
+  return { ...(await instagramRenderedPostLinks(env, topicUrl)), topicUrl };
 }
 
 function roundRobinInstagramPosts(scans, maximum) {
@@ -12285,7 +12297,7 @@ function roundRobinInstagramPosts(scans, maximum) {
   return selected;
 }
 
-async function inspectRegisteredInstagramPost(env, source, postUrl, channel) {
+async function inspectInstagramPost(env, source, postUrl, channel) {
   const rendered = await browserContent(env, postUrl, "", { includeImages:true });
   const extracted = await openAiPastedSocialEvents(env, postUrl, rendered.text, 1);
   const event = extracted.events[0];
@@ -12327,8 +12339,14 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
   let postsInspected = 0;
   let scanFailures = 0;
   let browserMs = 0;
-  if (platform === "instagram" && registered.length) {
-    const scans = await mapConcurrent(registered, 2, async (source) => {
+  let accountScans = [];
+  let topicScans = [];
+  let inspected = [];
+  const topicTags = platform === "instagram"
+    ? [...new Set(settings.tags.map(instagramTopicTag).filter(Boolean))].slice(0, 8)
+    : [];
+  if (platform === "instagram") {
+    accountScans = await mapConcurrent(registered, 2, async (source) => {
       try {
         const result = await instagramProfilePostLinks(env, source);
         browserMs += result.browserMs;
@@ -12338,10 +12356,28 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
         return { source, links:[], error:asString(error?.message || error) };
       }
     });
-    const selected = roundRobinInstagramPosts(scans, limit);
-    const inspected = await mapConcurrent(selected, 2, async ({ source, url }) => {
+    topicScans = await mapConcurrent(topicTags, 2, async (tag) => {
+      const source = { id:`instagram-topic:${tag}`, name:`#${tag}`, handle:"" };
       try {
-        const result = await inspectRegisteredInstagramPost(env, source, url, connector.id);
+        const result = await instagramTopicPostLinks(env, tag);
+        browserMs += result.browserMs;
+        return { source, tag, topicUrl:result.topicUrl, links:result.links, error:"" };
+      } catch (error) {
+        scanFailures += 1;
+        return { source, tag, topicUrl:`https://www.instagram.com/explore/tags/${encodeURIComponent(tag)}/`, links:[], error:asString(error?.message || error) };
+      }
+    });
+    const accountLimit = registered.length
+      ? Math.min(registered.length * 2, topicTags.length ? Math.max(registered.length, Math.ceil(limit * 0.6)) : limit)
+      : 0;
+    const topicLimit = Math.max(0, limit - accountLimit);
+    const selected = [
+      ...roundRobinInstagramPosts(accountScans, accountLimit),
+      ...roundRobinInstagramPosts(topicScans, topicLimit),
+    ];
+    inspected = await mapConcurrent(selected, 2, async ({ source, url }) => {
+      try {
+        const result = await inspectInstagramPost(env, source, url, connector.id);
         browserMs += result.browserMs;
         return { source, url, inspected:true, event:result.event, error:"" };
       } catch (error) {
@@ -12351,7 +12387,7 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
     });
     exactEvents = inspected.map((item) => item.event).filter(Boolean);
     postsInspected = inspected.filter((item) => item.inspected).length;
-    for (const scan of scans) {
+    for (const scan of accountScans) {
       const attempts = inspected.filter((item) => item.source.id === scan.source.id);
       const successful = attempts.filter((item) => item.inspected).length;
       const failed = attempts.length - successful;
@@ -12376,6 +12412,28 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
         ? { success:true, httpStatus:200 }
         : { error:warning, httpStatus:null });
     }
+    for (const scan of topicScans) {
+      const attempts = inspected.filter((item) => item.source.id === scan.source.id);
+      const successful = attempts.filter((item) => item.inspected).length;
+      const failed = attempts.length - successful;
+      const eventCount = attempts.filter((item) => item.event).length;
+      const warning = scan.error || (!successful
+        ? scan.links.length
+          ? "No post from this hashtag fit within the connector limit or completed inspection."
+          : "No visible post or reel links were found on the rendered hashtag page."
+        : "");
+      sourceDetails.push({
+        status:successful ? (failed ? "partial" : "ok") : "warning",
+        topic:`#${scan.tag}`,
+        topicUrl:scan.topicUrl,
+        profileLinksFound:scan.links.length,
+        postsAttempted:attempts.length,
+        postsInspected:successful,
+        postsFailed:failed,
+        eventsExtracted:eventCount,
+        ...(warning ? { warning } : {}),
+      });
+    }
   }
   const exactStored = await storeOpenAiEvents(env, db, profile, exactEvents, {
     platform,
@@ -12395,13 +12453,17 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
   const webStored = webFailure
     ? { candidates:0, duplicates:0, suppressed:0, failures:1, strongPicks:0, materialUpdates:0, details:[{ status:"failed", source:"public-web-index", error:asString(webFailure.message) }] }
     : await storeOpenAiEvents(env, db, profile, result.events, { provenance: result.citations, platform, channel: connector.id, limit, runId });
-  const uncovered = sourceDetails.filter((detail) => detail.postsInspected === 0);
-  const coverageConfirmed = !registered.length || (platform === "instagram" && uncovered.length === 0);
-  const coverageError = uncovered.length
-    ? `Registered account inspection was inconclusive for ${uncovered.map((detail) => detail.account).join(", ")}.`
-    : platform !== "instagram" && registered.length
-      ? `Registered ${platform} accounts were not directly inspected by this connector.`
-      : "";
+  const uncoveredAccounts = sourceDetails.filter((detail) => detail.account && detail.postsInspected === 0);
+  const accountCoverageConfirmed = !registered.length || (platform === "instagram" && uncoveredAccounts.length === 0);
+  const topicPostsInspected = sourceDetails.filter((detail) => detail.topic).reduce((total, detail) => total + detail.postsInspected, 0);
+  const topicCoverageConfirmed = !topicTags.length || topicPostsInspected > 0;
+  const coverageConfirmed = accountCoverageConfirmed && topicCoverageConfirmed;
+  const coverageErrors = [
+    uncoveredAccounts.length ? `Registered account inspection was inconclusive for ${uncoveredAccounts.map((detail) => detail.account).join(", ")}.` : "",
+    platform !== "instagram" && registered.length ? `Registered ${platform} accounts were not directly inspected by this connector.` : "",
+    topicTags.length && !topicCoverageConfirmed ? "Configured Instagram hashtag discovery inspected no posts." : "",
+  ].filter(Boolean);
+  const coverageError = coverageErrors.join(" ");
   return {
     candidates:exactStored.candidates + webStored.candidates,
     duplicates:exactStored.duplicates + webStored.duplicates,
@@ -12409,11 +12471,11 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
     failures:scanFailures + exactStored.failures + webStored.failures,
     strongPicks:exactStored.strongPicks + webStored.strongPicks,
     materialUpdates:exactStored.materialUpdates + webStored.materialUpdates,
-    warnings:coverageConfirmed ? 0 : 1,
+    warnings:(accountCoverageConfirmed ? 0 : 1) + (topicCoverageConfirmed ? 0 : 1),
     details:[...sourceDetails, ...exactStored.details, ...webStored.details],
     citations: result.citations,
     usage: result.usage,
-    queries: [query],
+    queries: [query, ...topicScans.map((scan) => `instagram hashtag #${scan.tag}`)],
     postsInspected,
     browserMs,
     coverageConfirmed,

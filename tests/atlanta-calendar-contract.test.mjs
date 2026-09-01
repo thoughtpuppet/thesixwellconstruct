@@ -358,6 +358,8 @@ test("social scout preserves calendar data, stages connectors disabled, and list
   }]);
   assert.equal(payload.connectors.find((item) => item.id === "threads_api").status, "disabled");
   assert.equal(payload.connectors.find((item) => item.id === "general_web").status, "unavailable");
+  assert.equal(payload.connectors.find((item) => item.id === "instagram_web").perRunLimit, 12);
+  assert.deepEqual(payload.profile.socialSettings.instagram.tags, ["atlantaart","atlart","atlantaartshow","atlantaevents","atlantagallery","atlantafilm","atlantapoetry","atldsgnfest"]);
   assert.equal(payload.profile.socialSettings.tiktok.perRunLimit, 6);
 });
 
@@ -3287,12 +3289,13 @@ test("registered Instagram scouting reports zero profile coverage honestly and c
   try {
     const run = await runCalendarScout(env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }), { runKind:"manual", channels:["instagram_web"] });
     assert.equal(run.status, "partial");
-    assert.equal(run.warnings, 1);
+    assert.equal(run.warnings, 2);
     assert.match(requestBody, /@loop\.atl/);
     assert.match(requestBody, /https:\/\/www\.instagram\.com\/loop\.atl\//);
     const outcome = run.outcomes[0];
     assert.equal(outcome.postsInspected, 0);
-    assert.equal(outcome.sources.filter((source) => source.profileLinksFound === 0).length, 3);
+    assert.equal(outcome.sources.filter((source) => source.account && source.profileLinksFound === 0).length, 3);
+    assert.equal(outcome.sources.filter((source) => source.topic && source.profileLinksFound === 0).length, 8);
     assert.match(outcome.sources[0].warning, /No visible post or reel links/);
     assert.deepEqual(
       { ...db.prepare("SELECT status,failure_count,error_message FROM calendar_scout_runs WHERE id='cal_run_stale_loop'").get() },
@@ -3310,21 +3313,25 @@ test("registered Instagram scouting opens profile posts and stages the missed Ar
   const db = database();
   db.exec("UPDATE calendar_scout_connectors SET enabled=1,per_run_limit=2 WHERE id='instagram_web'");
   db.exec("UPDATE calendar_social_sources SET enabled=0 WHERE handle<>'artistforumatlanta'");
+  db.exec(`UPDATE calendar_scout_profiles SET social_settings_json=json_set(social_settings_json,'$.instagram.tags',json('[]'),'$.instagram.perRunLimit',2) WHERE id='atlanta-default'`);
   const pinnedUrl = "https://www.instagram.com/p/C-VgFdOuhPI/";
   const eventUrl = "https://www.instagram.com/p/Dcv1EDKnPs_/";
   const flyerUrl = "https://scontent-atl3-2.cdninstagram.com/assemblage-of-selves.jpg";
-  const caption = "Assemblage of Selves opens September 5, 2026 from 6–9 PM at Artist Forum Atlanta, 100 Broad Street SW, Atlanta, GA.";
-  const renderedHtml = `<html><head><meta property="og:description" content="${caption}"></head><body><article><p>${caption}</p><img src="${flyerUrl}" alt="Assemblage of Selves September 5, 2026 6–9 PM"></article></body></html>`;
+  const caption = "Artist Forum is partnering with @residenceatl to present Assemblage of Selves, featuring Abdul Barnes, Yvonne McCoy, and Naijai Johnson. On display @thestudybyresidence_ September 25–27 during @atldsgnfest. Public Open Reception September 26, 7–10 PM. Artist Talk September 27, 2–3 PM.";
+  const renderedHtml = `<html><head><meta property="og:description" content="${caption}"></head><body><article><p>${caption}</p><img src="${flyerUrl}" alt="Assemblage of Selves September 25–27, 2026"></article></body></html>`;
   const visionEvent = {
-    title:"Assemblage of Selves", description:"Assemblage of Selves is a public Atlanta exhibition opening.", caption,
-    organizer:"Artist Forum Atlanta", organizerUrl:"", venueName:"Artist Forum Atlanta", venueAddress:"100 Broad Street SW, Atlanta, GA", locationDisclosure:"public", venueUrl:"",
-    city:"Atlanta", region:"GA", startsAt:"2026-09-05T18:00:00-04:00", endsAt:"2026-09-05T21:00:00-04:00", confirmedThrough:"",
+    title:"Assemblage of Selves", description:"Assemblage of Selves features work by Abdul Barnes, Yvonne McCoy, and Naijai Johnson during Atlanta Design Festival.", caption,
+    organizer:"Artist Forum Atlanta", organizerUrl:"", venueName:"", venueAddress:"", locationDisclosure:"public", venueUrl:"",
+    city:"Atlanta", region:"GA", startsAt:"2026-09-25", endsAt:"2026-09-27", confirmedThrough:"",
     visitingHours:[], visitingHoursNote:"", visitingHoursSourceUrl:"", eventUrl, ticketUrl:"", imageUrl:flyerUrl, imageAlt:"Assemblage of Selves event flyer",
-    accessStatus:"public", accessNotes:"", audiences:["Public"], eventStructure:"single", dateKind:"timed", timezone:"America/New_York",
+    accessStatus:"public", accessNotes:"", audiences:["Public"], eventStructure:"exhibition", dateKind:"date_range", timezone:"America/New_York",
     subjects:["art"], formats:["exhibition"], experimental:true, authorHandle:"artistforumatlanta", authorDisplayName:"Artist Forum Atlanta", authorIsVerified:false,
     postedAt:"2026-09-01T14:01:43Z", mediaType:"image", extractionNotes:[], conflicts:[],
-    carouselImages:[{ url:flyerUrl, altText:"Assemblage of Selves event flyer", extractedText:"Assemblage of Selves September 5, 2026 6–9 PM", role:"flyer" }],
-    occurrences:[], recurringOccurrences:[],
+    carouselImages:[{ url:flyerUrl, altText:"Assemblage of Selves event flyer", extractedText:"Assemblage of Selves September 25–27, 2026", role:"flyer" }],
+    occurrences:[
+      { title:"Assemblage of Selves Public Open Reception", occurrenceType:"opening_reception", factualDescription:"Public opening reception.", startsAt:"2026-09-26T19:00:00-04:00", endsAt:"2026-09-26T22:00:00-04:00", timezone:"America/New_York", venueName:"", venueAddress:"", accessStatus:"public", accessNotes:"", audiences:["Public"] },
+      { title:"Assemblage of Selves Artist Talk", occurrenceType:"artist_talk", factualDescription:"Artist talk.", startsAt:"2026-09-27T14:00:00-04:00", endsAt:"2026-09-27T15:00:00-04:00", timezone:"America/New_York", venueName:"", venueAddress:"", accessStatus:"public", accessNotes:"", audiences:["Public"] },
+    ], recurringOccurrences:[],
   };
   const browserCalls = [];
   const browser = {
@@ -3370,6 +3377,56 @@ test("registered Instagram scouting opens profile posts and stages the missed Ar
     assert.ok(JSON.parse(evidence.provenance_json).some((item) => item.channel === "instagram_web"));
     assert.ok(db.prepare("SELECT last_success_at FROM calendar_social_sources WHERE handle='artistforumatlanta'").get().last_success_at);
     assert.ok(db.prepare("SELECT last_success_at FROM calendar_scout_connectors WHERE id='instagram_web'").get().last_success_at);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Instagram topic scouting discovers unregistered posts from configured hashtags and applies relevance", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_social_sources SET enabled=0");
+  db.exec("UPDATE calendar_scout_connectors SET enabled=1,per_run_limit=2 WHERE id='instagram_web'");
+  db.exec(`UPDATE calendar_scout_profiles SET social_settings_json=json_set(social_settings_json,'$.instagram.tags',json('["atlantafilm"]'),'$.instagram.perRunLimit',2) WHERE id='atlanta-default'`);
+  const eventUrl = "https://www.instagram.com/p/DtopicScout1/";
+  const caption = "Atlanta Experimental Film Salon — October 3, 2026 at 7 PM, Eyedrum, Atlanta. Short films, moving-image experiments, and an artist discussion. #atlantafilm";
+  const renderedHtml = `<html><head><meta property="og:description" content="${caption}"></head><body><article>${caption}</article></body></html>`;
+  const visionEvent = {
+    title:"Atlanta Experimental Film Salon", description:"A screening of short films and moving-image experiments followed by an artist discussion.", caption,
+    organizer:"Eyedrum", organizerUrl:"", venueName:"Eyedrum", venueAddress:"", locationDisclosure:"public", venueUrl:"", city:"Atlanta", region:"GA",
+    startsAt:"2026-10-03T19:00:00-04:00", endsAt:"", confirmedThrough:"", visitingHours:[], visitingHoursNote:"", visitingHoursSourceUrl:"",
+    eventUrl, ticketUrl:"", imageUrl:"", imageAlt:"", accessStatus:"public", accessNotes:"", audiences:["Public"], eventStructure:"single", dateKind:"timed",
+    timezone:"America/New_York", subjects:["film"], formats:["screening"], experimental:true, authorHandle:"atlfilmcollective", authorDisplayName:"ATL Film Collective",
+    authorIsVerified:false, postedAt:"2026-09-01T15:00:00Z", mediaType:"", extractionNotes:[], conflicts:[], carouselImages:[], occurrences:[], recurringOccurrences:[],
+  };
+  const browser = {
+    async quickAction(action, options) {
+      if (action === "links") {
+        assert.match(options.url, /\/explore\/tags\/atlantafilm\//);
+        return Response.json({ result:[eventUrl] }, { headers:{ "x-browser-ms-used":"6" } });
+      }
+      assert.equal(action, "content");
+      assert.equal(options.url, eventUrl);
+      return new Response(renderedHtml, { status:200, headers:{ "content-type":"text/html", "x-browser-ms-used":"9" } });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    assert.equal(String(url), "https://api.openai.com/v1/responses");
+    const body = JSON.parse(init.body);
+    return Response.json({
+      output_text:JSON.stringify({ events:body.text?.format?.name === "pasted_social_event" ? [visionEvent] : [] }),
+      usage:{},
+    });
+  };
+  try {
+    const run = await runCalendarScout(env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }), { runKind:"manual", channels:["instagram_web"] });
+    assert.equal(run.status, "completed");
+    assert.equal(run.candidates, 1);
+    assert.equal(run.outcomes[0].postsInspected, 1);
+    const topic = run.outcomes[0].sources.find((source) => source.topic === "#atlantafilm");
+    assert.deepEqual({ links:topic.profileLinksFound, inspected:topic.postsInspected, events:topic.eventsExtracted }, { links:1, inspected:1, events:1 });
+    const candidate = db.prepare("SELECT source_event_id,discovery_channel,status FROM calendar_candidates WHERE title='Atlanta Experimental Film Salon'").get();
+    assert.deepEqual({ ...candidate }, { source_event_id:"instagram:DtopicScout1", discovery_channel:"instagram_web", status:"needs_verification" });
   } finally {
     globalThis.fetch = originalFetch;
   }
