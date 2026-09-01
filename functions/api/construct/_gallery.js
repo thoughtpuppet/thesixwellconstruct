@@ -595,12 +595,20 @@ WHERE gallery.state='published'
     gallery.publication_basis IN ('direct','editorial','manual')
     OR (gallery.publication_basis='record' AND (
       EXISTS(SELECT 1 FROM entity_media attachment JOIN content_entities owner ON owner.id=attachment.entity_id
-        WHERE attachment.media_id=gallery.media_id AND attachment.public_visible=1 AND owner.visibility='public')
+        WHERE attachment.media_id IN (gallery.media_id,gallery.display_media_id)
+          AND attachment.public_visible=1 AND owner.visibility='public')
       OR EXISTS(SELECT 1 FROM archive_materials material JOIN archive_dossiers dossier ON dossier.entity_id=material.dossier_entity_id
-        WHERE material.media_id=gallery.media_id AND material.state='published' AND material.visibility='public'
+        WHERE material.media_id IN (gallery.media_id,gallery.display_media_id)
+          AND material.state='published' AND material.visibility='public'
           AND dossier.state='published' AND dossier.public_visible=1)
       OR EXISTS(SELECT 1 FROM archive_note_assets note_asset JOIN archive_notes note ON note.entity_id=note_asset.note_entity_id
-        WHERE note_asset.media_id=gallery.media_id AND note_asset.public_visible=1 AND note.state='published' AND note.public_visible=1)
+        WHERE note_asset.media_id IN (gallery.media_id,gallery.display_media_id)
+          AND note_asset.public_visible=1 AND note.state='published' AND note.public_visible=1)
+      OR EXISTS(SELECT 1 FROM archive_blackboard_fragments fragment
+        JOIN content_entities owner ON owner.id=fragment.record_entity_id
+        WHERE COALESCE(fragment.master_media_id,fragment.edit_source_media_id,fragment.derivative_media_id)=gallery.media_id
+          AND fragment.derivative_media_id=gallery.display_media_id
+          AND fragment.state='published' AND fragment.public_visible=1 AND owner.visibility='public')
     ))
   )
   AND NOT EXISTS(SELECT 1 FROM media_asset_variants variant WHERE variant.derivative_media_id=gallery.media_id)`;

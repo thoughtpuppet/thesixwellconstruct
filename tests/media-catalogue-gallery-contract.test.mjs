@@ -101,7 +101,7 @@ function admitFixture(sql, mediaId, { title = "Fixture media", originality = "si
     VALUES(?,?,?,'undated',?,CASE WHEN ?='published' THEN datetime('now') ELSE NULL END,?,?,'test','test',datetime('now'),datetime('now'))`).run(mediaId, mediaId, title, state, state, basis, sourceEntityId);
 }
 
-test("confirmed originals and qualifying preexisting Archive media form one contiguous public catalogue", () => {
+test("confirmed originals and qualifying preexisting Archive media form one contiguous public catalogue", async () => {
   const sql = database();
   const catalogue = sql.prepare(`SELECT catalogue.catalogue_id,catalogue.media_id,provenance.originality,provenance.asset_role
     FROM media_catalogue_entries catalogue JOIN media_asset_provenance provenance ON provenance.media_id=catalogue.media_id
@@ -122,6 +122,10 @@ test("confirmed originals and qualifying preexisting Archive media form one cont
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM pragma_foreign_key_check").get().count, 0);
   assert.equal(sql.prepare("SELECT state FROM gallery_sets WHERE id='gallery-set-peer-amid-versions'").get().state, "published");
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_set_items WHERE set_id='gallery-set-peer-amid-versions'").get().count, 2);
+
+  const publicIndex = await api(environment(sql), "/api/gallery");
+  assert.equal(publicIndex.response.status, 200);
+  assert.equal(publicIndex.payload.count, catalogue.length, "every published MED record must clear the public ownership gate");
 
   const audit = sql.prepare("SELECT COUNT(*) count FROM media_catalogue_renumber_audit WHERE run_id='0215-original-media-rebuild'").get().count;
   assert.ok(audit > catalogue.length);
@@ -181,6 +185,33 @@ test("generated masks stay operational and HEIC masters publish through one auto
   const publicRecord=publicIndex.payload.records.find(record=>record.accession===accession&&record.mimeType==="image/jpeg");
   assert.ok(publicRecord);
   assert.match(publicRecord.mediaUrl,/\?asset=media-heic-display$/);
+});
+
+test("published Blackboard fragments authorize their private masters through public display derivatives", async () => {
+  const sql=database(),env=environment(sql);
+  const board=sql.prepare(`SELECT record.id record_entity_id
+    FROM archive_records record JOIN content_entities owner ON owner.id=record.id
+    WHERE owner.visibility='public' LIMIT 1`).get();
+  assert.ok(board);
+  sql.prepare(`INSERT OR IGNORE INTO archive_blackboard_records(record_entity_id,created_by,updated_by,created_at,updated_at)
+    VALUES(?,'test','test',datetime('now'),datetime('now'))`).run(board.record_entity_id);
+  sql.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('media-fragment-master','test/fragment.heic','fragment.heic','image/heic',10,'internal','active','test',datetime('now'),datetime('now'),'hidden')`).run();
+  sql.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation)
+    VALUES('media-fragment-display','test/fragment.jpg','fragment.jpg','image/jpeg',8,'public','active','test',datetime('now'),datetime('now'),'inline')`).run();
+  sql.prepare(`INSERT INTO media_asset_variants(master_media_id,derivative_media_id,purpose,created_by,created_at,updated_at)
+    VALUES('media-fragment-master','media-fragment-display','public-display','test',datetime('now'),datetime('now'))`).run();
+  admitFixture(sql,'media-fragment-master',{title:'Published Blackboard fragment',basis:'record',sourceEntityId:board.record_entity_id});
+  sql.prepare("UPDATE gallery_entries SET display_media_id='media-fragment-display' WHERE media_id='media-fragment-master'").run();
+  sql.prepare(`INSERT INTO content_entities(id,entity_type,visibility,search_visibility,featured,created_by,updated_by,created_at,updated_at)
+    VALUES('fragment-public-gate-test','archive_blackboard_fragment','public',0,0,'test','test',datetime('now'),datetime('now'))`).run();
+  sql.prepare(`INSERT INTO archive_blackboard_fragments(id,record_entity_id,slug,title,master_media_id,derivative_media_id,state,public_visible,created_by,updated_by,created_at,updated_at,published_at)
+    VALUES('fragment-public-gate-test',?,'fragment-public-gate-test','Public gate test','media-fragment-master','media-fragment-display','published',1,'test','test',datetime('now'),datetime('now'),datetime('now'))`).run(board.record_entity_id);
+  const accession=`MED-${String(sql.prepare("SELECT catalogue_id FROM media_catalogue_entries WHERE media_id='media-fragment-master'").get().catalogue_id).padStart(6,'0')}`;
+  const publicRecord=await api(env,`/api/gallery/items/${accession}`);
+  assert.equal(publicRecord.response.status,200);
+  assert.equal(publicRecord.payload.record.mimeType,'image/jpeg');
+  assert.match(publicRecord.payload.record.mediaUrl,/asset=media-fragment-display$/);
 });
 
 test("Studio draft creation is idempotent and one-click publication does not require rights or accessibility review", async () => {
