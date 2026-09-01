@@ -5,10 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const MEDIA_ROOT = path.join(REPO, "assets");
+const MEDIA_ROOT = REPO;
 const SUPPORTED = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".mp4", ".mov", ".webm", ".wav", ".mp3", ".m4a", ".ogg", ".pdf", ".doc", ".docx", ".txt"]);
 const SITE_PREFIXES = ["assets/entry-room/", "assets/audio/", "assets/home-ghost/", "assets/previews/", "assets/events/"];
-const ARCHIVE_EXCLUDED_PREFIXES = ["assets/events/"];
+const WALK_EXCLUDED_DIRECTORIES = new Set([".git", ".wrangler", ".codex-tmp", ".cloudflare-backups", ".playwright-cli", "node_modules", "tmp", "output"]);
+const ARCHIVE_EXCLUDED_PREFIXES = ["assets/events/", "prototypes/", "workers/archive-viewer/fixtures/", "docs/"];
 const ARCHIVE_EXCLUDED_FILES = new Set([
   "assets/entry-room/ring-ripple-reference.mov",
   "assets/entry-room/ring-ripple-reference.mp4",
@@ -51,7 +52,9 @@ const MIME = new Map([
 
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
-  const nested = await Promise.all(entries.map((entry) => entry.isDirectory() ? walk(path.join(directory, entry.name)) : [path.join(directory, entry.name)]));
+  const nested = await Promise.all(entries.map((entry) => entry.isDirectory()
+    ? (WALK_EXCLUDED_DIRECTORIES.has(entry.name) ? [] : walk(path.join(directory, entry.name)))
+    : [path.join(directory, entry.name)]));
   return nested.flat();
 }
 
@@ -151,12 +154,11 @@ function dimensions(buffer, extension) {
 
 function quoted(value) { return `'${String(value ?? "").replaceAll("'", "''")}'`; }
 function nullable(value) { return value === null || value === undefined || value === "" ? "NULL" : Number.isFinite(Number(value)) ? String(Number(value)) : quoted(value); }
-function titleFromFilename(filename) { return filename.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 function identityPredicate(record) {
   const locator = record.storageKey
     ? `existing.storage_key=${quoted(record.storageKey)}`
     : `lower(replace(existing.source_url,'\\','/'))=lower(${quoted(record.sourceUrl)})`;
-  return `(${locator} OR catalogue.sha256=${quoted(record.sha256)})`;
+  return `(${locator} OR provenance.sha256=${quoted(record.sha256)})`;
 }
 function locatorOrder(record) {
   return record.storageKey ? `existing.storage_key=${quoted(record.storageKey)}` : `lower(replace(existing.source_url,'\\','/'))=lower(${quoted(record.sourceUrl)})`;
@@ -167,99 +169,50 @@ async function inventory() {
   const records = [];
   for (const absolute of files) {
     const buffer = await readFile(absolute), extension = path.extname(absolute).toLowerCase(), relative = path.relative(REPO, absolute).split(path.sep).join("/"), provenance = KNOWN_PROVENANCE.get(relative) || {}, sourceUrl = provenance.storageKey ? "" : `/${relative}`;
-    const normalizedRelative=relative.toLowerCase(),hash = createHash("sha256").update(buffer).digest("hex"), sourceClass = SITE_PREFIXES.some((prefix) => normalizedRelative.startsWith(prefix)) ? "site_asset" : "creative";
-    const archiveCatalogueEligible = !ARCHIVE_EXCLUDED_FILES.has(normalizedRelative) && !ARCHIVE_EXCLUDED_PREFIXES.some((prefix)=>normalizedRelative.startsWith(prefix));
-    records.push({ relative, sourceUrl, storageKey:provenance.storageKey||"", filename: path.basename(absolute), extension: extension.slice(1), mimeType: MIME.get(extension), byteSize: buffer.length, sha256: hash, sourceClass, archiveCatalogueEligible, durationSeconds:mediaDuration(buffer,extension), ...dimensions(buffer, extension), ...technicalEvidence(buffer,extension) });
+    const normalizedRelative=relative.toLowerCase(),filename=path.basename(absolute),normalizedFilename=filename.toLowerCase(),hash = createHash("sha256").update(buffer).digest("hex"), sourceClass = SITE_PREFIXES.some((prefix) => normalizedRelative.startsWith(prefix)) || /^favicon(?:-v2)?(?:-|\.)/.test(normalizedRelative) ? "site_asset" : "creative";
+    const isMask=/(?:^|[-_. ])(?:alpha[-_. ]?)?(?:hotspot[-_. ]?)?mask(?:[-_. ]|$)/i.test(normalizedFilename);
+    const hardExcluded=ARCHIVE_EXCLUDED_FILES.has(normalizedRelative)||ARCHIVE_EXCLUDED_PREFIXES.some((prefix)=>normalizedRelative.startsWith(prefix))||isMask;
+    const portfolioOnly=normalizedRelative.startsWith("assets/paintings/")||normalizedRelative.startsWith("assets/flash/");
+    const registryAction=hardExcluded||sourceClass==="site_asset"||portfolioOnly?"skip":"review";
+    const exclusionReason=hardExcluded?"event, reference, fixture, document, or generated mask outside the Archive media registry":sourceClass==="site_asset"?"website infrastructure":portfolioOnly?"portfolio-only media is intentionally redundant in Gallery":"";
+    const archiveCatalogueEligible=registryAction==="review";
+    records.push({ relative, sourceUrl, storageKey:provenance.storageKey||"", filename, extension: extension.slice(1), mimeType: MIME.get(extension), byteSize: buffer.length, sha256: hash, sourceClass, archiveCatalogueEligible, registryAction, exclusionReason, durationSeconds:mediaDuration(buffer,extension), ...dimensions(buffer, extension), ...technicalEvidence(buffer,extension) });
   }
   return records;
 }
 
 function sql(records) {
   const lines = [
-    "-- Generated by tools/media-catalogue-backfill.mjs.",
-    "-- Repository files are registered once by source URL or SHA-256; creative files become private Gallery drafts.",
-    "",
-    "-- Existing source-URL identities remain distinct even when two repository paths contain",
-    "-- identical bytes. The canonical row retains the checksum after the import completes.",
-    "DROP INDEX IF EXISTS idx_media_catalogue_sha256;",
+    "-- Dry-run output generated by tools/media-catalogue-backfill.mjs.",
+    "-- This scanner registers only reviewable creative candidates. It never",
+    "-- assigns MED numbers, creates Gallery entries, or publishes files.",
+    "-- Event/calendar media, masks, references, fixtures, site infrastructure,",
+    "-- and portfolio-only files are inventoried but intentionally not registered.",
     "",
   ];
   for (const record of records) {
-    const mediaId = `media-repo-${record.sha256.slice(0, 24)}`, title = titleFromFilename(record.filename);
-    const provenance = KNOWN_PROVENANCE.get(record.relative) || {};
-    const repositoryAliases = records.filter((candidate) => candidate.sha256 === record.sha256).map((candidate) => candidate.relative);
-    const rawMetadata = {
-      repositoryPath: record.relative,
-      ...(repositoryAliases.length > 1 ? { repositoryAliases } : {}),
-      ...(provenance.originalSourcePath ? { originalSourcePath: provenance.originalSourcePath } : {}),
-      ...(provenance.filesystemCreatedAt ? { filesystemCreatedAt: provenance.filesystemCreatedAt } : {}),
-      ...(provenance.filesystemModifiedAt ? { filesystemModifiedAt: provenance.filesystemModifiedAt } : {}),
-      ...((record.metadataEvidence||provenance.metadataEvidence) ? { metadataEvidence: {...(record.metadataEvidence||{}),...(provenance.metadataEvidence||{})} } : {}),
-    };
+    lines.push(`-- ${record.relative}: ${record.registryAction}${record.exclusionReason ? ` (${record.exclusionReason})` : ""}`);
+    if (record.registryAction !== "review") { lines.push(""); continue; }
+    const mediaId=`media-repo-${record.sha256.slice(0,24)}`,provenance=KNOWN_PROVENANCE.get(record.relative)||{};
     const predicate=identityPredicate(record),order=locatorOrder(record),editingSoftware=provenance.editingSoftware||record.editingSoftware||"";
+    const repositoryAliases=records.filter(candidate=>candidate.sha256===record.sha256).map(candidate=>candidate.relative);
+    const rawMetadata={repositoryPath:record.relative,...(repositoryAliases.length>1?{repositoryAliases}:{}),...(provenance.originalSourcePath?{originalSourcePath:provenance.originalSourcePath}:{}),...(provenance.filesystemCreatedAt?{filesystemCreatedAt:provenance.filesystemCreatedAt}:{}),...(provenance.filesystemModifiedAt?{filesystemModifiedAt:provenance.filesystemModifiedAt}:{}),...((record.metadataEvidence||provenance.metadataEvidence)?{metadataEvidence:{...(record.metadataEvidence||{}),...(provenance.metadataEvidence||{})}}:{})};
     lines.push(
-      `INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,width,height,duration_seconds,alt_text,caption,credit,rights_notes,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)`,
-      `SELECT ${quoted(mediaId)},${quoted(record.sourceUrl)},${quoted(record.storageKey)},${quoted(record.filename)},${quoted(record.mimeType)},${record.byteSize},${nullable(record.width)},${nullable(record.height)},${nullable(record.durationSeconds)},'','','','','internal','active','migration-0203',datetime('now'),datetime('now'),'hidden',${record.archiveCatalogueEligible?1:0}`,
-      `WHERE NOT EXISTS(SELECT 1 FROM media_assets existing LEFT JOIN media_catalogue_entries catalogue ON catalogue.media_id=existing.id WHERE ${predicate});`,
-      ...(!record.archiveCatalogueEligible ? [
-        `UPDATE media_assets SET archive_catalogue_eligible=0 WHERE id=(SELECT existing.id FROM media_assets existing LEFT JOIN media_catalogue_entries catalogue ON catalogue.media_id=existing.id WHERE ${predicate} ORDER BY CASE WHEN ${order} THEN 0 ELSE 1 END LIMIT 1);`,
-      ] : [
-        `UPDATE media_catalogue_entries SET sha256=${quoted(record.sha256)},source_class=${quoted(record.sourceClass)},original_format=${quoted(record.extension)},import_source=${quoted(provenance.importSource || "repository-backfill")},embedded_capture_at=${nullable(record.embeddedCaptureAt)},camera_make=${quoted(record.cameraMake||"")},camera_model=${quoted(record.cameraModel||"")},editing_software=${quoted(editingSoftware)},orientation=${quoted(record.orientation||"")},color_profile=${quoted(record.colorProfile||"")},raw_metadata_json=${quoted(JSON.stringify(rawMetadata))},updated_by='migration-0203',updated_at=datetime('now')`,
-        `WHERE media_id=(SELECT existing.id FROM media_assets existing LEFT JOIN media_catalogue_entries catalogue ON catalogue.media_id=existing.id WHERE ${predicate} ORDER BY CASE WHEN ${order} THEN 0 ELSE 1 END LIMIT 1);`,
-      ]),
-    );
-    if (record.archiveCatalogueEligible && record.sourceClass === "creative") lines.push(
-      `INSERT OR IGNORE INTO gallery_entries(media_id,display_media_id,title,accessibility_text,accessibility_status,caption,credit,rights_status,date_precision,state,created_by,updated_by,created_at,updated_at)`,
-      `SELECT existing.id,existing.id,${quoted(title)},existing.alt_text,'unreviewed',existing.caption,existing.credit,'unreviewed','unreviewed','draft','migration-0203','migration-0203',datetime('now'),datetime('now') FROM media_assets existing LEFT JOIN media_catalogue_entries catalogue ON catalogue.media_id=existing.id WHERE ${predicate} ORDER BY CASE WHEN ${order} THEN 0 ELSE 1 END LIMIT 1;`,
-    );
-    lines.push("");
-  }
-  const peerAmid = [
-    "assets/gallery/peer-amid/avery peer amid black.png",
-    "assets/gallery/peer-amid/avery peer amid tan no huh.png",
-  ];
-  if (peerAmid.every((relative) => records.some((record) => record.relative === relative))) {
-    const peerRecords = peerAmid.map((relative) => records.find((record) => record.relative === relative));
-    const peerLocators = peerRecords.map((record) => record.storageKey
-      ? `storage_key=${quoted(record.storageKey)}`
-      : `source_url=${quoted(record.sourceUrl)}`);
-    lines.push(
-      "-- The two supplied Peer Amid exports stay distinct Media Assets. Their set and",
-      "-- alternate relationship are private editorial structure, not Archive records.",
-      "INSERT OR IGNORE INTO gallery_sets(id,slug,title,summary,set_type,date_precision,state,sort_order,created_by,updated_by,created_at,updated_at)",
-      "VALUES('gallery-set-peer-amid-versions','peer-amid-versions','Peer Amid — Versions','','series','undated','draft',0,'migration-0203','migration-0203',datetime('now'),datetime('now'));",
-      `INSERT OR IGNORE INTO gallery_set_items(set_id,media_id,sort_order,created_at) SELECT 'gallery-set-peer-amid-versions',id,0,datetime('now') FROM media_assets WHERE ${peerLocators[0]};`,
-      `INSERT OR IGNORE INTO gallery_set_items(set_id,media_id,sort_order,created_at) SELECT 'gallery-set-peer-amid-versions',id,1,datetime('now') FROM media_assets WHERE ${peerLocators[1]};`,
-      "INSERT OR IGNORE INTO entity_relationships(id,source_entity_id,target_entity_id,relationship_type_id,public_visible,internal_notes,sort_order,created_by,created_at,updated_at)",
-      `SELECT 'relationship-peer-amid-black-tan-alternate',source.entity_id,target.entity_id,'rel-alternate-of',0,'Imported together from the two user-supplied Peer Amid originals; editorial review required.',0,'migration-0203',datetime('now'),datetime('now') FROM media_catalogue_entries source JOIN media_assets source_media ON source_media.id=source.media_id AND source_media.${peerLocators[0]} JOIN media_catalogue_entries target JOIN media_assets target_media ON target_media.id=target.media_id AND target_media.${peerLocators[1]};`,
+      "INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,width,height,duration_seconds,alt_text,caption,credit,rights_notes,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)",
+      `SELECT ${quoted(mediaId)},${quoted(record.sourceUrl)},${quoted(record.storageKey)},${quoted(record.filename)},${quoted(record.mimeType)},${record.byteSize},${nullable(record.width)},${nullable(record.height)},${nullable(record.durationSeconds)},'','','','','internal','active','repository-scanner-v2',datetime('now'),datetime('now'),'hidden',1`,
+      `WHERE NOT EXISTS(SELECT 1 FROM media_assets existing LEFT JOIN media_asset_provenance provenance ON provenance.media_id=existing.id WHERE ${predicate});`,
+      `UPDATE media_asset_provenance SET sha256=CASE WHEN NOT EXISTS(SELECT 1 FROM media_asset_provenance duplicate WHERE duplicate.sha256=${quoted(record.sha256)} AND duplicate.media_id<>media_asset_provenance.media_id) THEN ${quoted(record.sha256)} ELSE sha256 END,original_format=${quoted(record.extension)},import_source=${quoted(provenance.importSource||"repository-scanner-v2")},embedded_capture_at=${nullable(record.embeddedCaptureAt)},camera_make=${quoted(record.cameraMake||"")},camera_model=${quoted(record.cameraModel||"")},editing_software=${quoted(editingSoftware)},orientation=${quoted(record.orientation||"")},color_profile=${quoted(record.colorProfile||"")},raw_metadata_json=${quoted(JSON.stringify(rawMetadata))},updated_by='repository-scanner-v2',updated_at=datetime('now')`,
+      `WHERE media_id=(SELECT existing.id FROM media_assets existing LEFT JOIN media_asset_provenance provenance ON provenance.media_id=existing.id WHERE ${predicate} ORDER BY CASE WHEN ${order} THEN 0 ELSE 1 END LIMIT 1);`,
+      "INSERT OR IGNORE INTO media_archive_admission_reviews(media_id,prior_catalogue_id,prior_gallery_state,review_state,suggested_reason,created_at,updated_at)",
+      `SELECT existing.id,NULL,NULL,'pending','Repository creative candidate; confirm authorship and Gallery purpose',datetime('now'),datetime('now') FROM media_assets existing LEFT JOIN media_asset_provenance provenance ON provenance.media_id=existing.id WHERE ${predicate} AND NOT EXISTS(SELECT 1 FROM media_catalogue_entries catalogue WHERE catalogue.media_id=existing.id AND catalogue.catalogue_state='active') ORDER BY CASE WHEN ${order} THEN 0 ELSE 1 END LIMIT 1;`,
       "",
     );
   }
-  lines.push(
-    "UPDATE media_catalogue_entries",
-    "SET sha256=NULL,",
-    "    raw_metadata_json=json_set(COALESCE(raw_metadata_json,'{}'),'$.duplicateOfCatalogueId',(",
-    "      SELECT MIN(canonical.catalogue_id)",
-    "      FROM media_catalogue_entries canonical",
-    "      WHERE canonical.sha256=media_catalogue_entries.sha256",
-    "    )),",
-    "    updated_at=datetime('now')",
-    "WHERE sha256 IS NOT NULL",
-    "  AND catalogue_id<>(",
-    "    SELECT MIN(canonical.catalogue_id)",
-    "    FROM media_catalogue_entries canonical",
-    "    WHERE canonical.sha256=media_catalogue_entries.sha256",
-    "  );",
-    "",
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_media_catalogue_sha256",
-    "  ON media_catalogue_entries(sha256)",
-    "  WHERE sha256 IS NOT NULL;",
-  );
   return `${lines.join("\n")}\n`;
 }
 
 const records = await inventory();
-if (process.argv.includes("--json")) process.stdout.write(`${JSON.stringify({ root: "assets", count: records.length, records }, null, 2)}\n`);
+if (process.argv.includes("--json")) process.stdout.write(`${JSON.stringify({ root: ".", mode: "dry-run-first", count: records.length, reviewCount:records.filter(record=>record.registryAction==="review").length, skippedCount:records.filter(record=>record.registryAction==="skip").length, records }, null, 2)}\n`);
 else if (process.argv.includes("--r2-manifest")) {
   const privateMasters = records.filter((record) => record.storageKey).map((record) => ({
     localPath: record.relative,

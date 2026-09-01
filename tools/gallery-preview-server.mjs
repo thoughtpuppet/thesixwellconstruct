@@ -50,6 +50,18 @@ function localAsset(request) {
 const database = new DatabaseSync(":memory:");
 database.exec("PRAGMA foreign_keys=ON");
 for (const name of readdirSync(join(ROOT,"migrations")).filter(name=>name.endsWith(".sql")).sort()) database.exec(readFileSync(join(ROOT,"migrations",name),"utf8"));
+database.exec(`
+  UPDATE media_archive_admission_reviews
+  SET review_state='pending',suggested_reason='Local browser acceptance fixture',reviewed_by='',reviewed_at=NULL,updated_at=datetime('now')
+  WHERE media_id IN (
+    SELECT review.media_id
+    FROM media_archive_admission_reviews review
+    LEFT JOIN media_catalogue_entries catalogue ON catalogue.media_id=review.media_id
+    WHERE catalogue.media_id IS NULL
+    ORDER BY review.media_id
+    LIMIT 2
+  );
+`);
 const galleryRows = database.prepare(`SELECT gallery.media_id,catalogue.catalogue_id FROM gallery_entries gallery JOIN media_catalogue_entries catalogue ON catalogue.media_id=gallery.media_id JOIN media_assets media ON media.id=gallery.media_id WHERE media.mime_type LIKE 'image/%' AND media.source_url<>'' ORDER BY catalogue.catalogue_id LIMIT 6`).all();
 database.prepare(`INSERT INTO gallery_sets(id,slug,title,summary,set_type,date_precision,state,published_at,created_by,updated_by,created_at,updated_at) VALUES('gallery-qa-set','studio-field-notes','Studio Field Notes','A local-only sequence used to verify Gallery set order and permanent routes.','session','undated','published',datetime('now'),'qa','qa',datetime('now'),datetime('now'))`).run();
 for (const [index,row] of galleryRows.entries()) {

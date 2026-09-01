@@ -101,19 +101,24 @@ function admitFixture(sql, mediaId, { title = "Fixture media", originality = "si
     VALUES(?,?,?,'undated',?,CASE WHEN ?='published' THEN datetime('now') ELSE NULL END,?,?,'test','test',datetime('now'),datetime('now'))`).run(mediaId, mediaId, title, state, state, basis, sourceEntityId);
 }
 
-test("only confirmed original media is renumbered into a contiguous public catalogue", () => {
+test("confirmed originals and qualifying preexisting Archive media form one contiguous public catalogue", () => {
   const sql = database();
   const catalogue = sql.prepare(`SELECT catalogue.catalogue_id,catalogue.media_id,provenance.originality,provenance.asset_role
     FROM media_catalogue_entries catalogue JOIN media_asset_provenance provenance ON provenance.media_id=catalogue.media_id
     WHERE catalogue.catalogue_state='active' ORDER BY catalogue.catalogue_id`).all();
-  assert.equal(catalogue.length, 3, "two Peer Amid originals plus the Current Works center video");
-  assert.deepEqual(catalogue.map((row) => row.catalogue_id), [1, 2, 3]);
+  assert.ok(catalogue.length >= 9, "direct originals plus qualifying public process, studio, Note, and Blackboard media");
+  assert.deepEqual(catalogue.map((row) => row.catalogue_id), Array.from({length:catalogue.length},(_,index)=>index+1));
   assert.ok(catalogue.every((row) => row.originality === "sixwell_original"));
   assert.ok(catalogue.every((row) => ["creative_master", "editorial_fragment"].includes(row.asset_role)));
-  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='published'").get().count, 3);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='published'").get().count, catalogue.length);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(media.original_filename) LIKE '%poster%'").get().count, 0);
+  assert.deepEqual(sql.prepare("SELECT catalogue.media_id,media.source_url,media.storage_key FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(replace(media.source_url,'\\','/')) LIKE '/assets/flash/%' OR lower(replace(media.source_url,'\\','/')) LIKE '/assets/paintings/%' OR lower(replace(media.storage_key,'\\','/')) LIKE 'portfolio/%' ORDER BY catalogue.media_id").all(),[]);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(media.original_filename) IN ('ring-ripple-reference.mov','ring-ripple-reference.mp4') OR lower(replace(media.source_url,'\\','/')) LIKE '/assets/events/%'").get().count, 0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_blackboard_fragment_edits edit JOIN media_catalogue_entries catalogue ON catalogue.media_id=edit.alpha_mask_media_id").get().count, 0);
+  assert.deepEqual(sql.prepare("SELECT media_id,suggested_reason FROM media_archive_admission_reviews WHERE review_state='pending' ORDER BY media_id").all(),[]);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE source_entity_id='archive-practice-making-the-canvas'").get().count,2);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE source_entity_id='archive-record-saiel-goat-farm-studio-years'").get().count,4);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries WHERE media_id IN (SELECT alpha_mask_media_id FROM archive_blackboard_fragment_edits WHERE alpha_mask_media_id IS NOT NULL)").get().count,0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM pragma_foreign_key_check").get().count, 0);
   assert.equal(sql.prepare("SELECT state FROM gallery_sets WHERE id='gallery-set-peer-amid-versions'").get().state, "published");
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_set_items WHERE set_id='gallery-set-peer-amid-versions'").get().count, 2);
@@ -213,6 +218,11 @@ test("batch publication accepts multiple Gallery selections and publishes each i
   assert.equal(result.payload.count,2,JSON.stringify(result.payload));
   assert.deepEqual(result.payload.failed,[]);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE media_id IN (?,?) AND state='published' AND date_precision='undated'").get(...entries.map(entry=>entry.media_id)).count,2);
+  const createdSet=await api(env,"/api/admin/gallery-sets",{method:"POST",admin:true,body:{title:"Selected process sequence",set_type:"series",state:"published",media_ids:entries.map(entry=>entry.media_id)}});
+  assert.equal(createdSet.response.status,201,JSON.stringify(createdSet.payload));
+  assert.equal(createdSet.payload.record.item_count,2);
+  assert.deepEqual(createdSet.payload.media_ids,entries.map(entry=>entry.media_id));
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_set_items WHERE set_id=?").get(createdSet.payload.record.id).count,2);
 });
 
 test("public and Studio Gallery hydration returns catalogues larger than one SQL parameter batch", async () => {
@@ -368,6 +378,8 @@ test("rights, accessibility, and timed-media transcripts are optional while docu
 test("repository scanner emits deterministic provenance and a private-master R2 manifest", () => {
   const scanner = join(ROOT,"tools","media-catalogue-backfill.mjs");
   const inventory = JSON.parse(execFileSync(process.execPath,[scanner,"--json"],{cwd:ROOT,encoding:"utf8"}));
+  assert.equal(inventory.root,".");
+  assert.equal(inventory.mode,"dry-run-first");
   const peers = inventory.records.filter((record)=>record.relative.startsWith("assets/gallery/peer-amid/"));
   const expectedHashes = [
     "f063b9839fe6cfbc1908edbaa907971849ddf950bbd38ac1adec7c59f24dbde8",
@@ -395,7 +407,17 @@ test("repository scanner emits deterministic provenance and a private-master R2 
   const rippleSourcesPresent=[join(ROOT,"assets","entry-room","ring-ripple-reference.mov"),join(ROOT,"assets","entry-room","ring-ripple-reference.mp4")].every(existsSync);
   assert.equal(rippleReferences.length,rippleSourcesPresent?2:0);
   assert.ok(rippleReferences.every((record)=>record.archiveCatalogueEligible===false));
-  assert.ok(inventory.records.filter((record)=>record.relative.startsWith("assets/events/")).every((record)=>record.archiveCatalogueEligible===false));
+  assert.ok(rippleReferences.every((record)=>record.registryAction==="skip"));
+  assert.ok(inventory.records.filter((record)=>record.relative.startsWith("assets/events/")).every((record)=>record.registryAction==="skip"));
+  assert.ok(inventory.records.filter((record)=>/mask/i.test(record.filename)).every((record)=>record.registryAction==="skip"));
+  assert.equal(inventory.records.some((record)=>record.relative.startsWith(".cloudflare-backups/")),false);
+  assert.equal(inventory.records.some((record)=>record.relative.startsWith(".playwright-cli/")),false);
+  const generated=execFileSync(process.execPath,[scanner],{cwd:ROOT,encoding:"utf8",maxBuffer:4*1024*1024});
+  assert.doesNotMatch(generated,/INSERT(?: OR IGNORE)? INTO gallery_entries/);
+  assert.doesNotMatch(generated,/INSERT(?: OR IGNORE)? INTO media_catalogue_entries/);
+  const first=database(),before=first.prepare("SELECT COUNT(*) count FROM gallery_entries").get().count;
+  first.exec(generated);first.exec(generated);
+  assert.equal(first.prepare("SELECT COUNT(*) count FROM gallery_entries").get().count,before);
 });
 
 test("Gallery surfaces preserve the shared shell and expose the complete relational workflow", () => {
@@ -425,6 +447,8 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studio, /media-catalogue\/preflight/);
   assert.match(studio, /XMLHttpRequest/);
   assert.match(studio, /StudioResumableMedia\.upload/);
+  assert.match(studio, /IntersectionObserver/);
+  assert.match(studio, /rootMargin:"600px 0px"/);
   assert.match(studio, /createHeicEditProxy/);
   assert.match(studio, /isHeicUpload/);
   assert.match(studio, /activate_derivative/);
@@ -432,6 +456,7 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studio, /data-draft-preview/);
   assert.match(studio, /data-gallery-select-all/);
   assert.match(studio, /data-gallery-publish-selected/);
+  assert.match(studio, /data-gallery-set-selected-form/);
   assert.match(studio, /Site asset · not part of Public Gallery/);
   assert.match(studio, /\/api\/admin\/gallery\/batch/);
   assert.match(studio, /display_media_id/);

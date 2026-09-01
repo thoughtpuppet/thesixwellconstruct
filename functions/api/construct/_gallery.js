@@ -482,13 +482,22 @@ export async function handleGalleryAdmin(request, env, path) {
     if (request.method === "POST" && !setId) {
       const setType = text(body.set_type, 40), title = text(body.title, 300), setSlug = slug(body.slug || title), state = text(body.state, 40) || "draft";
       if (!SET_TYPES.has(setType) || !title || !setSlug || !SET_STATES.has(state)) return failure("Title, unique slug, and a valid set type are required.");
-      const coverMediaId = text(body.cover_media_id,200)||null;
+      const mediaIds = uniqueIds(body.media_ids,500), coverMediaId = text(body.cover_media_id,200)||mediaIds[0]||null;
+      if (mediaIds.length) {
+        const placeholders=mediaIds.map(()=>"?").join(","),members=(await database.prepare(`SELECT media_id,state FROM gallery_entries WHERE media_id IN (${placeholders})`).bind(...mediaIds).all()).results||[];
+        if (members.length!==mediaIds.length) return failure("Every selected item must already have a Gallery entry.",409);
+        if (state==="published"&&members.some(member=>member.state!=="published")) return failure("Publish every selected Gallery entry before creating a published set.",409);
+      }
       if (state === "published" && coverMediaId && !(await database.prepare("SELECT 1 ready FROM gallery_entries WHERE media_id=? AND state='published'").bind(coverMediaId).first())) return failure("Publish the selected cover Gallery entry before publishing this set.",409);
       const newId = id("gallery-set");
-      try { await database.prepare(`INSERT INTO gallery_sets(id,slug,title,summary,set_type,cover_media_id,date_precision,date_label,occurred_at,ended_at,state,published_at,sort_order,created_by,updated_by,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' THEN datetime('now') ELSE NULL END,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,setSlug,title,text(body.summary,5000),setType,coverMediaId,text(body.date_precision,40)||"undated",text(body.date_label,160),body.occurred_at||null,body.ended_at||null,state,state,Number(body.sort_order)||0).run(); }
+      try {
+        const statements=[database.prepare(`INSERT INTO gallery_sets(id,slug,title,summary,set_type,cover_media_id,date_precision,date_label,occurred_at,ended_at,state,published_at,sort_order,created_by,updated_by,created_at,updated_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' THEN datetime('now') ELSE NULL END,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,setSlug,title,text(body.summary,5000),setType,coverMediaId,text(body.date_precision,40)||"undated",text(body.date_label,160),body.occurred_at||null,body.ended_at||null,state,state,Number(body.sort_order)||0)];
+        mediaIds.forEach((mediaId,index)=>statements.push(database.prepare("INSERT INTO gallery_set_items(set_id,media_id,sort_order,created_at) VALUES(?,?,?,datetime('now'))").bind(newId,mediaId,index+1)));
+        await database.batch(statements);
+      }
       catch (error) { if (/UNIQUE constraint failed.*slug/i.test(String(error?.message || error))) return failure("That Gallery set slug is already in use.",409); throw error; }
-      return json({ record: await database.prepare("SELECT * FROM gallery_sets WHERE id=?").bind(newId).first() }, { status: 201 });
+      return json({ record: {...await database.prepare("SELECT * FROM gallery_sets WHERE id=?").bind(newId).first(),item_count:mediaIds.length}, media_ids:mediaIds }, { status: 201 });
     }
     if (request.method === "PATCH" && setId) {
       const before = await database.prepare("SELECT * FROM gallery_sets WHERE id=?").bind(setId).first(); if (!before) return failure("Gallery set not found.",404);
