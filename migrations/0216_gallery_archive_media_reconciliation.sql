@@ -214,39 +214,43 @@ WHERE candidate.decision='admitted'
 
 -- Rebuild only historically evidenced sets: existing multi-item records/notes
 -- whose sequence is explicit in their material or attachment ordering.
+WITH definition(id,slug,title,summary,set_type,source_entity_id,sort_order) AS (
+  VALUES
+    ('gallery-set-process-archive-frame','process-archive-frame','Process Archive Frame',
+      'Existing process images attached to the Process Archive Frame record.','series','process-archive-frame',20),
+    ('gallery-set-making-the-canvas','making-the-canvas','Making the Canvas',
+      'Shellacking and preparing the panels documented as one making sequence.','series','archive-practice-making-the-canvas',30),
+    ('gallery-set-goat-farm-studio-years','goat-farm-studio-years','Goat Farm Studio Years',
+      'Ordered studio photographs preserved in the Goat Farm Archive record and source Journal.','session','archive-record-saiel-goat-farm-studio-years',40),
+    ('gallery-set-lost-marbles-process','lost-marbles-process-note','Lost Marbles — Process Note',
+      'Original sketch and later process experiment from the Lost Marbles inception note.','series','archive-note-a9794a6b-2251-4756-8bf4-2705e04449ee',50),
+    ('gallery-set-inner-chaos-process','inner-chaos-process','The Frustrations of Inner Chaos — Process',
+      'Notebook photograph and in-progress video attached to the work record.','series','art-inner-chaos',60),
+    ('gallery-set-blackboard-south-wall','blackboard-south-wall','Studio Blackboard — South Wall',
+      'Published whole-board states, studio context, and fragments from the South Wall Blackboard.','session','archive-blackboard-cd3b218b-08df-4755-92cb-79fe615e360e',70)
+)
 INSERT OR IGNORE INTO gallery_sets
   (id,slug,title,summary,set_type,cover_media_id,date_precision,state,published_at,sort_order,created_by,updated_by,created_at,updated_at)
 SELECT definition.id,definition.slug,definition.title,definition.summary,definition.set_type,
   (SELECT candidate.media_id FROM media_gallery_reconciliation_0216 candidate WHERE candidate.source_entity_id=definition.source_entity_id ORDER BY candidate.sort_order,candidate.media_id LIMIT 1),
   'undated','published',datetime('now'),definition.sort_order,'migration-0216','migration-0216',datetime('now'),datetime('now')
-FROM (
-  SELECT 'gallery-set-process-archive-frame' id,'process-archive-frame' slug,'Process Archive Frame' title,
-    'Existing process images attached to the Process Archive Frame record.' summary,'series' set_type,'process-archive-frame' source_entity_id,20 sort_order
-  UNION ALL SELECT 'gallery-set-making-the-canvas','making-the-canvas','Making the Canvas',
-    'Shellacking and preparing the panels documented as one making sequence.','series','archive-practice-making-the-canvas',30
-  UNION ALL SELECT 'gallery-set-goat-farm-studio-years','goat-farm-studio-years','Goat Farm Studio Years',
-    'Ordered studio photographs preserved in the Goat Farm Archive record and source Journal.','session','archive-record-saiel-goat-farm-studio-years',40
-  UNION ALL SELECT 'gallery-set-lost-marbles-process','lost-marbles-process-note','Lost Marbles — Process Note',
-    'Original sketch and later process experiment from the Lost Marbles inception note.','series','archive-note-a9794a6b-2251-4756-8bf4-2705e04449ee',50
-  UNION ALL SELECT 'gallery-set-inner-chaos-process','inner-chaos-process','The Frustrations of Inner Chaos — Process',
-    'Notebook photograph and in-progress video attached to the work record.','series','art-inner-chaos',60
-  UNION ALL SELECT 'gallery-set-blackboard-south-wall','blackboard-south-wall','Studio Blackboard — South Wall',
-    'Published whole-board states, studio context, and fragments from the South Wall Blackboard.','session','archive-blackboard-cd3b218b-08df-4755-92cb-79fe615e360e',70
-) definition
+FROM definition
 WHERE (SELECT COUNT(*) FROM media_gallery_reconciliation_0216 candidate WHERE candidate.source_entity_id=definition.source_entity_id)>=2;
 
+WITH definition(set_id,source_entity_id) AS (
+  VALUES
+    ('gallery-set-process-archive-frame','process-archive-frame'),
+    ('gallery-set-making-the-canvas','archive-practice-making-the-canvas'),
+    ('gallery-set-goat-farm-studio-years','archive-record-saiel-goat-farm-studio-years'),
+    ('gallery-set-lost-marbles-process','archive-note-a9794a6b-2251-4756-8bf4-2705e04449ee'),
+    ('gallery-set-inner-chaos-process','art-inner-chaos'),
+    ('gallery-set-blackboard-south-wall','archive-blackboard-cd3b218b-08df-4755-92cb-79fe615e360e')
+)
 INSERT OR IGNORE INTO gallery_set_items(set_id,media_id,sort_order,created_at)
 SELECT set_record.id,candidate.media_id,
   ROW_NUMBER() OVER (PARTITION BY set_record.id ORDER BY candidate.sort_order,candidate.media_id),datetime('now')
 FROM gallery_sets set_record
-JOIN (
-  SELECT 'gallery-set-process-archive-frame' set_id,'process-archive-frame' source_entity_id
-  UNION ALL SELECT 'gallery-set-making-the-canvas','archive-practice-making-the-canvas'
-  UNION ALL SELECT 'gallery-set-goat-farm-studio-years','archive-record-saiel-goat-farm-studio-years'
-  UNION ALL SELECT 'gallery-set-lost-marbles-process','archive-note-a9794a6b-2251-4756-8bf4-2705e04449ee'
-  UNION ALL SELECT 'gallery-set-inner-chaos-process','art-inner-chaos'
-  UNION ALL SELECT 'gallery-set-blackboard-south-wall','archive-blackboard-cd3b218b-08df-4755-92cb-79fe615e360e'
-) definition ON definition.set_id=set_record.id
+JOIN definition ON definition.set_id=set_record.id
 JOIN media_gallery_reconciliation_0216 candidate ON candidate.source_entity_id=definition.source_entity_id
 JOIN gallery_entries gallery ON gallery.media_id=candidate.media_id AND gallery.state='published';
 
