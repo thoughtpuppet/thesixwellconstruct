@@ -430,6 +430,15 @@ body {
   overflow: hidden;
   border: 5px solid var(--explore-destination-signal);
   background: var(--color-bg);
+  cursor: ns-resize;
+  overscroll-behavior: contain;
+  touch-action: none;
+  user-select: none;
+}
+
+.explore-portal__preview:focus-visible {
+  outline: 3px solid var(--explore-focus);
+  outline-offset: 3px;
 }
 
 .explore-portal__frame {

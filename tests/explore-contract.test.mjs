@@ -61,8 +61,10 @@ function exploreElement({ dataset = {}, hidden = false } = {}) {
   const events = {};
   return {
     attributes: {}, dataset: { ...dataset }, disabled: false, hidden, textContent: "", title: "", parentElement: null,
+    clientHeight: 300, clientWidth: 400,
     addEventListener(name, handler) { events[name] = handler; },
     dispatch(name, event = {}) { return events[name]?.(event); },
+    getBoundingClientRect() { return { left: 0, top: 0, width: this.clientWidth, height: this.clientHeight }; },
     setAttribute(name, value) { this.attributes[name] = String(value); },
     getAttribute(name) { return this.attributes[name] ?? null; },
     removeAttribute(name) { delete this.attributes[name]; },
@@ -81,7 +83,23 @@ function exploreClientHarness({ storedPortal = null, responses = [] } = {}) {
   const browsingLabel = exploreElement();
   const preview = exploreElement({ dataset: { explorePreviewState: "idle" } });
   const previewFrame = exploreElement();
+  const previewScroller = {
+    clientHeight: 300, clientWidth: 400, parentElement: null,
+    scrollHeight: 1200, scrollWidth: 400, scrollLeft: 0, scrollTop: 0,
+  };
+  const previewDocument = {
+    body: previewScroller,
+    documentElement: previewScroller,
+    scrollingElement: previewScroller,
+    elementFromPoint() { return previewScroller; },
+  };
+  const previewWindow = {
+    document: previewDocument,
+    getComputedStyle() { return { overflowX: "hidden", overflowY: "auto" }; },
+  };
   previewFrame.parentElement = preview;
+  previewFrame.contentDocument = previewDocument;
+  previewFrame.contentWindow = previewWindow;
   previewFrame.setAttribute("src", "about:blank");
   const previewStatus = exploreElement();
   const previewMedium = exploreElement();
@@ -92,6 +110,7 @@ function exploreClientHarness({ storedPortal = null, responses = [] } = {}) {
   const selectorMap = new Map([
     ["[data-explore-room]", room], ["[data-explore-actions]", actionGroup], ["[data-explore-status]", status],
     ["[data-explore-portal]", portal], ["[data-explore-browsing-label]", browsingLabel],
+    ["[data-explore-preview-scroll]", preview],
     ["[data-explore-preview-frame]", previewFrame],
     ["[data-explore-preview-status]", previewStatus], ["[data-explore-preview-medium]", previewMedium],
     ["[data-explore-preview-title]", previewTitle], ["[data-explore-dive-again]", diveAgain],
@@ -122,7 +141,7 @@ function exploreClientHarness({ storedPortal = null, responses = [] } = {}) {
   runInNewContext(read("js/explore.js"), { document, window, sessionStorage, URLSearchParams, fetch });
   return {
     actionGroup, backToBoard, browsingLabel, buttons, diveAgain, enterPage, fetchCalls, pageEvents, portal, preview,
-    previewFrame, previewMedium, previewStatus, previewTitle, room, status, storage, window,
+    previewDocument, previewFrame, previewMedium, previewScroller, previewStatus, previewTitle, room, status, storage, window,
   };
 }
 
@@ -280,6 +299,7 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(html, /data-explore-status[^>]*aria-live="polite"/);
   assert.match(html, /<section[^>]+data-explore-portal[^>]+hidden/);
   assert.match(html, /data-explore-browsing-label>Browsing entire site<\/p>/);
+  assert.match(html, /data-explore-preview-scroll[\s\S]*?role="region"[\s\S]*?tabindex="0"[\s\S]*?aria-label="Scrollable destination preview/);
   assert.match(html, /<iframe[\s\S]*?data-explore-preview-frame[\s\S]*?tabindex="-1"[\s\S]*?aria-hidden="true"[\s\S]*?inert[\s\S]*?sandbox="allow-scripts allow-same-origin"/);
   assert.match(html, /data-explore-preview-medium/);
   assert.match(html, /data-explore-preview-title/);
@@ -309,6 +329,7 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(css, /\.explore-portal\s*\{[\s\S]*?border-left:\s*5px solid var\(--explore-active-signal\)[\s\S]*?background:\s*var\(--color-bg\)/);
   assert.match(css, /\.explore-portal__browsing\s*\{[\s\S]*?color:\s*var\(--explore-active-copy\)[\s\S]*?text-transform:\s*uppercase/);
   assert.match(css, /\.explore-portal__preview\s*\{[\s\S]*?border:\s*5px solid var\(--explore-destination-signal\)[\s\S]*?background:\s*var\(--color-bg\)/);
+  assert.match(css, /\.explore-portal__preview\s*\{[\s\S]*?touch-action:\s*none[\s\S]*?user-select:\s*none/);
   for (const [node, signal] of [
     ["tattoos", "--color-tattooing"], ["art", "--color-art"], ["merch", "--color-merch"],
     ["events", "--color-events"], ["music", "--color-music"], ["writings", "--color-writings"],
@@ -400,6 +421,10 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(client, /interactive_start/);
   assert.match(client, /interactive_complete/);
   assert.match(client, /sixwell_explore_portal_v1/);
+  assert.match(client, /data-explore-preview-scroll/);
+  assert.match(client, /previewSurface\.addEventListener\("wheel"[\s\S]*?scrollPreviewAt/);
+  assert.match(client, /previewSurface\.addEventListener\("touchmove"[\s\S]*?scrollPreviewAt/);
+  assert.match(client, /previewSurface\.addEventListener\("keydown"[\s\S]*?scrollPreviewAt/);
   assert.match(client, /showPreview\(scope, destination\)/);
   assert.match(client, /function enterCurrentPage\(\)[\s\S]*?_constructFade\(currentPortal\.destination\.route\)/);
   assert.match(client, /previewFrame\.setAttribute\("src", "about:blank"\)/);
@@ -491,6 +516,49 @@ test("Explore identifies the selected browsing scope above the portal viewer", a
     await flushExploreClient();
     assert.equal(harness.browsingLabel.textContent, label);
   }
+});
+
+test("Explore forwards scrolling into the inert preview without enabling page interaction", () => {
+  const harness = exploreClientHarness({ storedPortal: { scope: "pages", destination: destination("pages", "scroll-preview") } });
+  let wheelPrevented = false;
+  harness.preview.dispatch("wheel", {
+    clientX: 200, clientY: 150, deltaMode: 0, deltaX: 0, deltaY: 120,
+    preventDefault() { wheelPrevented = true; },
+  });
+  assert.equal(harness.previewScroller.scrollTop, 120);
+  assert.equal(wheelPrevented, true);
+
+  harness.preview.dispatch("touchstart", { touches: [{ clientX: 200, clientY: 200 }] });
+  let touchPrevented = false;
+  harness.preview.dispatch("touchmove", {
+    touches: [{ clientX: 200, clientY: 140 }],
+    preventDefault() { touchPrevented = true; },
+  });
+  assert.equal(harness.previewScroller.scrollTop, 180);
+  assert.equal(touchPrevented, true);
+
+  let keyPrevented = false;
+  harness.preview.dispatch("keydown", {
+    altKey: false, ctrlKey: false, key: "PageDown", metaKey: false, shiftKey: false,
+    preventDefault() { keyPrevented = true; },
+  });
+  assert.equal(harness.previewScroller.scrollTop, 435);
+  assert.equal(keyPrevented, true);
+  assert.equal(harness.preview.dispatch("click", { clientX: 200, clientY: 150 }), undefined);
+  assert.equal(harness.window.fadedTo, undefined);
+
+  const nestedHarness = exploreClientHarness({ storedPortal: { scope: "process", destination: destination("process", "nested-scroll-preview") } });
+  const nestedScroller = {
+    clientHeight: 160, clientWidth: 320, parentElement: nestedHarness.previewScroller,
+    scrollHeight: 640, scrollWidth: 320, scrollLeft: 0, scrollTop: 0,
+  };
+  nestedHarness.previewDocument.elementFromPoint = () => nestedScroller;
+  nestedHarness.preview.dispatch("wheel", {
+    clientX: 200, clientY: 150, deltaMode: 0, deltaX: 0, deltaY: 90,
+    preventDefault() {},
+  });
+  assert.equal(nestedScroller.scrollTop, 90);
+  assert.equal(nestedHarness.previewScroller.scrollTop, 0);
 });
 
 test("Explore restores the current portal after a reload or BFCache return", () => {

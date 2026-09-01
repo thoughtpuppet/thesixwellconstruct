@@ -54,7 +54,14 @@
   <section class="explore-portal" data-explore-portal aria-labelledby="explore-portal-title" hidden>
     <p class="explore-portal__browsing" data-explore-browsing-label>Browsing entire site</p>
 
-    <div class="explore-portal__preview" data-explore-preview-state="idle">
+    <div
+      class="explore-portal__preview"
+      data-explore-preview-state="idle"
+      data-explore-preview-scroll
+      role="region"
+      tabindex="0"
+      aria-label="Scrollable destination preview. Page interactions are disabled; use Enter page to interact."
+    >
       <iframe
         class="explore-portal__frame"
         data-explore-preview-frame
