@@ -472,6 +472,9 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studioStyles,/\.mcm-workspace\s*>\s*\.mcm-editor[\s\S]{0,80}grid-row:1/);
   assert.match(studioStyles,/\.mcm-list\{grid-row:2;max-height:70vh;overflow:auto/);
   assert.match(navigation, /utilityLinks/);
+  assert.match(navigation, /mountManagedFooterLinks\(utilityLinks\)/);
+  assert.match(navigation, /data-construct-footer-link/);
+  assert.doesNotMatch(navigation, /className = 'construct-utility-links'/);
   assert.doesNotMatch(navigation, /node-gallery/);
   assert.match(blackboardStudio,/archiveCatalogueEligible:false/);
   assert.match(calendarApi,/archive_catalogue_eligible\)\s*\n?\s*VALUES[\s\S]{0,180}'calendar-scout'/);
