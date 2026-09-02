@@ -19,6 +19,7 @@ import {
 } from "./_pricing.js";
 import { bookingTokenFromUrl, bookingUrlForToken, createBookingRawToken } from "../booking-links.js";
 import { studioAddress } from "../_shared/studio.js";
+import { effectiveTattooSpecialSalesClose } from "../tattoo-specials/_sales-window.js";
 
 const BOOKING_STATUSES = new Set([
   "pending_deposit",
@@ -5124,9 +5125,11 @@ async function fetchSquareOrder(env, orderId) {
 export async function prepareApprovedTattooSpecialRequest(request, env, submissionId) {
   const db = requireBookingDb(env);
   const terms = await db.prepare(
-    `SELECT s.id,t.sales_closes_at
+    `SELECT s.id,t.sales_closes_at,
+            CASE WHEN c.archived_at IS NULL THEN c.sales_closes_at ELSE NULL END AS campaign_sales_closes_at
      FROM submissions s
      JOIN tattoo_special_submission_terms t ON t.submission_id = s.id
+     LEFT JOIN tattoo_special_campaigns c ON c.id = t.campaign_id
      WHERE s.id = ? AND s.type = 'tattoo_special'
        AND s.status = 'approved' AND s.tattoo_stage = 'ready_to_book'`
   ).bind(submissionId).first();
@@ -5147,13 +5150,22 @@ export async function prepareApprovedTattooSpecialRequest(request, env, submissi
     };
   }
 
-  const salesCloseMs = new Date(terms.sales_closes_at).getTime();
+  const effectiveSalesClosesAt = effectiveTattooSpecialSalesClose(terms);
+  const salesCloseMs = new Date(effectiveSalesClosesAt).getTime();
   const paymentDueMs = Math.min(Date.now() + 24 * 60 * 60 * 1000, salesCloseMs);
   if (!Number.isFinite(paymentDueMs) || paymentDueMs <= Date.now()) {
     throw new Error("The Tattoo Specials payment window has closed.");
   }
   const paymentDueAt = new Date(paymentDueMs).toISOString();
   const now = new Date().toISOString();
+  if (effectiveSalesClosesAt !== terms.sales_closes_at) {
+    await db.batch([
+      db.prepare("UPDATE tattoo_special_submission_terms SET sales_closes_at=?,updated_at=? WHERE submission_id=?")
+        .bind(effectiveSalesClosesAt, now, submissionId),
+      db.prepare("UPDATE submissions SET payload_json=json_set(payload_json,'$.sales_closes_at',?),updated_at=? WHERE id=?")
+        .bind(effectiveSalesClosesAt, now, submissionId),
+    ]);
+  }
   if (row?.id) {
     await db.prepare(
       `UPDATE appointments

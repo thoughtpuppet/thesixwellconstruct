@@ -4197,6 +4197,21 @@ test("Studio creates campaigns and individual specials while the published campa
   assert.equal(terms.campaign_id, campaign.id);
   assert.equal(terms.campaign_title, "Autumn Tattoo Specials");
   assert.equal(terms.offer_id, special.id);
+
+  const extendedClosesAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+  const extensionResponse = await handleAdminTattooSpecialCampaign(adminJsonRequest(
+    `/api/admin/tattoo/specials/campaigns/${campaign.id}`,
+    { salesClosesAt: extendedClosesAt },
+    token,
+    "PATCH",
+  ), env, campaign.id);
+  assert.equal(extensionResponse.status, 200);
+  const extendedTerms = database.prepare(
+    "SELECT sales_closes_at FROM tattoo_special_submission_terms WHERE submission_id=?",
+  ).get(submission.submissionId);
+  assert.equal(extendedTerms.sales_closes_at, extendedClosesAt);
+  const extendedSubmission = database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(submission.submissionId);
+  assert.equal(JSON.parse(extendedSubmission.payload_json).sales_closes_at, extendedClosesAt);
 });
 
 test("Studio Tattoo Specials metrics preserve lifetime conversion and separate genuine paid cancellations", async () => {
@@ -5213,7 +5228,7 @@ test("Script Tattoo enforces twenty-one words and preserves its fixed approved p
   assert.equal(database.prepare("SELECT COUNT(*) count FROM appointments WHERE submission_id=?").get(requestPayload.submissionId).count, 1);
 });
 
-test("Script Tattoo approval cannot issue a deposit link after the sales cutoff", async () => {
+test("Tattoo Special approval honors a later campaign extension while preserving the cutoff guard", async () => {
   const database = migratedDatabase();
   const db = new LocalD1(database);
   const adminToken = "studio-specials-cutoff";
@@ -5252,6 +5267,27 @@ test("Script Tattoo approval cannot issue a deposit link after the sales cutoff"
   assert.equal(simplification.status, 409);
   assert.match((await simplification.json()).error, /only for the Anime\/Cartoon/i);
   assert.equal(sent.some((message) => /needs simplification/i.test(message.subject || "")), false);
+
+  const extendedClosesAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+  database.prepare("UPDATE tattoo_special_campaigns SET sales_closes_at=? WHERE id='campaign-fka-2026'")
+    .run(extendedClosesAt);
+  const extendedApproval = await decideSubmission(env, review.submissionId, adminToken, "approve", {
+    approvedPriceCents: 15000,
+  });
+  assert.equal(extendedApproval.status, 200, await extendedApproval.clone().text());
+  assert.equal(
+    database.prepare("SELECT sales_closes_at FROM tattoo_special_submission_terms WHERE submission_id=?").get(review.submissionId).sales_closes_at,
+    extendedClosesAt,
+  );
+  assert.equal(
+    JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(review.submissionId).payload_json).sales_closes_at,
+    extendedClosesAt,
+  );
+  const prepared = await handleAdminTattooSpecialDeposit(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${review.submissionId}/deposit`,
+    {}, adminToken,
+  ), env, review.submissionId);
+  assert.equal(prepared.status, 200, await prepared.clone().text());
 });
 
 test("approved Tattoo Special clients can change the requested time without creating checkout", async () => {

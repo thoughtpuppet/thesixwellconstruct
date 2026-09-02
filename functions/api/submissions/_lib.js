@@ -22,6 +22,7 @@ import {
   presentBriefDocument,
 } from "../brief-documents/_lib.js";
 import { bookingTokenFromUrl } from "../booking-links.js";
+import { effectiveTattooSpecialSalesClose } from "../tattoo-specials/_sales-window.js";
 
 const VALID_STATUSES = new Set([
   "new",
@@ -3094,14 +3095,18 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
     let specialDecision = null;
     if (decisionMode && current.type === "tattoo_special") {
       const terms = await db.prepare(
-        "SELECT * FROM tattoo_special_submission_terms WHERE submission_id = ?"
+        `SELECT t.*, CASE WHEN c.archived_at IS NULL THEN c.sales_closes_at ELSE NULL END AS campaign_sales_closes_at
+         FROM tattoo_special_submission_terms t
+         LEFT JOIN tattoo_special_campaigns c ON c.id = t.campaign_id
+         WHERE t.submission_id = ?`
       ).bind(id).first();
       if (!terms) return errorResponse("Tattoo Special terms are missing.", 409);
       if (terms.booking_mode !== "review") {
         return errorResponse("This historical Tattoo Special uses a system-owned booking flow.", 409);
       }
       if (action === "approve") {
-        if (new Date(terms.sales_closes_at).getTime() <= Date.now()) {
+        const effectiveSalesClosesAt = effectiveTattooSpecialSalesClose(terms);
+        if (new Date(effectiveSalesClosesAt).getTime() <= Date.now()) {
           return errorResponse("The Tattoo Specials sales window has closed.", 409);
         }
         const requestedAppointment = await db.prepare(
@@ -3117,7 +3122,7 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
         if (!Number.isInteger(approvedPrice) || approvedPrice < advertised) {
           return errorResponse("The approved Tattoo Special price is invalid.", 400);
         }
-        specialDecision = { terms, requestedAppointment: requestedAppointment || null, approvedPrice };
+        specialDecision = { terms, requestedAppointment: requestedAppointment || null, approvedPrice, effectiveSalesClosesAt };
       } else {
         specialDecision = { terms };
       }
@@ -3505,14 +3510,14 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
       if (action === "approve") {
         statements.push(
           db.prepare(
-            "UPDATE tattoo_special_submission_terms SET approved_price_cents = ?, review_outcome = 'approved', updated_at = ? WHERE submission_id = ?"
-          ).bind(specialDecision.approvedPrice, now, id),
+            "UPDATE tattoo_special_submission_terms SET approved_price_cents = ?, sales_closes_at = ?, review_outcome = 'approved', updated_at = ? WHERE submission_id = ?"
+          ).bind(specialDecision.approvedPrice, specialDecision.effectiveSalesClosesAt, now, id),
           db.prepare(
             "UPDATE tattoo_session_plans SET approved_budget_min_cents = ?, approved_budget_max_cents = ?, updated_at = ? WHERE submission_id = ?"
           ).bind(specialDecision.approvedPrice, specialDecision.approvedPrice, now, id),
           db.prepare(
-            "UPDATE submissions SET payload_json=json_set(payload_json,'$.approved_price_cents',?) WHERE id=? AND updated_at=?"
-          ).bind(specialDecision.approvedPrice, id, now),
+            "UPDATE submissions SET payload_json=json_set(payload_json,'$.approved_price_cents',?,'$.sales_closes_at',?) WHERE id=? AND updated_at=?"
+          ).bind(specialDecision.approvedPrice, specialDecision.effectiveSalesClosesAt, id, now),
         );
         if (specialDecision.requestedAppointment?.id) {
           statements.push(db.prepare(

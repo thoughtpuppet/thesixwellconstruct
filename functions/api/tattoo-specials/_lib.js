@@ -34,6 +34,33 @@ function integer(value, fallback = 0) {
   return Number.isInteger(parsed) ? parsed : fallback;
 }
 
+function extendedCampaignRequestStatements(db, campaignId, previousClose, nextClose, now) {
+  const previousMs = new Date(previousClose).getTime();
+  const nextMs = new Date(nextClose).getTime();
+  if (!Number.isFinite(previousMs) || !Number.isFinite(nextMs) || nextMs <= previousMs) return [];
+  return [
+    db.prepare(
+      `UPDATE submissions
+       SET payload_json = json_set(payload_json, '$.sales_closes_at', ?), updated_at = ?
+       WHERE type = 'tattoo_special' AND status IN ('new','reviewing','approved')
+         AND id IN (
+           SELECT submission_id FROM tattoo_special_submission_terms
+           WHERE campaign_id = ? AND sales_closes_at < ?
+         )`
+    ).bind(nextClose, now, campaignId, nextClose),
+    db.prepare(
+      `UPDATE tattoo_special_submission_terms
+       SET sales_closes_at = ?, updated_at = ?
+       WHERE campaign_id = ? AND sales_closes_at < ?
+         AND EXISTS (
+           SELECT 1 FROM submissions s
+           WHERE s.id = tattoo_special_submission_terms.submission_id
+             AND s.type = 'tattoo_special' AND s.status IN ('new','reviewing','approved')
+         )`
+    ).bind(nextClose, now, campaignId, nextClose),
+  ];
+}
+
 function requireDb(env) {
   if (!env.SUBMISSIONS_DB) throw new Error("Missing D1 binding SUBMISSIONS_DB.");
   return env.SUBMISSIONS_DB;
@@ -814,10 +841,14 @@ export async function handleAdminTattooSpecials(request, env) {
       ).bind(mediaId).first();
       if (!eligible) return failure("Choose a public, active, inline image from Shared Media.", 409);
     }
-    await db.prepare(
-      `UPDATE tattoo_special_campaigns SET sales_opens_at = ?, sales_closes_at = ?,
-       default_deposit_cents = ?, artwork_media_id = ?, enabled = ?, updated_at = ? WHERE id = ?`
-    ).bind(opensAt, closesAt, deposit, mediaId, body.enabled === undefined ? Number(current.enabled) : (body.enabled ? 1 : 0), new Date().toISOString(), current.id).run();
+    const now = new Date().toISOString();
+    await db.batch([
+      db.prepare(
+        `UPDATE tattoo_special_campaigns SET sales_opens_at = ?, sales_closes_at = ?,
+         default_deposit_cents = ?, artwork_media_id = ?, enabled = ?, updated_at = ? WHERE id = ?`
+      ).bind(opensAt, closesAt, deposit, mediaId, body.enabled === undefined ? Number(current.enabled) : (body.enabled ? 1 : 0), now, current.id),
+      ...extendedCampaignRequestStatements(db, current.id, current.sales_closes_at, closesAt, now),
+    ]);
     return json(await adminPayload(db));
   } catch (error) {
     return failure("Unable to update Tattoo Specials settings.", 500, { detail: error.message });
@@ -905,6 +936,7 @@ export async function handleAdminTattooSpecialCampaign(request, env, campaignId 
          archived_at = NULL, sort_order = ?, updated_at = ? WHERE id = ?`
       ).bind(input.slug, input.title, input.opensAt, input.closesAt, input.timezone, input.deposit,
         input.artworkMediaId, input.enabled ? 1 : 0, input.isPublic ? 1 : 0, input.sortOrder, now, campaignId));
+      statements.push(...extendedCampaignRequestStatements(db, campaignId, current.sales_closes_at, input.closesAt, now));
       await db.batch(statements);
       return json(await adminPayload(db));
     }
