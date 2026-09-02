@@ -1,11 +1,17 @@
 (function (global) {
   "use strict";
 
-  var EDITIONS = Object.freeze([
-    { slug:"kinmarking-01-skin-as-archive", number:"01", fallbackTitle:"KINMARKING 01: Skin As Archive" },
-    { slug:"kinmarking-02", number:"02", fallbackTitle:"KINMARKING 02" },
-    { slug:"kinmarking-03", number:"03", fallbackTitle:"KINMARKING 03" },
-    { slug:"kinmarking-04", number:"04", fallbackTitle:"KINMARKING 04" },
+  var SERIES_SLUG = "kinmarking";
+  var FALLBACKS = Object.freeze([
+    {
+      number:"01",
+      slug:"kinmarking-01-skin-as-archive",
+      title:"Skin As Archive",
+      description:"KINMARKING 01: Skin As Archive is the first edition of KINMARKING, a participatory memory, archive, and tattoo practice. Participants are invited to bring photographs, documents, objects, stories, inherited symbols, and fragments of family history into conversation with an archivist and tattoo artist.",
+    },
+    { number:"02", slug:"kinmarking-02", title:"", description:"Theme to be announced." },
+    { number:"03", slug:"kinmarking-03", title:"", description:"Theme to be announced." },
+    { number:"04", slug:"kinmarking-04", title:"", description:"Theme to be announced." },
   ]);
   var TIME_ZONE = "America/New_York";
 
@@ -15,22 +21,84 @@
     });
   }
 
+  function normalizedNumber(value, index) {
+    var number = String(value || "").trim();
+    return number || String(index + 1).padStart(2, "0");
+  }
+
+  function fallbackForNumber(number) {
+    return FALLBACKS.find(function (item) { return item.number === number; }) || null;
+  }
+
+  function sessionNumberForSlug(slug) {
+    var fallback = FALLBACKS.find(function (item) { return item.slug === String(slug || ""); });
+    return fallback ? fallback.number : "";
+  }
+
   function isKinmarkingSlug(slug) {
-    return EDITIONS.some(function (edition) { return edition.slug === String(slug || ""); });
+    return String(slug || "") === SERIES_SLUG || Boolean(sessionNumberForSlug(slug));
+  }
+
+  function editionTitle(event, occurrence, index) {
+    var number = normalizedNumber(occurrence && occurrence.sessionNumber, Number(index) || 0);
+    var fallback = fallbackForNumber(number);
+    var sessionTitle = String((occurrence && occurrence.title) || (fallback && fallback.title) || "").trim();
+    return "KINMARKING " + number + (sessionTitle ? ": " + sessionTitle : "");
+  }
+
+  function editionDescription(event, occurrence, index) {
+    var number = normalizedNumber(occurrence && occurrence.sessionNumber, Number(index) || 0);
+    var fallback = fallbackForNumber(number);
+    if (fallback && fallback.description) {
+      return number === "01" ? fallback.description : fallback.description + " A future edition of KINMARKING, a participatory memory, archive, and tattoo practice.";
+    }
+    return (event && event.description) || "A KINMARKING session.";
+  }
+
+  function editionHref(edition) {
+    var fallback = fallbackForNumber(String(edition && edition.number || ""));
+    if (fallback) return "/events/" + encodeURIComponent(fallback.slug) + "/";
+    return "/events/kinmarking/?occurrence=" + encodeURIComponent(edition && edition.occurrenceId || "");
   }
 
   function orderedEvents(events) {
-    var bySlug = new Map((Array.isArray(events) ? events : []).map(function (event) {
-      return [event.slug, event];
-    }));
-    return EDITIONS.map(function (edition) {
-      var event = bySlug.get(edition.slug);
-      return event ? Object.assign({}, edition, event) : null;
-    }).filter(Boolean);
-  }
+    var list = Array.isArray(events) ? events : [];
+    var parent = list.find(function (event) { return event.slug === SERIES_SLUG; });
+    if (parent) {
+      return (Array.isArray(parent.occurrences) ? parent.occurrences : [])
+        .slice()
+        .sort(function (left, right) {
+          return Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || new Date(left.startsAt) - new Date(right.startsAt);
+        })
+        .map(function (occurrence, index) {
+          var number = normalizedNumber(occurrence.sessionNumber, index);
+          return {
+            number:number,
+            occurrenceId:occurrence.id,
+            title:editionTitle(parent, occurrence, index),
+            description:editionDescription(parent, occurrence, index),
+            startsAt:occurrence.startsAt,
+            endsAt:occurrence.endsAt,
+            location:occurrence.location || parent.location,
+            status:occurrence.status,
+            open:occurrence.open,
+            publicationState:parent.publicationState,
+            free:parent.free,
+            parentEvent:parent,
+            occurrence:occurrence,
+          };
+        });
+    }
 
-  function eventHref(slug) {
-    return "/events/" + encodeURIComponent(slug) + "/";
+    var bySlug = new Map(list.map(function (event) { return [event.slug, event]; }));
+    return FALLBACKS.map(function (fallback) {
+      var event = bySlug.get(fallback.slug);
+      return event ? Object.assign({}, event, {
+        number:fallback.number,
+        occurrenceId:event.occurrences && event.occurrences[0] ? event.occurrences[0].id : "",
+        title:event.title,
+      }) : null;
+    }).filter(Boolean);
   }
 
   function formatDate(value) {
@@ -56,27 +124,32 @@
     return "In development";
   }
 
-  function editionLinksMarkup(events, currentSlug) {
+  function editionLinksMarkup(events, currentSlug, selectedOccurrence) {
     var editions = orderedEvents(events);
     if (!editions.length) return '<p class="kinmarking-empty">Edition records are temporarily unavailable. <a href="/events/kinmarking/">Return to KINMARKING</a>.</p>';
-    return editions.map(function (event) {
-      var current = event.slug === currentSlug;
-      return '<a class="kinmarking-edition-link' + (current ? ' is-current' : '') + '" href="' + eventHref(event.slug) + '"' + (current ? ' aria-current="page"' : '') + '>' +
-        '<span>KINMARKING ' + escapeHtml(event.number) + '</span>' +
-        '<strong>' + escapeHtml(event.title || event.fallbackTitle) + '</strong>' +
-        '<small>' + escapeHtml(formatDate(event.startsAt)) + ' · ' + escapeHtml(stateLabel(event)) + '</small>' +
+    var currentNumber = sessionNumberForSlug(currentSlug) || String(selectedOccurrence && selectedOccurrence.sessionNumber || "");
+    return editions.map(function (edition) {
+      var current = edition.number === currentNumber;
+      return '<a class="kinmarking-edition-link' + (current ? ' is-current' : '') + '" href="' + editionHref(edition) + '"' + (current ? ' aria-current="page"' : '') + '>' +
+        '<span>KINMARKING ' + escapeHtml(edition.number) + '</span>' +
+        '<strong>' + escapeHtml(edition.title) + '</strong>' +
+        '<small>' + escapeHtml(formatDate(edition.startsAt)) + ' · ' + escapeHtml(stateLabel(edition)) + '</small>' +
       '</a>';
     }).join("");
   }
 
   global.KinmarkingSeries = Object.freeze({
-    editions:EDITIONS,
+    editions:FALLBACKS,
+    seriesSlug:SERIES_SLUG,
+    editionDescription:editionDescription,
+    editionHref:editionHref,
     editionLinksMarkup:editionLinksMarkup,
-    eventHref:eventHref,
+    editionTitle:editionTitle,
     escapeHtml:escapeHtml,
     formatDate:formatDate,
     isKinmarkingSlug:isKinmarkingSlug,
     orderedEvents:orderedEvents,
+    sessionNumberForSlug:sessionNumberForSlug,
     stateLabel:stateLabel,
   });
 })(window);

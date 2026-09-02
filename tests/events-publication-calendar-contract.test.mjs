@@ -173,8 +173,8 @@ test("recurring event dates keep independent operations, capacity, and reservati
       priceCents:0,
       isRecurring:true,
       occurrences:[
-        { startsAt:"2030-09-07T23:00:00.000Z", endsAt:"2030-09-08T01:00:00.000Z", location:"Room One", capacity:2, maxSeatsPerOrder:2, status:"open" },
-        { startsAt:"2030-09-14T23:00:00.000Z", endsAt:"2030-09-15T01:00:00.000Z", location:"Room Two", capacity:1, maxSeatsPerOrder:1, status:"open" },
+        { sessionNumber:"01", title:"Opening Study", startsAt:"2030-09-07T23:00:00.000Z", endsAt:"2030-09-08T01:00:00.000Z", location:"Room One", capacity:2, maxSeatsPerOrder:2, status:"open" },
+        { sessionNumber:"02", title:"Closing Study", startsAt:"2030-09-14T23:00:00.000Z", endsAt:"2030-09-15T01:00:00.000Z", location:"Room Two", capacity:1, maxSeatsPerOrder:1, status:"open" },
       ],
     },
   }), env);
@@ -183,6 +183,10 @@ test("recurring event dates keep independent operations, capacity, and reservati
   assert.equal(created.isRecurring, true);
   assert.equal(created.occurrences.length, 2);
   assert.deepEqual(created.occurrences.map((item) => item.capacity), [2, 1]);
+  assert.deepEqual(created.occurrences.map((item) => [item.sessionNumber,item.title,item.displayTitle]), [
+    ["01","Opening Study","Recurring Studio Night 01: Opening Study"],
+    ["02","Closing Study","Recurring Studio Night 02: Closing Study"],
+  ]);
 
   const list = await (await handleEventsList(request("/api/events"), env)).json();
   const recurring = list.events.find((event) => event.slug === "recurring-studio-night");
@@ -343,83 +347,144 @@ test("event reminders follow the selected admission time and title", async () =>
   assert.ok(database.prepare("SELECT reminder_sent_at FROM event_tickets WHERE id='reminder-admission-ticket'").get().reminder_sent_at);
 });
 
-test("KINMARKING records remain four independent announced and closed editions", async () => {
+test("0220 consolidates the existing KINMARKING editions under one preserved Event identity", () => {
+  const database = databaseThrough("0219_atl_creative_calendar_navigation.sql");
+  const records = [
+    ["evt_kin_01","kinmarking-01-skin-as-archive","KINMARKING 01: Skin As Archive","2026-11-21T19:00:00.000Z","2026-11-22T00:00:00.000Z","occ_kin_01"],
+    ["evt_kin_02","kinmarking-02","KINMARKING 02","2027-03-20T18:00:00.000Z","2027-03-20T23:00:00.000Z","occ_kin_02"],
+    ["evt_kin_03","kinmarking-03","KINMARKING 03","2027-07-17T18:00:00.000Z","2027-07-17T23:00:00.000Z","occ_kin_03"],
+    ["evt_kin_04","kinmarking-04","KINMARKING 04","2027-11-20T19:00:00.000Z","2027-11-21T00:00:00.000Z","occ_kin_04"],
+  ];
+  for (const [id,slug,title,startsAt,endsAt,occurrenceId] of records) {
+    database.prepare(
+      `INSERT INTO events(id,slug,title,description,starts_at,ends_at,location,price_cents,currency,capacity,max_seats_per_order,status,publication_state,image_url,waitlist_enabled,is_recurring,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,'art.pill Tattoo House',0,'USD',0,1,'closed','announced','',0,0,?,?)`
+    ).run(id,slug,title,slug === "kinmarking-01-skin-as-archive" ? "First edition" : "Theme to be announced.",startsAt,endsAt,"2026-09-01T00:00:00.000Z","2026-09-01T00:00:00.000Z");
+    database.prepare(
+      `INSERT INTO event_occurrences(id,event_id,starts_at,ends_at,location,capacity,max_seats_per_order,status,sort_order,created_at,updated_at)
+       VALUES(?,?,?,?,?,0,1,'closed',0,?,?)`
+    ).run(occurrenceId,id,startsAt,endsAt,"art.pill Tattoo House","2026-09-01T00:00:00.000Z","2026-09-01T00:00:00.000Z");
+    database.prepare(
+      `INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at)
+       VALUES(?,'event','node-events','public',1,'test','test',?,?)`
+    ).run(id,"2026-09-01T00:00:00.000Z","2026-09-01T00:00:00.000Z");
+  }
+
+  database.exec(readFileSync(join(ROOT, "migrations", "0220_kinmarking_series_sessions.sql"), "utf8"));
+  assert.deepEqual({ ...database.prepare("SELECT id,slug,title,is_recurring,publication_state,status FROM events WHERE slug='kinmarking'").get() }, {
+    id:"evt_kin_01", slug:"kinmarking", title:"KINMARKING", is_recurring:1, publication_state:"announced", status:"closed",
+  });
+  assert.deepEqual(
+    database.prepare("SELECT event_id,session_number,title,sort_order FROM event_occurrences WHERE event_id='evt_kin_01' ORDER BY sort_order").all().map((row) => ({ ...row })),
+    [
+      { event_id:"evt_kin_01", session_number:"01", title:"Skin As Archive", sort_order:0 },
+      { event_id:"evt_kin_01", session_number:"02", title:"", sort_order:1 },
+      { event_id:"evt_kin_01", session_number:"03", title:"", sort_order:2 },
+      { event_id:"evt_kin_01", session_number:"04", title:"", sort_order:3 },
+    ],
+  );
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM events WHERE slug LIKE 'kinmarking-%'").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM content_entities WHERE id IN ('evt_kin_02','evt_kin_03','evt_kin_04')").get().count, 0);
+  assert.equal(database.prepare("SELECT archive_slug FROM archive_dossiers WHERE entity_id='evt_kin_01'").get().archive_slug, "kinmarking");
+});
+
+test("KINMARKING is one announced and closed Studio event with four named sessions", async () => {
   const database = databaseThrough();
   const env = runtime(database);
   const location = "art.pill Tattoo House, 364 Nelson Street SW, Atlanta, GA 30313";
-  const editions = [
-    {
-      title:"KINMARKING 01: Skin As Archive",
-      slug:"kinmarking-01-skin-as-archive",
-      description:"The first edition of KINMARKING, a participatory memory, archive, and tattoo practice.",
-      startsAt:"2026-11-21T14:00:00-05:00",
-      endsAt:"2026-11-21T19:00:00-05:00",
-    },
-    { title:"KINMARKING 02", slug:"kinmarking-02", description:"Theme to be announced.", startsAt:"2027-03-20T14:00:00-04:00", endsAt:"2027-03-20T19:00:00-04:00" },
-    { title:"KINMARKING 03", slug:"kinmarking-03", description:"Theme to be announced.", startsAt:"2027-07-17T14:00:00-04:00", endsAt:"2027-07-17T19:00:00-04:00" },
-    { title:"KINMARKING 04", slug:"kinmarking-04", description:"Theme to be announced.", startsAt:"2027-11-20T14:00:00-05:00", endsAt:"2027-11-20T19:00:00-05:00" },
+  const sessions = [
+    { sessionNumber:"01", title:"Skin As Archive", startsAt:"2026-11-21T14:00:00-05:00", endsAt:"2026-11-21T19:00:00-05:00" },
+    { sessionNumber:"02", title:"", startsAt:"2027-03-20T14:00:00-04:00", endsAt:"2027-03-20T19:00:00-04:00" },
+    { sessionNumber:"03", title:"", startsAt:"2027-07-17T14:00:00-04:00", endsAt:"2027-07-17T19:00:00-04:00" },
+    { sessionNumber:"04", title:"", startsAt:"2027-11-20T14:00:00-05:00", endsAt:"2027-11-20T19:00:00-05:00" },
   ];
-  for (const edition of editions) {
-    const response = await handleAdminEventCreate(request("/api/admin/events", {
-      method:"POST",
-      admin:true,
-      body:{
-        ...edition,
-        publicationState:"announced",
-        status:"closed",
-        location,
-        priceCents:0,
-        capacity:0,
-        maxSeatsPerOrder:1,
-        waitlistEnabled:false,
-        imageUrl:"",
-        occurrences:[{
-          startsAt:edition.startsAt,
-          endsAt:edition.endsAt,
-          location,
-          capacity:0,
-          maxSeatsPerOrder:1,
-          status:"closed",
-        }],
-      },
-    }), env);
-    assert.equal(response.status, 201, await response.clone().text());
-  }
-
-  const rows = database.prepare(
-    `SELECT slug,title,publication_state,status,is_recurring,image_url,waitlist_enabled,max_seats_per_order
-     FROM events WHERE slug LIKE 'kinmarking-%' ORDER BY starts_at`
-  ).all();
-  assert.deepEqual(rows.map((row) => row.slug), editions.map((edition) => edition.slug));
-  rows.forEach((row) => {
-    assert.deepEqual({
-      publication_state:row.publication_state,
-      status:row.status,
-      is_recurring:row.is_recurring,
-      image_url:row.image_url,
-      waitlist_enabled:row.waitlist_enabled,
-      max_seats_per_order:row.max_seats_per_order,
-    }, {
-      publication_state:"announced",
+  const response = await handleAdminEventCreate(request("/api/admin/events", {
+    method:"POST",
+    admin:true,
+    body:{
+      title:"KINMARKING",
+      slug:"kinmarking",
+      description:"A participatory memory, archive, and tattoo practice.",
+      publicationState:"announced",
       status:"closed",
-      is_recurring:0,
-      image_url:"",
-      waitlist_enabled:0,
-      max_seats_per_order:1,
-    });
+      location,
+      priceCents:0,
+      capacity:0,
+      maxSeatsPerOrder:1,
+      waitlistEnabled:false,
+      isRecurring:true,
+      imageUrl:"",
+      occurrences:sessions.map((session) => ({ ...session, location, capacity:0, maxSeatsPerOrder:1, status:"closed" })),
+    },
+  }), env);
+  assert.equal(response.status, 201, await response.clone().text());
+
+  const row = database.prepare(
+    `SELECT slug,title,publication_state,status,is_recurring,image_url,waitlist_enabled,max_seats_per_order
+     FROM events WHERE slug='kinmarking'`
+  ).get();
+  assert.deepEqual({ ...row }, {
+    slug:"kinmarking", title:"KINMARKING", publication_state:"announced", status:"closed",
+    is_recurring:1, image_url:"", waitlist_enabled:0, max_seats_per_order:1,
   });
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM event_occurrences WHERE event_id IN (SELECT id FROM events WHERE slug LIKE 'kinmarking-%') AND capacity=0 AND max_seats_per_order=1 AND status='closed'").get().count, 4);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM event_occurrences WHERE event_id=(SELECT id FROM events WHERE slug='kinmarking') AND capacity=0 AND max_seats_per_order=1 AND status='closed'").get().count, 4);
 
   const publicList = await (await handleEventsList(request("/api/events"), env)).json();
-  assert.deepEqual(
-    publicList.events.filter((event) => event.slug.startsWith("kinmarking-")).map((event) => event.slug),
-    editions.map((edition) => edition.slug),
-  );
-  const blocked = await handleEventCheckout(request("/api/events/kinmarking-01-skin-as-archive/checkout", {
+  const kinmarking = publicList.events.find((event) => event.slug === "kinmarking");
+  assert.ok(kinmarking);
+  assert.deepEqual(kinmarking.occurrences.map((occurrence) => [occurrence.sessionNumber,occurrence.title,occurrence.displayTitle]), [
+    ["01","Skin As Archive","KINMARKING 01: Skin As Archive"],
+    ["02","","KINMARKING 02"],
+    ["03","","KINMARKING 03"],
+    ["04","","KINMARKING 04"],
+  ]);
+  const blocked = await handleEventCheckout(request("/api/events/kinmarking/checkout", {
     method:"POST",
-    body:{ name:"Archive Guest", email:"archive@example.test", phone:"404-555-0123", seats:1 },
-  }), env, "kinmarking-01-skin-as-archive");
+    body:{ name:"Archive Guest", email:"archive@example.test", phone:"404-555-0123", seats:1, occurrenceId:kinmarking.occurrences[0].id },
+  }), env, "kinmarking");
   assert.equal(blocked.status, 409);
+});
+
+test("KINMARKING session reminders use the composed session title and preparation guide", async () => {
+  const database = databaseThrough();
+  const env = runtime(database);
+  const startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const response = await handleAdminEventCreate(request("/api/admin/events", {
+    method:"POST",
+    admin:true,
+    body:{
+      title:"KINMARKING",
+      slug:"kinmarking",
+      publicationState:"published",
+      status:"open",
+      priceCents:0,
+      maxSeatsPerOrder:1,
+      waitlistEnabled:false,
+      isRecurring:true,
+      occurrences:[{ sessionNumber:"01", title:"Skin As Archive", startsAt, location:"art.pill Tattoo House", capacity:0, maxSeatsPerOrder:1, status:"open" }],
+    },
+  }), env);
+  assert.equal(response.status, 201, await response.clone().text());
+  const event = (await response.json()).event;
+  database.prepare(
+    `INSERT INTO event_tickets (
+      id,event_id,occurrence_id,contact_name,contact_email,contact_phone,
+      seats,amount_cents,currency,status,created_at,updated_at
+    ) VALUES ('kinmarking-reminder-ticket',?,?, 'Archive Guest','archive@example.test','404-555-0123',
+      1,0,'USD','paid',datetime('now'),datetime('now'))`
+  ).run(event.id,event.occurrences[0].id);
+  const sent = [];
+  const result = await sendDueEventTicketReminders({
+    SUBMISSIONS_DB:new LocalD1(database),
+    EMAIL:{ async send(message) { sent.push(message); return { messageId:"kinmarking-reminder-1" }; } },
+    PUBLIC_SITE_URL:"https://example.test",
+    NOTIFICATION_FROM_EMAIL:"notifications@example.test",
+  });
+  assert.equal(result.sent, 1);
+  assert.match(sent[0].subject, /KINMARKING 01: Skin As Archive/);
+  assert.match(sent[0].text, /Event guide/);
+  assert.match(sent[0].text, /one to three references/i);
+  assert.doesNotMatch(sent[0].text, /ticket purchased|confirmed and paid/i);
 });
 
 test("free event correspondence uses RSVP language and links the preparation guide", () => {
@@ -471,6 +536,9 @@ test("KINMARKING public pages retain the event shell, conditional flyer, guidanc
   assert.match(detail, /What to bring[\s\S]*How it works[\s\S]*Possible outcomes[\s\S]*Privacy \+ consent[\s\S]*RSVP \+ walk-ins/);
   assert.match(detail, /if \(isKinmarking\) form\.hidden = true/);
   assert.match(series, /kinmarking-01-skin-as-archive[\s\S]*kinmarking-02[\s\S]*kinmarking-03[\s\S]*kinmarking-04/);
+  assert.match(series, /SERIES_SLUG = "kinmarking"/);
+  assert.match(series, /parent\.occurrences/);
+  assert.match(detail, /apiSlug = isKinmarking \? kinmarking\.seriesSlug : slug/);
   assert.match(series, /aria-current="page"/);
 });
 
@@ -488,6 +556,7 @@ test("Events board contracts retain the shared shell, 5px cards, calendar, and s
   assert.match(studio, /Public stage[\s\S]*Event operations/);
   assert.match(studio, /\["draft", "announced", "published"\]/);
   assert.match(studio, /Recurring event[\s\S]*Event dates[\s\S]*Add date/);
+  assert.match(studio, /Session number[\s\S]*Session title/);
   assert.match(page, /function eventHref\(ev, occurrence\)[\s\S]*occurrence\.id/);
   assert.match(page, /occurrencesForEvent\(ev\)\.forEach/);
   assert.match(readFileSync(join(ROOT, "events", "detail", "index.html"), "utf8"), /occurrenceId:selected\.id/);

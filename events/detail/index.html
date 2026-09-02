@@ -113,7 +113,7 @@
     </section>
     <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">events</a><a href="/home/">return to construct</a></div></footer>
   </main>
-<script src="/js/kinmarking-series.js"></script>
+<script src="/js/kinmarking-series.js?v=20260902-series-sessions"></script>
 <script>
 (function () {
   var parts = location.pathname.split("/").filter(Boolean);
@@ -124,6 +124,8 @@
   var selected = null;
   var kinmarking = window.KinmarkingSeries;
   var isKinmarking = kinmarking && kinmarking.isKinmarkingSlug(slug);
+  var requestedSessionNumber = isKinmarking ? kinmarking.sessionNumberForSlug(slug) : "";
+  var apiSlug = isKinmarking ? kinmarking.seriesSlug : slug;
   var title = document.getElementById("eventTitle");
   var description = document.getElementById("eventDescription");
   var details = document.getElementById("eventDetails");
@@ -143,7 +145,10 @@
   if (isKinmarking) form.hidden = true;
   function esc(value) { return String(value == null ? "" : value).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c];}); }
   function when(value) { if (!value) return "Date to be announced"; return new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"long",month:"long",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short"}).format(new Date(value)); }
-  function href(occurrence) { return params.get("event") ? "/events/detail/?event=" + encodeURIComponent(slug) + "&occurrence=" + encodeURIComponent(occurrence.id) : "/events/" + encodeURIComponent(slug) + "/?occurrence=" + encodeURIComponent(occurrence.id); }
+  function href(occurrence) {
+    if (isKinmarking) return kinmarking.editionHref({ number:occurrence.sessionNumber, occurrenceId:occurrence.id });
+    return params.get("event") ? "/events/detail/?event=" + encodeURIComponent(slug) + "&occurrence=" + encodeURIComponent(occurrence.id) : "/events/" + encodeURIComponent(slug) + "/?occurrence=" + encodeURIComponent(occurrence.id);
+  }
   function setMessage(text,state) { message.textContent=text || ""; message.dataset.state=state || ""; }
   function renderKinmarking(event) {
     if (!isKinmarking) return;
@@ -151,7 +156,7 @@
     kinmarkingSeriesLink.hidden = false;
     if (event.imageUrl) {
       kinmarkingFlyerImage.src = event.imageUrl;
-      kinmarkingFlyerImage.alt = event.title + " event flyer";
+      kinmarkingFlyerImage.alt = (selected ? kinmarking.editionTitle(event, selected, event.occurrences.indexOf(selected)) : event.title) + " event flyer";
       kinmarkingFlyer.hidden = false;
     } else {
       kinmarkingFlyer.hidden = true;
@@ -160,20 +165,27 @@
     }
     fetch("/api/events")
       .then(function(response){return response.json().then(function(data){return {ok:response.ok,data:data};});})
-      .then(function(result){if(!result.ok) throw new Error(result.data.error||"Unable to load connected editions."); kinmarkingEditionLinks.innerHTML=kinmarking.editionLinksMarkup(result.data.events||[],slug);})
-      .catch(function(){kinmarkingEditionLinks.innerHTML=kinmarking.editionLinksMarkup([],slug);});
+      .then(function(result){if(!result.ok) throw new Error(result.data.error||"Unable to load connected editions."); kinmarkingEditionLinks.innerHTML=kinmarking.editionLinksMarkup(result.data.events||[],slug,selected);})
+      .catch(function(){kinmarkingEditionLinks.innerHTML=kinmarking.editionLinksMarkup([],slug,selected);});
   }
   function render(data) {
     eventData = data.event;
-    selected = data.occurrence || eventData.occurrences.find(function(item){return item.id === occurrenceId;}) || (eventData.occurrences.length === 1 ? eventData.occurrences[0] : null);
-    title.textContent = eventData.title;
-    document.title = eventData.title + " — the six.well construct";
-    description.textContent = eventData.description || "A public event attached to the construct.";
+    selected = data.occurrence ||
+      eventData.occurrences.find(function(item){return item.id === occurrenceId;}) ||
+      (requestedSessionNumber ? eventData.occurrences.find(function(item){return item.sessionNumber === requestedSessionNumber;}) : null) ||
+      (eventData.occurrences.length === 1 ? eventData.occurrences[0] : null);
+    var selectedIndex = selected ? eventData.occurrences.indexOf(selected) : 0;
+    var publicTitle = isKinmarking && selected ? kinmarking.editionTitle(eventData, selected, selectedIndex) : eventData.title;
+    title.textContent = publicTitle;
+    document.title = publicTitle + " — the six.well construct";
+    description.textContent = isKinmarking && selected ? kinmarking.editionDescription(eventData, selected, selectedIndex) : (eventData.description || "A public event attached to the construct.");
     details.textContent = eventData.details || eventData.included || "Choose a date to view registration availability.";
     renderKinmarking(eventData);
     dates.innerHTML = eventData.occurrences.length ? eventData.occurrences.map(function(item){
       var past = item.status === "completed" || new Date(item.endsAt || item.startsAt).getTime() < Date.now();
-      return '<a class="event-date' + (selected && selected.id === item.id ? ' is-selected' : '') + (past ? ' is-past' : '') + '" href="' + href(item) + '"><strong>' + esc(when(item.startsAt)) + '</strong><span>' + esc((item.location || eventData.location || "Location to be announced") + " · " + item.status + (item.capacity > 0 ? " · " + item.seatsRemaining + " seats left" : "")) + '</span></a>';
+      var itemIndex = eventData.occurrences.indexOf(item);
+      var itemTitle = isKinmarking ? kinmarking.editionTitle(eventData, item, itemIndex) : when(item.startsAt);
+      return '<a class="event-date' + (selected && selected.id === item.id ? ' is-selected' : '') + (past ? ' is-past' : '') + '" href="' + href(item) + '"><strong>' + esc(itemTitle) + '</strong><span>' + esc(when(item.startsAt) + " · " + (item.location || eventData.location || "Location to be announced") + " · " + item.status + (item.capacity > 0 ? " · " + item.seatsRemaining + " seats left" : "")) + '</span></a>';
     }).join("") : '<p class="event-message">The date has not been announced yet.</p>';
     waitlistPanel.hidden = true;
     if (!selected) {
@@ -200,7 +212,7 @@
     for (var i=1;i<=max;i+=1) seats.insertAdjacentHTML("beforeend",'<option value="'+i+'">'+i+(i===1?' seat':' seats')+'</option>');
     waitlistPanel.hidden = available || past || selected.status === "cancelled" || eventData.waitlistEnabled === false;
   }
-  fetch("/api/events/" + encodeURIComponent(slug) + "/context" + (occurrenceId ? "?occurrence=" + encodeURIComponent(occurrenceId) : ""))
+  fetch("/api/events/" + encodeURIComponent(apiSlug) + "/context" + (occurrenceId ? "?occurrence=" + encodeURIComponent(occurrenceId) : ""))
     .then(function(response){return response.json().then(function(data){return {ok:response.ok,data:data};});})
     .then(function(result){if(!result.ok || !result.data.event) throw new Error(result.data.error || "Event unavailable."); render(result.data);})
     .catch(function(error){title.textContent="Event unavailable."; description.textContent="Return to the events board for current public listings."; status.textContent="Unavailable"; button.textContent="Unavailable"; setMessage(error.message,"error");});
@@ -209,16 +221,16 @@
     var body={name:document.getElementById("eventName").value.trim(),email:document.getElementById("eventEmail").value.trim(),phone:document.getElementById("eventPhone").value.trim(),seats:Number(seats.value)||1,occurrenceId:selected.id,_gotcha:document.getElementById("eventGotcha").value};
     if(!body.name || !body.phone || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) return setMessage("Enter your name, valid email, and phone number.","error");
     button.disabled=true; button.textContent=eventData.free?"Registering":"Opening checkout";
-    fetch("/api/events/"+encodeURIComponent(slug)+"/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+    fetch("/api/events/"+encodeURIComponent(apiSlug)+"/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
       .then(function(response){return response.json().then(function(data){return {ok:response.ok,data:data};});})
-      .then(function(result){if(!result.ok) throw new Error(result.data.error||"Unable to register."); if(result.data.checkoutUrl) location.href=result.data.checkoutUrl; else location.href="/events/confirmed/?ticket="+encodeURIComponent(result.data.ticketId)+"&event="+encodeURIComponent(slug);})
+      .then(function(result){if(!result.ok) throw new Error(result.data.error||"Unable to register."); if(result.data.checkoutUrl) location.href=result.data.checkoutUrl; else location.href="/events/confirmed/?ticket="+encodeURIComponent(result.data.ticketId)+"&event="+encodeURIComponent(apiSlug);})
       .catch(function(error){setMessage(error.message,"error"); button.disabled=false; button.textContent=eventData.free?"RSVP":"Reserve a seat";});
   });
   waitlistButton.addEventListener("click",function(){
     if(!selected) return; var body={name:document.getElementById("eventName").value.trim(),email:document.getElementById("eventEmail").value.trim(),phone:document.getElementById("eventPhone").value.trim(),seats:Number(seats.value)||1,occurrenceId:selected.id};
     if(!body.name || !body.phone || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) return setMessage("Enter your contact information above before joining the waitlist.","error");
     waitlistButton.disabled=true;
-    fetch("/api/events/"+encodeURIComponent(slug)+"/waitlist",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+    fetch("/api/events/"+encodeURIComponent(apiSlug)+"/waitlist",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
       .then(function(response){return response.json().then(function(data){return {ok:response.ok,data:data};});})
       .then(function(result){if(!result.ok) throw new Error(result.data.error||"Unable to join the waitlist."); setMessage("You are on the waitlist for this date.","ok"); waitlistButton.textContent="Waitlist joined";})
       .catch(function(error){setMessage(error.message,"error"); waitlistButton.disabled=false;});

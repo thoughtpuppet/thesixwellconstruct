@@ -157,6 +157,7 @@
     <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/home/">return to construct</a><a href="/archive/events/">event archive</a></div></footer>
   </main>
 
+  <script src="/js/kinmarking-series.js?v=20260902-series-sessions"></script>
   <script>
   (function () {
     var upcomingRoot = document.getElementById("upcomingEvents");
@@ -179,7 +180,13 @@
         return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[c];
       });
     }
-    function eventHref(ev, occurrence) { return "/events/" + encodeURIComponent(ev.slug) + "/" + (occurrence && occurrence.id ? "?occurrence=" + encodeURIComponent(occurrence.id) : ""); }
+    function eventHref(ev, occurrence) {
+      if (ev.slug === "kinmarking") {
+        if (occurrence && window.KinmarkingSeries) return window.KinmarkingSeries.editionHref({ number:occurrence.sessionNumber, occurrenceId:occurrence.id });
+        return "/events/kinmarking/";
+      }
+      return "/events/" + encodeURIComponent(ev.slug) + "/" + (occurrence && occurrence.id ? "?occurrence=" + encodeURIComponent(occurrence.id) : "");
+    }
     function validDate(value) { var date = value ? new Date(value) : null; return date && !Number.isNaN(date.getTime()) ? date : null; }
     function occurrencesForEvent(ev) {
       if (Array.isArray(ev.occurrences) && ev.occurrences.length) return ev.occurrences;
@@ -266,7 +273,7 @@
     function renderAgenda(items, label) {
       dayAgenda.setAttribute("aria-label", "Events on " + label);
       dayAgenda.innerHTML = items.map(function (item) {
-        return '<a class="event-day-link" href="' + eventHref(item.event, item.occurrence) + '"><strong>' + escapeHtml(item.event.title) + '</strong><span>' + escapeHtml(formatDayTime(item.occurrence.startsAt) || item.event.publicationState) + '</span></a>';
+        return '<a class="event-day-link" href="' + eventHref(item.event, item.occurrence) + '"><strong>' + escapeHtml(item.occurrence.displayTitle || item.event.title) + '</strong><span>' + escapeHtml(formatDayTime(item.occurrence.startsAt) || item.event.publicationState) + '</span></a>';
       }).join("");
       dayAgenda.focus?.({ preventScroll:true });
     }

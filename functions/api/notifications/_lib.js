@@ -3056,7 +3056,14 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
     event = await db
       .prepare(
         `SELECT
-           CASE WHEN a.id IS NULL THEN e.title ELSE e.title||' — '||a.title END AS title,
+           CASE
+                  WHEN a.id IS NOT NULL THEN e.title||' — '||a.title
+                  WHEN trim(COALESCE(o.session_number,''))<>'' OR trim(COALESCE(o.title,''))<>'' THEN
+                    e.title||
+                    CASE WHEN trim(COALESCE(o.session_number,''))<>'' THEN ' '||trim(o.session_number) ELSE '' END||
+                    CASE WHEN trim(COALESCE(o.title,''))<>'' THEN ': '||trim(o.title) ELSE '' END
+                  ELSE e.title
+                END AS title,
            e.slug,
            COALESCE(a.starts_at,o.starts_at,e.starts_at) AS starts_at,
            COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS location
@@ -3087,7 +3094,7 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
   const eventUrl = event?.slug
     ? publicUrl(env, request, `/events/${encodeURIComponent(event.slug)}/`)
     : "";
-  const kinmarking = String(event?.slug || "").startsWith("kinmarking-");
+  const kinmarking = event?.slug === "kinmarking" || String(event?.slug || "").startsWith("kinmarking-");
   const message = buildEventTicketPaidEmail({
     variant: freeRsvp ? "rsvp" : "default",
     free: freeRsvp,
@@ -3126,7 +3133,14 @@ export async function notifyEventTicketCancelled(env, request, ticketRow, option
     event = await db
       .prepare(
         `SELECT
-           CASE WHEN a.id IS NULL THEN e.title ELSE e.title||' — '||a.title END AS title,
+           CASE
+                  WHEN a.id IS NOT NULL THEN e.title||' — '||a.title
+                  WHEN trim(COALESCE(o.session_number,''))<>'' OR trim(COALESCE(o.title,''))<>'' THEN
+                    e.title||
+                    CASE WHEN trim(COALESCE(o.session_number,''))<>'' THEN ' '||trim(o.session_number) ELSE '' END||
+                    CASE WHEN trim(COALESCE(o.title,''))<>'' THEN ': '||trim(o.title) ELSE '' END
+                  ELSE e.title
+                END AS title,
            COALESCE(a.starts_at,o.starts_at,e.starts_at) AS starts_at,
            COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS location
          FROM events e
@@ -3210,7 +3224,14 @@ export async function sendDueEventTicketReminders(env) {
     const result = await db
       .prepare(
         `SELECT t.*,
-                CASE WHEN a.id IS NULL THEN e.title ELSE e.title||' — '||a.title END AS event_title,
+                CASE
+                  WHEN a.id IS NOT NULL THEN e.title||' — '||a.title
+                  WHEN trim(COALESCE(o.session_number,''))<>'' OR trim(COALESCE(o.title,''))<>'' THEN
+                    e.title||
+                    CASE WHEN trim(COALESCE(o.session_number,''))<>'' THEN ' '||trim(o.session_number) ELSE '' END||
+                    CASE WHEN trim(COALESCE(o.title,''))<>'' THEN ': '||trim(o.title) ELSE '' END
+                  ELSE e.title
+                END AS event_title,
                 e.slug AS event_slug,
                 COALESCE(a.starts_at,o.starts_at,e.starts_at) AS event_starts_at,
                 COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS event_location
@@ -3244,7 +3265,7 @@ export async function sendDueEventTicketReminders(env) {
       const eventUrl = row.event_slug
         ? publicUrl(env, null, `/events/${encodeURIComponent(row.event_slug)}/`)
         : "";
-      const kinmarking = String(row.event_slug || "").startsWith("kinmarking-");
+      const kinmarking = row.event_slug === "kinmarking" || String(row.event_slug || "").startsWith("kinmarking-");
       const message = buildEventReminderEmail({
         subject: `Reminder: ${title} is tomorrow`,
         title,

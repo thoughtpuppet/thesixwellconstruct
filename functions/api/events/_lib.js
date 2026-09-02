@@ -590,6 +590,8 @@ function normalizeEventOccurrence(row, event) {
   return {
     id: row.id,
     eventId: row.event_id,
+    sessionNumber: row.session_number || "",
+    title: row.title || "",
     startsAt: row.starts_at,
     endsAt: row.ends_at || null,
     location: row.location || event?.location || "",
@@ -600,6 +602,15 @@ function normalizeEventOccurrence(row, event) {
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
   };
+}
+
+function eventOccurrenceTitle(event, occurrence) {
+  const parentTitle = asString(event?.title) || "Event";
+  const sessionNumber = asString(occurrence?.sessionNumber || occurrence?.session_number);
+  const sessionTitle = asString(occurrence?.title);
+  return parentTitle +
+    (sessionNumber ? ` ${sessionNumber}` : "") +
+    (sessionTitle ? `: ${sessionTitle}` : "");
 }
 
 async function getEventOccurrences(db, event) {
@@ -1298,6 +1309,7 @@ function publicOccurrenceView(event, occurrence, stats = {}) {
   const seatsRemaining = Math.max(0, occurrence.capacity - seatsHeld);
   return {
     ...occurrence,
+    displayTitle:eventOccurrenceTitle(event, occurrence),
     paidSeats,
     pendingSeats,
     paidOrders:Number(stats.paidOrders) || 0,
@@ -1465,7 +1477,14 @@ export async function handleEventTicketCalendar(request, env, ticketId) {
     const row = await db
       .prepare(
         `SELECT t.id, t.seats, t.status,
-                CASE WHEN a.id IS NULL THEN e.title ELSE e.title||' — '||a.title END AS event_title,
+                CASE
+                  WHEN a.id IS NOT NULL THEN e.title||' — '||a.title
+                  WHEN trim(COALESCE(o.session_number,''))<>'' OR trim(COALESCE(o.title,''))<>'' THEN
+                    e.title||
+                    CASE WHEN trim(COALESCE(o.session_number,''))<>'' THEN ' '||trim(o.session_number) ELSE '' END||
+                    CASE WHEN trim(COALESCE(o.title,''))<>'' THEN ': '||trim(o.title) ELSE '' END
+                  ELSE e.title
+                END AS event_title,
                 COALESCE(a.starts_at,o.starts_at,e.starts_at) AS event_starts_at,
                 COALESCE(a.ends_at,o.ends_at,e.ends_at) AS event_ends_at,
                 COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS event_location
@@ -1600,7 +1619,7 @@ export async function handleEventCheckout(request, env, slug) {
 
     const bookingEvent = {
       ...event,
-      title:admission ? `${event.title} — ${admission.title}` : event.title,
+      title:admission ? `${event.title} — ${admission.title}` : eventOccurrenceTitle(event, occurrence),
       parentTitle:event.title,
       admissionTitle:admission?.title || "",
       admissionMode:admission?.attendanceMode || "in_person",
@@ -1816,6 +1835,7 @@ export async function handleEventWaitlist(request, env, slug) {
     }
     const occurrenceEvent = {
       ...event,
+      title:eventOccurrenceTitle(event, occurrence),
       startsAt:occurrence.startsAt,
       endsAt:occurrence.endsAt,
       location:occurrence.location,
@@ -1944,6 +1964,7 @@ export async function handleEventOpenMicSignup(request, env, slug) {
     }
     const occurrenceEvent = {
       ...event,
+      title:eventOccurrenceTitle(event, occurrence),
       startsAt:occurrence.startsAt,
       endsAt:occurrence.endsAt,
       location:occurrence.location,
@@ -2088,7 +2109,14 @@ export async function handleEventTicketStatus(request, env, ticketId) {
     const row = await db
       .prepare(
         `SELECT t.*, e.slug AS event_slug,
-                CASE WHEN a.id IS NULL THEN e.title ELSE e.title||' — '||a.title END AS event_title,
+                CASE
+                  WHEN a.id IS NOT NULL THEN e.title||' — '||a.title
+                  WHEN trim(COALESCE(o.session_number,''))<>'' OR trim(COALESCE(o.title,''))<>'' THEN
+                    e.title||
+                    CASE WHEN trim(COALESCE(o.session_number,''))<>'' THEN ' '||trim(o.session_number) ELSE '' END||
+                    CASE WHEN trim(COALESCE(o.title,''))<>'' THEN ': '||trim(o.title) ELSE '' END
+                  ELSE e.title
+                END AS event_title,
                 COALESCE(a.starts_at,o.starts_at,e.starts_at) AS event_starts_at,
                 COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS event_location,
                 a.title AS admission_title,a.attendance_mode AS admission_mode
@@ -2705,6 +2733,8 @@ function occurrenceInputs(body, defaults = {}) {
     if (!ADMIN_EVENT_STATUSES.has(status)) throw new Error(`Event date ${index + 1} has an invalid operation state.`);
     return {
       id:asString(input?.id),
+      sessionNumber:asString(input?.sessionNumber || input?.session_number).slice(0, 24),
+      title:asString(input?.title).slice(0, 200),
       startsAt,
       endsAt,
       location:asString(input?.location || defaults.location),
@@ -2824,11 +2854,11 @@ async function replaceEventOccurrences(db, event, occurrences, now) {
     if (occurrence.id) {
       if (!existingIds.has(occurrence.id)) throw new Error("An event date does not belong to this event.");
       await db.prepare(
-        `UPDATE event_occurrences SET starts_at=?,ends_at=?,location=?,capacity=?,
+        `UPDATE event_occurrences SET session_number=?,title=?,starts_at=?,ends_at=?,location=?,capacity=?,
            max_seats_per_order=?,status=?,sort_order=?,updated_at=?
          WHERE id=? AND event_id=?`
       ).bind(
-        occurrence.startsAt, occurrence.endsAt, occurrence.location, occurrence.capacity,
+        occurrence.sessionNumber, occurrence.title, occurrence.startsAt, occurrence.endsAt, occurrence.location, occurrence.capacity,
         occurrence.maxSeatsPerOrder, occurrence.status, occurrence.sortOrder, now,
         occurrence.id, event.id,
       ).run();
@@ -2837,11 +2867,11 @@ async function replaceEventOccurrences(db, event, occurrences, now) {
     occurrence.id = `occ_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
     await db.prepare(
       `INSERT INTO event_occurrences (
-         id,event_id,starts_at,ends_at,location,capacity,max_seats_per_order,status,
+         id,event_id,session_number,title,starts_at,ends_at,location,capacity,max_seats_per_order,status,
          sort_order,created_at,updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(
-      occurrence.id, event.id, occurrence.startsAt, occurrence.endsAt, occurrence.location,
+      occurrence.id, event.id, occurrence.sessionNumber, occurrence.title, occurrence.startsAt, occurrence.endsAt, occurrence.location,
       occurrence.capacity, occurrence.maxSeatsPerOrder, occurrence.status,
       occurrence.sortOrder, now, now,
     ).run();
@@ -3093,7 +3123,15 @@ export async function handleAdminEventUpdate(request, env, slug) {
 
 async function selectAdminEventTicket(database, ticketId) {
   return database.prepare(
-    `SELECT t.*, e.title AS event_title, COALESCE(o.starts_at,e.starts_at) AS event_starts_at,
+    `SELECT t.*,
+            CASE
+              WHEN trim(COALESCE(o.session_number,''))<>'' OR trim(COALESCE(o.title,''))<>'' THEN
+                e.title||
+                CASE WHEN trim(COALESCE(o.session_number,''))<>'' THEN ' '||trim(o.session_number) ELSE '' END||
+                CASE WHEN trim(COALESCE(o.title,''))<>'' THEN ': '||trim(o.title) ELSE '' END
+              ELSE e.title
+            END AS event_title,
+            COALESCE(o.starts_at,e.starts_at) AS event_starts_at,
             COALESCE(NULLIF(o.location,''),e.location) AS event_location
      FROM event_tickets t
      JOIN events e ON e.id=t.event_id

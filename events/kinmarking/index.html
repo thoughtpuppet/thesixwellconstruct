@@ -67,7 +67,7 @@
 
     <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">events</a><a href="/home/">return to construct</a></div></footer>
   </main>
-<script src="/js/kinmarking-series.js"></script>
+<script src="/js/kinmarking-series.js?v=20260902-series-sessions"></script>
 <script>
 (function () {
   var root = document.getElementById("kinmarkingEditions");
@@ -78,10 +78,10 @@
     root.innerHTML = editions.map(function (event) {
       return '<article class="kinmarking-edition-card">' +
         '<p class="edition-state">KINMARKING ' + series.escapeHtml(event.number) + ' · ' + series.escapeHtml(series.stateLabel(event)) + '</p>' +
-        '<h3>' + series.escapeHtml(event.title || event.fallbackTitle) + '</h3>' +
+        '<h3>' + series.escapeHtml(event.title) + '</h3>' +
         '<p class="edition-date">' + series.escapeHtml(series.formatDate(event.startsAt)) + '</p>' +
-        '<p class="edition-copy">' + series.escapeHtml(event.description || "Theme and participant guidance will be announced closer to the date.") + '</p>' +
-        '<a class="venture-link" href="' + series.eventHref(event.slug) + '">view edition</a>' +
+        '<p class="edition-copy">' + series.escapeHtml(event.description) + '</p>' +
+        '<a class="venture-link" href="' + series.editionHref(event) + '">view edition</a>' +
       '</article>';
     }).join("");
   }

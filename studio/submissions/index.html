@@ -6999,6 +6999,8 @@ ${meetingLines}
   function eventOccurrenceEditor(occurrence = {}, index = 0, defaults = {}) {
     return `<div class="event-occurrence-editor" data-event-occurrence>
       <input type="hidden" data-occurrence-field="id" value="${escapeHtml(occurrence.id || "")}">
+      <div class="field"><label>Session number</label><input data-occurrence-field="sessionNumber" value="${escapeHtml(occurrence.sessionNumber || "")}" maxlength="24" placeholder="${String(index + 1).padStart(2, "0")}"></div>
+      <div class="field wide-field"><label>Session title</label><input data-occurrence-field="title" value="${escapeHtml(occurrence.title || "")}" maxlength="200" placeholder="Skin As Archive"></div>
       <div class="field"><label>Starts</label><input data-occurrence-field="startsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(occurrence.startsAt))}" required></div>
       <div class="field"><label>Ends</label><input data-occurrence-field="endsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(occurrence.endsAt))}"></div>
       <div class="field"><label>Operations</label><select data-occurrence-field="status">${eventStatusOptions(occurrence.status || defaults.status || "closed")}</select></div>
@@ -7020,6 +7022,8 @@ ${meetingLines}
       const value = (field) => row.querySelector(`[data-occurrence-field="${field}"]`)?.value ?? "";
       return {
         id:value("id"),
+        sessionNumber:value("sessionNumber"),
+        title:value("title"),
         startsAt:value("startsAt") ? localDateTimeToIso(value("startsAt")) : "",
         endsAt:value("endsAt") ? localDateTimeToIso(value("endsAt")) : "",
         status:value("status") || "closed",
