@@ -371,8 +371,8 @@ test("0220 consolidates the existing KINMARKING editions under one preserved Eve
   }
 
   database.exec(readFileSync(join(ROOT, "migrations", "0220_kinmarking_series_sessions.sql"), "utf8"));
-  assert.deepEqual({ ...database.prepare("SELECT id,slug,title,is_recurring,publication_state,status FROM events WHERE slug='kinmarking'").get() }, {
-    id:"evt_kin_01", slug:"kinmarking", title:"KINMARKING", is_recurring:1, publication_state:"announced", status:"closed",
+  assert.deepEqual({ ...database.prepare("SELECT id,slug,title,is_recurring,publication_state,status,waitlist_enabled FROM events WHERE slug='kinmarking'").get() }, {
+    id:"evt_kin_01", slug:"kinmarking", title:"KINMARKING", is_recurring:1, publication_state:"announced", status:"closed", waitlist_enabled:0,
   });
   assert.deepEqual(
     database.prepare("SELECT event_id,session_number,title,sort_order FROM event_occurrences WHERE event_id='evt_kin_01' ORDER BY sort_order").all().map((row) => ({ ...row })),
