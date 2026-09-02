@@ -1,8 +1,8 @@
 /* ============================================================
    construct-nav.js — the six.well construct
    ============================================================
-   Renders a row of 9 colored dots, one per construct entry, plus a
-   separate Construct-wide Explore action, fixed at the top of every inner page.
+   Renders a row of 9 colored dots, one per construct entry, plus
+   Calendar, Explore, and Search actions fixed at the top of every inner page.
 
    - Current construct entry dot: full opacity in its color
    - Other dots: dimmed to 0.2 opacity
@@ -171,6 +171,36 @@
     return svg;
   }
 
+  function createCalendarDaysIcon() {
+    var svgNs = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('viewBox', '0 0 64 64');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.style.cssText = 'display:block;width:100%;height:100%;overflow:visible';
+
+    var frame = document.createElementNS(svgNs, 'rect');
+    frame.setAttribute('x', '8');
+    frame.setAttribute('y', '11');
+    frame.setAttribute('width', '48');
+    frame.setAttribute('height', '45');
+    frame.setAttribute('rx', '5');
+    frame.style.cssText = 'fill:none;stroke:currentColor;stroke-width:5;stroke-linejoin:round';
+
+    var divider = document.createElementNS(svgNs, 'path');
+    divider.setAttribute('d', 'M8 25 H56 M21 6 V17 M43 6 V17');
+    divider.style.cssText = 'fill:none;stroke:currentColor;stroke-width:5;stroke-linecap:round;stroke-linejoin:round';
+
+    var dates = document.createElementNS(svgNs, 'path');
+    dates.setAttribute('d', 'M21 36 H21.1 M32 36 H32.1 M43 36 H43.1 M21 47 H21.1 M32 47 H32.1');
+    dates.style.cssText = 'fill:none;stroke:currentColor;stroke-width:6;stroke-linecap:round';
+
+    svg.appendChild(frame);
+    svg.appendChild(divider);
+    svg.appendChild(dates);
+    return svg;
+  }
+
   function tokenColorsAvailable() {
     return !!getComputedStyle(document.documentElement).getPropertyValue('--color-art').trim();
   }
@@ -226,6 +256,13 @@
     }
   }
 
+  var ATL_CREATIVE_CALENDAR_LINK = {
+    id: 'utility-atl-creative-calendar',
+    label: 'ATL Creative Calendar',
+    route: '/calendar/',
+    enforceLabel: true,
+  };
+
   function mountManagedFooterLinks(links) {
     if (!links.length) return;
 
@@ -237,10 +274,13 @@
       var footerAnchors = Array.prototype.slice.call(footer.querySelectorAll('a[href]'));
       links.forEach(function(link) {
         var routePath = normalizedRoutePath(link.route);
-        var alreadyPresent = footerAnchors.some(function(anchor) {
+        var existingAnchor = footerAnchors.find(function(anchor) {
           return normalizedRoutePath(anchor.getAttribute('href')) === routePath;
         });
-        if (alreadyPresent) return;
+        if (existingAnchor) {
+          if (link.enforceLabel) existingAnchor.textContent = link.label;
+          return;
+        }
 
         var anchor = document.createElement('a');
         anchor.href = link.route;
@@ -258,6 +298,8 @@
     });
     footerObserver.observe(document.body, { childList: true, subtree: true });
   }
+
+  mountManagedFooterLinks([ATL_CREATIVE_CALENDAR_LINK]);
 
   /* ── CONFIGURATION ────────────────────────────────────────
      All visual values live here. Adjust freely.
@@ -505,6 +547,33 @@
 
   var isExplorePage = window.location.pathname === '/adventure' || window.location.pathname.startsWith('/adventure/');
   var isSearchPage = window.location.pathname === '/search' || window.location.pathname.startsWith('/search/');
+  var isCalendarPage = window.location.pathname === '/calendar' || window.location.pathname.startsWith('/calendar/');
+  var calendarAction = document.createElement('button');
+  calendarAction.type = 'button';
+  calendarAction.className = 'cnav-calendar';
+  calendarAction.appendChild(createCalendarDaysIcon());
+  calendarAction.setAttribute('aria-label', 'ATL Creative Calendar');
+  if (isCalendarPage) calendarAction.setAttribute('aria-current', 'page');
+  calendarAction.style.cssText = [
+    'width:32px',
+    'height:32px',
+    'min-width:32px',
+    'min-height:32px',
+    'padding:3px',
+    'border:0',
+    'border-radius:0',
+    'background:transparent',
+    'color:' + readTokenColor('--color-about', '#FCB867'),
+    'cursor:' + (isCalendarPage ? 'default' : 'pointer'),
+    'pointer-events:auto',
+  ].join(';');
+  calendarAction.addEventListener('click', function() {
+    if (isCalendarPage) return;
+    if (typeof window._constructFade === 'function') window._constructFade('/calendar/');
+    else window.location.href = '/calendar/';
+  });
+  nav.appendChild(calendarAction);
+
   var exploreAction = document.createElement('button');
   exploreAction.type = 'button';
   exploreAction.className = 'cnav-explore';
@@ -556,7 +625,7 @@
   nav.appendChild(searchAction);
 
   var exploreFocusStyle = document.createElement('style');
-  exploreFocusStyle.textContent = '.cnav-retry:focus-visible,.cnav-explore:focus-visible,.cnav-search:focus-visible,#cnav-mobile-retry:focus-visible,#cnav-mobile-explore:focus-visible,#cnav-mobile-search:focus-visible{outline:3px solid #FCB867;outline-offset:3px;}';
+  exploreFocusStyle.textContent = '.cnav-retry:focus-visible,.cnav-calendar:focus-visible,.cnav-explore:focus-visible,.cnav-search:focus-visible,#cnav-mobile-retry:focus-visible,#cnav-mobile-calendar:focus-visible,#cnav-mobile-explore:focus-visible,#cnav-mobile-search:focus-visible{outline:3px solid #FCB867;outline-offset:3px;}';
   document.head.appendChild(exploreFocusStyle);
 
   document.body.appendChild(nav);
@@ -752,6 +821,34 @@
   ].join(';');
   mRetry.querySelector('svg').style.cssText = 'display:block;width:100%;height:100%';
 
+  var mCalendar = document.createElement('button');
+  mCalendar.id = 'cnav-mobile-calendar';
+  mCalendar.type = 'button';
+  mCalendar.appendChild(createCalendarDaysIcon());
+  mCalendar.setAttribute('aria-label', 'ATL Creative Calendar');
+  if (isCalendarPage) mCalendar.setAttribute('aria-current', 'page');
+  mCalendar.style.cssText = [
+    'position:absolute',
+    'top:72px',
+    'left:calc(50% - 58px)',
+    'display:inline-flex',
+    'align-items:center',
+    'justify-content:center',
+    'width:44px',
+    'height:44px',
+    'padding:7px',
+    'border:2px solid ' + PARTICLE_COLOR,
+    'border-radius:0',
+    'background:' + (isCalendarPage ? PARTICLE_COLOR : SITE_BG),
+    'color:' + (isCalendarPage ? SITE_BG : PARTICLE_COLOR),
+    'cursor:' + (isCalendarPage ? 'default' : 'pointer'),
+    'opacity:0',
+    'transition:opacity 350ms ease',
+    'pointer-events:none',
+    'z-index:2',
+  ].join(';');
+  mCalendar.querySelector('svg').style.cssText = 'display:block;width:100%;height:100%';
+
   var mExplore = document.createElement('button');
   mExplore.id = 'cnav-mobile-explore';
   mExplore.type = 'button';
@@ -761,7 +858,7 @@
   mExplore.style.cssText = [
     'position:absolute',
     'top:72px',
-    'left:50%',
+    'left:calc(50% + 36px)',
     'transform:translateX(-50%)',
     'display:inline-flex',
     'align-items:center',
@@ -791,7 +888,7 @@
   mSearch.style.cssText = [
     'position:absolute',
     'top:72px',
-    'left:calc(50% + 78px)',
+    'left:calc(50% + 86px)',
     'display:inline-flex',
     'align-items:center',
     'justify-content:center',
@@ -816,6 +913,7 @@
   mScrim.appendChild(mWordmark);
   mScrim.appendChild(mBack);
   mScrim.appendChild(mRetry);
+  mScrim.appendChild(mCalendar);
   mScrim.appendChild(mExplore);
   mScrim.appendChild(mSearch);
 
@@ -891,6 +989,8 @@
     exploreAction.style.borderLeftColor = PARTICLE_COLOR;
     exploreAction.style.background = isExplorePage ? PARTICLE_COLOR : 'transparent';
     exploreAction.style.color = isExplorePage ? SITE_BG : PARTICLE_COLOR;
+    calendarAction.style.background = isCalendarPage ? PARTICLE_COLOR : 'transparent';
+    calendarAction.style.color = isCalendarPage ? SITE_BG : PARTICLE_COLOR;
     searchAction.style.background = isSearchPage ? PARTICLE_COLOR : 'transparent';
     searchAction.style.color = isSearchPage ? SITE_BG : PARTICLE_COLOR;
     retryLabel.style.color = PARTICLE_COLOR;
@@ -898,6 +998,9 @@
     mRetry.style.borderColor = PARTICLE_COLOR;
     mRetry.style.background = SITE_BG;
     mRetry.style.color = PARTICLE_COLOR;
+    mCalendar.style.borderColor = PARTICLE_COLOR;
+    mCalendar.style.background = isCalendarPage ? PARTICLE_COLOR : SITE_BG;
+    mCalendar.style.color = isCalendarPage ? SITE_BG : PARTICLE_COLOR;
     mExplore.style.borderColor = PARTICLE_COLOR;
     mExplore.style.background = isExplorePage ? PARTICLE_COLOR : SITE_BG;
     mExplore.style.color = isExplorePage ? SITE_BG : PARTICLE_COLOR;
@@ -1409,6 +1512,8 @@
       mWordmark.style.opacity = '0.82';
       mRetry.style.opacity = '0.82';
       mRetry.style.pointerEvents = 'auto';
+      mCalendar.style.opacity = '0.82';
+      mCalendar.style.pointerEvents = 'auto';
       mExplore.style.opacity = '0.82';
       mExplore.style.pointerEvents = 'auto';
       mSearch.style.opacity = '0.82';
@@ -1432,6 +1537,8 @@
     mBack.style.pointerEvents = 'none';
     mRetry.style.opacity = '0';
     mRetry.style.pointerEvents = 'none';
+    mCalendar.style.opacity = '0';
+    mCalendar.style.pointerEvents = 'none';
     mExplore.style.opacity = '0';
     mExplore.style.pointerEvents = 'none';
     mSearch.style.opacity = '0';
@@ -1519,6 +1626,13 @@
     e.stopPropagation();
     if (typeof window._constructFade === 'function') window._constructFade('/');
     else window.location.href = '/';
+  });
+
+  mCalendar.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (isCalendarPage) return;
+    if (typeof window._constructFade === 'function') window._constructFade('/calendar/');
+    else window.location.href = '/calendar/';
   });
 
   mExplore.addEventListener('click', function(e) {
@@ -1678,10 +1792,11 @@
       var bounds = desktopHeaderBounds(w);
       var dotCount = desktopDots.length;
       var retryWidth = Math.max(22, retryAction.getBoundingClientRect().width);
+      var calendarWidth = Math.max(32, calendarAction.getBoundingClientRect().width);
       var exploreWidth = Math.max(76, exploreAction.getBoundingClientRect().width);
       var searchWidth = Math.max(32, searchAction.getBoundingClientRect().width);
       var minRowWidth = dotCount > 0
-        ? retryWidth + (dotCount * CONFIG.dotSize) + exploreWidth + searchWidth + ((dotCount + 2) * CONFIG.dotGapMin)
+        ? retryWidth + (dotCount * CONFIG.dotSize) + calendarWidth + exploreWidth + searchWidth + ((dotCount + 3) * CONFIG.dotGapMin)
         : 0;
       var availableWidth = Math.max(0, bounds.right - bounds.left);
 
@@ -1697,11 +1812,11 @@
       mRing.style.display  = 'none';
 
       var fittedGap = dotCount > 1
-        ? (availableWidth - retryWidth - (dotCount * CONFIG.dotSize) - exploreWidth - searchWidth) / (dotCount + 2)
+        ? (availableWidth - retryWidth - (dotCount * CONFIG.dotSize) - calendarWidth - exploreWidth - searchWidth) / (dotCount + 3)
         : CONFIG.dotGap;
       fittedGap = Math.max(CONFIG.dotGapMin, Math.min(CONFIG.dotGap, fittedGap));
 
-      var rowWidth = retryWidth + (dotCount * CONFIG.dotSize) + exploreWidth + searchWidth + ((dotCount + 2) * fittedGap);
+      var rowWidth = retryWidth + (dotCount * CONFIG.dotSize) + calendarWidth + exploreWidth + searchWidth + ((dotCount + 3) * fittedGap);
       var minCenter = bounds.left + rowWidth / 2;
       var maxCenter = bounds.right - rowWidth / 2;
       var centerX = Math.max(minCenter, Math.min(maxCenter, w / 2));
@@ -1786,6 +1901,7 @@
       var item = nav.querySelector('[data-venture-key="' + venture.key + '"]');
       if (item) nav.appendChild(item);
     });
+    nav.appendChild(calendarAction);
     nav.appendChild(exploreAction);
     nav.appendChild(searchAction);
     currentVenture = null;

@@ -224,16 +224,38 @@ test("the Search page is a dedicated URL-driven public shell with direct results
   assert.doesNotMatch(analytics, /resultBucket:.*(?:query|value)/);
 });
 
-test("homepage and shared navigation expose accessible Search actions with responsive fit accounting", () => {
+test("shared navigation exposes accessible Search and ATL Creative Calendar actions with responsive fit accounting", () => {
   const home = read("home/index.html");
   const nav = read("js/construct-nav.js");
+  const db = database();
   assert.match(home, /<a href="\/search\/">Search<\/a>/);
   assert.equal((nav.match(/aria-label', 'Search the Construct'/g) || []).length, 2);
   assert.match(nav, /className = 'cnav-search'/);
   assert.match(nav, /id = 'cnav-mobile-search'/);
   assert.match(nav, /isSearchPage.*aria-current/);
   assert.match(nav, /searchWidth/);
-  assert.match(nav, /dotCount \+ 2/);
+  assert.match(nav, /dotCount \+ 3/);
   assert.match(nav, /_constructFade\('\/search\/'\)/);
   assert.match(nav, /#cnav-mobile-search:focus-visible/);
+
+  assert.equal((nav.match(/aria-label', 'ATL Creative Calendar'/g) || []).length, 2);
+  assert.match(nav, /function createCalendarDaysIcon\(\)/);
+  assert.match(nav, /className = 'cnav-calendar'/);
+  assert.match(nav, /id = 'cnav-mobile-calendar'/);
+  assert.match(nav, /isCalendarPage.*aria-current/);
+  assert.match(nav, /calendarWidth/);
+  assert.equal((nav.match(/window\._constructFade\('\/calendar\/'\)/g) || []).length, 2);
+  assert.match(nav, /#cnav-mobile-calendar:focus-visible/);
+  assert.match(nav, /mountManagedFooterLinks\(\[ATL_CREATIVE_CALENDAR_LINK\]\)/);
+  assert.match(nav, /enforceLabel/);
+
+  const footerLink = db.prepare("SELECT id,label,route,color,state,sort_order FROM construct_utility_links WHERE id='utility-atl-creative-calendar'").get();
+  assert.deepEqual({ ...footerLink }, {
+    id: "utility-atl-creative-calendar",
+    label: "ATL Creative Calendar",
+    route: "/calendar/",
+    color: "#F8B468",
+    state: "published",
+    sort_order: 20,
+  });
 });
