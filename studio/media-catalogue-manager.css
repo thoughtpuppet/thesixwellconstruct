@@ -71,6 +71,16 @@
 .mcm-inspector-head h3{margin:.2rem 0 0;overflow-wrap:anywhere}
 .mcm-upload{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:14px}
 .mcm-upload .button{align-self:end}
+.mcm-drop-zone{display:grid;grid-column:1/-1;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;min-height:10rem;padding:18px;border:5px dashed var(--border,#585858);background:#101010;transition:border-color .16s ease,background-color .16s ease}
+.mcm-drop-zone.is-dragging{border-color:var(--color-archive-bright,#b87a32);background:rgba(184,122,50,.12)}
+.mcm-drop-zone[data-has-files="true"]{border-style:solid;border-color:var(--color-archive-bright,#b87a32)}
+.mcm-drop-input{position:absolute;width:1px;height:1px;padding:0;border:0;clip:rect(0 0 0 0);clip-path:inset(50%);overflow:hidden;white-space:nowrap}
+.mcm-drop-copy{display:grid;gap:5px;min-width:0}
+.mcm-drop-copy strong{color:var(--color-archive-bright,#b87a32);font-size:1rem}
+.mcm-drop-copy span,.mcm-drop-selection{color:var(--muted,#aaa);font-size:.72rem;line-height:1.4}
+.mcm-drop-selection{display:flex;grid-column:1/-1;flex-wrap:wrap;gap:7px 12px;align-items:center;min-width:0}
+.mcm-drop-selection strong{color:inherit}.mcm-drop-selection span{min-width:0;overflow-wrap:anywhere}
+.mcm-drop-selection .button{margin-left:auto}
 .mcm-upload-queue{display:grid;gap:8px;padding:0 14px 14px}
 .mcm-upload-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px;background:#101010}
 .mcm-upload-row progress{width:100%}
@@ -90,6 +100,6 @@
 dialog[data-type-dialog],dialog[data-draft-preview-dialog]{max-width:min(54rem,calc(100vw - 32px));max-height:calc(100vh - 32px);padding:16px;border:5px solid var(--color-archive-bright,#b87a32);background:var(--panel,#171717);color:inherit;overflow:auto}
 dialog::backdrop{background:rgba(0,0,0,.8)}
 @media(max-width:900px){.mcm-manager-head{align-items:start}.mcm-modal{width:100%;max-width:none;height:100%;max-height:none;border:0;border-top:5px solid var(--color-archive-bright,#b87a32)}.mcm-overlay{align-items:stretch}.mcm-grid{grid-template-columns:repeat(auto-fill,minmax(165px,1fr))}.mcm-grid--assets{grid-template-columns:repeat(auto-fill,minmax(132px,1fr))}}
-@media(max-width:620px){.mcm-manager-head{display:grid}.mcm-controlbar{grid-template-columns:1fr 1fr}.mcm-search{grid-column:1/-1}.mcm-result-count{align-self:center}.mcm-advanced,.mcm-editor-grid,.mcm-upload,.mcm-intake-form{grid-template-columns:1fr}.mcm-editor-grid .wide{grid-column:auto}.mcm-intake-form>.mcm-inspector-actions{grid-column:auto}.mcm-grid{grid-template-columns:1fr 1fr;gap:10px}.mcm-grid--assets{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.mcm-card-copy{padding:7px}.mcm-card-copy strong{font-size:.78rem}.mcm-card--asset .mcm-card-copy strong{font-size:.7rem}.mcm-reviewbar{align-items:stretch}.mcm-set-item{grid-template-columns:1fr}.mcm-inspector-actions .button{flex:1 1 auto}.mcm-detail-head{grid-template-columns:1fr;align-items:start}.mcm-detail-head>.mcm-primary-badge{justify-self:start}}
+@media(max-width:620px){.mcm-manager-head{display:grid}.mcm-controlbar{grid-template-columns:1fr 1fr}.mcm-search{grid-column:1/-1}.mcm-result-count{align-self:center}.mcm-advanced,.mcm-editor-grid,.mcm-upload,.mcm-intake-form{grid-template-columns:1fr}.mcm-editor-grid .wide{grid-column:auto}.mcm-intake-form>.mcm-inspector-actions{grid-column:auto}.mcm-grid{grid-template-columns:1fr 1fr;gap:10px}.mcm-grid--assets{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.mcm-card-copy{padding:7px}.mcm-card-copy strong{font-size:.78rem}.mcm-card--asset .mcm-card-copy strong{font-size:.7rem}.mcm-reviewbar{align-items:stretch}.mcm-set-item{grid-template-columns:1fr}.mcm-inspector-actions .button{flex:1 1 auto}.mcm-detail-head{grid-template-columns:1fr;align-items:start}.mcm-detail-head>.mcm-primary-badge{justify-self:start}.mcm-drop-zone{grid-template-columns:1fr;min-height:9rem;padding:14px}.mcm-drop-selection{grid-column:auto}.mcm-drop-selection .button{margin-left:0}}
 @media(max-width:420px){.mcm-grid{grid-template-columns:1fr}.mcm-grid--assets{grid-template-columns:repeat(2,minmax(0,1fr))}.mcm-controlbar{grid-template-columns:1fr}.mcm-result-count{justify-self:start}}
 @media(prefers-reduced-motion:reduce){.mcm-shell *{scroll-behavior:auto!important;transition:none!important}}
