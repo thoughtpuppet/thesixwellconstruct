@@ -101,6 +101,68 @@ test("sitewide search adds safe managed pages while preserving the default Archi
   assert.ok(relationship.records.some((record) => record.primary_match.kind === "Relationship"), "relationship fragments must explain how a record was found");
 });
 
+test("sitewide search projects only published Special Project copy and public media context", async () => {
+  const db = database();
+  db.prepare(`INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_at,updated_at)
+    VALUES('self-faith','special_project','node-tattoos','public',0,datetime('now'),datetime('now'))`).run();
+  db.prepare(`INSERT INTO special_project_calls(
+      id,slug,title,summary,artist_statement,status,rate_text,sort_order,profile,allowed_modes_json,
+      application_instructions,participation_terms,series_id,publication_state,updated_at
+    ) VALUES(
+      'self-faith','self-faith','SELF/FAITH','A study of self-belief.','Public artist statement about devotional imagery.',
+      'closed','$100/hr',1,'experimental','["fresh"]','PRIVATE APPLICATION CODE','PRIVATE PARTICIPATION TERMS',
+      'sp-series-classic-cliches','published',datetime('now')
+    )`).run();
+  db.prepare(`INSERT INTO media_assets(
+      id,storage_key,mime_type,alt_text,caption,privacy,state,public_presentation,created_by,created_at,updated_at
+    ) VALUES(
+      'self-faith-public-media','special-projects/self-faith-public.jpg','image/jpeg','SELF/FAITH devotional figure','Approved public media caption.','public','active','inline','test',datetime('now'),datetime('now')
+    )`).run();
+  db.prepare(`INSERT INTO media_assets(
+      id,storage_key,mime_type,alt_text,caption,privacy,state,public_presentation,created_by,created_at,updated_at
+    ) VALUES(
+      'self-faith-private-media','special-projects/self-faith-private.jpg','image/jpeg','PRIVATE MEDIA KEYWORD','Private media caption.','private','active','inline','test',datetime('now'),datetime('now')
+    )`).run();
+  db.prepare(`INSERT INTO special_project_call_media(project_id,media_id,role,sort_order,alt_text_override,created_at,updated_at)
+    VALUES('self-faith','self-faith-public-media','primary',0,'',datetime('now'),datetime('now'))`).run();
+  db.prepare(`INSERT INTO special_project_call_media(project_id,media_id,role,sort_order,alt_text_override,created_at,updated_at)
+    VALUES('self-faith','self-faith-private-media','gallery',1,'PRIVATE OVERRIDE KEYWORD',datetime('now'),datetime('now'))`).run();
+
+  const faith = await payload(db, "/api/search?q=faith&include=pages");
+  const project = faith.records.find((record) => record.entity_id === "self-faith");
+  assert.equal(project?.title, "SELF/FAITH");
+  assert.equal(project?.route, "/tattoos/special-projects/self-faith/");
+  assert.equal(project?.medium_key, "tattoo");
+  assert.equal(project?.result_kind, "Special Project");
+  assert.equal(project?.primary_match.kind, "Title");
+  assert.match(project?.description || "", /self-belief/i);
+  assert.deepEqual(project?.media_context, [{
+    role: "primary",
+    url: "/api/construct/media/self-faith-public-media",
+    alt: "SELF/FAITH devotional figure",
+    caption: "Approved public media caption.",
+  }]);
+  assert.equal(project?.image_url, "/api/construct/media/self-faith-public-media");
+  const serialized = JSON.stringify(project);
+  for (const privateValue of ["PRIVATE APPLICATION CODE", "PRIVATE PARTICIPATION TERMS", "PRIVATE MEDIA KEYWORD", "PRIVATE OVERRIDE KEYWORD"]) {
+    assert.doesNotMatch(serialized, new RegExp(privateValue, "i"));
+  }
+
+  const mediaMatch = await payload(db, "/api/search?q=devotional%20figure&include=pages");
+  assert.equal(mediaMatch.records.find((record) => record.entity_id === "self-faith")?.primary_match.kind, "Media");
+  const privateApplication = await payload(db, "/api/search?q=private%20application%20code&include=pages");
+  assert.ok(!privateApplication.records.some((record) => record.entity_id === "self-faith"));
+
+  db.prepare("UPDATE special_project_calls SET publication_state='draft' WHERE id='self-faith'").run();
+  const draft = await payload(db, "/api/search?q=faith&include=pages");
+  assert.ok(!draft.records.some((record) => record.entity_id === "self-faith"));
+
+  db.prepare("UPDATE special_project_calls SET publication_state='published' WHERE id='self-faith'").run();
+  db.prepare("UPDATE content_entities SET visibility='internal' WHERE id='self-faith'").run();
+  const privateProject = await payload(db, "/api/search?q=faith&include=pages");
+  assert.ok(!privateProject.records.some((record) => record.entity_id === "self-faith"));
+});
+
 test("sitewide search additively includes only approved public calendar events", async () => {
   const db = database();
 

@@ -3208,9 +3208,81 @@ function mergeCalendarSearchRecords(baseRecords, calendarRecords, query) {
   return merged;
 }
 
+function specialProjectSearchRecord(row, media, query) {
+  const q = String(query || "").trim().toLowerCase();
+  const title = String(row.title || "").trim();
+  const descriptionParts = [row.summary, row.artist_statement, row.series_name, row.series_statement]
+    .map((value) => String(value || "").trim())
+    .filter((value, index, values) => value && values.indexOf(value) === index);
+  const description = descriptionParts.join(" ");
+  const publicMedia = (media || []).map((item) => ({
+    role: item.role === "primary" ? "primary" : "gallery",
+    url: item.source_url || (item.storage_key ? `/api/construct/media/${encodeURIComponent(item.media_id)}` : ""),
+    alt: String(item.alt_text_override || item.alt_text || "").trim(),
+    caption: String(item.caption || "").trim(),
+  })).filter((item) => item.url);
+  const titleText = title.toLowerCase();
+  const descriptionMatch = descriptionParts.find((value) => !q || value.toLowerCase().includes(q));
+  const mediaMatch = publicMedia.find((item) => !q || `${item.alt} ${item.caption}`.toLowerCase().includes(q));
+  const titleMatches = !q || titleText.includes(q);
+  if (q && !titleMatches && !descriptionMatch && !mediaMatch) return null;
+
+  const route = `/tattoos/special-projects/${encodeURIComponent(String(row.slug || row.entity_id || ""))}/`;
+  const matches = [];
+  if (titleMatches) matches.push({
+    fragment_type: "page", source_id: row.entity_id, label: "Special Project title",
+    body: title, snippet: title, anchor: "", dossier_anchor: route,
+  });
+  if (descriptionMatch) matches.push({
+    fragment_type: "description", source_id: row.entity_id, label: "Special Project description",
+    body: descriptionMatch, snippet: descriptionMatch.slice(0, 320), anchor: "", dossier_anchor: route,
+  });
+  if (mediaMatch) matches.push({
+    fragment_type: "media", source_id: row.entity_id, label: mediaMatch.alt || "Special Project media",
+    body: `${mediaMatch.alt} ${mediaMatch.caption}`.trim(),
+    snippet: `${mediaMatch.alt} ${mediaMatch.caption}`.trim().slice(0, 320), anchor: "", dossier_anchor: route,
+  });
+
+  let primaryMatch;
+  let relevance;
+  if (titleMatches) {
+    relevance = !q ? 6 : titleText === q ? 0 : titleText.startsWith(q) ? 1 : 2;
+    primaryMatch = !q
+      ? { kind: "Title", label: "Special Project title", snippet: title }
+      : primarySearchMatch({ title, matches }, query);
+  } else if (descriptionMatch) {
+    relevance = 3;
+    primaryMatch = { kind: "Description", label: "Special Project description", snippet: descriptionMatch.slice(0, 320) };
+  } else {
+    relevance = 4;
+    primaryMatch = { kind: "Media", label: mediaMatch.alt || "Special Project media", snippet: `${mediaMatch.alt} ${mediaMatch.caption}`.trim().slice(0, 320) };
+  }
+  const leadMedia = publicMedia.find((item) => item.role === "primary") || publicMedia[0] || null;
+  return {
+    entity_id: row.entity_id,
+    entity_type: "special_project",
+    node_id: "node-tattoos",
+    title,
+    description,
+    summary: description,
+    body: "",
+    route,
+    state: "published",
+    updated_at: row.updated_at,
+    image_url: leadMedia?.url || "",
+    image_alt: leadMedia?.alt || "",
+    media_context: publicMedia,
+    result_kind: "Special Project",
+    matches,
+    match_count: matches.length,
+    primary_match: primaryMatch,
+    search_relevance: relevance,
+  };
+}
+
 async function publicSearchPages(database, query) {
   const pattern = `%${String(query || "").trim().toLowerCase()}%`;
-  const [nodesResult, pathwaysResult, identitiesResult, timelinesResult] = await database.batch([
+  const [nodesResult, pathwaysResult, identitiesResult, timelinesResult, specialProjectsResult, specialProjectMediaResult] = await database.batch([
     database.prepare(`SELECT cn.id entity_id,'construct_node' entity_type,cn.id node_id,cn.name title,cn.route,cn.updated_at
       FROM construct_nodes cn JOIN content_entities ce ON ce.id=cn.id
       WHERE cn.state='published' AND cn.homepage_enabled=1 AND ce.visibility='public' AND lower(cn.name) LIKE ?
@@ -3244,7 +3316,31 @@ async function publicSearchPages(database, query) {
         AND (ce.entity_type<>'person' OR person.id IS NOT NULL)
         AND lower(timeline.title||' '||timeline.description||' '||COALESCE(organization.name,person.name,node.name,'')) LIKE ?
       ORDER BY timeline.sort_order,timeline.title`).bind(pattern),
+    database.prepare(`SELECT spc.id entity_id,spc.slug,spc.title,spc.summary,spc.artist_statement,spc.updated_at,
+        CASE WHEN series_entity.id IS NOT NULL THEN series.name ELSE '' END series_name,
+        CASE WHEN series_entity.id IS NOT NULL THEN series.statement ELSE '' END series_statement
+      FROM special_project_calls spc
+      JOIN content_entities ce ON ce.id=spc.id AND ce.entity_type='special_project' AND ce.visibility='public'
+      LEFT JOIN special_project_series series ON series.id=spc.series_id AND series.state='published'
+      LEFT JOIN content_entities series_entity ON series_entity.id=series.id
+        AND series_entity.entity_type='special_project_series' AND series_entity.visibility='public'
+      WHERE spc.publication_state='published'
+      ORDER BY spc.sort_order,spc.title`),
+    database.prepare(`SELECT spm.project_id,spm.media_id,spm.role,spm.alt_text_override,
+        media.source_url,media.storage_key,media.alt_text,media.caption
+      FROM special_project_call_media spm
+      JOIN special_project_calls spc ON spc.id=spm.project_id AND spc.publication_state='published'
+      JOIN content_entities ce ON ce.id=spc.id AND ce.entity_type='special_project' AND ce.visibility='public'
+      JOIN media_assets media ON media.id=spm.media_id
+      WHERE media.state='active' AND media.privacy='public' AND media.public_presentation='inline'
+        AND media.mime_type LIKE 'image/%'
+      ORDER BY spm.project_id,CASE spm.role WHEN 'primary' THEN 0 ELSE 1 END,spm.sort_order,spm.media_id`),
   ]);
+  const mediaByProject = new Map();
+  for (const item of specialProjectMediaResult.results || []) {
+    if (!mediaByProject.has(item.project_id)) mediaByProject.set(item.project_id, []);
+    mediaByProject.get(item.project_id).push(item);
+  }
   return [
     ...(nodesResult.results || []).map((row) => ({
       ...row, summary: "Construct node", body: "", state: "published",
@@ -3266,6 +3362,7 @@ async function publicSearchPages(database, query) {
       matches: [{ fragment_type: "page", source_id: row.entity_id, label: "Archive timeline", body: row.summary, snippet: row.summary, anchor: "", dossier_anchor: row.route }],
       match_count: 1,
     })),
+    ...(specialProjectsResult.results || []).map((row) => specialProjectSearchRecord(row, mediaByProject.get(row.entity_id) || [], query)).filter(Boolean),
   ];
 }
 
