@@ -374,9 +374,30 @@ function catalogOrderBy(config) {
 }
 
 function appendUniqueLegendEntry(entries,entry){
-  const recordId=text(entry?.record_entity_id,200),href=text(entry?.href,2000);
-  if(entries.some(existing=>(recordId&&text(existing?.record_entity_id,200)===recordId)||(href&&text(existing?.href,2000)===href)))return;
+  const recordId=text(entry?.record_entity_id,200),mediaId=text(entry?.media_id??entry?.mediaId,200),href=text(entry?.href,2000);
+  if(entries.some(existing=>(recordId&&text(existing?.record_entity_id,200)===recordId)||(mediaId&&text(existing?.media_id??existing?.mediaId,200)===mediaId)||(href&&text(existing?.href,2000)===href)))return;
   entries.push(entry);
+}
+
+function appendPublicLegendMediaVariants(entries,mediaEntries,symbol){
+  const symbolName=text(symbol?.name,160);
+  for(const media of mediaEntries){
+    if(media.role!=="legend-variant"||!String(media.mimeType||"").toLowerCase().startsWith("image/"))continue;
+    const authoredAlt=text(media.alt,300),emDashPrefix=`${symbolName} — `,hyphenPrefix=`${symbolName} - `;
+    let variantName=authoredAlt;
+    if(symbolName&&variantName.toLowerCase().startsWith(emDashPrefix.toLowerCase()))variantName=variantName.slice(emDashPrefix.length);
+    else if(symbolName&&variantName.toLowerCase().startsWith(hyphenPrefix.toLowerCase()))variantName=variantName.slice(hyphenPrefix.length);
+    variantName=variantName.replace(/\s+variant$/i,"").trim()||"Image variant";
+    appendUniqueLegendEntry(entries,{
+      name:variantName,
+      style:"Uploaded variant",
+      note:text(media.caption,3000),
+      image_url:media.url,
+      media_id:media.id,
+      publication_state:"published",
+      public_visible:1,
+    });
+  }
 }
 
 async function publicCatalog(request, env, resource, recordSlug = "") {
@@ -454,9 +475,11 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
   for(const appearance of legendArchiveAppearances.results||[]){if(!legendAppearancesBySymbol.has(appearance.symbol_entity_id))legendAppearancesBySymbol.set(appearance.symbol_entity_id,[]);legendAppearancesBySymbol.get(appearance.symbol_entity_id).push(appearance)}
   const records = rows.map((row) => {
     const { reserved_submission_id: _reservationOwner, ...publicRow } = row;
+    const publicMedia=media.get(row.id)||[];
     const archiveAppearances=config.entityType === "visual_symbol"?(legendAppearancesBySymbol.get(row.id)||[]):[];
     const publicVariants=config.entityType === "visual_symbol"?publicLegendInlineEntries(row.variants_json):parseJson(row.variants_json);
     const publicExamples=config.entityType === "visual_symbol"?publicLegendInlineEntries(row.examples_json):parseJson(row.examples_json);
+    if(config.entityType === "visual_symbol")appendPublicLegendMediaVariants(publicVariants,publicMedia,row);
     for(const appearance of archiveAppearances){const href=`/archive/records/${encodeURIComponent(appearance.archive_slug)}/`;if(appearance.appearance_role==="variant")appendUniqueLegendEntry(publicVariants,{name:appearance.title,style:"Historical identity",note:appearance.caption,href,record_entity_id:appearance.record_entity_id,publication_state:"published",public_visible:1});else appendUniqueLegendEntry(publicExamples,{title:appearance.title||appearance.record_title,medium:"Archive",caption:appearance.caption,src:"",href,record_entity_id:appearance.record_entity_id,publication_state:"published",public_visible:1})}
     for(const identityLink of legendIdentityLinks.results||[]){if(identityLink.symbol_entity_id!==row.id)continue;appendUniqueLegendEntry(publicExamples,{title:`${identityLink.organization_name} creative identity`,medium:"About",caption:`The current profile and origin story for ${identityLink.organization_name}.`,src:"",href:`/about/identities/${encodeURIComponent(identityLink.profile_slug)}/`,publication_state:"published",public_visible:1});if(identityLink.timeline_slug)appendUniqueLegendEntry(publicExamples,{title:identityLink.timeline_title||`${identityLink.organization_name} full Archive history`,medium:"Archive",caption:`The authoritative chronology for ${identityLink.organization_name}.`,src:"",href:`/archive/timelines/${encodeURIComponent(identityLink.timeline_slug)}/`,publication_state:"published",public_visible:1})}
     const safePublicRow=config.entityType === "visual_symbol"?{...publicRow,applications_json:JSON.stringify(publicLegendEntries(row.applications_json)),variants_json:JSON.stringify(publicVariants),examples_json:JSON.stringify(publicExamples)}:publicRow;
@@ -479,7 +502,7 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
           reflectionQuestions: Array.isArray(guidance.reflection_questions) ? guidance.reflection_questions : [],
         };
       })(),
-      media: media.get(row.id) || [],
+      media: publicMedia,
       ...(config.entityType === "visual_symbol" ? { archive_appearances: archiveAppearances.map(appearance=>({id:appearance.id,role:appearance.appearance_role,title:appearance.title,caption:appearance.caption,record_entity_id:appearance.record_entity_id,route:`/archive/records/${encodeURIComponent(appearance.archive_slug)}/`})) } : {}),
       ...(resource === "appearances" ? { subjects: subjectsByAppearance.get(row.id) || [], archiveRoute: `/archive/records/${encodeURIComponent(row.slug)}/` } : {}),
     };

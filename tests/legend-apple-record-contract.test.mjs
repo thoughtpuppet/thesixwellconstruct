@@ -168,6 +168,11 @@ test("Studio and public Legend APIs render the existing Apple record and preserv
   assert.equal(payload.record.media[0].id, APPLE_MEDIA_ID);
   assert.equal(payload.record.media[0].role, "legend-variant");
   assert.equal(payload.record.media[0].alt, "Apple — Colored Apple Vector variant");
+  assert.equal(payload.record.variants.length, 1);
+  assert.equal(payload.record.variants[0].name, "Colored Apple Vector");
+  assert.equal(payload.record.variants[0].style, "Uploaded variant");
+  assert.equal(payload.record.variants[0].image_url, `/api/construct/entity-media/${APPLE_MEDIA_ID}`);
+  assert.equal(payload.record.variants[0].media_id, APPLE_MEDIA_ID);
   assert.deepEqual(payload.record.applications.map((entry) => entry.title), ["Fruit and seed", "At the boundary"]);
   assert.equal(payload.record.buildGuidance.essence, "Fruitful knowledge at the edge of permission.");
 
@@ -212,6 +217,8 @@ test("Apple Archive record keeps the canonical symbol primary and the raster att
   assert.equal(legendResponse.status, 200);
   assert.equal(legendPayload.record.media[0].id, APPLE_MEDIA_ID);
   assert.equal(legendPayload.record.media[0].role, "legend-variant");
+  assert.equal(legendPayload.record.variants[0].media_id, APPLE_MEDIA_ID);
+  assert.equal(legendPayload.record.variants[0].image_url, `/api/construct/entity-media/${APPLE_MEDIA_ID}`);
 });
 
 test("Apple canonical page follows the existing public About gate", async () => {
