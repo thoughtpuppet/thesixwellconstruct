@@ -15,6 +15,36 @@ const CREATOR_HANDOFF_TYPES = new Set([
   "cultural-object", "art", "merch", "tattoo-design", "flash", "event", "legend-symbol", "person",
   "place", "organization", "note", "failed-experiment", "blackboard", "origin-thread", "collection", "timeline",
 ]);
+const GALLERY_INTAKE_KINDS = {
+  "design-graphics": {
+    assetRole: "creative_master", lensId: "gallery-lens-works", relationshipTypeId: "rel-depicts",
+    mediaRole: "design-graphic", setType: "series", accepts: new Set(["image", "pdf"]),
+  },
+  "screen-print-process": {
+    assetRole: "editorial_fragment", lensId: "gallery-lens-making", relationshipTypeId: "rel-process-of",
+    mediaRole: "process-video", setType: "series", accepts: new Set(["video"]),
+  },
+  "studio-photographs": {
+    assetRole: "editorial_fragment", lensId: "gallery-lens-studio", relationshipTypeId: "rel-documents",
+    mediaRole: "studio-photograph", setType: "session", accepts: new Set(["image"]),
+  },
+  notes: {
+    assetRole: "editorial_fragment", lensId: "gallery-lens-making", relationshipTypeId: "rel-source-for",
+    mediaRole: "note", setType: "series", accepts: new Set(["image", "pdf"]),
+  },
+  blackboards: {
+    assetRole: "editorial_fragment", lensId: "gallery-lens-making", relationshipTypeId: "rel-process-of",
+    mediaRole: "blackboard-fragment", setType: "series", accepts: new Set(["image"]),
+  },
+  "work-in-progress": {
+    assetRole: "editorial_fragment", lensId: "gallery-lens-making", relationshipTypeId: "rel-process-of",
+    mediaRole: "work-in-progress", setType: "series", accepts: new Set(["image", "video"]),
+  },
+  "notebook-scans": {
+    assetRole: "editorial_fragment", lensId: "gallery-lens-making", relationshipTypeId: "rel-source-for",
+    mediaRole: "notebook-scan", setType: "series", accepts: new Set(["image", "pdf"]),
+  },
+};
 
 function accession(number) {
   const value = Number(number);
@@ -57,6 +87,87 @@ function uniqueIds(value, maximum = 100) {
   return [...new Set((Array.isArray(value) ? value : []).map((item) => text(item, 200)).filter(Boolean))].slice(0, maximum);
 }
 
+function pagination(url, defaultLimit = 24) {
+  const requested = url.searchParams.has("page") || url.searchParams.has("limit");
+  const page = Math.max(1, Math.floor(Number(url.searchParams.get("page")) || 1));
+  const pageSize = Math.min(100, Math.max(1, Math.floor(Number(url.searchParams.get("limit")) || defaultLimit)));
+  return { requested, page, pageSize, offset: (page - 1) * pageSize };
+}
+
+function paginatedPayload(records, total, page, pageSize, extra = {}) {
+  return {
+    records,
+    count: records.length,
+    total,
+    page,
+    page_size: pageSize,
+    total_pages: Math.max(1, Math.ceil(total / pageSize)),
+    ...extra,
+  };
+}
+
+function mediaTypeSql(value, column = "m.mime_type") {
+  if (value === "image") return `lower(${column}) LIKE 'image/%'`;
+  if (value === "video") return `lower(${column}) LIKE 'video/%'`;
+  if (value === "audio") return `lower(${column}) LIKE 'audio/%'`;
+  if (value === "pdf") return `lower(${column})='application/pdf'`;
+  if (value === "document") return `(lower(${column}) NOT LIKE 'image/%' AND lower(${column}) NOT LIKE 'video/%' AND lower(${column}) NOT LIKE 'audio/%' AND lower(${column})<>'application/pdf')`;
+  return "";
+}
+
+function adminMediaFilters(url, { catalogueOnly = false, galleryOnly = false } = {}) {
+  const where = [], values = [];
+  if (catalogueOnly) where.push("catalogue.catalogue_id IS NOT NULL");
+  if (galleryOnly) where.push("gallery.media_id IS NOT NULL", "catalogue.catalogue_id IS NOT NULL");
+  const scope = text(url.searchParams.get("scope"), 40);
+  if (scope === "catalogue") where.push("catalogue.catalogue_id IS NOT NULL");
+  else if (scope === "uncatalogued") where.push("catalogue.catalogue_id IS NULL", "m.state='active'", "COALESCE(m.archive_catalogue_eligible,1)=1");
+  else if (scope === "site_operational") where.push(`(
+    COALESCE(m.archive_catalogue_eligible,1)=0 OR catalogue.source_class='site_asset' OR
+    provenance.asset_role IN ('technical_derivative','site_asset','operational','reference')
+  )`);
+
+  const q = text(url.searchParams.get("q"), 300).toLowerCase();
+  if (q) {
+    const like = `%${q}%`, number = accessionNumber(q.toUpperCase());
+    const clauses = [
+      "lower(COALESCE(m.original_filename,'')) LIKE ?",
+      "lower(COALESCE(m.public_title,'')) LIKE ?",
+      "lower(COALESCE(m.alt_text,'')) LIKE ?",
+      "lower(COALESCE(gallery.title,'')) LIKE ?",
+    ];
+    values.push(like, like, like, like);
+    if (number) { clauses.push("catalogue.catalogue_id=?"); values.push(number); }
+    where.push(`(${clauses.join(" OR ")})`);
+  }
+  const sourceClass = text(url.searchParams.get("source_class"), 40);
+  if (sourceClass) { where.push("catalogue.source_class=?"); values.push(sourceClass); }
+  const galleryState = text(url.searchParams.get("gallery_state") || url.searchParams.get("state"), 40);
+  if (galleryState === "none") where.push("gallery.media_id IS NULL");
+  else if (galleryState) { where.push("gallery.state=?"); values.push(galleryState); }
+  const originality = text(url.searchParams.get("originality"), 40);
+  if (originality) { where.push("provenance.originality=?"); values.push(originality); }
+  const assetRole = text(url.searchParams.get("asset_role"), 40);
+  if (assetRole) { where.push("provenance.asset_role=?"); values.push(assetRole); }
+  const typeClause = mediaTypeSql(text(url.searchParams.get("type"), 40));
+  if (typeClause) where.push(typeClause);
+  const connected = text(url.searchParams.get("connected"), 200).toLowerCase();
+  if (connected) {
+    where.push(`EXISTS (
+      SELECT 1 FROM entity_relationships relation
+      WHERE (relation.source_entity_id=catalogue.entity_id OR relation.target_entity_id=catalogue.entity_id)
+        AND lower(CASE WHEN relation.source_entity_id=catalogue.entity_id THEN relation.target_entity_id ELSE relation.source_entity_id END) LIKE ?
+    )`);
+    values.push(`%${connected}%`);
+  }
+  const setId = text(url.searchParams.get("set_id"), 200);
+  if (setId) {
+    where.push("EXISTS (SELECT 1 FROM gallery_set_items filter_set WHERE filter_set.media_id=m.id AND filter_set.set_id=?)");
+    values.push(setId);
+  }
+  return { clause: where.length ? ` WHERE ${where.join(" AND ")}` : "", values };
+}
+
 const ADMIN_MEDIA_SQL = `SELECT
   m.*,catalogue.catalogue_id,catalogue.entity_id media_entity_id,catalogue.source_class,catalogue.catalogue_state,
   catalogue.admission_basis,catalogue.source_entity_id,catalogue.manual_gallery_approved,
@@ -70,6 +181,7 @@ const ADMIN_MEDIA_SQL = `SELECT
   gallery.occurred_at gallery_occurred_at,gallery.ended_at gallery_ended_at,gallery.focal_x,gallery.focal_y,
   gallery.state gallery_state,gallery.published_at gallery_published_at,gallery.updated_at gallery_updated_at,
   (SELECT derivative_media_id FROM media_asset_variants WHERE master_media_id=m.id AND purpose='public-display') variant_derivative_media_id,
+  (SELECT review_state FROM media_archive_admission_reviews WHERE media_id=m.id) admission_review_state,
   (SELECT COUNT(*) FROM entity_media attachment WHERE attachment.media_id=m.id) attachment_count,
   (SELECT COUNT(*) FROM entity_relationships relation WHERE relation.source_entity_id=catalogue.entity_id OR relation.target_entity_id=catalogue.entity_id) relationship_count
 FROM media_assets m
@@ -193,6 +305,20 @@ async function recordAdmissionSource(database, mediaId) {
     ) ORDER BY public_visible DESC,entity_id LIMIT 1`).bind(mediaId,mediaId,mediaId).first();
 }
 
+function mediaConnectionStatements(database, { mediaId, mediaEntityId, targetEntityId, relationshipTypeId, role, publicVisible, sortOrder = 0, altText = "", caption = "", internalNotes = "Gallery-set intake connection." }) {
+  return [
+    database.prepare(`INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at)
+      VALUES(?,?,?,?,?,?,?,datetime('now'))
+      ON CONFLICT(entity_id,media_id,role) DO UPDATE SET sort_order=excluded.sort_order,public_visible=excluded.public_visible,alt_text_override=excluded.alt_text_override,caption_override=excluded.caption_override`)
+      .bind(targetEntityId,mediaId,role,sortOrder,publicVisible?1:0,altText,caption),
+    database.prepare(`INSERT INTO entity_relationships(id,source_entity_id,target_entity_id,relationship_type_id,public_visible,internal_notes,sort_order,created_by,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,'studio',datetime('now'),datetime('now'))
+      ON CONFLICT(source_entity_id,target_entity_id,relationship_type_id) DO UPDATE SET
+       public_visible=excluded.public_visible,internal_notes=excluded.internal_notes,sort_order=excluded.sort_order,updated_at=datetime('now')`)
+      .bind(id("relationship"),mediaEntityId,targetEntityId,relationshipTypeId,publicVisible?1:0,internalNotes,sortOrder),
+  ];
+}
+
 async function hydrateAdminAssociations(database, records) {
   if (!records.length) return records;
   const lensRows=[],setRows=[],relationRows=[];
@@ -250,12 +376,27 @@ export async function handleMediaCatalogueAdmin(request, env, path) {
   }
   if (admissionReview) {
     if (request.method === "GET") {
-      const rows = (await database.prepare(`${ADMIN_MEDIA_SQL}
-        JOIN media_archive_admission_reviews review ON review.media_id=m.id
-        WHERE review.review_state IN ('pending','deferred')
-        ORDER BY review.prior_catalogue_id,m.created_at,m.id LIMIT 1000`).all()).results || [];
-      const records = await hydrateAdminAssociations(database, rows.map(presentAdminMedia));
-      return json({ records, count:records.length });
+      const url = new URL(request.url), paging = pagination(url), reviewState = text(url.searchParams.get("review_state"), 40);
+      const where = [reviewState === "pending" || reviewState === "deferred" ? "review.review_state=?" : "review.review_state IN ('pending','deferred')"], values = [];
+      if (reviewState === "pending" || reviewState === "deferred") values.push(reviewState);
+      const q = text(url.searchParams.get("q"), 300).toLowerCase();
+      if (q) { where.push("(lower(COALESCE(m.original_filename,'')) LIKE ? OR lower(COALESCE(m.public_title,'')) LIKE ?)"); values.push(`%${q}%`, `%${q}%`); }
+      const typeClause = mediaTypeSql(text(url.searchParams.get("type"), 40));
+      if (typeClause) where.push(typeClause);
+      const from = `${ADMIN_MEDIA_SQL} JOIN media_archive_admission_reviews review ON review.media_id=m.id WHERE ${where.join(" AND ")}`;
+      const counts = await database.prepare(`SELECT
+        SUM(CASE WHEN review_state='pending' THEN 1 ELSE 0 END) pending,
+        SUM(CASE WHEN review_state='deferred' THEN 1 ELSE 0 END) deferred
+        FROM media_archive_admission_reviews WHERE review_state IN ('pending','deferred')`).first();
+      if (!paging.requested) {
+        const rows = (await database.prepare(`${from} ORDER BY review.prior_catalogue_id,m.created_at,m.id LIMIT 1000`).bind(...values).all()).results || [];
+        const records = await hydrateAdminAssociations(database, rows.map((row) => ({ ...presentAdminMedia(row), review_state:row.admission_review_state })));
+        return json({ records, count:records.length, counts:{ pending:Number(counts?.pending)||0, deferred:Number(counts?.deferred)||0 } });
+      }
+      const countRow = await database.prepare(`SELECT COUNT(*) total FROM (${from}) filtered`).bind(...values).first();
+      const rows = (await database.prepare(`${from} ORDER BY review.prior_catalogue_id,m.created_at,m.id LIMIT ? OFFSET ?`).bind(...values,paging.pageSize,paging.offset).all()).results || [];
+      const records = await hydrateAdminAssociations(database, rows.map((row) => ({ ...presentAdminMedia(row), review_state:row.admission_review_state })));
+      return json(paginatedPayload(records,Number(countRow?.total)||0,paging.page,paging.pageSize,{ counts:{ pending:Number(counts?.pending)||0, deferred:Number(counts?.deferred)||0 } }));
     }
     if (request.method === "POST") {
       const body=await readJson(request),mediaIds=uniqueIds(body?.media_ids,500),action=text(body?.action,40);
@@ -351,17 +492,14 @@ export async function handleMediaCatalogueAdmin(request, env, path) {
     if (!source) return failure("Media Asset not found.", 404);
     if (!target) return failure("Connected record not found.", 404);
     if (!relationType) return failure("Relationship type not found.", 404);
-    const role = text(body.role, 100) || "documentation", relationshipId = id("relationship");
-    const statements = [
-      database.prepare(`INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at)
-        VALUES(?,?,?,?,?,?,?,datetime('now'))
-        ON CONFLICT(entity_id,media_id,role) DO UPDATE SET sort_order=excluded.sort_order,public_visible=excluded.public_visible,alt_text_override=excluded.alt_text_override,caption_override=excluded.caption_override`)
-        .bind(target.id, mediaId, role, Number(body.sort_order) || 0, body.public_visible ? 1 : 0, text(body.alt_text_override, 1000), text(body.caption_override, 3000)),
-    ];
-    if (catalogue) statements.push(database.prepare(`INSERT INTO entity_relationships(id,source_entity_id,target_entity_id,relationship_type_id,public_visible,internal_notes,sort_order,created_by,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,'studio',datetime('now'),datetime('now'))
-        ON CONFLICT(source_entity_id,target_entity_id,relationship_type_id) DO UPDATE SET public_visible=excluded.public_visible,internal_notes=excluded.internal_notes,sort_order=excluded.sort_order,updated_at=datetime('now')`)
-        .bind(relationshipId, catalogue.entity_id, target.id, relationType.id, body.public_visible ? 1 : 0, text(body.internal_notes, 3000), Number(body.sort_order) || 0));
+    const role = text(body.role, 100) || "documentation";
+    const statements = catalogue ? mediaConnectionStatements(database,{
+      mediaId,mediaEntityId:catalogue.entity_id,targetEntityId:target.id,relationshipTypeId:relationType.id,role,publicVisible:body.public_visible,
+      sortOrder:Number(body.sort_order)||0,altText:text(body.alt_text_override,1000),caption:text(body.caption_override,3000),internalNotes:text(body.internal_notes,3000),
+    }) : [database.prepare(`INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at)
+      VALUES(?,?,?,?,?,?,?,datetime('now'))
+      ON CONFLICT(entity_id,media_id,role) DO UPDATE SET sort_order=excluded.sort_order,public_visible=excluded.public_visible,alt_text_override=excluded.alt_text_override,caption_override=excluded.caption_override`)
+      .bind(target.id,mediaId,role,Number(body.sort_order)||0,body.public_visible?1:0,text(body.alt_text_override,1000),text(body.caption_override,3000))];
     await database.batch(statements);
     const record = presentAdminMedia(await adminMediaRow(database, mediaId));
     return json({ record: (await hydrateAdminAssociations(database, [record]))[0], linked: true }, { status: 201 });
@@ -371,18 +509,16 @@ export async function handleMediaCatalogueAdmin(request, env, path) {
       const row = await adminMediaRow(database, mediaId); if (!row) return failure("Media Asset not found.", 404);
       return json({ record: (await hydrateAdminAssociations(database, [presentAdminMedia(row)]))[0] });
     }
-    const url = new URL(request.url), rows = (await database.prepare(`${ADMIN_MEDIA_SQL}${libraryView ? "" : " WHERE catalogue.catalogue_id IS NOT NULL"} ORDER BY catalogue.catalogue_id IS NULL,catalogue.catalogue_id DESC,m.created_at DESC LIMIT 1000`).all()).results || [];
-    let records = rows.map(presentAdminMedia);
-    const q = text(url.searchParams.get("q"), 300).toLowerCase(), sourceClass = text(url.searchParams.get("source_class"), 40), galleryState = text(url.searchParams.get("gallery_state"), 40), type = text(url.searchParams.get("type"), 40), originality=text(url.searchParams.get("originality"),40),assetRole=text(url.searchParams.get("asset_role"),40);
-    if (q) records = records.filter((record) => [record.accession, record.original_filename, record.public_title, record.alt_text, record.gallery?.title].some((value) => String(value || "").toLowerCase().includes(q)));
-    if (sourceClass) records = records.filter((record) => record.source_class === sourceClass);
-    if (galleryState === "none") records = records.filter((record) => !record.gallery);
-    else if (galleryState) records = records.filter((record) => record.gallery?.state === galleryState);
-    if (type) records = records.filter((record) => record.media_type === type);
-    if (originality) records = records.filter((record) => record.originality === originality);
-    if (assetRole) records = records.filter((record) => record.asset_role === assetRole);
-    records = await hydrateAdminAssociations(database, records);
-    return json({ records, count: records.length });
+    const url = new URL(request.url), paging = pagination(url), filters = adminMediaFilters(url,{ catalogueOnly:!libraryView });
+    if (!paging.requested) {
+      const rows = (await database.prepare(`${ADMIN_MEDIA_SQL}${filters.clause} ORDER BY catalogue.catalogue_id IS NULL,catalogue.catalogue_id DESC,m.created_at DESC LIMIT 1000`).bind(...filters.values).all()).results || [];
+      const records = await hydrateAdminAssociations(database, rows.map(presentAdminMedia));
+      return json({ records, count: records.length });
+    }
+    const countRow = await database.prepare(`SELECT COUNT(*) total FROM (${ADMIN_MEDIA_SQL}${filters.clause}) filtered`).bind(...filters.values).first();
+    const rows = (await database.prepare(`${ADMIN_MEDIA_SQL}${filters.clause} ORDER BY catalogue.catalogue_id IS NULL,catalogue.catalogue_id DESC,m.created_at DESC LIMIT ? OFFSET ?`).bind(...filters.values,paging.pageSize,paging.offset).all()).results || [];
+    const records = await hydrateAdminAssociations(database, rows.map(presentAdminMedia));
+    return json(paginatedPayload(records,Number(countRow?.total)||0,paging.page,paging.pageSize));
   }
   if (request.method === "PATCH" && mediaId) {
     const body = await readJson(request); if (!body) return failure("Send a JSON object.");
@@ -443,12 +579,66 @@ async function publishGallerySelection(database, mediaIds) {
 }
 
 export async function handleGalleryAdmin(request, env, path) {
+  const intakeMatch = path === "/api/admin/gallery-intakes";
   const setItemsMatch = path.match(/^\/api\/admin\/gallery-sets\/([^/]+)\/items$/);
   const setMatch = path.match(/^\/api\/admin\/gallery-sets(?:\/([^/]+))?$/);
   const batchMatch = path === "/api/admin/gallery/batch";
   const entryMatch = path.match(/^\/api\/admin\/gallery(?:\/([^/]+))?(?:\/(publish|hide|archive))?$/);
-  if (!setItemsMatch && !setMatch && !entryMatch && !batchMatch && path !== "/api/admin/gallery-lenses") return null;
+  if (!intakeMatch && !setItemsMatch && !setMatch && !entryMatch && !batchMatch && path !== "/api/admin/gallery-lenses") return null;
   const database = db(env);
+  if (intakeMatch) {
+    if (request.method !== "POST") return failure("Method not allowed.",405);
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+    const mediaIds=uniqueIds(body.media_ids,50),targetEntityIds=uniqueIds(body.target_entity_ids,12),intakeKind=text(body.intake_kind,80),config=GALLERY_INTAKE_KINDS[intakeKind];
+    const title=text(body.title,300),setSlug=slug(body.slug||title),publication=text(body.publication,40)||"draft",creatorCredit=text(body.creator_credit,500)||"Six.Well";
+    if(!mediaIds.length)return failure("Upload or choose at least one master asset.");
+    if(!config)return failure("Choose a supported Gallery intake family.");
+    if(!title||!setSlug)return failure("A Gallery set title is required.");
+    if(!new Set(["draft","published"]).has(publication))return failure("Choose a private draft or public publication state.");
+    if(await database.prepare("SELECT id FROM gallery_sets WHERE slug=?").bind(setSlug).first())return failure("That Gallery set slug is already in use.",409);
+
+    const mediaPlaceholders=mediaIds.map(()=>"?").join(","),mediaRows=(await database.prepare(`SELECT media.*,provenance.sha256,provenance.asset_role,
+        EXISTS(SELECT 1 FROM media_asset_variants variant WHERE variant.derivative_media_id=media.id) is_derivative,
+        (SELECT state FROM gallery_entries gallery WHERE gallery.media_id=media.id) gallery_state
+      FROM media_assets media JOIN media_asset_provenance provenance ON provenance.media_id=media.id
+      WHERE media.id IN (${mediaPlaceholders})`).bind(...mediaIds).all()).results||[];
+    if(mediaRows.length!==mediaIds.length)return failure("One or more selected master assets no longer exist.",404);
+    const invalidMedia=mediaRows.find(row=>row.state!=="active"||Number(row.archive_catalogue_eligible)===0||Number(row.is_derivative)===1||!config.accepts.has(mediaType(row.mime_type)));
+    if(invalidMedia)return failure(`${invalidMedia.original_filename||invalidMedia.id} is not an eligible ${intakeKind.replaceAll("-"," ")} master.`,409);
+    if(targetEntityIds.length){
+      const targetPlaceholders=targetEntityIds.map(()=>"?").join(","),targetRows=(await database.prepare(`SELECT id FROM content_entities WHERE id IN (${targetPlaceholders}) AND entity_type<>'media_asset'`).bind(...targetEntityIds).all()).results||[];
+      if(targetRows.length!==targetEntityIds.length)return failure("One or more Archive connections are unavailable.",404);
+    }
+
+    const setId=id("gallery-set"),publicVisible=body.connection_public_visible===true;
+    try{
+      for(const mediaId of mediaIds){
+        const source=mediaRows.find(row=>row.id===mediaId),parts=String(source.original_filename||"").split("."),extension=parts.length>1?parts.pop().toLowerCase():"";
+        await database.prepare(`UPDATE media_asset_provenance SET originality='sixwell_original',asset_role=?,creator_credit=?,
+          original_format=CASE WHEN trim(original_format)='' THEN ? ELSE original_format END,
+          import_source=CASE WHEN trim(import_source)='' THEN 'studio-gallery-intake' ELSE import_source END,
+          updated_by='studio',updated_at=datetime('now') WHERE media_id=?`).bind(config.assetRole,creatorCredit,extension,mediaId).run();
+        const record=await admitOriginalMedia(database,mediaId,{basis:"direct",publish:publication==="published"||source.gallery_state==="published"});
+        await database.prepare(`INSERT INTO gallery_entry_lenses(media_id,lens_id,sort_order,created_at)
+          VALUES(?,?,1,datetime('now')) ON CONFLICT(media_id,lens_id) DO UPDATE SET sort_order=excluded.sort_order`).bind(mediaId,config.lensId).run();
+        const statements=[];
+        for(const targetEntityId of targetEntityIds)statements.push(...mediaConnectionStatements(database,{
+          mediaId,mediaEntityId:record.media_entity_id,targetEntityId,relationshipTypeId:config.relationshipTypeId,role:config.mediaRole,publicVisible,
+        }));
+        for(let offset=0;offset<statements.length;offset+=80)await database.batch(statements.slice(offset,offset+80));
+      }
+      const setStatements=[database.prepare(`INSERT INTO gallery_sets(id,slug,title,summary,set_type,cover_media_id,date_precision,state,published_at,sort_order,created_by,updated_by,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,'undated',?,CASE WHEN ?='published' THEN datetime('now') ELSE NULL END,0,'studio','studio',datetime('now'),datetime('now'))`)
+        .bind(setId,setSlug,title,text(body.summary,5000),config.setType,mediaIds[0],publication,publication)];
+      mediaIds.forEach((mediaId,index)=>setStatements.push(database.prepare("INSERT INTO gallery_set_items(set_id,media_id,sort_order,created_at) VALUES(?,?,?,datetime('now'))").bind(setId,mediaId,index+1)));
+      await database.batch(setStatements);
+    }catch(error){
+      if(/UNIQUE constraint failed.*slug/i.test(String(error?.message||error)))return failure("That Gallery set slug is already in use.",409);
+      throw error;
+    }
+    const rows=[];for(const mediaId of mediaIds)rows.push(presentAdminMedia(await adminMediaRow(database,mediaId)));
+    return json({record:{...await database.prepare("SELECT * FROM gallery_sets WHERE id=?").bind(setId).first(),item_count:mediaIds.length},records:await hydrateAdminAssociations(database,rows),connections:{target_entity_ids:targetEntityIds,public_visible:publicVisible},intake_kind:intakeKind},{status:201});
+  }
   if (path === "/api/admin/gallery-lenses") {
     if (request.method !== "GET") return failure("Method not allowed.", 405);
     const records = (await database.prepare("SELECT * FROM gallery_lenses WHERE state='active' ORDER BY sort_order,name").all()).results || [];
@@ -476,7 +666,28 @@ export async function handleGalleryAdmin(request, env, path) {
     if (request.method === "GET") {
       const rows = (await database.prepare(`SELECT set_record.*,(SELECT COUNT(*) FROM gallery_set_items item WHERE item.set_id=set_record.id) item_count FROM gallery_sets set_record ${setId ? "WHERE set_record.id=?" : ""} ORDER BY set_record.sort_order,set_record.title`).bind(...(setId ? [setId] : [])).all()).results || [];
       if (setId && !rows[0]) return failure("Gallery set not found.", 404);
-      return json(setId ? { record: rows[0] } : { records: rows, count: rows.length });
+      if (!setId) return json({ records: rows, count: rows.length });
+      const memberRows = (await database.prepare(`SELECT
+          m.id,m.original_filename,m.mime_type,m.byte_size,
+          catalogue.catalogue_id,gallery.title gallery_title,gallery.state gallery_state,
+          detail_item.sort_order
+        FROM gallery_set_items detail_item
+        JOIN media_assets m ON m.id=detail_item.media_id
+        JOIN media_catalogue_entries catalogue ON catalogue.media_id=m.id AND catalogue.catalogue_state='active'
+        JOIN gallery_entries gallery ON gallery.media_id=m.id
+        WHERE detail_item.set_id=?
+        ORDER BY detail_item.sort_order,m.id`).bind(setId).all()).results || [];
+      const items = memberRows.map((row)=>({
+        id:row.id,
+        accession:accession(row.catalogue_id),
+        original_filename:row.original_filename,
+        mime_type:row.mime_type,
+        media_type:mediaType(row.mime_type),
+        byte_size:row.byte_size,
+        sort_order:Number(row.sort_order)||0,
+        gallery:{ title:row.gallery_title, state:row.gallery_state },
+      }));
+      return json({ record: rows[0], items });
     }
     const body = await readJson(request); if (!body) return failure("Send a JSON object.");
     if (request.method === "POST" && !setId) {
@@ -521,9 +732,17 @@ export async function handleGalleryAdmin(request, env, path) {
       const row = await adminMediaRow(database, mediaId); if (!row?.gallery_state) return failure("Gallery entry not found.",404);
       return json({ record: (await hydrateAdminAssociations(database,[presentAdminMedia(row)]))[0] });
     }
-    const rows = (await database.prepare(`${ADMIN_MEDIA_SQL} WHERE gallery.media_id IS NOT NULL AND catalogue.catalogue_id IS NOT NULL ORDER BY CASE gallery.state WHEN 'draft' THEN 0 WHEN 'hidden' THEN 1 WHEN 'published' THEN 2 ELSE 3 END,gallery.updated_at DESC`).all()).results || [];
+    const url = new URL(request.url), paging = pagination(url), filters = adminMediaFilters(url,{ galleryOnly:true });
+    const order = " ORDER BY CASE gallery.state WHEN 'draft' THEN 0 WHEN 'hidden' THEN 1 WHEN 'published' THEN 2 ELSE 3 END,gallery.updated_at DESC";
+    if (!paging.requested) {
+      const rows = (await database.prepare(`${ADMIN_MEDIA_SQL}${filters.clause}${order}`).bind(...filters.values).all()).results || [];
+      const records = await hydrateAdminAssociations(database, rows.map(presentAdminMedia));
+      return json({ records, count: records.length });
+    }
+    const countRow = await database.prepare(`SELECT COUNT(*) total FROM (${ADMIN_MEDIA_SQL}${filters.clause}) filtered`).bind(...filters.values).first();
+    const rows = (await database.prepare(`${ADMIN_MEDIA_SQL}${filters.clause}${order} LIMIT ? OFFSET ?`).bind(...filters.values,paging.pageSize,paging.offset).all()).results || [];
     const records = await hydrateAdminAssociations(database, rows.map(presentAdminMedia));
-    return json({ records, count: records.length });
+    return json(paginatedPayload(records,Number(countRow?.total)||0,paging.page,paging.pageSize));
   }
   if (request.method === "POST" && !action && !mediaId) {
     const body = await readJson(request), sourceMediaId = text(body?.media_id,200); if (!sourceMediaId) return failure("Choose a Media Asset.");

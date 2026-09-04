@@ -271,6 +271,170 @@ test("public and Studio Gallery hydration returns catalogues larger than one SQL
   assert.equal(studioIndex.payload.records.length,expected);
 });
 
+test("Studio media workbench endpoints paginate, filter, preserve legacy shapes, and defer detail hydration", async () => {
+  const sql=database(),env=environment(sql);
+  const insertMedia=sql.prepare(`INSERT INTO media_assets(id,source_url,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)
+    VALUES(?,?,?,?,?,1,'internal','active','test',datetime('now'),datetime('now'),'hidden',?)`);
+  for(let index=0;index<31;index+=1){
+    const mediaId=`media-workbench-${String(index).padStart(2,"0")}`,operational=index%7===0;
+    insertMedia.run(mediaId,`/assets/workbench/${mediaId}.${index%3===0?"mp4":"png"}`,"",`${mediaId}.${index%3===0?"mp4":"png"}`,index%3===0?"video/mp4":"image/png",operational?0:1);
+    sql.prepare("UPDATE media_asset_provenance SET originality=?,asset_role=? WHERE media_id=?").run(operational?"external_source":"unknown",operational?"operational":"unclassified",mediaId);
+  }
+  const legacy=await api(env,"/api/admin/media-library",{admin:true});
+  assert.equal(legacy.response.status,200);
+  assert.equal(Object.hasOwn(legacy.payload,"total_pages"),false,"calls without pagination keep the legacy response shape");
+
+  const first=await api(env,"/api/admin/media-library?page=1&limit=24&scope=all",{admin:true});
+  assert.equal(first.response.status,200);
+  assert.equal(first.payload.records.length,24);
+  assert.equal(first.payload.page,1);
+  assert.equal(first.payload.page_size,24);
+  assert.equal(first.payload.total_pages,Math.ceil(first.payload.total/24));
+  const second=await api(env,"/api/admin/media-library?page=2&limit=24&scope=all",{admin:true});
+  assert.equal(second.payload.page,2);
+  assert.ok(second.payload.records.length>0&&second.payload.records.length<=24);
+  assert.equal(new Set([...first.payload.records,...second.payload.records].map(record=>record.id)).size,first.payload.records.length+second.payload.records.length);
+
+  const catalogue=await api(env,"/api/admin/media-library?page=1&limit=24&scope=catalogue",{admin:true});
+  assert.ok(catalogue.payload.records.every(record=>record.accession));
+  const uncatalogued=await api(env,"/api/admin/media-library?page=1&limit=100&scope=uncatalogued",{admin:true});
+  assert.ok(uncatalogued.payload.records.some(record=>record.id==="media-workbench-01"));
+  assert.ok(uncatalogued.payload.records.every(record=>!record.accession&&Number(record.archive_catalogue_eligible)!==0));
+  const operational=await api(env,"/api/admin/media-library?page=1&limit=100&scope=site_operational&asset_role=operational",{admin:true});
+  assert.ok(operational.payload.records.length>=5);
+  assert.ok(operational.payload.records.every(record=>record.asset_role==="operational"));
+  const videos=await api(env,"/api/admin/media-library?page=1&limit=100&scope=all&type=video&q=media-workbench",{admin:true});
+  assert.ok(videos.payload.records.length>=10);
+  assert.ok(videos.payload.records.every(record=>record.media_type==="video"));
+
+  const galleryPage=await api(env,"/api/admin/gallery?page=1&limit=5&state=published&type=image",{admin:true});
+  assert.equal(galleryPage.payload.records.length,Math.min(5,galleryPage.payload.total));
+  assert.ok(galleryPage.payload.records.every(record=>record.gallery.state==="published"&&record.media_type==="image"));
+  const sample=galleryPage.payload.records[0];
+  const detail=await api(env,`/api/admin/gallery/${sample.id}`,{admin:true});
+  assert.ok(Array.isArray(detail.payload.record.relationships));
+  assert.ok(Array.isArray(detail.payload.record.sets));
+
+  const set=sql.prepare("SELECT id FROM gallery_sets WHERE EXISTS (SELECT 1 FROM gallery_set_items item WHERE item.set_id=gallery_sets.id) ORDER BY id LIMIT 1").get();
+  const setDetail=await api(env,`/api/admin/gallery-sets/${set.id}`,{admin:true});
+  assert.equal(setDetail.response.status,200);
+  assert.equal(setDetail.payload.items.length,setDetail.payload.record.item_count);
+  assert.ok(setDetail.payload.items.every(record=>record.accession&&record.gallery?.title&&Number(record.sort_order)>0));
+});
+
+test("admission review pagination distinguishes pending from deferred and reports both counts", async () => {
+  const sql=database(),env=environment(sql);
+  const candidates=sql.prepare("SELECT media_id FROM media_archive_admission_reviews ORDER BY media_id LIMIT 3").all();
+  assert.ok(candidates.length>=3);
+  sql.prepare("UPDATE media_archive_admission_reviews SET review_state='pending' WHERE media_id IN (?,?)").run(candidates[0].media_id,candidates[1].media_id);
+  sql.prepare("UPDATE media_archive_admission_reviews SET review_state='deferred' WHERE media_id=?").run(candidates[2].media_id);
+  const pending=await api(env,"/api/admin/media-admission-review?page=1&limit=1&review_state=pending",{admin:true});
+  assert.equal(pending.response.status,200);
+  assert.equal(pending.payload.page_size,1);
+  assert.ok(pending.payload.total>=2);
+  assert.ok(pending.payload.records.every(record=>record.review_state==="pending"));
+  assert.equal(pending.payload.counts.pending,pending.payload.total);
+  assert.ok(pending.payload.counts.deferred>=1);
+  const deferred=await api(env,"/api/admin/media-admission-review?page=1&limit=24&review_state=deferred",{admin:true});
+  assert.ok(deferred.payload.records.length>=1);
+  assert.ok(deferred.payload.records.every(record=>record.review_state==="deferred"));
+  assert.equal(deferred.payload.total,deferred.payload.counts.deferred);
+});
+
+test("Gallery-set intake preserves master provenance and connects every design graphic to several Archive nodes privately", async () => {
+  const sql=database(),env=environment(sql),targets=sql.prepare("SELECT id FROM content_entities WHERE entity_type<>'media_asset' ORDER BY id LIMIT 2").all();
+  assert.equal(targets.length,2);
+  const insert=sql.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)
+    VALUES(?,?,?,?,1,'internal','active','test',datetime('now'),datetime('now'),'hidden',1)`);
+  insert.run("media-intake-design-a","intake/design-a.png","sixwell-mark-a.png","image/png");
+  insert.run("media-intake-design-b","intake/design-b.svg","sixwell-mark-b.svg","image/svg+xml");
+  const hashes=["a".repeat(64),"b".repeat(64)];
+  sql.prepare("UPDATE media_asset_provenance SET sha256=?,raw_metadata_json=? WHERE media_id=?").run(hashes[0],'{"capture":"preserved-a"}',"media-intake-design-a");
+  sql.prepare("UPDATE media_asset_provenance SET sha256=?,raw_metadata_json=? WHERE media_id=?").run(hashes[1],'{"capture":"preserved-b"}',"media-intake-design-b");
+
+  const intake=await api(env,"/api/admin/gallery-intakes",{method:"POST",admin:true,body:{
+    intake_kind:"design-graphics",media_ids:["media-intake-design-a","media-intake-design-b"],title:"Identity studies",slug:"identity-studies-intake",
+    summary:"Two related Six.Well design studies.",publication:"draft",creator_credit:"Six.Well",target_entity_ids:targets.map(row=>row.id),connection_public_visible:false,
+  }});
+  assert.equal(intake.response.status,201);
+  assert.equal(intake.payload.record.state,"draft");
+  assert.equal(intake.payload.record.set_type,"series");
+  assert.equal(intake.payload.record.item_count,2);
+  assert.deepEqual(intake.payload.connections.target_entity_ids,targets.map(row=>row.id));
+  for(const [index,mediaId] of ["media-intake-design-a","media-intake-design-b"].entries()){
+    const media=sql.prepare("SELECT original_filename,storage_key,privacy,public_presentation FROM media_assets WHERE id=?").get(mediaId);
+    assert.equal(media.privacy,"internal");
+    assert.equal(media.public_presentation,"hidden");
+    assert.match(media.original_filename,/sixwell-mark/);
+    assert.match(media.storage_key,/intake\/design/);
+    const provenance=sql.prepare("SELECT sha256,originality,asset_role,creator_credit,raw_metadata_json FROM media_asset_provenance WHERE media_id=?").get(mediaId);
+    assert.deepEqual({...provenance},{sha256:hashes[index],originality:"sixwell_original",asset_role:"creative_master",creator_credit:"Six.Well",raw_metadata_json:`{"capture":"preserved-${index?"b":"a"}"}`});
+    assert.equal(sql.prepare("SELECT state FROM gallery_entries WHERE media_id=?").get(mediaId).state,"draft");
+    assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entry_lenses WHERE media_id=? AND lens_id='gallery-lens-works'").get(mediaId).count,1);
+    assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_media WHERE media_id=? AND role='design-graphic' AND public_visible=0").get(mediaId).count,2);
+    assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_relationships relation JOIN media_catalogue_entries catalogue ON catalogue.entity_id=relation.source_entity_id WHERE catalogue.media_id=? AND relation.relationship_type_id='rel-depicts' AND relation.public_visible=0").get(mediaId).count,2);
+  }
+  const publicGallery=await api(env,"/api/gallery");
+  assert.ok(!publicGallery.payload.records.some(record=>intake.payload.records.some(item=>item.accession===record.accession)));
+});
+
+test("Gallery-set intake maps process videos and studio photographs to their focused lenses while keeping publication explicit", async () => {
+  const sql=database(),env=environment(sql),target=sql.prepare("SELECT id FROM content_entities WHERE entity_type<>'media_asset' AND visibility='public' ORDER BY id LIMIT 1").get();
+  const insert=sql.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)
+    VALUES(?,?,?,?,1,'internal','active','test',datetime('now'),datetime('now'),'hidden',1)`);
+  insert.run("media-intake-print-video","intake/print.mp4","pulling-red-ink.mp4","video/mp4");
+  insert.run("media-intake-studio-photo","intake/studio.jpg","screen-rack.jpg","image/jpeg");
+  const process=await api(env,"/api/admin/gallery-intakes",{method:"POST",admin:true,body:{intake_kind:"screen-print-process",media_ids:["media-intake-print-video"],title:"Pulling red ink",publication:"published",target_entity_ids:[target.id],connection_public_visible:true}});
+  const studio=await api(env,"/api/admin/gallery-intakes",{method:"POST",admin:true,body:{intake_kind:"studio-photographs",media_ids:["media-intake-studio-photo"],title:"Screen rack afternoon",publication:"draft",target_entity_ids:[target.id],connection_public_visible:false}});
+  assert.equal(process.response.status,201);
+  assert.equal(process.payload.record.state,"published");
+  assert.equal(process.payload.record.set_type,"series");
+  assert.equal(studio.response.status,201);
+  assert.equal(studio.payload.record.state,"draft");
+  assert.equal(studio.payload.record.set_type,"session");
+  assert.deepEqual({...sql.prepare("SELECT originality,asset_role FROM media_asset_provenance WHERE media_id='media-intake-print-video'").get()},{originality:"sixwell_original",asset_role:"editorial_fragment"});
+  assert.deepEqual({...sql.prepare("SELECT originality,asset_role FROM media_asset_provenance WHERE media_id='media-intake-studio-photo'").get()},{originality:"sixwell_original",asset_role:"editorial_fragment"});
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entry_lenses WHERE media_id='media-intake-print-video' AND lens_id='gallery-lens-making'").get().count,1);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entry_lenses WHERE media_id='media-intake-studio-photo' AND lens_id='gallery-lens-studio'").get().count,1);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_media WHERE media_id='media-intake-print-video' AND role='process-video' AND public_visible=1").get().count,1);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_media WHERE media_id='media-intake-studio-photo' AND role='studio-photograph' AND public_visible=0").get().count,1);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_relationships relation JOIN media_catalogue_entries catalogue ON catalogue.entity_id=relation.source_entity_id WHERE catalogue.media_id='media-intake-print-video' AND relation.relationship_type_id='rel-process-of' AND relation.public_visible=1").get().count,1);
+  const publicSet=await api(env,`/api/gallery/sets/${process.payload.record.slug}`);
+  assert.equal(publicSet.response.status,200);
+  assert.equal(publicSet.payload.records.length,1);
+  assert.equal(publicSet.payload.records[0].mediaType,"video");
+  const invalid=await api(env,"/api/admin/gallery-intakes",{method:"POST",admin:true,body:{intake_kind:"screen-print-process",media_ids:["media-intake-studio-photo"],title:"Wrong family",publication:"draft"}});
+  assert.equal(invalid.response.status,409);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_sets WHERE title='Wrong family'").get().count,0);
+});
+
+test("Gallery-set intake maps Notes, Blackboards, WIP, and Notebook scans without flattening their Archive meaning", async () => {
+  const sql=database(),env=environment(sql),target=sql.prepare("SELECT id FROM content_entities WHERE entity_type<>'media_asset' AND visibility='public' ORDER BY id LIMIT 1").get();
+  const insert=sql.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)
+    VALUES(?,?,?,?,1,'internal','active','test',datetime('now'),datetime('now'),'hidden',1)`);
+  const cases=[
+    {kind:"notes",id:"media-intake-note",file:"archive-note.jpg",mime:"image/jpeg",role:"note",relationship:"rel-source-for"},
+    {kind:"blackboards",id:"media-intake-blackboard",file:"south-wall.jpg",mime:"image/jpeg",role:"blackboard-fragment",relationship:"rel-process-of"},
+    {kind:"work-in-progress",id:"media-intake-wip",file:"layer-in-progress.mp4",mime:"video/mp4",role:"work-in-progress",relationship:"rel-process-of"},
+    {kind:"notebook-scans",id:"media-intake-notebook",file:"notebook-pages.pdf",mime:"application/pdf",role:"notebook-scan",relationship:"rel-source-for"},
+  ];
+  for(const item of cases){
+    insert.run(item.id,`intake/${item.file}`,item.file,item.mime);
+    const response=await api(env,"/api/admin/gallery-intakes",{method:"POST",admin:true,body:{intake_kind:item.kind,media_ids:[item.id],title:`${item.kind} intake`,publication:"draft",target_entity_ids:[target.id],connection_public_visible:false}});
+    assert.equal(response.response.status,201,item.kind);
+    assert.equal(response.payload.record.set_type,"series",item.kind);
+    assert.deepEqual({...sql.prepare("SELECT originality,asset_role FROM media_asset_provenance WHERE media_id=?").get(item.id)},{originality:"sixwell_original",asset_role:"editorial_fragment"},item.kind);
+    assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entry_lenses WHERE media_id=? AND lens_id='gallery-lens-making'").get(item.id).count,1,item.kind);
+    assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_media WHERE media_id=? AND role=? AND public_visible=0").get(item.id,item.role).count,1,item.kind);
+    assert.equal(sql.prepare(`SELECT COUNT(*) count FROM entity_relationships relation JOIN media_catalogue_entries catalogue ON catalogue.entity_id=relation.source_entity_id
+      WHERE catalogue.media_id=? AND relation.relationship_type_id=? AND relation.public_visible=0`).get(item.id,item.relationship).count,1,item.kind);
+  }
+  insert.run("media-intake-blackboard-pdf","intake/board.pdf","board.pdf","application/pdf");
+  const invalid=await api(env,"/api/admin/gallery-intakes",{method:"POST",admin:true,body:{intake_kind:"blackboards",media_ids:["media-intake-blackboard-pdf"],title:"Blackboard PDF mismatch",publication:"draft"}});
+  assert.equal(invalid.response.status,409);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_sets WHERE title='Blackboard PDF mismatch'").get().count,0);
+});
+
 test("checksum preflight and resumable creation reuse an existing Media Asset before uploading bytes", async () => {
   const sql = database(), env = environment(sql, new NoMultipartBucket());
   const existing = sql.prepare("SELECT media_id,sha256 FROM media_catalogue_entries WHERE sha256 IS NOT NULL ORDER BY catalogue_id LIMIT 1").get();
@@ -489,6 +653,30 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studio, /data-gallery-select-all/);
   assert.match(studio, /data-gallery-publish-selected/);
   assert.match(studio, /data-gallery-set-selected-form/);
+  assert.match(studio, /pageSize:24/);
+  assert.match(studio, /data-primary-card/);
+  assert.match(studio, /data-open-upload/);
+  assert.match(studio, /data-open-intake/);
+  assert.match(studio, /data-gallery-intake-form/);
+  assert.match(studio, /design-graphics/);
+  assert.match(studio, /screen-print-process/);
+  assert.match(studio, /studio-photographs/);
+  assert.match(studio, /notes/);
+  assert.match(studio, /blackboards/);
+  assert.match(studio, /work-in-progress/);
+  assert.match(studio, /notebook-scans/);
+  assert.match(studio, /target_entity_ids/);
+  assert.match(studio, /connection_public_visible/);
+  assert.match(studio, /\/api\/admin\/gallery-intakes/);
+  assert.match(studio, /data-select-mode/);
+  assert.match(studio, /Admission Review/);
+  assert.match(studio, /Deferred/);
+  assert.match(studio, /Identity/);
+  assert.match(studio, /Provenance/);
+  assert.match(studio, /Connections/);
+  assert.match(studio, /Presentation/);
+  assert.match(studio, /Organization/);
+  assert.match(studio, /Display/);
   assert.match(studio, /Site asset · not part of Public Gallery/);
   assert.match(studio, /\/api\/admin\/gallery\/batch/);
   assert.match(studio, /display_media_id/);
@@ -497,11 +685,12 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studio, /media-handoffs/);
   assert.doesNotMatch(studio, /crypto\.subtle\.digest\('SHA-256',b\)/);
   assert.match(studioShell, /\["gallery","Public Gallery"\]/);
-  assert.match(studioStyles,/height:\s*clamp\(34rem,72vh,56rem\)/);
-  assert.match(studioStyles,/\.mcm-workspace\s*>\s*\.mcm-editor[\s\S]{0,180}overflow:\s*auto/);
-  assert.match(studioStyles,/@media \(max-width:900px\)[\s\S]{0,180}height:auto/);
-  assert.match(studioStyles,/\.mcm-workspace\s*>\s*\.mcm-editor[\s\S]{0,80}grid-row:1/);
-  assert.match(studioStyles,/\.mcm-list\{grid-row:2;max-height:70vh;overflow:auto/);
+  assert.match(studioStyles,/\.mcm-grid\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(190px,1fr\)\)/);
+  assert.match(studioStyles,/\.mcm-overlay\{position:fixed/);
+  assert.match(studioStyles,/\.mcm-intake-form fieldset[^}]*border:5px/);
+  assert.match(studioStyles,/\.mcm-inspector-actions\{position:sticky/);
+  assert.match(studioStyles,/@media\(max-width:900px\)[^{]*\{[\s\S]{0,220}\.mcm-inspector,\.mcm-modal\{width:100%/);
+  assert.match(studioStyles,/@media\(prefers-reduced-motion:reduce\)/);
   assert.match(navigation, /utilityLinks/);
   assert.match(navigation, /mountManagedFooterLinks\(utilityLinks\)/);
   assert.match(navigation, /data-construct-footer-link/);
