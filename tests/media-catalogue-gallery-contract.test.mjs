@@ -408,15 +408,16 @@ test("Gallery-set intake maps process videos and studio photographs to their foc
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_sets WHERE title='Wrong family'").get().count,0);
 });
 
-test("Gallery-set intake maps Notes, Blackboards, WIP, and Notebook scans without flattening their Archive meaning", async () => {
+test("Gallery-set intake maps Notes, Blackboards, WIP, Notebook scans, and Ephemera without flattening their Archive meaning", async () => {
   const sql=database(),env=environment(sql),target=sql.prepare("SELECT id FROM content_entities WHERE entity_type<>'media_asset' AND visibility='public' ORDER BY id LIMIT 1").get();
   const insert=sql.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,privacy,state,created_by,created_at,updated_at,public_presentation,archive_catalogue_eligible)
     VALUES(?,?,?,?,1,'internal','active','test',datetime('now'),datetime('now'),'hidden',1)`);
   const cases=[
-    {kind:"notes",id:"media-intake-note",file:"archive-note.jpg",mime:"image/jpeg",role:"note",relationship:"rel-source-for"},
-    {kind:"blackboards",id:"media-intake-blackboard",file:"south-wall.jpg",mime:"image/jpeg",role:"blackboard-fragment",relationship:"rel-process-of"},
-    {kind:"work-in-progress",id:"media-intake-wip",file:"layer-in-progress.mp4",mime:"video/mp4",role:"work-in-progress",relationship:"rel-process-of"},
-    {kind:"notebook-scans",id:"media-intake-notebook",file:"notebook-pages.pdf",mime:"application/pdf",role:"notebook-scan",relationship:"rel-source-for"},
+    {kind:"notes",id:"media-intake-note",file:"archive-note.jpg",mime:"image/jpeg",role:"note",relationship:"rel-source-for",lens:"gallery-lens-making"},
+    {kind:"blackboards",id:"media-intake-blackboard",file:"south-wall.jpg",mime:"image/jpeg",role:"blackboard-fragment",relationship:"rel-process-of",lens:"gallery-lens-making"},
+    {kind:"work-in-progress",id:"media-intake-wip",file:"layer-in-progress.mp4",mime:"video/mp4",role:"work-in-progress",relationship:"rel-process-of",lens:"gallery-lens-making"},
+    {kind:"notebook-scans",id:"media-intake-notebook",file:"notebook-pages.pdf",mime:"application/pdf",role:"notebook-scan",relationship:"rel-source-for",lens:"gallery-lens-making"},
+    {kind:"ephemera",id:"media-intake-ephemera",file:"studio-card.pdf",mime:"application/pdf",role:"ephemera",relationship:"rel-documents",lens:"gallery-lens-ephemera"},
   ];
   for(const item of cases){
     insert.run(item.id,`intake/${item.file}`,item.file,item.mime);
@@ -424,7 +425,7 @@ test("Gallery-set intake maps Notes, Blackboards, WIP, and Notebook scans withou
     assert.equal(response.response.status,201,item.kind);
     assert.equal(response.payload.record.set_type,"series",item.kind);
     assert.deepEqual({...sql.prepare("SELECT originality,asset_role FROM media_asset_provenance WHERE media_id=?").get(item.id)},{originality:"sixwell_original",asset_role:"editorial_fragment"},item.kind);
-    assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entry_lenses WHERE media_id=? AND lens_id='gallery-lens-making'").get(item.id).count,1,item.kind);
+    assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entry_lenses WHERE media_id=? AND lens_id=?").get(item.id,item.lens).count,1,item.kind);
     assert.equal(sql.prepare("SELECT COUNT(*) count FROM entity_media WHERE media_id=? AND role=? AND public_visible=0").get(item.id,item.role).count,1,item.kind);
     assert.equal(sql.prepare(`SELECT COUNT(*) count FROM entity_relationships relation JOIN media_catalogue_entries catalogue ON catalogue.entity_id=relation.source_entity_id
       WHERE catalogue.media_id=? AND relation.relationship_type_id=? AND relation.public_visible=0`).get(item.id,item.relationship).count,1,item.kind);
@@ -673,6 +674,7 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studio, /blackboards/);
   assert.match(studio, /work-in-progress/);
   assert.match(studio, /notebook-scans/);
+  assert.match(studio, /ephemera/);
   assert.match(studio, /target_entity_ids/);
   assert.match(studio, /connection_public_visible/);
   assert.match(studio, /\/api\/admin\/gallery-intakes/);
@@ -696,7 +698,7 @@ test("Gallery surfaces preserve the shared shell and expose the complete relatio
   assert.match(studioShell, /\["gallery","Public Gallery"\]/);
   assert.match(studioShell, /construct-manager\.js\?v=20260903-focused-media-workbench/);
   assert.match(studioShell, /media-catalogue-manager\.css\?v=20260903-focused-media-workbench/);
-  assert.match(studioManager, /media-catalogue-manager\.js\?v=20260903-focused-media-workbench/);
+  assert.match(studioManager, /media-catalogue-manager\.js\?v=20260904-gallery-intake-ephemera/);
   assert.match(studioStyles,/\.mcm-grid\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(190px,1fr\)\)/);
   assert.match(studioStyles,/\.mcm-grid--assets\{grid-template-columns:repeat\(auto-fill,minmax\(132px,1fr\)\);gap:10px\}/);
   assert.match(studioStyles,/\.mcm-card--asset \.mcm-preview\{[^}]*aspect-ratio:1\/1/);

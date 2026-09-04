@@ -44,6 +44,10 @@ const GALLERY_INTAKE_KINDS = {
     assetRole: "editorial_fragment", lensId: "gallery-lens-making", relationshipTypeId: "rel-source-for",
     mediaRole: "notebook-scan", setType: "series", accepts: new Set(["image", "pdf"]),
   },
+  ephemera: {
+    assetRole: "editorial_fragment", lensId: "gallery-lens-ephemera", relationshipTypeId: "rel-documents",
+    mediaRole: "ephemera", setType: "series", accepts: new Set(["image", "pdf"]),
+  },
 };
 
 function accession(number) {
