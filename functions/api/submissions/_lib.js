@@ -51,6 +51,8 @@ const TATTOO_SUBMISSION_TYPES = new Set([
   "maze_design",
   "tattoo_special",
 ]);
+const TATTOO_SPECIFIC_BUDGET_VALUE = "__specific_amount__";
+const TATTOO_SPECIFIC_BUDGET_MINIMUM_DOLLARS = 150;
 const TATTOO_INQUIRY_PROJECT_TYPES = new Set([
   "new_work",
   "cover_up",
@@ -424,13 +426,31 @@ function normalizeTattooBudgetPayload(payload) {
     .replace(/^new_/, "");
   const type = rawType === "tattoo_inquiry_form" ? "tattoo_inquiry" : rawType;
   if (!TATTOO_SUBMISSION_TYPES.has(type)) return payload;
-  const budget = asString(
+  let budget = asString(
     payload.budget_range
     || payload.budgetRange
     || (type === "flash_claim" ? payload.claim_bid : "")
   );
+  if (budget === TATTOO_SPECIFIC_BUDGET_VALUE) {
+    const dollars = Number(payload.budget_amount_dollars ?? payload.budgetAmountDollars);
+    if (
+      !Number.isSafeInteger(dollars)
+      || !Number.isSafeInteger(dollars * 100)
+      || dollars < TATTOO_SPECIFIC_BUDGET_MINIMUM_DOLLARS
+    ) {
+      return { error: `Specific budget amount must be a whole-dollar amount of at least $${TATTOO_SPECIFIC_BUDGET_MINIMUM_DOLLARS}.` };
+    }
+    budget = `$${dollars.toLocaleString("en-US")}`;
+    payload.budget_selection_type = "exact";
+    payload.budget_amount_cents = dollars * 100;
+  } else if (budget) {
+    payload.budget_selection_type = /flexible|guidance/i.test(budget) ? "flexible" : "range";
+    delete payload.budget_amount_cents;
+  }
+  delete payload.budget_amount_dollars;
+  delete payload.budgetAmountDollars;
   if (budget) payload.budget_range = budget;
-  return payload;
+  return null;
 }
 
 function normalizedStringArray(value) {
@@ -1526,7 +1546,10 @@ export async function handleCreateSubmission(request, env) {
   const body = await readSubmissionBody(request);
   if (!body) return errorResponse("Expected JSON or form data.", 400);
   if (body.error) return errorResponse(body.error, body.status || 400);
-  normalizeTattooBudgetPayload(body.payload);
+  const tattooBudgetValidation = normalizeTattooBudgetPayload(body.payload);
+  if (tattooBudgetValidation?.error) {
+    return errorResponse(tattooBudgetValidation.error, 400, { code: "INVALID_SPECIFIC_BUDGET" });
+  }
   normalizeTattooInquiryPayload(body.payload);
 
   const submission = normalizeSubmission(body.payload, request);
@@ -2166,7 +2189,10 @@ function presentedMazeEdit(access) {
       dateOfBirth: asString(payload.dob),
       placement: asString(payload.placement),
       scale: asString(payload.scale),
-      budgetRange: asString(payload.budget_range),
+      budgetRange: payload.budget_selection_type === "exact" ? TATTOO_SPECIFIC_BUDGET_VALUE : asString(payload.budget_range),
+      budgetAmountDollars: payload.budget_selection_type === "exact"
+        ? String(Number(payload.budget_amount_cents || 0) / 100)
+        : "",
       mazeMeaning: asString(payload.maze_meaning || payload.maze_explanation),
       mazeDescription: asString(payload.maze_description),
     },
@@ -2208,6 +2234,10 @@ export async function handleSubmitMazeRevision(request, env) {
     const body = await readSubmissionBody(request);
     if (!body) return errorResponse("Expected form data.", 400);
     if (body.error) return errorResponse(body.error, body.status || 400);
+    const tattooBudgetValidation = normalizeTattooBudgetPayload(body.payload);
+    if (tattooBudgetValidation?.error) {
+      return errorResponse(tattooBudgetValidation.error, 400, { code: "INVALID_SPECIFIC_BUDGET" });
+    }
     const fileValidation = validateSubmissionFiles("maze_design", body.files, env);
     if (fileValidation) return errorResponse(fileValidation.error, fileValidation.status);
     const maze = await validateMazeArtifacts(body.files);
@@ -2247,11 +2277,17 @@ export async function handleSubmitMazeRevision(request, env) {
       placement: asString(body.payload.placement).slice(0, 300),
       scale: asString(body.payload.scale).slice(0, 160),
       budget_range: budgetRange,
+      budget_selection_type: asString(body.payload.budget_selection_type || "range"),
       maze_meaning: asString(body.payload.maze_meaning).slice(0, 5000),
       maze_description: asString(body.payload.maze_description).slice(0, 5000),
       maze_artifact_snapshot: maze.designSummary,
       maze_revision: nextRevision,
     };
+    if (body.payload.budget_selection_type === "exact") {
+      nextPayload.budget_amount_cents = Number(body.payload.budget_amount_cents);
+    } else {
+      delete nextPayload.budget_amount_cents;
+    }
     delete nextPayload.maze_explanation;
     savedFiles = await saveSubmissionFiles(env, access.row.id, body.files);
     const now = new Date().toISOString();

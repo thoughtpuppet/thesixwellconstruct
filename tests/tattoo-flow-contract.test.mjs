@@ -1030,7 +1030,7 @@ function validCustomForProject(projectType, overrides = {}) {
   return validCustom({ project_type: projectType, ...(fields[projectType] || {}), ...overrides });
 }
 
-test("Tattoo project forms expose the same required total-budget ranges", () => {
+test("Tattoo project forms use the managed budget-range system and expose a $150-minimum exact amount", () => {
   const formSources = [
     ["Custom", join(ROOT, "tattoos", "inquire", "custom", "index.html")],
     ["Flash", join(ROOT, "tattoos", "flash", "claim", "index.html")],
@@ -1042,9 +1042,17 @@ test("Tattoo project forms expose the same required total-budget ranges", () => 
     const source = readFileSync(path, "utf8");
     assert.match(source, /What total project budget are you comfortable working within\?/i, `${label} budget label`);
     assert.match(source, /name="budget_range"[^>]*required|required[^>]*name="budget_range"/, `${label} required budget field`);
-    for (const range of TATTOO_BUDGET_RANGES) {
-      assert.ok(source.includes(`value="${range}"`), `${label} includes ${range}`);
-    }
+    assert.match(source, /specific (?:whole-dollar|project budget)/i, `${label} exact-budget guidance`);
+    assert.match(source, /150/, `${label} exact-budget minimum`);
+  }
+  const sharedBudgetField = readFileSync(join(ROOT, "js", "tattoo-budget-field.js"), "utf8");
+  assert.match(sharedBudgetField, /\/api\/tattoo\/settings/);
+  assert.match(sharedBudgetField, /__specific_amount__/);
+  assert.match(sharedBudgetField, /MINIMUM_SPECIFIC_DOLLARS = 150/);
+  for (const path of formSources.slice(0, 4).map((entry) => entry[1])) {
+    const source = readFileSync(path, "utf8");
+    assert.match(source, /data-tattoo-budget-select/);
+    assert.match(source, /\/js\/tattoo-budget-field\.js/);
   }
 });
 
@@ -2198,6 +2206,27 @@ test("Extended tattoo project types require budget and canonical ranges remain a
     const saved = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(submissionId).payload_json);
     assert.equal(saved.budget_range, budgetRange);
   }
+
+  const belowMinimum = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
+    email: "budget-exact-low@example.test",
+    budget_range: "__specific_amount__",
+    budget_amount_dollars: "149",
+  })), env);
+  assert.equal(belowMinimum.status, 400);
+  assert.match((await belowMinimum.json()).error, /at least \$150/);
+
+  const exactMinimum = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
+    email: "budget-exact-minimum@example.test",
+    budget_range: "__specific_amount__",
+    budget_amount_dollars: "150",
+  })), env);
+  assert.equal(exactMinimum.status, 200, await exactMinimum.clone().text());
+  const exactSubmissionId = (await exactMinimum.json()).submissionId;
+  const exactSaved = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(exactSubmissionId).payload_json);
+  assert.equal(exactSaved.budget_range, "$150");
+  assert.equal(exactSaved.budget_selection_type, "exact");
+  assert.equal(exactSaved.budget_amount_cents, 15000);
+  assert.equal(exactSaved.budget_amount_dollars, undefined);
 });
 
 test("Experimental Project applications are free, mode-bound, photo-gated, and snapshot their agreements", async () => {
@@ -3515,7 +3544,8 @@ test("Build drafts hash resume tokens, autosync with revisions, email links, and
     contact: { firstName: "Draft", lastName: "Client", email: "draft@example.test", phone: "" },
     placement: "Upper arm",
     scale: "Palm-size",
-    budgetRange: "$500–$800",
+    budgetRange: "__specific_amount__",
+    budgetAmountDollars: "650",
     timeline: "No rush",
     designIntent: "A protected route.",
     message: "",
@@ -3536,7 +3566,8 @@ test("Build drafts hash resume tokens, autosync with revisions, email links, and
   const stored = database.prepare("SELECT * FROM tattoo_build_drafts WHERE id=?").get(createdBody.draft.id);
   assert.notEqual(stored.token_hash, createdBody.resumeToken);
   assert.equal(stored.token_hash.length, 64);
-  assert.equal(JSON.parse(stored.payload_json).budgetRange, "$500–$800");
+  assert.equal(JSON.parse(stored.payload_json).budgetRange, "__specific_amount__");
+  assert.equal(JSON.parse(stored.payload_json).budgetAmountDollars, "650");
 
   const fetched = await handleGetBuildDraft(draftRequest(
     "/api/build-drafts/current",
@@ -3591,7 +3622,8 @@ test("Build drafts hash resume tokens, autosync with revisions, email links, and
     dob: "1990-01-01",
     age_confirmed: "yes",
     placement: "Upper arm",
-    budget_range: "$500–$800",
+    budget_range: "__specific_amount__",
+    budget_amount_dollars: "650",
     design_intent: "A protected route that returns.",
     review_consent: "yes",
     symbol_ids: ["maze-path"],
@@ -3610,6 +3642,8 @@ test("Build drafts hash resume tokens, autosync with revisions, email links, and
   ).get(submissionId).payload_json);
   assert.equal(savedPayload.symbol_snapshot[0].client_note, draftPayload.symbolSelections[0].note);
   assert.equal(savedPayload.client_composition_snapshot.reading, draftPayload.compositionSnapshot.reading);
+  assert.equal(savedPayload.budget_range, "$650");
+  assert.equal(savedPayload.budget_amount_cents, 65000);
   const finalized = database.prepare(
     "SELECT status,submission_id,payload_json FROM tattoo_build_drafts WHERE id=?"
   ).get(createdBody.draft.id);
@@ -3914,6 +3948,47 @@ test("Maze submissions require mode-specific render variants and snapshot their 
   assert.equal(deleted.status, 200, await deleted.clone().text());
   assert.equal(bucket.objects.size, 0);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM maze_submission_revisions WHERE submission_id=?").get(submissionId).count, 0);
+});
+
+test("Studio manages the public tattoo inquiry budget ranges as structured whole-dollar bounds", async () => {
+  const database = migratedDatabase();
+  class SelectBatchD1 extends LocalD1 {
+    async batch(statements) {
+      return Promise.all(statements.map((statement) => statement.all()));
+    }
+  }
+  const token = "tattoo-budget-settings-admin";
+  const env = { SUBMISSIONS_DB: new SelectBatchD1(database), SUBMISSIONS_ADMIN_TOKEN: token };
+  const save = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    { settings: { inquiryBudgetRanges: [
+      { minimumDollars: 150, maximumDollars: 450 },
+      { minimumDollars: 450, maximumDollars: 900 },
+      { minimumDollars: 900, maximumDollars: null },
+    ] } },
+    token,
+  ), env);
+  assert.equal(save.status, 200, await save.clone().text());
+
+  const publicResponse = await handlePublicTattooSettings(
+    new Request("https://example.test/api/tattoo/settings"),
+    env,
+  );
+  assert.equal(publicResponse.status, 200, await publicResponse.clone().text());
+  assert.deepEqual((await publicResponse.json()).settings.inquiryBudgetRanges, [
+    { minimumDollars: 150, maximumDollars: 450, label: "$150–$450" },
+    { minimumDollars: 450, maximumDollars: 900, label: "$450–$900" },
+    { minimumDollars: 900, maximumDollars: null, label: "$900+" },
+  ]);
+
+  const invalid = await handleAdminTattooSettings(draftRequest(
+    "/api/admin/tattoo/settings",
+    "PATCH",
+    { settings: { inquiryBudgetRanges: [{ minimumDollars: 900, maximumDollars: 450 }] } },
+    token,
+  ), env);
+  assert.equal(invalid.status, 400);
 });
 
 test("Maze submission surfaces keep meaning optional and expose private revision controls", () => {
@@ -5749,7 +5824,7 @@ test("manual text templates require Studio auth, persist valid copy, and reject 
   }), env);
   assert.equal(initialResponse.status, 200);
   const initial = await initialResponse.json();
-  assert.equal(initial.templates.length, 12);
+  assert.equal(initial.templates.length, 13);
   assert.equal(
     initial.templates.find((template) => template.key === "opening_tattoo").body,
     "{{greeting}} {{first_name}}, this is Sai Solehman of art.pill TATTOO HOUSE.",
@@ -5761,6 +5836,14 @@ test("manual text templates require Studio auth, persist valid copy, and reject 
   assert.equal(
     initial.templates.find((template) => template.key === "tattoo_special_approved").group,
     "Tattoo Specials",
+  );
+  assert.deepEqual(
+    initial.templates.find((template) => template.key === "tattoo_booking_approved").allowedTokens,
+    ["approved_budget", "booking_url"],
+  );
+  assert.equal(
+    initial.templates.find((template) => template.key === "tattoo_booking_approved").body,
+    "Your project has been approved for booking. Your approved project budget is {{approved_budget}}. Review and agree to the session estimate and budget, choose your appointment, and place the deposit here: {{booking_url}}",
   );
 
   const savedResponse = await handleAdminManualTextTemplates(adminJsonRequest(
@@ -5788,6 +5871,20 @@ test("manual text templates require Studio auth, persist valid copy, and reject 
   assert.equal(
     database.prepare("SELECT body_text FROM manual_text_templates WHERE template_key=?").get("tattoo_special_approved").body_text,
     multilineBody,
+  );
+
+  const editableBudgetBody = "Your approved tattoo budget is {{approved_budget}}. Continue here: {{booking_url}}";
+  const editableBudgetResponse = await handleAdminManualTextTemplates(adminJsonRequest(
+    "/api/admin/communications/text-templates",
+    { templateKey: "tattoo_booking_approved", body: editableBudgetBody },
+    adminToken,
+    "PATCH",
+  ), env);
+  assert.equal(editableBudgetResponse.status, 200);
+  assert.equal((await editableBudgetResponse.json()).template.body, editableBudgetBody);
+  assert.equal(
+    database.prepare("SELECT body_text FROM manual_text_templates WHERE template_key=?").get("tattoo_booking_approved").body_text,
+    editableBudgetBody,
   );
 
   const unknownVariable = await handleAdminManualTextTemplates(adminJsonRequest(
@@ -5837,6 +5934,7 @@ test("manual text assist uses New York greeting boundaries and composes the name
     [{ type: "tattoo_special", specialClientUrl: true }, "opening_tattoo", "tattoo_special_approved"],
     [{ bookingUrl: true, status: "approved", requiresInPersonConsult: true }, "opening_tattoo", "tattoo_consultation_required"],
     [{ bookingUrl: true, status: "approved" }, "opening_tattoo", "tattoo_booking_approved"],
+    [{ bookingUrl: true, status: "approved", hasApprovedBudget: false }, "opening_tattoo", "tattoo_booking_approved_no_budget"],
     [{ bookingUrl: true, status: "booked" }, "opening_tattoo", "tattoo_appointment_confirmed"],
     [{ status: "new" }, "opening_tattoo", "tattoo_inquiry_received"],
   ];
@@ -5880,7 +5978,7 @@ test("manual text assist uses New York greeting boundaries and composes the name
         greeting: "Good afternoon",
         first_name: "Avery",
         booking_url: "https://example.test/book",
-        approved_budget_sentence: "Your approved project budget is $500.",
+        approved_budget: "$500",
       }),
       /Thank you for trusting me with your tattoo\. If any questions come up, feel free to reach out\.$/,
       bodyKey,

@@ -46,6 +46,17 @@ const MAX_SHAPE_SIZE = 360;
 const KIOSK = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("kiosk");
 const PREVIEW = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("preview") === "1";
 const KIOSK_IDLE_MS = 150000;
+const SPECIFIC_BUDGET_VALUE = "__specific_amount__";
+const MINIMUM_SPECIFIC_BUDGET_DOLLARS = 150;
+const FLEXIBLE_BUDGET_VALUE = "I’m flexible / I’d like guidance";
+const DEFAULT_TATTOO_BUDGET_RANGES = [
+  "Up to $300",
+  "$300–$500",
+  "$500–$800",
+  "$800–$1,200",
+  "$1,200–$2,000",
+  "$2,000+"
+];
 
 type MazeFormDraft = {
   firstName: string;
@@ -56,6 +67,7 @@ type MazeFormDraft = {
   placement: string;
   scale: string;
   budgetRange: string;
+  budgetAmountDollars: string;
   mazeMeaning: string;
   mazeDescription: string;
 };
@@ -67,6 +79,7 @@ type MazeDraftPayload = MazeState & {
   placement: string;
   scale: string;
   budgetRange: string;
+  budgetAmountDollars: string;
   mazeMeaning: string;
   mazeDescription: string;
   updatedAt: string;
@@ -133,6 +146,7 @@ function emptyForm(): MazeFormDraft {
     placement: "",
     scale: "",
     budgetRange: "",
+    budgetAmountDollars: "",
     mazeMeaning: "",
     mazeDescription: ""
   };
@@ -241,6 +255,7 @@ function draftPayload(state: MazeState, form: MazeFormDraft, clientDraftId: stri
     placement: form.placement,
     scale: form.scale,
     budgetRange: form.budgetRange,
+    budgetAmountDollars: form.budgetAmountDollars,
     mazeMeaning: form.mazeMeaning,
     mazeDescription: form.mazeDescription,
     updatedAt: new Date().toISOString()
@@ -254,6 +269,7 @@ function payloadToForm(payload: Partial<MazeDraftPayload>): MazeFormDraft {
     placement: payload.placement || "",
     scale: payload.scale || "",
     budgetRange: payload.budgetRange || "",
+    budgetAmountDollars: payload.budgetAmountDollars || "",
     mazeMeaning: payload.mazeMeaning || (payload as Partial<MazeDraftPayload> & { mazeExplanation?: string }).mazeExplanation || "",
     mazeDescription: payload.mazeDescription || ""
   };
@@ -398,6 +414,7 @@ function SubmitDialog({
   const [busy, setBusy] = useState(false);
   const [archiveOptIn, setArchiveOptIn] = useState(false);
   const [archiveAttribution, setArchiveAttribution] = useState("anonymous");
+  const [budgetRanges, setBudgetRanges] = useState(DEFAULT_TATTOO_BUDGET_RANGES);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const busyRef = useRef(busy);
@@ -405,6 +422,22 @@ function SubmitDialog({
 
   useEffect(() => { busyRef.current = busy; }, [busy]);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Tattoo settings unavailable")))
+      .then((payload: { settings?: { inquiryBudgetRanges?: Array<{ label?: string }> } }) => {
+        if (cancelled) return;
+        const labels = (payload.settings?.inquiryBudgetRanges || []).map((range) => String(range.label || "").trim()).filter(Boolean);
+        if (labels.length) setBudgetRanges(labels);
+      })
+      .catch(() => {
+        // Keep the bundled ranges available if public settings cannot be loaded.
+      });
+    return () => { cancelled = true; };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -443,6 +476,12 @@ function SubmitDialog({
 
   if (!open) return null;
   const isRevision = Boolean(editToken && editContext);
+  const visibleBudgetRanges = budgetRanges.includes(formDraft.budgetRange)
+    || !formDraft.budgetRange
+    || formDraft.budgetRange === SPECIFIC_BUDGET_VALUE
+    || formDraft.budgetRange === FLEXIBLE_BUDGET_VALUE
+    ? budgetRanges
+    : [...budgetRanges, formDraft.budgetRange];
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -543,16 +582,19 @@ function SubmitDialog({
             What total project budget are you comfortable working within?
             <select name="budget_range" required aria-describedby="maze-budget-help" value={formDraft.budgetRange} onChange={(event) => onFormDraftChange({ ...formDraft, budgetRange: event.target.value })}>
               <option value="">Select a range</option>
-              <option value="Up to $300">Up to $300</option>
-              <option value="$300–$500">$300–$500</option>
-              <option value="$500–$800">$500–$800</option>
-              <option value="$800–$1,200">$800–$1,200</option>
-              <option value="$1,200–$2,000">$1,200–$2,000</option>
-              <option value="$2,000+">$2,000+</option>
-              <option value="I’m flexible / I’d like guidance">I’m flexible / I’d like guidance</option>
+              {visibleBudgetRanges.map((range) => <option key={range} value={range}>{range}</option>)}
+              <option value={SPECIFIC_BUDGET_VALUE}>Enter a specific amount</option>
+              <option value={FLEXIBLE_BUDGET_VALUE}>{FLEXIBLE_BUDGET_VALUE}</option>
             </select>
             <span className="maze-submit-help" id="maze-budget-help">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.</span>
           </label>
+          {formDraft.budgetRange === SPECIFIC_BUDGET_VALUE ? (
+            <label className="maze-submit-full">
+              Specific project budget (USD)
+              <input name="budget_amount_dollars" type="number" min={MINIMUM_SPECIFIC_BUDGET_DOLLARS} step="1" inputMode="numeric" placeholder="Minimum $150" required value={formDraft.budgetAmountDollars} onChange={(event) => onFormDraftChange({ ...formDraft, budgetAmountDollars: event.target.value })} />
+              <span className="maze-submit-help">Enter a whole-dollar amount of at least $150. This is still a comfort budget for review, not your final quote.</span>
+            </label>
+          ) : null}
           <label className="maze-submit-full">
             Meaning (optional)
             <textarea name="maze_meaning" rows={4} placeholder="Share any personal or symbolic meaning this maze carries." value={formDraft.mazeMeaning} onChange={(event) => onFormDraftChange({ ...formDraft, mazeMeaning: event.target.value })} />

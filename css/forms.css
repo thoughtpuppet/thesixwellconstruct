@@ -68,6 +68,26 @@
   display: none !important;
 }
 
+.public-form .tattoo-budget-specific[hidden] {
+  display: none !important;
+}
+
+.public-form .tattoo-budget-specific {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.public-form .tattoo-budget-specific > label {
+  color: var(--form-control-dim);
+  font-family: var(--sans, var(--font-display, Inter, Arial, sans-serif));
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
 .form-field__label,
 .form-field > label,
 .public-form :is(.field, .field-group) > label,

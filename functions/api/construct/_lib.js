@@ -5054,9 +5054,19 @@ async function replaceArchiveThemes(database,entityId,value){
   await database.batch(statements);
 }
 
+function artCatalogueObjectTypeIdFromMedium(value){
+  const medium=String(value||"").trim();
+  return /\b(?:paint(?:ing|ed)?|acrylic|oil|watercolou?r|gouache|tempera|encaustic)\b/i.test(medium)
+    ? "art-painting"
+    : "art-other";
+}
+
 async function archiveCatalogueObjectTypeId(database,owner){
   let objectTypeId="other-cultural-object";
-  if(owner.entity_type==="art_work")objectTypeId="art-other";
+  if(owner.entity_type==="art_work"){
+    const art=await database.prepare("SELECT medium FROM art_works WHERE id=?").bind(owner.id).first();
+    objectTypeId=artCatalogueObjectTypeIdFromMedium(art?.medium);
+  }
   else if(owner.entity_type==="merch_item")objectTypeId="merch-other";
   else if(owner.entity_type==="portfolio_item")objectTypeId="tattoo-execution";
   else if(owner.entity_type==="flash_item")objectTypeId="tattoo-flash-design";
@@ -5087,6 +5097,13 @@ async function ensureArchiveCatalogueEntry(database,owner){
   if(!owner?.id||["event","appearance","organization"].includes(owner.entity_type))return null;
   if(!await database.prepare("SELECT entity_id FROM archive_dossiers WHERE entity_id=?").bind(owner.id).first())return null;
   let catalogue=await database.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id=?").bind(owner.id).first();
+  if(catalogue&&owner.entity_type==="art_work"&&catalogue.object_type_id==="art-other"&&catalogue.updated_by==="archive-structure-trigger"){
+    const objectTypeId=await archiveCatalogueObjectTypeId(database,owner);
+    if(objectTypeId!==catalogue.object_type_id){
+      await database.prepare("UPDATE archive_catalogue_entries SET object_type_id=?,updated_by='studio-art-classification',updated_at=datetime('now') WHERE entity_id=? AND object_type_id='art-other' AND updated_by='archive-structure-trigger'").bind(objectTypeId,owner.id).run();
+      catalogue=await database.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id=?").bind(owner.id).first();
+    }
+  }
   if(!catalogue){
     const objectTypeId=await archiveCatalogueObjectTypeId(database,owner);
     const type=await database.prepare("SELECT medium_id,catalogue_prefix FROM archive_cultural_object_types WHERE id=?").bind(objectTypeId).first();

@@ -200,7 +200,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field" id="scaleField"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="Example: palm-size, 5 in"></div>
             <div class="field full">
               <label for="budget_range">What total project budget are you comfortable working within?</label>
-              <select id="budget_range" name="budget_range" aria-describedby="budgetRangeHelp" required>
+              <select id="budget_range" name="budget_range" aria-describedby="budgetRangeHelp" data-tattoo-budget-select data-specific-budget-target="#specificBudgetField" required>
                 <option value="">Select a range</option>
                 <option value="Up to $300">Up to $300</option>
                 <option value="$300–$500">$300–$500</option>
@@ -210,6 +210,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
                 <option value="$2,000+">$2,000+</option>
                 <option value="I’m flexible / I’d like guidance">I’m flexible / I’d like guidance</option>
               </select>
+              <div class="tattoo-budget-specific" id="specificBudgetField" hidden aria-hidden="true">
+                <label for="budget_amount_dollars">Specific project budget (USD)</label>
+                <input id="budget_amount_dollars" name="budget_amount_dollars" type="number" min="150" step="1" inputmode="numeric" placeholder="Minimum $150" disabled>
+                <p class="file-note">Enter a whole-dollar amount of at least $150. This is still a comfort budget for review, not your final quote.</p>
+              </div>
               <p class="file-note" id="budgetRangeHelp">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote.</p>
             </div>
             <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="Example: no rush, June, weekend preferred"></div>
@@ -586,6 +591,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 
     init();
   </script>
+  <script src="/js/tattoo-budget-field.js"></script>
   <script src="/js/submission-form.js"></script>
   <script>
     (function(){

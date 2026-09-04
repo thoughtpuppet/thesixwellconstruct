@@ -11,7 +11,8 @@
     { key:"tattoo_appointment_confirmed", label:"Tattoo appointment confirmed", group:"Tattoo", allowedTokens:[], body:"Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session." },
     { key:"tattoo_special_approved", label:"Tattoo Special approved", group:"Tattoo Specials", allowedTokens:["booking_url"], body:"Your Tattoo Special request has been approved. Review your approved request and pay the deposit to confirm your appointment here: {{booking_url}}" },
     { key:"tattoo_consultation_required", label:"Consultation required", group:"Tattoo", allowedTokens:["booking_url"], body:"Your project needs an in-person consultation before tattoo booking. You can choose a consultation time and place the deposit here: {{booking_url}}" },
-    { key:"tattoo_booking_approved", label:"Tattoo approved for booking", group:"Tattoo", allowedTokens:["approved_budget_sentence","booking_url"], body:"Your project has been approved for booking. {{approved_budget_sentence}} Review and agree to the session estimate and budget, choose your appointment, and place the deposit here: {{booking_url}}" },
+    { key:"tattoo_booking_approved", label:"Tattoo approved for booking", group:"Tattoo", allowedTokens:["approved_budget","booking_url"], body:"Your project has been approved for booking. Your approved project budget is {{approved_budget}}. Review and agree to the session estimate and budget, choose your appointment, and place the deposit here: {{booking_url}}" },
+    { key:"tattoo_booking_approved_no_budget", label:"Tattoo approved without budget", group:"Tattoo", allowedTokens:["booking_url"], body:"Your project has been approved for booking. Review and agree to the session estimate, choose your appointment, and place the deposit here: {{booking_url}}" },
     { key:"tattoo_inquiry_received", label:"Tattoo inquiry received", group:"Tattoo", allowedTokens:[], body:"We received your inquiry and will review the project details before sending booking access." },
   ];
 
@@ -61,7 +62,12 @@
       return { openingKey: "opening_tattoo", bodyKey: "tattoo_consultation_required" };
     }
     if (context.bookingUrl && context.status === "approved") {
-      return { openingKey: "opening_tattoo", bodyKey: "tattoo_booking_approved" };
+      return {
+        openingKey: "opening_tattoo",
+        bodyKey: context.hasApprovedBudget === false
+          ? "tattoo_booking_approved_no_budget"
+          : "tattoo_booking_approved",
+      };
     }
     return { openingKey: "opening_tattoo", bodyKey: "tattoo_inquiry_received" };
   }

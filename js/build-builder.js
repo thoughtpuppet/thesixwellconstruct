@@ -201,6 +201,7 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
       placement: fieldValue("placement"),
       scale: fieldValue("scale"),
       budgetRange: fieldValue("budgetRange"),
+      budgetAmountDollars: fieldValue("budgetAmountDollars"),
       timeline: fieldValue("timeline"),
       designIntent: fieldValue("designIntent"),
       message: fieldValue("message"),
@@ -265,6 +266,7 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
       placement: payload.placement,
       scale: payload.scale,
       budgetRange: payload.budgetRange,
+      budgetAmountDollars: payload.budgetAmountDollars,
       timeline: payload.timeline,
       designIntent: payload.designIntent,
       message: payload.message,
@@ -273,6 +275,7 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
       const input = el(id);
       if (input) input.value = String(value || "");
     });
+    window.SixWellTattooBudget?.sync(buildForm);
   }
 
   function applyDraftPayload(payload) {

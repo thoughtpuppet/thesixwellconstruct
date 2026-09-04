@@ -248,7 +248,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             </div>
             <div class="field full">
               <label for="budget_range">What total project budget are you comfortable working within? <span class="required-mark">*</span></label>
-              <select id="budget_range" name="budget_range" aria-describedby="budgetRangeHelp" required>
+              <select id="budget_range" name="budget_range" aria-describedby="budgetRangeHelp" data-tattoo-budget-select data-specific-budget-target="#specificBudgetField" required>
                 <option value="">Select a range</option>
                 <option value="Up to $300">Up to $300</option>
                 <option value="$300–$500">$300–$500</option>
@@ -258,6 +258,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
                 <option value="$2,000+">$2,000+</option>
                 <option value="I’m flexible / I’d like guidance">I’m flexible / I’d like guidance</option>
               </select>
+              <div class="tattoo-budget-specific" id="specificBudgetField" hidden aria-hidden="true">
+                <label for="budget_amount_dollars">Specific project budget (USD)</label>
+                <input id="budget_amount_dollars" name="budget_amount_dollars" type="number" min="150" step="1" inputmode="numeric" placeholder="Minimum $150" disabled>
+                <p class="field-note">Enter a whole-dollar amount of at least $150. This is still a comfort budget for review, not your final quote.</p>
+              </div>
               <p class="field-note" id="budgetRangeHelp">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid.</p>
             </div>
             <div class="field">
@@ -342,6 +347,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+  <script src="/js/tattoo-budget-field.js"></script>
   <script src="/js/submission-form.js"></script>
   <script>
     (function(){

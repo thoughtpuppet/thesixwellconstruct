@@ -71,6 +71,83 @@ function request(path, { method = "GET", body, admin = false } = {}) {
   });
 }
 
+test("0222 refines only automatic painting classifications and preserves ART identities", () => {
+  const migrationName = "0222_art_painting_archive_classification.sql";
+  const db = databaseBefore(migrationName);
+
+  db.exec(`
+    INSERT INTO content_entities(
+      id,entity_type,node_id,visibility,search_visibility,
+      created_by,updated_by,created_at,updated_at
+    ) VALUES
+      ('art-auto-painting','art_work','node-art','internal',0,'test','test',datetime('now'),datetime('now')),
+      ('art-auto-ambiguous','art_work','node-art','internal',0,'test','test',datetime('now'),datetime('now')),
+      ('art-deliberate-drawing','art_work','node-art','internal',0,'test','test',datetime('now'),datetime('now'));
+    INSERT INTO art_works(
+      id,slug,title,medium,availability,state,created_at,updated_at
+    ) VALUES
+      ('art-auto-painting','automatic-painting','Automatic Painting','Acrylic on wood panel','unavailable','draft',datetime('now'),datetime('now')),
+      ('art-auto-ambiguous','automatic-ambiguous','Automatic Ambiguous','Foil sculpture','unavailable','draft',datetime('now'),datetime('now')),
+      ('art-deliberate-drawing','deliberate-drawing','Deliberate Drawing','Acrylic drawing on paper','unavailable','draft',datetime('now'),datetime('now'));
+    UPDATE archive_catalogue_entries
+    SET object_type_id='art-drawing',updated_by='studio',updated_at=datetime('now')
+    WHERE entity_id='art-deliberate-drawing';
+  `);
+
+  const paintingBefore = db.prepare("SELECT object_type_id,catalogue_id FROM archive_catalogue_entries WHERE entity_id='art-auto-painting'").get();
+  const ambiguousBefore = db.prepare("SELECT object_type_id,catalogue_id FROM archive_catalogue_entries WHERE entity_id='art-auto-ambiguous'").get();
+  assert.equal(paintingBefore.object_type_id, "art-other");
+  assert.equal(ambiguousBefore.object_type_id, "art-other");
+
+  db.exec(readFileSync(join(ROOT, "migrations", migrationName), "utf8"));
+
+  const paintingAfter = db.prepare("SELECT object_type_id,catalogue_id,updated_by FROM archive_catalogue_entries WHERE entity_id='art-auto-painting'").get();
+  const ambiguousAfter = db.prepare("SELECT object_type_id,catalogue_id,updated_by FROM archive_catalogue_entries WHERE entity_id='art-auto-ambiguous'").get();
+  const deliberateAfter = db.prepare("SELECT object_type_id,updated_by FROM archive_catalogue_entries WHERE entity_id='art-deliberate-drawing'").get();
+  assert.equal(paintingAfter.object_type_id, "art-painting");
+  assert.equal(paintingAfter.catalogue_id, paintingBefore.catalogue_id);
+  assert.equal(paintingAfter.updated_by, "migration-0222");
+  assert.equal(ambiguousAfter.object_type_id, "art-other");
+  assert.equal(ambiguousAfter.catalogue_id, ambiguousBefore.catalogue_id);
+  assert.equal(deliberateAfter.object_type_id, "art-drawing");
+  assert.equal(deliberateAfter.updated_by, "studio");
+
+  db.exec(`
+    INSERT INTO content_entities(
+      id,entity_type,node_id,visibility,search_visibility,
+      created_by,updated_by,created_at,updated_at
+    ) VALUES('art-future-painting','art_work','node-art','internal',0,'test','test',datetime('now'),datetime('now'));
+    INSERT INTO art_works(
+      id,slug,title,medium,availability,state,created_at,updated_at
+    ) VALUES('art-future-painting','future-painting','Future Painting','Oil on canvas','unavailable','draft',datetime('now'),datetime('now'));
+  `);
+  assert.equal(
+    db.prepare("SELECT object_type_id FROM archive_catalogue_entries WHERE entity_id='art-future-painting'").get().object_type_id,
+    "art-painting",
+  );
+});
+
+test("Art API reconciles an automatic catalogue fallback after the source row exists", async () => {
+  const db = database();
+  db.exec("DROP TRIGGER IF EXISTS archive_art_work_catalogue_insert");
+  const created = await handleConstructApi(request("/api/admin/art", {
+    method: "POST",
+    admin: true,
+    body: {
+      id: "art-api-painting-classification",
+      title: "API Painting Classification",
+      medium: "Gouache on paper",
+      availability: "unavailable",
+      state: "draft",
+    },
+  }), env(db));
+  assert.equal(created.status, 201);
+  assert.equal(
+    db.prepare("SELECT object_type_id FROM archive_catalogue_entries WHERE entity_id='art-api-painting-classification'").get().object_type_id,
+    "art-painting",
+  );
+});
+
 test("migration assigns every existing cultural object an identity from the exact agreed families", () => {
   const db = database();
   const counts = db.prepare(`SELECT

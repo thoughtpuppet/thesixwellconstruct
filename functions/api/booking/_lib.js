@@ -122,6 +122,14 @@ function confirmationPathForBookingType(bookingTypeId) {
 const DEFAULT_SUPPORT_EMAIL = "saisolehman@artpilltattoohouse.com";
 const DEFAULT_STUDIO_CONTACT_PHONE = "(770) 820-5800";
 const DEFAULT_CALENDAR_TIME_ZONE = "America/New_York";
+const DEFAULT_TATTOO_INQUIRY_BUDGET_RANGES = Object.freeze([
+  { minimumDollars: null, maximumDollars: 300 },
+  { minimumDollars: 300, maximumDollars: 500 },
+  { minimumDollars: 500, maximumDollars: 800 },
+  { minimumDollars: 800, maximumDollars: 1200 },
+  { minimumDollars: 1200, maximumDollars: 2000 },
+  { minimumDollars: 2000, maximumDollars: null },
+]);
 const DEFAULT_SESSION_ESTIMATE_COPY = Object.freeze({
   sectionHeading: "Your Session Plan",
   oneSessionLabel: "Session Plan",
@@ -9332,8 +9340,63 @@ function normalizeTattooSettingsRow(row) {
     walkInGuidance: row.walk_in_guidance || "",
     supportEmail: row.support_email || DEFAULT_SUPPORT_EMAIL,
     sessionEstimateCopy: normalizeSessionEstimateCopy(row.session_estimate_copy_json),
+    inquiryBudgetRanges: normalizeTattooInquiryBudgetRanges(row.inquiry_budget_ranges_json),
     updatedAt: row.updated_at,
   };
+}
+
+function tattooInquiryBudgetRangeLabel(range) {
+  const money = (value) => `$${Number(value).toLocaleString("en-US")}`;
+  if (range.minimumDollars === null) return `Up to ${money(range.maximumDollars)}`;
+  if (range.maximumDollars === null) return `${money(range.minimumDollars)}+`;
+  return `${money(range.minimumDollars)}–${money(range.maximumDollars)}`;
+}
+
+function normalizeTattooInquiryBudgetRanges(value) {
+  const parsed = Array.isArray(value) ? value : parseJsonField(value, DEFAULT_TATTOO_INQUIRY_BUDGET_RANGES);
+  const ranges = [];
+  for (const entry of Array.isArray(parsed) ? parsed.slice(0, 12) : []) {
+    const rawMinimum = entry?.minimumDollars ?? entry?.minimum_dollars;
+    const rawMaximum = entry?.maximumDollars ?? entry?.maximum_dollars;
+    const minimumDollars = rawMinimum === null || rawMinimum === undefined || rawMinimum === "" ? null : Number(rawMinimum);
+    const maximumDollars = rawMaximum === null || rawMaximum === undefined || rawMaximum === "" ? null : Number(rawMaximum);
+    if (
+      (minimumDollars === null && maximumDollars === null)
+      || (minimumDollars !== null && (!Number.isSafeInteger(minimumDollars) || minimumDollars < 0))
+      || (maximumDollars !== null && (!Number.isSafeInteger(maximumDollars) || maximumDollars <= 0))
+      || (minimumDollars !== null && maximumDollars !== null && maximumDollars < minimumDollars)
+    ) continue;
+    const range = { minimumDollars, maximumDollars };
+    ranges.push({ ...range, label: tattooInquiryBudgetRangeLabel(range) });
+  }
+  if (ranges.length) return ranges;
+  return DEFAULT_TATTOO_INQUIRY_BUDGET_RANGES.map((range) => ({
+    ...range,
+    label: tattooInquiryBudgetRangeLabel(range),
+  }));
+}
+
+function validateTattooInquiryBudgetRanges(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 12) {
+    return { error: "Add between 1 and 12 inquiry budget ranges." };
+  }
+  const ranges = [];
+  for (const entry of value) {
+    const rawMinimum = entry?.minimumDollars ?? entry?.minimum_dollars;
+    const rawMaximum = entry?.maximumDollars ?? entry?.maximum_dollars;
+    const minimumDollars = rawMinimum === null || rawMinimum === undefined || rawMinimum === "" ? null : Number(rawMinimum);
+    const maximumDollars = rawMaximum === null || rawMaximum === undefined || rawMaximum === "" ? null : Number(rawMaximum);
+    if (
+      (minimumDollars === null && maximumDollars === null)
+      || (minimumDollars !== null && (!Number.isSafeInteger(minimumDollars) || minimumDollars < 0))
+      || (maximumDollars !== null && (!Number.isSafeInteger(maximumDollars) || maximumDollars <= 0))
+      || (minimumDollars !== null && maximumDollars !== null && maximumDollars < minimumDollars)
+    ) {
+      return { error: "Each inquiry budget range needs valid whole-dollar bounds, with the maximum greater than or equal to the minimum." };
+    }
+    ranges.push({ minimumDollars, maximumDollars });
+  }
+  return { ranges };
 }
 
 function normalizeTattooRateCard(row) {
@@ -9541,20 +9604,26 @@ export async function handleAdminTattooSettings(request, env) {
       const sessionEstimateCopyJson = JSON.stringify(Object.fromEntries(
         Object.entries(sessionEstimateCopy).map(([key, value]) => [key, value.slice(0, 2000)])
       ));
+      const budgetRangesValidation = validateTattooInquiryBudgetRanges(
+        body.settings.inquiryBudgetRanges ?? parseJsonField(current?.inquiry_budget_ranges_json, DEFAULT_TATTOO_INQUIRY_BUDGET_RANGES)
+      );
+      if (budgetRangesValidation.error) return errorResponse(budgetRangesValidation.error, 400);
+      const inquiryBudgetRangesJson = JSON.stringify(budgetRangesValidation.ranges);
       if (!supportEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supportEmail)) {
         return errorResponse("A valid tattoo support email is required.", 400);
       }
       statements.push(db.prepare(
         `INSERT INTO tattoo_settings (
           id, review_time_message, lead_time_days, walk_in_guidance, support_email,
-          session_estimate_copy_json, updated_at
-        ) VALUES ('default', ?, ?, ?, ?, ?, ?)
+          session_estimate_copy_json, inquiry_budget_ranges_json, updated_at
+        ) VALUES ('default', ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           review_time_message = excluded.review_time_message,
           lead_time_days = excluded.lead_time_days,
           walk_in_guidance = excluded.walk_in_guidance,
           support_email = excluded.support_email,
           session_estimate_copy_json = excluded.session_estimate_copy_json,
+          inquiry_budget_ranges_json = excluded.inquiry_budget_ranges_json,
           updated_at = excluded.updated_at`
       ).bind(
         reviewTimeMessage,
@@ -9562,6 +9631,7 @@ export async function handleAdminTattooSettings(request, env) {
         walkInGuidance,
         supportEmail,
         sessionEstimateCopyJson,
+        inquiryBudgetRangesJson,
         now,
       ));
     }

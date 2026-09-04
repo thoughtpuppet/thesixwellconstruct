@@ -543,6 +543,8 @@
   .special-project-media,
   .special-project-upload { min-width:0; max-width:100%; }
   .tattoo-settings-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(120px,.65fr) auto; gap:10px; align-items:end; border-top:5px solid var(--ring-faint); padding-top:10px; min-width:0; }
+  .tattoo-budget-range-row .booking-actions { flex-wrap:nowrap; }
+  .tattoo-budget-range-row .button { min-width:34px; padding-inline:8px; }
   .tattoo-settings-row.special { grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; padding:14px; border:5px solid var(--ring-faint); }
   .tattoo-settings-row.special > .admin-collapse-heading { grid-column:1/-1; align-items:center; }
   .tattoo-settings-row.special-series { grid-template-columns:repeat(3,minmax(0,1fr)); align-items:start; padding:14px; border:5px solid var(--ring-faint); }
@@ -3576,6 +3578,16 @@
     </div>`;
   }
 
+  function tattooInquiryBudgetRangeRow(range = {}) {
+    const minimum = settingValue(range, "minimumDollars", "minimum_dollars", "");
+    const maximum = settingValue(range, "maximumDollars", "maximum_dollars", "");
+    return `<div class="tattoo-settings-row tattoo-budget-range-row" data-inquiry-budget-range>
+      <label>Minimum (USD)<input data-budget-range-minimum type="number" min="0" step="1" inputmode="numeric" value="${escapeHtml(minimum ?? "")}" placeholder="No lower bound"></label>
+      <label>Maximum (USD)<input data-budget-range-maximum type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(maximum ?? "")}" placeholder="No upper bound"></label>
+      <div class="booking-actions"><button class="button" type="button" data-move-budget-range="up" aria-label="Move budget range up">↑</button><button class="button" type="button" data-move-budget-range="down" aria-label="Move budget range down">↓</button><button class="button danger-button" type="button" data-remove-budget-range aria-label="Remove budget range">Remove</button></div>
+    </div>`;
+  }
+
   function specialProjectSeriesOptions(selectedId = "") {
     const options = tattooSettings.specialProjectSeries.map((series) => {
       const state = series.state || "draft";
@@ -4155,6 +4167,12 @@
             <div class="tattoo-settings-list">${tattooSettings.rateCards.map(tattooRateRow).join("") || '<p class="empty">No rate cards configured.</p>'}</div>
           </section>
         </div>
+        <section class="tattoo-settings-card">
+          <h3>Inquiry Budget Ranges</h3>
+          <p class="contact">These ranges populate every public tattoo inquiry path. Leave minimum blank for “Up to,” or maximum blank for an open-ended “+” range. Clients can always enter a specific whole-dollar amount of at least $150.</p>
+          <div class="tattoo-settings-list" data-inquiry-budget-range-list>${(settings.inquiryBudgetRanges || []).map(tattooInquiryBudgetRangeRow).join("")}</div>
+          <div class="booking-actions"><button class="button" type="button" data-add-budget-range>Add Budget Range</button></div>
+        </section>
         <section class="tattoo-settings-card">
           <h3>Session Plan Copy</h3>
           <p class="contact">Global wording for every private tattoo booking link. A client-specific estimate note can still override the default note without changing this template.</p>
@@ -6181,7 +6199,7 @@ ${meetingLines}
       event_title: payloadValue(submission, "event_title") || "the event",
       booking_label: "studio booking",
       booking_url: "",
-      approved_budget_sentence: "",
+      approved_budget: "",
     };
     if (submission.type === "event_rsvp") {
       const selection = window.ManualTextAssist.templateSelection({
@@ -6210,6 +6228,7 @@ ${meetingLines}
       appointmentConfirmed: appointment?.status === "confirmed",
       specialClientUrl: Boolean(specialClientUrl),
       bookingUrl: Boolean(bookingUrl),
+      hasApprovedBudget: Boolean(budgetLabel),
       requiresInPersonConsult: requiresInPersonConsult(submission),
     });
     return {
@@ -6218,7 +6237,7 @@ ${meetingLines}
         ...baseValues,
         booking_label: studioVisit ? "Open Studio Visit" : "studio booking",
         booking_url: specialClientUrl || bookingUrl,
-        approved_budget_sentence: budgetLabel ? `Your approved project budget is ${budgetLabel}.` : "",
+        approved_budget: budgetLabel,
       },
     };
   }
@@ -6266,7 +6285,7 @@ ${meetingLines}
     return window.ManualTextAssist.compose(previewTemplates, openingKey, bodyKey, {
       ...context.values,
       booking_url: context.values.booking_url || "[booking link]",
-      approved_budget_sentence: context.values.approved_budget_sentence || "Your approved project budget is [approved budget].",
+      approved_budget: context.values.approved_budget || "[approved budget]",
     });
   }
 
@@ -9519,6 +9538,35 @@ ${meetingLines}
       return;
     }
 
+    const addBudgetRange = event.target.closest("[data-add-budget-range]");
+    if (addBudgetRange) {
+      const list = addBudgetRange.closest(".tattoo-settings-card")?.querySelector("[data-inquiry-budget-range-list]");
+      list?.insertAdjacentHTML("beforeend", tattooInquiryBudgetRangeRow());
+      enhanceControls(list?.lastElementChild);
+      return;
+    }
+
+    const removeBudgetRange = event.target.closest("[data-remove-budget-range]");
+    if (removeBudgetRange) {
+      const row = removeBudgetRange.closest("[data-inquiry-budget-range]");
+      const list = row?.parentElement;
+      if (list?.querySelectorAll("[data-inquiry-budget-range]").length === 1) {
+        setStatus("Keep at least one inquiry budget range");
+        return;
+      }
+      row?.remove();
+      return;
+    }
+
+    const moveBudgetRange = event.target.closest("[data-move-budget-range]");
+    if (moveBudgetRange) {
+      const row = moveBudgetRange.closest("[data-inquiry-budget-range]");
+      const direction = moveBudgetRange.dataset.moveBudgetRange;
+      if (direction === "up" && row?.previousElementSibling) row.parentElement.insertBefore(row, row.previousElementSibling);
+      if (direction === "down" && row?.nextElementSibling) row.parentElement.insertBefore(row.nextElementSibling, row);
+      return;
+    }
+
     const refreshSpecialProjects = event.target.closest("[data-refresh-special-projects]");
     if (refreshSpecialProjects) {
       setStatus("Refreshing Special Projects");
@@ -10905,6 +10953,14 @@ ${meetingLines}
           field.value.trim(),
         ]),
       );
+      const inquiryBudgetRanges = [...tattooSettingsForm.querySelectorAll("[data-inquiry-budget-range]")].map((row) => {
+        const minimum = row.querySelector("[data-budget-range-minimum]")?.value.trim() || "";
+        const maximum = row.querySelector("[data-budget-range-maximum]")?.value.trim() || "";
+        return {
+          minimumDollars: minimum === "" ? null : Number(minimum),
+          maximumDollars: maximum === "" ? null : Number(maximum),
+        };
+      });
       setStatus("Saving tattoo settings");
       await api("/api/admin/tattoo/settings", {
         method: "PATCH",
@@ -10916,6 +10972,7 @@ ${meetingLines}
             supportEmail: String(values.supportEmail || "").trim(),
             walkInGuidance: String(values.walkInGuidance || "").trim(),
             sessionEstimateCopy,
+            inquiryBudgetRanges,
           },
           rateCards,
         }),

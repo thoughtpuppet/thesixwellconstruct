@@ -75,8 +75,15 @@ export const MANUAL_TEXT_TEMPLATE_DEFINITIONS = [
     key: "tattoo_booking_approved",
     label: "Tattoo approved for booking",
     group: "Tattoo",
-    allowedTokens: ["approved_budget_sentence", "booking_url"],
-    defaultBody: "Your project has been approved for booking. {{approved_budget_sentence}} Review and agree to the session estimate and budget, choose your appointment, and place the deposit here: {{booking_url}}",
+    allowedTokens: ["approved_budget", "booking_url"],
+    defaultBody: "Your project has been approved for booking. Your approved project budget is {{approved_budget}}. Review and agree to the session estimate and budget, choose your appointment, and place the deposit here: {{booking_url}}",
+  },
+  {
+    key: "tattoo_booking_approved_no_budget",
+    label: "Tattoo approved without budget",
+    group: "Tattoo",
+    allowedTokens: ["booking_url"],
+    defaultBody: "Your project has been approved for booking. Review and agree to the session estimate, choose your appointment, and place the deposit here: {{booking_url}}",
   },
   {
     key: "tattoo_inquiry_received",
@@ -106,13 +113,20 @@ export function validateManualTextTemplate(templateKey, body) {
 }
 
 function presentTemplate(definition, row) {
+  const storedBody = row?.body_text || definition.defaultBody;
+  const body = definition.key === "tattoo_booking_approved"
+    ? storedBody.replace(
+        /{{\s*approved_budget_sentence\s*}}/g,
+        "Your approved project budget is {{approved_budget}}.",
+      )
+    : storedBody;
   return {
     key: definition.key,
     label: definition.label,
     group: definition.group,
     allowedTokens: definition.allowedTokens,
     defaultBody: definition.defaultBody,
-    body: row?.body_text || definition.defaultBody,
+    body,
     updatedAt: row?.updated_at || "",
   };
 }
