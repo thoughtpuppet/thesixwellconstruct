@@ -4,11 +4,12 @@
   var STORAGE_KEY = "sixwell_explore_history_v1";
   var PORTAL_STORAGE_KEY = "sixwell_explore_portal_v1";
   var HISTORY_LIMIT = 12;
-  var VALID_SCOPES = ["all", "works", "process", "pages"];
+  var VALID_SCOPES = ["all", "works", "process", "journal", "pages"];
   var SCOPE_LABELS = {
     all: "Browsing entire site",
     works: "Browsing works & objects",
     process: "Browsing process & evidence",
+    journal: "Browsing journal entries",
     pages: "Browsing pages & pathways",
   };
   var room = document.querySelector("[data-explore-room]");
@@ -33,7 +34,7 @@
   if (!room || !buttons.length || !status || !portal || !browsingLabel || !previewSurface || !previewFrame || !previewMedium || !previewTitle || !diveAgainButton || !enterPageButton || !backToBoardButton) return;
 
   function emptyHistory() {
-    return { all: [], works: [], process: [], pages: [] };
+    return { all: [], works: [], process: [], journal: [], pages: [] };
   }
 
   function validScope(value) {

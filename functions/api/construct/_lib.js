@@ -3466,8 +3466,8 @@ async function publicSearch(request, env) {
   return json({records:sitewideRecords,groups:sitewideRecords,items:sitewideRecords,count:sitewideRecords.length,query:q,includes},{cache:"public, max-age=30"});
 }
 
-const EXPLORE_SCOPES = new Set(["all", "works", "process", "pages"]);
-const EXPLORE_WEIGHTS = { works: 0.5, process: 0.3, pages: 0.2 };
+const EXPLORE_SCOPES = new Set(["all", "works", "process", "journal", "pages"]);
+const EXPLORE_WEIGHTS = { works: 0.45, process: 0.25, pages: 0.2, journal: 0.1 };
 const EXPLORE_WORK_TYPES = new Set([
   "art_work", "portfolio_item", "flash_item", "flash_series", "tattoo_design",
   "merch_item", "event", "visual_symbol",
@@ -3540,7 +3540,7 @@ function pickExploreBalanced(candidates, random = Math.random) {
 
 export function selectExploreDestination(pools, requestedScope = "all", excludedKeys = [], random = Math.random) {
   const exclusions = new Set((excludedKeys || []).map(String));
-  const scopes = requestedScope === "all" ? ["works", "process", "pages"] : [requestedScope];
+  const scopes = requestedScope === "all" ? ["works", "process", "pages", "journal"] : [requestedScope];
   const available = scopes.filter((scope) => Array.isArray(pools[scope]) && pools[scope].length);
   if (!available.length) return { destination: null, restarted: false };
   let filtered = Object.fromEntries(available.map((scope) => [scope, pools[scope].filter((item) => !exclusions.has(item.key))]));
@@ -3588,6 +3588,21 @@ function exploreProcessCandidate(row) {
   };
 }
 
+function exploreJournalCandidate(row) {
+  const route = safeExploreRoute(archiveNoteRoute(row.slug));
+  const medium = exploreMedium(row.node_id, row.entity_type, "archive");
+  if (!route || !medium || !String(row.title || "").trim()) return null;
+  return {
+    key: `journal:${row.entity_id}`,
+    scope: "journal",
+    kind: "journal-entry",
+    medium,
+    title: String(row.title).trim(),
+    route,
+    entityKey: row.entity_id,
+  };
+}
+
 function explorePageCandidate(row, kind) {
   const route = safeExploreRoute(row.route);
   const medium = exploreMedium(kind === "node" ? row.id : row.node_id, "", "about");
@@ -3610,7 +3625,7 @@ async function publicExplore(request, env) {
   if (!EXPLORE_SCOPES.has(scope)) return failure("Invalid Explore scope.", 400);
   const excluded = String(url.searchParams.get("exclude") || "").split(",").map((key) => key.trim()).filter(Boolean).slice(-12);
   const database = db(env);
-  const [worksResult, dossiersResult, processResult, nodesResult, pathwaysResult] = await database.batch([
+  const [worksResult, dossiersResult, processResult, journalsResult, nodesResult, pathwaysResult] = await database.batch([
     database.prepare(`SELECT d.entity_id,d.entity_type,d.node_id,d.title,d.route
       FROM search_documents d JOIN content_entities ce ON ce.id=d.entity_id
       WHERE ce.visibility='public' AND ce.search_visibility=1
@@ -3637,6 +3652,10 @@ async function publicExplore(request, env) {
       WHERE af.public_visible=1 AND af.fragment_type IN ('material','source-material')
         AND ce.visibility='public' AND ad.state='published' AND ad.public_visible=1
         AND (am.id IS NULL OR am.material_type<>'final-image') AND ${archiveFragmentPublicSql("af")}`),
+    database.prepare(`SELECT note.entity_id,note.slug,note.title,owner.entity_type,owner.node_id
+      FROM archive_notes note JOIN content_entities owner ON owner.id=note.entity_id
+      WHERE note.note_type='journal-entry' AND note.state='published' AND note.public_visible=1
+        AND owner.visibility='public'`),
     database.prepare(`SELECT cn.id,cn.id node_id,cn.name title,cn.route FROM construct_nodes cn
       JOIN content_entities ce ON ce.id=cn.id
       WHERE cn.state='published' AND cn.homepage_enabled=1 AND ce.visibility='public'`),
@@ -3655,11 +3674,12 @@ async function publicExplore(request, env) {
     if (candidate) works.push(candidate);
   }
   const process = (processResult.results || []).map(exploreProcessCandidate).filter(Boolean);
+  const journal = (journalsResult.results || []).map(exploreJournalCandidate).filter(Boolean);
   const pages = [
     ...(nodesResult.results || []).map((row) => explorePageCandidate(row, "node")),
     ...(pathwaysResult.results || []).map((row) => explorePageCandidate(row, "pathway")),
   ].filter(Boolean);
-  const result = selectExploreDestination({ works, process, pages }, scope, excluded);
+  const result = selectExploreDestination({ works, process, pages, journal }, scope, excluded);
   if (!result.destination) return failure("No public Explore destinations are available for that scope.", 404);
   return json(result, { cache: "no-store" });
 }
@@ -7736,9 +7756,11 @@ async function archiveNoteAssets(database,noteEntityId,{publicOnly=false,admin=f
 
 async function archiveNoteLinks(database,noteEntityId,{publicOnly=false}={}){
   const rows=(await database.prepare(`SELECT anl.*,ce.entity_type,ce.visibility,sd.title,sd.route,
+      ad.archive_slug linked_archive_slug,ad.state linked_dossier_state,ad.public_visible linked_dossier_public_visible,
       COALESCE(aw.title,mi.title,ar.title,vs.name,spc.title,sd.title,anl.target_entity_id) target_title
     FROM archive_note_links anl JOIN content_entities ce ON ce.id=anl.target_entity_id
     LEFT JOIN search_documents sd ON sd.entity_id=anl.target_entity_id
+    LEFT JOIN archive_dossiers ad ON ad.entity_id=anl.target_entity_id
     LEFT JOIN art_works aw ON aw.id=anl.target_entity_id
     LEFT JOIN merch_items mi ON mi.id=anl.target_entity_id
     LEFT JOIN archive_records ar ON ar.id=anl.target_entity_id
@@ -7751,7 +7773,8 @@ async function archiveNoteLinks(database,noteEntityId,{publicOnly=false}={}){
     entity_type:row.entity_type,entityType:row.entity_type,relationship_role:row.relationship_role,relationshipRole:row.relationship_role,
     is_primary:Number(row.is_primary||0)===1,isPrimary:Number(row.is_primary||0)===1,
     public_visible:Number(row.public_visible||0)===1,publicVisible:Number(row.public_visible||0)===1,
-    sort_order:Number(row.sort_order||0),sortOrder:Number(row.sort_order||0),route:row.route||"",
+    sort_order:Number(row.sort_order||0),sortOrder:Number(row.sort_order||0),
+    route:row.linked_archive_slug&&row.linked_dossier_state==="published"&&Number(row.linked_dossier_public_visible)===1?`/archive/records/${encodeURIComponent(row.linked_archive_slug)}/`:row.route||"",
   }));
 }
 

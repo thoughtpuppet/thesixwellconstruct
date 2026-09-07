@@ -75,7 +75,7 @@ function exploreClientHarness({ storedPortal = null, responses = [] } = {}) {
   const pageEvents = {};
   const storage = new Map();
   if (storedPortal) storage.set("sixwell_explore_portal_v1", JSON.stringify(storedPortal));
-  const buttons = ["all", "works", "process", "pages"].map((scope) => exploreElement({ dataset: { exploreScope: scope } }));
+  const buttons = ["all", "works", "process", "journal", "pages"].map((scope) => exploreElement({ dataset: { exploreScope: scope } }));
   const room = exploreElement({ dataset: { exploreState: "loading", exploreActiveScope: "all" } });
   const actionGroup = exploreElement();
   const status = exploreElement({ dataset: { state: "loading" } });
@@ -147,16 +147,18 @@ function exploreClientHarness({ storedPortal = null, responses = [] } = {}) {
 
 const flushExploreClient = () => new Promise((resolve) => setImmediate(resolve));
 
-test("all-site selection uses 50/30/20 family bands and omits unavailable families", () => {
+test("all-site selection uses 45/25/20/10 family bands and omits unavailable families", () => {
   const pools = {
     works: [destination("works", "work")],
     process: [destination("process", "process")],
     pages: [destination("pages", "page")],
+    journal: [destination("journal", "journal", "archive")],
   };
   assert.equal(selectExploreDestination(pools, "all", [], () => 0.1).destination.scope, "works");
-  assert.equal(selectExploreDestination(pools, "all", [], () => 0.6).destination.scope, "process");
-  assert.equal(selectExploreDestination(pools, "all", [], () => 0.9).destination.scope, "pages");
-  assert.equal(selectExploreDestination({ works: [], process: [], pages: pools.pages }, "all", [], () => 0).destination.scope, "pages");
+  assert.equal(selectExploreDestination(pools, "all", [], () => 0.5).destination.scope, "process");
+  assert.equal(selectExploreDestination(pools, "all", [], () => 0.8).destination.scope, "pages");
+  assert.equal(selectExploreDestination(pools, "all", [], () => 0.95).destination.scope, "journal");
+  assert.equal(selectExploreDestination({ works: [], process: [], pages: [], journal: pools.journal }, "all", [], () => 0).destination.scope, "journal");
 });
 
 test("selection balances medium, canonical entity, and surface instead of row volume", () => {
@@ -256,6 +258,52 @@ test("process selection reuses record publication, media privacy and presentatio
   assert.equal((await excluded.json()).restarted, true);
 });
 
+test("journal selection returns each canonical public Journal once and keeps unlinked entries eligible", async () => {
+  const db = database();
+  db.exec(`
+    UPDATE archive_notes SET state='draft',public_visible=0;
+    UPDATE content_entities SET visibility='internal',search_visibility=0 WHERE entity_type='archive_note';
+    UPDATE content_entities SET visibility='public',search_visibility=1 WHERE id='art-marbles';
+    UPDATE archive_dossiers SET state='published',public_visible=1 WHERE entity_id='art-marbles';
+
+    INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at)
+      VALUES('journal-linked','archive_note','node-archive','public',1,'test','test',datetime('now'),datetime('now')),
+            ('journal-orphan','archive_note','node-archive','public',1,'test','test',datetime('now'),datetime('now')),
+            ('journal-private','archive_note','node-archive','public',1,'test','test',datetime('now'),datetime('now')),
+            ('note-public','archive_note','node-archive','public',1,'test','test',datetime('now'),datetime('now'));
+    INSERT INTO archive_notes(entity_id,slug,title,note_type,body_markdown,state,public_visible,created_at,updated_at)
+      VALUES('journal-linked','journal-linked','Linked Journal','journal-entry','A public Journal linked in more than one place.','published',1,datetime('now'),datetime('now')),
+            ('journal-orphan','journal-orphan','Standalone Journal','journal-entry','A public Journal without a record link.','published',1,datetime('now'),datetime('now')),
+            ('journal-private','journal-private','Private Journal','journal-entry','Not for Adventure.','draft',0,datetime('now'),datetime('now')),
+            ('note-public','note-public','Public supporting Note','concept-note','Not a Journal entry.','published',1,datetime('now'),datetime('now'));
+    INSERT INTO archive_note_links(note_entity_id,target_entity_id,relationship_role,is_primary,sort_order,public_visible,created_at)
+      VALUES('journal-linked','art-marbles','development',1,1,1,datetime('now')),
+            ('journal-linked','place-goat-farm-arts-center','context',0,2,1,datetime('now'));
+  `);
+  const runtime = { SUBMISSIONS_DB: new LocalD1(db) };
+  const first = await handleConstructApi(request("/api/site/explore?scope=journal"), runtime);
+  assert.equal(first.status, 200);
+  assert.equal(first.headers.get("cache-control"), "no-store");
+  const firstDestination = (await first.json()).destination;
+  assert.ok(["journal:journal-linked", "journal:journal-orphan"].includes(firstDestination.key));
+  assert.equal(firstDestination.scope, "journal");
+  assert.equal(firstDestination.kind, "journal-entry");
+  assert.equal(firstDestination.medium.id, "archive");
+  assert.match(firstDestination.route, /^\/archive\/notes\/journal-(?:linked|orphan)\/$/);
+
+  const excludedKey = firstDestination.key;
+  const second = await handleConstructApi(request(`/api/site/explore?scope=journal&exclude=${encodeURIComponent(excludedKey)}`), runtime);
+  const secondDestination = (await second.json()).destination;
+  assert.notEqual(secondDestination.key, excludedKey);
+  const exhausted = await handleConstructApi(request(`/api/site/explore?scope=journal&exclude=${encodeURIComponent(excludedKey)},${encodeURIComponent(secondDestination.key)}`), runtime);
+  assert.equal((await exhausted.json()).restarted, true);
+
+  const linked = await handleConstructApi(request("/api/archive/notes/journal-linked"), runtime);
+  const linkedPayload = await linked.json();
+  assert.equal(linkedPayload.links.length, 2, "multiple placements do not duplicate the canonical Journal destination");
+  assert.equal(linkedPayload.links[0].route, "/archive/records/lostmarbles/");
+});
+
 test("empty eligible pools return a retryable no-store response", async () => {
   const db = database();
   db.exec("UPDATE content_entities SET visibility='internal'; UPDATE archive_dossiers SET public_visible=0; UPDATE construct_nodes SET homepage_enabled=0; UPDATE construct_pathways SET homepage_enabled=0;");
@@ -288,6 +336,7 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
     ["all", "Take me anywhere", "Across the entire domain\."],
     ["works", "Works &amp; objects", "Art, objects, events &amp; archives\."],
     ["process", "Process &amp; evidence", "Sketches, notes, bts media &amp; voice memos\."],
+    ["journal", "Journal entries", "Published reflections, observations &amp; studio moments\."],
     ["pages", "Pages &amp; pathways", "whole pages, guides, portfolios &amp; pathways\."],
   ]) {
     const action = html.match(new RegExp(`<button[^>]+data-explore-scope="${scope}"[\\s\\S]*?<\\/button>`))?.[0] || "";
@@ -296,6 +345,7 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
     assert.match(action, new RegExp(`<span class="explore-action__description" id="explore-description-${scope}">${description}<\\/span>`));
   }
   assert.match(html, /data-explore-scope="all" data-explore-shape="disc" aria-label="Take me anywhere"/);
+  assert.match(html, /data-explore-scope="journal" data-explore-shape="pentagon" aria-label="Journal entries"/);
   assert.match(html, /data-explore-status[^>]*aria-live="polite"/);
   assert.match(html, /<section[^>]+data-explore-portal[^>]+hidden/);
   assert.match(html, /data-explore-browsing-label>Browsing entire site<\/p>/);
@@ -323,7 +373,7 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(css, /\.explore-room\[data-explore-renderer="fallback"\]/);
   assert.match(css, /\.explore-action::before/);
   assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
-  for (const [scope, signal] of [["works", "--explore-orange"], ["process", "--explore-yellow"], ["pages", "--explore-blue"]]) {
+  for (const [scope, signal] of [["works", "--explore-orange"], ["process", "--explore-teal"], ["journal", "--explore-bronze"], ["pages", "--explore-blue"]]) {
     assert.match(css, new RegExp(`data-explore-active-scope="${scope}"[\\s\\S]*?--explore-active-signal:\\s*var\\(${signal}\\)`));
   }
   assert.match(css, /\.explore-portal\s*\{[\s\S]*?border-left:\s*5px solid var\(--explore-active-signal\)[\s\S]*?background:\s*var\(--color-bg\)/);
@@ -351,7 +401,7 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.doesNotMatch(room, /MeshPhysicalMaterial/);
   assert.match(room, /0xD01006/i);
   assert.match(room, /new THREE\.CylinderGeometry\(1,\s*1,\s*0\.46,\s*segments\)/);
-  for (const [segments, color] of [[4, "F06C00"], [3, "FFBB00"], [6, "006EFF"]]) {
+  for (const [segments, color] of [[4, "F06C00"], [3, "00857A"], [6, "006EFF"]]) {
     assert.match(room, new RegExp(`prismGeometry\\(${segments}(?:,|\\))`));
     assert.match(room, new RegExp(`0x${color}`, "i"));
   }
@@ -379,13 +429,13 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.doesNotMatch(room, /CircleGeometry/);
   assert.doesNotMatch(css, /drop-shadow\(/);
   assert.match(css, /data-explore-renderer="fallback"[^}]*\.explore-action\s*\{[\s\S]*?radial-gradient\(/);
-  assert.equal((room.match(/floatX:\s*0\./g) || []).length, 4);
-  assert.equal((room.match(/floatY:\s*0\./g) || []).length, 4);
-  assert.equal((room.match(/floatZ:\s*0\./g) || []).length, 4);
-  assert.equal((room.match(/floatTilt:\s*0\./g) || []).length, 4);
-  assert.equal((room.match(/rollSway:\s*0\./g) || []).length, 4);
-  assert.equal((room.match(/tumbleX:\s*0\./g) || []).length, 4);
-  assert.equal((room.match(/tumbleY:\s*0\./g) || []).length, 4);
+  assert.equal((room.match(/floatX:\s*0\./g) || []).length, 5);
+  assert.equal((room.match(/floatY:\s*0\./g) || []).length, 5);
+  assert.equal((room.match(/floatZ:\s*0\./g) || []).length, 5);
+  assert.equal((room.match(/floatTilt:\s*0\./g) || []).length, 5);
+  assert.equal((room.match(/rollSway:\s*0\./g) || []).length, 5);
+  assert.equal((room.match(/tumbleX:\s*0\./g) || []).length, 5);
+  assert.equal((room.match(/tumbleY:\s*0\./g) || []).length, 5);
   assert.match(room, /Math\.cos\(elapsed \* 0\.34 \+ item\.floatPhase\)/);
   assert.match(room, /Math\.sin\(elapsed \* 0\.47 \+ item\.floatPhase \* 1\.13\)/);
   assert.match(room, /item\.basePosition\.y \+ driftY \+ lift/);
@@ -508,9 +558,10 @@ test("Explore identifies the selected browsing scope above the portal viewer", a
     [0, "Browsing entire site"],
     [1, "Browsing works & objects"],
     [2, "Browsing process & evidence"],
-    [3, "Browsing pages & pathways"],
+    [3, "Browsing journal entries"],
+    [4, "Browsing pages & pathways"],
   ]) {
-    const scope = ["all", "works", "process", "pages"][index];
+    const scope = ["all", "works", "process", "journal", "pages"][index];
     const harness = exploreClientHarness({ responses: [{ destination: destination(scope === "all" ? "works" : scope, "scope-" + scope) }] });
     harness.buttons[index].dispatch("click");
     await flushExploreClient();
@@ -576,7 +627,7 @@ test("Explore restores the current portal after a reload or BFCache return", () 
   harness.room.dataset.exploreState = "loading";
   harness.buttons.forEach((button) => { button.disabled = true; });
   harness.pageEvents.pageshow({ persisted: true });
-  assert.deepEqual(harness.buttons.map((button) => button.disabled), [false, false, false, false]);
+  assert.deepEqual(harness.buttons.map((button) => button.disabled), [false, false, false, false, false]);
   assert.equal(harness.room.dataset.exploreState, "preview");
   assert.equal(harness.room.dataset.exploreActiveScope, "process");
   assert.equal(harness.portal.hidden, false);

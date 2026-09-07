@@ -38,8 +38,12 @@ body.archive-public[data-archive-view="notes"]{background:var(--color-bg);color:
 body.archive-note-image-open{overflow:hidden}
 .archive-note-context{border:5px solid var(--color-archive,#6D3D15);padding:20px;position:sticky;top:18px}
 .archive-note-context h2{font-size:.78rem;letter-spacing:.15em;text-transform:uppercase;margin:0 0 14px}
+.archive-note-main-record{display:grid;gap:10px;margin:0 0 20px;padding:16px;border:5px solid var(--color-archive-bright,#B87A32)}
+.archive-note-main-record h2{margin:0}
+.archive-note-main-record a{color:#FCB867;font-size:.84rem;font-weight:900;letter-spacing:.08em;line-height:1.4;text-decoration-thickness:2px;text-transform:uppercase;text-underline-offset:4px}
 .archive-note-context-list{display:grid;gap:10px;margin:0;padding:0;list-style:none}
 .archive-note-context-list a{display:block;color:#FCB867;text-transform:uppercase;font-size:.75rem;line-height:1.4;text-decoration-thickness:2px;text-underline-offset:4px}
+.archive-note-context-list>li>span:last-child{display:block;color:var(--color-text-muted);font-size:.75rem;line-height:1.4;text-transform:uppercase}
 .archive-note-missing-asset{border:5px solid #6D3D15;padding:18px;color:#B87A32!important}
 .archive-note-quick-card{border:5px solid var(--color-archive,#6D3D15);background:var(--color-bg)}
 .archive-note-quick-card button{appearance:none;border:0;background:transparent;color:inherit;padding:0;width:100%;text-align:left;cursor:pointer}

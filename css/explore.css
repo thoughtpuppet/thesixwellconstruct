@@ -20,7 +20,8 @@ body {
 .explore-room {
   --explore-red: #d01006;
   --explore-orange: #f06c00;
-  --explore-yellow: #ffbb00;
+  --explore-teal: var(--color-film, #00857a);
+  --explore-bronze: var(--color-archive-bright, #b87a32);
   --explore-blue: #006eff;
   --explore-focus: var(--color-about, #fcb867);
   --explore-description: rgba(252, 184, 103, 0.55);
@@ -43,8 +44,14 @@ body {
 }
 
 .explore-room[data-explore-active-scope="process"] {
-  --explore-active-signal: var(--explore-yellow);
-  --explore-active-copy: var(--explore-yellow);
+  --explore-active-signal: var(--explore-teal);
+  --explore-active-copy: var(--color-film-bright, #339d95);
+  --explore-active-ink: #000;
+}
+
+.explore-room[data-explore-active-scope="journal"] {
+  --explore-active-signal: var(--explore-bronze);
+  --explore-active-copy: #d79b4b;
   --explore-active-ink: #000;
 }
 
@@ -146,24 +153,32 @@ body {
 }
 
 .explore-action--works {
-  --explore-x: 18%;
-  --explore-y: 74%;
-  --explore-size: clamp(104px, 11vw, 148px);
+  --explore-x: 12.5%;
+  --explore-y: 72%;
+  --explore-size: clamp(96px, 9.5vw, 132px);
   --explore-shape-color: var(--explore-orange);
 }
 
 .explore-action--process {
-  --explore-x: 50%;
+  --explore-x: 37.5%;
   --explore-y: 78%;
-  --explore-size: clamp(104px, 11vw, 148px);
-  --explore-shape-color: var(--explore-yellow);
+  --explore-size: clamp(96px, 9.5vw, 132px);
+  --explore-shape-color: var(--explore-teal);
   --explore-shape-clip: polygon(50% 8%, 94% 88%, 6% 88%);
 }
 
+.explore-action--journal {
+  --explore-x: 62.5%;
+  --explore-y: 78%;
+  --explore-size: clamp(96px, 9.5vw, 132px);
+  --explore-shape-color: var(--explore-bronze);
+  --explore-shape-clip: polygon(50% 4%, 96% 38%, 78% 92%, 22% 92%, 4% 38%);
+}
+
 .explore-action--pages {
-  --explore-x: 82%;
-  --explore-y: 74%;
-  --explore-size: clamp(104px, 11vw, 148px);
+  --explore-x: 87.5%;
+  --explore-y: 72%;
+  --explore-size: clamp(96px, 9.5vw, 132px);
   --explore-shape-color: var(--explore-blue);
   --explore-shape-clip: polygon(25% 7%, 75% 7%, 97% 50%, 75% 93%, 25% 93%, 3% 50%);
 }
@@ -267,6 +282,10 @@ body {
   pointer-events: none;
   transform: translate(-50%, -8px);
   transition: opacity 180ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.explore-action:not(.explore-action--primary) .explore-action__description {
+  width: min(220px, 170%);
 }
 
 .explore-action--primary .explore-action__description {
@@ -610,6 +629,11 @@ body {
   animation-duration: 8.9s;
 }
 
+.explore-room[data-explore-renderer="fallback"] .explore-action--journal {
+  animation-delay: -6.2s;
+  animation-duration: 10.1s;
+}
+
 .explore-room[data-explore-renderer="fallback"] .explore-action--pages {
   animation-delay: -7.4s;
   animation-duration: 11.3s;
@@ -622,21 +646,27 @@ body {
   }
 
   .explore-action--works {
-    --explore-x: 18%;
-    --explore-y: 72%;
-    --explore-size: clamp(76px, 23vw, 94px);
+    --explore-x: 12.5%;
+    --explore-y: 70.5%;
+    --explore-size: clamp(68px, 20vw, 82px);
   }
 
   .explore-action--process {
-    --explore-x: 50%;
-    --explore-y: 77%;
-    --explore-size: clamp(76px, 23vw, 94px);
+    --explore-x: 37.5%;
+    --explore-y: 76.5%;
+    --explore-size: clamp(68px, 20vw, 82px);
+  }
+
+  .explore-action--journal {
+    --explore-x: 62.5%;
+    --explore-y: 76.5%;
+    --explore-size: clamp(68px, 20vw, 82px);
   }
 
   .explore-action--pages {
-    --explore-x: 82%;
-    --explore-y: 72%;
-    --explore-size: clamp(76px, 23vw, 94px);
+    --explore-x: 87.5%;
+    --explore-y: 70.5%;
+    --explore-size: clamp(68px, 20vw, 82px);
   }
 
   .explore-action__label {
@@ -648,8 +678,8 @@ body {
 
   .explore-action__description {
     top: calc(100% + 23px);
-    width: 118px;
-    max-width: 118px;
+    width: 88px;
+    max-width: 88px;
     font-size: 8px;
     letter-spacing: 0.025em;
     line-height: 1.3;
@@ -716,13 +746,14 @@ body {
 
   .explore-action--works,
   .explore-action--pages {
-    --explore-y: 72%;
-    --explore-size: clamp(88px, 9vw, 118px);
+    --explore-y: 70%;
+    --explore-size: clamp(82px, 8.5vw, 110px);
   }
 
-  .explore-action--process {
-    --explore-y: 75%;
-    --explore-size: clamp(88px, 9vw, 118px);
+  .explore-action--process,
+  .explore-action--journal {
+    --explore-y: 74%;
+    --explore-size: clamp(82px, 8.5vw, 110px);
   }
 }
 
