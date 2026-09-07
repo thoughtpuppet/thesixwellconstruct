@@ -150,6 +150,7 @@
       if (endDifference === 1) return "Ends tomorrow";
       return "Ends " + new Intl.DateTimeFormat("en-US", { weekday:"long", timeZone:"UTC" }).format(new Date(endKey + "T12:00:00Z"));
     }
+    if (startDifference <= 0 && endDifference >= 0) return "Today";
     if (startDifference === 0) return "Today";
     if (startDifference === 1) return "Tomorrow";
     var today = new Date(todayKey + "T12:00:00Z");
@@ -401,7 +402,7 @@
   function renderLists() {
     var onView = filtered.filter(isOnViewExhibition);
     var dated = filtered.filter(function (event) { return !isOnViewExhibition(event); });
-    var upcoming = window.AtlantaCalendarRecord.nextUpcoming(matchedEvents, 10);
+    var upcoming = window.AtlantaCalendarRecord.nextUpcoming(matchedEvents, 3);
     var past = dated.filter(isPast).reverse();
     var monthName = new Intl.DateTimeFormat("en-US", { month:"long", year:"numeric" }).format(activeMonth);
     currentMonthName = monthName;

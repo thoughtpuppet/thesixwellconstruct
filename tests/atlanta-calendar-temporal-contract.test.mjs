@@ -64,7 +64,7 @@ test("same-day timed events remain not past until they end", () => {
   assert.equal(isPast(sameDay, Date.parse("2026-08-31T14:01:00-04:00")), true);
 });
 
-test("Upcoming uses the Atlanta start day rather than the event end or clock time", () => {
+test("Upcoming includes every non-exhibition event overlapping today through the day after tomorrow", () => {
   const priorDayRange = {
     id:"prior-day-range",
     title:"Already started range",
@@ -92,24 +92,41 @@ test("Upcoming uses the Atlanta start day rather than the event end or clock tim
     endsAt:"2026-09-01T10:00:00-04:00",
     formats:["workshop"],
   };
+  const dayAfterTomorrow = {
+    id:"day-after-tomorrow",
+    title:"Day after tomorrow",
+    dateKind:"timed",
+    eventStructure:"single",
+    startsAt:"2026-09-02T09:00:00-04:00",
+    endsAt:"2026-09-02T10:00:00-04:00",
+    formats:["workshop"],
+  };
+  const outsideWindow = {
+    id:"outside-window",
+    title:"Outside the three-day window",
+    dateKind:"timed",
+    eventStructure:"single",
+    startsAt:"2026-09-03T09:00:00-04:00",
+    endsAt:"2026-09-03T10:00:00-04:00",
+    formats:["workshop"],
+  };
   assert.equal(startsTodayOrLater(priorDayRange, NOW), false);
   assert.equal(startsTodayOrLater(earlierToday, NOW), true);
   assert.deepEqual(
-    Array.from(nextUpcoming([priorDayRange, tomorrow, earlierToday], 10, NOW), function (event) { return event.id; }),
-    ["earlier-today", "tomorrow"],
+    Array.from(nextUpcoming([outsideWindow, dayAfterTomorrow, priorDayRange, tomorrow, earlierToday], 3, NOW), function (event) { return event.id; }),
+    ["prior-day-range", "earlier-today", "tomorrow", "day-after-tomorrow"],
   );
 });
 
-test("Upcoming returns the next ten matching events across month boundaries", () => {
+test("Upcoming has no item cap inside its rolling three-day window", () => {
   const future = Array.from({ length:12 }, function (_, index) {
-    var day = String(index + 1).padStart(2, "0");
     return {
-      id:"future-" + day,
-      title:"Future event " + day,
+      id:"future-" + index,
+      title:"Future event " + index,
       dateKind:"timed",
       eventStructure:"single",
-      startsAt:"2026-09-" + day + "T19:00:00-04:00",
-      endsAt:"2026-09-" + day + "T21:00:00-04:00",
+      startsAt:"2026-09-01T" + String(8 + index).padStart(2, "0") + ":00:00-04:00",
+      endsAt:"2026-09-01T" + String(9 + index).padStart(2, "0") + ":00:00-04:00",
       formats:["performance"],
     };
   });
@@ -132,7 +149,7 @@ test("Upcoming returns the next ten matching events across month boundaries", ()
     formats:["exhibition"],
   };
   assert.deepEqual(
-    Array.from(nextUpcoming([future[10], stale, exhibition, ...future.slice(0, 10), future[11]], 10, NOW), function (event) { return event.id; }),
-    future.slice(0, 10).map(function (event) { return event.id; }),
+    Array.from(nextUpcoming([future[10], stale, exhibition, ...future.slice(0, 10), future[11]], 3, NOW), function (event) { return event.id; }),
+    future.map(function (event) { return event.id; }),
   );
 });

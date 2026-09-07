@@ -77,14 +77,35 @@
     return Boolean(startKey && currentKey && startKey >= currentKey);
   }
 
-  function nextUpcoming(events, limit, now) {
-    var maximum = Math.max(0, Number(limit) || 0);
+  function addCalendarDays(key, amount) {
+    var date = /^\d{4}-\d{2}-\d{2}$/.test(key) ? new Date(key + "T12:00:00Z") : null;
+    if (!date) return "";
+    date.setUTCDate(date.getUTCDate() + amount);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function nextUpcoming(events, dayCount, now) {
+    var days = Math.max(1, Number(dayCount) || 3);
+    var current = now instanceof Date ? now : Number.isFinite(Number(now)) ? Number(now) : Date.now();
+    var currentKey = dateKey(current);
+    var windowEndKey = addCalendarDays(currentKey, days - 1);
     return (Array.isArray(events) ? events : [])
-      .filter(function (event) { return !isOnViewExhibition(event) && startsTodayOrLater(event, now); })
-      .sort(function (left, right) {
-        return Date.parse(left.startsAt) - Date.parse(right.startsAt) || String(left.title || "").localeCompare(String(right.title || ""));
+      .filter(function (event) {
+        var startKey = dateKey(event && event.startsAt);
+        var end = classificationEnd(event || {});
+        var endKey = end ? dateKey(end.toISOString()) : startKey;
+        return !isOnViewExhibition(event) && Boolean(
+          currentKey && windowEndKey && startKey && endKey
+          && startKey <= windowEndKey && endKey >= currentKey
+        );
       })
-      .slice(0, maximum);
+      .sort(function (left, right) {
+        var leftDay = dateKey(left.startsAt) < currentKey ? currentKey : dateKey(left.startsAt);
+        var rightDay = dateKey(right.startsAt) < currentKey ? currentKey : dateKey(right.startsAt);
+        return leftDay.localeCompare(rightDay)
+          || Date.parse(left.startsAt) - Date.parse(right.startsAt)
+          || String(left.title || "").localeCompare(String(right.title || ""));
+      });
   }
 
   function eventDate(event) {
@@ -137,6 +158,7 @@
       if (endDifference === 1) return "Ends tomorrow";
       return "Ends " + new Intl.DateTimeFormat("en-US", { weekday:"long", timeZone:"UTC" }).format(new Date(endKey + "T12:00:00Z"));
     }
+    if (startDifference <= 0 && endDifference >= 0) return "Today";
     if (startDifference === 0) return "Today";
     if (startDifference === 1) return "Tomorrow";
     var today = new Date(todayKey + "T12:00:00Z");

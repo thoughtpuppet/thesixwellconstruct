@@ -5742,6 +5742,7 @@ function structuredEventProposal(item, source) {
   const access = audienceAccess(structuredAudienceNames(item.audience), { assumePublic: true });
   const subEvents = (Array.isArray(item.subEvent) ? item.subEvent : item.subEvent ? [item.subEvent] : [])
     .map((subEvent, index) => normalizeOccurrenceProposal({
+      sourceEventId: asString(subEvent.identifier || subEvent["@id"] || subEvent.url),
       occurrenceType: /closing(?:\s+reception)?/i.test(asString(subEvent.name)) ? "closing_reception"
         : /opening(?:\s+reception)?|\breception\b/i.test(asString(subEvent.name)) ? "opening_reception"
         : /artist talk/i.test(asString(subEvent.name)) ? "artist_talk"
@@ -10810,7 +10811,7 @@ function scoutRelevance(event, profile) {
   };
 }
 
-async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenance, profile, { targetCandidateId = "", bypassEligibility = false, refreshPrivateIntelligence = false, allowIncompleteCandidate = false } = {}) {
+async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenance, profile, { targetCandidateId = "", bypassEligibility = false, refreshPrivateIntelligence = false, allowIncompleteCandidate = false, authoritativeCompleteSchedule = false } = {}) {
   let proposal = inferSubjectsAndFormats(proposalFromBody(rawProposal));
   const incompleteCandidate = allowIncompleteCandidate && proposal.verificationState === "needs_verification";
   if (!proposal.title || !validHttpUrl(proposal.sourceUrl)) return { skipped: "invalid" };
@@ -10923,17 +10924,36 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
     || proposal.sourceEventId === "eyedrum-series-monday-night-creative-music"
     || asString(proposal.sourceEventId).startsWith("seven-stages-vbo-");
   const matchedBaselineOccurrences = new Set();
+  const sourceIdentityCounts = (occurrences) => occurrences.reduce((counts, occurrence) => {
+    const identity = asString(occurrence.sourceEventId);
+    if (identity) counts.set(identity, (counts.get(identity) || 0) + 1);
+    return counts;
+  }, new Map());
+  const baselineIdentityCounts = sourceIdentityCounts(occurrenceBaseline);
+  const proposalIdentityCounts = sourceIdentityCounts(proposal.occurrences);
+  function matchingBaselineOccurrence(occurrence) {
+    const identity = asString(occurrence.sourceEventId);
+    if (identity && baselineIdentityCounts.get(identity) === 1 && proposalIdentityCounts.get(identity) === 1) {
+      const uniqueIdentityMatch = occurrenceBaseline.find((item) => !matchedBaselineOccurrences.has(item) && item.sourceEventId === identity);
+      if (uniqueIdentityMatch) return uniqueIdentityMatch;
+    }
+    const equivalentMatches = occurrenceBaseline.filter((item) => !matchedBaselineOccurrences.has(item)
+      && item.occurrenceType === occurrence.occurrenceType
+      && (sameEventStart(item.startsAt, occurrence.startsAt)
+        || (!item.startsAt && !occurrence.startsAt && equivalentLineup(item.title) === equivalentLineup(occurrence.title)))
+      && equivalentLineup(item.title) === equivalentLineup(occurrence.title)
+      && normalizeText(item.venueName) === normalizeText(occurrence.venueName));
+    if (equivalentMatches.length === 1) return equivalentMatches[0];
+    const venue = normalizeText(occurrence.venueName);
+    if (!venue) return null;
+    const scheduleMatches = occurrenceBaseline.filter((item) => !matchedBaselineOccurrences.has(item)
+      && sameEventStart(item.startsAt, occurrence.startsAt)
+      && normalizeText(item.venueName) === venue);
+    return scheduleMatches.length === 1 ? scheduleMatches[0] : null;
+  }
   proposal.occurrences = proposal.occurrences.length
     ? proposal.occurrences.map((occurrence) => {
-      const currentOccurrence = occurrenceBaseline.find((item) => (
-        occurrence.sourceEventId && item.sourceEventId === occurrence.sourceEventId
-      ) || (
-        item.occurrenceType === occurrence.occurrenceType
-          && (sameEventStart(item.startsAt, occurrence.startsAt)
-            || (!item.startsAt && !occurrence.startsAt && equivalentLineup(item.title) === equivalentLineup(occurrence.title)))
-          && equivalentLineup(item.title) === equivalentLineup(occurrence.title)
-          && normalizeText(item.venueName) === normalizeText(occurrence.venueName)
-      ));
+      const currentOccurrence = matchingBaselineOccurrence(occurrence);
       if (currentOccurrence) matchedBaselineOccurrences.add(currentOccurrence);
       const preserveLastPublishableFestivalFacts = festivalCollection
         && occurrence.includePublic === false
@@ -10962,6 +10982,7 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   if (retainMissingSeriesOccurrences && proposal.occurrences.length) {
     const missingOccurrences = occurrenceBaseline.filter((occurrence) => !matchedBaselineOccurrences.has(occurrence)).map((occurrence) => {
       if (!festivalCollection) return occurrence;
+      if (!authoritativeCompleteSchedule) return occurrence;
       const missingCompleteRuns = Math.max(0, Number(occurrence.missingCompleteRuns) || 0) + 1;
       return {
         ...occurrence,
@@ -11526,7 +11547,7 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
         const stored = await upsertScoutProposal(env, db, resolved.proposal, "source_monitor", [
           { url: proposal.sourceUrl || source.url, role: "discovery", retrievedAt: now },
           ...resolved.citations,
-        ], profile);
+        ], profile, { authoritativeCompleteSchedule:adapterKey === "eventive" && automation.canonicalEligible });
         await recordSourceResolutionAttempt(db, resolved.audit, stored.candidate?.id || "", runId);
         const strongPick = await recordStrongPick(db, runId, stored, now);
         if (strongPick) {

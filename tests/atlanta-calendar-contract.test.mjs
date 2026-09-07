@@ -67,6 +67,11 @@ function database() {
   return databaseThrough();
 }
 
+function insertRow(db, table, row) {
+  const columns = Object.keys(row);
+  db.prepare(`INSERT INTO ${table} (${columns.join(",")}) VALUES (${columns.map(() => "?").join(",")})`).run(...columns.map((column) => row[column]));
+}
+
 function env(db, extras = {}) {
   return { SUBMISSIONS_DB:new LocalD1(db), SUBMISSIONS_ADMIN_TOKEN:TOKEN, CALENDAR_SCOUT_MODEL:"gpt-5.6-terra", ...extras };
 }
@@ -954,6 +959,88 @@ test("one exhibition publishes its dated related schedule without publishing TBD
   const cancelledTalk = afterCancellation.events.find((event) => event.occurrenceId && event.occurrenceType === "artist_talk" && event.parentTitle === candidate.title);
   assert.equal(cancelledTalk.status, "cancelled");
   assert.equal(cancelledTalk.sequence, 1);
+});
+
+test("migration 0224 restores the complete official ATLWKNDR schedule and preserves valid public identities", async () => {
+  const db = databaseThrough("0223_tattoo_inquiry_budget_ranges.sql");
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"ATLWKNDR fixture", organizer:"ATLWKNDR", factualDescription:"Festival fixture.",
+      sourceUrl:"https://www.atlwkndr.com/festival", organizerUrl:"https://www.atlwkndr.com/", sourceAuthority:"official_calendar",
+      eventStructure:"series", collectionKind:"festival", dateKind:"date_range", startsAt:"2026-09-03", endsAt:"2026-09-07",
+      venueName:"Multiple Atlanta venues", venueAddress:"Atlanta, GA", city:"Atlanta", region:"GA",
+      subjects:["poetry-music"], formats:["performance"], verificationState:"verified",
+      occurrences:[{
+        sourceEventId:"fixture-program", occurrenceType:"performance", title:"Fixture Program", factualDescription:"Fixture.",
+        startsAt:"2026-09-03T21:00:00-04:00", endsAt:"2026-09-04T02:00:00-04:00", venueName:"Fixture Hall",
+        venueAddress:"1 Fixture Way, Atlanta, GA", sourceUrl:"https://www.atlwkndr.com/festival", status:"scheduled", verificationState:"verified",
+      }],
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const fixtureCandidate = (await created.json()).candidate;
+  const fixtureApproval = await admin(db, `/candidates/${fixtureCandidate.id}/approve`, { method:"POST", body:{} });
+  assert.equal(fixtureApproval.status, 200, await fixtureApproval.clone().text());
+  const fixtureCandidateRow = { ...db.prepare("SELECT * FROM calendar_candidates WHERE id=?").get(fixtureCandidate.id) };
+  const fixtureEntryRow = { ...db.prepare("SELECT * FROM calendar_entries WHERE candidate_id=?").get(fixtureCandidate.id) };
+  const fixtureOccurrenceRow = { ...db.prepare("SELECT * FROM calendar_candidate_occurrences WHERE candidate_id=?").get(fixtureCandidate.id) };
+  const fixtureEntryOccurrenceRow = { ...db.prepare("SELECT * FROM calendar_entry_occurrences WHERE entry_id=?").get(fixtureEntryRow.id) };
+  const candidateId = "cal_candidate_8d4a89fa-f082-4eb8-9660-ec9ca2f0bbf2";
+  const entryId = "cal_entry_c02e15a6-b684-44ae-a6c4-1021245fa709";
+  insertRow(db, "calendar_candidates", {
+    ...fixtureCandidateRow, id:candidateId, source_id:null,
+    source_event_id:"https://happeningnext.com/event/the-atlanta-weekender-atlwkndr-2026-eid1ef0kxcvur4a",
+    public_entry_id:entryId, pending_revision_id:"cal_revision_2bab37bd-93fe-4a31-8f57-c8a361d194f2",
+  });
+  insertRow(db, "calendar_entries", {
+    ...fixtureEntryRow, id:entryId, candidate_id:candidateId,
+    uid:"cal_entry_c02e15a6-b684-44ae-a6c4-1021245fa709@thesixwellconstruct.com",
+  });
+  db.prepare(`INSERT INTO calendar_candidate_revisions
+    (id,candidate_id,revision_number,revision_state,snapshot_json,provenance_json,change_summary,created_by,created_at,change_set_json)
+    VALUES (?,?,99,'pending','{}','[]','Stale automated proposal','source_monitor',datetime('now'),'[]')`)
+    .run("cal_revision_2bab37bd-93fe-4a31-8f57-c8a361d194f2", candidateId);
+
+  const productionRows = [
+    ["cal_occurrence_0785ad1c-ad58-4ff7-b32e-e63e7eba4bb7","cal_entry_occurrence_40aa5b4d-d6e8-4166-b244-8ef66a75160f","LOVESEXY","2026-09-03T21:00:00-04:00","2026-09-04T02:00:00-04:00","scheduled","published"],
+    ["cal_occurrence_3f807c90-65fb-40bf-86fa-33ad8c30237c","cal_entry_occurrence_ffa9d60c-a62b-4fb9-8529-64928fce747a","LOVESEXY duplicate","2026-09-03T21:00:00-04:00","2026-09-04T02:00:00-04:00","cancelled","cancelled"],
+    ["cal_occurrence_dc3d73f5-fd82-47a5-a697-32121c0f04c7","cal_entry_occurrence_4cadb53c-ec1c-4288-83ae-6edfb38cd66a","LOVESEXY ticket duplicate","2026-09-03T21:00:00-04:00","2026-09-04T02:00:00-04:00","cancelled","cancelled"],
+    ["cal_occurrence_3dab0aea-6895-423f-b6bc-155925d66c66","cal_entry_occurrence_0b08247e-ffd0-45e4-830c-102f471566c3","Sunset City Groove","2026-09-05T13:00:00-04:00","2026-09-05T21:00:00-04:00","cancelled","cancelled"],
+    ["cal_occurrence_6951adde-8180-4d47-9310-b8f4ff71a79c","cal_entry_occurrence_adc3b79f-e918-4293-9974-b923f652c871","Afrique Electrique","2026-09-05T21:00:00-04:00","2026-09-06T02:00:00-04:00","scheduled","published"],
+    ["cal_occurrence_694b378d-be17-41d1-a1f9-b4dad31542a7","cal_entry_occurrence_a6cd8407-1c72-4e04-834c-53d3d60c7031","House in the Park","2026-09-06T12:00:00-04:00","2026-09-06T20:00:00-04:00","scheduled","cancelled"],
+    ["cal_occurrence_6c591fce-9777-486a-860d-ca2625df1e01","cal_entry_occurrence_5498065e-a0e0-4a46-a308-6f86d83e6e55","Recovery","2026-09-07T13:00:00-04:00","2026-09-07T21:00:00-04:00","cancelled","cancelled"],
+    ["cal_occurrence_d8985830-455d-4e3a-9dc9-e5639ac0f472","cal_entry_occurrence_c3ca74e7-23cc-435c-9c97-4cb7022184b1","Recovery duplicate","2026-09-07T13:00:00-04:00","2026-09-07T21:00:00-04:00","cancelled","cancelled"],
+  ];
+  for (const [occurrenceId, publicOccurrenceId, title, startsAt, endsAt, privateStatus, publicStatus] of productionRows) {
+    insertRow(db, "calendar_candidate_occurrences", {
+      ...fixtureOccurrenceRow, id:occurrenceId, candidate_id:candidateId, source_event_id:occurrenceId,
+      title, starts_at:startsAt, ends_at:endsAt, status:privateStatus,
+      source_presence_state:privateStatus === "cancelled" ? "confirmed_removed" : "present",
+      missing_complete_runs:privateStatus === "cancelled" ? 2 : 0,
+    });
+    insertRow(db, "calendar_entry_occurrences", {
+      ...fixtureEntryOccurrenceRow, id:publicOccurrenceId, entry_id:entryId, candidate_occurrence_id:occurrenceId,
+      uid:`${publicOccurrenceId}@thesixwellconstruct.com`, title, starts_at:startsAt, ends_at:endsAt, status:publicStatus,
+    });
+  }
+
+  db.exec(readFileSync(join(ROOT, "migrations", "0224_atlwkndr_2026_schedule_reconciliation.sql"), "utf8"));
+  assert.deepEqual(
+    { ...db.prepare("SELECT source_id,source_event_id,source_url,pending_revision_id,last_check_status,monitoring_enabled FROM calendar_candidates WHERE id=?").get(candidateId) },
+    { source_id:null, source_event_id:"atlwkndr-2026-official-schedule", source_url:"https://www.atlwkndr.com/schedule", pending_revision_id:"", last_check_status:"unchanged", monitoring_enabled:0 },
+  );
+  assert.equal(db.prepare("SELECT revision_state FROM calendar_candidate_revisions WHERE id='cal_revision_2bab37bd-93fe-4a31-8f57-c8a361d194f2'").get().revision_state, "superseded");
+  assert.deepEqual(
+    { ...db.prepare("SELECT COUNT(*) total,SUM(status='scheduled') scheduled,SUM(source_presence_state='present') present,SUM(missing_complete_runs=0) reset FROM calendar_candidate_occurrences WHERE candidate_id=?").get(candidateId) },
+    { total:14, scheduled:14, present:14, reset:14 },
+  );
+  assert.deepEqual(
+    { ...db.prepare("SELECT COUNT(*) total,SUM(status='published') published FROM calendar_entry_occurrences WHERE entry_id=?").get(entryId) },
+    { total:14, published:14 },
+  );
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE id IN ('cal_occurrence_3f807c90-65fb-40bf-86fa-33ad8c30237c','cal_occurrence_dc3d73f5-fd82-47a5-a697-32121c0f04c7','cal_occurrence_d8985830-455d-4e3a-9dc9-e5639ac0f472')").get().count, 0);
+  assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
 });
 
 test("closing receptions are first-class related programs from Studio through public feeds", async () => {
@@ -7105,6 +7192,66 @@ test("one-day festivals and virtual programs publish without artificial ranges o
   assert.equal(publicFestival.dateKind, "all_day");
   assert.equal(publicFestival.venueAddress, "");
   assert.equal(Object.hasOwn(publicFestival.relatedOccurrences[0], "venueAddress"), false);
+});
+
+test("non-authoritative festival rechecks preserve missing programs and match reused identities by schedule", async () => {
+  const db = database();
+  const sourceUrl = "https://official.example/three-day-festival";
+  const venue = (name) => ({ name, address:{ streetAddress:`${name} Way`, addressLocality:"Atlanta", addressRegion:"GA" } });
+  const created = await admin(db, "/candidates", {
+    method:"POST",
+    body:{
+      title:"Three-Day Festival", organizer:"Official Festival", factualDescription:"A multi-program Atlanta festival.",
+      sourceUrl, organizerUrl:"https://official.example/", sourceAuthority:"organizer_event",
+      eventStructure:"series", collectionKind:"festival", dateKind:"date_range", startsAt:"2026-11-13", endsAt:"2026-11-15",
+      city:"Atlanta", region:"GA", subjects:["art"], formats:["performance"], verificationState:"verified",
+      occurrences:[
+        { sourceEventId:"reused-program-id", occurrenceType:"performance", title:"Program Alpha", factualDescription:"Alpha.", startsAt:"2026-11-13T10:00:00-05:00", endsAt:"2026-11-13T11:00:00-05:00", venueName:"Alpha Hall", venueAddress:"Alpha Hall Way, Atlanta, GA", sourceUrl, status:"scheduled", verificationState:"verified" },
+        { sourceEventId:"reused-program-id", occurrenceType:"performance", title:"Program Beta", factualDescription:"Beta.", startsAt:"2026-11-13T12:00:00-05:00", endsAt:"2026-11-13T13:00:00-05:00", venueName:"Beta Hall", venueAddress:"Beta Hall Way, Atlanta, GA", sourceUrl, status:"scheduled", verificationState:"verified" },
+        { sourceEventId:"renamed-old-id", occurrenceType:"performance", title:"Original Program Name", factualDescription:"Original.", startsAt:"2026-11-14T14:00:00-05:00", endsAt:"2026-11-14T15:00:00-05:00", venueName:"Gamma Hall", venueAddress:"Gamma Hall Way, Atlanta, GA", sourceUrl, status:"scheduled", verificationState:"verified" },
+        { sourceEventId:"missing-program-id", occurrenceType:"performance", title:"Program Missing From Partial Page", factualDescription:"Missing.", startsAt:"2026-11-15T16:00:00-05:00", endsAt:"2026-11-15T17:00:00-05:00", venueName:"Delta Hall", venueAddress:"Delta Hall Way, Atlanta, GA", sourceUrl, status:"scheduled", verificationState:"verified" },
+      ],
+    },
+  });
+  assert.equal(created.status, 201, await created.clone().text());
+  const candidate = (await created.json()).candidate;
+  const baseline = db.prepare("SELECT id,title FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at").all(candidate.id);
+  const originalFetch = globalThis.fetch;
+  const subEvent = (identifier, name, startsAt, endsAt, venueName) => ({
+    "@type":"Event", identifier, name, description:`${name}.`, url:`${sourceUrl}#${identifier}`,
+    startDate:startsAt, endDate:endsAt, location:venue(venueName),
+  });
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), sourceUrl);
+    return new Response(`<script type="application/ld+json">${JSON.stringify({
+      "@context":"https://schema.org", "@type":"Event", identifier:"three-day-festival", name:"Three-Day Festival",
+      description:"A multi-program Atlanta festival.", url:sourceUrl, startDate:"2026-11-13", endDate:"2026-11-15",
+      organizer:{ name:"Official Festival", url:"https://official.example/" },
+      subEvent:[
+        subEvent("reused-program-id", "Program Alpha", "2026-11-13T10:00:00-05:00", "2026-11-13T11:00:00-05:00", "Alpha Hall"),
+        subEvent("reused-program-id", "Program Beta", "2026-11-13T12:00:00-05:00", "2026-11-13T13:00:00-05:00", "Beta Hall"),
+        subEvent("renamed-new-id", "Renamed Program", "2026-11-14T14:00:00-05:00", "2026-11-14T15:00:00-05:00", "Gamma Hall"),
+      ],
+    })}</script>`, { status:200, headers:{ "content-type":"text/html" } });
+  };
+  try {
+    const checked = await admin(db, `/candidates/${candidate.id}/recheck`, { method:"POST", body:{} });
+    assert.equal(checked.status, 200, await checked.clone().text());
+    const payload = await checked.json();
+    assert.equal(payload.checkStatus, "changes_detected");
+    const snapshot = JSON.parse(db.prepare("SELECT snapshot_json FROM calendar_candidate_revisions WHERE id=?").get(payload.candidate.pendingRevisionId).snapshot_json);
+    assert.deepEqual(
+      snapshot.occurrences.map((occurrence) => ({ id:occurrence.id, title:occurrence.title, sourceEventId:occurrence.sourceEventId, sourcePresenceState:occurrence.sourcePresenceState, missingCompleteRuns:occurrence.missingCompleteRuns, status:occurrence.status })),
+      [
+        { id:baseline[0].id, title:"Program Alpha", sourceEventId:"reused-program-id", sourcePresenceState:"present", missingCompleteRuns:0, status:"scheduled" },
+        { id:baseline[1].id, title:"Program Beta", sourceEventId:"reused-program-id", sourcePresenceState:"present", missingCompleteRuns:0, status:"scheduled" },
+        { id:baseline[2].id, title:"Renamed Program", sourceEventId:"renamed-new-id", sourcePresenceState:"present", missingCompleteRuns:0, status:"scheduled" },
+        { id:baseline[3].id, title:"Program Missing From Partial Page", sourceEventId:"missing-program-id", sourcePresenceState:"present", missingCompleteRuns:0, status:"scheduled" },
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("Eventive maps a one-day festival window to one all-day parent", async () => {
