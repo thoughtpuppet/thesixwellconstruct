@@ -491,6 +491,8 @@ export async function initMerchCatalogPage() {
   const sourceValueEl = document.getElementById("sourceFilterValue");
   const sourceOptionsEl = document.getElementById("sourceFilterOptions");
   const typeRowEl = document.getElementById("typeRow");
+  const contextTabs = [...document.querySelectorAll("[data-merch-context]")];
+  const fromArchiveIntro = document.querySelector("[data-from-archive-intro]");
   const grid = document.getElementById("productGrid");
   const introDesc = document.getElementById("introDesc");
   const introAbove = document.getElementById("introAbove");
@@ -502,6 +504,7 @@ export async function initMerchCatalogPage() {
   let products = [];
   let activeFilter = "all";
   let activeTypeFilter = "all";
+  let activeContext = new URLSearchParams(window.location.search).get("context") === "from_archive" ? "from_archive" : "current";
   const sourceSelectDefaultLabel = "filter by source";
   let sourceFilterOptions = [{ value: "all", label: sourceSelectDefaultLabel }];
 
@@ -552,8 +555,9 @@ export async function initMerchCatalogPage() {
   }
 
   function renderFilters() {
+    const contextProducts=products.filter((product)=>(product.merchContext||"current")===activeContext);
     sourceRowEl.innerHTML = "";
-    const allButton = makeChip("all", products.length, activeFilter === "all", MERCH_COLOR);
+    const allButton = makeChip("all", contextProducts.length, activeFilter === "all", MERCH_COLOR);
     allButton.addEventListener("click", () => setFilter("all"));
     sourceRowEl.appendChild(allButton);
 
@@ -568,7 +572,7 @@ export async function initMerchCatalogPage() {
 
     for (const sourceKey of SOURCE_ORDER) {
       const source = SOURCES[sourceKey];
-      const count = products.filter((product) => canonicalSourceKey(product.sourceVenture) === sourceKey).length;
+      const count = contextProducts.filter((product) => canonicalSourceKey(product.sourceVenture) === sourceKey).length;
       if (!count) continue;
       const button = makeChip(source.label, count, activeFilter === sourceKey, source.color);
       button.addEventListener("click", () => setFilter(sourceKey));
@@ -593,7 +597,7 @@ export async function initMerchCatalogPage() {
     typeRowEl.innerHTML = "";
     if (activeFilter === "all") return;
 
-    const visibleProducts = products.filter((product) => canonicalSourceKey(product.sourceVenture) === activeFilter);
+    const visibleProducts = products.filter((product) => (product.merchContext||"current")===activeContext && canonicalSourceKey(product.sourceVenture) === activeFilter);
     const counts = new Map();
     visibleProducts.forEach((product) => {
       counts.set(product.productType, (counts.get(product.productType) || 0) + 1);
@@ -633,6 +637,17 @@ export async function initMerchCatalogPage() {
     renderGrid();
   }
 
+  function setContext(key,mode="push") {
+    activeContext = key === "from_archive" ? "from_archive" : "current";
+    contextTabs.forEach((button) => { const active=button.dataset.merchContext===activeContext;button.classList.toggle("active",active);button.setAttribute("aria-pressed",String(active)); });
+    if(fromArchiveIntro)fromArchiveIntro.hidden=activeContext!=="from_archive";
+    const url=new URL(window.location.href);activeContext==="from_archive"?url.searchParams.set("context","from_archive"):url.searchParams.delete("context");
+    if(mode!=="replace")history.pushState({},"",url);else history.replaceState({},"",url);
+    renderFilters();renderTypeFilters();renderGrid();
+  }
+
+  contextTabs.forEach((button)=>button.addEventListener("click",()=>setContext(button.dataset.merchContext)));
+
   if (sourceSelectEl) {
     sourceSelectEl.addEventListener("change", () => setFilter(sourceSelectEl.value || "all"));
   }
@@ -670,7 +685,7 @@ export async function initMerchCatalogPage() {
   }
 
   function renderGrid() {
-    let visibleProducts = products;
+    let visibleProducts = products.filter((product)=>(product.merchContext||"current")===activeContext);
     if (activeFilter !== "all") {
       visibleProducts = visibleProducts.filter((product) => canonicalSourceKey(product.sourceVenture) === activeFilter);
     }
@@ -751,8 +766,9 @@ export async function initMerchCatalogPage() {
             </div>
             <div class="card-meta">
               <h3 class="card-name"><a href="${cardUrl}" style="color:inherit">${product.title}</a></h3>
-              <span class="card-price">${moneyText(product.price)}</span>
+              <span class="card-price">${product.availabilityState==="sold_out"?"Sold":moneyText(product.price)}</span>
             </div>
+            ${product.fromArchive?`<p class="card-dims">${[product.periodLabel,product.itemSize,product.colorway,product.technique,product.conditionNote].filter(Boolean).join(" &middot; ")}</p>${product.historicalPrice?`<p class="card-dims">Documented historical price: ${moneyText(product.historicalPrice)}${product.historicalPriceNote?` · ${product.historicalPriceNote}`:""}</p>`:""}`:""}
             ${selectorsHtml}
             ${ctaHtml}
           </article>
@@ -807,6 +823,7 @@ export async function initMerchCatalogPage() {
     renderTypeFilters();
     renderGrid();
     setHeroState("all");
+    setContext(activeContext,"replace");
     const initFilter = canonicalSourceKey(new URLSearchParams(window.location.search).get("filter"));
     if (initFilter && SOURCES[initFilter]) setFilter(initFilter);
   } catch (error) {

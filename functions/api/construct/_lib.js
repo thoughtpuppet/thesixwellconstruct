@@ -787,6 +787,11 @@ const ARCHIVE_BULK_PUBLICATION_LIMIT = 100;
 function publicationPublicFlag(state){return state==="published"?1:0}
 function publicationVisibility(state){return state==="published"?"public":"internal"}
 const ARCHIVE_TIMELINE_STATES = new Set(["draft","published","archived"]);
+const ARCHIVE_TIMELINE_MODES = new Set(["standard","editorial"]);
+const ARCHIVE_TIMELINE_CHAPTER_ROLES = new Set(["chapter","act","prologue","epilogue"]);
+const ARCHIVE_TIMELINE_BLOCK_TYPES = new Set(["activity","reflection","gallery-set","merch-item","collection-item","open-interval"]);
+const ARCHIVE_TIMELINE_EVIDENCE = new Set(["documented","remembered","approximate","open-interval"]);
+const ARCHIVE_TIMELINE_MEDIA_BEHAVIORS = new Set(["static","muted-loop"]);
 const ARCHIVE_CONTEXT_TYPES = new Set(["person","organization","place","event"]);
 const ARCHIVE_DOCUMENTATION_FIELDS = new Set([
   "alternate-title","object-description","technique","support","dimensions","inscription",
@@ -1175,12 +1180,18 @@ function publicIdentityProfileLinkGateSql(profileAlias="profile"){
 
 function archiveIdentityProfilePublicSql(entityAlias = "ce") {
   return `(${entityAlias}.entity_type<>'organization' OR EXISTS(
-    SELECT 1 FROM about_identity_profiles public_identity_profile
-    WHERE public_identity_profile.organization_id=${entityAlias}.id
-      AND public_identity_profile.publication_state='published'
-      AND public_identity_profile.visibility='public'
-      AND ${publicIdentityProfileLinkGateSql("public_identity_profile")}
-  ))`;
+      SELECT 1 FROM about_identity_profiles public_identity_profile
+      WHERE public_identity_profile.organization_id=${entityAlias}.id
+        AND public_identity_profile.publication_state='published'
+        AND public_identity_profile.visibility='public'
+        AND ${publicIdentityProfileLinkGateSql("public_identity_profile")}
+    ) OR EXISTS(
+      SELECT 1 FROM archive_timelines public_identity_timeline
+      WHERE public_identity_timeline.subject_entity_id=${entityAlias}.id
+        AND public_identity_timeline.presentation_mode='editorial'
+        AND public_identity_timeline.state='published'
+        AND public_identity_timeline.public_visible=1
+    ))`;
 }
 
 function archiveCanonicalOwnerPublicSql(entityAlias="ce"){
@@ -2283,22 +2294,78 @@ function presentPublicArchiveActivity(row={}){
   return {...safe,entry_type:"activity",anchor:`activity-${row.id}`,archive_route:row.archive_slug?`/archive/records/${encodeURIComponent(row.archive_slug)}/`:"",archiveRoute:row.archive_slug?`/archive/records/${encodeURIComponent(row.archive_slug)}/`:"",primary_image:row.primary_image||"",primary_image_alt:row.primary_image_alt||"",primary_image_caption:row.primary_image_caption||"",primary_image_width:Number(row.primary_image_width||0),primary_image_height:Number(row.primary_image_height||0),lead_media:leadMedia,leadMedia,era_key:era.key,eraKey:era.key};
 }
 
+async function hydrateEditorialTimelineBlock(database,row,activityMap){
+  const base={...redactPublicArchiveTimelineRecord(row),blockType:row.block_type,evidenceStatus:row.evidence_status,mediaBehavior:row.media_behavior,publicVisible:true};
+  if(row.block_type==="open-interval")return base;
+  if(row.block_type==="activity"){
+    const activity=activityMap.get(row.source_id);return activity?{...base,source:activity}:null;
+  }
+  if(row.block_type==="reflection"){
+    const note=await database.prepare(`SELECT note.entity_id,note.slug,note.title,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,
+        note.is_reflection,note.reflected_on_start,note.reflected_on_end,note.reflected_on_precision,note.reflected_on_label
+      FROM archive_notes note JOIN content_entities owner ON owner.id=note.entity_id AND owner.visibility='public'
+      WHERE note.entity_id=? AND note.note_type='journal-entry' AND note.state='published' AND note.public_visible=1`).bind(row.source_id).first();
+    return note?{...base,source:{...presentArchiveNote(note),body_markdown:undefined,bodyMarkdown:undefined,excerpt:row.excerpt||note.excerpt||archiveNotePlainText(note.body_markdown).slice(0,1200)}}:null;
+  }
+  if(row.block_type==="gallery-set"){
+    const set=await database.prepare("SELECT id,slug,title,summary,date_precision,date_label,occurred_at,ended_at FROM gallery_sets WHERE id=? AND state='published'").bind(row.source_id).first();
+    if(!set)return null;
+    const result=await database.prepare(`SELECT entry.media_id,entry.display_media_id,entry.poster_media_id,entry.title,entry.accessibility_text,entry.caption,entry.date_label,
+        display.source_url,display.storage_key,display.mime_type,display.width,display.height,display.duration_seconds,display.transcript,display.transcript_status,
+        poster.source_url poster_source_url,poster.storage_key poster_storage_key
+      FROM gallery_set_items item JOIN gallery_entries entry ON entry.media_id=item.media_id AND entry.state='published'
+      JOIN media_assets original ON original.id=entry.media_id AND original.state='active'
+      JOIN media_catalogue_entries catalogue ON catalogue.media_id=original.id AND catalogue.catalogue_state='active'
+      JOIN media_asset_provenance provenance ON provenance.media_id=original.id AND provenance.originality IN ('sixwell_original','collaborative_original') AND provenance.asset_role IN ('creative_master','editorial_fragment')
+      JOIN media_assets display ON display.id=entry.display_media_id AND display.state='active' AND display.privacy='public' AND display.public_presentation='inline'
+      LEFT JOIN media_assets poster ON poster.id=entry.poster_media_id AND poster.state='active' AND poster.privacy='public' AND poster.public_presentation='inline' AND ${mediaIsNotVariantMasterSql("poster")}
+      WHERE item.set_id=? AND ${mediaIsNotVariantMasterSql("display")}
+      ORDER BY item.sort_order,item.created_at`).bind(set.id).all();
+    const items=(result.results||[]).map(item=>({...item,url:item.source_url||(item.storage_key?`/api/construct/media/${encodeURIComponent(item.display_media_id)}`:""),poster_url:item.poster_source_url||(item.poster_storage_key?`/api/construct/media/${encodeURIComponent(item.poster_media_id)}`:""),alt_text:item.accessibility_text||item.title||"",transcript:item.transcript_status==="ready"?item.transcript:""})).filter(item=>item.url);
+    return items.length?{...base,source:{...set,items}}:null;
+  }
+  if(row.block_type==="merch-item"){
+    const item=await database.prepare(`SELECT merch.id,merch.slug,merch.title,merch.route,merch.availability_state,merch.merch_context,merch.item_size,merch.colorway,merch.technique,merch.period_label,merch.condition_note,merch.provenance_summary,merch.historical_price_amount,merch.historical_price_currency,merch.historical_price_note,
+        media.id media_id,COALESCE(NULLIF(media.source_url,''),CASE WHEN media.storage_key<>'' THEN '/api/construct/media/'||media.id ELSE merch.image_url END) image_url,
+        COALESCE(NULLIF(attachment.alt_text_override,''),media.alt_text,merch.alt_text) alt_text
+      FROM merch_items merch JOIN content_entities owner ON owner.id=merch.id AND owner.visibility='public'
+      LEFT JOIN entity_media attachment ON attachment.entity_id=merch.id AND attachment.role='primary' AND attachment.public_visible=1
+      LEFT JOIN media_assets media ON media.id=attachment.media_id AND media.state='active' AND media.privacy='public' AND media.public_presentation='inline' AND ${mediaIsNotVariantMasterSql("media")}
+      WHERE merch.id=? AND merch.state='published' LIMIT 1`).bind(row.source_id).first();
+    return item?{...base,source:{...item,is_sold:item.availability_state==="sold_out",isSold:item.availability_state==="sold_out",shop_api_route:`/api/shop/items/${encodeURIComponent(item.slug)}`}}:null;
+  }
+  if(row.block_type==="collection-item"){
+    const item=await database.prepare(`SELECT object.entity_id id,object.title,object.period_label,object.item_size,object.colorway,object.technique,object.description,object.provenance_summary,
+        collection.name collection_name,collection.slug collection_slug,media.id media_id,
+        COALESCE(NULLIF(media.source_url,''),CASE WHEN media.storage_key<>'' THEN '/api/construct/media/'||media.id ELSE '' END) image_url,media.alt_text
+      FROM archive_collection_items object JOIN archive_collections collection ON collection.id=object.collection_id AND collection.state='published'
+      JOIN content_entities owner ON owner.id=object.entity_id AND owner.visibility='public'
+      LEFT JOIN media_assets media ON media.id=object.media_id AND media.state='active' AND media.privacy='public' AND media.public_presentation='inline' AND ${mediaIsNotVariantMasterSql("media")}
+      WHERE object.entity_id=? AND object.state='published' AND object.public_visible=1
+        AND (object.media_id IS NULL OR media.id IS NOT NULL)`).bind(row.source_id).first();
+    return item?{...base,source:{...item,non_saleable:true,nonSaleable:true}}:null;
+  }
+  return null;
+}
+
 function timelineProfileJoinSql(){return `LEFT JOIN about_identity_profiles aip ON aip.organization_id=at.subject_entity_id AND aip.publication_state='published' AND aip.visibility='public' AND ${publicIdentityProfileLinkGateSql("aip")}`;}
 
 async function loadPublicArchiveTimeline(database,timelineSlug){
   const timelineRow=await database.prepare(`SELECT at.*,ce.entity_type,o.name organization_name,p.name person_name,n.name node_name,
-      CASE WHEN aip.organization_id IS NOT NULL THEN '/about/identities/'||aip.slug||'/' ELSE '' END profile_route
+      CASE WHEN aip.organization_id IS NOT NULL THEN '/about/identities/'||aip.slug||'/' ELSE '' END profile_route,
+      CASE WHEN identity_dossier.entity_id IS NOT NULL THEN '/archive/records/'||identity_dossier.archive_slug||'/' ELSE '' END dossier_route
     FROM archive_timelines at JOIN content_entities ce ON ce.id=at.subject_entity_id AND ce.visibility='public'
     LEFT JOIN organizations o ON o.id=ce.id AND o.state='published'
     LEFT JOIN people p ON p.id=ce.id AND p.state='published' AND p.privacy='public'
     LEFT JOIN construct_nodes n ON n.id=ce.id AND n.state='published'
     ${timelineProfileJoinSql()}
+    LEFT JOIN archive_dossiers identity_dossier ON identity_dossier.entity_id=at.subject_entity_id AND identity_dossier.state='published' AND identity_dossier.public_visible=1
     WHERE (at.slug=? OR at.id=?) AND at.state='published' AND at.public_visible=1
       AND (ce.entity_type<>'person' OR p.id IS NOT NULL)
       AND (ce.entity_type<>'organization' OR o.id IS NOT NULL)`).bind(timelineSlug,timelineSlug).first();
   if(!timelineRow)return null;
   const timeline=redactPublicArchiveTimelineRecord(timelineRow);
-  timeline.subject_name=timelineSubjectName(timeline);timeline.route=`/archive/timelines/${encodeURIComponent(timeline.slug)}/`;timeline.profileRoute=timeline.profile_route||"";
+  timeline.subject_name=timelineSubjectName(timeline);timeline.route=`/archive/timelines/${encodeURIComponent(timeline.slug)}/`;timeline.profileRoute=timeline.profile_route||"";timeline.dossierRoute=timeline.dossier_route||"";
   const publicOwnerSql=archiveEntitySql(`ce.visibility='public' AND ad.state='published' AND ad.public_visible=1 AND ${archiveIdentityProfilePublicSql("ce")} AND ${archiveCanonicalOwnerPublicSql("ce")}`);
   const [chaptersResult,activitiesResult]=await database.batch([
     database.prepare(`SELECT * FROM archive_timeline_chapters WHERE timeline_id=? AND state='published' AND public_visible=1
@@ -2311,6 +2378,14 @@ async function loadPublicArchiveTimeline(database,timelineSlug){
   ]);
   const chapters=(chaptersResult.results||[]).map(row=>{const era=timelineEra(row);return {...redactPublicArchiveTimelineRecord(row),entry_type:"chapter",anchor:row.anchor_slug||`chapter-${row.id}`,era_key:era.key,eraKey:era.key}});
   const activities=(activitiesResult.results||[]).map(presentPublicArchiveActivity);
+  if(timeline.presentation_mode==="editorial"){
+    const activityMap=new Map(activities.map(activity=>[activity.id,activity]));
+    const blockRows=(await database.prepare(`SELECT * FROM archive_timeline_blocks WHERE timeline_id=? AND state='published' AND public_visible=1 ORDER BY sort_order,created_at,id`).bind(timeline.id).all()).results||[];
+    const hydrated=(await Promise.all(blockRows.map(row=>hydrateEditorialTimelineBlock(database,row,activityMap)))).filter(Boolean);
+    const blocksByChapter=new Map();for(const block of hydrated){const key=block.chapter_id||"";if(!blocksByChapter.has(key))blocksByChapter.set(key,[]);blocksByChapter.get(key).push(block)}
+    const acts=chapters.sort((a,b)=>Number(a.sort_order||0)-Number(b.sort_order||0)||String(a.created_at||"").localeCompare(String(b.created_at||""))).map(chapter=>({...chapter,chapter_role:chapter.chapter_role||"act",chapterRole:chapter.chapter_role||"act",blocks:blocksByChapter.get(chapter.id)||[]}));
+    return {timeline,chapters,activities,entries:[],acts,blocks:hydrated,eras:[]};
+  }
   const entries=[...chapters,...activities].sort((a,b)=>{const ad=a.occurred_at||"9999-12-31",bd=b.occurred_at||"9999-12-31";return ad.localeCompare(bd)||Number(a.sort_order||0)-Number(b.sort_order||0);});
   const deduped=[],keys=new Set();for(const entry of entries){const key=entry.dedupe_key||`${String(entry.title||"").toLowerCase()}|${entry.occurred_at||entry.date_label||"undated"}`;if(keys.has(key))continue;keys.add(key);deduped.push(entry)}
   const eraMap=new Map();for(const entry of deduped){const era=timelineEra(entry),current=eraMap.get(era.key)||{key:era.key,label:era.label,count:0};current.count+=1;eraMap.set(era.key,current)}
@@ -7240,17 +7315,49 @@ async function archiveActivitiesAdminApi(request,env,activityId=""){
   return failure("Method not allowed.",405);
 }
 
-function normalizeArchiveTimeline(body,existing={}){const state=text(body.state??existing.state,30)||"draft";return {subject_entity_id:text(body.subject_entity_id??body.subjectEntityId??existing.subject_entity_id,200),slug:slug(body.slug??existing.slug),title:text(body.title??existing.title,300),description:text(body.description??existing.description,8000),state,public_visible:publicationPublicFlag(state),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
-function normalizeArchiveChapter(body,existing={}){const occurredAt=text(body.occurred_at??body.start_date??body.start??existing.occurred_at,80)||null,state=text(body.state??existing.state,30)||"draft";return {title:text(body.title??existing.title,300),summary:text(body.summary??existing.summary,5000),body:text(body.body??body.inline_text??body.inlineText??existing.body,50000),occurred_at:occurredAt,ended_at:text(body.ended_at??body.end_date??body.end??existing.ended_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||(occurredAt?"exact":"undated"),date_label:text(body.date_label??body.display_date??body.displayDate??existing.date_label,160),anchor_slug:slug(body.anchor_slug??body.anchor??existing.anchor_slug),dedupe_key:text(body.dedupe_key??body.dedupeKey??existing.dedupe_key,200),state,public_visible:publicationPublicFlag(state),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
+function normalizeArchiveTimeline(body,existing={}){const state=text(body.state??existing.state,30)||"draft";return {subject_entity_id:text(body.subject_entity_id??body.subjectEntityId??existing.subject_entity_id,200),slug:slug(body.slug??existing.slug),title:text(body.title??existing.title,300),description:text(body.description??existing.description,8000),presentation_mode:text(body.presentation_mode??body.presentationMode??existing.presentation_mode??"standard",30)||"standard",state,public_visible:publicationPublicFlag(state),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
+function normalizeArchiveChapter(body,existing={}){const occurredAt=text(body.occurred_at??body.start_date??body.start??existing.occurred_at,80)||null,state=text(body.state??existing.state,30)||"draft";return {title:text(body.title??existing.title,300),summary:text(body.summary??existing.summary,5000),body:text(body.body??body.inline_text??body.inlineText??existing.body,50000),occurred_at:occurredAt,ended_at:text(body.ended_at??body.end_date??body.end??existing.ended_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||(occurredAt?"exact":"undated"),date_label:text(body.date_label??body.display_date??body.displayDate??existing.date_label,160),anchor_slug:slug(body.anchor_slug??body.anchor??existing.anchor_slug),dedupe_key:text(body.dedupe_key??body.dedupeKey??existing.dedupe_key,200),chapter_role:text(body.chapter_role??body.chapterRole??existing.chapter_role??"chapter",30)||"chapter",eyebrow:text(body.eyebrow??existing.eyebrow,160),state,public_visible:publicationPublicFlag(state),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
+
+function normalizeArchiveTimelineBlock(body,existing={}){const state=text(body.state??existing.state??"draft",30)||"draft";return {chapter_id:text(body.chapter_id??body.chapterId??existing.chapter_id,200)||null,block_type:text(body.block_type??body.blockType??existing.block_type??"open-interval",40),source_id:text(body.source_id??body.sourceId??existing.source_id,200)||null,title:text(body.title??existing.title,300),body:text(body.body??existing.body,30000),excerpt:text(body.excerpt??existing.excerpt,3000),evidence_status:text(body.evidence_status??body.evidenceStatus??existing.evidence_status??"documented",40),date_label:text(body.date_label??body.dateLabel??existing.date_label,160),source_url:safeLegendUrl(body.source_url??body.sourceUrl??existing.source_url),citation_label:text(body.citation_label??body.citationLabel??existing.citation_label,300),media_behavior:text(body.media_behavior??body.mediaBehavior??existing.media_behavior??"static",30),state,public_visible:publicationPublicFlag(state),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
+
+async function validateArchiveTimelineBlock(database,timelineId,block){
+  if(!ARCHIVE_TIMELINE_BLOCK_TYPES.has(block.block_type)||!ARCHIVE_TIMELINE_EVIDENCE.has(block.evidence_status)||!ARCHIVE_TIMELINE_MEDIA_BEHAVIORS.has(block.media_behavior)||!ARCHIVE_TIMELINE_STATES.has(block.state))return "Choose supported block, evidence, media, and publication values.";
+  if(block.block_type!=="open-interval"&&!block.source_id)return "Choose the canonical source for this block.";
+  if(block.chapter_id&&!await database.prepare("SELECT id FROM archive_timeline_chapters WHERE id=? AND timeline_id=? AND state<>'archived'").bind(block.chapter_id,timelineId).first())return "Choose an act from this timeline.";
+  if(block.state!=="published")return "";
+  const checks={activity:["SELECT id FROM entity_activity WHERE id=? AND public_visible=1",block.source_id],reflection:["SELECT note.entity_id FROM archive_notes note JOIN content_entities owner ON owner.id=note.entity_id AND owner.visibility='public' WHERE note.entity_id=? AND note.note_type='journal-entry' AND note.state='published' AND note.public_visible=1",block.source_id],"gallery-set":["SELECT id FROM gallery_sets WHERE id=? AND state='published'",block.source_id],"merch-item":["SELECT merch.id FROM merch_items merch JOIN content_entities owner ON owner.id=merch.id AND owner.visibility='public' WHERE merch.id=? AND merch.state='published'",block.source_id],"collection-item":["SELECT object.entity_id FROM archive_collection_items object JOIN content_entities owner ON owner.id=object.entity_id AND owner.visibility='public' JOIN archive_collections collection ON collection.id=object.collection_id AND collection.state='published' WHERE object.entity_id=? AND object.state='published' AND object.public_visible=1",block.source_id]};
+  const check=checks[block.block_type];if(check&&!await database.prepare(check[0]).bind(check[1]).first())return "Publish the referenced source before publishing this timeline block.";return "";
+}
+
+async function archiveTimelineBlocksAdminApi(request,env,timelineId,blockId=""){
+  const database=db(env),timeline=await database.prepare("SELECT id FROM archive_timelines WHERE id=?").bind(timelineId).first();if(!timeline)return failure("Timeline not found.",404);
+  if(request.method==="GET"&&!blockId){const rows=(await database.prepare("SELECT * FROM archive_timeline_blocks WHERE timeline_id=? ORDER BY chapter_id,sort_order,created_at").bind(timelineId).all()).results||[];return json({records:rows,blocks:rows,count:rows.length});}
+  const before=blockId?await database.prepare("SELECT * FROM archive_timeline_blocks WHERE id=? AND timeline_id=?").bind(blockId,timelineId).first():null;
+  if(blockId&&!before)return failure("Timeline block not found.",404);
+  if(request.method==="DELETE"&&before){await database.prepare("UPDATE archive_timeline_blocks SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(blockId).run();return json({ok:true,archived:true});}
+  if(!["POST","PATCH"].includes(request.method))return failure("Method not allowed.",405);const body=await readJson(request);if(!body)return failure("Send a JSON object.");const block=normalizeArchiveTimelineBlock(body,before||{}),validation=await validateArchiveTimelineBlock(database,timelineId,block);if(validation)return failure(validation,409);
+  if(before){await database.prepare(`UPDATE archive_timeline_blocks SET chapter_id=?,block_type=?,source_id=?,title=?,body=?,excerpt=?,evidence_status=?,date_label=?,source_url=?,citation_label=?,media_behavior=?,state=?,public_visible=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=? AND timeline_id=?`).bind(block.chapter_id,block.block_type,block.source_id,block.title,block.body,block.excerpt,block.evidence_status,block.date_label,block.source_url,block.citation_label,block.media_behavior,block.state,block.public_visible,block.sort_order,blockId,timelineId).run();return json({record:await database.prepare("SELECT * FROM archive_timeline_blocks WHERE id=?").bind(blockId).first()});}
+  const newId=text(body.id,200)||id("archive-timeline-block");await database.prepare(`INSERT INTO archive_timeline_blocks(id,timeline_id,chapter_id,block_type,source_id,title,body,excerpt,evidence_status,date_label,source_url,citation_label,media_behavior,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,timelineId,block.chapter_id,block.block_type,block.source_id,block.title,block.body,block.excerpt,block.evidence_status,block.date_label,block.source_url,block.citation_label,block.media_behavior,block.state,block.public_visible,block.sort_order).run();return json({record:await database.prepare("SELECT * FROM archive_timeline_blocks WHERE id=?").bind(newId).first()},{status:201});
+}
+
+function presentArchiveCollectionItem(row,admin=false){const {internal_provenance:_internal,...safe}=row;return {...safe,id:row.entity_id,entityId:row.entity_id,itemSize:row.item_size,colorway:row.colorway,periodLabel:row.period_label,provenanceSummary:row.provenance_summary,publicVisible:Number(row.public_visible||0)===1,nonSaleable:true,route:row.dossier_slug?`/archive/records/${encodeURIComponent(row.dossier_slug)}/`:"",...(admin?{internal_provenance:row.internal_provenance||"",internalProvenance:row.internal_provenance||""}:{})};}
+function archiveCollectionItemSql(where="1=1"){return `SELECT item.*,collection.name collection_name,collection.slug collection_slug,dossier.archive_slug dossier_slug,
+    COALESCE(NULLIF(media.source_url,''),CASE WHEN media.storage_key<>'' THEN '/api/construct/media/'||media.id ELSE '' END) image_url,media.alt_text,media.mime_type
+  FROM archive_collection_items item JOIN archive_collections collection ON collection.id=item.collection_id
+  JOIN content_entities owner ON owner.id=item.entity_id LEFT JOIN archive_dossiers dossier ON dossier.entity_id=item.entity_id AND dossier.state='published' AND dossier.public_visible=1
+  LEFT JOIN media_assets media ON media.id=item.media_id WHERE ${where}`;}
+async function publicArchiveCollectionItemsApi(request,env){if(request.method!=="GET")return failure("Method not allowed.",405);const database=db(env),url=new URL(request.url),collection=text(url.searchParams.get("collection"),160);const values=[],conditions=["item.state='published'","item.public_visible=1","owner.visibility='public'","collection.state='published'",`(item.media_id IS NULL OR (media.state='active' AND media.privacy='public' AND media.public_presentation='inline' AND ${mediaIsNotVariantMasterSql("media")}))`];if(collection){conditions.push("(collection.slug=? OR collection.id=?)");values.push(collection,collection)}const rows=(await database.prepare(`${archiveCollectionItemSql(conditions.join(" AND "))} ORDER BY collection.sort_order,item.sort_order,item.title`).bind(...values).all()).results||[];return json({records:rows.map(row=>presentArchiveCollectionItem(row)),items:rows.map(row=>presentArchiveCollectionItem(row)),count:rows.length},{cache:"public, max-age=30"});}
+function normalizeArchiveCollectionItem(body,existing={}){const state=text(body.state??existing.state??"draft",30)||"draft";return {collection_id:text(body.collection_id??body.collectionId??existing.collection_id,200),title:text(body.title??existing.title,300),period_label:text(body.period_label??body.periodLabel??existing.period_label,300),item_size:text(body.item_size??body.itemSize??existing.item_size,160),colorway:text(body.colorway??existing.colorway,300),technique:text(body.technique??existing.technique,500),description:text(body.description??existing.description,12000),provenance_summary:text(body.provenance_summary??body.provenanceSummary??existing.provenance_summary,3000),internal_provenance:text(body.internal_provenance??body.internalProvenance??existing.internal_provenance,8000),media_id:text(body.media_id??body.mediaId??existing.media_id,200)||null,state,public_visible:publicationPublicFlag(state),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
+async function archiveCollectionItemsAdminApi(request,env,itemId=""){const database=db(env);if(request.method==="GET"&&!itemId){const rows=(await database.prepare(`${archiveCollectionItemSql("1=1")} ORDER BY collection.sort_order,item.sort_order,item.title`).all()).results||[];return json({records:rows.map(row=>presentArchiveCollectionItem(row,true)),count:rows.length});}const before=itemId?await database.prepare("SELECT * FROM archive_collection_items WHERE entity_id=?").bind(itemId).first():null;if(itemId&&!before)return failure("Collection item not found.",404);if(request.method==="DELETE"&&before){await database.batch([database.prepare("UPDATE archive_collection_items SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(itemId),database.prepare("UPDATE content_entities SET visibility='internal',search_visibility=0,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(itemId)]);return json({ok:true,archived:true});}if(!["POST","PATCH"].includes(request.method))return failure("Method not allowed.",405);const body=await readJson(request);if(!body)return failure("Send a JSON object.");const item=normalizeArchiveCollectionItem(body,before||{});if(!item.collection_id||!item.title||!ARCHIVE_TIMELINE_STATES.has(item.state))return failure("Collection, title, and valid publication state are required.");if(!await database.prepare("SELECT id FROM archive_collections WHERE id=?").bind(item.collection_id).first())return failure("Collection not found.",404);if(item.media_id){const media=await database.prepare(`SELECT state,privacy,public_presentation,${mediaIsNotVariantMasterSql("media_assets")} eligible_derivative FROM media_assets WHERE id=?`).bind(item.media_id).first();if(!media)return failure("Media asset not found.",404);if(item.state==="published"&&(media.state!=="active"||media.privacy!=="public"||media.public_presentation!=="inline"||!Number(media.eligible_derivative)))return failure("Publish an active public display derivative before publishing this item.",409)}const idValue=itemId||text(body.id,200)||id("archive-collection-item");if(before){await database.batch([database.prepare(`UPDATE archive_collection_items SET collection_id=?,title=?,period_label=?,item_size=?,colorway=?,technique=?,description=?,provenance_summary=?,internal_provenance=?,media_id=?,state=?,public_visible=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(item.collection_id,item.title,item.period_label,item.item_size,item.colorway,item.technique,item.description,item.provenance_summary,item.internal_provenance,item.media_id,item.state,item.public_visible,item.sort_order,idValue),database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,public_at=CASE WHEN ?='published' THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(item.state==="published"?"public":"internal",item.state==="published"?1:0,item.state,idValue)]);}else{await database.batch([database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_collection_item','node-archive','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(idValue),database.prepare(`INSERT INTO archive_collection_items(entity_id,collection_id,title,period_label,item_size,colorway,technique,description,provenance_summary,internal_provenance,media_id,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(idValue,item.collection_id,item.title,item.period_label,item.item_size,item.colorway,item.technique,item.description,item.provenance_summary,item.internal_provenance,item.media_id,item.state,item.public_visible,item.sort_order)]);if(item.state==="published")await database.prepare("UPDATE content_entities SET visibility='public',search_visibility=1,public_at=datetime('now'),updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(idValue).run()}return json({record:presentArchiveCollectionItem(await database.prepare(`${archiveCollectionItemSql("item.entity_id=?")}`).bind(idValue).first(),true)},{status:before?200:201});}
 
 async function archiveTimelinesAdminApi(request,env,timelineId="",chapterId=""){
   const database=db(env);
-  if(chapterId){const before=await database.prepare("SELECT * FROM archive_timeline_chapters WHERE id=? AND timeline_id=?").bind(chapterId,timelineId).first();if(!before)return failure("Timeline chapter not found.",404);if(request.method==="PATCH"){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const chapter=normalizeArchiveChapter(body,before);if(!chapter.title||!ARCHIVE_DATE_PRECISIONS.has(chapter.date_precision)||!ARCHIVE_TIMELINE_STATES.has(chapter.state))return failure("Invalid timeline chapter.");await database.prepare(`UPDATE archive_timeline_chapters SET title=?,summary=?,body=?,occurred_at=?,ended_at=?,date_precision=?,date_label=?,anchor_slug=?,dedupe_key=?,state=?,public_visible=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=? AND timeline_id=?`).bind(chapter.title,chapter.summary,chapter.body,chapter.occurred_at,chapter.ended_at,chapter.date_precision,chapter.date_label,chapter.anchor_slug,chapter.dedupe_key,chapter.state,chapter.public_visible,chapter.sort_order,chapterId,timelineId).run();return json({record:await database.prepare("SELECT * FROM archive_timeline_chapters WHERE id=?").bind(chapterId).first()});}if(request.method==="DELETE"){await database.prepare("UPDATE archive_timeline_chapters SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE id=? AND timeline_id=?").bind(chapterId,timelineId).run();return json({ok:true,archived:true});}return failure("Method not allowed.",405);}
+  if(chapterId){const before=await database.prepare("SELECT * FROM archive_timeline_chapters WHERE id=? AND timeline_id=?").bind(chapterId,timelineId).first();if(!before)return failure("Timeline chapter not found.",404);if(request.method==="PATCH"){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const chapter=normalizeArchiveChapter(body,before);if(!chapter.title||!ARCHIVE_DATE_PRECISIONS.has(chapter.date_precision)||!ARCHIVE_TIMELINE_STATES.has(chapter.state)||!ARCHIVE_TIMELINE_CHAPTER_ROLES.has(chapter.chapter_role))return failure("Invalid timeline chapter.");await database.prepare(`UPDATE archive_timeline_chapters SET title=?,summary=?,body=?,occurred_at=?,ended_at=?,date_precision=?,date_label=?,anchor_slug=?,dedupe_key=?,chapter_role=?,eyebrow=?,state=?,public_visible=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=? AND timeline_id=?`).bind(chapter.title,chapter.summary,chapter.body,chapter.occurred_at,chapter.ended_at,chapter.date_precision,chapter.date_label,chapter.anchor_slug,chapter.dedupe_key,chapter.chapter_role,chapter.eyebrow,chapter.state,chapter.public_visible,chapter.sort_order,chapterId,timelineId).run();return json({record:await database.prepare("SELECT * FROM archive_timeline_chapters WHERE id=?").bind(chapterId).first()});}if(request.method==="DELETE"){await database.prepare("UPDATE archive_timeline_chapters SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE id=? AND timeline_id=?").bind(chapterId,timelineId).run();return json({ok:true,archived:true});}return failure("Method not allowed.",405);}
   const chapterRoute=/\/chapters$/.test(new URL(request.url).pathname);
-  if(chapterRoute&&timelineId&&request.method==="POST"){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const timeline=await database.prepare("SELECT id FROM archive_timelines WHERE id=?").bind(timelineId).first();if(!timeline)return failure("Timeline not found.",404);const chapter=normalizeArchiveChapter(body);if(!chapter.title||!ARCHIVE_DATE_PRECISIONS.has(chapter.date_precision)||!ARCHIVE_TIMELINE_STATES.has(chapter.state))return failure("Invalid timeline chapter.");const newId=text(body.id,200)||id("archive-chapter");await database.prepare(`INSERT INTO archive_timeline_chapters(id,timeline_id,title,summary,body,occurred_at,ended_at,date_precision,date_label,anchor_slug,dedupe_key,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,timelineId,chapter.title,chapter.summary,chapter.body,chapter.occurred_at,chapter.ended_at,chapter.date_precision,chapter.date_label,chapter.anchor_slug,chapter.dedupe_key,chapter.state,chapter.public_visible,chapter.sort_order).run();return json({record:await database.prepare("SELECT * FROM archive_timeline_chapters WHERE id=?").bind(newId).first()},{status:201});}
-  if(request.method==="GET"){const timelineIdFilter=timelineId?"WHERE at.id=?":"";const statement=database.prepare(`SELECT at.*,ce.entity_type,COALESCE(o.name,p.name,n.name,ce.id) subject_name FROM archive_timelines at JOIN content_entities ce ON ce.id=at.subject_entity_id LEFT JOIN organizations o ON o.id=ce.id LEFT JOIN people p ON p.id=ce.id LEFT JOIN construct_nodes n ON n.id=ce.id ${timelineIdFilter} ORDER BY at.sort_order,at.title`);const result=timelineId?await statement.bind(timelineId).all():await statement.all();const records=result.results||[];if(timelineId&&!records[0])return failure("Timeline not found.",404);if(timelineId){const chapters=(await database.prepare("SELECT * FROM archive_timeline_chapters WHERE timeline_id=? ORDER BY occurred_at,sort_order,created_at").bind(timelineId).all()).results||[];return json({record:records[0],timeline:records[0],chapters});}return json({records,count:records.length});}
-  if(request.method==="POST"&&!timelineId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const timeline=normalizeArchiveTimeline(body);if(!timeline.subject_entity_id||!timeline.slug||!timeline.title||!ARCHIVE_TIMELINE_STATES.has(timeline.state))return failure("subject_entity_id, slug, title, and a valid state are required.");const subject=await database.prepare("SELECT visibility FROM content_entities WHERE id=?").bind(timeline.subject_entity_id).first();if(!subject)return failure("Timeline subject not found.",404);if(timeline.state==="published"&&timeline.public_visible&&subject.visibility!=="public")return failure("The timeline subject must be public before publishing.",409);const newId=text(body.id,200)||id("archive-timeline");await database.prepare(`INSERT INTO archive_timelines(id,subject_entity_id,slug,title,description,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?, 'studio','studio',datetime('now'),datetime('now'))`).bind(newId,timeline.subject_entity_id,timeline.slug,timeline.title,timeline.description,timeline.state,timeline.public_visible,timeline.sort_order).run();return json({record:await database.prepare("SELECT * FROM archive_timelines WHERE id=?").bind(newId).first()},{status:201});}
-  if(request.method==="PATCH"&&timelineId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_timelines WHERE id=?").bind(timelineId).first();if(!before)return failure("Timeline not found.",404);const timeline=normalizeArchiveTimeline(body,before);if(!timeline.subject_entity_id||!timeline.slug||!timeline.title||!ARCHIVE_TIMELINE_STATES.has(timeline.state))return failure("Invalid timeline.");const subject=await database.prepare("SELECT visibility FROM content_entities WHERE id=?").bind(timeline.subject_entity_id).first();if(!subject)return failure("Timeline subject not found.",404);if(timeline.state==="published"&&timeline.public_visible&&subject.visibility!=="public")return failure("The timeline subject must be public before publishing.",409);await database.prepare(`UPDATE archive_timelines SET subject_entity_id=?,slug=?,title=?,description=?,state=?,public_visible=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(timeline.subject_entity_id,timeline.slug,timeline.title,timeline.description,timeline.state,timeline.public_visible,timeline.sort_order,timelineId).run();return json({record:await database.prepare("SELECT * FROM archive_timelines WHERE id=?").bind(timelineId).first()});}
+  if(chapterRoute&&timelineId&&request.method==="POST"){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const timeline=await database.prepare("SELECT id FROM archive_timelines WHERE id=?").bind(timelineId).first();if(!timeline)return failure("Timeline not found.",404);const chapter=normalizeArchiveChapter(body);if(!chapter.title||!ARCHIVE_DATE_PRECISIONS.has(chapter.date_precision)||!ARCHIVE_TIMELINE_STATES.has(chapter.state)||!ARCHIVE_TIMELINE_CHAPTER_ROLES.has(chapter.chapter_role))return failure("Invalid timeline chapter.");const newId=text(body.id,200)||id("archive-chapter");await database.prepare(`INSERT INTO archive_timeline_chapters(id,timeline_id,title,summary,body,occurred_at,ended_at,date_precision,date_label,anchor_slug,dedupe_key,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at,chapter_role,eyebrow) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'),?,?)`).bind(newId,timelineId,chapter.title,chapter.summary,chapter.body,chapter.occurred_at,chapter.ended_at,chapter.date_precision,chapter.date_label,chapter.anchor_slug,chapter.dedupe_key,chapter.state,chapter.public_visible,chapter.sort_order,chapter.chapter_role,chapter.eyebrow).run();return json({record:await database.prepare("SELECT * FROM archive_timeline_chapters WHERE id=?").bind(newId).first()},{status:201});}
+  if(request.method==="GET"){const timelineIdFilter=timelineId?"WHERE at.id=?":"";const statement=database.prepare(`SELECT at.*,ce.entity_type,COALESCE(o.name,p.name,n.name,ce.id) subject_name FROM archive_timelines at JOIN content_entities ce ON ce.id=at.subject_entity_id LEFT JOIN organizations o ON o.id=ce.id LEFT JOIN people p ON p.id=ce.id LEFT JOIN construct_nodes n ON n.id=ce.id ${timelineIdFilter} ORDER BY at.sort_order,at.title`);const result=timelineId?await statement.bind(timelineId).all():await statement.all();const records=result.results||[];if(timelineId&&!records[0])return failure("Timeline not found.",404);if(timelineId){const [chaptersResult,blocksResult]=await database.batch([database.prepare("SELECT * FROM archive_timeline_chapters WHERE timeline_id=? ORDER BY sort_order,occurred_at,created_at").bind(timelineId),database.prepare("SELECT * FROM archive_timeline_blocks WHERE timeline_id=? ORDER BY chapter_id,sort_order,created_at").bind(timelineId)]);return json({record:records[0],timeline:records[0],chapters:chaptersResult.results||[],blocks:blocksResult.results||[]});}return json({records,count:records.length});}
+  if(request.method==="POST"&&!timelineId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const timeline=normalizeArchiveTimeline(body);if(!timeline.subject_entity_id||!timeline.slug||!timeline.title||!ARCHIVE_TIMELINE_STATES.has(timeline.state)||!ARCHIVE_TIMELINE_MODES.has(timeline.presentation_mode))return failure("subject_entity_id, slug, title, presentation mode, and a valid state are required.");const subject=await database.prepare("SELECT visibility FROM content_entities WHERE id=?").bind(timeline.subject_entity_id).first();if(!subject)return failure("Timeline subject not found.",404);if(timeline.state==="published"&&timeline.public_visible&&subject.visibility!=="public")return failure("The timeline subject must be public before publishing.",409);const newId=text(body.id,200)||id("archive-timeline");await database.prepare(`INSERT INTO archive_timelines(id,subject_entity_id,slug,title,description,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at,presentation_mode) VALUES(?,?,?,?,?,?,?,?, 'studio','studio',datetime('now'),datetime('now'),?)`).bind(newId,timeline.subject_entity_id,timeline.slug,timeline.title,timeline.description,timeline.state,timeline.public_visible,timeline.sort_order,timeline.presentation_mode).run();return json({record:await database.prepare("SELECT * FROM archive_timelines WHERE id=?").bind(newId).first()},{status:201});}
+  if(request.method==="PATCH"&&timelineId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_timelines WHERE id=?").bind(timelineId).first();if(!before)return failure("Timeline not found.",404);const timeline=normalizeArchiveTimeline(body,before);if(!timeline.subject_entity_id||!timeline.slug||!timeline.title||!ARCHIVE_TIMELINE_STATES.has(timeline.state)||!ARCHIVE_TIMELINE_MODES.has(timeline.presentation_mode))return failure("Invalid timeline.");const subject=await database.prepare("SELECT visibility FROM content_entities WHERE id=?").bind(timeline.subject_entity_id).first();if(!subject)return failure("Timeline subject not found.",404);if(timeline.state==="published"&&timeline.public_visible&&subject.visibility!=="public")return failure("The timeline subject must be public before publishing.",409);await database.prepare(`UPDATE archive_timelines SET subject_entity_id=?,slug=?,title=?,description=?,state=?,public_visible=?,sort_order=?,presentation_mode=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(timeline.subject_entity_id,timeline.slug,timeline.title,timeline.description,timeline.state,timeline.public_visible,timeline.sort_order,timeline.presentation_mode,timelineId).run();return json({record:await database.prepare("SELECT * FROM archive_timelines WHERE id=?").bind(timelineId).first()});}
   if(request.method==="DELETE"&&timelineId){await database.prepare("UPDATE archive_timelines SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(timelineId).run();return json({ok:true});}
   return failure("Method not allowed.",405);
 }
@@ -7787,13 +7894,13 @@ async function archiveNoteOrigins(database,noteEntityId,{publicOnly=false}={}){
 }
 
 function archiveNoteHistorySourceSignature(note){
-  const source=[note.title,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label].map(value=>String(value||"")).join("\u001f");let hash=2166136261;
+  const source=[note.title,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.is_reflection,note.reflected_on_start,note.reflected_on_end,note.reflected_on_precision,note.reflected_on_label].map(value=>String(value||"")).join("\u001f");let hash=2166136261;
   for(let index=0;index<source.length;index++)hash=Math.imul(hash^source.charCodeAt(index),16777619);
   return `${source.length}:${(hash>>>0).toString(16)}`;
 }
 
 function presentArchiveNoteHistorySuggestion(row){
-  const currentSignature=archiveNoteHistorySourceSignature({title:row.note_title,body_markdown:row.note_body_markdown,excerpt:row.note_excerpt,source_created_at:row.note_source_created_at,source_modified_at:row.note_source_modified_at,date_label:row.note_date_label});
+  const currentSignature=archiveNoteHistorySourceSignature({title:row.note_title,body_markdown:row.note_body_markdown,excerpt:row.note_excerpt,source_created_at:row.note_source_created_at,source_modified_at:row.note_source_modified_at,date_label:row.note_date_label,is_reflection:row.note_is_reflection,reflected_on_start:row.note_reflected_on_start,reflected_on_end:row.note_reflected_on_end,reflected_on_precision:row.note_reflected_on_precision,reflected_on_label:row.note_reflected_on_label});
   const stale=row.source_note_signature!==currentSignature;
   const authoritative=row.activity_id?{
     id:row.activity_id,activity_type:row.authoritative_activity_type||"",title:row.authoritative_title||"",
@@ -7818,6 +7925,8 @@ function presentArchiveNoteHistorySuggestion(row){
 async function archiveNoteHistorySuggestions(database,noteEntityId){
   const rows=(await database.prepare(`SELECT suggestion.*,note.updated_at note_updated_at,note.title note_title,note.body_markdown note_body_markdown,
       note.excerpt note_excerpt,note.source_created_at note_source_created_at,note.source_modified_at note_source_modified_at,note.date_label note_date_label,
+      note.is_reflection note_is_reflection,note.reflected_on_start note_reflected_on_start,note.reflected_on_end note_reflected_on_end,
+      note.reflected_on_precision note_reflected_on_precision,note.reflected_on_label note_reflected_on_label,
       COALESCE(art.title,merch.title,record.title,symbol.name,project.title,search.title,suggestion.target_entity_id) target_title,
       activity.activity_type authoritative_activity_type,activity.title authoritative_title,activity.summary authoritative_summary,
       activity.body authoritative_body,activity.occurred_at authoritative_occurred_at,activity.ended_at authoritative_ended_at,
@@ -7836,12 +7945,16 @@ async function archiveNoteHistorySuggestions(database,noteEntityId){
   return rows.map(presentArchiveNoteHistorySuggestion);
 }
 
-function presentArchiveNote(row){
+function presentArchiveNote(row,admin=false){
+  const {reflection_memory_note:_privateReflectionMemoryNote,...safe}=row;
   return {
-    ...row,id:row.entity_id,entityId:row.entity_id,noteType:row.note_type,sourceApp:row.source_app,
+    ...safe,id:row.entity_id,entityId:row.entity_id,noteType:row.note_type,sourceApp:row.source_app,
     bodyMarkdown:row.body_markdown,sourceCreatedAt:row.source_created_at,sourceModifiedAt:row.source_modified_at,
     dateLabel:row.date_label,provenanceNote:row.provenance_note||"",publicVisible:Number(row.public_visible||0)===1,sortOrder:Number(row.sort_order||0),
+    isReflection:Number(row.is_reflection||0)===1,reflectedOnStart:row.reflected_on_start||null,reflectedOnEnd:row.reflected_on_end||null,
+    reflectedOnPrecision:row.reflected_on_precision||"undated",reflectedOnLabel:row.reflected_on_label||"",
     route:archiveNoteRoute(row.slug),preview_url:row.preview_url||"",previewUrl:row.preview_url||"",
+    ...(admin?{reflection_memory_note:row.reflection_memory_note||"",reflectionMemoryNote:row.reflection_memory_note||""}:{}),
   };
 }
 
@@ -7862,7 +7975,7 @@ async function archiveNotePayload(database,row,{publicOnly=false,admin=false}={}
     archiveNoteAssets(database,row.entity_id,{publicOnly,admin}),archiveNoteLinks(database,row.entity_id,{publicOnly}),archiveNoteOrigins(database,row.entity_id,{publicOnly}),
     admin?archiveNoteHistorySuggestions(database,row.entity_id):Promise.resolve([]),
   ]);
-  return {note:presentArchiveNote(row),record:presentArchiveNote(row),assets,links,origin_threads:originThreads,originThreads,history_suggestions:historySuggestions,historySuggestions};
+  return {note:presentArchiveNote(row,admin),record:presentArchiveNote(row,admin),assets,links,origin_threads:originThreads,originThreads,history_suggestions:historySuggestions,historySuggestions};
 }
 
 async function validateArchiveNotePublication(database,note,assets=null,links=null){
@@ -7918,10 +8031,17 @@ function normalizedArchiveNote(body={},before={}){
     source_created_at:text(body.source_created_at??body.sourceCreatedAt??before.source_created_at,80)||null,
     source_modified_at:text(body.source_modified_at??body.sourceModifiedAt??before.source_modified_at,80)||null,
     date_label:text(body.date_label??body.dateLabel??before.date_label,500),provenance_note:text(body.provenance_note??body.provenanceNote??before.provenance_note,3000),state:text(body.state??before.state??"draft",30),
+    is_reflection:body.is_reflection===undefined&&body.isReflection===undefined?Number(before.is_reflection||0):truthy(body.is_reflection??body.isReflection)?1:0,
+    reflected_on_start:text(body.reflected_on_start??body.reflectedOnStart??before.reflected_on_start,80)||null,
+    reflected_on_end:text(body.reflected_on_end??body.reflectedOnEnd??before.reflected_on_end,80)||null,
+    reflected_on_precision:text(body.reflected_on_precision??body.reflectedOnPrecision??before.reflected_on_precision??"undated",30)||"undated",
+    reflected_on_label:text(body.reflected_on_label??body.reflectedOnLabel??before.reflected_on_label,500),
+    reflection_memory_note:text(body.reflection_memory_note??body.reflectionMemoryNote??before.reflection_memory_note,5000),
     public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible||0):(body.public_visible??body.publicVisible)?1:0,
     sort_order:Number(body.sort_order??body.sortOrder??before.sort_order)||0,
   };
   if(!ARCHIVE_NOTE_STATES.has(next.state))throw new Error("Choose draft, published, or archived.");
+  if(!ARCHIVE_DATE_PRECISIONS.has(next.reflected_on_precision))throw new Error("Choose a valid reflected-on date precision.");
   if(!next.slug||!next.title)throw new Error("A Note needs a title and URL-safe slug.");
   return next;
 }
@@ -7950,11 +8070,14 @@ async function replaceArchiveNoteLinks(database,noteEntityId,links){
 }
 
 function inferredArchiveNoteHistory(note){
-  const plain=archiveNotePlainText(note.body_markdown||"").trim(),occurredAt=text(note.source_created_at,80)||null;
+  const plain=archiveNotePlainText(note.body_markdown||"").trim(),reflection=Number(note.is_reflection||0)===1;
+  const occurredAt=reflection?(text(note.reflected_on_start,80)||null):(text(note.source_created_at,80)||null);
   const firstParagraph=plain.split(/\n\s*\n/).map(value=>value.trim()).find(Boolean)||plain;
   return {
     activity_type:"milestone",title:text(note.title,300),summary:text(note.excerpt||firstParagraph,5000),body:text(plain,50000),
-    occurred_at:occurredAt,ended_at:null,date_precision:occurredAt?"exact":"undated",date_label:text(note.date_label,160),public_visible:0,
+    occurred_at:occurredAt,ended_at:reflection?(text(note.reflected_on_end,80)||null):null,
+    date_precision:reflection?(note.reflected_on_precision||"undated"):(occurredAt?"exact":"undated"),
+    date_label:reflection?text(note.reflected_on_label,160):text(note.date_label,160),public_visible:0,
   };
 }
 
@@ -8045,7 +8168,7 @@ async function archiveNoteExportPayload(database,note){
   let markdown=note.body_markdown;
   for(const asset of exported){const replacement=asset.mime_type.startsWith("image/")?`![${asset.alt_text||""}](Attachments/${asset.export_filename})`:`[${asset.export_filename}](Attachments/${asset.export_filename})`;markdown=markdown.replaceAll(`{{asset:${asset.token}}}`,replacement)}
   for(const asset of payload.assets.filter(asset=>!exported.some(item=>item.id===asset.id)))markdown=markdown.replaceAll(`{{asset:${asset.token}}}`,"");
-  const frontmatter=["---",`id: ${JSON.stringify(note.entity_id)}`,`title: ${JSON.stringify(note.title)}`,`slug: ${JSON.stringify(note.slug)}`,`note_type: ${JSON.stringify(note.note_type)}`,`source: ${JSON.stringify(note.source_app||"")}`,`source_created_at: ${JSON.stringify(note.source_created_at||"")}`,`source_modified_at: ${JSON.stringify(note.source_modified_at||"")}`,`date_label: ${JSON.stringify(note.date_label||"")}`,`provenance_note: ${JSON.stringify(note.provenance_note||"")}`,`visibility: ${note.state==="published"&&Number(note.public_visible)?"public":"private"}`,`links: ${JSON.stringify(payload.links.map(link=>({target_entity_id:link.target_entity_id,relationship_role:link.relationship_role,is_primary:link.is_primary,public_visible:link.public_visible,sort_order:link.sort_order})))}`,`origin_threads: ${JSON.stringify(payload.origin_threads.map(origin=>origin.id))}`,`primary_origin_thread: ${JSON.stringify(payload.origin_threads.find(origin=>origin.is_primary)?.id||"")}`,"---",""].join("\n");
+  const frontmatter=["---",`id: ${JSON.stringify(note.entity_id)}`,`title: ${JSON.stringify(note.title)}`,`slug: ${JSON.stringify(note.slug)}`,`note_type: ${JSON.stringify(note.note_type)}`,`source: ${JSON.stringify(note.source_app||"")}`,`source_created_at: ${JSON.stringify(note.source_created_at||"")}`,`source_modified_at: ${JSON.stringify(note.source_modified_at||"")}`,`date_label: ${JSON.stringify(note.date_label||"")}`,`is_reflection: ${Number(note.is_reflection||0)===1}`,`reflected_on_start: ${JSON.stringify(note.reflected_on_start||"")}`,`reflected_on_end: ${JSON.stringify(note.reflected_on_end||"")}`,`reflected_on_precision: ${JSON.stringify(note.reflected_on_precision||"undated")}`,`reflected_on_label: ${JSON.stringify(note.reflected_on_label||"")}`,`provenance_note: ${JSON.stringify(note.provenance_note||"")}`,`visibility: ${note.state==="published"&&Number(note.public_visible)?"public":"private"}`,`links: ${JSON.stringify(payload.links.map(link=>({target_entity_id:link.target_entity_id,relationship_role:link.relationship_role,is_primary:link.is_primary,public_visible:link.public_visible,sort_order:link.sort_order})))}`,`origin_threads: ${JSON.stringify(payload.origin_threads.map(origin=>origin.id))}`,`primary_origin_thread: ${JSON.stringify(payload.origin_threads.find(origin=>origin.is_primary)?.id||"")}`,"---",""].join("\n");
   return{filename:`${note.slug}.zip`,markdown_filename:`${note.slug}.md`,markdown:`${frontmatter}${markdown.trim()}\n`,attachments:exported.map(asset=>({token:asset.token,filename:asset.export_filename,mime_type:asset.mime_type,byte_size:asset.byte_size,download_url:asset.url}))};
 }
 
@@ -8087,7 +8210,7 @@ async function adminArchiveNotesApi(request,env,noteEntityId="",action=""){
   if(request.method==="GET"&&!noteEntityId){
     const url=new URL(request.url),targetEntityId=text(url.searchParams.get("target_entity_id")||url.searchParams.get("targetEntityId"),200),where=targetEntityId?"WHERE EXISTS(SELECT 1 FROM archive_note_links scoped_link WHERE scoped_link.note_entity_id=an.entity_id AND scoped_link.target_entity_id=?)":"";
     const statement=database.prepare(`SELECT an.*,(SELECT COUNT(*) FROM archive_note_assets WHERE note_entity_id=an.entity_id) asset_count,(SELECT COUNT(*) FROM archive_note_links WHERE note_entity_id=an.entity_id) link_count,(SELECT COUNT(*) FROM archive_note_history_suggestions WHERE note_entity_id=an.entity_id) history_suggestion_count FROM archive_notes an ${where} ORDER BY COALESCE(an.source_created_at,an.created_at) DESC,an.updated_at DESC`),result=targetEntityId?await statement.bind(targetEntityId).all():await statement.all(),rows=result.results||[];
-    return json({records:rows.map(presentArchiveNote),count:rows.length,target_entity_id:targetEntityId||null});
+    return json({records:rows.map(row=>presentArchiveNote(row,true)),count:rows.length,target_entity_id:targetEntityId||null});
   }
   if(request.method==="POST"&&!noteEntityId){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");
@@ -8096,9 +8219,9 @@ async function adminArchiveNotesApi(request,env,noteEntityId="",action=""){
       note.entity_id=newId;await validateArchiveNotePublication(database,note,[],links||[]);
       await database.batch([
         database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_note','node-archive','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(newId),
-        database.prepare(`INSERT INTO archive_notes(entity_id,slug,title,note_type,source_app,body_markdown,excerpt,source_created_at,source_modified_at,date_label,provenance_note,state,public_visible,sort_order,published_at,created_by,updated_by,created_at,updated_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' AND ?=1 THEN datetime('now') ELSE NULL END,'studio','studio',datetime('now'),datetime('now'))`)
-          .bind(newId,note.slug,note.title,note.note_type,note.source_app,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.provenance_note,note.state,note.public_visible,note.sort_order,note.state,note.public_visible),
+        database.prepare(`INSERT INTO archive_notes(entity_id,slug,title,note_type,source_app,body_markdown,excerpt,source_created_at,source_modified_at,date_label,provenance_note,state,public_visible,sort_order,published_at,created_by,updated_by,created_at,updated_at,is_reflection,reflected_on_start,reflected_on_end,reflected_on_precision,reflected_on_label,reflection_memory_note)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' AND ?=1 THEN datetime('now') ELSE NULL END,'studio','studio',datetime('now'),datetime('now'),?,?,?,?,?,?)`)
+          .bind(newId,note.slug,note.title,note.note_type,note.source_app,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.provenance_note,note.state,note.public_visible,note.sort_order,note.state,note.public_visible,note.is_reflection,note.reflected_on_start,note.reflected_on_end,note.reflected_on_precision,note.reflected_on_label,note.reflection_memory_note),
       ]);
       await replaceArchiveNoteLinks(database,newId,links||[]);
       if(Array.isArray(body.origin_thread_ids??body.originThreadIds))await replaceEntityOriginThreads(database,newId,originThreadIds(body.origin_thread_ids??body.originThreadIds),text(body.primary_origin_thread_id??body.primaryOriginThreadId,200));
@@ -8122,9 +8245,9 @@ async function adminArchiveNotesApi(request,env,noteEntityId="",action=""){
     await validateArchiveNotePublication(database,{...note,entity_id:before.entity_id},null,links);
     if(links!==null)await replaceArchiveNoteLinks(database,before.entity_id,links);
     if(Array.isArray(body.origin_thread_ids??body.originThreadIds))await replaceEntityOriginThreads(database,before.entity_id,originThreadIds(body.origin_thread_ids??body.originThreadIds),text(body.primary_origin_thread_id??body.primaryOriginThreadId,200));
-    await database.prepare(`UPDATE archive_notes SET slug=?,title=?,note_type=?,source_app=?,body_markdown=?,excerpt=?,source_created_at=?,source_modified_at=?,date_label=?,provenance_note=?,state=?,public_visible=?,sort_order=?,
+    await database.prepare(`UPDATE archive_notes SET slug=?,title=?,note_type=?,source_app=?,body_markdown=?,excerpt=?,source_created_at=?,source_modified_at=?,date_label=?,provenance_note=?,state=?,public_visible=?,sort_order=?,is_reflection=?,reflected_on_start=?,reflected_on_end=?,reflected_on_precision=?,reflected_on_label=?,reflection_memory_note=?,
       published_at=CASE WHEN ?='published' AND ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`)
-      .bind(note.slug,note.title,note.note_type,note.source_app,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.provenance_note,note.state,note.public_visible,note.sort_order,note.state,note.public_visible,before.entity_id).run();
+      .bind(note.slug,note.title,note.note_type,note.source_app,note.body_markdown,note.excerpt,note.source_created_at,note.source_modified_at,note.date_label,note.provenance_note,note.state,note.public_visible,note.sort_order,note.is_reflection,note.reflected_on_start,note.reflected_on_end,note.reflected_on_precision,note.reflected_on_label,note.reflection_memory_note,note.state,note.public_visible,before.entity_id).run();
     await syncArchiveNoteSearch(database,before.entity_id);const row=await archiveNoteByKey(database,before.entity_id);await nextRevision(database,before.entity_id,"archive-note-update",before,row);
     return json(await archiveNotePayload(database,row,{admin:true}));
   }catch(error){return failure(error.message,/UNIQUE constraint failed/i.test(error.message)?409:400)}
@@ -8217,6 +8340,7 @@ export async function handleConstructApi(request,env){
   if(path==="/api/archive/notes")return publicArchiveNotesApi(request,env);
   const archiveNotePublicMatch=path.match(/^\/api\/archive\/notes\/([^/]+)$/);if(archiveNotePublicMatch)return publicArchiveNotesApi(request,env,decodeURIComponent(archiveNotePublicMatch[1]));
   if(path==="/api/archive/items")return publicArchiveItems(request,env);
+  if(path==="/api/archive/collection-items")return publicArchiveCollectionItemsApi(request,env);
   if(path==="/api/archive/compare")return publicArchiveCompare(request,env);
   const archiveItemMatch=path.match(/^\/api\/archive\/items\/([^/]+)$/);if(archiveItemMatch)return publicArchiveDetail(request,env,decodeURIComponent(archiveItemMatch[1]));
   if(path==="/api/archive/timelines")return publicArchiveTimeline(request,env,"");
@@ -8283,11 +8407,13 @@ export async function handleConstructApi(request,env){
   const noteHistorySuggestionMatch=path.match(/^\/api\/admin\/archive-notes\/([^/]+)\/history-suggestions(?:\/([^/]+))?$/);if(noteHistorySuggestionMatch)return adminArchiveNoteHistorySuggestionsApi(request,env,decodeURIComponent(noteHistorySuggestionMatch[1]),noteHistorySuggestionMatch[2]?decodeURIComponent(noteHistorySuggestionMatch[2]):"");
   const noteAssetMatch=path.match(/^\/api\/admin\/archive-notes\/([^/]+)\/assets(?:\/([^/]+))?$/);if(noteAssetMatch)return adminArchiveNoteAssetsApi(request,env,decodeURIComponent(noteAssetMatch[1]),noteAssetMatch[2]?decodeURIComponent(noteAssetMatch[2]):"");
   const noteMatch=path.match(/^\/api\/admin\/archive-notes(?:\/([^/]+))?$/);if(noteMatch)return adminArchiveNotesApi(request,env,noteMatch[1]?decodeURIComponent(noteMatch[1]):"");
+  const collectionItemMatch=path.match(/^\/api\/admin\/archive-collection-items(?:\/([^/]+))?$/);if(collectionItemMatch)return archiveCollectionItemsAdminApi(request,env,collectionItemMatch[1]?decodeURIComponent(collectionItemMatch[1]):"");
   const sourceMaterialEntryMatch=path.match(/^\/api\/admin\/archive-source-materials\/([^/]+)\/entries\/([^/]+)$/);if(sourceMaterialEntryMatch)return archiveSourceMaterialsAdminApi(request,env,decodeURIComponent(sourceMaterialEntryMatch[1]),decodeURIComponent(sourceMaterialEntryMatch[2]),"entries");
   const sourceMaterialEntriesMatch=path.match(/^\/api\/admin\/archive-source-materials\/([^/]+)\/entries$/);if(sourceMaterialEntriesMatch)return archiveSourceMaterialsAdminApi(request,env,decodeURIComponent(sourceMaterialEntriesMatch[1]),"","entries");
   const sourceMaterialMatch=path.match(/^\/api\/admin\/archive-source-materials(?:\/([^/]+))?$/);if(sourceMaterialMatch)return archiveSourceMaterialsAdminApi(request,env,sourceMaterialMatch[1]?decodeURIComponent(sourceMaterialMatch[1]):"");
   const activityMatch=path.match(/^\/api\/admin\/archive-activities(?:\/([^/]+))?$/);if(activityMatch)return archiveActivitiesAdminApi(request,env,activityMatch[1]?decodeURIComponent(activityMatch[1]):"");
   const originThreadMatch=path.match(/^\/api\/admin\/archive-origin-threads(?:\/([^/]+))?$/);if(originThreadMatch)return archiveOriginThreadsAdminApi(request,env,originThreadMatch[1]?decodeURIComponent(originThreadMatch[1]):"");
+  const timelineBlockMatch=path.match(/^\/api\/admin\/archive-timelines\/([^/]+)\/blocks(?:\/([^/]+))?$/);if(timelineBlockMatch)return archiveTimelineBlocksAdminApi(request,env,decodeURIComponent(timelineBlockMatch[1]),timelineBlockMatch[2]?decodeURIComponent(timelineBlockMatch[2]):"");
   const timelineChapterMatch=path.match(/^\/api\/admin\/archive-timelines\/([^/]+)\/chapters\/([^/]+)$/);if(timelineChapterMatch)return archiveTimelinesAdminApi(request,env,decodeURIComponent(timelineChapterMatch[1]),decodeURIComponent(timelineChapterMatch[2]));
   const timelineChaptersMatch=path.match(/^\/api\/admin\/archive-timelines\/([^/]+)\/chapters$/);if(timelineChaptersMatch)return archiveTimelinesAdminApi(request,env,decodeURIComponent(timelineChaptersMatch[1]),"");
   const timelineMatch=path.match(/^\/api\/admin\/archive-timelines(?:\/([^/]+))?$/);if(timelineMatch)return archiveTimelinesAdminApi(request,env,timelineMatch[1]?decodeURIComponent(timelineMatch[1]):"");

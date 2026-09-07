@@ -1,7 +1,8 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import {
   clientEmailPreviewCatalog,
@@ -13,6 +14,7 @@ import { renderEmailContent } from "../functions/api/notifications/_email-conten
 import { defaultEmailDesignProfile, validateEmailDesignProfile } from "../functions/api/notifications/_email-design.js";
 import { CLIENT_EMAIL_THEMES } from "../functions/api/notifications/_email-renderer.js";
 import { shortBookingTokenFromPath } from "../functions/api/booking-links.js";
+import { handleConstructApi } from "../functions/api/construct/_lib.js";
 import {
   PAGE_VISIBILITY_DEFAULT_RULES,
   isPageVisibilityOperationalExemptPath,
@@ -24,8 +26,75 @@ const root = path.resolve(__dirname, "..");
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "127.0.0.1";
 const apiProxyOrigin = (process.env.SWC_API_ORIGIN || "https://thesixwellconstruct.com").replace(/\/+$/g, "");
+const localArchivePreviewEnabled = process.env.SWC_LOCAL_ARCHIVE_PREVIEW === "1";
 const localEmailTemplates = new Map();
 const localEmailDesign = { draft: null, published: null, history: [] };
+
+class LocalPreviewStatement {
+  constructor(database, sql, values = []) { this.database = database; this.sql = sql; this.values = values; }
+  bind(...values) { return new LocalPreviewStatement(this.database, this.sql, values); }
+  async first() { return this.database.prepare(this.sql).get(...this.values) || null; }
+  async all() { return { results: this.database.prepare(this.sql).all(...this.values) }; }
+  async run() {
+    const statement = this.database.prepare(this.sql);
+    if (statement.sourceSQL.trimStart().toUpperCase().startsWith("SELECT")) return { results: statement.all(...this.values) };
+    const result = statement.run(...this.values);
+    return { success: true, meta: { changes: Number(result.changes || 0) } };
+  }
+}
+
+class LocalPreviewD1 {
+  constructor(database) { this.database = database; }
+  prepare(sql) { return new LocalPreviewStatement(this.database, sql); }
+  async batch(statements) {
+    this.database.exec("BEGIN");
+    try {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      this.database.exec("COMMIT");
+      return results;
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
+let localArchiveDatabasePromise;
+async function localArchiveDatabase() {
+  if (!localArchiveDatabasePromise) {
+    localArchiveDatabasePromise = (async () => {
+      const database = new DatabaseSync(":memory:");
+      database.exec("PRAGMA foreign_keys=ON");
+      const migrationRoot = path.join(root, "migrations");
+      const migrations = (await readdir(migrationRoot)).filter((name) => name.endsWith(".sql")).sort();
+      for (const migration of migrations) database.exec(await readFile(path.join(migrationRoot, migration), "utf8"));
+      return new LocalPreviewD1(database);
+    })();
+  }
+  return localArchiveDatabasePromise;
+}
+
+async function handleLocalArchivePreview(req, res) {
+  if (!localArchivePreviewEnabled || !(req.url || "").startsWith("/api/archive/")) return false;
+  try {
+    const response = await handleConstructApi(new Request(`http://${host}:${port}${req.url || "/"}`, {
+      method: req.method || "GET",
+      headers: req.headers,
+    }), {
+      SUBMISSIONS_DB: await localArchiveDatabase(),
+      PUBLIC_SITE_URL: `http://${host}:${port}`,
+    });
+    const headers = Object.fromEntries(response.headers.entries());
+    headers["cache-control"] = "no-store";
+    headers["x-swc-local-archive-preview"] = "1";
+    res.writeHead(response.status, headers);
+    res.end(Buffer.from(await response.arrayBuffer()));
+  } catch (error) {
+    localEmailResponse(res, 500, { ok: false, error: "Local Archive preview failed.", detail: error.message });
+  }
+  return true;
+}
 
 const localDesignRepresentatives = Object.freeze({
   tattoo: { node: "tattoo", label: "Tattoo", templateKey: "booking_link_created", variant: "tattoo" },
@@ -685,6 +754,10 @@ const server = createServer(async (req, res) => {
   }
 
   if ((req.url || "").startsWith("/__tools/") && await handleToolApi(req, res)) {
+    return;
+  }
+
+  if (await handleLocalArchivePreview(req, res)) {
     return;
   }
 

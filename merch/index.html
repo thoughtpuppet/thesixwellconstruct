@@ -213,6 +213,38 @@
   nav.filters {
     margin-bottom:var(--s6);
   }
+  .merch-context-tabs {
+    display:flex;
+    flex-wrap:wrap;
+    gap:12px;
+    margin:var(--s5) 0 var(--s3);
+  }
+  .merch-context-tab {
+    min-height:44px;
+    border:5px solid var(--accent-hot);
+    border-radius:0;
+    background:transparent;
+    color:var(--accent-hot);
+    padding:8px 14px;
+    font:800 11px/1.2 var(--font-sans, Arial, sans-serif);
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    cursor:pointer;
+  }
+  .merch-context-tab.active { background:var(--accent-hot); color:#0e0e0e; }
+  .from-archive-intro {
+    display:grid;
+    grid-template-columns:minmax(0,1.15fr) minmax(16rem,.85fr);
+    gap:16px;
+    margin:0 0 var(--s5);
+  }
+  .from-archive-intro[hidden] { display:none; }
+  .from-archive-intro figure,
+  .from-archive-intro > div { margin:0; border:5px solid var(--accent-hot); background:#0e0e0e; }
+  .from-archive-intro img { display:block; width:100%; aspect-ratio:16/9; object-fit:cover; }
+  .from-archive-intro figcaption { border-top:5px solid var(--accent-hot); padding:12px; color:rgba(252,184,103,.7); font-size:11px; }
+  .from-archive-intro > div { display:grid; align-content:end; gap:12px; padding:16px; }
+  .from-archive-intro h2,.from-archive-intro p { margin:0; }
 
   .source-filter-select {
     display:none;
@@ -779,6 +811,7 @@
     main { padding:var(--s7) var(--s5) var(--s6); }
   }
   @media (max-width:640px) {
+    .from-archive-intro { grid-template-columns:1fr; gap:12px; }
     header.top { padding:var(--s4) var(--s5); }
     main { padding:var(--s6) var(--s5); }
     .intro { flex-direction:column; align-items:flex-start; gap:var(--s4); margin-bottom:var(--s7); }
@@ -883,6 +916,14 @@
       </div>
     </section>
 
+    <nav class="merch-context-tabs" aria-label="Merch context">
+      <button type="button" class="merch-context-tab active" data-merch-context="current" aria-pressed="true">Current</button>
+      <button type="button" class="merch-context-tab" data-merch-context="from_archive" aria-pressed="false">From the Archive</button>
+    </nav>
+    <section class="from-archive-intro" data-from-archive-intro hidden aria-labelledby="from-archive-title">
+      <figure><img src="/api/gallery/media/MED-000056?asset=placeholder" alt="SIX.WELL editorial portrait used as temporary atmosphere for From the Archive." loading="lazy"><figcaption>Temporary editorial image · MED-000056. This image is not evidence for any individual garment.</figcaption></figure>
+      <div><span class="card-plaque">Sales context</span><h2 id="from-archive-title">From the Archive</h2><p>Past garments and one-of-one objects remain part of the record while they are offered. Sold pieces stay visible, with purchasing removed.</p></div>
+    </section>
     <!-- filter rows — row 1: source medium, row 2: type (only when source active) -->
     <nav class="filters" id="filters" aria-label="merch filters">
       <select class="source-filter-select" id="sourceFilterSelect" aria-label="filter by source" data-select-menu-skip>

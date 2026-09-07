@@ -31,3 +31,17 @@
 .archive-note-source-private{color:#B87A32;text-transform:uppercase;font-size:.72rem;letter-spacing:.08em}
 @media(max-width:900px){.archive-note-studio-layout{grid-template-columns:1fr}.archive-note-studio-preview{position:static;max-height:70vh}.archive-note-link-row{grid-template-columns:1fr 1fr}.archive-note-link-row .button{grid-column:1/-1}}
 @media(max-width:600px){.archive-note-studio-grid{grid-template-columns:1fr}.archive-note-studio-grid .wide{grid-column:auto}}
+.archive-note-reflection-fields {
+  margin: 0;
+  border: 5px solid rgba(184, 122, 50, 0.45);
+  padding: 12px;
+}
+
+.archive-note-reflection-fields legend {
+  padding: 0 8px;
+  color: #b87a32;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}

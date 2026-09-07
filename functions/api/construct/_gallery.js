@@ -24,6 +24,10 @@ const GALLERY_INTAKE_KINDS = {
     assetRole: "editorial_fragment", lensId: "gallery-lens-making", relationshipTypeId: "rel-process-of",
     mediaRole: "process-video", setType: "series", accepts: new Set(["video"]),
   },
+  "making-process": {
+    assetRole: "editorial_fragment", lensId: "gallery-lens-making", relationshipTypeId: "rel-process-of",
+    mediaRole: "making-process", setType: "series", accepts: new Set(["image", "video", "pdf"]),
+  },
   "studio-photographs": {
     assetRole: "editorial_fragment", lensId: "gallery-lens-studio", relationshipTypeId: "rel-documents",
     mediaRole: "studio-photograph", setType: "session", accepts: new Set(["image"]),

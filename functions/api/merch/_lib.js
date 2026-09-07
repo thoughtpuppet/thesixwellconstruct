@@ -104,6 +104,7 @@ async function productMedia(database, entityIds, { publicOnly = false } = {}) {
     "em.public_visible=1",
     "m.privacy='public'",
     "m.public_presentation='inline'",
+    "NOT EXISTS(SELECT 1 FROM media_asset_variants protected_variant WHERE protected_variant.master_media_id=m.id)",
   );
   const result = await database.prepare(`SELECT em.entity_id,em.media_id,em.role,em.sort_order,em.public_visible,
       em.alt_text_override,m.source_url,m.original_filename,m.mime_type,m.alt_text
@@ -127,8 +128,31 @@ async function productMedia(database, entityIds, { publicOnly = false } = {}) {
   return map;
 }
 
-function publicProduct(row, shopify = null, media = []) {
-  const live = row.availability_state === "available" && shopify ? shopify : null;
+async function productTimelines(database, entityIds) {
+  const ids = [...new Set((entityIds || []).filter(Boolean))];
+  const map = new Map(ids.map((entityId) => [entityId, []]));
+  for (let offset = 0; offset < ids.length; offset += 75) {
+    const chunk = ids.slice(offset, offset + 75);
+    const result = await database.prepare(`SELECT block.source_id merch_item_id,timeline.id,timeline.slug,timeline.title,
+        chapter.id chapter_id,chapter.title chapter_title,block.sort_order block_sort_order
+      FROM archive_timeline_blocks block
+      JOIN archive_timelines timeline ON timeline.id=block.timeline_id AND timeline.state='published' AND timeline.public_visible=1
+      LEFT JOIN archive_timeline_chapters chapter ON chapter.id=block.chapter_id AND chapter.state='published' AND chapter.public_visible=1
+      WHERE block.block_type='merch-item' AND block.state='published' AND block.public_visible=1
+        AND block.source_id IN (${chunk.map(() => "?").join(",")})
+      ORDER BY timeline.sort_order,chapter.sort_order,block.sort_order,block.created_at`).bind(...chunk).all();
+    for (const row of result.results || []) {
+      const records = map.get(row.merch_item_id) || [];
+      records.push({ id: row.id, slug: row.slug, title: row.title, route: `/archive/timelines/${encodeURIComponent(row.slug)}/`, actId: row.chapter_id || "", actTitle: row.chapter_title || "" });
+      map.set(row.merch_item_id, records);
+    }
+  }
+  return map;
+}
+
+function publicProduct(row, shopify = null, media = [], timelines = []) {
+  const live = shopify || null;
+  const permanentlySold = row.availability_state === "sold_out";
   const handle = row.shopify_handle || row.slug;
   const primaryMedia = media.find((item) => item.role === "primary") || media[0] || null;
   const studioImages = media.map((item) => ({ url: item.url, altText: item.altText || row.alt_text || row.title }));
@@ -143,13 +167,15 @@ function publicProduct(row, shopify = null, media = []) {
     publicationState: row.state,
     availabilityState: row.availability_state,
     sourceVenture: row.source_venture,
+    merchContext: row.merch_context || "current",
+    fromArchive: row.merch_context === "from_archive",
     sourceLabel: sourceLabel(row.source_venture),
     statement: row.statement || "",
     description: row.description || "",
     price: live?.price || null,
-    availableForSale: Boolean(live?.availableForSale && live?.variants?.some((variant) => variant.availableForSale)),
+    availableForSale: !permanentlySold && Boolean(live?.availableForSale && live?.variants?.some((variant) => variant.availableForSale)),
     options: live?.options?.length ? live.options : normalizeOptions(row.options_json),
-    variants: live?.variants || [],
+    variants: permanentlySold ? (live?.variants || []).map((variant) => ({ ...variant, availableForSale: false })) : live?.variants || [],
     images: studioImages.length ? studioImages : live?.images || [],
     heroImage: primaryMedia?.url || row.image_url || live?.heroImage || null,
     heroImageAlt: primaryMedia?.altText || row.alt_text || live?.heroImageAlt || row.title,
@@ -159,6 +185,16 @@ function publicProduct(row, shopify = null, media = []) {
     editionText: row.edition_text || (row.availability_state === "coming_soon" ? "coming soon" : null),
     shippingNote: row.shipping_note || "",
     priceNote: row.price_note || "",
+    itemSize: row.item_size || "",
+    colorway: row.colorway || "",
+    technique: row.technique || "",
+    periodLabel: row.period_label || "",
+    conditionNote: row.condition_note || "",
+    provenanceSummary: row.provenance_summary || "",
+    historicalPrice: row.historical_price_amount == null ? null : { amount: Number(row.historical_price_amount) / 100, currencyCode: row.historical_price_currency || "USD" },
+    historicalPriceNote: row.historical_price_note || "",
+    timelines,
+    timelineAssociations: timelines,
     originTitle: row.origin_title || "",
     originPath: row.origin_path || "",
     originThumb: row.origin_thumb || "",
@@ -192,10 +228,11 @@ async function publicRows(env, slug = "") {
 export async function handleMerchCatalog(request, env) {
   if (request.method !== "GET") return failure("Method not allowed.", 405);
   const [rows, shopify] = await Promise.all([publicRows(env), shopifyProducts(env)]);
-  const media = await productMedia(db(env), rows.map((row) => row.id), { publicOnly: true });
+  const database = db(env);
+  const [media,timelines] = await Promise.all([productMedia(database, rows.map((row) => row.id), { publicOnly: true }),productTimelines(database, rows.map((row) => row.id))]);
   const byHandle = new Map(shopify.products.map((product) => [product.handle, product]));
   return json({
-    products: rows.map((row) => publicProduct(row, row.shopify_handle ? byHandle.get(row.shopify_handle) : null, media.get(row.id) || [])),
+    products: rows.map((row) => publicProduct(row, row.shopify_handle ? byHandle.get(row.shopify_handle) : null, media.get(row.id) || [], timelines.get(row.id) || [])),
     commerceAvailable: !shopify.error,
   });
 }
@@ -210,8 +247,9 @@ export async function handleMerchItem(request, env, itemSlug) {
     try { shopify = await fetchProductByHandle(env, row.shopify_handle, { signal: AbortSignal.timeout(4000) }); }
     catch (error) { console.warn(JSON.stringify({ event: "merch_shopify_product_unavailable", slug: row.slug, error: error.message })); }
   }
-  const media = await productMedia(db(env), [row.id], { publicOnly: true });
-  return json({ product: publicProduct(row, shopify, media.get(row.id) || []) });
+  const database = db(env);
+  const [media,timelines] = await Promise.all([productMedia(database, [row.id], { publicOnly: true }),productTimelines(database, [row.id])]);
+  return json({ product: publicProduct(row, shopify, media.get(row.id) || [], timelines.get(row.id) || []) });
 }
 
 function substitute(template, values) {
@@ -359,7 +397,7 @@ export async function handleLaunchAlertToken(request, env, action) {
 const EDITABLE_FIELDS = [
   "title","product_type","state","availability_state","source_venture","catalog_number","statement","description",
   "edition_text","shipping_note","price_note","image_url","alt_text","origin_title","origin_path","origin_thumb",
-  "origin_meta","options_json","notify_enabled","sort_order","shopify_handle",
+  "origin_meta","options_json","notify_enabled","sort_order","shopify_handle","merch_context","item_size","colorway","technique","period_label","condition_note","provenance_summary","internal_provenance","historical_price_amount","historical_price_currency","historical_price_note",
 ];
 
 function merchValues(body, current = {}) {
@@ -367,6 +405,7 @@ function merchValues(body, current = {}) {
   for (const field of EDITABLE_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(body, field)) continue;
     if (["notify_enabled","sort_order"].includes(field)) values[field] = Number(body[field]) || 0;
+    else if (field === "historical_price_amount") values[field] = body[field] === "" || body[field] == null ? null : Math.max(0, Math.round(Number(body[field])));
     else if (field === "shopify_handle") values[field] = text(body[field], 160) || null;
     else if (field === "options_json") values[field] = JSON.stringify(safeJson(body[field], {}));
     else values[field] = text(body[field], field === "description" ? 12000 : 3000);
