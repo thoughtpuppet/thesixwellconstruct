@@ -79,7 +79,7 @@
         const entityId=created.entity_id||created.entityId||created.id;
         if(handoff?.id&&expected&&path===expected&&entityId){
           const relationship=handoff.type==="legend-symbol"?"rel-uses-symbol":handoff.type==="note"?"rel-source-for":"rel-depicts";
-          await import("/studio/media-catalogue-manager.js?v=20260904-media-drag-drop").then(module=>module.completeSourceMediaHandoff(api,entityId,{relationship_type_id:relationship,role:handoff.type==="note"?"source":"documentation",public_visible:false}));
+          await import("/studio/media-catalogue-manager.js?v=20260904-media-detail-cleanup").then(module=>module.completeSourceMediaHandoff(api,entityId,{relationship_type_id:relationship,role:handoff.type==="note"?"source":"documentation",public_visible:false}));
           status(`${handoff.accession||"Media Asset"} attached to the new record`);
         }
       }catch(error){status(`Record created; source media handoff still needs review: ${error.message}`)}

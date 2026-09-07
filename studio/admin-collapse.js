@@ -117,6 +117,7 @@
 
   function enhanceSection(element) {
     if (!(element instanceof Element) || !element.matches(sectionSelector)) return;
+    if (element.closest("[data-admin-collapse-ignore]")) return;
     if (element.querySelector(":scope > .admin-collapse-heading > [data-admin-collapse-control]")) return;
 
     const staleBody = directChild(element, ".admin-collapse-body");
@@ -146,6 +147,7 @@
 
   function enhanceDetails(details) {
     if (!(details instanceof HTMLDetailsElement) || details.dataset.adminDetailsReady === "true") return;
+    if (details.closest("[data-admin-collapse-ignore]")) return;
     const summary = details.querySelector(":scope > summary");
     if (!summary) return;
     details.dataset.adminDetailsReady = "true";
@@ -170,6 +172,7 @@
 
   function enhanceCustom(section) {
     if (!(section instanceof Element) || !section.matches(customSelector) || section.dataset.adminCustomReady === "true") return;
+    if (section.closest("[data-admin-collapse-ignore]")) return;
     const schedule = section.matches("[data-collapse-section]");
     const button = section.querySelector(schedule ? ":scope > .section-toggle" : ":scope > .detail-section-toggle");
     const body = section.querySelector(schedule ? ":scope > .section-body" : ":scope > .detail-section-body");
