@@ -94,10 +94,26 @@ test("editorial timelines are additive and the opening SIX.WELL edition stays fl
   assert.equal(response.body.entries.length, 0, "editorial hydration does not alter the standard milestone response");
   assert.ok(response.body.acts.flatMap((act) => act.blocks).some((block) => block.blockType === "gallery-set"));
   assert.ok(response.body.acts.flatMap((act) => act.blocks).some((block) => block.evidenceStatus === "open-interval"));
+  const transferAct = response.body.acts.find((act) => act.id === "six-well-act-transfer");
+  const transferGalleryBlocks = transferAct.blocks.filter((block) => block.blockType === "gallery-set");
+  assert.deepEqual(transferGalleryBlocks.map((block) => block.id), ["six-well-block-origin-diagram", "six-well-block-button-pattern-detail"]);
+  assert.equal(transferGalleryBlocks[1].source_url, "/archive/records/the-personification-of-truth/");
+  assert.equal(transferGalleryBlocks[1].citation_label, "Open THE PERSONIFICATION OF TRUTH. Archive record");
+  assert.equal(transferGalleryBlocks[1].source.presentation_mode, "detail-crop");
+  assert.equal(transferGalleryBlocks[1].source.presentation_zoom, 4);
+  assert.equal(transferGalleryBlocks[1].source.presentation_focal_y, 0.88);
+  assert.equal(transferGalleryBlocks[1].source.presentation_alt_text, "Close-up of the lower vest in THE PERSONIFICATION OF TRUTH., showing six painted buttons arranged in two columns and three rows.");
+  assert.equal(transferGalleryBlocks[1].source.items[0].url, "/assets/paintings/the-personification-of-truth.jpg");
   assert.equal(JSON.stringify(response.body).includes("reflection_memory_note"), false);
   assert.equal(JSON.stringify(response.body).includes("archive-note-six-well-pattern-emergence"), false, "the draft Reflection is not hydrated publicly");
-  const dossier = await handleConstructApi(request("/api/archive/items/six-well-clothing-identity"), runtime(db));
+  const dossier = await json(await handleConstructApi(request("/api/archive/items/six-well-clothing-identity"), runtime(db)));
   assert.equal(dossier.status, 200, "the organization dossier is public through the editorial timeline without a duplicate identity profile");
+  assert.ok(dossier.body.relationships.some((relationship) => relationship.label === "Derived from" && (relationship.related.entity_id || relationship.related.id) === "art-personification-of-truth" && relationship.related.archiveRoute === "/archive/records/the-personification-of-truth/"));
+
+  const painting = await json(await handleConstructApi(request("/api/archive/items/the-personification-of-truth"), runtime(db)));
+  assert.equal(painting.status, 200, "the canonical painting identity receives an Archive dossier rather than a duplicate entity");
+  assert.match(painting.body.item.story, /extracted that arrangement from this painting and used it as the SIX\.WELL mark/);
+  assert.ok(painting.body.relationships.some((relationship) => relationship.label === "Source for" && (relationship.related.entity_id || relationship.related.id) === "org-six-well-clothing" && relationship.related.archiveRoute === "/archive/records/six-well-clothing-identity/"), JSON.stringify(painting.body.relationships));
 });
 
 test("Reflection timing, public excerpts, and factual-history dates remain separate", async () => {
@@ -188,5 +204,14 @@ test("public presentation keeps cinematic media bounded, accessible, and checkou
   assert.match(studioNotes, /Written in reflection \/ after the fact/);
   assert.match(studioTimeline, /open-interval/);
   assert.match(diagram, /stroke-width="5"/);
+  assert.match(diagram, /PATTERN EXTRACTED/);
+  assert.match(diagram, /FROM PAINTING/);
+  assert.match(diagram, /<tspan/);
+  assert.doesNotMatch(diagram, /PATTERN RECOGNIZED/);
   assert.match(diagram, /canonical logo is unchanged/i);
+  assert.match(archive, /presentation_mode/);
+  assert.match(archive, /is-detail-crop/);
+  assert.match(archiveCss, /archive-editorial-detail-frame/);
+  assert.match(archiveCss, /transform: scale\(var\(--editorial-detail-zoom\)\)/);
+  assert.match(archiveCss, /transform-origin: var\(--editorial-detail-x\) var\(--editorial-detail-y\)/);
 });

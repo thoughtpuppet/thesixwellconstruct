@@ -112,7 +112,15 @@ test("confirmed originals and qualifying preexisting Archive media form one cont
   assert.ok(catalogue.every((row) => ["creative_master", "editorial_fragment"].includes(row.asset_role)));
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM gallery_entries WHERE state='published'").get().count, catalogue.length);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(media.original_filename) LIKE '%poster%'").get().count, 0);
-  assert.deepEqual(sql.prepare("SELECT catalogue.media_id,media.source_url,media.storage_key FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(replace(media.source_url,'\\','/')) LIKE '/assets/flash/%' OR lower(replace(media.source_url,'\\','/')) LIKE '/assets/paintings/%' OR lower(replace(media.storage_key,'\\','/')) LIKE 'portfolio/%' ORDER BY catalogue.media_id").all(),[]);
+  assert.deepEqual(sql.prepare("SELECT catalogue.media_id,media.source_url,media.storage_key,catalogue.admission_basis,catalogue.source_entity_id FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(replace(media.source_url,'\\','/')) LIKE '/assets/flash/%' OR lower(replace(media.source_url,'\\','/')) LIKE '/assets/paintings/%' OR lower(replace(media.storage_key,'\\','/')) LIKE 'portfolio/%' ORDER BY catalogue.media_id").all().map((row)=>({...row})),[
+    {
+      media_id:"media-art-personification-of-truth",
+      source_url:"/assets/paintings/the-personification-of-truth.jpg",
+      storage_key:"",
+      admission_basis:"record",
+      source_entity_id:"art-personification-of-truth",
+    },
+  ]);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM media_catalogue_entries catalogue JOIN media_assets media ON media.id=catalogue.media_id WHERE lower(media.original_filename) IN ('ring-ripple-reference.mov','ring-ripple-reference.mp4') OR lower(replace(media.source_url,'\\','/')) LIKE '/assets/events/%'").get().count, 0);
   assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_blackboard_fragment_edits edit JOIN media_catalogue_entries catalogue ON catalogue.media_id=edit.alpha_mask_media_id").get().count, 0);
   assert.deepEqual(sql.prepare("SELECT media_id,suggested_reason FROM media_archive_admission_reviews WHERE review_state='pending' ORDER BY media_id").all(),[]);

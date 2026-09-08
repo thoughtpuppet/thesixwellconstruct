@@ -2308,7 +2308,7 @@ async function hydrateEditorialTimelineBlock(database,row,activityMap){
     return note?{...base,source:{...presentArchiveNote(note),body_markdown:undefined,bodyMarkdown:undefined,excerpt:row.excerpt||note.excerpt||archiveNotePlainText(note.body_markdown).slice(0,1200)}}:null;
   }
   if(row.block_type==="gallery-set"){
-    const set=await database.prepare("SELECT id,slug,title,summary,date_precision,date_label,occurred_at,ended_at FROM gallery_sets WHERE id=? AND state='published'").bind(row.source_id).first();
+    const set=await database.prepare("SELECT id,slug,title,summary,date_precision,date_label,occurred_at,ended_at,presentation_mode,presentation_focal_x,presentation_focal_y,presentation_aspect_ratio,presentation_zoom,presentation_alt_text FROM gallery_sets WHERE id=? AND state='published'").bind(row.source_id).first();
     if(!set)return null;
     const result=await database.prepare(`SELECT entry.media_id,entry.display_media_id,entry.poster_media_id,entry.title,entry.accessibility_text,entry.caption,entry.date_label,
         display.source_url,display.storage_key,display.mime_type,display.width,display.height,display.duration_seconds,display.transcript,display.transcript_status,

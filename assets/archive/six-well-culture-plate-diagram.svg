@@ -1,26 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
   <title id="title">Pattern and six-well culture plate</title>
-  <desc id="description">Two six-circle arrangements are shown side by side. The left is the pattern recognized in the painted figure. The right is a six-well culture plate. This is an explanatory diagram; the canonical logo is unchanged.</desc>
+  <desc id="description">Two six-circle arrangements are shown side by side. The left is the pattern extracted from the painting. The right is a six-well culture plate. This is an explanatory diagram; the canonical logo is unchanged.</desc>
   <rect width="1600" height="900" fill="#0e0e0e"/>
+
   <g fill="none" stroke="#b87a32" stroke-width="5">
     <rect x="70" y="70" width="680" height="760"/>
     <rect x="850" y="70" width="680" height="760"/>
   </g>
-  <g fill="#fcb867" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" letter-spacing="5">
-    <text x="120" y="135">PATTERN RECOGNIZED IN THE PAINTING</text>
-    <text x="900" y="135">SIX-WELL CULTURE PLATE</text>
+
+  <g fill="#fcb867" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" letter-spacing="4">
+    <text x="120" y="125">
+      <tspan x="120" dy="0">PATTERN EXTRACTED</tspan>
+      <tspan x="120" dy="34">FROM PAINTING</tspan>
+    </text>
+    <text x="900" y="125">
+      <tspan x="900" dy="0">SIX-WELL</tspan>
+      <tspan x="900" dy="34">CULTURE PLATE</tspan>
+    </text>
   </g>
+
   <g fill="#6d3d15" stroke="#fcb867" stroke-width="5">
     <circle cx="285" cy="310" r="82"/><circle cx="535" cy="310" r="82"/>
     <circle cx="285" cy="515" r="82"/><circle cx="535" cy="515" r="82"/>
     <circle cx="285" cy="720" r="82"/><circle cx="535" cy="720" r="82"/>
   </g>
+
   <g fill="none" stroke="#f08f00" stroke-width="5">
     <rect x="925" y="205" width="530" height="610" rx="58"/>
     <circle cx="1090" cy="340" r="82"/><circle cx="1290" cy="340" r="82"/>
     <circle cx="1090" cy="515" r="82"/><circle cx="1290" cy="515" r="82"/>
     <circle cx="1090" cy="690" r="82"/><circle cx="1290" cy="690" r="82"/>
   </g>
+
   <path d="M760 450h80M810 420l30 30-30 30" fill="none" stroke="#b87a32" stroke-width="5"/>
-  <text x="800" y="535" fill="#b87a32" font-family="Georgia, serif" font-size="22" text-anchor="middle">a recurring arrangement</text>
 </svg>
