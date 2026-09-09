@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {JSDOM} from "jsdom";
 import {createWritingEditor} from "./editor.js";
-import {normalizeWritingSnapshot,renderWritingBody} from "../../shared/writing-content.js";
+import {normalizeWritingSnapshot,renderWritingBody,writingHref} from "../../shared/writing-content.js";
 const dom=new JSDOM('<!doctype html><html><body><div id="editor"></div></body></html>',{url:"http://localhost",pretendToBeVisual:true});
 for(const key of ["window","document","navigator","Node","HTMLElement","Element","DocumentFragment","MutationObserver","DOMParser","getComputedStyle"]){Object.defineProperty(globalThis,key,{value:key==="getComputedStyle"?dom.window.getComputedStyle.bind(dom.window):dom.window[key],configurable:true});}
 globalThis.requestAnimationFrame=callback=>setTimeout(callback,0);globalThis.cancelAnimationFrame=clearTimeout;
@@ -10,6 +10,18 @@ globalThis.innerHeight=1000;globalThis.innerWidth=1400;
 globalThis.ClipboardEvent=dom.window.Event;
 dom.window.Range.prototype.getClientRects=()=>[];dom.window.Range.prototype.getBoundingClientRect=()=>({top:0,left:0,right:0,bottom:0});
 function snapshot(editor){return normalizeWritingSnapshot({schemaVersion:1,title:"Editor round trip",author:"Saiel Dauhn Solehman",excerpt:"",body:editor.getJSON(),sources:[],relatedIds:[]});}
+test("inline links accept a pasted bare address and retain it through undo, redo, and reload",()=>{
+  const editor=createWritingEditor(document.createElement("div"),{content:"<p>Read the source</p>"});
+  try {
+    const href=writingHref("openai.com/index/hugging-face-incident-and-the-road-ahead/");
+    editor.commands.selectAll();assert.equal(editor.chain().extendMarkRange("link").setLink({href}).run(),true);
+    assert.equal(editor.getAttributes("link").href,`https://openai.com/index/hugging-face-incident-and-the-road-ahead/`);
+    editor.commands.undo();assert.equal(editor.isActive("link"),false);
+    editor.commands.redo();const saved=snapshot(editor);
+    editor.commands.setContent(saved.body);assert.deepEqual(snapshot(editor),saved);
+    assert.ok(renderWritingBody(saved).includes(`href="${href}"`));
+  } finally { editor.destroy(); }
+});
 test("formatting, lists, images, captions, undo, redo, and JSON reload retain meaning",async()=>{
   const editor=createWritingEditor(document.querySelector("#editor"),{content:{type:"doc",content:[{type:"paragraph",content:[{type:"text",text:"An observation"}]}]}});
   editor.commands.setTextSelection({from:1,to:3});editor.commands.toggleBold();

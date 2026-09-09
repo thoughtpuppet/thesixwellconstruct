@@ -3,11 +3,28 @@ import test from "node:test";
 import {readFileSync} from "node:fs";
 import {createWritingRuntime} from "../tools/writing-local-runtime.mjs";
 import {handleConstructApi} from "../functions/api/construct/_lib.js";
-import {normalizeWritingSnapshot,renderWritingBody,WRITING_ROOT} from "../shared/writing-content.js";
+import {normalizeWritingSnapshot,renderWritingBody,writingHref,WRITING_ROOT} from "../shared/writing-content.js";
 import {normalizeWritingPathways} from "../shared/writing-navigation.js";
 import {writingPageSlug,renderWritingPageTemplate} from "../functions/api/_shared/writing-pages.js";
 
 const snapshot = (title="An open question") => ({schemaVersion:1,title,author:"Saiel Dauhn Solehman",excerpt:"A thought in progress.",body:{type:"doc",content:[{type:"paragraph",content:[{type:"text",text:"A publicly readable observation about form and memory."}]}]},sources:[{label:"The Archive",url:"/archive/"}],relatedIds:[]});
+test("pasted links infer HTTPS and email destinations without requiring protocol syntax",()=>{
+  const article="openai.com/index/hugging-face-incident-and-the-road-ahead/";
+  for(const [input,expected] of [
+    [article,`https://${article}`],
+    [`  ${article}\n`,`https://${article}`],
+    ["www.example.com/a?b=c#source","https://www.example.com/a?b=c#source"],
+    ["//example.com/source","https://example.com/source"],
+    ["example.com:8080/source","https://example.com:8080/source"],
+    ["example.com/a document.pdf","https://example.com/a%20document.pdf"],
+    ["reader@example.com","mailto:reader@example.com"],
+    ["mailto:reader@example.com?subject=Hello","mailto:reader@example.com?subject=Hello"],
+    ["https://example.com/source","https://example.com/source"],
+    ["http://localhost:4193/writings/","http://localhost:4193/writings/"],
+    ["/archive/","/archive/"],["#sources","#sources"],
+  ]) assert.equal(writingHref(input),expected,input);
+  for(const input of ["","not a link","javascript:alert(1)","javascript://example.com","data:text/html,hello","vbscript:msgbox(1)","file:///private/file","java\nscript:alert(1)","/\\example.com"]) assert.equal(writingHref(input),"",input);
+});
 function setup() {
   const runtime=createWritingRuntime();
   runtime.call=async(path,{admin=false,method="GET",body}={})=>{
@@ -18,6 +35,22 @@ function setup() {
   runtime.action=async(entry,action)=>runtime.call(`/api/admin/writing-entries/${entry.id}/${action}`,{admin:true,method:"POST",body:{version:entry.version}});
   return runtime;
 }
+test("bare inline and source addresses survive draft save, reload, publication, and rendering",async()=>{
+  const r=setup();
+  try {
+    const article="openai.com/index/hugging-face-incident-and-the-road-ahead/",value=snapshot();
+    value.body.content[0].content[0].marks=[{type:"link",attrs:{href:article}}];
+    value.sources=[{label:"Source",url:article}];
+    const entry=await r.create(value,"pasted-source-link");
+    const saved=(await r.call(`/api/admin/writing-entries/${entry.id}`,{admin:true})).entry;
+    assert.equal(saved.snapshot.sources[0].url,`https://${article}`);
+    assert.equal(saved.snapshot.body.content[0].content[0].marks[0].attrs.href,`https://${article}`);
+    assert.equal((await r.action(saved,"publish")).status,200);
+    const published=(await r.call(`/api/writings/entries/${entry.slug}`)).entry;
+    assert.deepEqual(published.snapshot,saved.snapshot);
+    assert.ok(renderWritingBody(published.snapshot).includes(`href="https://${article}"`));
+  } finally { r.database.close(); }
+});
 test("drafts, published snapshots, revisions, withdrawal, restore, and stable URLs",async()=>{
   const r=setup();let entry=await r.create();
   assert.equal((await r.call(`/api/writings/entries/${entry.slug}`)).status,404);

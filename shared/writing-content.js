@@ -3,10 +3,19 @@ export const WRITING_ROOT = "/writings/mindful-darkness/wrkng/";
 export const WRITING_AUTHOR = "Saiel Dauhn Solehman";
 export const escapeWriting = value => String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
 export function writingHref(value) {
-  const url = String(value || "").trim();
-  if (/[\u0000-\u0020\\]/.test(url)) return "";
-  if (url.startsWith("/") && !url.startsWith("//")) return url;
-  try { return ["https:","http:","mailto:"].includes(new URL(url).protocol) ? url : ""; } catch { return ""; }
+  let url = String(value || "").trim();
+  if (!url || /[\u0000-\u001f\u007f\\]/.test(url)) return "";
+  if (/^(?:\/(?!\/)|[?#])/.test(url)) return url.replaceAll(" ", "%20");
+  if (url.startsWith("//")) url = `https:${url}`;
+  if (/^[^\s@/:?#]+@[^\s@/:?#]+\.[^\s@/:?#]+(?:\?[^#]*)?$/.test(url)) url = `mailto:${url}`;
+  // A pasted domain is a website address; the author need not supply its protocol.
+  const hasProtocol = /^[a-z][a-z\d+.-]*:/i.test(url) && !/^[^/?#@:]+:\d+(?:[/?#]|$)/.test(url);
+  try {
+    const parsed = new URL(hasProtocol ? url : `https://${url}`);
+    if (!["https:","http:","mailto:"].includes(parsed.protocol)) return "";
+    if (!hasProtocol && (parsed.username || parsed.password || !(parsed.hostname.includes(".") || parsed.hostname === "localhost" || parsed.hostname.startsWith("[")))) return "";
+    return parsed.href;
+  } catch { return ""; }
 }
 function string(value, label, max) {
   if (typeof value !== "string" || value.length > max) throw new Error(`${label} must be text of ${max} characters or fewer.`);
