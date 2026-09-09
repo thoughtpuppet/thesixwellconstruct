@@ -269,6 +269,7 @@ body.construct-search-page {
 .search-result[data-medium="tattoo"] { --result-accent: var(--color-tattooing-bright, #BE281F); }
 .search-result[data-medium="merch"] { --result-accent: var(--color-merch-bright, #FF9933); }
 .search-result[data-medium="events"] { --result-accent: var(--color-events-bright, #397F34); }
+.search-result[data-medium="writings"] { --result-accent: var(--color-writings); }
 .search-result[data-medium="symbols"] { --result-accent: var(--color-about-bright, #F9C386); }
 .search-result[data-medium="pages"] { --result-accent: var(--color-about, #F8B468); }
 

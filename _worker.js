@@ -148,6 +148,7 @@ import {
 } from "./functions/api/special-projects/_lib.js";
 import { handlePortfolioApi } from "./functions/api/portfolio/_lib.js";
 import { handleConstructApi, reapStaleMediaUploads } from "./functions/api/construct/_lib.js";
+import { writingPageSlug, renderWritingPageTemplate } from "./functions/api/_shared/writing-pages.js";
 import { runVisualColorAnalysisPass } from "./functions/api/construct/_colors-materials.js";
 import { handleVisualColorQueue } from "./functions/api/construct/_automatic-visual-colors.js";
 import { handleAdminCrmApi } from "./functions/api/crm/_lib.js";
@@ -644,6 +645,20 @@ async function serveArtRecordPage(request, env, slug) {
   headers.delete("etag");
   headers.set("cache-control", "no-store");
   return new Response(html, { status: assetResponse.status, headers });
+}
+
+async function serveWritingRecordPage(request, env, slug) {
+  if (!slug) return notFoundPage(request,env);
+  const response = await handleConstructApi(new Request(new URL(`/api/writings/entries/${encodeURIComponent(slug)}`,request.url)),env);
+  if (response.status === 404) return notFoundPage(request,env);
+  if (!response.ok) return response;
+  const {entry} = await response.json();
+  const asset = await servePublicAsset(request,env,"/writings/mindful-darkness/wrkng/detail/index.html");
+  if (!asset.ok) return asset;
+  const origin = String(env.PUBLIC_SITE_URL || "https://thesixwellconstruct.com").replace(/\/+$/, "");
+  const headers = new Headers(asset.headers); headers.delete("content-length"); headers.delete("etag"); headers.set("cache-control","no-store");
+  if (request.method === "HEAD") return new Response(null,{status:200,headers});
+  return new Response(renderWritingPageTemplate(await asset.text(),entry,origin),{headers});
 }
 
 async function serveArtPreviewPage(request, env) {
@@ -1424,6 +1439,8 @@ export default {
 
     if (
       url.pathname === "/api/search" ||
+      url.pathname === "/api/writings/entries" || url.pathname.startsWith("/api/writings/entries/") ||
+      url.pathname === "/api/admin/writing-entries" || url.pathname.startsWith("/api/admin/writing-entries/") ||
       url.pathname === "/api/gallery" || url.pathname.startsWith("/api/gallery/") ||
       url.pathname === "/api/site/explore" ||
       url.pathname === "/api/site/navigation" ||
@@ -1751,6 +1768,14 @@ export default {
     if (legacyMerch) return legacyMerch;
 
     const requestedArtSlug = artRecordSlug(url.pathname);
+    const requestedWritingSlug = writingPageSlug(url.pathname);
+    if (requestedWritingSlug !== null) {
+      if (requestedWritingSlug && !url.pathname.endsWith("/")) {
+        const canonicalUrl = new URL(request.url); canonicalUrl.pathname += "/";
+        return Response.redirect(canonicalUrl,308);
+      }
+      return serveWritingRecordPage(request,env,requestedWritingSlug);
+    }
     if (requestedArtSlug) {
       if (!url.pathname.endsWith("/")) {
         const canonicalUrl = new URL(request.url);

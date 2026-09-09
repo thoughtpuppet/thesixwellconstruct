@@ -19,6 +19,8 @@
   };
 
   var SECTION_LABELS = {
+    'mindful-darkness': 'Mindful Darkness',
+    wrkng: 'WRKNG*',
     approved: 'Approved booking',
     booking: 'Booking',
     build: 'Build yours',

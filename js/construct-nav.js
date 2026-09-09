@@ -79,8 +79,8 @@
       ['scores', '/music/#forms'],
     ],
     writings: [
-      ['Mindful Darkness', '/writings/#reading-paths'], ['THE SOLEHMAN LETTERS', 'https://thesolehmanletters.com'],
-      ['essays & notes', '/writings/#featured'],
+      ['Mindful Darkness', '/writings/mindful-darkness/'], ['WRKNG*', '/writings/mindful-darkness/wrkng/'],
+      ['THE SOLEHMAN LETTERS', 'https://www.solehmanletters.com/'],
     ],
     archive: [
       ['Records', '/archive/'], ['Collections', '/archive/collections/'],
@@ -1857,6 +1857,8 @@
       try { payload = JSON.parse(localStorage.getItem(snapshotKey) || 'null'); } catch (ignored) { payload = null; }
     }
     if (!payload || !Array.isArray(payload.nodes) || !payload.nodes.length) return;
+    const { normalizeWritingPathways } = await import('/shared/writing-navigation.js');
+    payload.nodes.forEach(function(node) { if (node.slug === 'writings') node.pathways = normalizeWritingPathways(node.pathways); });
     var utilityLinks = Array.isArray(payload.utilityLinks) ? payload.utilityLinks : [];
     var existingUtilityBar = document.querySelector('[data-construct-utility-links]');
     if (existingUtilityBar) existingUtilityBar.remove();

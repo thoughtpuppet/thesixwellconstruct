@@ -1,0 +1,32 @@
+.writing-manager { max-width:1200px; margin:0 auto; }
+.writing-manager-head, .writing-editor-actions, .writing-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+.writing-manager-head { justify-content:space-between; margin-bottom:24px; }
+.writing-manager-list { display:grid; gap:16px; list-style:none; padding:0; }
+.writing-manager-card { padding:20px; border:5px solid var(--line, #443c30); }
+.writing-manager-card h3 { margin:0 0 10px; }
+.writing-editor-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:24px 0; }
+.writing-editor-fields label { display:flex; flex-direction:column; gap:8px; font-size:14px; }
+.writing-editor-fields .wide { grid-column:1/-1; }
+.writing-editor-fields input, .writing-editor-fields textarea, .writing-editor-fields select { width:100%; min-width:0; font:16px/1.5 Inter,Arial,sans-serif; padding:12px; border:5px solid var(--line, #443c30); background:var(--panel,#181512); color:var(--text,#fbdab1); }
+.writing-toolbar { border:5px solid var(--line,#443c30); padding:12px; margin-bottom:16px; }
+.writing-toolbar button { font-size:14px; }
+.writing-toolbar button[aria-pressed="true"] { background:#fbdab1; color:#111; }
+.writing-editor-body { min-height:360px; max-width:680px; padding:24px; border:5px solid var(--line,#443c30); font:18px/1.8 Georgia,serif; outline-offset:5px; overflow-wrap:break-word; }
+.writing-editor-body p { margin:0 0 1em; }
+.writing-editor-body h2 { font:700 28px/1.3 Inter,Arial,sans-serif; }
+.writing-editor-body h3 { font:700 22px/1.4 Inter,Arial,sans-serif; }
+.writing-editor-body blockquote { margin:24px 0; border-left:5px solid #fbdab1; padding-left:20px; }
+.writing-editor-body img { max-width:100%; height:auto; }
+.writing-editor-body figure { margin:24px 0; padding:8px; }
+.writing-editor-body .is-selected { outline:5px solid #fbdab1; }
+.writing-editor-body figcaption { font:14px/1.7 Inter,Arial,sans-serif; }
+.writing-editor-actions { margin:24px 0; }
+.writing-editor-status { font-size:14px; }
+.writing-reference-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.writing-reference-row input { flex:1; min-width:180px; }
+.writing-manager dialog { max-width:680px; width:calc(100% - 40px); max-height:85dvh; overflow:auto; padding:24px; border:5px solid #fbdab1; background:#171411; color:#fbdab1; }
+.writing-manager dialog::backdrop { background:rgba(0,0,0,.75); }
+.writing-manager dialog label { display:block; margin:16px 0; }
+.writing-manager dialog input, .writing-manager dialog textarea, .writing-manager dialog select { width:100%; padding:10px; font:16px/1.5 Inter,Arial,sans-serif; background:#222; color:#fbdab1; border:5px solid #443c30; }
+.writing-manager button:focus-visible, .writing-manager a:focus-visible { outline:3px solid #fbdab1; outline-offset:4px; }
+@media(max-width:650px) { .writing-editor-fields { grid-template-columns:minmax(0,1fr); } .writing-editor-body { padding:16px; } .writing-toolbar { gap:8px; } }

@@ -6,6 +6,8 @@ export const PAGE_VISIBILITY_PAGES = Object.freeze([
   { label: "Film", path: "/film/" },
   { label: "Music", path: "/music/" },
   { label: "Writings", path: "/writings/" },
+  { label: "Mindful Darkness", path: "/writings/mindful-darkness/" },
+  { label: "WRKNG*", path: "/writings/mindful-darkness/wrkng/" },
   { label: "Art Index", path: "/art/" },
   { label: "Acquisition Inquiry", path: "/art/acquisitioninquiry.html" },
   { label: "Homeland Security", path: "/art/homelandsecuritypainting.html" },

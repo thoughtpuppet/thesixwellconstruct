@@ -12,6 +12,7 @@ import { loadPublicCalendarSearchEvents } from "../calendar/_lib.js";
 import { handleArchiveWebSnapshotsAdmin, loadPublicArchiveWebSnapshots } from "./_web-snapshots.js";
 import { enqueueVisualColorEntity, enqueueVisualColorEntityById } from "./_automatic-visual-colors.js";
 import { handleGalleryAdmin, handleGalleryPublic, handleMediaCatalogueAdmin } from "./_gallery.js";
+import { handleWritingApi } from "./_writing.js";
 import {
   ArchiveDossierEnsureError,
   archiveDossierEligibleOwner,
@@ -3062,6 +3063,7 @@ function searchMediumKey(record) {
   if (type === "merch_item" || node === "merch" || node === "node-merch") return "merch";
   if (["event", "appearance"].includes(type) || node === "events" || node === "node-events") return "events";
   if (type === "visual_symbol") return "symbols";
+  if (type === "writing_work" || node === "writings" || node === "node-writings") return "writings";
   if (["archive_record", "archive_note"].includes(type) || node === "archive" || node === "node-archive") return "archive";
   return "archive";
 }
@@ -3503,6 +3505,8 @@ async function publicSearch(request, env) {
   if(request.method!=="GET")return failure("Method not allowed.",405);
   const database=db(env),url=new URL(request.url),q=text(url.searchParams.get("q"),200),type=text(url.searchParams.get("type"),80),node=text(url.searchParams.get("node"),80);
   const archiveFilter=archivePublicConditions(url),archiveConditions=[...archiveFilter.conditions],archiveValues=[...archiveFilter.values];
+  // WRKNG owns its reader and published snapshot even when an Archive shell exists.
+  archiveConditions.push("NOT EXISTS(SELECT 1 FROM writing_entries writing WHERE writing.entity_id=ce.id)");
   if(type){archiveConditions.push("ce.entity_type=?");archiveValues.push(type)}
   if(node){archiveConditions.push("ce.node_id=?");archiveValues.push(node)}
   const archiveRows=(await database.prepare(`${archiveEntitySql(archiveConditions.join(" AND "))} ORDER BY ad.featured DESC,ad.updated_at DESC LIMIT 100`).bind(...archiveValues).all()).results||[];
@@ -3517,7 +3521,7 @@ async function publicSearch(request, env) {
   const fragmentsByEntity=new Map();for(const fragment of fragmentRows){if(!fragmentsByEntity.has(fragment.dossier_entity_id))fragmentsByEntity.set(fragment.dossier_entity_id,[]);const anchor=fragment.anchor||"overview";fragmentsByEntity.get(fragment.dossier_entity_id).push({fragment_type:fragment.fragment_type,source_id:fragment.source_id,label:fragment.label,body:fragment.body,snippet:String(fragment.body||fragment.label||"").slice(0,320),anchor,dossier_anchor:`/archive/records/${encodeURIComponent(archiveRows.find(row=>row.entity_id===fragment.dossier_entity_id)?.archive_slug||fragment.dossier_entity_id)}/#${encodeURIComponent(anchor)}`,rank:Number(fragment.rank||0)});}
   const archiveRecords=archiveRows.map(row=>{const item=presentArchiveItem(row);return {...item,route:item.archive_route,matches:fragmentsByEntity.get(row.entity_id)||[],match_count:(fragmentsByEntity.get(row.entity_id)||[]).length};});
 
-  const legacyFilters=["ce.visibility='public'","ce.search_visibility=1","ad.entity_id IS NULL"],legacyValues=[];
+  const legacyFilters=["ce.visibility='public'","ce.search_visibility=1","(ad.entity_id IS NULL OR EXISTS(SELECT 1 FROM writing_entries writing WHERE writing.entity_id=ce.id AND writing.state='published'))"],legacyValues=[];
   if(type){legacyFilters.push("d.entity_type=?");legacyValues.push(type)}if(node){legacyFilters.push("d.node_id=?");legacyValues.push(node)}
   for(const [param,column] of [["state","state"],["date","date_label"]]){const value=text(url.searchParams.get(param),120);if(value){legacyFilters.push(`d.${column}=?`);legacyValues.push(value)}}
   for(const [param,column] of [["theme","theme_labels"],["place","place_labels"]]){const value=text(url.searchParams.get(param),120);if(value){legacyFilters.push(`d.${column} LIKE ?`);legacyValues.push(`%${value}%`)}}
@@ -4700,7 +4704,7 @@ async function mediaApi(request, env, mediaId="") {
     try{
       await database.prepare("UPDATE media_assets SET state=?,alt_text=?,caption=?,rights_notes=?,privacy=?,transcript=?,transcript_status=?,transcript_language=?,public_title=?,public_description=?,public_presentation=?,updated_at=datetime('now') WHERE id=?")
         .bind(next.state,next.alt_text,next.caption,next.rights_notes,next.privacy,next.transcript,next.transcript_status,next.transcript_language,next.public_title,next.public_description,next.public_presentation,mediaId).run();
-    }catch(error){if(isPortfolioCoverGuardError(error))return failure("Unpublish this tattoo or choose another permitted result image as its cover before making this media private.",409);throw error;}
+    }catch(error){if(/WRKNG/.test(error.message))return failure(error.message,409);if(isPortfolioCoverGuardError(error))return failure("Unpublish this tattoo or choose another permitted result image as its cover before making this media private.",409);throw error;}
     await syncFailedExperimentsForMedia(database,mediaId);
     return json({record:presentMediaRecord(await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(mediaId).first())});
   }
@@ -4750,6 +4754,7 @@ function nodeFallback(nodeId){return Object.values(NODE_FALLBACKS).find(node=>no
 function entityDirectorySql(where="1=1"){
   return `SELECT ce.id,ce.entity_type,ce.node_id legacy_node_id,ce.visibility,
     CASE ce.entity_type
+      WHEN 'writing_work' THEN COALESCE(json_extract(we.published_json,'$.title'),json_extract(we.draft_json,'$.title'))
       WHEN 'flash_item' THEN fi.title WHEN 'flash_series' THEN fs.name WHEN 'special_project' THEN spc.title WHEN 'special_project_series' THEN sps.name WHEN 'art_work' THEN aw.title WHEN 'portfolio_item' THEN pi.title WHEN 'merch_item' THEN mi.title
       WHEN 'visual_symbol' THEN vs.name WHEN 'archive_record' THEN ar.title WHEN 'archive_collection' THEN ac.name
       WHEN 'archive_failed_experiment' THEN afe.title
@@ -4757,6 +4762,7 @@ function entityDirectorySql(where="1=1"){
       WHEN 'construct_node' THEN own.name WHEN 'construct_pathway' THEN cp.name WHEN 'person' THEN pe.name
       WHEN 'organization' THEN org.name WHEN 'place' THEN pl.name WHEN 'event' THEN ev.title WHEN 'appearance' THEN app.title ELSE ce.id END title,
     CASE ce.entity_type
+      WHEN 'writing_work' THEN we.state
       WHEN 'flash_item' THEN fi.state WHEN 'flash_series' THEN fs.state WHEN 'special_project' THEN spc.publication_state WHEN 'special_project_series' THEN sps.state WHEN 'art_work' THEN aw.state WHEN 'portfolio_item' THEN pi.state WHEN 'merch_item' THEN mi.state
       WHEN 'visual_symbol' THEN vs.state WHEN 'archive_record' THEN ar.state WHEN 'archive_collection' THEN ac.state
       WHEN 'archive_failed_experiment' THEN afe.state
@@ -4764,6 +4770,7 @@ function entityDirectorySql(where="1=1"){
       WHEN 'construct_node' THEN own.state WHEN 'construct_pathway' THEN cp.state WHEN 'person' THEN pe.state
       WHEN 'organization' THEN org.state WHEN 'place' THEN pl.state WHEN 'event' THEN ev.status WHEN 'appearance' THEN app.state ELSE ce.visibility END state,
     CASE ce.entity_type
+      WHEN 'writing_work' THEN '/writings/mindful-darkness/wrkng/'||we.slug||'/'
       WHEN 'flash_item' THEN COALESCE(NULLIF(fi.legacy_path,''),'/tattoos/flash/'||fi.slug||'/')
       WHEN 'flash_series' THEN '/tattoos/flash/?series='||fs.slug
       WHEN 'special_project' THEN '/tattoos/special-projects/'||spc.slug||'/'
@@ -4801,6 +4808,7 @@ function entityDirectorySql(where="1=1"){
     CASE WHEN ce.entity_type='visual_symbol' THEN COALESCE(vs.svg_markup,'') ELSE '' END media_markup,
     CASE ce.entity_type
       WHEN 'flash_item' THEN CASE WHEN fi.item_type='sheet' THEN 'Flash sheet' ELSE 'Flash' END
+      WHEN 'writing_work' THEN 'WRKNG* entry'
       WHEN 'flash_series' THEN 'Flash series' WHEN 'special_project' THEN 'Special Project' WHEN 'special_project_series' THEN 'Special Project series' WHEN 'art_work' THEN 'Painting' WHEN 'portfolio_item' THEN 'Tattoo'
       WHEN 'merch_item' THEN COALESCE(NULLIF(mi.product_type,''),'Product') WHEN 'visual_symbol' THEN 'Legend symbol'
       WHEN 'archive_record' THEN COALESCE(NULLIF(ar.record_type,''),'Archive record') WHEN 'archive_collection' THEN 'Archive collection'
@@ -4821,6 +4829,7 @@ function entityDirectorySql(where="1=1"){
     COALESCE(cn.id,'') node_resolved_id,COALESCE(cn.name,'') node_name,COALESCE(cn.slug,'') node_slug,COALESCE(cn.color,'') node_color,
     COALESCE(fi.claimable,0) claimable,COALESCE(mi.shopify_handle,'') shopify_handle
   FROM content_entities ce
+  LEFT JOIN writing_entries we ON ce.entity_type='writing_work' AND we.entity_id=ce.id
   LEFT JOIN flash_items fi ON ce.entity_type='flash_item' AND fi.id=ce.id
   LEFT JOIN flash_series fs ON ce.entity_type='flash_series' AND fs.id=ce.id
   LEFT JOIN special_project_calls spc ON ce.entity_type='special_project' AND spc.id=ce.id
@@ -8324,6 +8333,7 @@ async function eventArchive(request,env,eventId){
 
 export async function handleConstructApi(request,env){
   const url=new URL(request.url);const path=url.pathname;
+  const writingResponse=await handleWritingApi(request,env,{resolveEntities:async(database,ids)=>[...(await entityRecords(database,ids)).values()]});if(writingResponse)return writingResponse;
   const galleryPublic=await handleGalleryPublic(request,env,path);if(galleryPublic)return galleryPublic;
   const colorMaterialsPublic=await handleArchiveColorMaterialsPublic(request,env,path);if(colorMaterialsPublic)return colorMaterialsPublic;
   if(path==="/api/site/navigation")return publicNavigation(env);

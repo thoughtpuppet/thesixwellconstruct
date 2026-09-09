@@ -1,0 +1,40 @@
+:root { --venture-color:var(--color-writings); --venture-accent:var(--color-writings); --venture-dim:var(--color-writings-dim); }
+html, body.venture-page, .venture-shell { background:var(--color-bg); }
+body[data-venture="writings"] .construct-breadcrumb { flex-wrap:wrap; }
+body[data-venture="writings"] .construct-breadcrumb > a { flex-shrink:0; }
+body[data-venture="writings"] .construct-breadcrumb-current { min-width:0; overflow-wrap:anywhere; }
+.writing-intro, .writing-reader { max-width:680px; }
+.venture-hero + .writing-intro { margin-top:32px; }
+.writing-entry-hero { min-height:0; padding-top:32px; padding-bottom:40px; margin-bottom:32px; }
+.writing-intro, .writing-reader, .writing-entry-card p, .writing-destination p, .writing-empty { --type-body-transform:none; --type-body-tracking:0; --type-body-tracking-active:0; --type-body-leading:1.8; --type-body-leading-active:1.8; }
+.writing-body h2, .writing-body h3 { line-height:1.3 !important; }
+.writing-intro, .writing-body, .writing-sources, .writing-related { font-family:Georgia,serif; font-size:18px; line-height:1.8; color:var(--color-body); }
+.writing-intro p, .writing-body p { margin:0 0 1.4em; }
+.writing-destinations, .writing-entry-list { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; margin:28px 0; padding:0; list-style:none; }
+.writing-destination, .writing-entry-card { padding:28px; border:5px solid var(--venture-dim); min-width:0; }
+.writing-destination h2, .writing-entry-card h2 { font-size:clamp(25px,4vw,40px); margin:0 0 16px; }
+.writing-destination p, .writing-entry-card p { font:18px/1.8 Georgia,serif; max-width:680px; }
+.writing-entry-card h2 a, .writing-destination h2 a { color:var(--venture-accent); text-decoration:none; }
+.writing-meta, .writing-entry-date { font:14px/1.7 Inter,Arial,sans-serif; color:var(--color-text-dim); }
+.writing-meta { margin:0 0 36px; }
+.writing-body h2, .writing-sources h2, .writing-related h2 { margin:40px 0 18px; font:700 28px/1.3 Inter,Arial,sans-serif; color:var(--venture-accent); }
+.writing-body h3 { margin:30px 0 16px; font:700 22px/1.4 Inter,Arial,sans-serif; color:var(--venture-accent); }
+.writing-body blockquote { margin:32px 0; padding:8px 0 8px 24px; border-left:5px solid var(--venture-accent); }
+.writing-body blockquote p:last-child { margin-bottom:0; }
+.writing-body ul, .writing-body ol, .writing-sources ol, .writing-related ul { padding-left:1.5em; margin:24px 0; }
+.writing-body li { margin:8px 0; }
+.writing-body li p { margin:0; }
+.writing-body a, .writing-sources a, .writing-related a, .writing-intro a { color:var(--venture-accent); text-decoration:underline; text-underline-offset:4px; overflow-wrap:anywhere; }
+.writing-image { margin:36px 0; }
+.writing-image img { display:block; width:100%; height:auto; }
+.writing-image figcaption { margin-top:12px; font:14px/1.7 Inter,Arial,sans-serif; color:var(--color-text-dim); }
+.writing-sources, .writing-related { border-top:5px solid var(--venture-dim); margin-top:40px; }
+.writing-footnote { margin:48px 0 24px; font:italic 16px/1.8 Georgia,serif; color:var(--color-text-dim); }
+.writing-empty, .writing-preview-notice { max-width:680px; font:18px/1.8 Georgia,serif; }
+.writing-preview-notice { padding:16px; border:5px solid var(--venture-dim); }
+.writing-reader, .writing-body, .writing-entry-card, .writing-intro { overflow-wrap:break-word; }
+.writing-skip { position:absolute; top:-100px; left:20px; z-index:10000; background:var(--color-bg); color:var(--venture-accent); padding:12px; }
+.writing-skip:focus { top:12px; }
+.writing-reader a:focus-visible, .writing-destinations a:focus-visible, .writing-entry-list a:focus-visible { outline:3px solid var(--venture-accent); outline-offset:6px; }
+@media(min-width:1000px) { .writing-destinations { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:600px) { .writing-destination, .writing-entry-card { padding:20px; } .writing-body blockquote { padding-left:16px; } }

@@ -1084,7 +1084,7 @@ const SUB_NODE_DATA = {
   'ABOUT':      [{name:'Current Works + Projects',url:'/currently'},{name:'the construct',url:'/about/#construct'},{name:'Saiel Dauhn Solehman',url:'/about/saieldauhnsolehman/'},{name:'architecture',url:'/about/#construct-architecture'},{name:'nodes',url:'/about/#access'},{name:'method',url:'/about/#library'},{name:'faq',url:'/about/#faq'},{name:'Legend',url:'/about/legend/'},{name:'Exhibitions & Appearances',url:'/about/exhibitions-appearances/'}],
   'EVENTS':     [{name:'GREEN[FIELD]',url:'/events/greenfield/'},{name:'Signal & Symbol',url:'/events/signal-symbol/'},{name:'calendar',url:'/events/calendar/'},{name:'rent the studio',url:'/booking/studio/'},{name:'archive',url:'/archive/events/',color:MEDIUM_COLORS.archive},{name:"solehman's new years",url:'/events/solehmans-new-year/'},{name:'SS&F live audience',url:'/events/ss-and-f-live-audience/'},{name:'open studios',url:'/events/open-studios/',color:MEDIUM_COLORS.art}],
   'MUSIC':      [{name:'ringtones',url:'/music/#listening-surfaces'},{name:'MILOWALKSONWATER',url:'/music/#listening-index'},{name:'scores',url:'/music/#forms'}],
-  'WRITINGS':   [{name:'Mindful Darkness',url:'/writings/#reading-paths'},{name:'THE SOLEHMAN LETTERS',url:'https://thesolehmanletters.com'},{name:'essays & notes',url:'/writings/#featured'}],
+  'WRITINGS':   [{name:'Mindful Darkness',url:'/writings/mindful-darkness/'},{name:'WRKNG*',url:'/writings/mindful-darkness/wrkng/'},{name:'THE SOLEHMAN LETTERS',url:'https://www.solehmanletters.com/'}],
   'ARCHIVE':    [{name:'Records',url:'/archive/'},{name:'Collections',url:'/archive/collections/'},{name:'Origin Threads',url:'/archive/origin-threads/'},{name:'Notes',url:'/archive/notes/'},{name:'Making Practices',url:'/archive/?record_type=practice'},{name:'Colors & Materials',url:'/archive/colors-materials/'},{name:'Blackboards',url:'/archive/blackboards/'},{name:'Timelines',url:'/archive/timelines/'}],
   'FILM':       [{name:'isolated.take',url:'/film/#projects'},{name:'&friends',url:'/film/#projects'},{name:'animations',url:'/film/#forms'},{name:'sloth99',url:'/film/#status'}],
 };
@@ -1104,6 +1104,8 @@ const SUB_NODE_DATA = {
     try{payload=JSON.parse(localStorage.getItem(snapshotKey)||'null')}catch{payload=null}
   }
   if(!payload||!Array.isArray(payload.nodes)||!payload.nodes.length)return;
+  const {normalizeWritingPathways}=await import('/shared/writing-navigation.js');
+  payload.nodes.forEach(node=>{if(node.slug==='writings')node.pathways=normalizeWritingPathways(node.pathways)});
   const priorByName=new Map(VENTURES.map(venture=>[venture.name,venture]));
   const slots=VENTURES.map(venture=>({angle:venture.angle,dist:venture.dist,fromDot:venture.fromDot,color:venture.color}));
   const managedVentures=payload.nodes.slice(0,9).map((node,index)=>{

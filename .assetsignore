@@ -31,6 +31,10 @@ assets/gallery/peer-amid
 assets/gallery/peer-amid/**
 tools/gallery-preview-server.mjs
 tools/media-catalogue-backfill.mjs
+tools/writing-editor
+tools/writing-editor/**
+tools/writing-preview-server.mjs
+tools/writing-local-runtime.mjs
 functions
 functions/**
 migrations

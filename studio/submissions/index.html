@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="/studio/construct-manager.css?v=20260831-bulk-archive-publication">
 <link rel="stylesheet" href="/studio/media-catalogue-manager.css?v=20260904-media-detail-cleanup">
 <link rel="stylesheet" href="/studio/archive-notes-manager.css?v=1">
+<link rel="stylesheet" href="/studio/writing-manager.css?v=1">
 <link rel="stylesheet" href="/studio/archive-catalogue.css?v=1">
 <link rel="stylesheet" href="/studio/archive-colors-materials.css?v=6">
 <link rel="stylesheet" href="/studio/archive-failed-experiments.css?v=1">
@@ -713,6 +714,7 @@
     <button class="tab" type="button" data-tab="legend">Legend</button>
     <button class="tab" type="button" data-tab="about">About</button>
     <button class="tab" type="button" data-tab="events">Events</button>
+    <button class="tab" type="button" data-tab="writings">Writings</button>
     <button class="tab" type="button" data-tab="archive">Archive</button>
     <button class="tab" type="button" data-tab="site">Site</button>
     <button class="tab" type="button" data-tab="shared">Shared</button>
@@ -2300,6 +2302,8 @@
         html += `<span class="subnav-crumb">/ ${escapeHtml(ev ? ev.title : selectedEventSlug)}</span>`;
       }
       html += `<button class="subnav-btn" type="button" data-event-setup style="margin-left:auto;">Manage / New Events</button>`;
+    } else if (activeTab === "writings") {
+      html = '<button class="subnav-btn is-active" type="button" data-subview="wrkng">WRKNG*</button>';
     } else if (activeTab === "archive") {
       html = [["dossiers","Dossiers"],["web-snapshots","Website Inception"],["records","Records"],["legacy-records","Legacy Records"],["notes","Notes"],["failed-experiments","Failed Experiments"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["collections","Collections"],["timeline","Timelines"],["people","People"],["organizations","Organizations"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "site") {
@@ -4674,6 +4678,7 @@
   }
 
   function renderActiveTab() {
+    if (activeTab !== "writings") window.WritingManager?.unmount?.();
     document.body.classList.toggle("is-analytics-tab", activeTab === "analytics");
     if (activeTab !== "analytics") window.StudioAnalytics?.clearHash?.();
     if (activeTab !== "people") window.PeopleManager?.unmount?.();
@@ -4802,6 +4807,7 @@
   }
 
   function setActiveTab(tab) {
+    if (activeTab === "writings" && window.WritingManager?.canLeave?.() === false) return;
     if (tab !== "archive") clearWebsiteArchiveSection();
     if (tab === "archive" && tab === activeTab && subView === "dossiers" && archiveEntityIdFromLocation()) {
       showAllDossiers().catch((error) => setStatus(error.message));
@@ -4825,7 +4831,7 @@
     activeAppointmentId = "";
     typeValue = "";
     schedulePeriodDraft = null;
-    subView = tab === "analytics" ? (window.StudioAnalytics?.hashState?.().view || "overview") : tab === "tattoo" ? "appointments" : tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "about" ? "current-works" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
+    subView = tab === "analytics" ? (window.StudioAnalytics?.hashState?.().view || "overview") : tab === "tattoo" ? "appointments" : tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "writings" ? "wrkng" : tab === "about" ? "current-works" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
     selectedCalendarDay = "";
     selectedEventSlug = "";
     renderActiveTab();
@@ -8659,6 +8665,7 @@ ${meetingLines}
 
   async function loadAndRender() {
     await Promise.all([loadSubmissions(), loadManualTextTemplates()]);
+    if (/^#writings(?:\/wrkng)?$/.test(window.location.hash)) { activeTab = "writings"; subView = "wrkng"; }
     const archiveEntityId = archiveEntityIdFromLocation();
     if (archiveEntityId) {
       await openArchiveRecord(archiveEntityId, { historyMode: "replace" });

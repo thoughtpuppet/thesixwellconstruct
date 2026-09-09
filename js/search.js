@@ -9,8 +9,8 @@
   var scopeButtons = Array.prototype.slice.call(document.querySelectorAll('[data-search-scope]'));
   if (!form || !input || !submit || !tools || !count || !status || !results) return;
 
-  var VALID_SCOPES = new Set(['all', 'art', 'archive', 'tattoo', 'merch', 'events', 'symbols', 'pages']);
-  var MEDIUM_LABELS = { art: 'Art', archive: 'Archive', tattoo: 'Tattoo', merch: 'Merch', events: 'Events', symbols: 'Symbol', pages: 'Page' };
+  var VALID_SCOPES = new Set(['all', 'art', 'archive', 'tattoo', 'merch', 'events', 'writings', 'symbols', 'pages']);
+  var MEDIUM_LABELS = { art: 'Art', archive: 'Archive', tattoo: 'Tattoo', merch: 'Merch', events: 'Events', writings: 'Writings', symbols: 'Symbol', pages: 'Page' };
   var records = [];
   var activeQuery = '';
   var activeScope = 'all';
@@ -100,6 +100,7 @@
     var type = String(record.entity_type || 'record').toLowerCase();
     if (type === 'appearance') return 'Appearance';
     if (type === 'event') return 'Six.Well event';
+    if (type === 'writing_work') return 'WRKNG* entry';
     return type.replace(/_/g, ' ');
   }
 

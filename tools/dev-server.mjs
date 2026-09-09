@@ -15,6 +15,7 @@ import { defaultEmailDesignProfile, validateEmailDesignProfile } from "../functi
 import { CLIENT_EMAIL_THEMES } from "../functions/api/notifications/_email-renderer.js";
 import { shortBookingTokenFromPath } from "../functions/api/booking-links.js";
 import { handleConstructApi } from "../functions/api/construct/_lib.js";
+import { writingPageSlug, renderWritingPageTemplate } from "../functions/api/_shared/writing-pages.js";
 import {
   PAGE_VISIBILITY_DEFAULT_RULES,
   isPageVisibilityOperationalExemptPath,
@@ -772,6 +773,19 @@ const server = createServer(async (req, res) => {
   }
 
   const file = await resolveFile(req.url || "/");
+  const writingSlug = writingPageSlug(requestUrl.pathname);
+  if (writingSlug !== null) {
+    try {
+      if (!writingSlug) { res.writeHead(404);res.end("Entry not found.");return; }
+      if(!requestUrl.pathname.endsWith("/")){res.writeHead(301,{Location:`${requestUrl.pathname}/${requestUrl.search}`});res.end();return;}
+      const response = await fetch(`${apiProxyOrigin}/api/writings/entries/${encodeURIComponent(writingSlug)}`,{headers:{accept:"application/json"}});
+      if (!response.ok) { res.writeHead(response.status,{"content-type":"text/plain","cache-control":"no-store"});res.end(response.status === 404 ? "Entry not found." : "The entry could not be loaded.");return; }
+      const {entry} = await response.json();
+      const template = await readFile(path.join(root,"writings/mindful-darkness/wrkng/detail/index.html"),"utf8");
+      res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store"});
+      res.end(req.method === "HEAD" ? "" : renderWritingPageTemplate(template,entry,`http://${host}:${port}`));return;
+    } catch {res.writeHead(503);res.end("The entry could not be loaded.");return;}
+  }
   if (!file) {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("not found");

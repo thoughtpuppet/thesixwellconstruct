@@ -1,4 +1,5 @@
 # wrangler files
+**/node_modules/
 .wrangler
 .cloudflare-backups/
 .dev.vars*
