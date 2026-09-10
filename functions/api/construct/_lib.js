@@ -13,6 +13,7 @@ import { handleArchiveWebSnapshotsAdmin, loadPublicArchiveWebSnapshots } from ".
 import { enqueueVisualColorEntity, enqueueVisualColorEntityById } from "./_automatic-visual-colors.js";
 import { handleGalleryAdmin, handleGalleryPublic, handleMediaCatalogueAdmin } from "./_gallery.js";
 import { handleWritingApi } from "./_writing.js";
+import { WRITING_ROOT } from "../../../shared/writing-content.js";
 import {
   ArchiveDossierEnsureError,
   archiveDossierEligibleOwner,
@@ -3545,8 +3546,8 @@ async function publicSearch(request, env) {
   return json({records:sitewideRecords,groups:sitewideRecords,items:sitewideRecords,count:sitewideRecords.length,query:q,includes},{cache:"public, max-age=30"});
 }
 
-const EXPLORE_SCOPES = new Set(["all", "works", "process", "journal", "pages"]);
-const EXPLORE_WEIGHTS = { works: 0.45, process: 0.25, pages: 0.2, journal: 0.1 };
+const EXPLORE_SCOPES = new Set(["all", "works", "process", "writings", "pages"]);
+const EXPLORE_WEIGHTS = { works: 0.45, process: 0.25, pages: 0.2, writings: 0.1 };
 const EXPLORE_WORK_TYPES = new Set([
   "art_work", "portfolio_item", "flash_item", "flash_series", "tattoo_design",
   "merch_item", "event", "visual_symbol",
@@ -3618,8 +3619,9 @@ function pickExploreBalanced(candidates, random = Math.random) {
 }
 
 export function selectExploreDestination(pools, requestedScope = "all", excludedKeys = [], random = Math.random) {
+  if (requestedScope === "journal") requestedScope = "writings";
   const exclusions = new Set((excludedKeys || []).map(String));
-  const scopes = requestedScope === "all" ? ["works", "process", "pages", "journal"] : [requestedScope];
+  const scopes = requestedScope === "all" ? ["works", "process", "pages", "writings"] : [requestedScope];
   const available = scopes.filter((scope) => Array.isArray(pools[scope]) && pools[scope].length);
   if (!available.length) return { destination: null, restarted: false };
   let filtered = Object.fromEntries(available.map((scope) => [scope, pools[scope].filter((item) => !exclusions.has(item.key))]));
@@ -3673,8 +3675,23 @@ function exploreJournalCandidate(row) {
   if (!route || !medium || !String(row.title || "").trim()) return null;
   return {
     key: `journal:${row.entity_id}`,
-    scope: "journal",
+    scope: "writings",
     kind: "journal-entry",
+    medium,
+    title: String(row.title).trim(),
+    route,
+    entityKey: row.entity_id,
+  };
+}
+
+function exploreWritingCandidate(row) {
+  const route = safeExploreRoute(`${WRITING_ROOT}${encodeURIComponent(row.slug)}/`);
+  const medium = exploreMedium(row.node_id, row.entity_type, "writings");
+  if (!route || !medium || !String(row.title || "").trim()) return null;
+  return {
+    key: `writings:wrkng:${row.entity_id}`,
+    scope: "writings",
+    kind: "writing-work",
     medium,
     title: String(row.title).trim(),
     route,
@@ -3700,11 +3717,12 @@ function explorePageCandidate(row, kind) {
 async function publicExplore(request, env) {
   if (request.method !== "GET") return failure("Method not allowed.", 405);
   const url = new URL(request.url);
-  const scope = String(url.searchParams.get("scope") || "all").toLowerCase();
+  const requestedScope = String(url.searchParams.get("scope") || "all").toLowerCase();
+  const scope = requestedScope === "journal" ? "writings" : requestedScope;
   if (!EXPLORE_SCOPES.has(scope)) return failure("Invalid Explore scope.", 400);
   const excluded = String(url.searchParams.get("exclude") || "").split(",").map((key) => key.trim()).filter(Boolean).slice(-12);
   const database = db(env);
-  const [worksResult, dossiersResult, processResult, journalsResult, nodesResult, pathwaysResult] = await database.batch([
+  const [worksResult, dossiersResult, processResult, journalsResult, writingsResult, nodesResult, pathwaysResult] = await database.batch([
     database.prepare(`SELECT d.entity_id,d.entity_type,d.node_id,d.title,d.route
       FROM search_documents d JOIN content_entities ce ON ce.id=d.entity_id
       WHERE ce.visibility='public' AND ce.search_visibility=1
@@ -3735,6 +3753,11 @@ async function publicExplore(request, env) {
       FROM archive_notes note JOIN content_entities owner ON owner.id=note.entity_id
       WHERE note.note_type='journal-entry' AND note.state='published' AND note.public_visible=1
         AND owner.visibility='public'`),
+    database.prepare(`SELECT writing.entity_id,writing.slug,json_extract(writing.published_json,'$.title') title,
+        owner.entity_type,owner.node_id
+      FROM writing_entries writing JOIN content_entities owner ON owner.id=writing.entity_id
+      WHERE writing.state='published' AND writing.is_sample=0 AND writing.published_json IS NOT NULL
+        AND owner.visibility='public'`),
     database.prepare(`SELECT cn.id,cn.id node_id,cn.name title,cn.route FROM construct_nodes cn
       JOIN content_entities ce ON ce.id=cn.id
       WHERE cn.state='published' AND cn.homepage_enabled=1 AND ce.visibility='public'`),
@@ -3753,12 +3776,15 @@ async function publicExplore(request, env) {
     if (candidate) works.push(candidate);
   }
   const process = (processResult.results || []).map(exploreProcessCandidate).filter(Boolean);
-  const journal = (journalsResult.results || []).map(exploreJournalCandidate).filter(Boolean);
+  const writings = [
+    ...(journalsResult.results || []).map(exploreJournalCandidate),
+    ...(writingsResult.results || []).map(exploreWritingCandidate),
+  ].filter(Boolean);
   const pages = [
     ...(nodesResult.results || []).map((row) => explorePageCandidate(row, "node")),
     ...(pathwaysResult.results || []).map((row) => explorePageCandidate(row, "pathway")),
   ].filter(Boolean);
-  const result = selectExploreDestination({ works, process, pages, journal }, scope, excluded);
+  const result = selectExploreDestination({ works, process, pages, writings }, scope, excluded);
   if (!result.destination) return failure("No public Explore destinations are available for that scope.", 404);
   return json(result, { cache: "no-store" });
 }

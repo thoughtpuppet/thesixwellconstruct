@@ -71,11 +71,12 @@ function exploreElement({ dataset = {}, hidden = false } = {}) {
   };
 }
 
-function exploreClientHarness({ storedPortal = null, responses = [] } = {}) {
+function exploreClientHarness({ storedPortal = null, storedHistory = null, responses = [] } = {}) {
   const pageEvents = {};
   const storage = new Map();
   if (storedPortal) storage.set("sixwell_explore_portal_v1", JSON.stringify(storedPortal));
-  const buttons = ["all", "works", "process", "journal", "pages"].map((scope) => exploreElement({ dataset: { exploreScope: scope } }));
+  if (storedHistory) storage.set("sixwell_explore_history_v1", JSON.stringify(storedHistory));
+  const buttons = ["all", "works", "process", "writings", "pages"].map((scope) => exploreElement({ dataset: { exploreScope: scope } }));
   const room = exploreElement({ dataset: { exploreState: "loading", exploreActiveScope: "all" } });
   const actionGroup = exploreElement();
   const status = exploreElement({ dataset: { state: "loading" } });
@@ -152,13 +153,13 @@ test("all-site selection uses 45/25/20/10 family bands and omits unavailable fam
     works: [destination("works", "work")],
     process: [destination("process", "process")],
     pages: [destination("pages", "page")],
-    journal: [destination("journal", "journal", "archive")],
+    writings: [destination("writings", "writing", "archive")],
   };
   assert.equal(selectExploreDestination(pools, "all", [], () => 0.1).destination.scope, "works");
   assert.equal(selectExploreDestination(pools, "all", [], () => 0.5).destination.scope, "process");
   assert.equal(selectExploreDestination(pools, "all", [], () => 0.8).destination.scope, "pages");
-  assert.equal(selectExploreDestination(pools, "all", [], () => 0.95).destination.scope, "journal");
-  assert.equal(selectExploreDestination({ works: [], process: [], pages: [], journal: pools.journal }, "all", [], () => 0).destination.scope, "journal");
+  assert.equal(selectExploreDestination(pools, "all", [], () => 0.95).destination.scope, "writings");
+  assert.equal(selectExploreDestination({ works: [], process: [], pages: [], writings: pools.writings }, "all", [], () => 0).destination.scope, "writings");
 });
 
 test("selection balances medium, canonical entity, and surface instead of row volume", () => {
@@ -258,7 +259,7 @@ test("process selection reuses record publication, media privacy and presentatio
   assert.equal((await excluded.json()).restarted, true);
 });
 
-test("journal selection returns each canonical public Journal once and keeps unlinked entries eligible", async () => {
+test("Writings selection combines canonical public Journals with published WRKNG entries", async () => {
   const db = database();
   db.exec(`
     UPDATE archive_notes SET state='draft',public_visible=0;
@@ -270,7 +271,9 @@ test("journal selection returns each canonical public Journal once and keeps unl
       VALUES('journal-linked','archive_note','node-archive','public',1,'test','test',datetime('now'),datetime('now')),
             ('journal-orphan','archive_note','node-archive','public',1,'test','test',datetime('now'),datetime('now')),
             ('journal-private','archive_note','node-archive','public',1,'test','test',datetime('now'),datetime('now')),
-            ('note-public','archive_note','node-archive','public',1,'test','test',datetime('now'),datetime('now'));
+            ('note-public','archive_note','node-archive','public',1,'test','test',datetime('now'),datetime('now')),
+            ('writing-public','writing_work','node-writings','public',1,'test','test',datetime('now'),datetime('now')),
+            ('writing-private','writing_work','node-writings','internal',0,'test','test',datetime('now'),datetime('now'));
     INSERT INTO archive_notes(entity_id,slug,title,note_type,body_markdown,state,public_visible,created_at,updated_at)
       VALUES('journal-linked','journal-linked','Linked Journal','journal-entry','A public Journal linked in more than one place.','published',1,datetime('now'),datetime('now')),
             ('journal-orphan','journal-orphan','Standalone Journal','journal-entry','A public Journal without a record link.','published',1,datetime('now'),datetime('now')),
@@ -279,24 +282,34 @@ test("journal selection returns each canonical public Journal once and keeps unl
     INSERT INTO archive_note_links(note_entity_id,target_entity_id,relationship_role,is_primary,sort_order,public_visible,created_at)
       VALUES('journal-linked','art-marbles','development',1,1,1,datetime('now')),
             ('journal-linked','place-goat-farm-arts-center','context',0,2,1,datetime('now'));
+    INSERT INTO writing_entries(entity_id,slug,draft_json,published_json,state,is_sample,version,first_published_at,published_updated_at,created_at,updated_at)
+      VALUES('writing-public','published-wrkng','{"schemaVersion":1,"title":"Published WRKNG","author":"Saiel Dauhn Solehman","excerpt":"A public work in progress.","body":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"A public thought."}]}]},"sources":[],"relatedIds":[]}','{"schemaVersion":1,"title":"Published WRKNG","author":"Saiel Dauhn Solehman","excerpt":"A public work in progress.","body":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"A public thought."}]}]},"sources":[],"relatedIds":[]}','published',0,1,datetime('now'),datetime('now'),datetime('now'),datetime('now')),
+            ('writing-private','private-wrkng','{"schemaVersion":1,"title":"Private WRKNG","author":"Saiel Dauhn Solehman","excerpt":"Not public.","body":{"type":"doc","content":[]},"sources":[],"relatedIds":[]}',NULL,'draft',0,1,NULL,NULL,datetime('now'),datetime('now'));
   `);
   const runtime = { SUBMISSIONS_DB: new LocalD1(db) };
-  const first = await handleConstructApi(request("/api/site/explore?scope=journal"), runtime);
-  assert.equal(first.status, 200);
-  assert.equal(first.headers.get("cache-control"), "no-store");
-  const firstDestination = (await first.json()).destination;
-  assert.ok(["journal:journal-linked", "journal:journal-orphan"].includes(firstDestination.key));
-  assert.equal(firstDestination.scope, "journal");
-  assert.equal(firstDestination.kind, "journal-entry");
-  assert.equal(firstDestination.medium.id, "archive");
-  assert.match(firstDestination.route, /^\/archive\/notes\/journal-(?:linked|orphan)\/$/);
+  const destinations = [];
+  for (let index = 0; index < 3; index += 1) {
+    const exclude = destinations.map((item) => item.key).join(",");
+    const response = await handleConstructApi(request(`/api/site/explore?scope=writings${exclude ? `&exclude=${encodeURIComponent(exclude)}` : ""}`), runtime);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    destinations.push((await response.json()).destination);
+  }
+  assert.deepEqual(new Set(destinations.map((item) => item.key)), new Set(["journal:journal-linked", "journal:journal-orphan", "writings:wrkng:writing-public"]));
+  assert.ok(destinations.every((item) => item.scope === "writings"));
+  const journal = destinations.find((item) => item.kind === "journal-entry");
+  assert.equal(journal.medium.id, "archive");
+  assert.match(journal.route, /^\/archive\/notes\/journal-(?:linked|orphan)\/$/);
+  const wrkng = destinations.find((item) => item.kind === "writing-work");
+  assert.equal(wrkng.medium.id, "writings");
+  assert.equal(wrkng.route, "/writings/mindful-darkness/wrkng/published-wrkng/");
 
-  const excludedKey = firstDestination.key;
-  const second = await handleConstructApi(request(`/api/site/explore?scope=journal&exclude=${encodeURIComponent(excludedKey)}`), runtime);
-  const secondDestination = (await second.json()).destination;
-  assert.notEqual(secondDestination.key, excludedKey);
-  const exhausted = await handleConstructApi(request(`/api/site/explore?scope=journal&exclude=${encodeURIComponent(excludedKey)},${encodeURIComponent(secondDestination.key)}`), runtime);
+  const excludedKeys = destinations.map((item) => encodeURIComponent(item.key)).join(",");
+  const exhausted = await handleConstructApi(request(`/api/site/explore?scope=writings&exclude=${excludedKeys}`), runtime);
   assert.equal((await exhausted.json()).restarted, true);
+
+  const legacy = await handleConstructApi(request(`/api/site/explore?scope=journal&exclude=${encodeURIComponent("journal:journal-linked")},${encodeURIComponent("journal:journal-orphan")}`), runtime);
+  assert.equal((await legacy.json()).destination.scope, "writings", "old Journal scope URLs migrate to Writings");
 
   const linked = await handleConstructApi(request("/api/archive/notes/journal-linked"), runtime);
   const linkedPayload = await linked.json();
@@ -336,7 +349,7 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
     ["all", "Take me anywhere", "Across the entire domain\."],
     ["works", "Works &amp; objects", "Art, objects, events &amp; archives\."],
     ["process", "Process &amp; evidence", "Sketches, notes, bts media &amp; voice memos\."],
-    ["journal", "Journal entries", "Published reflections, observations &amp; studio moments\."],
+    ["writings", "Writings", "Journal entries, reflections &amp; works in progress\."],
     ["pages", "Pages &amp; pathways", "whole pages, guides, portfolios &amp; pathways\."],
   ]) {
     const action = html.match(new RegExp(`<button[^>]+data-explore-scope="${scope}"[\\s\\S]*?<\\/button>`))?.[0] || "";
@@ -345,7 +358,7 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
     assert.match(action, new RegExp(`<span class="explore-action__description" id="explore-description-${scope}">${description}<\\/span>`));
   }
   assert.match(html, /data-explore-scope="all" data-explore-shape="disc" aria-label="Take me anywhere"/);
-  assert.match(html, /data-explore-scope="journal" data-explore-shape="pentagon" aria-label="Journal entries"/);
+  assert.match(html, /data-explore-scope="writings" data-explore-shape="pentagon" aria-label="Writings"/);
   assert.match(html, /data-explore-status[^>]*aria-live="polite"/);
   assert.match(html, /<section[^>]+data-explore-portal[^>]+hidden/);
   assert.match(html, /data-explore-browsing-label>Browsing entire site<\/p>/);
@@ -373,7 +386,7 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(css, /\.explore-room\[data-explore-renderer="fallback"\]/);
   assert.match(css, /\.explore-action::before/);
   assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
-  for (const [scope, signal] of [["works", "--explore-orange"], ["process", "--explore-teal"], ["journal", "--explore-bronze"], ["pages", "--explore-blue"]]) {
+  for (const [scope, signal] of [["works", "--explore-orange"], ["process", "--explore-teal"], ["writings", "--explore-bronze"], ["pages", "--explore-blue"]]) {
     assert.match(css, new RegExp(`data-explore-active-scope="${scope}"[\\s\\S]*?--explore-active-signal:\\s*var\\(${signal}\\)`));
   }
   assert.match(css, /\.explore-portal\s*\{[\s\S]*?border-left:\s*5px solid var\(--explore-active-signal\)[\s\S]*?background:\s*var\(--color-bg\)/);
@@ -558,10 +571,10 @@ test("Explore identifies the selected browsing scope above the portal viewer", a
     [0, "Browsing entire site"],
     [1, "Browsing works & objects"],
     [2, "Browsing process & evidence"],
-    [3, "Browsing journal entries"],
+    [3, "Browsing writings"],
     [4, "Browsing pages & pathways"],
   ]) {
-    const scope = ["all", "works", "process", "journal", "pages"][index];
+    const scope = ["all", "works", "process", "writings", "pages"][index];
     const harness = exploreClientHarness({ responses: [{ destination: destination(scope === "all" ? "works" : scope, "scope-" + scope) }] });
     harness.buttons[index].dispatch("click");
     await flushExploreClient();
@@ -633,6 +646,26 @@ test("Explore restores the current portal after a reload or BFCache return", () 
   assert.equal(harness.portal.hidden, false);
   assert.equal(harness.status.textContent, "");
   assert.equal(harness.status.dataset.state, "idle");
+});
+
+test("old Journal portal and history state migrate into the Writings scope", async () => {
+  const legacy = destination("journal", "journal:legacy-entry", "archive");
+  const next = destination("writings", "writings:wrkng:next-entry", "writings");
+  const harness = exploreClientHarness({
+    storedPortal: {scope:"journal", destination:legacy},
+    storedHistory: {journal:[legacy.key]},
+    responses: [{destination:next}],
+  });
+  assert.equal(harness.room.dataset.exploreActiveScope, "writings");
+  assert.equal(harness.browsingLabel.textContent, "Browsing writings");
+  assert.match(harness.storage.get("sixwell_explore_portal_v1"), /"scope":"journal"/);
+
+  harness.backToBoard.dispatch("click");
+  harness.buttons[3].dispatch("click");
+  await flushExploreClient();
+  assert.match(decodeURIComponent(harness.fetchCalls[0]), /scope=writings/);
+  assert.match(decodeURIComponent(harness.fetchCalls[0]), /exclude=journal:legacy-entry/);
+  assert.equal(harness.room.dataset.exploreActiveScope, "writings");
 });
 
 test("the shared ambient field preserves 404 and About behavior while giving Explore a quieter configuration", () => {

@@ -49,7 +49,7 @@ body {
   --explore-active-ink: #000;
 }
 
-.explore-room[data-explore-active-scope="journal"] {
+.explore-room[data-explore-active-scope="writings"] {
   --explore-active-signal: var(--explore-bronze);
   --explore-active-copy: #d79b4b;
   --explore-active-ink: #000;
@@ -167,7 +167,7 @@ body {
   --explore-shape-clip: polygon(50% 8%, 94% 88%, 6% 88%);
 }
 
-.explore-action--journal {
+.explore-action--writings {
   --explore-x: 62.5%;
   --explore-y: 78%;
   --explore-size: clamp(96px, 9.5vw, 132px);
@@ -629,7 +629,7 @@ body {
   animation-duration: 8.9s;
 }
 
-.explore-room[data-explore-renderer="fallback"] .explore-action--journal {
+.explore-room[data-explore-renderer="fallback"] .explore-action--writings {
   animation-delay: -6.2s;
   animation-duration: 10.1s;
 }
@@ -657,7 +657,7 @@ body {
     --explore-size: clamp(68px, 20vw, 82px);
   }
 
-  .explore-action--journal {
+  .explore-action--writings {
     --explore-x: 62.5%;
     --explore-y: 76.5%;
     --explore-size: clamp(68px, 20vw, 82px);
@@ -751,7 +751,7 @@ body {
   }
 
   .explore-action--process,
-  .explore-action--journal {
+  .explore-action--writings {
     --explore-y: 74%;
     --explore-size: clamp(82px, 8.5vw, 110px);
   }

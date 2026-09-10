@@ -133,7 +133,7 @@ if (root) {
         floatZ: 0.045,
         floatTilt: 0.055,
       },
-      journal: {
+      writings: {
         color: 0xb87a32,
         geometry: () => prismGeometry(5),
         diameterRatio: 0.74,

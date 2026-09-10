@@ -4,12 +4,12 @@
   var STORAGE_KEY = "sixwell_explore_history_v1";
   var PORTAL_STORAGE_KEY = "sixwell_explore_portal_v1";
   var HISTORY_LIMIT = 12;
-  var VALID_SCOPES = ["all", "works", "process", "journal", "pages"];
+  var VALID_SCOPES = ["all", "works", "process", "writings", "pages"];
   var SCOPE_LABELS = {
     all: "Browsing entire site",
     works: "Browsing works & objects",
     process: "Browsing process & evidence",
-    journal: "Browsing journal entries",
+    writings: "Browsing writings",
     pages: "Browsing pages & pathways",
   };
   var room = document.querySelector("[data-explore-room]");
@@ -34,11 +34,16 @@
   if (!room || !buttons.length || !status || !portal || !browsingLabel || !previewSurface || !previewFrame || !previewMedium || !previewTitle || !diveAgainButton || !enterPageButton || !backToBoardButton) return;
 
   function emptyHistory() {
-    return { all: [], works: [], process: [], journal: [], pages: [] };
+    return { all: [], works: [], process: [], writings: [], pages: [] };
+  }
+
+  function normalizeScope(value) {
+    var scope = String(value || "");
+    return scope === "journal" ? "writings" : scope;
   }
 
   function validScope(value) {
-    return VALID_SCOPES.indexOf(String(value || "")) >= 0;
+    return VALID_SCOPES.indexOf(normalizeScope(value)) >= 0;
   }
 
   function normalizeDestination(value) {
@@ -48,7 +53,7 @@
     if (!route || route.charAt(0) !== "/" || route.slice(0, 2) === "//" || !title) return null;
     return {
       key: String(value.key || route),
-      scope: validScope(value.scope) ? String(value.scope) : "pages",
+      scope: validScope(value.scope) ? normalizeScope(value.scope) : "pages",
       kind: String(value.kind || "destination"),
       medium: {
         id: String(value.medium && value.medium.id || "about"),
@@ -76,6 +81,9 @@
       Object.keys(history).forEach(function (scope) {
         history[scope] = Array.isArray(parsed[scope]) ? parsed[scope].map(String).slice(-HISTORY_LIMIT) : [];
       });
+      if (Array.isArray(parsed.journal)) {
+        history.writings = history.writings.concat(parsed.journal.map(String)).slice(-HISTORY_LIMIT);
+      }
       return history;
     } catch (error) {
       return emptyHistory();
@@ -102,7 +110,7 @@
       var parsed = JSON.parse(sessionStorage.getItem(PORTAL_STORAGE_KEY) || "null");
       var destination = normalizeDestination(parsed && parsed.destination);
       if (!parsed || !validScope(parsed.scope) || !destination) return null;
-      return { scope: String(parsed.scope), destination: destination };
+      return { scope: normalizeScope(parsed.scope), destination: destination };
     } catch (error) {
       return null;
     }
@@ -116,6 +124,7 @@
   }
 
   function setRoomState(state, scope) {
+    scope = normalizeScope(scope);
     room.dataset.exploreState = state;
     if ((state === "loading" || state === "preview") && validScope(scope)) room.dataset.exploreActiveScope = scope;
     else delete room.dataset.exploreActiveScope;
@@ -273,6 +282,7 @@
   }
 
   async function choose(scope) {
+    scope = normalizeScope(scope);
     if (!validScope(scope)) return;
     var history = readHistory();
     var query = new URLSearchParams({ scope: scope });
