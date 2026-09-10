@@ -13,8 +13,9 @@ body[data-venture="writings"] .construct-breadcrumb-current { min-width:0; overf
 .writing-destinations, .writing-entry-list { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; margin:28px 0; padding:0; list-style:none; }
 .writing-destination, .writing-entry-card { padding:28px; border:5px solid var(--venture-dim); min-width:0; }
 .writing-destination h2, .writing-entry-card h2 { font-size:clamp(25px,4vw,40px); margin:0 0 16px; }
+.writing-entry-card h3 { font-size:clamp(23px,3.5vw,34px); margin:0 0 16px; }
 .writing-destination p, .writing-entry-card p { font:18px/1.8 Georgia,serif; max-width:680px; }
-.writing-entry-card h2 a, .writing-destination h2 a { color:var(--venture-accent); text-decoration:none; }
+.writing-entry-card h2 a, .writing-entry-card h3 a, .writing-destination h2 a { color:var(--venture-accent); text-decoration:none; }
 .writing-meta, .writing-entry-date { font:14px/1.7 Inter,Arial,sans-serif; color:var(--color-text-dim); }
 .writing-meta { margin:0 0 36px; }
 .writing-body h2, .writing-sources h2, .writing-related h2 { margin:40px 0 18px; font:700 28px/1.3 Inter,Arial,sans-serif; color:var(--venture-accent); }
@@ -32,6 +33,15 @@ body[data-venture="writings"] .construct-breadcrumb-current { min-width:0; overf
 .writing-footnote { margin:48px 0 24px; font:italic 16px/1.8 Georgia,serif; color:var(--color-text-dim); }
 .writing-empty, .writing-preview-notice { max-width:680px; font:18px/1.8 Georgia,serif; }
 .writing-preview-notice { padding:16px; border:5px solid var(--venture-dim); }
+.writing-destination--journal { border-color:var(--color-archive-dim); }
+.writing-destination--journal h2 a, .writing-destination--journal .venture-link { color:var(--color-archive-bright); }
+.writing-journal-section { margin-top:clamp(48px,8vw,88px); scroll-margin-top:32px; }
+.writing-section-head { max-width:720px; }
+.writing-section-head h2 { margin:8px 0 16px; font-size:clamp(32px,6vw,64px); line-height:1; color:var(--color-archive-bright); }
+.writing-section-head > p { margin:0; font:18px/1.8 Georgia,serif; color:var(--color-body); }
+.writing-journal-card { border-color:var(--color-archive-dim); }
+.writing-journal-card h3 a, .writing-journal-card .venture-link { color:var(--color-archive-bright); }
+.writing-journal-card .venture-link { display:inline-block; margin-top:8px; }
 .writing-reader, .writing-body, .writing-entry-card, .writing-intro { overflow-wrap:break-word; }
 .writing-skip { position:absolute; top:-100px; left:20px; z-index:10000; background:var(--color-bg); color:var(--venture-accent); padding:12px; }
 .writing-skip:focus { top:12px; }
