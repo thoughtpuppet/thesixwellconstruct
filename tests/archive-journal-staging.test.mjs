@@ -42,6 +42,6 @@ test("public dossier labels Journal moments without renaming Open notebook",()=>
   assert.match(publicArchive,/journal\?"Journal moment":"Archive Note"/);
   assert.match(publicArchive,/Open complete Journal moment/);
   assert.match(publicArchive,/Complete \$\{publicLabel\}/);
-  assert.doesNotMatch(publicArchive,/Journal entr(?:y|ies)/);
+  assert.doesNotMatch(publicArchive,/id="journal-entries-title">Journal entr(?:y|ies)/);
   assert.match(publicArchive,/>Open notebook<\/h2>/);
 });

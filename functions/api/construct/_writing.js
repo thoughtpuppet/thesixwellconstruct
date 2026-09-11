@@ -66,9 +66,13 @@ async function saveDraft(database, before, body, resolveEntities) {
   const start = typeof body.startedAt === "string" ? Date.parse(body.startedAt) : NaN;
   const startedAt = before ? before.started_at : Number.isFinite(start) ? new Date(Math.min(start,Date.parse(now))).toISOString() : null;
   const savedAt = new Date(Math.max(Date.parse(now),Date.parse(before?.draft_saved_at || "")+1 || 0)).toISOString();
-  const entryId = before?.entity_id || id("writing"), nextSlug = entrySlug(body.slug || before?.slug || slug(snapshot.title) || entryId);
+  const entryId = before?.entity_id || id("writing");
+  const slugProvided = Object.prototype.hasOwnProperty.call(body, "slug");
+  const requestedSlug = String(body.slug ?? "").trim();
+  const draftSlug = requestedSlug || slug(snapshot.title) || before?.slug || entryId;
+  const nextSlug = entrySlug(before?.first_published_at ? before.slug : draftSlug);
   if (before && Number(body.version) !== before.version) throw new Error("Save conflict: this entry changed in another window. Reload it before saving.");
-  if (before?.first_published_at && before.slug !== nextSlug) throw new Error("A published WRKNG URL cannot change.");
+  if (before?.first_published_at && slugProvided && before.slug !== requestedSlug) throw new Error("A published WRKNG URL cannot change.");
   await validateReferences(database,snapshot,{resolveEntities,entryId});
   const writes = before ? [statement(database,"UPDATE writing_entries SET slug=?,draft_json=?,version=?,updated_at=?,draft_saved_at=? WHERE entity_id=?",nextSlug,draft,before.version+1,now,savedAt,entryId)] : [
     statement(database,"INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'writing_work','node-writings','internal',0,'studio','studio',?,?)",entryId,now,now),

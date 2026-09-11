@@ -128,6 +128,27 @@ test("drafts, published snapshots, revisions, withdrawal, restore, and stable UR
   assert.ok(r.database.prepare("SELECT COUNT(*) n FROM entity_revisions WHERE entity_id=?").get(entry.id).n>=8);
   r.database.close();
 });
+test("clearing an unpublished URL name regenerates it from the current title",async()=>{
+  const r=setup();
+  try {
+    let entry=await r.create(snapshot("Original title"),"original-title");
+    const renamed=snapshot("A completely new title");
+    let saved=await r.call(`/api/admin/writing-entries/${entry.id}`,{admin:true,method:"PATCH",body:{snapshot:renamed,slug:"",version:entry.version}});
+    assert.equal(saved.status,200,saved.error);entry=saved.entry;
+    assert.equal(entry.slug,"a-completely-new-title");
+
+    const manual=snapshot("Another title change");
+    saved=await r.call(`/api/admin/writing-entries/${entry.id}`,{admin:true,method:"PATCH",body:{snapshot:manual,slug:"chosen-address",version:entry.version}});
+    assert.equal(saved.status,200,saved.error);entry=saved.entry;
+    assert.equal(entry.slug,"chosen-address","a manual draft URL name is preserved");
+
+    entry=(await r.action(entry,"publish")).entry;
+    const locked=snapshot("A title after publication");
+    saved=await r.call(`/api/admin/writing-entries/${entry.id}`,{admin:true,method:"PATCH",body:{snapshot:locked,slug:"",version:entry.version}});
+    assert.equal(saved.status,409,"blank cannot regenerate a first-published URL");
+    assert.equal(r.database.prepare("SELECT slug FROM writing_entries WHERE entity_id=?").get(entry.id).slug,"chosen-address");
+  } finally { r.database.close(); }
+});
 test("sample entry and sample image are authenticated and cannot be published",async()=>{
   const r=setup(),sample=(await r.call("/api/admin/writing-entries/writing-layout-sample",{admin:true})).entry;
   assert.equal(sample.isSample,true);assert.equal(sample.media[0].url,"/api/admin/writing-entries/sample-image");
@@ -171,6 +192,19 @@ test("navigation migration, cached navigation, and current works agree",async()=
   assert.deepEqual(normalizeWritingPathways(paths),paths);
   assert.doesNotMatch(r.database.prepare("SELECT links_json FROM about_current_projects WHERE id='current-project-solehman-letters'").get().links_json,/#reading-paths/);
   const page=readFileSync(new URL("../writings/index.html",import.meta.url),"utf8");assert.match(page,/id="reading-paths"/);assert.match(page,/id="featured"/);r.database.close();
+});
+test("the WRKNG index preserves its introductory voice",()=>{
+  const page=readFileSync(new URL("../writings/mindful-darkness/wrkng/index.html",import.meta.url),"utf8");
+  assert.match(page,/Observations, questions, ideas and connections in progress\. Some entries may be brief; others may be a bit long and chaotic\.\.\. I'm wrkng through it\./);
+});
+test("the WRKNG editor explains draft regeneration and published URL locking",()=>{
+  const manager=readFileSync(new URL("../studio/writing-manager.js",import.meta.url),"utf8");
+  const construct=readFileSync(new URL("../studio/construct-manager.js",import.meta.url),"utf8");
+  assert.match(manager,/Clear this field and save to regenerate it from the current title\./);
+  assert.match(manager,/Locked after first publication\./);
+  assert.match(manager,/entry\?\.firstPublishedAt\?"readonly"/);
+  assert.doesNotMatch(manager,/name="slug"[^>]*required/);
+  assert.match(construct,/writing-manager\.js\?v=2/);
 });
 test("reading routes and metadata use the same safe published document",()=>{
   assert.equal(writingPageSlug(WRITING_ROOT),null);assert.equal(writingPageSlug(`${WRITING_ROOT}detail/index.html`),"");assert.equal(writingPageSlug(`${WRITING_ROOT}an-open-question/`),"an-open-question");
