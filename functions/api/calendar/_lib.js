@@ -300,7 +300,7 @@ function normalizeRelatedLinks(values, sourceUrl = "") {
       provenanceUrl: asString(item.provenanceUrl) || sourceUrl,
       role,
       creditRole: asString(item.creditRole).slice(0, 120),
-      includePublic: requestedPublic && (!isInstagramUrl(url) || (role === "artist" && isInstagramProfileUrl(url))),
+      includePublic: requestedPublic && (!isInstagramUrl(url) || isInstagramProfileUrl(url)),
     });
   }
   return links;
@@ -1905,8 +1905,8 @@ function publicationErrors(proposal) {
   for (const link of proposal.relatedLinks || []) {
     if (!validHttpUrl(link.url)) errors.push(`Related link ${link.label || link.url} must use a public http or https URL.`);
     if (link.provenanceUrl && !validHttpUrl(link.provenanceUrl)) errors.push(`Related link provenance for ${link.label || link.url} is invalid.`);
-    if (link.includePublic && isInstagramUrl(link.url) && !(link.role === "artist" && isInstagramProfileUrl(link.url))) {
-      errors.push("Only an artist's Instagram profile may be included as a public related link; Instagram posts remain private provenance.");
+    if (link.includePublic && isInstagramUrl(link.url) && !isInstagramProfileUrl(link.url)) {
+      errors.push("Instagram profiles may be included as public related links; Instagram posts remain private provenance.");
     }
   }
   if (proposal.accessStatus === "unknown") errors.push("Attendance eligibility must be confirmed before publication.");

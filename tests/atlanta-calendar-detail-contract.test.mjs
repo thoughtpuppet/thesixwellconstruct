@@ -247,6 +247,7 @@ test("dedicated event records render every approved detail without collapsed con
       { role:"artist", label:"Participating Artist", creditRole:"Painter", url:"https://example.com/artist" },
       { role:"participant", label:"Program Participant", url:"https://example.com/participant" },
       { role:"organizer", label:"Additional Organizer", url:"https://example.com/organizer" },
+      { role:"venue", label:"Additional Venue", url:"https://example.com/venue" },
       { role:"related", label:"Program details", url:"https://example.com/details" },
     ],
     flyer:{ url:"https://example.com/flyer.jpg", altText:"Expanded Detail Record flyer", caption:"Official event flyer" },
@@ -264,6 +265,7 @@ test("dedicated event records render every approved detail without collapsed con
   assert.match(expanded, /Artists<\/span>.*Participating Artist/s);
   assert.match(expanded, /Participants<\/span>.*Program Participant/s);
   assert.match(expanded, /Additional organizers<\/span>.*Additional Organizer/s);
+  assert.match(expanded, /Venues<\/span>.*Additional Venue/s);
   assert.match(expanded, /Related<\/span>.*Program details/s);
   assert.match(expanded, /<h2>Flyer \+ media<\/h2>/);
   assert.match(expanded, /flyer\.jpg/);

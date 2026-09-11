@@ -207,13 +207,14 @@
       '</div>';
   }
 
-  function relatedDisclosure(relatedOccurrences, artistLinks, participantLinks, organizerLinks, otherRelatedLinks, creditedLink) {
-    var peopleCount = artistLinks.length + participantLinks.length + organizerLinks.length + otherRelatedLinks.length;
+  function relatedDisclosure(relatedOccurrences, artistLinks, participantLinks, organizerLinks, venueLinks, otherRelatedLinks, creditedLink) {
+    var peopleCount = artistLinks.length + participantLinks.length + organizerLinks.length + venueLinks.length + otherRelatedLinks.length;
     var schedule = relatedOccurrences.length ? '<details class="calendar-event-disclosure"><summary>Related schedule (' + relatedOccurrences.length + ')</summary><div class="calendar-disclosure-content calendar-related-schedule">' + relatedOccurrences.map(function (occurrence) { return '<a href="#' + eventAnchor(occurrence) + '"><strong>' + escapeHtml(occurrence.occurrenceLabel || occurrence.title) + '</strong><small>' + escapeHtml(eventDate(occurrence)) + '</small></a>'; }).join("") + '</div></details>' : '';
     var people = peopleCount ? '<details class="calendar-event-disclosure"><summary>People + related (' + peopleCount + ')</summary><div class="calendar-disclosure-content">' +
       (artistLinks.length ? '<div class="calendar-related-links calendar-artist-links"><span>Artists</span>' + artistLinks.map(creditedLink).join("") + '</div>' : '') +
       (participantLinks.length ? '<div class="calendar-related-links"><span>Participants</span>' + participantLinks.map(creditedLink).join("") + '</div>' : '') +
       (organizerLinks.length ? '<div class="calendar-related-links"><span>Additional organizers</span>' + organizerLinks.map(creditedLink).join("") + '</div>' : '') +
+      (venueLinks.length ? '<div class="calendar-related-links"><span>Venues</span>' + venueLinks.map(creditedLink).join("") + '</div>' : '') +
       (otherRelatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + otherRelatedLinks.map(creditedLink).join("") + '</div>' : '') +
       '</div></details>' : '';
     return schedule + people;
@@ -283,7 +284,8 @@
     var artistLinks = relatedLinks.filter(function (link) { return link.role === "artist"; });
     var participantLinks = relatedLinks.filter(function (link) { return link.role === "participant"; });
     var organizerLinks = relatedLinks.filter(function (link) { return link.role === "organizer"; });
-    var otherRelatedLinks = relatedLinks.filter(function (link) { return !["artist","participant","organizer"].includes(link.role); });
+    var venueLinks = relatedLinks.filter(function (link) { return link.role === "venue"; });
+    var otherRelatedLinks = relatedLinks.filter(function (link) { return !["artist","participant","organizer","venue"].includes(link.role); });
     function creditedLink(link) { return '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(link.label) + (link.creditRole ? ' / ' + link.creditRole : '') + '</a>'; }
     var relatedOccurrences = Array.isArray(event.relatedOccurrences) ? event.relatedOccurrences : [];
     var flyer = event.flyer && event.flyer.url ? event.flyer : null;
@@ -322,7 +324,7 @@
       description +
       '<div class="calendar-event-facts">' + organizerFact + venueFact + mapFact + (sourceLabel ? '<span class="calendar-event-source">' + escapeHtml(sourceLabel) + '</span>' : '') + '</div>' +
       tagList(labels) +
-      relatedDisclosure(relatedOccurrences, artistLinks, participantLinks, organizerLinks, otherRelatedLinks, creditedLink) +
+      relatedDisclosure(relatedOccurrences, artistLinks, participantLinks, organizerLinks, venueLinks, otherRelatedLinks, creditedLink) +
       (media.length ? '<details class="calendar-event-media"><summary>View media ('+media.length+')</summary><div class="calendar-media-grid">'+media.map(function(item,index){return '<button type="button" data-gallery-event="'+escapeHtml(galleryKey)+'" data-gallery-index="'+index+'" aria-label="View '+escapeHtml(item.altText||event.title+' event image')+'"><img src="'+escapeHtml(item.url)+'" alt="'+escapeHtml(item.altText||event.title+' event image')+'" loading="lazy" decoding="async"'+(item.width?' width="'+Number(item.width)+'"':'')+(item.height?' height="'+Number(item.height)+'"':'')+'>'+(item.caption?'<span>'+escapeHtml(item.caption)+'</span>':'')+'</button>';}).join("")+'</div></details>' : '') +
       '<div class="calendar-event-actions">' + officialAction + ticketAction + '<a class="is-secondary" href="/api/calendar/events/' + encodeURIComponent(event.id) + '.ics">Save date</a><button class="is-secondary" type="button" data-share-event data-share-title="' + escapeHtml(event.title) + '" data-share-anchor="' + escapeHtml(eventAnchor(event)) + '">Share</button></div>' +
       '</article>';

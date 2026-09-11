@@ -289,7 +289,7 @@
 
   function relatedLinkRow(link) {
     link = link || {};
-    var instagramOnly = isInstagramUrl(link.url) && !(link.role === "artist" && isInstagramProfileUrl(link.url));
+    var instagramOnly = isInstagramUrl(link.url) && !isInstagramProfileUrl(link.url);
     return '<article class="related-link-row" data-related-link data-link-id="' + escapeHtml(link.id || "") + '">' +
       '<div class="field-grid">' +
       '<label class="field"><span>Label</span><input data-link-label value="' + escapeHtml(link.label || "") + '"></label>' +

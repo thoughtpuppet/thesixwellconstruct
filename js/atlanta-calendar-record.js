@@ -226,8 +226,9 @@
     var artistLinks = relatedLinks.filter(function (link) { return link.role === "artist"; });
     var participantLinks = relatedLinks.filter(function (link) { return link.role === "participant"; });
     var organizerLinks = relatedLinks.filter(function (link) { return link.role === "organizer"; });
-    var otherRelatedLinks = relatedLinks.filter(function (link) { return !["artist","participant","organizer"].includes(link.role); });
-    var peopleCount = artistLinks.length + participantLinks.length + organizerLinks.length + otherRelatedLinks.length;
+    var venueLinks = relatedLinks.filter(function (link) { return link.role === "venue"; });
+    var otherRelatedLinks = relatedLinks.filter(function (link) { return !["artist","participant","organizer","venue"].includes(link.role); });
+    var peopleCount = artistLinks.length + participantLinks.length + organizerLinks.length + venueLinks.length + otherRelatedLinks.length;
     var scheduleContent = relatedOccurrences.map(function (occurrence) {
       var href = occurrence.detailUrl || ("#" + eventAnchor(occurrence));
       var programItems = Array.isArray(occurrence.programItems) ? occurrence.programItems : [];
@@ -237,6 +238,7 @@
       (artistLinks.length ? '<div class="calendar-related-links calendar-artist-links"><span>Artists</span>' + artistLinks.map(creditedLink).join("") + '</div>' : '') +
       (participantLinks.length ? '<div class="calendar-related-links"><span>Participants</span>' + participantLinks.map(creditedLink).join("") + '</div>' : '') +
       (organizerLinks.length ? '<div class="calendar-related-links"><span>Additional organizers</span>' + organizerLinks.map(creditedLink).join("") + '</div>' : '') +
+      (venueLinks.length ? '<div class="calendar-related-links"><span>Venues</span>' + venueLinks.map(creditedLink).join("") + '</div>' : '') +
       (otherRelatedLinks.length ? '<div class="calendar-related-links"><span>Related</span>' + otherRelatedLinks.map(creditedLink).join("") + '</div>' : '');
     var schedule = relatedOccurrences.length ? (expanded
       ? '<section class="calendar-event-detail-section"><h2>Related schedule</h2><div class="calendar-disclosure-content calendar-related-schedule">' + scheduleContent + '</div></section>'

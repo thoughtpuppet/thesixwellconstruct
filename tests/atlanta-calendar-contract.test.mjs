@@ -465,11 +465,23 @@ test("a human-verified Instagram-only source can publish while social ticket lin
       dateKind:"timed", startsAt:"2026-11-21T18:00:00-05:00", endsAt:"2026-11-21T20:00:00-05:00",
       venueName:"Atlanta Artist Collective", venueAddress:"25 Art Way, Atlanta, GA",
       subjects:["art"], formats:["lecture-talk"], verificationState:"needs_verification",
+      relatedLinks:[
+        { label:"Atlanta Artist — Instagram", url:"https://www.instagram.com/atlanta_artist/", role:"artist", includePublic:true },
+        { label:"Atlanta Artist Collective — Instagram", url:"https://www.instagram.com/atlanta_artist_collective/", role:"organizer", includePublic:true },
+        { label:"Atlanta Art Room — Instagram", url:"https://www.instagram.com/atlanta_art_room/", role:"venue", includePublic:true },
+        { label:"Announcement post", url:"https://www.instagram.com/p/announcement-post/", role:"supporting", includePublic:true },
+      ],
     },
   });
   assert.equal(created.status, 201, await created.clone().text());
   const candidate = (await created.json()).candidate;
   assert.equal(candidate.verificationState, "needs_verification");
+  assert.deepEqual(candidate.relatedLinks.filter((link) => ["artist","organizer","venue"].includes(link.role)).map((link) => ({ url:link.url, includePublic:link.includePublic })), [
+    { url:"https://www.instagram.com/atlanta_artist/", includePublic:true },
+    { url:"https://www.instagram.com/atlanta_artist_collective/", includePublic:true },
+    { url:"https://www.instagram.com/atlanta_art_room/", includePublic:true },
+  ]);
+  assert.equal(candidate.relatedLinks.find((link) => link.url === "https://www.instagram.com/p/announcement-post/").includePublic, false);
   assert.equal((await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} })).status, 409);
 
   const saved = await admin(db, `/candidates/${candidate.id}`, {
@@ -493,6 +505,11 @@ test("a human-verified Instagram-only source can publish while social ticket lin
   const publicEvent = publicPayload.events.find((event) => event.title === "Instagram-only Atlanta Artist Talk");
   assert.equal(publicEvent.sourceUrl, instagramUrl);
   assert.equal(publicEvent.ticketUrl, "");
+  assert.deepEqual(publicEvent.relatedLinks.map((link) => link.url), [
+    "https://www.instagram.com/atlanta_artist/",
+    "https://www.instagram.com/atlanta_artist_collective/",
+    "https://www.instagram.com/atlanta_art_room/",
+  ]);
   assert.doesNotMatch(JSON.stringify(publicEvent), /verificationNotes|sourceResolutionNotes|socialEvidence|discoveryUrl/);
 
   const single = await handleCalendarPublicApi(request(`/api/calendar/events/${encodeURIComponent(publicEvent.id)}.ics`), env(db));
