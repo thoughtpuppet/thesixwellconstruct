@@ -3,7 +3,7 @@ import test from "node:test";
 import {readFileSync} from "node:fs";
 import {createWritingRuntime} from "../tools/writing-local-runtime.mjs";
 import {handleConstructApi} from "../functions/api/construct/_lib.js";
-import {normalizeWritingSnapshot,renderWritingBody,writingHref,WRITING_ROOT} from "../shared/writing-content.js";
+import {normalizeWritingSnapshot,renderWritingBody,renderWritingDates,renderWritingEntry,writingDate,writingHref,WRITING_ROOT} from "../shared/writing-content.js";
 import {normalizeWritingPathways} from "../shared/writing-navigation.js";
 import {writingPageSlug,renderWritingPageTemplate} from "../functions/api/_shared/writing-pages.js";
 
@@ -31,10 +31,62 @@ function setup() {
     const response=await handleConstructApi(new Request(`https://example.test${path}`,{method,headers:{...(admin?{authorization:`Bearer ${runtime.env.SUBMISSIONS_ADMIN_TOKEN}`}:{ }),...(body?{"content-type":"application/json"}:{})},...(body?{body:JSON.stringify(body)}:{})}),runtime.env);
     const data=await response.json();return {status:response.status,headers:response.headers,...data};
   };
-  runtime.create=async(value=snapshot(),slug="an-open-question")=>{const result=await runtime.call("/api/admin/writing-entries",{admin:true,method:"POST",body:{snapshot:value,slug}});assert.equal(result.status,201,result.error);return result.entry;};
+  runtime.create=async(value=snapshot(),slug="an-open-question",metadata={})=>{const result=await runtime.call("/api/admin/writing-entries",{admin:true,method:"POST",body:{snapshot:value,slug,...metadata}});assert.equal(result.status,201,result.error);return result.entry;};
   runtime.action=async(entry,action)=>runtime.call(`/api/admin/writing-entries/${entry.id}/${action}`,{admin:true,method:"POST",body:{version:entry.version}});
   return runtime;
 }
+test("creation, draft save, and publication dates retain their distinct lifecycle",async()=>{
+  const r=setup(),startedAt="2026-01-10T18:04:00.000Z";
+  try {
+    let entry=await r.create(snapshot(),"dated-entry",{startedAt});
+    assert.equal(entry.startedAt,startedAt);assert.equal(entry.draftSavedAt,entry.firstSavedAt);
+    const firstSavedAt=entry.firstSavedAt,firstDraftSavedAt=entry.draftSavedAt;
+    entry=(await r.action(entry,"publish")).entry;
+    const firstPublishedAt=entry.firstPublishedAt;
+    assert.equal(entry.draftSavedAt,firstDraftSavedAt);
+    const originalPublic=(await r.call(`/api/writings/entries/${entry.slug}`)).entry;
+    assert.equal(originalPublic.startedAt,startedAt);assert.ok(!("draftSavedAt" in originalPublic));
+    const saved=await r.call(`/api/admin/writing-entries/${entry.id}`,{admin:true,method:"PATCH",body:{snapshot:snapshot("Private revision"),slug:entry.slug,version:entry.version,startedAt:"2020-01-01T00:00:00Z"}});
+    assert.equal(saved.status,200,saved.error);entry=saved.entry;
+    assert.equal(entry.startedAt,startedAt);assert.equal(entry.firstSavedAt,firstSavedAt);
+    assert.ok(entry.draftSavedAt>firstDraftSavedAt);assert.equal(entry.firstPublishedAt,firstPublishedAt);
+    assert.deepEqual((await r.call(`/api/writings/entries/${entry.slug}`)).entry,originalPublic);
+    const lastSaved=entry.draftSavedAt;
+    const failed=await r.call(`/api/admin/writing-entries/${entry.id}`,{admin:true,method:"PATCH",body:{snapshot:snapshot("Must not save"),version:0}});
+    assert.equal(failed.status,409);assert.equal((await r.call(`/api/admin/writing-entries/${entry.id}`,{admin:true})).entry.draftSavedAt,lastSaved);
+    entry=(await r.action(entry,"publish")).entry;
+    assert.equal(entry.firstPublishedAt,firstPublishedAt);assert.ok(entry.publishedUpdatedAt>firstPublishedAt);assert.equal(entry.draftSavedAt,lastSaved);
+    for(const action of ["unpublish","archive","restore","publish"]){entry=(await r.action(entry,action)).entry;assert.equal(entry.startedAt,startedAt);assert.equal(entry.firstSavedAt,firstSavedAt);assert.equal(entry.firstPublishedAt,firstPublishedAt);assert.equal(entry.draftSavedAt,lastSaved);}
+    assert.throws(()=>r.database.prepare("UPDATE writing_entries SET started_at=?,version=version+1 WHERE entity_id=?").run("2000-01-01T00:00:00Z",entry.id),/cannot change/);
+    const fallback=await r.create(snapshot(),"older-client",{startedAt:"invalid"});assert.equal(fallback.startedAt,null);assert.ok(fallback.firstSavedAt);
+    const skewed=await r.create(snapshot(),"future-clock",{startedAt:"2999-01-01T00:00:00Z"});assert.equal(skewed.startedAt,skewed.firstSavedAt);
+  } finally {r.database.close();}
+});
+test("date migration preserves earlier publication and recovers draft saves from revisions",()=>{
+  const r=createWritingRuntime({throughMigration:"0227_mindful_darkness_writing_entries.sql"});
+  try {
+    const document=JSON.stringify(snapshot()),published="2026-01-12T15:00:00.000Z";
+    r.database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES('date-legacy','writing_work','node-writings','public',1,'test','test',?,?)").run(published,published);
+    r.database.prepare("INSERT INTO writing_entries(entity_id,slug,draft_json,published_json,state,first_published_at,published_updated_at,created_at,updated_at) VALUES('date-legacy','date-legacy',?,?,'published',?,?,?,?)").run(document,document,published,published,"2026-01-10T18:04:00.000Z",published);
+    const before=r.database.prepare("SELECT * FROM writing_entries WHERE entity_id='date-legacy'").get();
+    const lastSave="2026-01-11T15:30:00.000Z";
+    r.database.prepare("INSERT INTO entity_revisions(id,entity_id,revision_number,action,after_json,created_by,created_at) VALUES('date-test','date-legacy',1,'writing-save-draft','{}','test',?)").run(lastSave);
+    r.database.exec(readFileSync(new URL("../migrations/0228_writing_entry_dates.sql",import.meta.url),"utf8"));
+    const after=r.database.prepare("SELECT * FROM writing_entries WHERE entity_id='date-legacy'").get();
+    assert.equal(after.started_at,null);assert.equal(after.created_at,before.created_at);assert.equal(after.draft_saved_at,lastSave);
+    assert.equal(after.draft_json,before.draft_json);assert.equal(after.published_json,before.published_json);assert.equal(after.first_published_at,before.first_published_at);assert.equal(after.updated_at,before.updated_at);
+  } finally {r.database.close();}
+});
+test("publication stays visible while the info control contains other dates and Eastern times",()=>{
+  const record={snapshot:snapshot(),startedAt:"2026-01-10T18:04:00Z",firstPublishedAt:"2026-07-01T15:30:00Z",publishedUpdatedAt:"2026-07-02T16:00:00Z",draftSavedAt:"2026-07-03T17:00:00Z"};
+  const html=renderWritingDates(record),visible=html.split("<details")[0];
+  assert.match(visible,/Published <time[^>]+>July 1, 2026/);assert.doesNotMatch(visible,/Created|updated/);
+  assert.match(html,/<details class="writing-date-info" data-writing-dates>/);assert.match(html,/aria-label="Creation and publication dates"/);
+  assert.match(html,/1:04 PM EST/);assert.match(html,/11:30 AM EDT/);assert.match(html,/Publication updated/);assert.doesNotMatch(html,/Last draft saved/);
+  assert.match(renderWritingEntry(record,{preview:true}),/Last draft saved/);assert.doesNotMatch(renderWritingEntry(record),/Last draft saved/);
+  assert.equal(writingDate("2026-01-10 18:04:00",{includeTime:true}),writingDate(record.startedAt,{includeTime:true}));
+  assert.match(renderWritingDates({firstSavedAt:record.startedAt}),/Unpublished draft/);assert.match(renderWritingDates({firstSavedAt:record.startedAt}),/First saved/);
+});
 test("bare inline and source addresses survive draft save, reload, publication, and rendering",async()=>{
   const r=setup();
   try {

@@ -26,8 +26,8 @@ function entrySlug(value) {
 async function rowById(database, entryId) { return statement(database,"SELECT * FROM writing_entries WHERE entity_id=?",entryId).first(); }
 function summary(row, admin = false) {
   const snapshot = JSON.parse(admin ? row.draft_json : row.published_json);
-  return {id:row.entity_id,slug:row.slug,title:snapshot.title,excerpt:snapshot.excerpt,author:snapshot.author,firstPublishedAt:row.first_published_at,publishedUpdatedAt:row.published_updated_at,
-    ...(admin ? {state:row.state,version:row.version,isSample:Boolean(row.is_sample),updatedAt:row.updated_at,hasUnpublishedChanges:row.draft_json !== row.published_json} : {})};
+  return {id:row.entity_id,slug:row.slug,title:snapshot.title,excerpt:snapshot.excerpt,author:snapshot.author,startedAt:row.started_at || null,firstSavedAt:row.created_at,firstPublishedAt:row.first_published_at,publishedUpdatedAt:row.published_updated_at,
+    ...(admin ? {state:row.state,version:row.version,isSample:Boolean(row.is_sample),draftSavedAt:row.draft_saved_at || row.created_at,updatedAt:row.updated_at,hasUnpublishedChanges:row.draft_json !== row.published_json} : {})};
 }
 async function assets(database, snapshot) {
   const ids = [...new Set(writingImages(snapshot).map(image => image.mediaId))];
@@ -61,15 +61,20 @@ async function validateReferences(database, snapshot, {publish = false, resolveE
 }
 async function saveDraft(database, before, body, resolveEntities) {
   const snapshot = normalizeWritingSnapshot(body.snapshot), draft = JSON.stringify(snapshot), now = new Date().toISOString();
+  // Only creation accepts the editor's first-edit timestamp. Clock skew or an
+  // older client must never prevent the author from saving their writing.
+  const start = typeof body.startedAt === "string" ? Date.parse(body.startedAt) : NaN;
+  const startedAt = before ? before.started_at : Number.isFinite(start) ? new Date(Math.min(start,Date.parse(now))).toISOString() : null;
+  const savedAt = new Date(Math.max(Date.parse(now),Date.parse(before?.draft_saved_at || "")+1 || 0)).toISOString();
   const entryId = before?.entity_id || id("writing"), nextSlug = entrySlug(body.slug || before?.slug || slug(snapshot.title) || entryId);
   if (before && Number(body.version) !== before.version) throw new Error("Save conflict: this entry changed in another window. Reload it before saving.");
   if (before?.first_published_at && before.slug !== nextSlug) throw new Error("A published WRKNG URL cannot change.");
   await validateReferences(database,snapshot,{resolveEntities,entryId});
-  const writes = before ? [statement(database,"UPDATE writing_entries SET slug=?,draft_json=?,version=?,updated_at=? WHERE entity_id=?",nextSlug,draft,before.version+1,now,entryId)] : [
+  const writes = before ? [statement(database,"UPDATE writing_entries SET slug=?,draft_json=?,version=?,updated_at=?,draft_saved_at=? WHERE entity_id=?",nextSlug,draft,before.version+1,now,savedAt,entryId)] : [
     statement(database,"INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'writing_work','node-writings','internal',0,'studio','studio',?,?)",entryId,now,now),
-    statement(database,"INSERT INTO writing_entries(entity_id,slug,draft_json,created_at,updated_at) VALUES(?,?,?,?,?)",entryId,nextSlug,draft,now,now),
+    statement(database,"INSERT INTO writing_entries(entity_id,slug,draft_json,started_at,created_at,updated_at,draft_saved_at) VALUES(?,?,?,?,?,?,?)",entryId,nextSlug,draft,startedAt,now,now,savedAt),
   ];
-  writes.push(...draftAttachments(database,entryId,snapshot,now),revision(database,entryId,before?"writing-save-draft":"writing-create",before,{slug:nextSlug,snapshot},now));
+  writes.push(...draftAttachments(database,entryId,snapshot,now),revision(database,entryId,before?"writing-save-draft":"writing-create",before,{slug:nextSlug,snapshot,startedAt:startedAt || null,draftSavedAt:savedAt},now));
   await database.batch(writes);
   return rowById(database,entryId);
 }

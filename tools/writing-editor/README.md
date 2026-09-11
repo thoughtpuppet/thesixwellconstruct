@@ -10,6 +10,13 @@ Unpublish withdraws the reader; Archive keeps the entry available for restoratio
 The URL name becomes permanent after first publication. The seeded reading-layout
 sample is preview-only and cannot be published.
 
+The public date is always the first publication date. Its ⓘ control opens the
+creation and publication-update dates, including time in Eastern time. Studio and
+authenticated previews also include the last draft save there. New entries capture
+creation on the first editor change and retain it when the first save succeeds;
+later saves and publication never reset it. Older entries whose first edit was not
+recorded show the known **First saved** timestamp instead of an invented start time.
+
 ## Editor build
 
 Run from this directory:
@@ -53,6 +60,10 @@ search document, relationships, image eligibility, and revision history. Optimis
 version guards roll back a conflicting batch; published image references are
 protected against silent withdrawal or deletion in the media library.
 
+Migration `0228_writing_entry_dates.sql` adds the first-edit and last-draft-save
+timestamps. It preserves existing first-save times and recovers draft-save dates
+from revisions without changing public content or publication dates.
+
 Images use managed media IDs. The editor retains the original file and parsed
 metadata internally, with SHA-256 provenance supplied by the shared upload API.
 It prepares a display derivative with embedded metadata removed (retaining GIF
@@ -72,7 +83,7 @@ This release is currently local, as requested. When production release is author
 
 1. Sign in to Wrangler and inspect remote migrations. Resolve any unrelated pending
    migrations separately; avoid applying an unknown batch.
-2. Apply migration 0227 before deploying the code that queries `writing_entries`.
+2. Apply migrations 0227 and 0228 before deploying the writing code.
 3. Deploy using the repository's existing Cloudflare Worker/static-assets workflow.
    Keep the sample private. Do not push; the repository owner handles Git pushes.
 4. Verify public lists are empty until a real entry is published, sample and unknown

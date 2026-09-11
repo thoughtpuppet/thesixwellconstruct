@@ -127,21 +127,31 @@ export function renderWritingBody(snapshot, media = []) {
   }
   return render(snapshot.body);
 }
-export function writingDate(value) {
+export function writingDate(value, {includeTime = false} = {}) {
   if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("en-US", {month:"long",day:"numeric",year:"numeric",timeZone:"America/New_York"}).format(date);
+  // SQLite's legacy datetime('now') strings are UTC, even without a suffix.
+  const date = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? `${value.replace(" ","T")}Z` : value);
+  return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("en-US", {month:"long",day:"numeric",year:"numeric",timeZone:"America/New_York",...(includeTime ? {hour:"numeric",minute:"2-digit",timeZoneName:"short"} : {})}).format(date);
+}
+export function renderWritingDates(record, {studio = false} = {}) {
+  const esc = escapeWriting;
+  const time = (value,includeTime = true) => `<time datetime="${esc(/^\d{4}-\d{2}-\d{2} /.test(value) ? `${value.replace(" ","T")}Z` : value)}">${writingDate(value,{includeTime})}</time>`;
+  const dates = [[record.startedAt ? "Created" : "First saved",record.startedAt || record.firstSavedAt]];
+  if (studio) dates.push(["Last draft saved",record.draftSavedAt]);
+  dates.push(["Published",record.firstPublishedAt]);
+  if (record.publishedUpdatedAt && record.publishedUpdatedAt !== record.firstPublishedAt) dates.push(["Publication updated",record.publishedUpdatedAt]);
+  const details = dates.filter(([,value])=>writingDate(value)).map(([label,value])=>`<div><dt>${label}</dt><dd>${time(value)}</dd></div>`).join("");
+  return `<span class="writing-published">${record.firstPublishedAt ? `Published ${time(record.firstPublishedAt,false)}` : "Unpublished draft"}</span>${details ? `<details class="writing-date-info" data-writing-dates><summary aria-label="Creation and publication dates" title="Writing dates"><span aria-hidden="true">ⓘ</span></summary><div class="writing-date-panel"><dl>${details}</dl></div></details>` : ""}`;
 }
 export function renderWritingEntry(record, {preview = false} = {}) {
   const esc = escapeWriting, snapshot = record.snapshot;
-  const updated = record.publishedUpdatedAt && record.publishedUpdatedAt !== record.firstPublishedAt;
   return `${preview ? '<p class="writing-preview-notice" role="status">Draft preview · visible only in Studio</p>' : ""}
     <section class="venture-hero site-hero site-hero--supporting writing-entry-hero" aria-labelledby="page-title">
       <div><span class="venture-kicker">Mindful Darkness / WRKNG*</span><h1 class="venture-title hero-title" id="page-title">${esc(snapshot.title)}</h1></div>
       <div class="hero-copy"><p class="hero-descriptor">${esc(snapshot.excerpt || "Notes on things I’m still figuring out.")}</p></div>
     </section>
     <article class="writing-reader" aria-labelledby="page-title">
-      <p class="writing-meta">${esc(snapshot.author)}${record.firstPublishedAt ? ` · <time datetime="${esc(record.firstPublishedAt)}">${writingDate(record.firstPublishedAt)}</time>` : " · Draft"}${updated ? `<br>Updated <time datetime="${esc(record.publishedUpdatedAt)}">${writingDate(record.publishedUpdatedAt)}</time>` : ""}</p>
+      <div class="writing-meta"><p class="writing-byline">${esc(snapshot.author)}${record.firstPublishedAt ? "" : " · Draft"}</p><div class="writing-dates">${renderWritingDates(record,{studio:preview})}</div></div>
       <div class="writing-body">${renderWritingBody(snapshot, record.media)}</div>
       ${snapshot.sources.length ? `<section class="writing-sources" aria-labelledby="writing-sources-title"><h2 id="writing-sources-title">Sources</h2><ol>${snapshot.sources.map(source => `<li><a href="${esc(source.url)}" rel="noopener">${esc(source.label)}</a></li>`).join("")}</ol></section>` : ""}
       ${record.related?.length ? `<section class="writing-related"><h2>Connected work</h2><ul>${record.related.map(item => `<li><a href="${esc(item.route)}">${esc(item.title)}</a></li>`).join("")}</ul></section>` : ""}

@@ -1,3 +1,4 @@
+@import url("/css/writing-dates.css");
 .writing-manager { max-width:1200px; margin:0 auto; }
 .writing-manager-head, .writing-editor-actions, .writing-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
 .writing-manager-head { justify-content:space-between; margin-bottom:24px; }

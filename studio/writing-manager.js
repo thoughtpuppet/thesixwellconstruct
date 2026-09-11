@@ -1,15 +1,17 @@
 import {createWritingEditor,prepareWritingImage} from "/studio/vendor/writing-editor/editor.js";
-import {escapeWriting as esc, normalizeWritingSnapshot, WRITING_AUTHOR, WRITING_ROOT, writingHref} from "/shared/writing-content.js";
+import {escapeWriting as esc, normalizeWritingSnapshot, renderWritingDates, WRITING_AUTHOR, WRITING_ROOT, writingHref} from "/shared/writing-content.js";
+import "/js/writing-dates.js";
 
 export async function mountWriting(root, api, setStatus) {
   if (root.querySelector("[data-writing-manager]") && window.WritingManager?.mounted) return;
   window.WritingManager?.unmount?.();
-  let current = null, editor = null, dirty = false, busy = false, destroyed = false, entities = [], media = [], requestNumber = 0;
+  let current = null, editor = null, startedAt = null, dirty = false, busy = false, destroyed = false, entities = [], media = [], requestNumber = 0;
   const controller = new AbortController(), previews = new Map(), previewsPending = new Map();
   const request = (url,method,body) => api(url,{method,headers:{"content-type":"application/json"},body:JSON.stringify(body)});
   const output = () => root.querySelector("[data-writing-status]");
   const say = message => { if (output()) output().textContent = message; setStatus(message); };
-  function changed() { dirty = true; if (output()) output().textContent = "Unsaved changes"; }
+  function showDates() { const target=root.querySelector("[data-writing-entry-dates]");if(target)target.innerHTML=renderWritingDates(current || {startedAt},{studio:true}); }
+  function changed() { if(!current && !startedAt){startedAt=new Date().toISOString();showDates();}dirty = true; if (output()) output().textContent = "Unsaved changes"; }
   function canLeave() { if(busy){say("Wait for this save to finish before leaving the entry.");return false;}return !dirty || confirm("Leave this entry without saving your changes?"); }
   function destroyEditor() { editor?.destroy(); editor = null; }
   function unmount() { destroyed = true; destroyEditor(); controller.abort(); previews.forEach(URL.revokeObjectURL); previews.clear(); window.WritingManager.mounted = false; }
@@ -33,7 +35,7 @@ export async function mountWriting(root, api, setStatus) {
     try {
       const payload = await api("/api/admin/writing-entries");
       if (destroyed || sequence !== requestNumber) return;
-      shell(`<button class="button" type="button" data-writing-new>New entry</button><ul class="writing-manager-list">${payload.entries.map(entry=>`<li class="writing-manager-card"><h3>${esc(entry.title || "Untitled entry")}</h3><p>${entry.isSample ? "Layout sample · preview only" : esc(entry.state) + (entry.state === "published" && entry.hasUnpublishedChanges ? " · unpublished changes" : "")}</p><p>${esc(entry.excerpt)}</p><button class="button" type="button" data-writing-open="${esc(entry.id)}">Edit entry</button></li>`).join("")}</ul><p data-writing-status role="status"></p>`);
+      shell(`<button class="button" type="button" data-writing-new>New entry</button><ul class="writing-manager-list">${payload.entries.map(entry=>`<li class="writing-manager-card"><h3>${esc(entry.title || "Untitled entry")}</h3><p>${entry.isSample ? "Layout sample · preview only" : esc(entry.state) + (entry.state === "published" && entry.hasUnpublishedChanges ? " · unpublished changes" : "")}</p><div class="writing-dates">${renderWritingDates(entry,{studio:true})}</div><p>${esc(entry.excerpt)}</p><button class="button" type="button" data-writing-open="${esc(entry.id)}">Edit entry</button></li>`).join("")}</ul><p data-writing-status role="status"></p>`);
     } catch(error) { if(!destroyed) shell(`<p role="alert">${esc(error.message)}</p><button class="button" data-writing-list>Try again</button>`); }
   }
   function sourceRow(source = {}) { return `<div class="writing-reference-row" data-source-row><input aria-label="Source label" data-source-label value="${esc(source.label)}" placeholder="Source label" maxlength="240"><input aria-label="Source URL" data-source-url value="${esc(source.url)}" placeholder="Website, email, or /site-path/"><button class="button" type="button" data-source-remove>Remove source</button></div>`; }
@@ -50,9 +52,10 @@ export async function mountWriting(root, api, setStatus) {
     }
   }
   function edit(entry = null) {
-    destroyEditor(); current=entry; dirty=false;
+    destroyEditor(); current=entry; startedAt=entry?.startedAt || null; dirty=false;
     const value=entry?.snapshot || {schemaVersion:1,title:"",author:WRITING_AUTHOR,excerpt:"",body:{type:"doc",content:[{type:"paragraph",content:[]}]},sources:[],relatedIds:[]};
     shell(`<button class="button" type="button" data-writing-list>All entries</button>${entry?.isSample?'<p class="writing-preview-notice">Layout sample · this entry stays private. Create a new entry when you’re ready to publish.</p>':""}
+      <div class="writing-dates" data-writing-entry-dates>${renderWritingDates(entry || {},{studio:true})}</div>
       <form data-writing-form><div class="writing-editor-fields"><label class="wide">Title<input name="title" maxlength="240" value="${esc(value.title)}"></label><label>URL name<input name="slug" maxlength="160" pattern="[a-z0-9]+(-[a-z0-9]+)*" value="${esc(entry?.slug)}" ${entry?.firstPublishedAt?"readonly":""}></label><label>Author<input name="author" maxlength="160" value="${esc(value.author)}"></label><label class="wide">Excerpt<textarea name="excerpt" maxlength="1000" rows="3">${esc(value.excerpt)}</textarea></label></div>
       <div class="writing-toolbar" role="toolbar" aria-label="Text formatting">${[["paragraph","Paragraph"],["h2","Heading 2"],["h3","Heading 3"],["bold","Bold"],["italic","Italic"],["blockquote","Quote"],["bulletList","Bullet list"],["orderedList","Numbered list"]].map(([key,label])=>`<button class="button" type="button" data-format="${key}" aria-pressed="false">${label}</button>`).join("")}<button class="button" type="button" data-writing-link>Link</button><button class="button" type="button" data-writing-image>Image</button><button class="button" type="button" data-writing-undo>Undo</button><button class="button" type="button" data-writing-redo>Redo</button></div>
       <div data-writing-editor></div>
@@ -73,13 +76,13 @@ export async function mountWriting(root, api, setStatus) {
   function serialize() {
     const form=root.querySelector("[data-writing-form]");
     const snapshot=normalizeWritingSnapshot({schemaVersion:1,title:form.elements.title.value,author:form.elements.author.value,excerpt:form.elements.excerpt.value,body:editor.getJSON(),sources:[...root.querySelectorAll("[data-source-row]")].map(row=>({label:row.querySelector("[data-source-label]").value,url:row.querySelector("[data-source-url]").value})).filter(row=>row.label||row.url),relatedIds:[...root.querySelectorAll("[data-related-id]")].map(input=>input.value).filter(Boolean)});
-    return {snapshot,slug:form.elements.slug.value,version:current?.version};
+    return {snapshot,slug:form.elements.slug.value,version:current?.version,...(!current && startedAt ? {startedAt} : {})};
   }
   async function save() {
     if (current && !dirty) return current;
     const creating=!current;
     const value=serialize(),payload=await request(`/api/admin/writing-entries${current?`/${encodeURIComponent(current.id)}`:""}`,current?"PATCH":"POST",value);
-    current=payload.entry; dirty=false;
+    current=payload.entry; startedAt=current.startedAt || null; dirty=false;showDates();
     const form=root.querySelector("[data-writing-form]");form.elements.slug.value=current.slug;
     if(creating)root.querySelector(".writing-editor-actions").insertAdjacentHTML("beforeend",'<button class="button" type="button" data-writing-action="archive">Archive</button>');
     say("Draft saved"); return current;

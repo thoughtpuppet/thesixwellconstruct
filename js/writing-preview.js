@@ -1,4 +1,5 @@
 import {renderWritingEntry, writingBreadcrumb, escapeWriting as esc} from "/shared/writing-content.js";
+import "/js/writing-dates.js";
 const mount = document.querySelector("[data-writing-preview]"), urls = [];
 async function open() {
   const id = new URL(location.href).searchParams.get("entry"), token = localStorage.getItem("swc_submissions_admin_token");
