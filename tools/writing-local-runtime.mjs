@@ -22,8 +22,8 @@ class MemoryR2 {
   async get(key,options={}) {const item=this.items.get(key);if(!item)return null;const bytes=options.range?item.bytes.slice(options.range.offset,options.range.offset+options.range.length):item.bytes;return {...await this.head(key),body:new Blob([bytes]).stream()};}
   async delete(key) {this.items.delete(key);}
 }
-export function createWritingRuntime() {
+export function createWritingRuntime({throughMigration = ""} = {}) {
   const database=new DatabaseSync(":memory:");database.exec("PRAGMA foreign_keys=ON");
-  for(const file of readdirSync(migrationRoot).filter(name=>name.endsWith(".sql")).sort())database.exec(readFileSync(`${migrationRoot}/${file}`,"utf8"));
+  for(const file of readdirSync(migrationRoot).filter(name=>name.endsWith(".sql") && (!throughMigration || name<=throughMigration)).sort())database.exec(readFileSync(`${migrationRoot}/${file}`,"utf8"));
   return {database,env:{SUBMISSIONS_DB:new LocalD1(database),SUBMISSIONS_ADMIN_TOKEN:"writing-local-preview",SUBMISSION_FILES:new MemoryR2(),PUBLIC_SITE_URL:"http://127.0.0.1:4173"}};
 }
