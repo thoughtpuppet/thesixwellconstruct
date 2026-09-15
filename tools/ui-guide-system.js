@@ -352,7 +352,7 @@
   }
 
   function breadcrumb(label) {
-    return '<nav class="construct-breadcrumb" aria-label="Breadcrumb"><a href="#">Construct</a><span class="construct-breadcrumb-sep">/</span><a href="#">Medium</a><span class="construct-breadcrumb-sep">/</span><span class="construct-breadcrumb-current" aria-current="page">' + esc(label) + "</span></nav>";
+    return '<nav class="construct-breadcrumb" aria-label="Breadcrumb"><a href="#">Construct</a><span class="construct-breadcrumb-sep">:</span><a href="#">Medium</a><span class="construct-breadcrumb-sep">:</span><span class="construct-breadcrumb-current" aria-current="page">' + esc(label) + "</span></nav>";
   }
 
   function footer() {

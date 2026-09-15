@@ -122,7 +122,7 @@
     items.forEach(function(item, index) {
       if (index > 0) {
         var sep = document.createElement('span');
-        sep.textContent = '/';
+        sep.textContent = ':';
         sep.className = 'construct-breadcrumb-sep';
         nav.appendChild(sep);
       }

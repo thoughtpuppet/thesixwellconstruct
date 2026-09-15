@@ -29,7 +29,7 @@
   }
 
   function crumb(current) {
-    breadcrumb.innerHTML = `<a href="/home/">Construct</a><span class="construct-breadcrumb-sep" aria-hidden="true">/</span><a href="/gallery/">Gallery</a>${current ? `<span class="construct-breadcrumb-sep" aria-hidden="true">/</span><span class="construct-breadcrumb-current" aria-current="page">${esc(current)}</span>` : ""}`;
+    breadcrumb.innerHTML = `<a href="/home/">Construct</a><span class="construct-breadcrumb-sep" aria-hidden="true">:</span><a href="/gallery/">Gallery</a>${current ? `<span class="construct-breadcrumb-sep" aria-hidden="true">:</span><span class="construct-breadcrumb-current" aria-current="page">${esc(current)}</span>` : ""}`;
   }
 
   function hero(title, descriptor, kicker, count) {

@@ -821,12 +821,12 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <h3>Breadcrumb (injected)</h3>
     <div class="demo">
       <nav class="crumb-demo">
-        <a href="#navigation" onclick="return false">Construct</a><span class="sep">/</span>
-        <a href="#navigation" onclick="return false">Art.Pill Tattoo House</a><span class="sep">/</span>
+        <a href="#navigation" onclick="return false">Construct</a><span class="sep">:</span>
+        <a href="#navigation" onclick="return false">Art.Pill Tattoo House</a><span class="sep">:</span>
         <span class="current">Flash</span>
       </nav>
     </div>
-    <p class="lead">Georgia · 11px · 0.18em tracking · uppercase. This is shared by hardcoded <code>.breadcrumb</code> rows and generated <code>.construct-breadcrumb</code> rows in <code>css/site-typography.css</code>. The amber breadcrumb flow is tokenized globally: ancestor links use <code>--color-breadcrumb-dim</code> at .30, hover/focus uses <code>--color-breadcrumb-hover</code> at .55, separators use <code>--color-breadcrumb-ghost</code> at .13, and the current page uses <code>--color-breadcrumb-current</code> at .80. The first breadcrumb item is always <strong>construct</strong> and always points to <code>/home/</code>; <code>/</code> is reserved for the entry room.</p>
+    <p class="lead">Georgia · 11px · 0.18em tracking · uppercase. This is shared by hardcoded <code>.breadcrumb</code> rows and generated <code>.construct-breadcrumb</code> rows in <code>css/site-typography.css</code>. The amber breadcrumb flow is tokenized globally: ancestor links use <code>--color-breadcrumb-dim</code> at .30, hover/focus uses <code>--color-breadcrumb-hover</code> at .55, colon separators use <code>--color-breadcrumb-ghost</code> at .13, and the current page uses <code>--color-breadcrumb-current</code> at .80. The first breadcrumb item is always <strong>construct</strong> and always points to <code>/home/</code>; the route <code>/</code> remains reserved for the entry room.</p>
 
     <h3>Header band</h3>
     <p class="lead">A fixed 88px frosted band (<code>rgba(14,14,14,.85)</code> + 8px blur + 5px faint bottom border) activates behind the lockup and dots on scroll (<code>#construct-header-shell</code> / <code>.construct-header-active</code>). At ≤640px it grows to 110px and the dot row drops to 92px to clear the wrapped lockup.</p>
@@ -1121,7 +1121,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     {key:'section',name:'Section titles',sample:'Section title',defaults:{font:'var(--font-display)',color:'var(--color-body)',size:'clamp(34px, 6vw, 82px)',weight:'900',style:'normal',leading:'0.94',tracking:'0em',transform:'uppercase'}},
     {key:'descriptor',name:'Hero descriptors',sample:'One concise description of the page or medium.',defaults:{font:'var(--font-serif)',color:'rgba(252, 184, 103, 0.55)',size:'12px',weight:'400',style:'normal',leading:'1.6',tracking:'0.22em',transform:'uppercase'}},
     {key:'eyebrow',name:'Eyebrows & kickers',sample:'Section kicker · current medium',defaults:{font:'var(--font-serif)',color:'var(--venture-accent, var(--venture-color, var(--accent, var(--color-accent))))',size:'10px',weight:'400',style:'normal',leading:'1.35',tracking:'0.22em',transform:'uppercase'}},
-    {key:'breadcrumb',name:'Breadcrumbs',sample:'Construct / Tattooing / Flash',defaults:{font:'var(--font-serif)',color:'var(--color-breadcrumb-dim)',size:'11px',weight:'400',style:'normal',leading:'1.42',tracking:'0.18em',transform:'uppercase'}},
+    {key:'breadcrumb',name:'Breadcrumbs',sample:'Construct : Tattooing : Flash',defaults:{font:'var(--font-serif)',color:'var(--color-breadcrumb-dim)',size:'11px',weight:'400',style:'normal',leading:'1.42',tracking:'0.18em',transform:'uppercase'}},
     {key:'control',name:'Controls & actions',sample:'Primary action',defaults:{font:'var(--font-display)',color:'var(--color-body)',size:'11px',weight:'800',style:'normal',leading:'1.2',tracking:'0.14em',transform:'uppercase'}},
     {key:'footer',name:'Footers',sample:'Return to construct · Back to medium',defaults:{font:'var(--font-serif)',color:'var(--color-text-dim)',size:'10px',weight:'400',style:'normal',leading:'1.42',tracking:'0.18em',transform:'uppercase'}},
     {key:'meta',name:'Metadata & captions',sample:'Updated July 2026 · Internal reference',defaults:{font:'var(--font-serif)',color:'var(--color-text-dim)',size:'11px',weight:'400',style:'normal',leading:'1.42',tracking:'0.18em',transform:'uppercase'}},
