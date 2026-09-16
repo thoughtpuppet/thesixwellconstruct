@@ -1049,6 +1049,17 @@ test("Tattoo project forms use the managed budget-range system and expose a $150
   assert.match(sharedBudgetField, /\/api\/tattoo\/settings/);
   assert.match(sharedBudgetField, /__specific_amount__/);
   assert.match(sharedBudgetField, /MINIMUM_SPECIFIC_DOLLARS = 150/);
+  assert.ok(
+    sharedBudgetField.indexOf('{ value: SPECIFIC_VALUE, label: "Enter a specific amount" }')
+      < sharedBudgetField.indexOf("normalizedRanges(ranges).map"),
+    "shared exact amount option should precede managed ranges",
+  );
+  const mazeSource = readFileSync(formSources[4][1], "utf8");
+  assert.ok(
+    mazeSource.indexOf('<option value={SPECIFIC_BUDGET_VALUE}>Enter a specific amount</option>')
+      < mazeSource.indexOf("visibleBudgetRanges.map"),
+    "Maze exact amount option should precede managed ranges",
+  );
   for (const path of formSources.slice(0, 4).map((entry) => entry[1])) {
     const source = readFileSync(path, "utf8");
     assert.match(source, /data-tattoo-budget-select/);

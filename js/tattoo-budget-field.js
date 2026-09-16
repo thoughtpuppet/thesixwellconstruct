@@ -61,18 +61,20 @@
 
   function populateSelect(select, ranges) {
     var currentValue = select.value;
-    var options = [{ value: "", label: "Select a range" }].concat(
+    var options = [
+      { value: "", label: "Select a range" },
+      { value: SPECIFIC_VALUE, label: "Enter a specific amount" },
+    ].concat(
       normalizedRanges(ranges).map(function (range) {
         var label = rangeLabel(range);
         return { value: label, label: label };
       }),
       [
-        { value: SPECIFIC_VALUE, label: "Enter a specific amount" },
         { value: FLEXIBLE_VALUE, label: FLEXIBLE_VALUE },
       ]
     );
     if (currentValue && !options.some(function (option) { return option.value === currentValue; })) {
-      options.splice(options.length - 2, 0, { value: currentValue, label: currentValue + " (saved selection)" });
+      options.splice(options.length - 1, 0, { value: currentValue, label: currentValue + " (saved selection)" });
     }
     select.replaceChildren.apply(select, options.map(function (option) {
       return new Option(option.label, option.value, false, option.value === currentValue);

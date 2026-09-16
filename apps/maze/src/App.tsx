@@ -582,8 +582,8 @@ function SubmitDialog({
             What total project budget are you comfortable working within?
             <select name="budget_range" required aria-describedby="maze-budget-help" value={formDraft.budgetRange} onChange={(event) => onFormDraftChange({ ...formDraft, budgetRange: event.target.value })}>
               <option value="">Select a range</option>
-              {visibleBudgetRanges.map((range) => <option key={range} value={range}>{range}</option>)}
               <option value={SPECIFIC_BUDGET_VALUE}>Enter a specific amount</option>
+              {visibleBudgetRanges.map((range) => <option key={range} value={range}>{range}</option>)}
               <option value={FLEXIBLE_BUDGET_VALUE}>{FLEXIBLE_BUDGET_VALUE}</option>
             </select>
             <span className="maze-submit-help" id="maze-budget-help">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.</span>
