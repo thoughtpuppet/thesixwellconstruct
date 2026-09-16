@@ -25,6 +25,24 @@
 .writing-editor-status { font-size:14px; }
 .writing-reference-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
 .writing-reference-row input { flex:1; min-width:180px; }
+.writing-connection-editor { align-items:flex-start; padding:12px; border:5px solid var(--line,#443c30); }
+.writing-connection-editor > select { flex:1; min-width:180px; }
+.writing-connection-editor > input { flex-basis:100%; }
+.writing-connection-actions { display:flex; gap:8px; }
+.writing-response-manager { margin:48px 0 0; padding-top:24px; border-top:5px solid var(--line,#443c30); }
+.writing-response-manager > h3 { font-size:28px; }
+.writing-response-manager > p { max-width:680px; font:16px/1.7 Georgia,serif; }
+[data-admin-responses] { display:grid; gap:16px; }
+.writing-admin-response { padding:16px; border:5px solid var(--line,#443c30); }
+.writing-admin-response > header { display:flex; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.writing-admin-response > header div { display:flex; gap:10px; flex-wrap:wrap; }
+.writing-admin-response > header span { text-transform:uppercase; letter-spacing:.12em; font-size:11px; }
+.writing-admin-response > p { max-width:680px; font:17px/1.7 Georgia,serif; }
+.writing-admin-response-links { display:flex; flex-direction:column; align-items:flex-start; gap:8px; margin:12px 0; }
+.writing-admin-response-actions { margin:16px 0; }
+.writing-admin-response form { margin-top:20px; padding:16px; border:5px solid var(--line,#443c30); }
+.writing-admin-response form label { display:flex; flex-direction:column; gap:8px; margin:12px 0; }
+.writing-admin-response form input, .writing-admin-response form textarea, .writing-admin-response form select { width:100%; box-sizing:border-box; padding:10px; border:5px solid var(--line,#443c30); background:var(--panel,#181512); color:var(--text,#fbdab1); font:16px/1.5 Inter,Arial,sans-serif; }
 .writing-manager dialog { max-width:680px; width:calc(100% - 40px); max-height:85dvh; overflow:auto; padding:24px; border:5px solid #fbdab1; background:#171411; color:#fbdab1; }
 .writing-manager dialog::backdrop { background:rgba(0,0,0,.75); }
 .writing-manager dialog label { display:block; margin:16px 0; }

@@ -5,7 +5,7 @@ import "/js/writing-dates.js";
 export async function mountWriting(root, api, setStatus) {
   if (root.querySelector("[data-writing-manager]") && window.WritingManager?.mounted) return;
   window.WritingManager?.unmount?.();
-  let current = null, editor = null, startedAt = null, dirty = false, busy = false, destroyed = false, entities = [], media = [], requestNumber = 0;
+  let current = null, editor = null, startedAt = null, dirty = false, busy = false, destroyed = false, entities = [], relationshipTypes = [], media = [], requestNumber = 0;
   const controller = new AbortController(), previews = new Map(), previewsPending = new Map();
   const request = (url,method,body) => api(url,{method,headers:{"content-type":"application/json"},body:JSON.stringify(body)});
   const output = () => root.querySelector("[data-writing-status]");
@@ -39,10 +39,18 @@ export async function mountWriting(root, api, setStatus) {
     } catch(error) { if(!destroyed) shell(`<p role="alert">${esc(error.message)}</p><button class="button" data-writing-list>Try again</button>`); }
   }
   function sourceRow(source = {}) { return `<div class="writing-reference-row" data-source-row><input aria-label="Source label" data-source-label value="${esc(source.label)}" placeholder="Source label" maxlength="240"><input aria-label="Source URL" data-source-url value="${esc(source.url)}" placeholder="Website, email, or /site-path/"><button class="button" type="button" data-source-remove>Remove source</button></div>`; }
-  function relatedRow(entityId = "") {
-    if(entityId && !entities.some(entity=>entity.id===entityId)) entities.push({id:entityId,title:entityId,route:"/",visibility:"public"});
-    return `<div class="writing-reference-row" data-related-row><select aria-label="Related Construct record" data-related-id><option value="">Choose a record</option>${entities.filter(entity=>entity.id!==current?.id && entity.route).map(entity=>`<option value="${esc(entity.id)}" ${entity.id===entityId?"selected":""}>${esc(entity.title)} · ${esc(entity.node?.name || entity.entityType || "")}${entity.visibility!=="public"?" · internal":""}</option>`).join("")}</select><button class="button" type="button" data-related-remove>Remove record</button></div>`;
+  function relatedRow(connection = {}, context = "post") {
+    if(typeof connection==="string")connection={targetId:connection,relationshipTypeId:"rel-related-to",note:""};
+    const entityId=connection.targetId||"",typeId=connection.relationshipTypeId||"rel-related-to";
+    if(entityId&&!entities.some(entity=>entity.id===entityId))entities.push({id:entityId,title:entityId,route:"/",visibility:"public"});
+    return `<div class="writing-reference-row writing-connection-editor" data-related-row data-connection-context="${context}"><select aria-label="Connected Construct record" data-related-id><option value="">Choose a record</option>${entities.filter(entity=>entity.id!==current?.id&&entity.route).map(entity=>`<option value="${esc(entity.id)}" ${entity.id===entityId?"selected":""}>${esc(entity.title)} · ${esc(entity.node?.name||entity.entityType||"")}${entity.visibility!=="public"?" · internal":""}</option>`).join("")}</select><select aria-label="Relationship type" data-related-type>${relationshipTypes.map(type=>`<option value="${esc(type.id)}" ${type.id===typeId?"selected":""}>${esc(type.forward_label)}</option>`).join("")}</select><input aria-label="Connection note" data-related-note maxlength="1000" placeholder="Optional context" value="${esc(connection.note||"")}"><div class="writing-connection-actions"><button class="button" type="button" data-related-up aria-label="Move connection up">↑</button><button class="button" type="button" data-related-down aria-label="Move connection down">↓</button><button class="button" type="button" data-related-remove>Remove</button></div></div>`;
   }
+  function responseAttachment(item){return `<button class="button" type="button" data-response-file="${esc(item.url)}">Open ${esc(item.filename)} · ${Number(item.byteSize||0).toLocaleString()} bytes</button>`}
+  function responseAdminCard(response){
+    const reply=response.replies?.[0],connections=reply?.connections||[];
+    return `<article class="writing-admin-response" data-admin-response="${esc(response.id)}"><header><div><strong>${esc(response.authorName)}</strong><span>${esc(response.state)}</span></div><time>${esc(new Date(response.createdAt).toLocaleString())}</time></header>${response.body?`<p>${esc(response.body).replace(/\r?\n/g,"<br>")}</p>`:""}${response.attachments?.length?`<div class="writing-admin-response-links">${response.attachments.map(responseAttachment).join("")}</div>`:""}${response.links?.length?`<div class="writing-admin-response-links">${response.links.map(link=>`<a href="${esc(link.url)}" target="_blank" rel="noopener">${esc(link.label||link.url)}</a>`).join("")}</div>`:""}<div class="writing-admin-response-actions"><button class="button" type="button" data-response-state="${response.state==="published"?"hidden":"published"}">${response.state==="published"?"Hide response":"Publish response"}</button></div><form data-author-reply><h4>Author response</h4><label>Name<input name="authorName" maxlength="160" value="${esc(reply?.authorName||WRITING_AUTHOR)}"></label><label>Response<textarea name="body" maxlength="12000" rows="5">${esc(reply?.body||"")}</textarea></label><h5>Official connections</h5><div data-reply-connections>${connections.map(connection=>relatedRow({targetId:connection.id,relationshipTypeId:connection.relationshipTypeId,note:connection.note},"reply")).join("")}</div><button class="button" type="button" data-reply-connection-add>Add connection</button><button class="button" type="submit">${reply?"Update author response":"Publish author response"}</button><p role="status" data-reply-status></p></form></article>`;
+  }
+  function responseManager(responses=[]){return `<section class="writing-response-manager" aria-labelledby="writing-response-manager-title"><h3 id="writing-response-manager-title">Respond / Extend thread</h3><p>Visitor responses publish immediately. You can hide a response, reply as the author, and attach official Construct connections to that reply.</p><div data-admin-responses>${responses.length?responses.map(responseAdminCard).join(""):'<p class="writing-manager-card">No visitor responses yet.</p>'}</div></section>`}
   function selectedStyle() {
     if (!editor || destroyed) return;
     for (const button of root.querySelectorAll("[data-format]")) {
@@ -53,14 +61,15 @@ export async function mountWriting(root, api, setStatus) {
   }
   function edit(entry = null) {
     destroyEditor(); current=entry; startedAt=entry?.startedAt || null; dirty=false;
-    const value=entry?.snapshot || {schemaVersion:1,title:"",author:WRITING_AUTHOR,excerpt:"",body:{type:"doc",content:[{type:"paragraph",content:[]}]},sources:[],relatedIds:[]};
+    const value=entry?.snapshot || {schemaVersion:1,title:"",author:WRITING_AUTHOR,excerpt:"",body:{type:"doc",content:[{type:"paragraph",content:[]}]},sources:[],connections:[],relatedIds:[]};
+    const connections=value.connections||value.relatedIds?.map(targetId=>({targetId,relationshipTypeId:"rel-related-to",note:""}))||[];
     shell(`<button class="button" type="button" data-writing-list>All entries</button>${entry?.isSample?'<p class="writing-preview-notice">Layout sample · this entry stays private. Create a new entry when you’re ready to publish.</p>':""}
       <div class="writing-dates" data-writing-entry-dates>${renderWritingDates(entry || {},{studio:true})}</div>
       <form data-writing-form><div class="writing-editor-fields"><label class="wide">Title<input name="title" maxlength="240" value="${esc(value.title)}"></label><label>URL name<input name="slug" maxlength="160" pattern="[a-z0-9]+(-[a-z0-9]+)*" value="${esc(entry?.slug)}" ${entry?.firstPublishedAt?"readonly":""}>${entry?.firstPublishedAt?'<span class="cm-field-note">Locked after first publication.</span>':'<span class="cm-field-note">Clear this field and save to regenerate it from the current title.</span>'}</label><label>Author<input name="author" maxlength="160" value="${esc(value.author)}"></label><label class="wide">Excerpt<textarea name="excerpt" maxlength="1000" rows="3">${esc(value.excerpt)}</textarea></label></div>
       <div class="writing-toolbar" role="toolbar" aria-label="Text formatting">${[["paragraph","Paragraph"],["h2","Heading 2"],["h3","Heading 3"],["bold","Bold"],["italic","Italic"],["blockquote","Quote"],["bulletList","Bullet list"],["orderedList","Numbered list"]].map(([key,label])=>`<button class="button" type="button" data-format="${key}" aria-pressed="false">${label}</button>`).join("")}<button class="button" type="button" data-writing-link>Link</button><button class="button" type="button" data-writing-image>Image</button><button class="button" type="button" data-writing-undo>Undo</button><button class="button" type="button" data-writing-redo>Redo</button></div>
       <div data-writing-editor></div>
-      <div class="writing-editor-fields"><section class="wide"><h3>Sources</h3><div data-writing-sources>${value.sources.map(sourceRow).join("")}</div><button class="button" type="button" data-source-add>Add source</button></section><section class="wide"><h3>Connected work</h3><div data-writing-related>${value.relatedIds.map(relatedRow).join("")}</div><button class="button" type="button" data-related-add>Add record</button></section></div>
-      <div class="writing-editor-actions"><button class="button" type="submit">Save draft</button><button class="button" type="button" data-writing-preview>Preview</button>${!entry?.isSample && entry?.state!=="archived"?`<button class="button" type="button" data-writing-action="publish">${entry?.firstPublishedAt?"Publish updates":"Publish"}</button>`:""}${entry?.state==="published"?'<button class="button" type="button" data-writing-action="unpublish">Unpublish</button>':""}${entry?.state==="archived"?'<button class="button" type="button" data-writing-action="restore">Restore draft</button>':entry&&!entry.isSample?'<button class="button" type="button" data-writing-action="archive">Archive</button>':""}<span class="writing-editor-status" data-writing-status role="status">${entry?"Saved draft":"New entry"}</span></div></form>`);
+      <div class="writing-editor-fields"><section class="wide"><h3>Sources</h3><div data-writing-sources>${value.sources.map(sourceRow).join("")}</div><button class="button" type="button" data-source-add>Add source</button></section><section class="wide"><h3>Connections from this writing</h3><p class="cm-field-note">These become typed, official Construct connections when this entry is published.</p><div data-writing-related>${connections.map(connection=>relatedRow(connection,"post")).join("")}</div><button class="button" type="button" data-related-add>Add connection</button></section></div>
+      <div class="writing-editor-actions"><button class="button" type="submit">Save draft</button><button class="button" type="button" data-writing-preview>Preview</button>${!entry?.isSample && entry?.state!=="archived"?`<button class="button" type="button" data-writing-action="publish">${entry?.firstPublishedAt?"Publish updates":"Publish"}</button>`:""}${entry?.state==="published"?'<button class="button" type="button" data-writing-action="unpublish">Unpublish</button>':""}${entry?.state==="archived"?'<button class="button" type="button" data-writing-action="restore">Restore draft</button>':entry&&!entry.isSample?'<button class="button" type="button" data-writing-action="archive">Archive</button>':""}<span class="writing-editor-status" data-writing-status role="status">${entry?"Saved draft":"New entry"}</span></div></form>${entry&&!entry.isSample?responseManager(entry.responses):""}`);
     editor=createWritingEditor(root.querySelector("[data-writing-editor]"),{content:value.body,imageUrl,onUpdate:changed,onSelection:selectedStyle});
     selectedStyle();
   }
@@ -68,14 +77,22 @@ export async function mountWriting(root, api, setStatus) {
     if (!canLeave()) return;
     const sequence=++requestNumber;
     try {
-      const [payload,directory]=await Promise.all([api(`/api/admin/writing-entries/${encodeURIComponent(entryId)}`),api("/api/admin/entities")]);
+      const [payload,directory,types]=await Promise.all([api(`/api/admin/writing-entries/${encodeURIComponent(entryId)}`),api("/api/admin/entities"),api("/api/admin/relationship-types")]);
       if(destroyed||sequence!==requestNumber)return;
-      entities=directory.entities||directory.records||[]; edit(payload.entry);
+      entities=directory.entities||directory.records||[];relationshipTypes=(types.records||[]).filter(type=>type.public_visible);edit(payload.entry);
     } catch(error) {say(error.message);}
   }
+  function refreshResponseManager(responses){current.responses=responses;const section=root.querySelector(".writing-response-manager");if(section)section.outerHTML=responseManager(responses)}
+  async function saveReply(form){
+    const card=form.closest("[data-admin-response]"),responseId=card.dataset.adminResponse,status=form.querySelector("[data-reply-status]");
+    const connections=[...form.querySelectorAll('[data-related-row][data-connection-context="reply"]')].map(row=>({targetId:row.querySelector("[data-related-id]").value,relationshipTypeId:row.querySelector("[data-related-type]").value,note:row.querySelector("[data-related-note]").value})).filter(connection=>connection.targetId);
+    status.textContent="Publishing author response…";const payload=await request(`/api/admin/writing-entries/${encodeURIComponent(current.id)}/responses/${encodeURIComponent(responseId)}/reply`,"PUT",{authorName:form.elements.authorName.value,body:form.elements.body.value,connections});refreshResponseManager(payload.responses);say("Author response published.");
+  }
+  async function setResponseState(responseId,state){const payload=await request(`/api/admin/writing-entries/${encodeURIComponent(current.id)}/responses/${encodeURIComponent(responseId)}`,"PATCH",{state});refreshResponseManager(payload.responses);say(state==="hidden"?"Response hidden from the public thread.":"Response returned to the public thread.")}
   function serialize() {
     const form=root.querySelector("[data-writing-form]");
-    const snapshot=normalizeWritingSnapshot({schemaVersion:1,title:form.elements.title.value,author:form.elements.author.value,excerpt:form.elements.excerpt.value,body:editor.getJSON(),sources:[...root.querySelectorAll("[data-source-row]")].map(row=>({label:row.querySelector("[data-source-label]").value,url:row.querySelector("[data-source-url]").value})).filter(row=>row.label||row.url),relatedIds:[...root.querySelectorAll("[data-related-id]")].map(input=>input.value).filter(Boolean)});
+    const connections=[...root.querySelectorAll('[data-related-row][data-connection-context="post"]')].map(row=>({targetId:row.querySelector("[data-related-id]").value,relationshipTypeId:row.querySelector("[data-related-type]").value,note:row.querySelector("[data-related-note]").value})).filter(connection=>connection.targetId);
+    const snapshot=normalizeWritingSnapshot({schemaVersion:1,title:form.elements.title.value,author:form.elements.author.value,excerpt:form.elements.excerpt.value,body:editor.getJSON(),sources:[...root.querySelectorAll("[data-source-row]")].map(row=>({label:row.querySelector("[data-source-label]").value,url:row.querySelector("[data-source-url]").value})).filter(row=>row.label||row.url),connections,relatedIds:connections.map(connection=>connection.targetId)});
     return {snapshot,slug:form.elements.slug.value,version:current?.version,...(!current && startedAt ? {startedAt} : {})};
   }
   async function save() {
@@ -155,12 +172,12 @@ export async function mountWriting(root, api, setStatus) {
     dialog.addEventListener("close",()=>dialog.remove(),{once:true});
   }
   root.addEventListener("input",event=>{if(event.target.closest("[data-writing-form]")&&!event.target.closest("[data-writing-editor]"))changed();},{signal:controller.signal});
-  root.addEventListener("change",event=>{if(event.target.matches("[data-related-id]"))changed();},{signal:controller.signal});
+  root.addEventListener("change",event=>{if(event.target.closest('[data-related-row][data-connection-context="post"]'))changed();},{signal:controller.signal});
   root.addEventListener("mousedown",event=>{if(event.target.closest("[data-format],[data-writing-undo],[data-writing-redo]"))event.preventDefault();},{signal:controller.signal});
-  root.addEventListener("submit",event=>{if(event.target.matches("[data-writing-form]")){event.preventDefault();run("save");}},{signal:controller.signal});
+  root.addEventListener("submit",event=>{if(event.target.matches("[data-writing-form]")){event.preventDefault();run("save");return}if(event.target.matches("[data-author-reply]")){event.preventDefault();if(busy)return;busy=true;saveReply(event.target).catch(error=>{event.target.querySelector("[data-reply-status]").textContent=error.message;say(error.message)}).finally(()=>busy=false)}},{signal:controller.signal});
   root.addEventListener("click",async event=>{
     const button=event.target.closest("button");if(!button||busy)return;
-    if(button.hasAttribute("data-writing-new")){if(!canLeave())return;try{const directory=await api("/api/admin/entities");entities=directory.entities||directory.records||[];edit();}catch(error){say(error.message);}return;}
+    if(button.hasAttribute("data-writing-new")){if(!canLeave())return;try{const [directory,types]=await Promise.all([api("/api/admin/entities"),api("/api/admin/relationship-types")]);entities=directory.entities||directory.records||[];relationshipTypes=(types.records||[]).filter(type=>type.public_visible);edit();}catch(error){say(error.message);}return;}
     if(button.hasAttribute("data-writing-list")){if(canLeave())list();return;}
     if(button.dataset.writingOpen){openEntry(button.dataset.writingOpen);return;}
     if(button.hasAttribute("data-writing-preview")){run("preview");return;}
@@ -168,7 +185,11 @@ export async function mountWriting(root, api, setStatus) {
     if(button.hasAttribute("data-source-add")){root.querySelector("[data-writing-sources]").insertAdjacentHTML("beforeend",sourceRow());changed();}
     if(button.hasAttribute("data-source-remove")){button.closest("[data-source-row]").remove();changed();}
     if(button.hasAttribute("data-related-add")){root.querySelector("[data-writing-related]").insertAdjacentHTML("beforeend",relatedRow());changed();}
-    if(button.hasAttribute("data-related-remove")){button.closest("[data-related-row]").remove();changed();}
+    if(button.hasAttribute("data-reply-connection-add")){button.closest("[data-author-reply]").querySelector("[data-reply-connections]").insertAdjacentHTML("beforeend",relatedRow({},"reply"));return;}
+    if(button.hasAttribute("data-related-remove")){const row=button.closest("[data-related-row]");row.remove();if(row.dataset.connectionContext==="post")changed();}
+    if(button.hasAttribute("data-related-up")||button.hasAttribute("data-related-down")){const row=button.closest("[data-related-row]"),sibling=button.hasAttribute("data-related-up")?row.previousElementSibling:row.nextElementSibling;if(sibling)button.hasAttribute("data-related-up")?row.parentElement.insertBefore(row,sibling):row.parentElement.insertBefore(sibling,row);if(row.dataset.connectionContext==="post")changed();return;}
+    if(button.dataset.responseState){setResponseState(button.closest("[data-admin-response]").dataset.adminResponse,button.dataset.responseState).catch(error=>say(error.message));return;}
+    if(button.dataset.responseFile){const fileWindow=window.open("about:blank","_blank");try{const response=await fetch(button.dataset.responseFile,{headers:{authorization:`Bearer ${localStorage.getItem("swc_submissions_admin_token")||""}`},cache:"no-store",signal:controller.signal});if(!response.ok)throw new Error("The attachment could not be opened.");const url=URL.createObjectURL(await response.blob());previews.set(`response-${crypto.randomUUID()}`,url);if(fileWindow){fileWindow.opener=null;fileWindow.location.href=url}else throw new Error("Allow popups for Studio and try again.")}catch(error){fileWindow?.close();say(error.message)}return;}
     if(button.hasAttribute("data-writing-link")){linkDialog();return;}
     if(button.hasAttribute("data-writing-image")){imageDialog();return;}
     if(button.hasAttribute("data-writing-undo"))editor.chain().focus().undo().run();

@@ -184,6 +184,29 @@ test("duplicate slugs, stale saves, private relationships, malformed documents, 
   const privateRelated=snapshot();privateRelated.relatedIds=["writing-layout-sample"];const privateEntry=await r.create(privateRelated,"private-related");assert.equal((await r.action(privateEntry,"publish")).status,400);
   const safe=snapshot();safe.body.content[0].content[0].text='<script>alert("x")</script>';assert.doesNotMatch(renderWritingBody(normalizeWritingSnapshot(safe)),/<script>/);r.database.close();
 });
+test("public responses publish immediately with files and links while author replies own official connections",async()=>{
+  const r=setup();
+  try{
+    const value=snapshot("A writing with a thread");value.connections=[{targetId:"art-marbles",relationshipTypeId:"rel-inspired-by",note:"A formal echo."}];value.relatedIds=["art-marbles"];
+    let entry=(await r.action(await r.create(value,"writing-with-a-thread"),"publish")).entry;
+    let publicEntry=(await r.call(`/api/writings/entries/${entry.slug}`)).entry;
+    assert.equal(publicEntry.related[0].relationshipLabel,"Inspired by");assert.equal(publicEntry.related[0].note,"A formal echo.");
+    assert.equal(r.database.prepare("SELECT relationship_type_id FROM entity_relationships WHERE source_entity_id=? AND created_by='writing-publisher'").get(entry.id).relationship_type_id,"rel-inspired-by");
+
+    const form=new FormData();form.set("authorName","River Reader");form.set("body","This responds to the text and carries its image of memory further.");form.append("links","https://youtu.be/dQw4w9WgXcQ");form.set("website","");form.set("cf-turnstile-response","test-pass");
+    const png=new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,0]);form.append("attachments",new File([png],"extension.png",{type:"image/png"}));
+    const response=await handleConstructApi(new Request(`https://example.test/api/writings/entries/${entry.slug}/responses`,{method:"POST",headers:{"Idempotency-Key":"response-test-1","content-length":"2048"},body:form}),r.env),created=await response.json();
+    assert.equal(response.status,201,created.error);assert.equal(created.response.authorKind,"visitor");assert.equal(created.response.links[0].kind,"youtube");assert.equal(created.response.attachments[0].sha256,undefined);assert.match(created.html,/alt=""/);assert.match(created.html,/aria-label="Open extension\.png"/);assert.doesNotMatch(created.html,/permission|alt text/i);
+    const attachment=await handleConstructApi(new Request(`https://example.test${created.response.attachments[0].url}`),r.env);assert.equal(attachment.status,200);assert.equal(attachment.headers.get("content-type"),"image/png");
+    const repeated=await handleConstructApi(new Request(`https://example.test/api/writings/entries/${entry.slug}/responses`,{method:"POST",headers:{"Idempotency-Key":"response-test-1","content-length":"2048"},body:form}),r.env);assert.equal((await repeated.json()).repeated,true);
+
+    const unauthorized=await r.call(`/api/admin/writing-entries/${entry.id}/responses/${created.response.id}/reply`,{method:"PUT",body:{body:"No."}});assert.equal(unauthorized.status,401);
+    const reply=await r.call(`/api/admin/writing-entries/${entry.id}/responses/${created.response.id}/reply`,{admin:true,method:"PUT",body:{authorName:"Saiel Dauhn Solehman",body:"The extension changes how I read the original passage.",connections:[{targetId:"art-marbles",relationshipTypeId:"rel-uses-symbol",note:"The symbol returns here."}]}});assert.equal(reply.status,200,reply.error);
+    publicEntry=(await r.call(`/api/writings/entries/${entry.slug}`)).entry;assert.equal(publicEntry.responses.length,1);assert.equal(publicEntry.responses[0].replies[0].authorKind,"author");assert.equal(publicEntry.responses[0].replies[0].connections[0].relationshipLabel,"Uses symbol");
+    const hidden=await r.call(`/api/admin/writing-entries/${entry.id}/responses/${created.response.id}`,{admin:true,method:"PATCH",body:{state:"hidden"}});assert.equal(hidden.status,200,hidden.error);assert.equal((await r.call(`/api/writings/entries/${entry.slug}`)).entry.responses.length,0);assert.equal((await handleConstructApi(new Request(`https://example.test${created.response.attachments[0].url}`),r.env)).status,404);
+    const html=renderWritingEntry(publicEntry);assert.match(html,/Respond \/ Extend/);assert.match(html,/Author response/);assert.match(html,/Connections from this response/);assert.doesNotMatch(html,/name="alt"|permission confirmation/i);
+  }finally{r.database.close()}
+});
 test("navigation migration, cached navigation, and current works agree",async()=>{
   const r=setup(),nav=await r.call("/api/site/navigation");const paths=nav.nodes.find(node=>node.slug==="writings").pathways;
   assert.deepEqual(paths.map(path=>path.name),["Mindful Darkness","WRKNG*","THE SOLEHMAN LETTERS"]);assert.equal(paths[1].route,WRITING_ROOT);
@@ -204,7 +227,7 @@ test("the WRKNG editor explains draft regeneration and published URL locking",()
   assert.match(manager,/Locked after first publication\./);
   assert.match(manager,/entry\?\.firstPublishedAt\?"readonly"/);
   assert.doesNotMatch(manager,/name="slug"[^>]*required/);
-  assert.match(construct,/writing-manager\.js\?v=2/);
+  assert.match(construct,/writing-manager\.js\?v=3/);
 });
 test("reading routes and metadata use the same safe published document",()=>{
   assert.equal(writingPageSlug(WRITING_ROOT),null);assert.equal(writingPageSlug(`${WRITING_ROOT}detail/index.html`),"");assert.equal(writingPageSlug(`${WRITING_ROOT}an-open-question/`),"an-open-question");

@@ -25,5 +25,5 @@ class MemoryR2 {
 export function createWritingRuntime({throughMigration = ""} = {}) {
   const database=new DatabaseSync(":memory:");database.exec("PRAGMA foreign_keys=ON");
   for(const file of readdirSync(migrationRoot).filter(name=>name.endsWith(".sql") && (!throughMigration || name<=throughMigration)).sort())database.exec(readFileSync(`${migrationRoot}/${file}`,"utf8"));
-  return {database,env:{SUBMISSIONS_DB:new LocalD1(database),SUBMISSIONS_ADMIN_TOKEN:"writing-local-preview",SUBMISSION_FILES:new MemoryR2(),PUBLIC_SITE_URL:"http://127.0.0.1:4173"}};
+  return {database,env:{SUBMISSIONS_DB:new LocalD1(database),SUBMISSIONS_ADMIN_TOKEN:"writing-local-preview",SUBMISSION_FILES:new MemoryR2(),PUBLIC_SITE_URL:"http://127.0.0.1:4173",WRITING_RESPONSE_TURNSTILE_SITE_KEY:"1x00000000000000000000AA",WRITING_RESPONSE_TURNSTILE_TEST_BYPASS:"true",WRITING_RESPONSE_RATE_LIMIT_SALT:"local-writing-response-tests"}};
 }

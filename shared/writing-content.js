@@ -25,7 +25,7 @@ function keys(value, allowed) {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(key => !allowed.includes(key))) throw new Error("The entry contains unsupported formatting.");
 }
 export function normalizeWritingSnapshot(input) {
-  keys(input, ["schemaVersion","title","author","excerpt","body","sources","relatedIds"]);
+  keys(input, ["schemaVersion","title","author","excerpt","body","sources","relatedIds","connections"]);
   if (input.schemaVersion !== 1) throw new Error("Unsupported writing document version.");
   let count = 0;
   function node(item, parent = "", depth = 0) {
@@ -77,7 +77,24 @@ export function normalizeWritingSnapshot(input) {
     } else if (item.content !== undefined) throw new Error("Invalid nested content.");
     return output;
   }
-  if (!Array.isArray(input.sources) || input.sources.length > 50 || !Array.isArray(input.relatedIds) || input.relatedIds.length > 30) throw new Error("Use up to 50 sources and 30 related records.");
+  const legacyRelated = input.relatedIds ?? [];
+  if (!Array.isArray(input.sources) || input.sources.length > 50 || !Array.isArray(legacyRelated) || legacyRelated.length > 30) throw new Error("Use up to 50 sources and 30 related records.");
+  const rawConnections = input.connections === undefined
+    ? legacyRelated.map(targetId => ({targetId,relationshipTypeId:"rel-related-to",note:""}))
+    : input.connections;
+  if (!Array.isArray(rawConnections) || rawConnections.length > 30) throw new Error("Use up to 30 Construct connections.");
+  const connectionKeys = new Set();
+  const connections = rawConnections.map(connection => {
+    keys(connection,["targetId","relationshipTypeId","note"]);
+    const targetId=string(connection.targetId,"Connected record",200).trim();
+    const relationshipTypeId=string(connection.relationshipTypeId || "rel-related-to","Relationship type",200).trim();
+    const note=string(connection.note || "","Connection note",1000).trim();
+    if(!targetId || !relationshipTypeId || !/^[a-zA-Z0-9_-]+$/.test(targetId) || !/^[a-zA-Z0-9_-]+$/.test(relationshipTypeId)) throw new Error("Choose a valid Construct record and relationship type.");
+    const key=`${targetId}\u0000${relationshipTypeId}`;
+    if(connectionKeys.has(key)) throw new Error("Each Construct record and relationship type may be connected once.");
+    connectionKeys.add(key);
+    return {targetId,relationshipTypeId,note};
+  });
   const snapshot = {
     schemaVersion:1,
     title:string(input.title, "Title", 240).trim(),
@@ -90,7 +107,8 @@ export function normalizeWritingSnapshot(input) {
       if (!label || !url) throw new Error("Each source needs a label and a valid link.");
       return {label,url};
     }),
-    relatedIds:[...new Set(input.relatedIds.map(value => string(value, "Related record", 200)))],
+    connections,
+    relatedIds:[...new Set(connections.map(connection => connection.targetId))],
   };
   if (JSON.stringify(snapshot).length > 200000) throw new Error("Keep the entry below 200,000 characters.");
   return snapshot;
@@ -154,10 +172,41 @@ export function renderWritingEntry(record, {preview = false} = {}) {
       <div class="writing-meta"><p class="writing-byline">${esc(snapshot.author)}${record.firstPublishedAt ? "" : " · Draft"}</p><div class="writing-dates">${renderWritingDates(record,{studio:preview})}</div></div>
       <div class="writing-body">${renderWritingBody(snapshot, record.media)}</div>
       ${snapshot.sources.length ? `<section class="writing-sources" aria-labelledby="writing-sources-title"><h2 id="writing-sources-title">Sources</h2><ol>${snapshot.sources.map(source => `<li><a href="${esc(source.url)}" rel="noopener">${esc(source.label)}</a></li>`).join("")}</ol></section>` : ""}
-      ${record.related?.length ? `<section class="writing-related"><h2>Connected work</h2><ul>${record.related.map(item => `<li><a href="${esc(item.route)}">${esc(item.title)}</a></li>`).join("")}</ul></section>` : ""}
+      ${renderWritingConnections(record.related || [],{title:"Connections from this writing",className:"writing-related"})}
       <p class="writing-footnote">*working. subject to change.</p>
       <a class="venture-link" href="${WRITING_ROOT}">All WRKNG* entries</a>
-    </article>`;
+    </article>
+    ${preview ? "" : renderWritingConversation(record)}`;
+}
+
+function youtubeEmbed(value) {
+  const videoId=String(value || "");
+  return /^[a-zA-Z0-9_-]{11}$/.test(videoId) ? `https://www.youtube-nocookie.com/embed/${videoId}` : "";
+}
+
+export function renderWritingConnections(connections = [], {title="Official connections",className="writing-connections"} = {}) {
+  if(!connections.length)return "";
+  const esc=escapeWriting;
+  return `<section class="${esc(className)} writing-connections" aria-label="${esc(title)}"><h2>${esc(title)}</h2><div class="writing-connection-grid">${connections.map(item=>`<a class="writing-connection-card" href="${esc(item.route)}"><span class="writing-connection-label">${esc(item.relationshipLabel || "Related to")}</span><strong>${esc(item.title)}</strong>${item.kindLabel?`<span>${esc(item.kindLabel)}</span>`:""}${item.note?`<p>${esc(item.note)}</p>`:""}</a>`).join("")}</div></section>`;
+}
+
+export function renderWritingResponse(response) {
+  const esc=escapeWriting,author=response.authorKind==="author";
+  const attachments=(response.attachments||[]).map(item=>item.kind==="image"
+    ? `<figure class="writing-response-image"><a href="${esc(item.url)}" target="_blank" rel="noopener" aria-label="Open ${esc(item.filename)}"><img src="${esc(item.url)}" alt="" loading="lazy" decoding="async"></a><figcaption>${esc(item.filename)}</figcaption></figure>`
+    : `<a class="writing-file-card" href="${esc(item.url)}" download><span aria-hidden="true">↧</span><span><strong>${esc(item.filename)}</strong><small>${esc(item.mimeType)} · ${Number(item.byteSize||0).toLocaleString("en-US")} bytes</small></span></a>`).join("");
+  const links=(response.links||[]).map(link=>{
+    const embed=link.kind==="youtube"?youtubeEmbed(link.youtubeId):"";
+    return embed?`<div class="writing-youtube"><iframe src="${esc(embed)}" title="YouTube material shared by ${esc(response.authorName)}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe><a href="${esc(link.url)}" target="_blank" rel="noopener">Open on YouTube</a></div>`:`<a class="writing-link-card" href="${esc(link.url)}" target="_blank" rel="noopener"><span>External link</span><strong>${esc(link.label || link.url)}</strong></a>`;
+  }).join("");
+  const responseConnections=renderWritingConnections(response.connections||[],{title:"Connections from this response",className:"writing-response-connections"});
+  const replies=(response.replies||[]).map(renderWritingResponse).join("");
+  return `<article class="writing-response${author?" writing-response--author":""}" data-response-id="${esc(response.id)}"><header><div><strong>${esc(response.authorName)}</strong>${author?'<span class="writing-author-badge">Author response</span>':""}</div><time datetime="${esc(response.createdAt)}">${esc(writingDate(response.createdAt,{includeTime:true}))}</time></header>${response.body?`<div class="writing-response-body">${esc(response.body).replace(/\r?\n/g,"<br>")}</div>`:""}${attachments?`<div class="writing-response-attachments">${attachments}</div>`:""}${links?`<div class="writing-response-links">${links}</div>`:""}${responseConnections}${replies?`<div class="writing-author-replies">${replies}</div>`:""}</article>`;
+}
+
+export function renderWritingConversation(record) {
+  const esc=escapeWriting,responses=record.responses||[];
+  return `<section class="writing-conversation" aria-labelledby="writing-response-title" data-writing-conversation data-entry-slug="${esc(record.slug)}"><div class="writing-conversation-head"><p class="venture-kicker">Conversation as continuation</p><h2 id="writing-response-title">Respond / Extend</h2><p>React to the writing, carry an idea further, or place another material beside it.</p></div><form class="writing-response-form" data-writing-response-form enctype="multipart/form-data"><div class="writing-response-fields"><label>Name or alias<input name="authorName" maxlength="160" autocomplete="name" required></label><label class="writing-response-wide">Written response<textarea name="body" rows="7" maxlength="12000" placeholder="Respond to the writing, extend it, or do both."></textarea></label><label class="writing-response-wide">Images or files<input name="attachments" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><span>Up to 4 files, 10 MB each. Images, PDF, text, DOC, or DOCX.</span></label><div class="writing-upload-preview writing-response-wide" data-writing-upload-preview></div><fieldset class="writing-response-wide"><legend>External or YouTube links</legend><div data-writing-link-fields><div class="writing-link-input"><input name="links" type="url" placeholder="https://…" aria-label="External or YouTube link"><button type="button" data-writing-link-remove aria-label="Remove link">Remove</button></div></div><button type="button" class="venture-link" data-writing-link-add>Add another link</button></fieldset><label class="writing-response-honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label><div class="writing-response-wide writing-turnstile" data-writing-turnstile><p>Loading verification…</p></div></div><div class="writing-response-actions"><button type="submit" class="venture-link">Publish response</button><p role="status" aria-live="polite" data-writing-response-status></p></div></form><div class="writing-response-thread" data-writing-response-thread>${responses.length?responses.map(renderWritingResponse).join(""):'<p class="writing-response-empty" data-writing-response-empty>No responses yet. You can begin the thread.</p>'}</div></section>`;
 }
 export function writingBreadcrumb(title = "") {
   const esc = escapeWriting;

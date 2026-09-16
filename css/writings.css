@@ -4,7 +4,7 @@ html, body.venture-page, .venture-shell { background:var(--color-bg); }
 body[data-venture="writings"] .construct-breadcrumb { flex-wrap:wrap; }
 body[data-venture="writings"] .construct-breadcrumb > a { flex-shrink:0; }
 body[data-venture="writings"] .construct-breadcrumb-current { min-width:0; overflow-wrap:anywhere; }
-.writing-intro, .writing-reader { max-width:680px; }
+.writing-intro, .writing-reader, .writing-conversation { max-width:680px; }
 .venture-hero + .writing-intro { margin-top:32px; }
 .writing-entry-hero { min-height:0; padding-top:32px; padding-bottom:40px; margin-bottom:32px; }
 .writing-intro, .writing-reader, .writing-entry-card p, .writing-destination p, .writing-empty { --type-body-transform:none; --type-body-tracking:0; --type-body-tracking-active:0; --type-body-leading:1.8; --type-body-leading-active:1.8; }
@@ -33,6 +33,12 @@ body[data-venture="writings"] .construct-breadcrumb-current { min-width:0; overf
 .writing-image img { display:block; width:100%; height:auto; }
 .writing-image figcaption { margin-top:12px; font:14px/1.7 Inter,Arial,sans-serif; color:var(--color-text-dim); }
 .writing-sources, .writing-related { border-top:5px solid var(--venture-dim); margin-top:40px; }
+.writing-connections h2 { margin:40px 0 18px; font:700 28px/1.3 Inter,Arial,sans-serif; color:var(--venture-accent); }
+.writing-connection-grid { display:grid; gap:14px; }
+.writing-connection-card { display:flex; flex-direction:column; gap:6px; padding:16px; border:5px solid var(--venture-dim); color:var(--color-body); text-decoration:none !important; font:14px/1.5 Inter,Arial,sans-serif; }
+.writing-connection-card strong { color:var(--venture-accent); font-size:18px; }
+.writing-connection-card p { margin:4px 0 0; font:16px/1.6 Georgia,serif; }
+.writing-connection-label { text-transform:uppercase; letter-spacing:.16em; font-size:11px; color:var(--color-text-dim); }
 .writing-footnote { margin:48px 0 24px; font:italic 16px/1.8 Georgia,serif; color:var(--color-text-dim); }
 .writing-empty, .writing-preview-notice { max-width:680px; font:18px/1.8 Georgia,serif; }
 .writing-preview-notice { padding:16px; border:5px solid var(--venture-dim); }
@@ -49,5 +55,52 @@ body[data-venture="writings"] .construct-breadcrumb-current { min-width:0; overf
 .writing-skip { position:absolute; top:-100px; left:20px; z-index:10000; background:var(--color-bg); color:var(--venture-accent); padding:12px; }
 .writing-skip:focus { top:12px; }
 .writing-reader a:focus-visible, .writing-destinations a:focus-visible, .writing-entry-list a:focus-visible { outline:3px solid var(--venture-accent); outline-offset:6px; }
+.writing-conversation { margin:clamp(64px,10vw,112px) auto 0; padding-top:32px; border-top:5px solid var(--venture-accent); color:var(--color-body); }
+.writing-conversation-head h2 { margin:8px 0 16px; font-size:clamp(34px,6vw,58px); line-height:1; color:var(--venture-accent); }
+.writing-conversation-head > p:last-child { font:18px/1.8 Georgia,serif; }
+.writing-response-form { margin:32px 0 48px; padding:16px; border:5px solid var(--venture-dim); }
+.writing-response-fields { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; }
+.writing-response-fields label, .writing-response-fields fieldset { min-width:0; font:700 13px/1.5 Inter,Arial,sans-serif; }
+.writing-response-fields label { display:flex; flex-direction:column; gap:8px; }
+.writing-response-fields label > span { color:var(--color-text-dim); font-weight:400; }
+.writing-response-fields input, .writing-response-fields textarea { width:100%; box-sizing:border-box; padding:12px; border:5px solid var(--venture-dim); border-radius:0; background:var(--color-bg); color:var(--color-body); font:16px/1.55 Inter,Arial,sans-serif; }
+.writing-response-fields textarea { resize:vertical; font-family:Georgia,serif; }
+.writing-response-fields fieldset { margin:0; padding:12px; border:5px solid var(--venture-dim); }
+.writing-response-fields legend { padding:0 8px; }
+.writing-link-input { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin-bottom:10px; }
+.writing-link-input button, .writing-upload-preview button { padding:8px 10px; border:5px solid var(--venture-dim); background:transparent; color:var(--venture-accent); font:700 12px/1 Inter,Arial,sans-serif; }
+.writing-link-preview { grid-column:1/-1; display:flex; justify-content:space-between; gap:12px; padding:12px; border-left:5px solid var(--venture-accent); font:12px/1.5 Inter,Arial,sans-serif; overflow-wrap:anywhere; }
+.writing-response-honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
+.writing-response-actions { display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin-top:20px; }
+.writing-response-actions button { border:5px solid var(--venture-accent); background:transparent; color:var(--venture-accent); padding:12px 16px; }
+.writing-response-actions button:disabled { opacity:.5; }
+.writing-response-actions p { margin:0; flex:1; min-width:220px; font:14px/1.5 Inter,Arial,sans-serif; }
+.writing-upload-preview, .writing-response-attachments { display:grid; gap:12px; }
+.writing-upload-preview figure, .writing-response-image { margin:0; padding:12px; border:5px solid var(--venture-dim); }
+.writing-upload-preview img, .writing-response-image img { display:block; width:100%; max-height:520px; object-fit:contain; background:#080808; }
+.writing-upload-preview figcaption, .writing-response-image figcaption { display:flex; justify-content:space-between; gap:12px; margin-top:10px; font:12px/1.5 Inter,Arial,sans-serif; overflow-wrap:anywhere; }
+.writing-file-card, .writing-link-card { display:flex; align-items:center; gap:14px; padding:14px; border:5px solid var(--venture-dim); color:var(--color-body); text-decoration:none !important; font:14px/1.5 Inter,Arial,sans-serif; min-width:0; }
+.writing-file-card > span:nth-child(2), .writing-link-card { min-width:0; }
+.writing-file-card strong, .writing-file-card small, .writing-link-card strong, .writing-link-card span { display:block; overflow-wrap:anywhere; }
+.writing-file-card small, .writing-link-card span { color:var(--color-text-dim); }
+.writing-response-thread { display:grid; gap:16px; }
+.writing-response { padding:16px; border:5px solid var(--venture-dim); scroll-margin-top:24px; }
+.writing-response > header { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:18px; font:13px/1.5 Inter,Arial,sans-serif; }
+.writing-response > header > div { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.writing-response > header time { color:var(--color-text-dim); text-align:right; }
+.writing-author-badge { padding:5px 8px; background:var(--venture-accent); color:var(--color-bg); font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.12em; }
+.writing-response-body { font:18px/1.75 Georgia,serif; white-space:normal; }
+.writing-response-attachments, .writing-response-links { margin-top:20px; }
+.writing-response-links { display:grid; gap:12px; }
+.writing-youtube { border:5px solid var(--venture-dim); }
+.writing-youtube iframe { display:block; width:100%; aspect-ratio:16/9; border:0; }
+.writing-youtube > a { display:block; padding:10px 12px; color:var(--venture-accent); font:13px/1.5 Inter,Arial,sans-serif; }
+.writing-response-connections { margin-top:24px; }
+.writing-response-connections h2 { margin:0 0 14px; font-size:18px; }
+.writing-author-replies { margin:28px 0 0 20px; padding-left:16px; border-left:5px solid var(--venture-accent); }
+.writing-response--author { border-color:var(--venture-accent); background:rgba(252,184,103,.035); }
+.writing-response-empty { padding:20px; border:5px solid var(--venture-dim); font:italic 16px/1.7 Georgia,serif; }
+.writing-turnstile { min-height:68px; }
+.writing-response-form :focus-visible, .writing-response-thread :focus-visible { outline:3px solid var(--venture-accent); outline-offset:4px; }
 @media(min-width:1000px) { .writing-destinations { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media(max-width:600px) { .writing-destination, .writing-entry-card { padding:20px; } .writing-body blockquote { padding-left:16px; } }
+@media(max-width:600px) { .writing-destination, .writing-entry-card { padding:20px; } .writing-body blockquote { padding-left:16px; } .writing-response-form, .writing-response { padding:12px; } .writing-link-input { grid-template-columns:minmax(0,1fr); } .writing-link-input button { justify-self:start; } .writing-response > header { flex-direction:column; } .writing-response > header time { text-align:left; } .writing-author-replies { margin-left:6px; padding-left:10px; } }

@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e0e0e">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Interactive prototype for responses and Construct connections on WRKNG* entries.">
+<title>Respond / Extend prototype · WRKNG* · the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
+<link rel="stylesheet" href="/css/writings.css">
+<style>
+  :root {
+    --venture-color:var(--color-writings);
+    --venture-accent:var(--color-writings);
+    --venture-dim:var(--color-writings-dim);
+    --prototype-panel:rgba(252,184,103,.055);
+    --prototype-muted:rgba(251,209,157,.64);
+    --prototype-faint:rgba(251,209,157,.4);
+  }
+
+  html,
+  body.venture-page,
+  .venture-shell { background:var(--color-bg); }
+
+  *,
+  *::before,
+  *::after { box-sizing:border-box; }
+
+  button,
+  input,
+  textarea,
+  select { font:inherit; }
+
+  button { color:inherit; }
+
+  .prototype-shell { padding-bottom:clamp(72px,10vw,120px); }
+
+  .prototype-bar {
+    max-width:680px;
+    margin:28px 0 0;
+    padding:16px;
+    border:5px solid var(--venture-dim);
+    background:var(--color-bg);
+  }
+
+  .prototype-bar-head,
+  .prototype-view-toggle,
+  .response-actions,
+  .attachment-actions,
+  .author-card-actions {
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+
+  .prototype-bar-head { justify-content:space-between; }
+
+  .prototype-label,
+  .section-kicker,
+  .connection-kind,
+  .response-role,
+  .attachment-label,
+  .field-label,
+  .prototype-reset-note {
+    font:700 10px/1.45 Inter,Arial,sans-serif;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+  }
+
+  .prototype-label,
+  .section-kicker,
+  .connection-kind,
+  .response-role { color:var(--venture-accent); }
+
+  .prototype-reset-note,
+  .attachment-label,
+  .field-label { color:var(--color-text-dim); }
+
+  .prototype-view-toggle { margin-top:14px; }
+
+  .prototype-control,
+  .prototype-link-button,
+  .connection-editor button,
+  .author-card-actions button {
+    min-height:44px;
+    padding:11px 14px;
+    border:5px solid var(--venture-dim);
+    background:var(--color-bg);
+    color:var(--color-body);
+    font:800 11px/1.2 Inter,Arial,sans-serif;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    cursor:pointer;
+  }
+
+  .prototype-control:hover,
+  .prototype-control[aria-pressed="true"],
+  .prototype-link-button:hover,
+  .connection-editor button:hover,
+  .author-card-actions button:hover {
+    border-color:var(--venture-accent);
+    color:var(--venture-accent);
+  }
+
+  .prototype-control:focus-visible,
+  .prototype-link-button:focus-visible,
+  .connection-editor button:focus-visible,
+  .author-card-actions button:focus-visible,
+  .response-form input:focus-visible,
+  .response-form textarea:focus-visible,
+  .connection-editor select:focus-visible,
+  .connection-card a:focus-visible,
+  .attachment-card a:focus-visible {
+    outline:3px solid var(--venture-accent);
+    outline-offset:4px;
+  }
+
+  .prototype-status,
+  .connection-status,
+  .response-status {
+    min-height:1.5em;
+    margin:12px 0 0;
+    color:var(--prototype-muted);
+    font:14px/1.5 Inter,Arial,sans-serif;
+  }
+
+  .prototype-hero-art {
+    position:relative;
+    min-height:320px;
+    margin:36px 0;
+    overflow:hidden;
+    border:5px solid var(--venture-dim);
+    background:#15110d;
+  }
+
+  .prototype-hero-art::before,
+  .prototype-hero-art::after {
+    content:"";
+    position:absolute;
+    inset:15% 18%;
+    border:5px solid var(--venture-accent);
+    transform:rotate(-6deg);
+  }
+
+  .prototype-hero-art::after {
+    inset:28% 30%;
+    border-color:var(--color-body);
+    transform:rotate(7deg);
+  }
+
+  .prototype-hero-art-grid {
+    position:absolute;
+    inset:0;
+    display:grid;
+    grid-template-columns:repeat(3,18px);
+    place-content:center;
+    gap:34px;
+  }
+
+  .prototype-hero-art-grid span {
+    width:18px;
+    height:18px;
+    border-radius:50%;
+    background:var(--venture-accent);
+    box-shadow:0 0 0 5px rgba(252,184,103,.18);
+  }
+
+  .prototype-hero-art figcaption {
+    position:absolute;
+    right:16px;
+    bottom:14px;
+    left:16px;
+    color:var(--prototype-muted);
+    font:12px/1.5 Inter,Arial,sans-serif;
+  }
+
+  .writing-body .prototype-inline-link { white-space:nowrap; }
+
+  .connection-cluster,
+  .response-section {
+    margin-top:52px;
+    padding-top:28px;
+    border-top:5px solid var(--venture-dim);
+  }
+
+  .connection-cluster-head,
+  .response-section-head {
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(180px,280px);
+    gap:16px;
+    align-items:end;
+    margin-bottom:22px;
+  }
+
+  .connection-cluster h2,
+  .response-section h2 {
+    margin:6px 0 0;
+    color:var(--venture-accent);
+    font:900 clamp(28px,5vw,44px)/1 Inter,Arial,sans-serif;
+  }
+
+  .connection-cluster-head p,
+  .response-section-head p {
+    margin:0;
+    color:var(--prototype-muted);
+    font:15px/1.6 Georgia,serif;
+  }
+
+  .connection-list {
+    position:relative;
+    display:grid;
+    gap:14px;
+    padding-left:19px;
+  }
+
+  .connection-list::before {
+    content:"";
+    position:absolute;
+    top:0;
+    bottom:0;
+    left:0;
+    width:5px;
+    background:var(--venture-dim);
+  }
+
+  .connection-card {
+    position:relative;
+    display:grid;
+    grid-template-columns:58px minmax(0,1fr);
+    gap:14px;
+    align-items:center;
+    min-width:0;
+    padding:16px;
+    border:5px solid var(--venture-dim);
+    background:var(--color-bg);
+  }
+
+  .connection-card::before {
+    content:"";
+    position:absolute;
+    top:50%;
+    right:100%;
+    width:19px;
+    height:5px;
+    background:var(--venture-dim);
+  }
+
+  .connection-mark {
+    position:relative;
+    display:grid;
+    place-items:center;
+    width:58px;
+    height:58px;
+    border:5px solid var(--venture-accent);
+    color:var(--venture-accent);
+    font:900 14px/1 Inter,Arial,sans-serif;
+  }
+
+  .connection-mark[data-kind="Symbol"] { border-radius:50%; }
+  .connection-mark[data-kind="Writing"] { transform:rotate(4deg); }
+
+  .connection-copy { min-width:0; }
+  .connection-copy h3 { margin:4px 0 5px; color:var(--color-body); font:800 18px/1.2 Inter,Arial,sans-serif; }
+  .connection-copy p { margin:0; color:var(--prototype-muted); font:14px/1.55 Georgia,serif; }
+  .connection-copy a { display:inline-block; margin-top:8px; color:var(--venture-accent); font:700 11px/1.4 Inter,Arial,sans-serif; letter-spacing:.12em; text-transform:uppercase; }
+
+  .author-only { display:none !important; }
+  body.is-author-mode .author-only { display:flex !important; }
+  body.is-author-mode .connection-editor.author-only { display:grid !important; }
+  body.is-author-mode .connection-card { border-color:var(--venture-accent); }
+
+  .author-card-actions {
+    grid-column:1 / -1;
+    padding-top:12px;
+    border-top:5px solid var(--venture-dim);
+  }
+
+  .author-card-actions button { min-height:40px; padding:8px 11px; }
+
+  .connection-editor {
+    grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr) auto;
+    gap:12px;
+    align-items:end;
+    margin-top:16px;
+    padding:16px;
+    border:5px solid var(--venture-accent);
+    background:var(--prototype-panel);
+  }
+
+  .connection-editor label { display:grid; gap:7px; min-width:0; }
+  .connection-editor select,
+  .response-form input,
+  .response-form textarea {
+    width:100%;
+    min-width:0;
+    border:5px solid var(--venture-dim);
+    border-radius:0;
+    background:var(--color-bg);
+    color:var(--color-body);
+  }
+
+  .connection-editor select,
+  .response-form input { min-height:50px; padding:10px 12px; }
+  .response-form textarea { min-height:164px; padding:14px; resize:vertical; font:17px/1.7 Georgia,serif; }
+
+  .response-form {
+    display:grid;
+    gap:16px;
+    padding:20px;
+    border:5px solid var(--venture-dim);
+    background:var(--prototype-panel);
+  }
+
+  .response-form label { display:grid; gap:8px; }
+  .response-form-grid { display:grid; grid-template-columns:minmax(0,.7fr) minmax(0,1.3fr); gap:14px; }
+  .response-help { margin:0; color:var(--prototype-muted); font:14px/1.6 Georgia,serif; }
+  .response-link-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:end; }
+  .response-link-row label { min-width:0; }
+
+  .file-input { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; }
+  .attachment-preview-list,
+  .response-attachments { display:grid; gap:14px; }
+  .attachment-preview-list:empty { display:none; }
+
+  .attachment-card {
+    min-width:0;
+    padding:14px;
+    border:5px solid var(--venture-dim);
+    background:var(--color-bg);
+  }
+
+  .attachment-card h4 { margin:5px 0; color:var(--color-body); font:800 16px/1.3 Inter,Arial,sans-serif; overflow-wrap:anywhere; }
+  .attachment-card p { margin:0; color:var(--prototype-muted); font:14px/1.55 Georgia,serif; }
+  .attachment-card a { color:var(--venture-accent); text-decoration:underline; text-underline-offset:4px; overflow-wrap:anywhere; }
+  .attachment-card img { display:block; width:100%; max-height:360px; margin-bottom:12px; object-fit:cover; background:#15110d; }
+
+  .attachment-image-placeholder {
+    position:relative;
+    min-height:220px;
+    margin-bottom:12px;
+    overflow:hidden;
+    background:#17120d;
+  }
+
+  .attachment-image-placeholder::before,
+  .attachment-image-placeholder::after {
+    content:"";
+    position:absolute;
+    width:130px;
+    height:130px;
+    border:5px solid var(--venture-accent);
+    border-radius:50%;
+  }
+
+  .attachment-image-placeholder::before { top:20px; left:12%; }
+  .attachment-image-placeholder::after { right:12%; bottom:-22px; border-radius:0; transform:rotate(18deg); }
+
+  .youtube-frame { position:relative; aspect-ratio:16 / 9; margin-bottom:12px; background:#080808; }
+  .youtube-frame iframe { width:100%; height:100%; border:0; }
+
+  .attachment-remove {
+    margin-top:12px;
+    padding:8px 10px;
+    border:5px solid var(--venture-dim);
+    background:var(--color-bg);
+    color:var(--prototype-muted);
+    font:800 10px/1 Inter,Arial,sans-serif;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    cursor:pointer;
+  }
+
+  .response-thread { display:grid; gap:16px; margin-top:32px; }
+  .response-card { padding:20px; border:5px solid var(--venture-dim); background:var(--color-bg); }
+  .response-card.is-author { border-color:var(--venture-accent); background:var(--prototype-panel); }
+  .response-card-head { display:flex; justify-content:space-between; gap:16px; align-items:start; margin-bottom:18px; }
+  .response-card h3 { margin:5px 0 0; color:var(--color-body); font:800 20px/1.2 Inter,Arial,sans-serif; }
+  .response-time { color:var(--color-text-dim); font:12px/1.5 Inter,Arial,sans-serif; text-align:right; }
+  .response-copy { color:var(--color-body); font:17px/1.75 Georgia,serif; }
+  .response-copy p { margin:0 0 1.2em; }
+  .response-copy p:last-child { margin-bottom:0; }
+  .response-attachments { margin-top:20px; }
+  .author-response-wrap { margin:16px 0 0 24px; padding-left:19px; border-left:5px solid var(--venture-accent); }
+  .response-card .connection-cluster { margin-top:28px; padding-top:20px; }
+  .response-card .connection-cluster-head { grid-template-columns:1fr; margin-bottom:16px; }
+  .response-card .connection-cluster-head p { max-width:540px; }
+  .response-card .connection-cluster h2 { font-size:clamp(23px,4vw,32px); }
+
+  .prototype-note {
+    margin:44px 0 0;
+    padding:16px;
+    border:5px solid var(--venture-dim);
+    color:var(--prototype-muted);
+    font:14px/1.6 Inter,Arial,sans-serif;
+  }
+
+  @media(max-width:700px) {
+    .connection-cluster-head,
+    .response-section-head,
+    .response-form-grid,
+    .response-link-row,
+    .connection-editor { grid-template-columns:1fr; }
+    .connection-editor button,
+    .response-link-row button { width:100%; }
+  }
+
+  @media(max-width:480px) {
+    .prototype-bar-head,
+    .response-card-head { align-items:flex-start; flex-direction:column; }
+    .prototype-view-toggle { display:grid; grid-template-columns:1fr 1fr; }
+    .prototype-control { width:100%; }
+    .prototype-hero-art { min-height:250px; }
+    .connection-card { grid-template-columns:48px minmax(0,1fr); padding:14px; }
+    .connection-mark { width:48px; height:48px; }
+    .response-form,
+    .response-card { padding:16px; }
+    .author-response-wrap { margin-left:8px; padding-left:12px; }
+  }
+
+  @media(prefers-reduced-motion:reduce) {
+    *,*::before,*::after { scroll-behavior:auto !important; transition:none !important; animation:none !important; }
+  }
+</style>
+</head>
+<body class="venture-page" data-venture="writings">
+<a class="writing-skip" href="#writing-main">Skip to writing</a>
+<main class="venture-shell entrance-fade prototype-shell" id="writing-main" tabindex="-1">
+  <nav class="construct-breadcrumb" aria-label="Breadcrumb">
+    <a href="/home/">Construct</a><span class="construct-breadcrumb-sep" aria-hidden="true">:</span>
+    <a href="/writings/">Writings</a><span class="construct-breadcrumb-sep" aria-hidden="true">:</span>
+    <a href="/writings/mindful-darkness/">Mindful Darkness</a><span class="construct-breadcrumb-sep" aria-hidden="true">:</span>
+    <a href="/writings/mindful-darkness/wrkng/">WRKNG*</a><span class="construct-breadcrumb-sep" aria-hidden="true">:</span>
+    <span class="construct-breadcrumb-current" aria-current="page">Respond / Extend prototype</span>
+  </nav>
+
+  <aside class="prototype-bar" aria-labelledby="prototype-title">
+    <div class="prototype-bar-head">
+      <span class="prototype-label" id="prototype-title">Interactive prototype · not a live entry</span>
+      <span class="prototype-reset-note">Resets on reload</span>
+    </div>
+    <div class="prototype-view-toggle" role="group" aria-label="Prototype viewing mode">
+      <button class="prototype-control" type="button" data-view="public" aria-pressed="true">Public view</button>
+      <button class="prototype-control" type="button" data-view="author" aria-pressed="false">Author mode</button>
+    </div>
+    <p class="prototype-status" data-prototype-status role="status" aria-live="polite">Public view shows the published reading and conversation.</p>
+  </aside>
+
+  <section class="venture-hero site-hero site-hero--supporting writing-entry-hero" aria-labelledby="page-title">
+    <div>
+      <span class="venture-kicker">Mindful Darkness / WRKNG*</span>
+      <h1 class="venture-title hero-title" id="page-title">What the dark keeps returning</h1>
+    </div>
+    <div class="hero-copy">
+      <p class="hero-descriptor">A placeholder meditation on repetition, memory, and the marks that follow an idea from one work into another.</p>
+    </div>
+  </section>
+
+  <article class="writing-reader" aria-labelledby="page-title">
+    <div class="writing-meta">
+      <p class="writing-byline">Saiel Dauhn Solehman</p>
+      <p class="writing-entry-date">Published September 15, 2026 · Prototype entry</p>
+    </div>
+
+    <div class="writing-body">
+      <p>I have been thinking about darkness less as an absence and more as a place where unfinished things continue arranging themselves. A shape disappears from view, but it does not necessarily stop working.</p>
+      <p>This placeholder entry imagines a mark recurring across drawings, objects, and recollections. Each return changes what came before it. The repetition is not proof of a fixed meaning; it is evidence that the question is still active.</p>
+      <h2>A mark is also a meeting place</h2>
+      <p>When another person recognizes something in the work, their response does not have to resolve it. It can sit beside the original thought, contradict it, or open a route toward another part of the Construct.</p>
+      <blockquote><p>The connection matters because of where it was noticed, who noticed it, and what it made possible next.</p></blockquote>
+      <figure class="prototype-hero-art" role="img" aria-label="Placeholder study of six points held between two offset frames.">
+        <div class="prototype-hero-art-grid" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        <figcaption>Placeholder field study · six points held between two shifting frames.</figcaption>
+      </figure>
+      <p>The connections below are not claims that everything means the same thing. They document the route I took through the work: a symbol I used, a study that influenced the thought, and another writing that remains nearby.</p>
+    </div>
+
+    <section class="writing-sources" aria-labelledby="sources-title">
+      <h2 id="sources-title">Sources</h2>
+      <ol>
+        <li><a href="#prototype-note">Field notebook 04 · placeholder source</a></li>
+        <li><a href="#prototype-note">Archive fragment · light study</a></li>
+      </ol>
+    </section>
+
+    <section class="connection-cluster" data-connection-context="post" aria-labelledby="post-connections-title">
+      <div class="connection-cluster-head">
+        <div><span class="section-kicker">Construct relationships</span><h2 id="post-connections-title">Connections in this entry</h2></div>
+        <p>Official connections established by the author. Each one preserves its relationship to this specific thought.</p>
+      </div>
+      <div class="connection-list" data-connection-list="post"></div>
+      <form class="connection-editor author-only" data-connection-form="post">
+        <label><span class="field-label">Construct record</span><select data-connection-target></select></label>
+        <label><span class="field-label">Relationship</span><select data-connection-type></select></label>
+        <button type="submit">Add connection</button>
+      </form>
+      <p class="connection-status author-only" data-connection-status="post" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="response-section" aria-labelledby="responses-title">
+      <div class="response-section-head">
+        <div><span class="section-kicker">Respond / Extend</span><h2 id="responses-title">Continue the thought</h2></div>
+        <p>What did this bring forward for you? Respond to the writing, question it, or extend it with a thought, image, file, or connection.</p>
+      </div>
+
+      <form class="response-form" data-response-form novalidate>
+        <div class="response-form-grid">
+          <label><span class="field-label">Name or alias</span><input name="name" maxlength="100" autocomplete="name" required placeholder="How you want to appear"></label>
+          <label><span class="field-label">Link</span><input name="link" inputmode="url" placeholder="Website or YouTube URL"></label>
+        </div>
+        <label><span class="field-label">Your response</span><textarea name="response" maxlength="5000" placeholder="React, question, disagree, remember, or extend…"></textarea></label>
+        <p class="response-help">You can respond with words, material, or both. Images and files appear with the response; YouTube links become video cards.</p>
+        <div class="attachment-actions">
+          <label class="prototype-link-button" for="response-files">Add images or files</label>
+          <input class="file-input" id="response-files" name="files" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt">
+          <button class="prototype-link-button" type="button" data-add-link>Add link</button>
+        </div>
+        <div class="attachment-preview-list" data-draft-attachments aria-live="polite"></div>
+        <div class="response-actions">
+          <button class="prototype-control" type="submit">Add response</button>
+          <span class="prototype-reset-note">Prototype only · added immediately</span>
+        </div>
+        <p class="response-status" data-response-status role="status" aria-live="polite"></p>
+      </form>
+
+      <div class="response-thread" data-response-thread aria-live="polite"></div>
+    </section>
+
+    <p class="prototype-note" id="prototype-note"><strong>Prototype boundary.</strong> This page uses fictional records and local browser state. Nothing submitted or connected here is uploaded, saved, moderated, or published.</p>
+    <p class="writing-footnote">*working. subject to change.</p>
+    <a class="venture-link" href="/writings/mindful-darkness/wrkng/">All WRKNG* entries</a>
+  </article>
+</main>
+
+<footer class="footer">
+  <p>© the six.well construct</p>
+  <nav class="page-links" aria-label="Footer">
+    <a href="/writings/">Writings</a>
+    <a href="/archive/">Archive</a>
+    <a href="/home/">Return to construct</a>
+  </nav>
+</footer>
+
+<script src="/js/transition.js"></script>
+<script src="/js/construct-corner.js"></script>
+<script src="/js/construct-nav.js"></script>
+<script src="/js/construct-wayfinding.js"></script>
+<script>
+(() => {
+  const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+  const body = document.body;
+  const prototypeStatus = document.querySelector("[data-prototype-status]");
+  const responseForm = document.querySelector("[data-response-form]");
+  const responseStatus = document.querySelector("[data-response-status]");
+  const draftHost = document.querySelector("[data-draft-attachments]");
+  const threadHost = document.querySelector("[data-response-thread]");
+
+  const records = [
+    { id:"returning-mark", kind:"Symbol", title:"The Returning Mark", note:"A placeholder symbol for recurrence, recognition, and unfinished return." },
+    { id:"dark-room-study", kind:"Work", title:"Dark Room Study III", note:"A fictional mixed-media work built around concealed and repeated forms." },
+    { id:"notes-recurrence", kind:"Writing", title:"Notes on Recurrence", note:"A neighboring placeholder WRKNG* entry about repetition without equivalence." },
+    { id:"threshold-fragment", kind:"Archive", title:"Threshold Fragment 06", note:"A fictional Archive record documenting a material edge and six punctures." },
+    { id:"witness-drawing", kind:"Work", title:"Drawing for a Witness", note:"A placeholder drawing concerned with looking, memory, and partial evidence." }
+  ];
+
+  const relationshipTypes = ["Uses symbol","Inspired by","Related to","Derived from","Part of"];
+  const connectionState = {
+    post:[
+      { id:"post-1", targetId:"returning-mark", relationship:"Uses symbol" },
+      { id:"post-2", targetId:"dark-room-study", relationship:"Inspired by" },
+      { id:"post-3", targetId:"notes-recurrence", relationship:"Related to" }
+    ],
+    author:[
+      { id:"author-1", targetId:"threshold-fragment", relationship:"Related to" },
+      { id:"author-2", targetId:"returning-mark", relationship:"Uses symbol" }
+    ]
+  };
+
+  let connectionSequence = 20;
+  let responseSequence = 2;
+  let draftAttachments = [];
+  const responses = [{
+    id:"response-1",
+    name:"M.",
+    time:"Earlier today · Prototype contribution",
+    text:"The repeated points made me think about the marks people leave when they are trying to remember a route. I made a small study after reading this and added the note that was sitting beside it. The video is another connection—the movement feels like remembering without recovering the whole image.",
+    attachments:[
+      { id:"seed-image", kind:"seed-image", name:"threshold-study.jpg", label:"Image contribution", description:"Placeholder image · circles and an offset frame from a fictional field study." },
+      { id:"seed-file", kind:"file", name:"notes-on-repetition.pdf", label:"Document · PDF", description:"4 pages · placeholder contribution" },
+      { id:"seed-link", kind:"link", name:"A short reference on visual memory", url:"https://example.com/visual-memory", label:"External connection", description:"example.com/visual-memory" },
+      { id:"seed-youtube", kind:"youtube", name:"Movement study · placeholder video reference", url:"https://www.youtube.com/watch?v=aqz-KE-bpKQ", videoId:"aqz-KE-bpKQ", label:"YouTube connection", description:"A video offered as an extension of the thought." }
+    ],
+    authorReply:{
+      id:"author-response",
+      name:"Saiel Dauhn Solehman",
+      time:"Author response · Prototype",
+      text:"I understand what you mean about remembering a route. That shifts the six points for me: they stop acting like a fixed emblem and begin behaving like evidence of movement. I connected your observation to the Threshold Fragment and back to the Returning Mark because this response changes how those records meet here."
+    }
+  }];
+
+  function recordFor(id) { return records.find((record) => record.id === id); }
+
+  function markFor(kind) {
+    return ({Symbol:"SY",Work:"WK",Writing:"WR",Archive:"AR"})[kind] || "CN";
+  }
+
+  function renderConnections(context) {
+    const list = document.querySelector(`[data-connection-list="${context}"]`);
+    if (!list) return;
+    const items = connectionState[context] || [];
+    list.innerHTML = items.length ? items.map((item, index) => {
+      const record = recordFor(item.targetId);
+      if (!record) return "";
+      return `<article class="connection-card" data-connection-id="${esc(item.id)}">
+        <span class="connection-mark" data-kind="${esc(record.kind)}" aria-hidden="true">${esc(markFor(record.kind))}</span>
+        <div class="connection-copy">
+          <span class="connection-kind">${esc(item.relationship)} · ${esc(record.kind)}</span>
+          <h3>${esc(record.title)}</h3>
+          <p>${esc(record.note)}</p>
+          <a href="#prototype-note">Open prototype node</a>
+        </div>
+        <div class="author-card-actions author-only">
+          <button type="button" data-connection-move="up" data-context="${esc(context)}" data-id="${esc(item.id)}" ${index === 0 ? "disabled" : ""}>Move up</button>
+          <button type="button" data-connection-move="down" data-context="${esc(context)}" data-id="${esc(item.id)}" ${index === items.length - 1 ? "disabled" : ""}>Move down</button>
+          <button type="button" data-connection-remove data-context="${esc(context)}" data-id="${esc(item.id)}">Remove</button>
+        </div>
+      </article>`;
+    }).join("") : '<p class="response-help">No official connections have been added.</p>';
+  }
+
+  function populateConnectionForms() {
+    document.querySelectorAll("[data-connection-form]").forEach((form) => {
+      form.querySelector("[data-connection-target]").innerHTML = records.map((record) => `<option value="${esc(record.id)}">${esc(record.title)} · ${esc(record.kind)}</option>`).join("");
+      form.querySelector("[data-connection-type]").innerHTML = relationshipTypes.map((label) => `<option value="${esc(label)}">${esc(label)}</option>`).join("");
+    });
+  }
+
+  function connectionStatus(context, message) {
+    const status = document.querySelector(`[data-connection-status="${context}"]`);
+    if (status) status.textContent = message;
+  }
+
+  function normalizeUrl(value) {
+    let input = String(value || "").trim();
+    if (!input) return "";
+    if (!/^[a-z][a-z\d+.-]*:/i.test(input)) input = `https://${input}`;
+    try {
+      const url = new URL(input);
+      return ["http:","https:"].includes(url.protocol) ? url.href : "";
+    } catch { return ""; }
+  }
+
+  function youtubeId(url) {
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.replace(/^www\./, "");
+      let id = "";
+      if (host === "youtu.be") id = parsed.pathname.split("/").filter(Boolean)[0] || "";
+      if (["youtube.com","m.youtube.com","youtube-nocookie.com"].includes(host)) {
+        id = parsed.searchParams.get("v") || (parsed.pathname.match(/\/(?:embed|shorts)\/([^/?#]+)/) || [])[1] || "";
+      }
+      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : "";
+    } catch { return ""; }
+  }
+
+  function attachmentMarkup(item, removable = false) {
+    const remove = removable ? `<button class="attachment-remove" type="button" data-draft-remove="${esc(item.id)}">Remove</button>` : "";
+    if (item.kind === "seed-image") return `<article class="attachment-card"><div class="attachment-image-placeholder" role="img" aria-label="Placeholder contribution with circles and an offset frame."></div><span class="attachment-label">${esc(item.label)}</span><h4>${esc(item.name)}</h4><p>${esc(item.description)}</p>${remove}</article>`;
+    if (item.kind === "image") return `<article class="attachment-card"><img src="${esc(item.url)}" alt=""><span class="attachment-label">Image contribution</span><h4>${esc(item.name)}</h4><p>Local preview · not uploaded</p>${remove}</article>`;
+    if (item.kind === "youtube") return `<article class="attachment-card"><div class="youtube-frame"><iframe src="https://www.youtube-nocookie.com/embed/${esc(item.videoId)}" title="${esc(item.name || "YouTube video contribution")}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div><span class="attachment-label">${esc(item.label || "YouTube connection")}</span><h4>${esc(item.name || "YouTube video")}</h4><p>${esc(item.description || item.url)}</p>${remove}</article>`;
+    if (item.kind === "link") return `<article class="attachment-card"><span class="attachment-label">${esc(item.label || "External connection")}</span><h4>${esc(item.name || "Shared link")}</h4><p><a href="${esc(item.url)}" target="_blank" rel="noopener">${esc(item.description || item.url)}</a></p>${remove}</article>`;
+    const fileLink = item.url ? `<a href="${esc(item.url)}" download="${esc(item.name)}">Open local file preview</a>` : "Placeholder downloadable attachment";
+    return `<article class="attachment-card"><span class="attachment-label">${esc(item.label || "File contribution")}</span><h4>${esc(item.name)}</h4><p>${fileLink}${item.description ? ` · ${esc(item.description)}` : ""}</p>${remove}</article>`;
+  }
+
+  function renderDraftAttachments() {
+    draftHost.innerHTML = draftAttachments.map((item) => attachmentMarkup(item, true)).join("");
+  }
+
+  function renderResponses() {
+    threadHost.innerHTML = responses.map((response) => `<article class="response-card" id="${esc(response.id)}">
+      <header class="response-card-head"><div><span class="response-role">Response / Extension</span><h3>${esc(response.name)}</h3></div><span class="response-time">${esc(response.time)}</span></header>
+      <div class="response-copy"><p>${esc(response.text)}</p></div>
+      ${response.attachments?.length ? `<div class="response-attachments">${response.attachments.map((item) => attachmentMarkup(item)).join("")}</div>` : ""}
+      ${response.authorReply ? `<div class="author-response-wrap"><article class="response-card is-author">
+        <header class="response-card-head"><div><span class="response-role">Author response</span><h3>${esc(response.authorReply.name)}</h3></div><span class="response-time">${esc(response.authorReply.time)}</span></header>
+        <div class="response-copy"><p>${esc(response.authorReply.text)}</p></div>
+        <section class="connection-cluster" data-connection-context="author" aria-labelledby="author-connections-title">
+          <div class="connection-cluster-head"><div><span class="section-kicker">Author-established relationships</span><h2 id="author-connections-title">Connections from this response</h2></div><p>These relationships belong to this author response and preserve why the records meet here.</p></div>
+          <div class="connection-list" data-connection-list="author"></div>
+          <form class="connection-editor author-only" data-connection-form="author">
+            <label><span class="field-label">Construct record</span><select data-connection-target></select></label>
+            <label><span class="field-label">Relationship</span><select data-connection-type></select></label>
+            <button type="submit">Add connection</button>
+          </form>
+          <p class="connection-status author-only" data-connection-status="author" role="status" aria-live="polite"></p>
+        </section>
+      </article></div>` : ""}
+    </article>`).join("");
+    renderConnections("author");
+    populateConnectionForms();
+  }
+
+  document.querySelector("[data-view='public']").addEventListener("click", () => {
+    body.classList.remove("is-author-mode");
+    document.querySelectorAll("[data-view]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === "public")));
+    prototypeStatus.textContent = "Public view shows the published reading and conversation.";
+  });
+
+  document.querySelector("[data-view='author']").addEventListener("click", () => {
+    body.classList.add("is-author-mode");
+    document.querySelectorAll("[data-view]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === "author")));
+    prototypeStatus.textContent = "Author mode reveals official connection controls on the post and author response.";
+  });
+
+  document.addEventListener("submit", (event) => {
+    const connectionForm = event.target.closest("[data-connection-form]");
+    if (!connectionForm) return;
+    event.preventDefault();
+    const context = connectionForm.dataset.connectionForm;
+    const targetId = connectionForm.querySelector("[data-connection-target]").value;
+    const relationship = connectionForm.querySelector("[data-connection-type]").value;
+    if (connectionState[context].some((item) => item.targetId === targetId && item.relationship === relationship)) {
+      connectionStatus(context, "That official connection is already present.");
+      return;
+    }
+    connectionState[context].push({id:`connection-${++connectionSequence}`,targetId,relationship});
+    renderConnections(context);
+    connectionStatus(context, `${relationship} connection added to this prototype.`);
+  });
+
+  document.addEventListener("click", (event) => {
+    const move = event.target.closest("[data-connection-move]");
+    const remove = event.target.closest("[data-connection-remove]");
+    if (move) {
+      const items = connectionState[move.dataset.context];
+      const index = items.findIndex((item) => item.id === move.dataset.id);
+      const nextIndex = move.dataset.connectionMove === "up" ? index - 1 : index + 1;
+      if (index >= 0 && nextIndex >= 0 && nextIndex < items.length) {
+        [items[index],items[nextIndex]] = [items[nextIndex],items[index]];
+        renderConnections(move.dataset.context);
+        connectionStatus(move.dataset.context, "Connection order updated.");
+      }
+    }
+    if (remove) {
+      const items = connectionState[remove.dataset.context];
+      const index = items.findIndex((item) => item.id === remove.dataset.id);
+      if (index >= 0) items.splice(index,1);
+      renderConnections(remove.dataset.context);
+      connectionStatus(remove.dataset.context, "Connection removed from this prototype.");
+    }
+    const draftRemove = event.target.closest("[data-draft-remove]");
+    if (draftRemove) {
+      const item = draftAttachments.find((entry) => entry.id === draftRemove.dataset.draftRemove);
+      if (item?.url?.startsWith("blob:")) URL.revokeObjectURL(item.url);
+      draftAttachments = draftAttachments.filter((entry) => entry.id !== draftRemove.dataset.draftRemove);
+      renderDraftAttachments();
+      responseStatus.textContent = "Attachment removed.";
+    }
+  });
+
+  document.querySelector("[data-add-link]").addEventListener("click", () => {
+    const input = responseForm.elements.link;
+    const url = normalizeUrl(input.value);
+    if (!url) {
+      responseStatus.textContent = "Enter a valid website or YouTube address first.";
+      input.focus();
+      return;
+    }
+    const videoId = youtubeId(url);
+    const duplicate = draftAttachments.some((item) => item.url === url);
+    if (duplicate) {
+      responseStatus.textContent = "That link is already attached.";
+      return;
+    }
+    draftAttachments.push(videoId
+      ? {id:`draft-${crypto.randomUUID()}`,kind:"youtube",name:"YouTube video contribution",url,videoId,label:"YouTube connection",description:url}
+      : {id:`draft-${crypto.randomUUID()}`,kind:"link",name:"Shared external connection",url,label:"External connection",description:url});
+    input.value = "";
+    renderDraftAttachments();
+    responseStatus.textContent = videoId ? "YouTube video attached." : "External link attached.";
+  });
+
+  responseForm.elements.files.addEventListener("change", (event) => {
+    for (const file of event.target.files) {
+      const isImage = file.type.startsWith("image/");
+      draftAttachments.push({
+        id:`draft-${crypto.randomUUID()}`,
+        kind:isImage ? "image" : "file",
+        name:file.name,
+        url:URL.createObjectURL(file),
+        label:isImage ? "Image contribution" : "File contribution",
+        description:`${Math.max(1,Math.ceil(file.size / 1024))} KB · local preview`
+      });
+    }
+    event.target.value = "";
+    renderDraftAttachments();
+    responseStatus.textContent = `${draftAttachments.length} attachment${draftAttachments.length === 1 ? "" : "s"} ready.`;
+  });
+
+  responseForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const name = responseForm.elements.name.value.trim();
+    const text = responseForm.elements.response.value.trim();
+    const pendingLink = responseForm.elements.link.value.trim();
+    if (!name) {
+      responseStatus.textContent = "Add a name or alias.";
+      responseForm.elements.name.focus();
+      return;
+    }
+    if (pendingLink) {
+      responseStatus.textContent = "Choose Add link before submitting, or clear the link field.";
+      responseForm.elements.link.focus();
+      return;
+    }
+    if (!text && !draftAttachments.length) {
+      responseStatus.textContent = "Add a written response, image, file, or link.";
+      responseForm.elements.response.focus();
+      return;
+    }
+    const response = {
+      id:`response-${++responseSequence}`,
+      name,
+      time:"Just now · Prototype contribution",
+      text:text || "Shared without an additional written note.",
+      attachments:draftAttachments.map((item) => ({...item}))
+    };
+    responses.push(response);
+    draftAttachments = [];
+    responseForm.reset();
+    renderDraftAttachments();
+    renderResponses();
+    responseStatus.textContent = "Response added immediately to this prototype.";
+    requestAnimationFrame(() => document.getElementById(response.id)?.scrollIntoView({behavior:"smooth",block:"center"}));
+  });
+
+  renderConnections("post");
+  renderResponses();
+  populateConnectionForms();
+})();
+</script>
+</body>
+</html>
