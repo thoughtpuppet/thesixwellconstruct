@@ -502,7 +502,6 @@ function validateTattooInquiryProject(payload) {
   if (["cover_up", "large_cover_up"].includes(projectType)) {
     const required = [
       ["cover_up_goal", "Cover-up goal is required."],
-      ["size_placement_flexibility", "Size and placement flexibility is required."],
     ];
     for (const [field, message] of required) {
       const error = requireProjectField(payload, field, message);
@@ -527,12 +526,24 @@ function validateTattooInquiryProject(payload) {
   if (projectType === "large_cover_up") {
     const required = [
       ["existing_tattoo_dimensions", "Existing tattoo dimensions are required for a large cover-up."],
-      ["open_to_larger_footprint", "Larger-footprint flexibility is required for a large cover-up."],
-      ["open_to_multiple_sessions", "Multiple-session flexibility is required for a large cover-up."],
     ];
     for (const [field, message] of required) {
       const error = requireProjectField(payload, field, message);
       if (error) return error;
+    }
+    const appointmentPreference = asString(payload.multi_session_preference);
+    const legacyMultipleSessions = asString(payload.open_to_multiple_sessions);
+    if (!appointmentPreference && !legacyMultipleSessions) {
+      return { error: "Choose what could work if this cover-up needs more than one appointment.", status: 400 };
+    }
+    if (appointmentPreference) {
+      const preferenceError = validateProjectChoice(
+        payload,
+        "multi_session_preference",
+        new Set(["back_to_back", "separate_healed_visits", "either", "discuss"]),
+        "Choose a supported appointment-planning preference.",
+      );
+      if (preferenceError) return preferenceError;
     }
     for (const field of ["open_to_larger_footprint", "open_to_multiple_sessions"]) {
       const choiceError = validateProjectChoice(

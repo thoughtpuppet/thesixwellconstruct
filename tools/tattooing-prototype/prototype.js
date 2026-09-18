@@ -100,13 +100,13 @@
     scheduleContainer.innerHTML = `
       <div class="prototype-field-grid">
         <fieldset class="prototype-field prototype-field--full prototype-fieldset prototype-planning-choice" data-session-preference hidden><legend>If this needs more than one appointment, what would work best for you?</legend><div class="prototype-choices">
-          <label class="prototype-choice"><input type="radio" name="${prefix}Preference" value="Back-to-back days in one trip, if feasible">Back-to-back days in one trip</label>
+          <label class="prototype-choice"><input type="radio" name="${prefix}Preference" value="Back-to-back days"><span>Back-to-back days</span></label>
           <label class="prototype-choice"><input type="radio" name="${prefix}Preference" value="Separate visits with healing time in between">Separate visits with healing time in between</label>
           <label class="prototype-choice"><input type="radio" name="${prefix}Preference" value="Either plan works">Either works</label>
           <label class="prototype-choice"><input type="radio" name="${prefix}Preference" value="Need to discuss">Need to discuss</label>
         </div><small>This is your preference, not a booking choice. Even a ¼ sleeve might be completed in one appointment.</small></fieldset>
         <div class="prototype-field" data-return-ability hidden><label for="${prefix}Return">Could you return for another trip if needed?</label><select id="${prefix}Return"><option value="">Choose one</option><option>Yes</option><option>No</option><option>Not sure</option></select></div>
-        <div class="prototype-field" data-trip-days hidden><label for="${prefix}TripDays">How many appointment days could you make in one trip?</label><select id="${prefix}TripDays"><option value="">Choose one</option><option>1 day</option><option>2 days</option><option>3 days</option><option>4 or more days</option><option>Not sure</option></select></div>
+        <div class="prototype-field" data-trip-days hidden><label for="${prefix}TripDays">How many appointment days could you tolerate in one trip?</label><select id="${prefix}TripDays"><option value="">Choose one</option><option>1 day</option><option>2 days</option><option>3 days</option><option>4 or more days</option><option>Not sure</option></select></div>
         <div class="prototype-field" data-travel-origin hidden><label for="${prefix}Origin">Traveling from (optional)</label><input id="${prefix}Origin" type="text" placeholder="City, state, or country"></div>
       </div>
       <p class="prototype-planning-note">${pathNote} Saiel confirms the appointment count, pacing, and budget after review; no date is reserved here.</p>
@@ -114,6 +114,8 @@
     const size = sizeContainer.querySelector(`#${prefix}Size`);
     const coverage = sizeContainer.querySelector(`#${prefix}Coverage`);
     const feedback = scheduleContainer.querySelector("[data-planning-feedback]");
+    const backToBackChoice = scheduleContainer.querySelector(`input[name="${prefix}Preference"][value="Back-to-back days"]`);
+    const backToBackLabel = backToBackChoice.closest("label").querySelector("span");
     const groups = {
       coverage: sizeContainer.querySelector("[data-coverage]"),
       other: sizeContainer.querySelector("[data-other-coverage]"),
@@ -128,16 +130,19 @@
     };
     const sync = () => {
       const largeScale = size.value === "large_scale";
+      const largeCoverUp = path === "custom" && document.getElementById("projectType")?.value === "large_cover_up";
       const traveling = travelContainer.querySelector(`input[name="${prefix}Travel"]:checked`)?.value === "Yes";
+      backToBackChoice.value = traveling ? "Back-to-back days in one trip" : "Back-to-back days";
+      backToBackLabel.textContent = backToBackChoice.value;
       show(groups.coverage, largeScale);
       show(groups.other, largeScale && coverage.value === "other");
-      show(groups.preference, largeScale || size.value === "xl");
+      show(groups.preference, largeScale || size.value === "xl" || largeCoverUp);
       [groups.returnAbility, groups.tripDays, groups.origin].forEach((group) => show(group, traveling));
       const returnChoice = scheduleContainer.querySelector(`#${prefix}Return`).value;
       const preference = scheduleContainer.querySelector(`input[name="${prefix}Preference"]:checked`)?.value || "";
       if (traveling && returnChoice === "No" && preference === "Separate visits with healing time in between") {
         feedback.textContent = "You said you cannot return, so separate trips may not work for you. I would discuss a one-trip plan or a different scope before booking.";
-      } else if (traveling && returnChoice === "No" && (largeScale || size.value === "xl")) {
+      } else if (traveling && returnChoice === "No" && (largeScale || size.value === "xl" || largeCoverUp)) {
         feedback.textContent = "You cannot make a return trip. I would review whether this project can be completed in one visit; that is not guaranteed by this request.";
       } else {
         feedback.textContent = "";
@@ -212,6 +217,7 @@
       existingPhotoCopy.textContent = guidance?.existing || "";
       placementPhoto.hidden = type === "large_cover_up";
       placementPhotoCopy.textContent = guidance?.placement || "The live form lets you add body-area photos. No image can be uploaded here.";
+      planners.get("custom")?.sync();
     };
     const syncBudget = () => { specificBudget.hidden = budget.value !== "specific"; };
     projectType.addEventListener("change", syncProjectType);
@@ -259,8 +265,8 @@
       ];
       const branchAnswers = {
         new_work: [["Style direction", value("desiredStyle")]],
-        cover_up: [["Cover-up goal", value("coverUpGoal")], ["Size or placement flexibility", value("sizePlacementFlexibility")]],
-        large_cover_up: [["Cover-up goal", value("coverUpGoal")], ["Size or placement flexibility", value("sizePlacementFlexibility")], ["Existing tattoo size", value("existingTattooDimensions")], ["Larger tattoo", value("openToLargerFootprint")], ["Laser or scarring context", value("treatmentScarringContext")]],
+        cover_up: [["Cover-up goal", value("coverUpGoal")]],
+        large_cover_up: [["Cover-up goal", value("coverUpGoal")], ["Existing tattoo size", value("existingTattooDimensions")], ["Laser or scarring context", value("treatmentScarringContext")]],
         rework: [["Current tattoo age", value("existingTattooAge")], ["Work considered", selected("reworkIntervention").join(", ") || "Not selected"], ["Current condition", value("reworkCondition")], ["Making the tattoo larger", value("reworkExpansion")]],
         space_filler: [["Gap size", value("gapDimensions")], ["Surrounding tattoos", value("surroundingWork")], ["How the filler should fit", value("fillerRelationship")]],
       };

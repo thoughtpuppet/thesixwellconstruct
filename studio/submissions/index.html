@@ -1292,7 +1292,7 @@
     large: "Large · over 5–8 in",
     xl: "XL · over 8 in, one area",
     large_scale: "Large-scale work / body-area coverage",
-    back_to_back: "Back-to-back days in one trip",
+    back_to_back: "Back-to-back days",
     separate_healed_visits: "Separate visits with healing time in between",
     either: "Either works",
     "4_plus": "4 or more days",
@@ -1316,6 +1316,9 @@
   }
   function planningValue(value) {
     return TATTOO_INQUIRY_VALUE_LABELS[value] || value || "";
+  }
+  function planningPreference(value, traveling) {
+    return value === "back_to_back" && traveling === "yes" ? "Back-to-back days in one trip" : planningValue(value);
   }
 
   function statusOptionsFor(submission) {
@@ -1407,9 +1410,9 @@
           ${field("Other Coverage", p("body_area_coverage_other"))}
           ${field("Budget Range", p("budget_range") || p("claim_bid"))}
           ${field("Timeline", p("timeline"))}
-          ${field("Multi-appointment Preference", planningValue(p("multi_session_preference")))}
+          ${field("Multi-appointment Preference", planningPreference(p("multi_session_preference"), p("traveling_to_atlanta")))}
           ${field("Can Return After Healing", planningValue(p("can_return_for_healed_visit")))}
-          ${field("Appointment Days Per Trip", planningValue(p("days_per_trip")))}
+          ${field("Appointment Days Tolerated in One Trip", planningValue(p("days_per_trip")))}
           ${field("Traveling From", p("travel_origin"))}
           ${field("Managed Price", p("flash_price_note"))}
           ${field("Session Category", p("flash_session_category"))}
@@ -1533,9 +1536,9 @@
           ${profile === "experimental" ? field("Healed-photo timing", `${terms.healedPhotoDueWeeks || p("healed_photo_due_weeks") || 6} weeks after attendance`) : ""}
           ${field("Instagram", p("instagram"))}
           ${field("Source", submission.sourcePath || "")}
-          ${field("Multi-appointment Preference", planningValue(p("multi_session_preference")))}
+          ${field("Multi-appointment Preference", planningPreference(p("multi_session_preference"), p("traveling_to_atlanta")))}
           ${field("Can Return After Healing", planningValue(p("can_return_for_healed_visit")))}
-          ${field("Appointment Days Per Trip", planningValue(p("days_per_trip")))}
+          ${field("Appointment Days Tolerated in One Trip", planningValue(p("days_per_trip")))}
           ${field("Traveling From", p("travel_origin"))}
           ${field("Booking Policies Read", p("policies_read"))}
         </div>
@@ -1608,9 +1611,9 @@
         ${field("Color Preference", p("color_preference"))}
         ${field("Timeline", p("timeline"))}
         ${field("Requested Date", p("requested_date"))}
-        ${field("Multi-appointment Preference", planningValue(p("multi_session_preference")))}
+        ${field("Multi-appointment Preference", planningPreference(p("multi_session_preference"), p("traveling_to_atlanta")))}
         ${field("Can Return After Healing", planningValue(p("can_return_for_healed_visit")))}
-        ${field("Appointment Days Per Trip", planningValue(p("days_per_trip")))}
+        ${field("Appointment Days Tolerated in One Trip", planningValue(p("days_per_trip")))}
         ${field("Traveling From", p("travel_origin"))}
         ${field("Work Resonance", tattooInquiryValue(submission, "work_resonance"))}
         ${field("Work Example", p("work_resonance_reference"))}

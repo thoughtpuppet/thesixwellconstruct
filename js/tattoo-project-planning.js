@@ -16,15 +16,20 @@
     var coverageGroup = form.querySelector("[data-planning-coverage-group]");
     var otherCoverageGroup = form.querySelector("[data-planning-other-coverage-group]");
     var preferenceGroup = form.querySelector("[data-planning-preference-group]");
+    var firstPreference = form.querySelector('[name="multi_session_preference"]');
+    var backToBackLabel = form.querySelector('[name="multi_session_preference"][value="back_to_back"]')?.closest("label")?.querySelector("span");
     var travelDetailGroups = form.querySelectorAll("[data-planning-travel-detail]");
     var feedback = form.querySelector("[data-planning-feedback]");
 
     function sync() {
       var largeScale = size.value === "large_scale";
+      var largeCoverUp = form.querySelector('[name="project_type"]')?.value === "large_cover_up";
       var traveling = form.querySelector('[name="traveling_to_atlanta"]:checked')?.value === "yes";
+      if (backToBackLabel) backToBackLabel.textContent = traveling ? "Back-to-back days in one trip" : "Back-to-back days";
       setGroup(coverageGroup, largeScale);
       setGroup(otherCoverageGroup, largeScale && coverage.value === "other");
-      setGroup(preferenceGroup, largeScale || size.value === "xl");
+      setGroup(preferenceGroup, largeScale || size.value === "xl" || largeCoverUp);
+      if (firstPreference) firstPreference.required = largeCoverUp;
       travelDetailGroups.forEach(function (group) { setGroup(group, traveling); });
 
       if (!feedback) return;
@@ -32,7 +37,7 @@
       var preference = form.querySelector('[name="multi_session_preference"]:checked')?.value || "";
       if (traveling && canReturn === "no" && preference === "separate_healed_visits") {
         feedback.textContent = "You said you cannot return. I would review a one-trip plan or a different scope with you before booking.";
-      } else if (traveling && canReturn === "no" && (largeScale || size.value === "xl")) {
+      } else if (traveling && canReturn === "no" && (largeScale || size.value === "xl" || largeCoverUp)) {
         feedback.textContent = "A return trip may not be possible for you. I will review whether the work can be planned for one visit; that is not guaranteed.";
       } else {
         feedback.textContent = "";

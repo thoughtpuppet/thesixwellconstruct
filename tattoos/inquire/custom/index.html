@@ -174,17 +174,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
                 <option value="unsure">Unsure - needs assessment</option>
               </select>
             </div>
-            <div class="field" id="sizePlacementFlexibilityField" data-project-field="cover_up large_cover_up" hidden>
-              <label for="size_placement_flexibility">Size / placement flexibility <span class="required-mark">*</span></label>
-              <select id="size_placement_flexibility" name="size_placement_flexibility" disabled>
-                <option value="">Choose one</option>
-                <option value="flexible">Flexible on both</option>
-                <option value="size_only">Flexible on size</option>
-                <option value="placement_only">Flexible on placement</option>
-                <option value="limited">Limited flexibility</option>
-                <option value="unsure">Unsure - needs assessment</option>
-              </select>
-            </div>
             <div class="field" id="existingTattooDimensionsField" data-project-field="large_cover_up" hidden>
               <label for="existing_tattoo_dimensions">Existing tattoo dimensions <span class="required-mark">*</span></label>
               <input id="existing_tattoo_dimensions" name="existing_tattoo_dimensions" placeholder="Example: 8 x 12 in" disabled>
@@ -192,12 +181,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field full" id="treatmentScarringContextField" data-project-field="large_cover_up" hidden>
               <label for="treatment_scarring_context">Laser treatment or scarring context (optional)</label>
               <textarea id="treatment_scarring_context" name="treatment_scarring_context" disabled></textarea>
-            </div>
-            <div class="field" id="largerFootprintField" data-project-field="large_cover_up" hidden>
-              <label for="open_to_larger_footprint">Open to a larger tattoo footprint? <span class="required-mark">*</span></label>
-              <select id="open_to_larger_footprint" name="open_to_larger_footprint" disabled>
-                <option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="discuss">Needs discussion</option>
-              </select>
             </div>
             <div class="field" id="existingTattooAgeField" data-project-field="rework" hidden>
               <label for="existing_tattoo_age">Approximate age of the tattoo (optional)</label>
@@ -274,14 +257,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field"><label for="timeline">General timeline (optional)</label><input id="timeline" name="timeline" placeholder="Example: fall, flexible weekdays"><p class="field-note">Wait for a confirmed appointment before booking non-refundable travel.</p></div>
             <div class="field"><label for="requested_date">Requested date (optional)</label><input id="requested_date" name="requested_date" type="date"><p class="field-note">This is context for review, not a reservation.</p></div>
             <fieldset class="field full tattoo-planning-fieldset" data-planning-preference-group hidden><legend>If this needs more than one appointment, what would work best for you?</legend><div class="radio-group"><label class="radio-option"><input type="radio" name="multi_session_preference" value="back_to_back" disabled><span>Back-to-back days in one trip</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="separate_healed_visits" disabled><span>Separate visits with healing time in between</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="either" disabled><span>Either works</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="discuss" disabled><span>Need to discuss</span></label></div><p class="field-note">This is a planning preference, not a booking choice. A ¼ sleeve may still be one appointment.</p></fieldset>
-            <div class="field" id="multipleSessionsField" data-project-field="large_cover_up" hidden>
-              <label for="open_to_multiple_sessions">Open to multiple sessions? <span class="required-mark">*</span></label>
-              <select id="open_to_multiple_sessions" name="open_to_multiple_sessions" disabled>
-                <option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="discuss">Needs discussion</option>
-              </select>
-            </div>
             <div class="field" data-planning-travel-detail hidden><label for="can_return_for_healed_visit">Could you return for another trip if needed?</label><select id="can_return_for_healed_visit" name="can_return_for_healed_visit" disabled><option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="unsure">Not sure</option></select></div>
-            <div class="field" data-planning-travel-detail hidden><label for="days_per_trip">How many appointment days could you make in one trip?</label><select id="days_per_trip" name="days_per_trip" disabled><option value="">Choose one</option><option value="1">1 day</option><option value="2">2 days</option><option value="3">3 days</option><option value="4_plus">4 or more days</option><option value="unsure">Not sure</option></select></div>
+            <div class="field" data-planning-travel-detail hidden><label for="days_per_trip">How many appointment days could you tolerate in one trip?</label><select id="days_per_trip" name="days_per_trip" disabled><option value="">Choose one</option><option value="1">1 day</option><option value="2">2 days</option><option value="3">3 days</option><option value="4_plus">4 or more days</option><option value="unsure">Not sure</option></select></div>
             <div class="field" data-planning-travel-detail hidden><label for="travel_origin">Traveling from (optional)</label><input id="travel_origin" name="travel_origin" placeholder="City, state, or country" disabled></div>
             <p class="tattoo-planning-note" data-planning-feedback hidden aria-live="polite"></p>
             <p class="tattoo-planning-note">Your answers help me propose a plan after reviewing the project. A ¼ sleeve may still be one appointment. I confirm the appointment count, pacing, and project budget after review; no date is reserved here.</p>
@@ -426,8 +403,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         cover_up: {
           title: "Cover-up",
           copy: "Show the existing tattoo and explain whether it should be hidden, transformed, or incorporated.",
-          fields: ["coverUpGoalField", "sizePlacementFlexibilityField"],
-          requiredNames: ["cover_up_goal", "size_placement_flexibility"],
+          fields: ["coverUpGoalField"],
+          requiredNames: ["cover_up_goal"],
           messageLabel: "What should be hidden, transformed, kept, or changed?",
           messagePlaceholder: "Describe what is not working now, what may remain visible, and the direction you want the cover-up to take.",
           referencesLabel: "Desired cover-up direction references (optional)",
@@ -442,8 +419,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         large_cover_up: {
           title: "Large cover-up",
           copy: "Document the complete existing tattoo from several angles so scale, skin, and the full working area can be reviewed.",
-          fields: ["coverUpGoalField", "sizePlacementFlexibilityField", "existingTattooDimensionsField", "treatmentScarringContextField", "largerFootprintField", "multipleSessionsField"],
-          requiredNames: ["cover_up_goal", "size_placement_flexibility", "existing_tattoo_dimensions", "open_to_larger_footprint", "open_to_multiple_sessions"],
+          fields: ["coverUpGoalField", "existingTattooDimensionsField", "treatmentScarringContextField"],
+          requiredNames: ["cover_up_goal", "existing_tattoo_dimensions"],
           messageLabel: "What should be hidden, transformed, kept, or changed?",
           messagePlaceholder: "Describe the current tattoo, the outcome you want, and any constraints the studio should understand.",
           referencesLabel: "Desired large cover-up direction references (optional)",
@@ -648,8 +625,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         });
         var branch = {
           new_work: [["Style direction", "desired_style"]],
-          cover_up: [["Cover-up goal", "cover_up_goal"], ["Size or placement flexibility", "size_placement_flexibility"]],
-          large_cover_up: [["Cover-up goal", "cover_up_goal"], ["Size or placement flexibility", "size_placement_flexibility"], ["Existing tattoo size", "existing_tattoo_dimensions"], ["Larger tattoo", "open_to_larger_footprint"], ["Laser or scarring context", "treatment_scarring_context"], ["Open to multiple sessions", "open_to_multiple_sessions"]],
+          cover_up: [["Cover-up goal", "cover_up_goal"]],
+          large_cover_up: [["Cover-up goal", "cover_up_goal"], ["Existing tattoo size", "existing_tattoo_dimensions"], ["Laser or scarring context", "treatment_scarring_context"]],
           rework: [["Current tattoo age", "existing_tattoo_age"], ["Work considered", "rework_interventions"], ["Current condition", "rework_tattoo_condition"], ["Making the tattoo larger", "rework_expansion_flexibility"]],
           space_filler: [["Gap size", "gap_dimensions"], ["Surrounding tattoos", "surrounding_work"], ["How the filler should fit", "filler_relationship"]]
         }[projectType.value] || [];

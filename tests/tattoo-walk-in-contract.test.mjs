@@ -92,6 +92,8 @@ test("Custom, Flash, and active Special application share the new planning field
       assert.match(source, new RegExp(`name="${name}"`), `${relativePath}: ${name}`);
     }
     assert.match(source, /Separate visits with healing time in between/, relativePath);
+    assert.match(source, /How many appointment days could you tolerate in one trip\?/, relativePath);
+    assert.doesNotMatch(source, /How many appointment days could you make in one trip\?/, relativePath);
     assert.doesNotMatch(source, /¾ (?:arm|leg) sleeve/, relativePath);
   }
 
@@ -108,6 +110,20 @@ test("Custom, Flash, and active Special application share the new planning field
   assert.match(custom, /id="answerReviewList"/);
   assert.match(custom, /id="reviewSubmitRow" hidden/);
   assert.match(custom, /href="\/css\/tattoo-custom-inquiry\.css"/);
+  assert.doesNotMatch(custom, /value="one_appointment_only"/);
+  assert.match(custom, /name="days_per_trip"/);
+  assert.match(custom, /name="travel_origin"/);
+  assert.doesNotMatch(custom, /name="(?:size_placement_flexibility|open_to_larger_footprint|open_to_multiple_sessions)"/);
+  const prototype = read("tools/tattooing-prototype/custom.html");
+  assert.doesNotMatch(prototype, /Can the size or placement change\?|Open to a larger tattoo\?/);
+  const planning = read("js/tattoo-project-planning.js");
+  assert.match(planning, /largeScale \|\| size\.value === "xl" \|\| largeCoverUp/);
+  assert.match(planning, /firstPreference\.required = largeCoverUp/);
+  assert.match(planning, /backToBackLabel\.textContent = traveling \? "Back-to-back days in one trip" : "Back-to-back days"/);
+  const prototypePlanning = read("tools/tattooing-prototype/prototype.js");
+  assert.match(prototypePlanning, /How many appointment days could you tolerate in one trip\?/);
+  assert.match(prototypePlanning, /backToBackChoice\.value = traveling \? "Back-to-back days in one trip" : "Back-to-back days"/);
+  assert.match(read("studio/submissions/index.html"), /planningPreference\(p\("multi_session_preference"\), p\("traveling_to_atlanta"\)\)/);
   const customStyle = read("css/tattoo-custom-inquiry.css");
   assert.match(customStyle, /border-top: 5px solid rgba\(109, 61, 21, 0\.42\)/);
   assert.match(customStyle, /--form-control-accent: var\(--color-tattooing-bright\)/);

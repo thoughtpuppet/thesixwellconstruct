@@ -6963,9 +6963,29 @@ test("large cover-ups require at least three angle photographs without automatic
   assert.equal(twoPhotos.status, 400);
   assert.match((await twoPhotos.json()).error, /at least 3 photographs/i);
 
+  const noAppointmentPreference = await handleCreateSubmission(jsonRequest(
+    "/api/submissions",
+    validCustomForProject("large_cover_up", { open_to_multiple_sessions: "" }),
+  ), env);
+  assert.equal(noAppointmentPreference.status, 400);
+  assert.match((await noAppointmentPreference.json()).error, /more than one appointment/i);
+
+  const invalidAppointmentPreference = await handleCreateSubmission(jsonRequest(
+    "/api/submissions",
+    validCustomForProject("large_cover_up", { open_to_multiple_sessions: "", multi_session_preference: "unsupported" }),
+  ), env);
+  assert.equal(invalidAppointmentPreference.status, 400);
+  assert.match((await invalidAppointmentPreference.json()).error, /supported appointment-planning preference/i);
+
   const created = await handleCreateSubmission(multipartRequest(
     "/api/submissions",
-    validCustomForProject("large_cover_up"),
+    validCustomForProject("large_cover_up", {
+      email: "new-cover-up-planning@example.test",
+      size_placement_flexibility: "",
+      open_to_larger_footprint: "",
+      open_to_multiple_sessions: "",
+      multi_session_preference: "back_to_back",
+    }),
     [
       { fieldName: "cover_up_photos", fileName: "angle-1.jpg" },
       { fieldName: "cover_up_photos", fileName: "angle-2.jpg" },
