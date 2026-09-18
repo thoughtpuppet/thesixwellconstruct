@@ -1,0 +1,258 @@
+/* Published-work references in the Custom tattoo inquiry. */
+body.custom-inquiry-page .tattoo-reference-picker {
+  min-width: 0;
+  max-width: 780px;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__label,
+body.custom-inquiry-page .tattoo-reference-picker__selected > p {
+  margin: 0 0 8px;
+  color: var(--color-body);
+  font: 800 11px/1.4 var(--sans);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__open {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 5px solid var(--color-tattooing);
+  background: var(--color-bg);
+  color: var(--color-body);
+  cursor: pointer;
+  font: 800 11px/1.4 var(--sans);
+  letter-spacing: .08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__open:hover,
+body.custom-inquiry-page .tattoo-reference-picker__open:focus-visible {
+  border-color: var(--color-tattooing-bright);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__open-mark {
+  color: var(--color-tattooing-bright);
+  font: 700 20px/1 var(--sans);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__panel {
+  min-width: 0;
+  padding: 10px;
+  border: 5px solid #49301f;
+  border-top: 0;
+  background: #15110f;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__panel[hidden],
+body.custom-inquiry-page .tattoo-reference-picker__followup[hidden] { display: none; }
+
+body.custom-inquiry-page .tattoo-reference-picker__tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__tabs button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 5px 2px;
+  border: 5px solid #49301f;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: 800 10px/1.2 var(--sans);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__tabs button[aria-pressed="true"] {
+  border-color: var(--color-tattooing);
+  color: var(--color-body);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__tabs button:hover,
+body.custom-inquiry-page .tattoo-reference-picker__tabs button:focus-visible {
+  border-color: var(--color-tattooing-bright);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__panel > label {
+  display: block;
+  margin: 0 0 6px;
+  color: var(--color-body);
+  font: 700 11px/1.4 var(--sans);
+}
+
+body.custom-inquiry-page .public-form .tattoo-reference-picker #tattooReferenceSearch {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 5px solid #49301f;
+  background: var(--color-bg);
+  color: var(--color-body);
+  font: 16px/1.35 var(--serif);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__results-count {
+  margin: 9px 0 7px;
+  color: var(--color-body);
+  font: 800 10px/1.3 var(--sans);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__results {
+  max-height: 440px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--color-tattooing) #241915;
+  scrollbar-width: thin;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__results::-webkit-scrollbar { width: 8px; }
+body.custom-inquiry-page .tattoo-reference-picker__results::-webkit-scrollbar-track { background: #241915; }
+body.custom-inquiry-page .tattoo-reference-picker__results::-webkit-scrollbar-thumb { background: var(--color-tattooing); }
+
+body.custom-inquiry-page .tattoo-reference-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding-right: 4px;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__item {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 6px;
+  border-left: 5px solid #49301f;
+  background: #211813;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__thumb {
+  display: grid;
+  position: relative;
+  width: 56px;
+  height: 64px;
+  place-items: center;
+  overflow: hidden;
+  background: #38291f;
+  color: var(--color-body);
+  font: 900 30px/1 var(--sans);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__thumb img,
+body.custom-inquiry-page .tattoo-reference-picker__thumb svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__thumb img {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__thumb svg { padding: 10px; }
+
+body.custom-inquiry-page .tattoo-reference-picker__item-copy { min-width: 0; }
+
+body.custom-inquiry-page .tattoo-reference-picker__item-title {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-body);
+  font: 800 10px/1.3 var(--sans);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__item-kind {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font: 400 11px/1.3 var(--serif);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__select {
+  min-width: 60px;
+  min-height: 40px;
+  padding: 5px 6px;
+  border: 5px solid var(--color-tattooing);
+  background: var(--color-bg);
+  color: var(--color-body);
+  cursor: pointer;
+  font: 800 10px/1.2 var(--sans);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__select[aria-pressed="true"] {
+  background: var(--color-tattooing);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__select:hover,
+body.custom-inquiry-page .tattoo-reference-picker__select:focus-visible {
+  border-color: var(--color-tattooing-bright);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__selected { margin-top: 12px; }
+body.custom-inquiry-page .tattoo-reference-picker__selected > p { margin-bottom: 7px; }
+
+body.custom-inquiry-page #tattooReferenceSelectedList {
+  display: flex;
+  min-height: 38px;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__remove {
+  min-height: 38px;
+  padding: 5px 8px;
+  border: 5px solid #49301f;
+  background: #211813;
+  color: var(--color-body);
+  cursor: pointer;
+  font: 700 11px/1.3 var(--sans);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__remove:hover,
+body.custom-inquiry-page .tattoo-reference-picker__remove:focus-visible {
+  border-color: var(--color-tattooing-bright);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__empty-selection,
+body.custom-inquiry-page .tattoo-reference-picker__note {
+  color: var(--color-text-muted);
+  font: 400 11px/1.4 var(--serif);
+}
+
+body.custom-inquiry-page .tattoo-reference-picker__note { margin: 8px 0 0; }
+body.custom-inquiry-page .tattoo-reference-picker__status {
+  color: var(--color-body);
+  font: 400 12px/1.5 var(--serif);
+}
+body.custom-inquiry-page .tattoo-reference-picker__status:not(:empty) { margin-top: 7px; }
+body.custom-inquiry-page .tattoo-reference-picker__followup { margin-top: 16px; }
+
+@media (max-width: 640px) {
+  body.custom-inquiry-page .tattoo-reference-picker__results { max-height: 348px; }
+  body.custom-inquiry-page .tattoo-reference-picker__grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 340px) {
+  body.custom-inquiry-page .tattoo-reference-picker__item { gap: 6px; padding: 4px; }
+  body.custom-inquiry-page .tattoo-reference-picker__thumb { width: 48px; height: 60px; }
+  body.custom-inquiry-page .tattoo-reference-picker__item { grid-template-columns: 48px minmax(0, 1fr) auto; }
+}

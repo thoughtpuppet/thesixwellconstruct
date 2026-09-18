@@ -58,7 +58,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .path-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; }
   .path-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.5vw,48px); letter-spacing:-0.05em; line-height:0.9; color:var(--signal); text-transform:uppercase; margin-bottom:12px; }
   .path-body { font-size:14px; line-height:1.7; color:var(--text-mute); max-width:520px; }
-  .path-action { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text); }
+  .path-action,.consult-option-action { display:inline-flex; align-items:center; justify-self:start; align-self:end; width:max-content; max-width:100%; min-height:44px; padding:8px 12px; border:5px solid var(--ring-soft); font-family:var(--sans); font-weight:700; font-size:11px; line-height:1.3; letter-spacing:0.16em; text-transform:uppercase; color:var(--color-accent); transition:border-color var(--t-fast), background var(--t-fast); }
+  .path-card:hover .path-action,.path-card:focus-visible .path-action,.consult-option:hover .consult-option-action,.consult-option:focus-visible .consult-option-action { border-color:var(--signal); background:rgba(110,4,4,0.08); }
   .consult-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:5px solid var(--ring-faint); }
   .consult-option { display:grid; grid-template-rows:auto 1fr auto; gap:18px; min-height:210px; padding:22px; border-right:5px solid var(--ring-faint); transition:background var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
   .consult-option:last-child { border-right:none; }
@@ -66,7 +67,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .consult-option-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; }
   .consult-option-title { font-family:var(--sans); font-weight:900; font-size:clamp(22px,3vw,36px); letter-spacing:-0.04em; line-height:0.94; color:var(--text); text-transform:uppercase; margin-bottom:12px; }
   .consult-option-body { font-size:14px; line-height:1.7; color:var(--text-mute); }
-  .consult-option-action { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); }
   footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
   footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
@@ -132,15 +132,15 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         <div class="guide-list" aria-label="Before booking guidance">
           <details class="guide-item" name="before-booking">
             <summary>How requests are reviewed</summary>
-            <div class="guide-copy"><p>I review the idea, placement, size, timing, budget, and whether I can make the work well. A clear request helps me respond with a useful next step, but it does not guarantee approval or an appointment.</p><p>Flash, Custom, Build, and Special Projects have different starting points. If your project needs more discussion, I may ask for more context or recommend a consultation before a date is offered.</p></div>
+            <div class="guide-copy"><p>I review the idea, placement, size, timing, budget, and whether it fits my style or if I can translate it into my style. I work best with full artistic freedom over the composition and orientation. Be as detailed as possible to make this process as smooth as possible; vagueness will delay the process or even lead to complete rejection of your project. A submission does not guarantee approval or an appointment. You will be notified by email if a project has been rejected.</p><p>Flash, Custom, Build, and Special Projects have different starting points. If your project needs more discussion, I may ask for more context or recommend a consultation before a date is offered. Or I might recommend another artist that would best fit your needs.<br><br>If you need one-on-one planning time, you can book a consultation below.</p></div>
           </details>
           <details class="guide-item" name="before-booking">
             <summary>Your idea and my interpretation</summary>
-            <div class="guide-copy"><p>You bring the subject, meaning, placement idea, and any details that must stay. I shape the composition, scale, contrast, and how the design works on your body. Tell me what matters most and where I have room to make decisions.</p><p>I do not copy another artist's tattoo or repeat a previous custom piece. If you need an exact image reproduced, I may not be the right artist for the project.</p></div>
+            <div class="guide-copy"><p>You bring the subject, meaning, placement, idea, and any details that you want to stay. I shape the composition, scale, style, orientation, and how the design works on your body.&nbsp;</p><p>I do not copy another artist's work or repeat a previous custom piece. However, I am open to recreating a previous custom piece or interpreting a reference in my own style.&nbsp;<span style="text-transform: none">Tell me what matters most and I'll try to accomadate while maintaining my own artistic intergrity.</span>&nbsp;If you need an exact image reproduced, I may not be the right artist for you. If you want a specific style that another artist is known for, try contacting them for your project.</p></div>
           </details>
           <details class="guide-item" name="before-booking">
             <summary>References and designs you bring</summary>
-            <div class="guide-copy"><p>References can show a mood, story, subject, or visual detail you like. You can also point to a Tattoo, Tattoo Design, or Legend symbol from my work. A reference is a starting point, not a promise to trace it.</p><p>If you made your own drawing or used a digital or AI image to explore the idea, send it with a note about what you like in it. I may need to change it for placement, contrast, existing work, and how it will age. Build Your Own creates a brief for review; selected marks may be adapted in the final composition.</p></div>
+            <div class="guide-copy"><p>References can show a mood, story, subject, or visual detail you like. You can also point to a tattoo, tattoo design, or symbols from my work on the form you fill out. A reference is a starting point, not a promise to trace it.</p><p>If you made your own drawing or used a digital or AI image to explore the idea, send it with a note about what you like in it. I may need to change it for placement, contrast, existing work, and how it will age. Build Your Own creates a brief for review; selected marks may be adapted in the final composition.</p></div>
           </details>
           <details class="guide-item" name="before-booking">
             <summary>When you see the design</summary>
@@ -148,19 +148,27 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           </details>
           <details class="guide-item" name="before-booking">
             <summary>Placement and body photographs</summary>
-            <div class="guide-copy"><p>Send a clear, real photograph of the area you want tattooed so I can see its shape, available space, nearby tattoos, and how the design might fit. For cover-ups or reworks, include clear photos of the existing tattoo. Internet photos can explain the idea but cannot show your anatomy.</p><p>Skin, texture, scarring, sensitivity, color, and contrast are considered individually. Photos provided with an inquiry are for private project review, not permission to publish them.</p></div>
+            <div class="guide-copy"><p>Send a clear, real photograph of the actual area you want tattooed so I can see its shape, available space, skin tone and nearby tattoos. For cover-ups or reworks, include clear photos of the existing tattoo. Do not use internet or AI generated photos.</p><p><br></p></div>
           </details>
           <details class="guide-item" name="before-booking">
             <summary>Rates, budgets, and deposits</summary>
-            <div class="guide-copy"><p>The <a href="/tattoos/#project-fit">Tattooing rates</a> show current starting rates by path. Your inquiry budget tells me what you are comfortable spending; it is not an approved quote. If your project is accepted, I will present a reviewed scope, session plan, and budget before private scheduling.</p><p>Booking requires a deposit. Tattoo deposits are non-refundable and credited toward the tattoo. You will review the appointment length and exact deposit in your private booking plan; payment and rescheduling rules are in the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</p></div>
+            <div class="guide-copy"><p><br></p><p><br></p></div>
           </details>
           <details class="guide-item" name="before-booking">
             <summary>How sessions are planned</summary>
-            <div class="guide-copy"><p>Size alone does not decide the number of appointments. A quarter sleeve may fit one session, while a more complex piece may need several. I review detail, body area, your pace, and how the work needs to develop before proposing a plan.</p><p>For larger work, we may complete sections across back-to-back days on one trip, or make separate visits with healing time in between for further depth and refinement. The first approach does not guarantee a whole sleeve in one trip; the second is not required for every project. Your travel limits help shape the plan, which you review before booking.</p></div>
+            <div class="guide-copy"><p><br></p><p>For larger work, we may complete sections across back-to-back days on one trip, or make separate visits with healing time in between for further depth and refinement. The first approach does not guarantee a whole sleeve in one trip; the second is not required for every project. Your travel limits help shape the plan, which you review before booking.</p></div>
           </details>
           <details class="guide-item" name="before-booking">
             <summary>If you are traveling to Atlanta</summary>
-            <div class="guide-copy"><p>Tell me whether you are traveling, how many appointment days you can make in one trip, and whether returning after healing is possible. If more than one appointment is needed, you can state a preference for back-to-back days or separate visits with healing time in between. These are preferences for planning, not guaranteed schedules.</p><p>Please wait for project approval, an agreed session plan, and confirmed appointments before buying non-refundable travel.</p></div>
+            <div class="guide-copy"><p>The <a href="/tattoos/#project-fit">Tattooing rates</a> show current starting rates by path. Your inquiry budget tells me what you are comfortable spending; it is not an approved quote. If your project is accepted, I will present a reviewed scope, session plan, and cost before private scheduling. I do try to work with everyone's budget as much as I can.</p><p>Booking requires a deposit. Tattoo deposits are non-refundable and credited toward the tattoo. Deposits depend on the session length and range from $50 to $300. You will review the appointment length and exact deposit in your private booking plan; payment and rescheduling rules are in the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking">
+            <summary>What Happens During Each Session</summary>
+            <div class="guide-copy">
+              <p>At the first appointment, I'll show you the prepared design and talk through how I plan to execute the entire project, including what we'll work on that day and how later appointments or return trips may fit together if needed. We'll check the size and placement, then I'll apply the stencil.</p>
+              <p>Once you approve the design and stencil placement, we'll confirm that day's session price and take payment before tattooing begins. For a project with multiple appointment days, payment is taken at the start of each day, not for the whole project upfront.</p>
+              <p>During tattooing, I work without planned breaks. If you need a break, tell me and we'll pause. At the end of each day, we'll review what was completed, go over aftercare, and discuss the next session if one is needed.</p>
+            </div>
           </details>
           <details class="guide-item" name="before-booking">
             <summary>Preparing for your appointment</summary>

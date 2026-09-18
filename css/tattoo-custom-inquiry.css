@@ -133,6 +133,69 @@ body.custom-inquiry-page .public-form :is(#existingTattooPhotosField, #placement
   background: #15110f;
 }
 
+body.custom-inquiry-page .tattoo-upload-selection { margin-top: 16px; }
+body.custom-inquiry-page .tattoo-upload-selection[hidden] { display: none; }
+body.custom-inquiry-page .tattoo-upload-selection__heading {
+  margin: 0 0 8px;
+  color: var(--color-body);
+  font: 800 11px/1.4 var(--sans);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+body.custom-inquiry-page .tattoo-upload-selection__list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+body.custom-inquiry-page .tattoo-upload-selection__item {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 7px;
+  border: 5px solid rgba(109, 61, 21, .42);
+  background: var(--color-bg);
+}
+body.custom-inquiry-page .tattoo-upload-selection__preview {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  overflow: hidden;
+  background: #211813;
+  color: var(--color-body);
+  font: 800 10px/1 var(--sans);
+}
+body.custom-inquiry-page .tattoo-upload-selection__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+body.custom-inquiry-page .tattoo-upload-selection__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-body);
+  font: 400 12px/1.4 var(--serif);
+}
+body.custom-inquiry-page .tattoo-upload-selection__remove {
+  min-height: 40px;
+  padding: 5px 8px;
+  border: 5px solid var(--color-tattooing);
+  background: var(--color-bg);
+  color: var(--color-body);
+  cursor: pointer;
+  font: 800 10px/1.2 var(--sans);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+body.custom-inquiry-page .tattoo-upload-selection__remove:hover,
+body.custom-inquiry-page .tattoo-upload-selection__remove:focus-visible {
+  border-color: var(--color-tattooing-bright);
+}
+
 body.custom-inquiry-page .project-checks label.form-check {
   padding: 11px;
   border: 5px solid rgba(109, 61, 21, 0.27);
@@ -304,5 +367,13 @@ body.custom-inquiry-page .guide-links a:hover {
 
   body.custom-inquiry-page .guide-stack {
     margin-top: 45px;
+  }
+}
+
+/* Keep enhanced dropdown text in scale with the rest of this form on mobile. */
+@media (max-width: 768px) {
+  body.custom-inquiry-page .public-form .custom-select > .custom-select-trigger,
+  body.custom-inquiry-page .public-form .custom-select-option {
+    font-size: 12px;
   }
 }

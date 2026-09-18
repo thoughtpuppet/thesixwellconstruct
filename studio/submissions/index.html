@@ -190,6 +190,14 @@
   .symbol-snapshot-head strong { color:var(--text); font-family:var(--sans); font-size:12px; letter-spacing:.04em; text-transform:uppercase; }
   .symbol-snapshot-head span,.symbol-snapshot-themes { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
   .symbol-snapshot-item p { margin:0; color:var(--muted); line-height:1.6; }
+  .tattoo-reference-review { display:grid; gap:10px; margin:0 0 22px; }
+  .tattoo-reference-review > h3 { margin:0; color:var(--accent); font:800 10px/1.4 var(--sans); letter-spacing:.14em; text-transform:uppercase; }
+  .tattoo-reference-review-item { display:flex; align-items:center; gap:12px; min-width:0; padding:10px; border:5px solid var(--ring-faint); }
+  .tattoo-reference-review-image { display:grid; flex:0 0 66px; width:66px; height:66px; place-items:center; overflow:hidden; background:#211916; color:var(--accent); font:900 23px/1 var(--sans); }
+  .tattoo-reference-review-image img { width:100%; height:100%; object-fit:cover; }
+  .tattoo-reference-review-item span { display:grid; gap:5px; min-width:0; overflow-wrap:anywhere; }
+  .tattoo-reference-review-item small { color:var(--dim); font:700 10px/1.3 var(--sans); text-transform:uppercase; }
+  .tattoo-reference-review-item a { color:var(--accent); font:800 12px/1.4 var(--sans); }
   .actions { display:grid; grid-template-columns:180px minmax(0,1fr) auto; gap:12px; align-items:start; margin-top:22px; }
   .booking-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
   .assist-panel { border:5px solid var(--ring-faint); padding:14px; margin-top:16px; display:grid; gap:10px; }
@@ -1340,6 +1348,23 @@
         <div class="review-card-header">${escapeHtml(label)}</div>
         ${inner}
       </div>`;
+    const selectedReferences = Array.isArray(submission.payload?.selected_references)
+      ? submission.payload.selected_references.filter((item) => item && ["tattoo", "design", "symbol"].includes(item.kind)).slice(0, 3)
+      : [];
+    const selectedReferencesMarkup = selectedReferences.length ? `
+      <div class="tattoo-reference-review" aria-label="Selected work and symbols">
+        <h3>Selected work and symbols</h3>
+        ${selectedReferences.map((item) => {
+          const image = String(item.imageUrl || "").trim();
+          const safeImage = image.startsWith("/") && !image.startsWith("//") || /^https?:\/\//i.test(image) ? image : "";
+          const route = String(item.route || "").trim();
+          const safeRoute = route.startsWith("/") && !route.startsWith("//") ? route : "";
+          return `<div class="tattoo-reference-review-item">
+            <div class="tattoo-reference-review-image">${safeImage ? `<img src="${escapeHtml(safeImage)}" alt="" loading="lazy">` : escapeHtml(String(item.title || "·").slice(0, 1))}</div>
+            <span><small>${escapeHtml(item.kind === "tattoo" ? "Tattoo" : item.kind === "design" ? "Tattoo Design" : "Legend symbol")}</small>${safeRoute ? `<a href="${escapeHtml(safeRoute)}" target="_blank" rel="noopener">${escapeHtml(item.title || item.id || "Open reference")}</a>` : `<strong>${escapeHtml(item.title || item.id || "Reference")}</strong>`}</span>
+          </div>`;
+        }).join("")}
+      </div>` : "";
     const symbolSnapshot = submission.payload?.symbol_snapshot;
     const symbolSnapshotMarkup = Array.isArray(symbolSnapshot)
       ? symbolSnapshot.map((symbol, index) => {
@@ -1617,6 +1642,7 @@
         ${field("Traveling From", p("travel_origin"))}
         ${field("Work Resonance", tattooInquiryValue(submission, "work_resonance"))}
         ${field("Work Example", p("work_resonance_reference"))}
+        ${field("What They Like About Selected References", p("selected_reference_note"))}
         ${field("Reference Intent", planningValue(p("reference_intent")))}
         ${field("Age Confirmed", p("age_confirmed"))}
         ${field("Review Consent", p("review_consent"))}
@@ -1635,6 +1661,7 @@
         ${field("Gap Dimensions", p("gap_dimensions"))}
         ${field("Filler Relationship", ti("filler_relationship"))}
       </div>
+      ${selectedReferencesMarkup}
       ${p("treatment_scarring_context") ? `<div class="field" style="margin-top:16px;"><label>Laser Treatment / Scarring Context</label><div class="value full">${escapeHtml(p("treatment_scarring_context"))}</div></div>` : ""}
       ${p("rework_tattoo_condition") ? `<div class="field" style="margin-top:16px;"><label>Current Tattoo Condition</label><div class="value full">${escapeHtml(p("rework_tattoo_condition"))}</div></div>` : ""}
       ${p("surrounding_work") ? `<div class="field" style="margin-top:16px;"><label>Surrounding Tattoos</label><div class="value full">${escapeHtml(p("surrounding_work"))}</div></div>` : ""}

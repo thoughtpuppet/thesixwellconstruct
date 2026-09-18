@@ -1276,6 +1276,7 @@ function submissionDetailLines(submission) {
       "surrounding_work",
       "filler_relationship",
       "timeline",
+      "selected_reference_note",
       "message",
       "instagram",
     ],
@@ -1345,6 +1346,13 @@ function submissionDetailLines(submission) {
   const lines = preferredFields
     .map((key) => compactLine(labelFromKey(key), readableSubmissionDetailValue(payload[key])))
     .filter(Boolean);
+  if (submission.type === "tattoo_inquiry" && Array.isArray(payload.selected_references) && payload.selected_references.length) {
+    lines.push("Selected work and symbols");
+    for (const item of payload.selected_references.slice(0, 3)) {
+      const label = item.kind === "tattoo" ? "Tattoo" : item.kind === "design" ? "Tattoo Design" : "Legend symbol";
+      lines.push(`- ${label}: ${asString(item.title)} (${asString(item.route)})`);
+    }
+  }
   if (submission.type === "flash_claim") {
     lines.push(
       ...flashSheetDesignLines(payload, "sheet_design_selections", "Requested sheet designs"),

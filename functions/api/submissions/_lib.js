@@ -60,6 +60,7 @@ const TATTOO_INQUIRY_PROJECT_TYPES = new Set([
   "rework",
   "space_filler",
 ]);
+const TATTOO_REFERENCE_KINDS = new Set(["tattoo", "design", "symbol"]);
 const ARTIST_LED_DESIGN_TYPES = new Set(["floral", "narrative", "figurative", "anime"]);
 const REWORK_INTERVENTIONS = new Set([
   "refresh_color",
@@ -475,6 +476,111 @@ function normalizeTattooInquiryPayload(payload) {
   return payload;
 }
 
+function normalizeTattooSelectedReferences(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const raw = payload.selected_references_json ?? payload.selected_references ?? [];
+  let entries = raw;
+  if (typeof raw === "string") {
+    try { entries = JSON.parse(raw || "[]"); }
+    catch { return { error: "Choose up to 3 valid work references.", status: 400 }; }
+  }
+  if (!Array.isArray(entries) || entries.length > 3) {
+    return { error: "Choose up to 3 valid work references.", status: 400 };
+  }
+  const seen = new Set();
+  const selected = [];
+  for (const entry of entries) {
+    const kind = asString(entry?.kind);
+    const id = asString(entry?.id);
+    const key = `${kind}:${id}`;
+    if (!TATTOO_REFERENCE_KINDS.has(kind) || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(id) || seen.has(key)) {
+      return { error: "Choose up to 3 valid work references.", status: 400 };
+    }
+    seen.add(key);
+    selected.push({ kind, id });
+  }
+  const note = asString(payload.selected_reference_note);
+  if (note.length > 1000) return { error: "The reference note must be 1,000 characters or less.", status: 400 };
+  delete payload.selected_references_json;
+  if (selected.length) payload.selected_references = selected;
+  else delete payload.selected_references;
+  if (note && selected.length) payload.selected_reference_note = note;
+  else delete payload.selected_reference_note;
+  return null;
+}
+
+function publicReferenceImageUrl(value) {
+  const url = asString(value);
+  if (url.startsWith("/") && !url.startsWith("//")) return url;
+  try {
+    const parsed = new URL(url);
+    return ["http:", "https:"].includes(parsed.protocol) ? url : "";
+  } catch { return ""; }
+}
+
+async function resolveTattooSelectedReferences(db, references) {
+  const resolved = [];
+  for (const reference of references) {
+    let row;
+    if (reference.kind === "tattoo") {
+      row = await db.prepare(`SELECT p.id,p.title,
+        CASE WHEN COALESCE(NULLIF(p.cover_image_ref,''),'primary')='primary' AND p.primary_public_visible=1
+          THEN COALESCE(NULLIF(p.source_url,''),CASE WHEN p.storage_key<>'' THEN '/api/portfolio/media/'||p.id END)
+          ELSE (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/entity-media/'||m.id)
+            FROM entity_media em JOIN media_assets m ON m.id=em.media_id
+            LEFT JOIN portfolio_image_details detail ON detail.portfolio_item_id=em.entity_id AND detail.image_ref=em.media_id
+            WHERE em.entity_id=p.id AND em.media_id=p.cover_image_ref AND em.role='gallery' AND em.public_visible=1
+              AND m.state='active' AND m.privacy='public' AND m.public_presentation='inline'
+              AND m.mime_type LIKE 'image/%' AND COALESCE(detail.image_role,'result')='result'
+              AND NOT EXISTS(SELECT 1 FROM media_asset_variants mav WHERE mav.master_media_id=m.id)
+            LIMIT 1) END image_url
+        FROM portfolio_items p JOIN content_entities ce ON ce.id=p.id AND ce.visibility='public'
+        WHERE p.id=? AND p.state='published'`).bind(reference.id).first();
+      const portfolioNumber = row ? /^port-(\d+)$/i.exec(row.id) : null;
+      if (row) resolved.push({
+        kind: "tattoo", id: row.id, title: row.title || (portfolioNumber ? `Tattoo ${portfolioNumber[1]}` : "Untitled tattoo"),
+        route: `/tattoos/portfolio/?work=${encodeURIComponent(row.id)}`,
+        imageUrl: publicReferenceImageUrl(row.image_url),
+      });
+    } else if (reference.kind === "design") {
+      row = await db.prepare(`SELECT td.id,td.title,ad.archive_slug,
+        (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id)
+         FROM archive_materials am JOIN media_assets m ON m.id=am.media_id
+         WHERE am.dossier_entity_id=td.id AND am.state='published' AND am.visibility='public'
+           AND (am.state_id IS NULL OR NOT EXISTS(SELECT 1 FROM archive_catalogue_entries ace WHERE ace.entity_id=td.id)
+             OR EXISTS(SELECT 1 FROM archive_object_states aos
+               JOIN archive_object_versions aov ON aov.id=aos.version_id
+               WHERE aos.id=am.state_id AND aov.entity_id=td.id
+                 AND aos.publication_state='published' AND aos.public_visible=1
+                 AND aov.publication_state='published' AND aov.public_visible=1))
+           AND m.state='active' AND m.privacy='public' AND m.public_presentation='inline'
+           AND m.mime_type LIKE 'image/%'
+           AND NOT EXISTS(SELECT 1 FROM media_asset_variants mav WHERE mav.master_media_id=m.id)
+         ORDER BY CASE am.material_type WHEN 'final-image' THEN 0 ELSE 1 END,am.sort_order,am.created_at LIMIT 1) image_url
+        FROM tattoo_designs td
+        JOIN content_entities ce ON ce.id=td.id AND ce.visibility='public'
+        JOIN archive_dossiers ad ON ad.entity_id=td.id AND ad.state='published' AND ad.public_visible=1
+        WHERE td.id=? AND td.state='published'`).bind(reference.id).first();
+      if (row) resolved.push({
+        kind: "design", id: row.id, title: row.title || "Untitled design",
+        route: `/archive/records/${encodeURIComponent(row.archive_slug)}/`,
+        imageUrl: publicReferenceImageUrl(row.image_url),
+      });
+    } else {
+      row = await db.prepare(`SELECT vs.id,vs.name,vs.slug,vs.image_url
+        FROM visual_symbols vs JOIN content_entities ce ON ce.id=vs.id AND ce.visibility='public'
+        WHERE vs.id=? AND vs.state='published'`).bind(reference.id).first();
+      if (row) resolved.push({
+        kind: "symbol", id: row.id, title: row.name || "Untitled symbol",
+        route: `/about/legend/${encodeURIComponent(row.slug)}/`,
+        imageUrl: publicReferenceImageUrl(row.image_url),
+      });
+    }
+    if (!row) return null;
+  }
+  return resolved;
+}
+
 function normalizeTattooInquiryFileRoles(type, files) {
   if (type !== "tattoo_inquiry") return files;
   for (const file of files || []) {
@@ -524,13 +630,6 @@ function validateTattooInquiryProject(payload) {
   }
 
   if (projectType === "large_cover_up") {
-    const required = [
-      ["existing_tattoo_dimensions", "Existing tattoo dimensions are required for a large cover-up."],
-    ];
-    for (const [field, message] of required) {
-      const error = requireProjectField(payload, field, message);
-      if (error) return error;
-    }
     const appointmentPreference = asString(payload.multi_session_preference);
     const legacyMultipleSessions = asString(payload.open_to_multiple_sessions);
     if (!appointmentPreference && !legacyMultipleSessions) {
@@ -1587,6 +1686,10 @@ export async function handleCreateSubmission(request, env) {
   normalizeTattooInquiryPayload(body.payload);
 
   const submission = normalizeSubmission(body.payload, request);
+  if (submission.type === "tattoo_inquiry") {
+    const referenceValidation = normalizeTattooSelectedReferences(body.payload);
+    if (referenceValidation?.error) return errorResponse(referenceValidation.error, referenceValidation.status);
+  }
   normalizeTattooInquiryFileRoles(submission.type, body.files);
   const validation = validateSubmission(submission, body.payload);
   if (validation?.spam) {
@@ -1654,6 +1757,16 @@ export async function handleCreateSubmission(request, env) {
           mazeArchive,
         });
       }
+    }
+
+    if (submission.type === "tattoo_inquiry" && body.payload.selected_references?.length) {
+      const selectedReferences = await resolveTattooSelectedReferences(db, body.payload.selected_references);
+      if (!selectedReferences) {
+        return errorResponse("One of your selected references is no longer public. Remove it and try again.", 409, {
+          code: "TATTOO_REFERENCE_UNAVAILABLE",
+        });
+      }
+      body.payload.selected_references = selectedReferences;
     }
 
     if (submission.type === "tattoo_inquiry" && asString(body.payload.requested_date)) {
