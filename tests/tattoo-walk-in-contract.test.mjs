@@ -97,6 +97,9 @@ test("Custom, Flash, and active Special application share the new planning field
 
   const custom = read("tattoos/inquire/custom/index.html");
   assert.ok(custom.indexOf("About you</h2>") < custom.indexOf("What kind of tattoo do you want?</h2>"));
+  assert.ok(custom.indexOf("What do you want tattooed?</h2>") < custom.indexOf('id="referencesField"'));
+  assert.ok(custom.indexOf('id="referencesField"') < custom.indexOf("Where do you want the tattoo?</h2>"));
+  assert.ok(custom.indexOf("Where do you want the tattoo?</h2>") < custom.indexOf('id="placementPhotosField"'));
   assert.ok(custom.indexOf("Where do you want the tattoo?</h2>") < custom.indexOf("What details are important to you?</h2>"));
   assert.ok(custom.indexOf("What details are important to you?</h2>") < custom.indexOf("When can you come in, and what is your budget?</h2>"));
   assert.match(custom, /<summary>Timing and review<\/summary>/);

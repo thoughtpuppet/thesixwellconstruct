@@ -23,7 +23,7 @@ const PAGES = {
   "tattoos/flash/maze/index.html": "c64e277f52d32203d26dfcd3d10d323aabfc5907c2f8041f344caefb9c881674",
   "tattoos/index.html": "820debbf72538b5e208354b6b0a874f3108de8de34bc6c44c26a8995c2169df8",
   "tattoos/inquire/consultation/index.html": "22e83f2a6a28c269fb42c933cdb988a478f33c4ea43392bd6c82731ea703d9c0",
-  "tattoos/inquire/custom/index.html": "357e1777f804de226eeca2109b616bccae3be2c14ae6b8f21e41a11863b19826",
+  "tattoos/inquire/custom/index.html": "9cdb45f90022aa68a6682bd51368743f146054b90a06512cfd6a4c622fef5fdd",
   "tattoos/inquire/index.html": "3e7f284009b519988bedeb3ccbb904d301bc19849c0ed1d4e333227a87c43dd0",
   "tattoos/location-parking/index.html": "b3b3d42d975c9af4e17831e11760758065cd30f6dbdfdb35d546be5014777447",
   "tattoos/policies/index.html": "0879869acd5b316b810cf2e49a4b14fabbfdf79f5c0da1857d8f9f1280f2f74a",

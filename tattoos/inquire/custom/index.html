@@ -244,6 +244,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <fieldset class="field full tattoo-planning-fieldset"><legend>Any examples of my work you want me to see? (optional)</legend><div class="radio-group custom-example-choices"><label class="radio-option"><input type="checkbox" name="work_resonance" value="tattoo"><span>A tattoo</span></label><label class="radio-option"><input type="checkbox" name="work_resonance" value="tattoo_design"><span>A tattoo design</span></label><label class="radio-option"><input type="checkbox" name="work_resonance" value="legend_symbol"><span>A Legend symbol</span></label><label class="radio-option"><input type="checkbox" name="work_resonance" value="style_detail"><span>A style or detail</span></label></div></fieldset>
             <div class="field full"><label for="work_resonance_reference">Which example? (optional)</label><input id="work_resonance_reference" name="work_resonance_reference" placeholder="Tattoo or design title, link, or Legend symbol"><p class="field-note">Leave blank if none applies.</p></div>
             <div class="field full"><label for="reference_links">Reference links (optional)</label><textarea id="reference_links" name="reference_links" placeholder="Paste links if your references already live online."></textarea></div>
+            <div class="field full" id="referencesField">
+              <label for="references" id="referencesLabel">Concept and visual reference uploads (optional)</label>
+              <input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" aria-describedby="referencesNote" multiple>
+              <p class="file-note" id="referencesNote">Upload only helpful references. Multiple PNG, JPG, WEBP, or PDF files are accepted.</p>
+            </div>
             <h2 class="tattoo-planning-heading"><span class="custom-section-kicker">Placement</span>Where do you want the tattoo?</h2>
             <p class="custom-section-intro">Tell me the body area and any existing tattoos I need to work around.</p>
             <div class="field"><label for="placement">Body area <span class="required-mark">*</span></label><input id="placement" name="placement" placeholder="Example: outer upper arm" required></div>
@@ -258,11 +263,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
               <label for="placement_photos" id="placementPhotosLabel">Placement / body-area photographs (optional)</label>
               <input id="placement_photos" name="placement_photos" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="placementPhotosNote" multiple>
               <p class="file-note" id="placementPhotosNote">Multiple photographs are welcome. Show enough of the body area to understand placement and scale; circle the desired location if helpful.</p>
-            </div>
-            <div class="field full" id="referencesField">
-              <label for="references" id="referencesLabel">Concept and visual reference uploads (optional)</label>
-              <input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" aria-describedby="referencesNote" multiple>
-              <p class="file-note" id="referencesNote">Upload only helpful references. Multiple PNG, JPG, WEBP, or PDF files are accepted.</p>
             </div>
             <h2 class="tattoo-planning-heading"><span class="custom-section-kicker">Details and references</span>What details are important to you?</h2>
             <p class="custom-section-intro">Tell me what must be included and what you are open to changing. Reference images help explain the request; they will not be copied exactly.</p>
