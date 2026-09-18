@@ -54,3 +54,103 @@ test("tattoo inquiry and booking paths remain connected", () => {
   assert.match(booking, /id="appointmentSelection"/);
   assert.match(booking, /id="checkoutBtn"/);
 });
+
+test("inquiry guide precedes the unchanged project choices and consultation", () => {
+  const chooser = read("tattoos/inquire/index.html");
+  const guide = chooser.indexOf('id="before-booking"');
+  const project = chooser.indexOf('id="project-lane-title"');
+  const consultation = chooser.indexOf('id="consult-options-title"');
+  assert.ok(guide >= 0 && guide < project && project < consultation);
+  assert.match(chooser, /01 \/ Start here[\s\S]*What You Should Know Before Booking/);
+  assert.match(chooser, /02 \/ Submit a project[\s\S]*Submit a Project/);
+  assert.match(chooser, /03 \/ Paid planning[\s\S]*Book a Consultation/);
+  assert.equal((chooser.match(/<details class="guide-item"/g) || []).length, 10);
+  assert.equal((chooser.match(/<details class="guide-item" name="before-booking"/g) || []).length, 10);
+  assert.match(chooser, /<summary>Terms &amp; Conditions<\/summary>/);
+  assert.match(chooser, /Choose the request that already matches your idea\. Submissions enter review before any tattoo appointment is offered\./);
+  assert.match(chooser, /Browse available work, open the design you want, and send its attached claim form\./);
+  assert.match(chooser, /Submit an original concept, story, placement, references, and timing for review\./);
+  assert.match(chooser, /Choose symbols and marks from the Legend to create a guided brief for me to use to create your design\./);
+  assert.match(chooser, /participate in an open concept-led, long-form, collaborative, or experimental call\./);
+});
+
+test("Tattoo index changes only its collaboration actions into 5px outlines", () => {
+  const landing = read("tattoos/index.html");
+  assert.match(landing, /\.ledger-action \{[\s\S]*?border:5px solid var\(--ring-soft\); padding:10px 14px;/);
+  assert.equal((landing.match(/class="ledger-action"/g) || []).length, 4);
+});
+
+test("Custom, Flash, and active Special application share the new planning fields", () => {
+  for (const relativePath of [
+    "tattoos/inquire/custom/index.html",
+    "tattoos/flash/claim/index.html",
+    "tattoos/special-projects/index.html",
+  ]) {
+    const source = read(relativePath);
+    assert.match(source, /id="specialProjectForm" data-tattoo-project-planning|id="flashClaimForm" data-tattoo-project-planning|id="inquiryForm" data-tattoo-project-planning/, relativePath);
+    for (const name of ["inquiry_flow_version", "previous_client", "traveling_to_atlanta", "body_area_coverage", "multi_session_preference", "can_return_for_healed_visit", "days_per_trip", "policies_read"]) {
+      assert.match(source, new RegExp(`name="${name}"`), `${relativePath}: ${name}`);
+    }
+    assert.match(source, /Separate visits with healing time in between/, relativePath);
+    assert.doesNotMatch(source, /¾ (?:arm|leg) sleeve/, relativePath);
+  }
+
+  const custom = read("tattoos/inquire/custom/index.html");
+  assert.ok(custom.indexOf("About you</h2>") < custom.indexOf("What kind of tattoo do you want?</h2>"));
+  assert.ok(custom.indexOf("Where do you want the tattoo?</h2>") < custom.indexOf("What details are important to you?</h2>"));
+  assert.ok(custom.indexOf("What details are important to you?</h2>") < custom.indexOf("When can you come in, and what is your budget?</h2>"));
+  assert.match(custom, /<summary>Timing and review<\/summary>/);
+  assert.match(custom, /<summary>Flash, Build, Special, or paid planning<\/summary>/);
+  assert.match(custom, /id="previewAnswersButton"/);
+  assert.match(custom, /id="answerReviewList"/);
+  assert.match(custom, /id="reviewSubmitRow" hidden/);
+  assert.match(custom, /href="\/css\/tattoo-custom-inquiry\.css"/);
+  const customStyle = read("css/tattoo-custom-inquiry.css");
+  assert.match(customStyle, /border-top: 5px solid rgba\(109, 61, 21, 0\.42\)/);
+  assert.match(customStyle, /--form-control-accent: var\(--color-tattooing-bright\)/);
+  assert.match(customStyle, /\.radio-option:hover,[\s\S]*border-color: var\(--color-tattooing-bright\)/);
+});
+
+test("Flash and artist-led Special requests implement the prototype review flow with shared form design", () => {
+  const css = read("css/tattoo-request-form.css");
+  const review = read("js/tattoo-request-review.js");
+  assert.match(css, /--form-control-accent: var\(--color-tattooing-bright\)/);
+  assert.match(css, /\.request-review-card/);
+  assert.match(review, /form\.reportValidity\(\)/);
+  assert.match(review, /submit\.hidden = true/);
+  for (const path of ["tattoos/inquire/custom/index.html", "tattoos/flash/claim/index.html", "tattoos/special-projects/index.html", "tattoos/build/index.html"]) {
+    const source = read(path);
+    assert.match(source, /href="\/css\/tattoo-request-form\.css"/);
+    assert.match(source, /tattoo-form-treatment/);
+  }
+  const flash = read("tattoos/flash/claim/index.html");
+  assert.match(flash, /id="flashClaimForm"[^>]*data-tattoo-request-review/);
+  assert.ok(flash.indexOf("About you</h3>") < flash.indexOf("Which flash design?</h3>"));
+  assert.ok(flash.indexOf("Which flash design?</h3>") < flash.indexOf("When can you come in?</h3>"));
+  assert.match(flash, /data-request-preview/);
+  assert.match(flash, /data-request-submit hidden/);
+  const special = read("tattoos/special-projects/index.html");
+  assert.match(special, /id="artist-led"/);
+  assert.match(special, /id="artistLedForm"[^>]*data-tattoo-request-review/);
+  for (const type of ["floral", "narrative", "figurative", "anime"]) {
+    assert.match(special, new RegExp(`name="artist_led_type" value="${type}"`));
+  }
+  assert.ok(special.indexOf('id="project-calls"') < special.indexOf('id="artist-led"'));
+  assert.match(special, /name="artist_led_trust_ack"/);
+  assert.match(special, /name="artist_led_deposit_ack"/);
+  assert.match(special, /data-request-submit hidden/);
+  assert.match(read("tattoos/submission-received/index.html"), /"artist-led": \{/);
+});
+
+test("all live Preview answers buttons use the Special Projects filter treatment", () => {
+  const custom = read("tattoos/inquire/custom/index.html");
+  const flash = read("tattoos/flash/claim/index.html");
+  const special = read("tattoos/special-projects/index.html");
+  const requestStyles = read("css/tattoo-request-form.css");
+
+  assert.match(custom, /<button class="tattoo-preview-button" type="button" id="previewAnswersButton">Preview answers/);
+  assert.match(flash, /<button class="tattoo-preview-button" type="button" data-request-preview>Preview answers/);
+  assert.match(special, /<button class="tattoo-preview-button" type="button" data-request-preview>Preview answers/);
+  assert.match(requestStyles, /\.public-form \.tattoo-preview-button \{/);
+  assert.match(requestStyles, /border: 5px solid var\(--signal\);/);
+});

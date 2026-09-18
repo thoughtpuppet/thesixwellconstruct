@@ -78,6 +78,73 @@
   margin-top: 4px;
 }
 
+.public-form .tattoo-planning-heading {
+  grid-column: 1 / -1;
+  margin: 18px 0 0;
+  color: var(--form-control-accent);
+  font-family: var(--sans, var(--font-display, Inter, Arial, sans-serif));
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.public-form .tattoo-planning-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.public-form .tattoo-planning-fieldset legend {
+  margin-bottom: 8px;
+  color: var(--form-control-dim);
+  font-family: var(--sans, var(--font-display, Inter, Arial, sans-serif));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.public-form .tattoo-planning-fieldset .radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  min-height: 40px;
+}
+
+.public-form .tattoo-planning-fieldset .radio-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--form-control-muted);
+  font-family: var(--sans, var(--font-display, Inter, Arial, sans-serif));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.public-form .tattoo-planning-fieldset .radio-option input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--form-control-accent);
+}
+
+.public-form .tattoo-planning-fieldset[hidden],
+.public-form .tattoo-planning-note[hidden] {
+  display: none !important;
+}
+
+.public-form .tattoo-planning-note {
+  grid-column: 1 / -1;
+  color: var(--form-control-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .public-form .tattoo-budget-specific > label {
   color: var(--form-control-dim);
   font-family: var(--sans, var(--font-display, Inter, Arial, sans-serif));

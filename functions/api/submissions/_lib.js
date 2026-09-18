@@ -60,6 +60,7 @@ const TATTOO_INQUIRY_PROJECT_TYPES = new Set([
   "rework",
   "space_filler",
 ]);
+const ARTIST_LED_DESIGN_TYPES = new Set(["floral", "narrative", "figurative", "anime"]);
 const REWORK_INTERVENTIONS = new Set([
   "refresh_color",
   "repair_linework",
@@ -667,6 +668,14 @@ function validateSubmission(submission, payload) {
     return { error: "Tattoo requests require a valid date of birth confirming age 18 or older.", status: 400 };
   }
 
+  if (
+    ["tattoo_inquiry", "flash_claim", "special_project"].includes(submission.type)
+    && asString(payload.inquiry_flow_version) === "2"
+    && asString(payload.policies_read) !== "yes"
+  ) {
+    return { error: "Please read and acknowledge the Studio & Booking Policies.", status: 400 };
+  }
+
   if (submission.type === "build_brief") {
     const symbols = parseStableSymbolIds(payload);
     if (symbols.error) return { error: symbols.error, status: 400 };
@@ -695,6 +704,20 @@ function validateSubmission(submission, payload) {
   if (submission.type === "tattoo_inquiry") {
     const projectValidation = validateTattooInquiryProject(payload);
     if (projectValidation) return projectValidation;
+    if (asString(payload.project_category) === "special_projects_artist_led") {
+      if (asString(payload.project_type) !== "new_work" || !ARTIST_LED_DESIGN_TYPES.has(asString(payload.artist_led_type))) {
+        return { error: "Choose a supported artist-led design type.", status: 400 };
+      }
+      if (asString(payload.artist_led_type) === "anime" && !asString(payload.anime_source)) {
+        return { error: "Name the Anime show, character, or arc.", status: 400 };
+      }
+      if (asString(payload.artist_led_type) !== "anime" && asString(payload.anime_source)) {
+        return { error: "Only Anime requests can specify a source theme.", status: 400 };
+      }
+      if (asString(payload.artist_led_trust_ack) !== "yes" || asString(payload.artist_led_deposit_ack) !== "yes") {
+        return { error: "Please acknowledge the artist-led design and deposit terms.", status: 400 };
+      }
+    }
   }
 
   return null;

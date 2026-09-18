@@ -1287,6 +1287,25 @@
     connect_blend: "Connect or blend with surrounding work",
     standalone: "Standalone tattoo",
     unsure: "Unsure - needs assessment",
+    small: "Small · 2 in or less",
+    medium: "Medium · over 2–5 in",
+    large: "Large · over 5–8 in",
+    xl: "XL · over 8 in, one area",
+    large_scale: "Large-scale work / body-area coverage",
+    back_to_back: "Back-to-back days in one trip",
+    separate_healed_visits: "Separate visits with healing time in between",
+    either: "Either works",
+    "4_plus": "4 or more days",
+    yes: "Yes",
+    no: "No",
+    tattoo: "A tattoo",
+    tattoo_design: "A tattoo design",
+    legend_symbol: "A Legend symbol",
+    style_detail: "A style or detail",
+    subject: "The subject",
+    style_color: "Style or color",
+    layout: "Layout",
+    own_image: "Client sketch or digital image",
   };
   function tattooInquiryValue(submission, key) {
     const value = submission.payload?.[key];
@@ -1294,6 +1313,9 @@
     return values.filter((item) => item !== undefined && item !== null && item !== "")
       .map((item) => TATTOO_INQUIRY_VALUE_LABELS[item] || item)
       .join(", ");
+  }
+  function planningValue(value) {
+    return TATTOO_INQUIRY_VALUE_LABELS[value] || value || "";
   }
 
   function statusOptionsFor(submission) {
@@ -1376,10 +1398,19 @@
           ${field("Series", p("flash_series"))}
           ${field("Flash Size", p("flash_size"))}
           ${field("Date of Birth", p("dob"))}
+          ${field("Previous Client", planningValue(p("previous_client")))}
+          ${field("Traveling to Atlanta", planningValue(p("traveling_to_atlanta")))}
           ${field("Placement", p("placement"))}
           ${field("Scale", p("scale"))}
+          ${field("Estimated Size", planningValue(p("estimated_size")))}
+          ${field("Body-area Coverage", p("body_area_coverage"))}
+          ${field("Other Coverage", p("body_area_coverage_other"))}
           ${field("Budget Range", p("budget_range") || p("claim_bid"))}
           ${field("Timeline", p("timeline"))}
+          ${field("Multi-appointment Preference", planningValue(p("multi_session_preference")))}
+          ${field("Can Return After Healing", planningValue(p("can_return_for_healed_visit")))}
+          ${field("Appointment Days Per Trip", planningValue(p("days_per_trip")))}
+          ${field("Traveling From", p("travel_origin"))}
           ${field("Managed Price", p("flash_price_note"))}
           ${field("Session Category", p("flash_session_category"))}
           ${field("Estimated Sessions", p("flash_estimated_sessions"))}
@@ -1488,14 +1519,25 @@
           ${field("Profile", titleize(profile))}
           ${field("Mode", titleize(selectedMode))}
           ${field("Date of Birth", p("dob"))}
+          ${field("Previous Client", planningValue(p("previous_client")))}
+          ${field("Traveling to Atlanta", planningValue(p("traveling_to_atlanta")))}
           ${field("Placement", p("placement"))}
-          ${field("Size", p("scale") || p("size"))}
+          ${field("Estimated Size", planningValue(p("scale") || p("size")))}
+          ${field("Estimated Dimensions", p("estimated_dimensions"))}
+          ${field("Body-area Coverage", p("body_area_coverage"))}
+          ${field("Other Coverage", p("body_area_coverage_other"))}
           ${profile === "experimental" ? field("Tattoo work", "Free") : field("Budget", p("budget_range"))}
+          ${profile === "experimental" ? "" : field("Specific Budget (USD)", p("budget_amount_dollars"))}
           ${profile === "experimental" ? field("Attendance deposit", money(terms.refundableDepositCents || p("refundable_deposit_cents") || 0)) : field("Timeline", p("timeline"))}
           ${profile === "experimental" ? field("Healed-photo method", titleize(terms.healedPhotoMethod || p("healed_photo_method"))) : ""}
           ${profile === "experimental" ? field("Healed-photo timing", `${terms.healedPhotoDueWeeks || p("healed_photo_due_weeks") || 6} weeks after attendance`) : ""}
           ${field("Instagram", p("instagram"))}
           ${field("Source", submission.sourcePath || "")}
+          ${field("Multi-appointment Preference", planningValue(p("multi_session_preference")))}
+          ${field("Can Return After Healing", planningValue(p("can_return_for_healed_visit")))}
+          ${field("Appointment Days Per Trip", planningValue(p("days_per_trip")))}
+          ${field("Traveling From", p("travel_origin"))}
+          ${field("Booking Policies Read", p("policies_read"))}
         </div>
         <div class="field" style="margin-top:16px;"><label>Project Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>
         ${profile === "extended" ? `<div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>` : ""}
@@ -1546,19 +1588,36 @@
     }
 
     const ti = (key) => tattooInquiryValue(submission, key);
-    return card("Tattoo Inquiry", `
+    return card(p("project_category") === "special_projects_artist_led" ? "Artist-led Design Request" : "Tattoo Inquiry", `
       <div class="grid">
         ${field("Project Type", ti("project_type"))}
+        ${field("Artist-led Type", p("artist_led_type"))}
+        ${field("Anime Source", p("anime_source"))}
+        ${field("Artist-led Design Acknowledged", p("artist_led_trust_ack"))}
+        ${field("Artist-led Deposit Terms Acknowledged", p("artist_led_deposit_ack"))}
         ${field("Date of Birth", p("dob"))}
         ${field("Previous Client", p("previous_client"))}
         ${field("Placement", p("placement"))}
-        ${field("Size", p("size"))}
+        ${field("Estimated Size", ti("size"))}
+        ${field("Estimated Dimensions", p("estimated_dimensions"))}
+        ${field("Body-area Coverage", p("body_area_coverage"))}
+        ${field("Other Coverage", p("body_area_coverage_other"))}
+        ${field("Traveling to Atlanta", planningValue(p("traveling_to_atlanta")))}
         ${field("Budget", p("budget_range"))}
+        ${field("Specific Budget (USD)", p("budget_amount_dollars"))}
         ${field("Color Preference", p("color_preference"))}
         ${field("Timeline", p("timeline"))}
         ${field("Requested Date", p("requested_date"))}
+        ${field("Multi-appointment Preference", planningValue(p("multi_session_preference")))}
+        ${field("Can Return After Healing", planningValue(p("can_return_for_healed_visit")))}
+        ${field("Appointment Days Per Trip", planningValue(p("days_per_trip")))}
+        ${field("Traveling From", p("travel_origin"))}
+        ${field("Work Resonance", tattooInquiryValue(submission, "work_resonance"))}
+        ${field("Work Example", p("work_resonance_reference"))}
+        ${field("Reference Intent", planningValue(p("reference_intent")))}
         ${field("Age Confirmed", p("age_confirmed"))}
         ${field("Review Consent", p("review_consent"))}
+        ${field("Booking Policies Read", p("policies_read"))}
         ${field("Instagram", p("instagram"))}
         ${field("Source", submission.sourcePath || "")}
         ${field("Desired Style / Direction", p("desired_style"))}
@@ -1576,6 +1635,9 @@
       ${p("treatment_scarring_context") ? `<div class="field" style="margin-top:16px;"><label>Laser Treatment / Scarring Context</label><div class="value full">${escapeHtml(p("treatment_scarring_context"))}</div></div>` : ""}
       ${p("rework_tattoo_condition") ? `<div class="field" style="margin-top:16px;"><label>Current Tattoo Condition</label><div class="value full">${escapeHtml(p("rework_tattoo_condition"))}</div></div>` : ""}
       ${p("surrounding_work") ? `<div class="field" style="margin-top:16px;"><label>Surrounding Tattoos</label><div class="value full">${escapeHtml(p("surrounding_work"))}</div></div>` : ""}
+      ${p("must_have_details") ? `<div class="field" style="margin-top:16px;"><label>Must-have Details</label><div class="value full">${escapeHtml(p("must_have_details"))}</div></div>` : ""}
+      ${p("creative_freedom") ? `<div class="field" style="margin-top:16px;"><label>Artist Decisions</label><div class="value full">${escapeHtml(p("creative_freedom"))}</div></div>` : ""}
+      ${p("body_context") ? `<div class="field" style="margin-top:16px;"><label>Placement Concerns</label><div class="value full">${escapeHtml(p("body_context"))}</div></div>` : ""}
       ${p("project_title") ? `<div class="field" style="margin-top:16px;"><label>Project or Flash Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>` : ""}
       ${p("reference_links") ? `<div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>` : ""}
       <div class="field" style="margin-top:16px;"><label>Project Description</label><div class="value full">${escapeHtml(p("message"))}</div></div>

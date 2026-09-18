@@ -749,6 +749,8 @@ export async function notifySubmissionDecision(env, submission = {}, options = {
   const to = asString(submission.contact_email || submission.contactEmail);
   if (!to) return { ok: false, skipped: true, error: "The submission has no client email." };
   const type = normalizedSubmissionType(submission.type);
+  const artistLed = type === "tattoo_inquiry"
+    && asString((submission.payload || parseJsonField(submission.payload_json, {})).project_category) === "special_projects_artist_led";
   const variant = ({
     tattoo_inquiry: "custom",
     flash_claim: "flash",
@@ -769,8 +771,8 @@ export async function notifySubmissionDecision(env, submission = {}, options = {
   })[type] || "project request";
   const message = buildSubmissionDecisionEmail({
     decision,
-    variant,
-    label,
+    variant: artistLed ? "special" : variant,
+    label: artistLed ? "artist-led design request" : label,
     clientName: submission.contact_name || submission.contactName,
     message: options.message || submission.decision_client_message || submission.decisionClientMessage || "",
   });
@@ -779,7 +781,7 @@ export async function notifySubmissionDecision(env, submission = {}, options = {
     ...(type === "art_acquisition" ? eventsEmailIdentity(env) : {}),
     ...message,
     templateKey: decision === "approved" ? "submission_approved" : "submission_declined",
-    templateVariant: variant,
+    templateVariant: artistLed ? "special" : variant,
     relatedType: "submission",
     relatedId: asString(submission.id),
     idempotencyKey: options.idempotencyKey || `submission_${decision}:${asString(submission.id)}:${Number(options.decisionRevision || submission.decision_revision || submission.decisionRevision || 0)}`,
@@ -1162,6 +1164,8 @@ async function tattooReceiptSettings(env) {
 
 const SUBMISSION_DETAIL_LABELS = {
   project_type: "Project type",
+  artist_led_type: "Artist-led design type",
+  anime_source: "Anime show, character, or arc",
   desired_style: "Desired style / direction",
   cover_up_goal: "Cover-up goal",
   size_placement_flexibility: "Size / placement flexibility",
@@ -1252,6 +1256,8 @@ function submissionDetailLines(submission) {
   const fieldsByType = {
     tattoo_inquiry: [
       "project_type",
+      "artist_led_type",
+      "anime_source",
       "placement",
       "size",
       "budget_range",
@@ -1410,7 +1416,14 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     : type === "studio_booking"
       ? "construct_event"
       : "tattoo";
-  const baseProfile = SUBMISSION_RECEIPTS[type] || {
+  const artistLed = type === "tattoo_inquiry"
+    && asString(normalized.payload?.project_category) === "special_projects_artist_led";
+  const baseProfile = artistLed ? {
+    label: "artist-led design request",
+    subject: "Artist-led design request received",
+    expectation: "The studio will review the design type, placement, scale, travel needs, budget, and timing before deciding the next step.",
+    next: "If approved, you can review a project budget and session plan before private booking and deposit.",
+  } : SUBMISSION_RECEIPTS[type] || {
     label: "project submission",
     subject: "Project submission received",
     expectation: "The studio will review the information you shared before deciding the next step.",
@@ -1434,7 +1447,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
   const message = buildSubmissionReceivedEmail({
     variant: studioVisit
       ? "studio_visit"
-      : ({ tattoo_inquiry: "custom", flash_claim: "flash", build_brief: "build", maze_design: "maze", special_project: "special", tattoo_special: "tattoo_special", consultation: "consultation", build_session: "build_session", art_acquisition: "art_acquisition", studio_booking: "studio_space" })[type] || "custom",
+      : artistLed ? "special" : ({ tattoo_inquiry: "custom", flash_claim: "flash", build_brief: "build", maze_design: "maze", special_project: "special", tattoo_special: "tattoo_special", consultation: "consultation", build_session: "build_session", art_acquisition: "art_acquisition", studio_booking: "studio_space" })[type] || "custom",
     theme: constructTheme,
     subject: constructIdentity
       ? `the six.well construct — ${profile.subject}`
@@ -1471,10 +1484,12 @@ export async function notifyAdminSubmissionReceived(env, submission, options = {
   if (normalized.type === "tattoo_special" && asString(normalized.payload?.booking_mode) !== "review") {
     return { ok: false, skipped: true, reason: "direct_booking_confirmation_only" };
   }
-  const formName = tattooFormName(normalized.type);
+  const artistLed = normalized.type === "tattoo_inquiry"
+    && asString(normalized.payload?.project_category) === "special_projects_artist_led";
+  const formName = artistLed ? "Artist-led Design Request" : tattooFormName(normalized.type);
   const studioVisit = normalized.type === "studio_booking"
     && (normalized.payload?.booking_type_id || normalized.payload?.bookingTypeId) === "studio_visit";
-  const submissionTypeLabel = studioVisit ? "Open Studio Visit" : labelFromKey(normalized.type);
+  const submissionTypeLabel = studioVisit ? "Open Studio Visit" : artistLed ? "Artist-led Design Request" : labelFromKey(normalized.type);
   const theme = normalized.type === "art_acquisition" || studioVisit
     ? "construct_art"
     : normalized.type === "studio_booking"

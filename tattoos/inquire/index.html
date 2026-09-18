@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
-    --bg:#0e0e0e; --accent:#FCB867; --signal:var(--color-tattooing); --ring:#6D3D15;
+    --bg:var(--color-bg); --accent:#FCB867; --signal:var(--color-tattooing); --ring:#6D3D15;
     --venture-color:var(--color-tattooing); --venture-accent:var(--color-tattooing);
     --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
     --text:var(--color-body, #FBD19D); --text-mute:var(--color-text-muted, rgba(251,209,157,0.66));
@@ -24,7 +24,6 @@
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
   html,body { background:var(--bg); color:var(--text); font-family:var(--serif); min-height:100vh; overflow-x:clip; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   a { color:inherit; text-decoration:none; }
-  .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
   header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
 main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
   .intro { max-width:780px; margin-bottom:64px; }
@@ -36,6 +35,20 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .lane-index { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; margin-bottom:12px; }
   .lane-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.6vw,48px); letter-spacing:-0.04em; line-height:0.92; color:var(--signal); text-transform:uppercase; margin-bottom:14px; }
   .lane-intro { font-size:13px; line-height:1.7; color:var(--text-mute); max-width:260px; }
+  .guide-list { border:5px solid var(--ring-faint); }
+  .guide-item { border-bottom:5px solid var(--ring-faint); }
+  .guide-item:last-child { border-bottom:0; }
+  .guide-item summary { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:22px 24px; cursor:pointer; list-style:none; font-family:var(--sans); font-size:clamp(15px,1.5vw,19px); font-weight:700; line-height:1.25; color:var(--text); transition:background var(--t-fast); }
+  .guide-item summary::-webkit-details-marker { display:none; }
+  .guide-item summary::after { content:'+'; flex:none; font-size:27px; line-height:1; color:var(--signal); }
+  .guide-item[open] summary::after { content:'−'; }
+  .guide-item summary:hover,.guide-item summary:focus-visible { background:rgba(109,61,21,0.18); outline:5px solid var(--signal); outline-offset:-5px; }
+  .guide-copy { padding:0 24px 24px; max-width:790px; font-size:14px; line-height:1.7; color:var(--text-mute); }
+  .guide-copy p + p,.guide-copy ul + p { margin-top:16px; }
+  .guide-copy ul { padding-left:22px; margin-top:14px; }
+  .guide-copy li + li { margin-top:9px; }
+  .guide-copy a { color:var(--accent); text-decoration:underline; text-underline-offset:4px; }
+  .guide-copy strong { color:var(--text); }
   .path-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:5px solid var(--ring-faint); }
   .path-card { display:grid; grid-template-rows:auto 1fr auto; gap:18px; min-height:230px; padding:24px; border-right:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); transition:background var(--t-fast), color var(--t-fast); }
   .path-card:nth-child(2n) { border-right:none; }
@@ -74,6 +87,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   }
   @media (max-width:640px) {
     .path-card { min-height:auto; }
+    .guide-item summary { padding:18px 16px; }
+    .guide-copy { padding:0 16px 20px; }
     .lane,.path-grid { grid-template-columns:1fr; }
     main { overflow-x:hidden; }
   }
@@ -94,7 +109,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fadeOut); else fadeOut();
   })();
   </script>
-  <div class="grain"></div>
   <header class="top"></header>
   <main>
     <nav class="breadcrumb" aria-label="breadcrumb">
@@ -109,9 +123,67 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       <p class="intro-body hero-descriptor" data-copy-id="inquire-chooser-intro">Each form carries a different kind of request into review. Choose the path closest to what you want, then submit the details there.</p>
     </section>
     <div class="decision-surface" aria-label="Choose a tattoo path">
-      <section class="lane" aria-labelledby="project-lane-title">
+      <section class="lane" id="before-booking" aria-labelledby="guide-title">
         <div>
           <p class="lane-index">01 / Start here</p>
+          <h2 class="lane-title" id="guide-title">What You Should Know Before Booking</h2>
+          <p class="lane-intro">Open a subject for the full guidance. The studio policies linked below remain the terms that govern appointments.</p>
+        </div>
+        <div class="guide-list" aria-label="Before booking guidance">
+          <details class="guide-item" name="before-booking">
+            <summary>How requests are reviewed</summary>
+            <div class="guide-copy"><p>I review the idea, placement, size, timing, budget, and whether I can make the work well. A clear request helps me respond with a useful next step, but it does not guarantee approval or an appointment.</p><p>Flash, Custom, Build, and Special Projects have different starting points. If your project needs more discussion, I may ask for more context or recommend a consultation before a date is offered.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking">
+            <summary>Your idea and my interpretation</summary>
+            <div class="guide-copy"><p>You bring the subject, meaning, placement idea, and any details that must stay. I shape the composition, scale, contrast, and how the design works on your body. Tell me what matters most and where I have room to make decisions.</p><p>I do not copy another artist's tattoo or repeat a previous custom piece. If you need an exact image reproduced, I may not be the right artist for the project.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking">
+            <summary>References and designs you bring</summary>
+            <div class="guide-copy"><p>References can show a mood, story, subject, or visual detail you like. You can also point to a Tattoo, Tattoo Design, or Legend symbol from my work. A reference is a starting point, not a promise to trace it.</p><p>If you made your own drawing or used a digital or AI image to explore the idea, send it with a note about what you like in it. I may need to change it for placement, contrast, existing work, and how it will age. Build Your Own creates a brief for review; selected marks may be adapted in the final composition.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking">
+            <summary>When you see the design</summary>
+            <div class="guide-copy"><p>After a project is approved and booked, I prepare the references and composition. Your design is normally shown at the tattoo appointment. An earlier design review requires a separately requested, approved, and paid consultation.</p><p>The tattoo deposit includes one developed design direction. Minor refinements and redraws I initiate are included. If I approve a substantially different alternate concept you request, the current policy requires a separate non-refundable drawing fee before that work begins. See the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a> for the amount and full conditions.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking">
+            <summary>Placement and body photographs</summary>
+            <div class="guide-copy"><p>Send a clear, real photograph of the area you want tattooed so I can see its shape, available space, nearby tattoos, and how the design might fit. For cover-ups or reworks, include clear photos of the existing tattoo. Internet photos can explain the idea but cannot show your anatomy.</p><p>Skin, texture, scarring, sensitivity, color, and contrast are considered individually. Photos provided with an inquiry are for private project review, not permission to publish them.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking">
+            <summary>Rates, budgets, and deposits</summary>
+            <div class="guide-copy"><p>The <a href="/tattoos/#project-fit">Tattooing rates</a> show current starting rates by path. Your inquiry budget tells me what you are comfortable spending; it is not an approved quote. If your project is accepted, I will present a reviewed scope, session plan, and budget before private scheduling.</p><p>Booking requires a deposit. Tattoo deposits are non-refundable and credited toward the tattoo. You will review the appointment length and exact deposit in your private booking plan; payment and rescheduling rules are in the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking">
+            <summary>How sessions are planned</summary>
+            <div class="guide-copy"><p>Size alone does not decide the number of appointments. A quarter sleeve may fit one session, while a more complex piece may need several. I review detail, body area, your pace, and how the work needs to develop before proposing a plan.</p><p>For larger work, we may complete sections across back-to-back days on one trip, or make separate visits with healing time in between for further depth and refinement. The first approach does not guarantee a whole sleeve in one trip; the second is not required for every project. Your travel limits help shape the plan, which you review before booking.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking">
+            <summary>If you are traveling to Atlanta</summary>
+            <div class="guide-copy"><p>Tell me whether you are traveling, how many appointment days you can make in one trip, and whether returning after healing is possible. If more than one appointment is needed, you can state a preference for back-to-back days or separate visits with healing time in between. These are preferences for planning, not guaranteed schedules.</p><p>Please wait for project approval, an agreed session plan, and confirmed appointments before buying non-refundable travel.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking">
+            <summary>Preparing for your appointment</summary>
+            <div class="guide-copy"><p>Clients must be at least 18 with valid ID. Arrive rested, fed, hydrated, and wearing clothing that gives access to the tattoo area. Review the <a href="/tattoos/day-of/">day-of preparation</a>, <a href="/tattoos/location-parking/">location and parking</a>, and <a href="/tattoos/aftercare/">aftercare</a> before your visit.</p><p>Timing, late arrival, rescheduling, and health requirements are covered in the full <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking" id="terms">
+            <summary>Terms &amp; Conditions</summary>
+            <div class="guide-copy"><p>This is a plain-language introduction to the <a href="/tattoos/policies/">full Studio &amp; Booking Policies</a>. Read that page before booking; it governs if a summary here leaves out a detail. An inquiry is a request for review, not an appointment or a deposit charge.</p>
+              <ul>
+                <li><strong>Age and ID:</strong> You must be at least 18 and bring valid ID.</li>
+                <li><strong>Design:</strong> I do not offer exact copies. The design is normally shown at your appointment unless an earlier consultation is requested, approved, and paid for.</li>
+                <li><strong>Changes:</strong> One developed direction is included with a paid tattoo deposit. Minor refinements and artist-initiated redraws are included; an approved alternate concept has a separate non-refundable drawing fee. Major last-minute changes can require a new appointment and deposit.</li>
+                <li><strong>Deposit and timing:</strong> Tattoo deposits are non-refundable and credited toward the final cost. One reschedule is allowed with at least 48 hours' notice. Late arrival and no-shows have separate consequences in the full policy.</li>
+                <li><strong>Payment and safety:</strong> The remaining balance is paid before tattooing begins, after the final design, placement, and session price are confirmed. Digital payments carry a processing fee. Arriving under the influence or with an active illness or skin concern near the tattoo area can prevent the session.</li>
+              </ul>
+              <p>Review the full policy for exact fees, grace periods, guest guidance, payment methods, and all other conditions.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+      <section class="lane" aria-labelledby="project-lane-title">
+        <div>
+          <p class="lane-index">02 / Submit a project</p>
           <h2 class="lane-title" id="project-lane-title">Submit a Project</h2>
           <p class="lane-intro">Choose the request that already matches your idea. Submissions enter review before any tattoo appointment is offered.</p>
         </div>
@@ -141,7 +213,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 
       <section class="lane" aria-labelledby="consult-options-title">
         <div>
-          <p class="lane-index">02 / Paid planning</p>
+          <p class="lane-index">03 / Paid planning</p>
           <h2 class="lane-title" id="consult-options-title">Book a Consultation</h2>
           <p class="lane-intro">Use paid planning time when placement or project direction needs a focused conversation.&nbsp;</p>
         </div>

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0e0e0e">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Custom tattoo inquiry · content prototype · Art.Pill Tattoo House</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/transitions.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <link rel="stylesheet" href="/css/site-typography.css">
+  <link rel="stylesheet" href="/css/hero.css">
+  <link rel="stylesheet" href="/tools/tattooing-prototype/prototype.css">
+</head>
+<body data-venture="tattooing" data-prototype-page="custom">
+  <div class="prototype-ribbon" role="status">
+    <strong>Prototype · no live submission</strong>
+    <nav aria-label="Prototype pages">
+      <a href="/tools/tattooing-prototype/">Tattooing</a>
+      <a href="/tools/tattooing-prototype/inquire.html">Inquire</a>
+      <a href="/tools/tattooing-prototype/flash.html">Flash claim</a>
+      <a href="/tools/tattooing-prototype/custom.html" aria-current="page">Custom inquiry</a>
+      <a href="/tools/tattooing-prototype/special.html">Special Projects</a>
+    </nav>
+  </div>
+  <header class="prototype-top top"><a href="/tools/tattooing-prototype/inquire.html#submit-a-project">Back to project paths →</a></header>
+  <main class="prototype-shell">
+    <nav class="prototype-breadcrumb" aria-label="Breadcrumb"><a href="/tools/tattooing-prototype/">Tattooing</a><span aria-hidden="true">:</span><a href="/tools/tattooing-prototype/inquire.html">Inquire</a><span aria-hidden="true">:</span><span>Custom inquiry</span></nav>
+    <section class="prototype-hero prototype-hero--supporting site-hero site-hero--supporting" aria-labelledby="page-title">
+      <div><h1 class="hero-title" id="page-title">Custom Tattoo.</h1></div>
+      <p class="hero-descriptor">Tell me what you want, where you want it, and which details matter most.</p>
+    </section>
+    <p class="prototype-note"><strong>Prototype only:</strong> Use made-up details in the client fields. Nothing here can be submitted or uploaded, and this page does not send or save your answers. The button at the bottom only previews them in this tab.</p>
+
+    <section class="prototype-form-section" aria-labelledby="client-title">
+      <p class="prototype-kicker">Client details</p>
+      <h2 id="client-title">About you</h2>
+      <p>The live form asks for these details. Use made-up answers here. Names, contact details, and date of birth will not appear in the answer preview.</p>
+      <div class="prototype-field-grid">
+        <div class="prototype-field"><label for="clientFirstName">First name <span class="prototype-required">*</span></label><input id="clientFirstName" type="text" autocomplete="off" placeholder="Use a made-up name"></div>
+        <div class="prototype-field"><label for="clientLastName">Last name <span class="prototype-required">*</span></label><input id="clientLastName" type="text" autocomplete="off" placeholder="Use a made-up name"></div>
+        <div class="prototype-field"><label for="clientEmail">Email <span class="prototype-required">*</span></label><input id="clientEmail" type="email" autocomplete="off" placeholder="example@example.com"></div>
+        <div class="prototype-field"><label for="clientPhone">Phone <span class="prototype-required">*</span></label><input id="clientPhone" type="tel" autocomplete="off" placeholder="Use a made-up number"></div>
+        <div class="prototype-field"><label for="clientInstagram">Instagram (optional)</label><input id="clientInstagram" type="text" autocomplete="off" placeholder="Use a made-up handle"></div>
+        <div class="prototype-field"><label for="clientPreferredContact">Preferred contact (optional)</label><select id="clientPreferredContact"><option value="">Choose one</option><option>Email</option><option>Phone / text</option><option>Instagram</option></select></div>
+        <div class="prototype-field"><label for="clientDob">Date of birth <span class="prototype-required">*</span></label><input id="clientDob" type="date" autocomplete="off"><small>Use a made-up date in this preview.</small></div>
+        <fieldset class="prototype-field prototype-fieldset"><legend>Have you been tattooed by me before? <span class="prototype-required">*</span></legend><div class="prototype-choices"><label class="prototype-choice"><input type="radio" name="previousClient" value="Yes">Yes</label><label class="prototype-choice"><input type="radio" name="previousClient" value="No">No</label></div></fieldset>
+      </div>
+      <div class="prototype-planner" data-planning-travel="custom"></div>
+    </section>
+
+    <section class="prototype-form-section" aria-labelledby="starting-title">
+      <p class="prototype-kicker">Tattoo</p>
+      <h2 id="starting-title">What kind of tattoo do you want?</h2>
+      <p>Select the closest project type. The questions below will change to match it.</p>
+      <div class="prototype-field-grid">
+        <div class="prototype-field"><label for="projectType">Project type <span class="prototype-required">*</span></label><select id="projectType"><option value="">Choose the closest fit</option><option value="new_work">New work</option><option value="cover_up">Cover-up</option><option value="large_cover_up">Large cover-up</option><option value="rework">Rework / recolor</option><option value="space_filler">Space filler</option></select></div>
+      </div>
+      <div class="prototype-planner" data-planning-size="custom"></div>
+      <p class="prototype-branch-note" id="projectTypeContext" hidden aria-live="polite"></p>
+      <div class="prototype-field-grid prototype-conditional-grid" aria-label="Questions for the selected project type">
+        <div class="prototype-field prototype-field--full" data-project-types="new_work" hidden><label for="desiredStyle">Style or visual direction (optional)</label><input id="desiredStyle" type="text" placeholder="Example: black and grey, fine lines, or a work of mine you like"></div>
+        <div class="prototype-field" data-project-types="cover_up large_cover_up" hidden><label for="coverUpGoal">What do you want to do with the existing tattoo? <span class="prototype-required">*</span></label><select id="coverUpGoal"><option value="">Choose one</option><option>Fully hide it</option><option>Transform it</option><option>Include it in new work</option><option>Not sure</option></select></div>
+        <div class="prototype-field" data-project-types="cover_up large_cover_up" hidden><label for="sizePlacementFlexibility">Can the size or placement change? <span class="prototype-required">*</span></label><select id="sizePlacementFlexibility"><option value="">Choose one</option><option>Both can change</option><option>Size can change</option><option>Placement can change</option><option>Limited flexibility</option><option>Not sure</option></select></div>
+        <div class="prototype-field" data-project-types="large_cover_up" hidden><label for="existingTattooDimensions">Size of the existing tattoo <span class="prototype-required">*</span></label><input id="existingTattooDimensions" type="text" placeholder="Example: 8 × 12 in"></div>
+        <div class="prototype-field" data-project-types="large_cover_up" hidden><label for="openToLargerFootprint">Open to a larger tattoo? <span class="prototype-required">*</span></label><select id="openToLargerFootprint"><option value="">Choose one</option><option>Yes</option><option>No</option><option>Need to discuss</option></select></div>
+        <div class="prototype-field prototype-field--full" data-project-types="large_cover_up" hidden><label for="treatmentScarringContext">Laser treatment or scarring (optional)</label><textarea id="treatmentScarringContext" placeholder="Use a made-up example in this preview. The real form is for private details."></textarea></div>
+        <div class="prototype-field" data-project-types="rework" hidden><label for="existingTattooAge">Approximate age of the tattoo (optional)</label><input id="existingTattooAge" type="text" placeholder="Example: about 5 years"></div>
+        <fieldset class="prototype-field prototype-field--full prototype-fieldset" data-project-types="rework" hidden><legend>What work are you considering? <span class="prototype-required">*</span></legend><div class="prototype-choices">
+          <label class="prototype-choice"><input type="checkbox" name="reworkIntervention" value="Refresh color">Refresh color</label>
+          <label class="prototype-choice"><input type="checkbox" name="reworkIntervention" value="Repair linework">Repair linework</label>
+          <label class="prototype-choice"><input type="checkbox" name="reworkIntervention" value="Redesign part">Redesign part</label>
+          <label class="prototype-choice"><input type="checkbox" name="reworkIntervention" value="Extend with new work">Extend with new work</label>
+          <label class="prototype-choice"><input type="checkbox" name="reworkIntervention" value="Need an assessment">Need an assessment</label>
+        </div></fieldset>
+        <div class="prototype-field prototype-field--full" data-project-types="rework" hidden><label for="reworkCondition">Current condition (optional)</label><textarea id="reworkCondition" placeholder="Example: faded color or lines you want reviewed"></textarea></div>
+        <div class="prototype-field" data-project-types="rework" hidden><label for="reworkExpansion">Open to making the tattoo larger? <span class="prototype-required">*</span></label><select id="reworkExpansion"><option value="">Choose one</option><option>Yes</option><option>No</option><option>Not sure</option></select></div>
+        <div class="prototype-field" data-project-types="space_filler" hidden><label for="gapDimensions">Size of the gap <span class="prototype-required">*</span></label><input id="gapDimensions" type="text" placeholder="Example: 2 × 4 in"></div>
+        <div class="prototype-field prototype-field--full" data-project-types="space_filler" hidden><label for="surroundingWork">Describe the surrounding tattoos <span class="prototype-required">*</span></label><textarea id="surroundingWork" placeholder="Example: nearby colors, styles, and the space between them"></textarea></div>
+        <div class="prototype-field" data-project-types="space_filler" hidden><label for="fillerRelationship">How should the new tattoo fit in? <span class="prototype-required">*</span></label><select id="fillerRelationship"><option value="">Choose one</option><option>Stand on its own</option><option>Connect with nearby tattoos</option><option>Not sure</option></select></div>
+      </div>
+      <p class="prototype-field-key"><span class="prototype-required">*</span> Marks a proposed required answer. The live forms are unchanged, and no information is submitted here.</p>
+    </section>
+
+    <section class="prototype-form-section" aria-labelledby="meaning-title">
+      <p class="prototype-kicker">Your idea</p>
+      <h2 id="meaning-title">What do you want tattooed?</h2>
+      <p>Describe the subject or idea. If it has a personal meaning you want me to know, include that too.</p>
+      <div class="prototype-field-grid">
+        <div class="prototype-field prototype-field--full"><label for="projectMeaning">Describe your idea <span class="prototype-required">*</span></label><textarea id="projectMeaning" placeholder="For this preview, use a general example. Do not enter names or private details."></textarea></div>
+        <fieldset class="prototype-field prototype-field--full prototype-fieldset"><legend>Any examples of my work you want me to see? (Optional)</legend><div class="prototype-choices">
+          <label class="prototype-choice"><input type="checkbox" name="resonance" value="A tattoo">A tattoo</label>
+          <label class="prototype-choice"><input type="checkbox" name="resonance" value="A tattoo design">A tattoo design</label>
+          <label class="prototype-choice"><input type="checkbox" name="resonance" value="A Legend symbol">A Legend symbol</label>
+          <label class="prototype-choice"><input type="checkbox" name="resonance" value="A style or detail">A style or detail</label>
+        </div></fieldset>
+        <div class="prototype-field prototype-field--full"><label for="resonanceReference">Which example?</label><input id="resonanceReference" type="text" placeholder="Example: the tattoo or design title, or a Legend symbol"><small>Leave this blank if none applies.</small></div>
+        <div class="prototype-field prototype-field--full"><label for="referenceLinks">Reference links (optional)</label><textarea id="referenceLinks" placeholder="For this preview, use a sample link or leave this blank."></textarea><small>The live form also allows reference files. Uploads are turned off here.</small></div>
+      </div>
+    </section>
+
+    <section class="prototype-form-section" aria-labelledby="body-title">
+      <p class="prototype-kicker">Placement</p>
+      <h2 id="body-title">Where do you want the tattoo?</h2>
+      <p>Tell me the body area and any existing tattoos I need to work around.</p>
+      <div class="prototype-field-grid">
+        <div class="prototype-field"><label for="bodyPlacement">Body area <span class="prototype-required">*</span></label><input id="bodyPlacement" type="text" placeholder="Example: outer upper arm"></div>
+        <div class="prototype-field"><label for="colorDirection">Color preference <span class="prototype-required">*</span></label><select id="colorDirection"><option value="">Choose one</option><option>Color</option><option>Black &amp; grey</option><option>Mix of both</option></select></div>
+        <div class="prototype-field prototype-field--full"><label for="bodyContext">Existing tattoos or placement concerns</label><textarea id="bodyContext" placeholder="Example: a nearby tattoo, a scar, or a question about placement. Do not enter private health information here."></textarea><small>Use the secure live form for a real request.</small></div>
+        <div class="prototype-field prototype-field--full" id="existingPhotoPreview" hidden><div class="prototype-media-disabled"><strong>Existing tattoo photos · upload disabled</strong><p id="existingPhotoCopy"></p></div></div>
+        <div class="prototype-field prototype-field--full" id="placementPhotoPreview"><div class="prototype-media-disabled"><strong>Body-area photos · upload disabled</strong><p id="placementPhotoCopy">The live form lets you add photos of the area you want tattooed. These are optional for new work. No image can be uploaded here.</p></div></div>
+        <div class="prototype-field prototype-field--full"><div class="prototype-media-disabled"><strong>Visual reference files · upload disabled</strong><p>The live form accepts helpful reference images or PDFs. No file can be uploaded here.</p></div></div>
+      </div>
+    </section>
+
+    <section class="prototype-form-section" aria-labelledby="authorship-title">
+      <p class="prototype-kicker">Details and references</p>
+      <h2 id="authorship-title">What details are important to you?</h2>
+      <p>Tell me what must be included and what you are open to changing. Reference images help explain the request; they will not be copied exactly.</p>
+      <div class="prototype-field-grid">
+        <div class="prototype-field"><label for="projectBoundaries">Must-have details</label><textarea id="projectBoundaries" placeholder="Example: specific words, symbols, colors, or placement"></textarea></div>
+        <div class="prototype-field"><label for="creativeFreedom">What can I decide?</label><textarea id="creativeFreedom" placeholder="Example: layout, size, background, or other details"></textarea></div>
+        <div class="prototype-field prototype-field--full"><label for="referenceIntent">What are your references showing?</label><select id="referenceIntent"><option value="">Choose one</option><option>The subject</option><option>The style or color</option><option>The layout</option><option>My own sketch or digital image</option><option>Not sure</option></select><small>A reference, including an AI-generated image, is not a finished design to copy.</small></div>
+      </div>
+    </section>
+
+    <section class="prototype-form-section" aria-labelledby="logistics-title">
+      <p class="prototype-kicker">Planning</p>
+      <h2 id="logistics-title">When can you come in, and what is your budget?</h2>
+      <p>This helps me review the request. It does not hold a date or set a price.</p>
+      <div class="prototype-field-grid">
+        <div class="prototype-field"><label for="timingWindow">General timeline (optional)</label><input id="timingWindow" type="text" placeholder="Example: fall, flexible weekdays"><small>Wait for a confirmed appointment before booking non-refundable travel.</small></div>
+        <div class="prototype-field"><label for="requestedDate">Requested date (optional)</label><input id="requestedDate" type="date"><small>This is context for review, not a reservation.</small></div>
+      </div>
+      <div class="prototype-planner" data-planning-schedule="custom"></div>
+      <div class="prototype-field-grid prototype-conditional-grid">
+        <div class="prototype-field prototype-field--full"><label for="comfortBudget">Total budget you are comfortable with <span class="prototype-required">*</span></label><select id="comfortBudget"><option value="">Choose a range</option><option value="specific">Enter a specific amount</option><option>Up to $300</option><option>$300–$500</option><option>$500–$800</option><option>$800–$1,200</option><option>$1,200–$2,000</option><option>$2,000+</option><option>I’m flexible / I’d like guidance</option></select><small>Your answer is not a quote. The price is confirmed after the project is reviewed.</small></div>
+        <div class="prototype-field prototype-field--full" id="specificBudgetPreview" hidden><label for="specificBudget">Specific project budget (USD)</label><input id="specificBudget" type="number" min="150" step="1" inputmode="numeric" placeholder="Minimum $150"><small>The live form allows a whole-dollar amount of at least $150. It is still a comfort budget, not a quote.</small></div>
+      </div>
+    </section>
+
+    <section class="prototype-form-section" id="custom-terms" aria-labelledby="custom-terms-title">
+      <p class="prototype-kicker">Before sending a request</p>
+      <h2 id="custom-terms-title">Terms &amp; Conditions</h2>
+      <p>Review the <a href="/tools/tattooing-prototype/inquire.html#guide-terms">Terms &amp; Conditions in 01 / Start Here</a> and the <a href="https://thesixwellconstruct.com/tattoos/policies/" target="_blank" rel="noopener noreferrer">current live Studio &amp; Booking Policies ↗</a>. The live page is the source of truth. This prototype does not create an agreement.</p>
+      <ul class="prototype-terms-points">
+        <li>You must be at least 18 and bring valid ID to an appointment.</li>
+        <li>An inquiry starts project review. It does not reserve a tattoo appointment.</li>
+        <li>After approval, you review the project budget and session plan before booking. Tattoo deposits are non-refundable and credited toward the tattoo.</li>
+        <li>Design changes, rescheduling, late arrival, and no-shows are covered by the live policies. Read them before booking.</li>
+      </ul>
+      <p class="prototype-terms-warning">The age and inquiry checkboxes mirror the live form. The policy acknowledgment is proposed for this new flow. Checking them here records no consent or agreement.</p>
+      <div class="prototype-acknowledgments" role="group" aria-label="Prototype-only acknowledgments">
+        <label class="prototype-ack"><input id="previewAgeConfirmed" type="checkbox"><span>I confirm I am 18 or older. <span class="prototype-required">*</span></span></label>
+        <label class="prototype-ack"><input id="previewInquiryUnderstood" type="checkbox"><span>I understand this is an inquiry, not an appointment. <span class="prototype-required">*</span></span></label>
+        <label class="prototype-ack"><input id="previewTermsRead" type="checkbox"><span>I have read the current Studio &amp; Booking Policies. <span class="prototype-required">*</span></span></label>
+      </div>
+    </section>
+
+    <section class="prototype-form-section" aria-labelledby="review-title">
+      <p class="prototype-kicker">Review</p>
+      <h2 id="review-title">Review your answers</h2>
+      <p>The live form would submit these details and any required photos for review. This prototype does not submit, upload, reserve a date, or record an agreement. Client names, contact details, and date of birth are not shown in the answer preview.</p>
+      <button class="prototype-action" id="previewBriefButton" type="button">Preview answers →</button>
+      <p class="prototype-terms-status" id="previewTermsStatus" hidden role="status" aria-live="polite"></p>
+      <div class="prototype-review" id="briefReview" hidden aria-live="polite">
+        <h2>Your answers</h2>
+        <p>These answers only appear in this tab. Nothing was sent or saved. Use made-up details while testing this page.</p>
+        <ul id="briefReviewList"></ul>
+      </div>
+      <div class="prototype-action-row"><a class="prototype-action prototype-action--quiet" href="/tools/tattooing-prototype/inquire.html#submit-a-project">Back to project paths →</a></div>
+    </section>
+  </main>
+  <footer class="prototype-footer"><span>Art.Pill Tattoo House / Custom inquiry preview</span><a href="/tools/tattooing-prototype/special.html">See Special Projects preview →</a></footer>
+  <script src="/tools/tattooing-prototype/prototype.js"></script>
+</body>
+</html>

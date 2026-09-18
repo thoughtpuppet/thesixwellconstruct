@@ -288,7 +288,7 @@ test("Studio review shows Series as quiet context without changing the project b
 test("Studio explains incomplete Experimental Projects instead of leaving save stuck", () => {
   const source = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
   const validationStart = source.indexOf("  function specialProjectEditorValidation(projects) {");
-  const validationEnd = source.indexOf("\n\n  function syncSpecialProjectEditorRequirements", validationStart);
+  const validationEnd = source.indexOf("  function syncSpecialProjectEditorRequirements", validationStart);
   assert.ok(validationStart > -1 && validationEnd > validationStart, "Special Project editor validation must be present");
   const validate = Function(`${source.slice(validationStart, validationEnd)}; return specialProjectEditorValidation;`)();
   const complete = {
@@ -1040,7 +1040,7 @@ test("Tattoo project forms use the managed budget-range system and expose a $150
   ];
   for (const [label, path] of formSources) {
     const source = readFileSync(path, "utf8");
-    assert.match(source, /What total project budget are you comfortable working within\?/i, `${label} budget label`);
+    assert.match(source, /What total project budget are you comfortable working within\?|Total budget you are comfortable with/i, `${label} budget label`);
     assert.match(source, /name="budget_range"[^>]*required|required[^>]*name="budget_range"/, `${label} required budget field`);
     assert.match(source, /specific (?:whole-dollar|project budget)/i, `${label} exact-budget guidance`);
     assert.match(source, /150/, `${label} exact-budget minimum`);
@@ -1072,7 +1072,7 @@ test("Original-design tattoo paths disclose the additional-rendering drawing fee
   const applicableSources = [
     ["Build", join(ROOT, "tattoos", "build", "index.html")],
     ["Maze", join(ROOT, "apps", "maze", "src", "App.tsx")],
-    ["Special Projects", join(ROOT, "tattoos", "special-projects", "apply", "index.html")],
+    ["Special Projects", join(ROOT, "tattoos", "special-projects", "index.html")],
   ];
   for (const [label, path] of applicableSources) {
     assert.ok(readFileSync(path, "utf8").includes(drawingFeeNotice), `${label} drawing-fee notice`);
@@ -1489,7 +1489,7 @@ test("tattoo forms keep short controls uniform while paragraph fields can grow",
   ];
   for (const path of formSources) {
     const source = readFileSync(path, "utf8");
-    assert.match(source, /<body class="tattoo-flow"/);
+    assert.match(source, /<body class="tattoo-flow(?:\s[^\"]*)?"/);
     assert.match(source, /href="\/css\/tattoos\.css"/);
     assert.match(source, /href="\/css\/forms\.css"/);
     assert.match(source, /class="public-form"/);
@@ -4531,7 +4531,7 @@ test("Tattoo aftercare is part of the client resource packet and keeps medical e
 
 test("Custom Tattoo Inquiry explains approval and booking before asking for detail", () => {
   const source = readFileSync(join(ROOT, "tattoos", "inquire", "custom", "index.html"), "utf8");
-  assert.match(source, /data-copy-id="inquiry-intro-primary">Use this form for an original custom tattoo that is not available flash\.<\/p>/);
+  assert.match(source, /data-copy-id="inquiry-intro-primary">Tell me what you want, where you want it, and which details matter most\.<\/p>/);
   assert.doesNotMatch(source, /Submitting starts review; it does not reserve an appointment\./);
   assert.match(source, /class="form-note-group" data-copy-id="inquiry-form-note">[\s\S]*?<p class="form-note">Every request is reviewed and approved before booking\. After approval, you will receive a booking link to choose your appointment day &amp; time and pay the deposit\.<\/p>[\s\S]*?<p class="form-note">Please fill out all questions in detail\. Vague answers may delay approval\.<\/p>/);
   assert.doesNotMatch(source, /private token link into the studio booking and deposit flow/i);
@@ -6773,6 +6773,65 @@ test("project-aware custom inquiries validate conditional answers, upload counts
   assert.match((await rejectedThirteen.json()).error, /at most 12 uploaded files/i);
 });
 
+test("updated tattoo inquiry forms require the booking-policy acknowledgment without blocking older cached forms", async () => {
+  const database = migratedDatabase();
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+
+  const missing = await handleCreateSubmission(jsonRequest(
+    "/api/submissions",
+    validCustom({ inquiry_flow_version: "2", email: "new-flow-missing@example.test" }),
+  ), env);
+  assert.equal(missing.status, 400);
+  assert.match((await missing.json()).error, /booking policies/i);
+
+  const accepted = await handleCreateSubmission(jsonRequest(
+    "/api/submissions",
+    validCustom({ inquiry_flow_version: "2", policies_read: "yes", email: "new-flow-accepted@example.test" }),
+  ), env);
+  assert.equal(accepted.status, 200);
+
+  const cached = await handleCreateSubmission(jsonRequest(
+    "/api/submissions",
+    validCustom({ email: "cached-flow@example.test" }),
+  ), env);
+  assert.equal(cached.status, 200);
+});
+
+test("artist-led Special Project requests validate type, Anime source, and design/deposit agreement", async () => {
+  const database = migratedDatabase();
+  const env = { SUBMISSIONS_DB: new LocalD1(database), PUBLIC_SITE_URL: "https://example.test" };
+  const base = {
+    project_category: "special_projects_artist_led",
+    inquiry_flow_version: "2",
+    policies_read: "yes",
+    artist_led_trust_ack: "yes",
+    artist_led_deposit_ack: "yes",
+  };
+  const request = (overrides) => handleCreateSubmission(jsonRequest(
+    "/api/submissions",
+    validCustom({ ...base, ...overrides }),
+  ), env);
+
+  const missingType = await request({ artist_led_type: "" });
+  assert.equal(missingType.status, 400);
+  assert.match((await missingType.json()).error, /artist-led design type/i);
+  const missingAnimeSource = await request({ artist_led_type: "anime" });
+  assert.equal(missingAnimeSource.status, 400);
+  assert.match((await missingAnimeSource.json()).error, /Anime show/i);
+  const missingAgreement = await request({ artist_led_type: "floral", artist_led_deposit_ack: "" });
+  assert.equal(missingAgreement.status, 400);
+  assert.match((await missingAgreement.json()).error, /design and deposit terms/i);
+  const accepted = await request({ artist_led_type: "anime", anime_source: "A show and character", email: "artist-led@example.test" });
+  assert.equal(accepted.status, 200);
+  const id = (await accepted.json()).submissionId;
+  const stored = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(id).payload_json);
+  assert.equal(stored.artist_led_type, "anime");
+  assert.equal(stored.anime_source, "A show and character");
+});
+
 test("saved review work, decisions, access preparation, and client email remain separate", async () => {
   const database = migratedDatabase();
   const adminToken = "decision-workflow-admin";
@@ -8481,6 +8540,19 @@ test("tattoo admin notification subjects use canonical art.pill names without ch
   });
   assert.equal(sent.at(-1).subject, "art.pill TATTOO HOUSE — Custom tattoo project received");
 
+  const artistLedSubmission = {
+    id: "artist-led-notification",
+    type: "tattoo_inquiry",
+    contact: { name: "Collector", email: "collector@example.test" },
+    payload: { project_category: "special_projects_artist_led", artist_led_type: "anime", anime_source: "A show and character" },
+  };
+  await notifySubmissionReceived(env, artistLedSubmission);
+  assert.equal(sent.at(-1).subject, "art.pill TATTOO HOUSE — Artist-led design request received");
+  assert.match(sent.at(-1).text, /artist-led design request/i);
+  await notifyAdminSubmissionReceived(env, artistLedSubmission);
+  assert.equal(sent.at(-1).subject, "art.pill Tattoo House Artist-led Design Request");
+  assert.match(sent.at(-1).text, /Anime show, character, or arc: A show and character/);
+
   await notifySubmissionReceived(env, {
     id: "managed-sheet-client-receipt",
     type: "flash_claim",
@@ -8763,7 +8835,7 @@ test("Custom Inquiry configures project-aware questions and multi-file upload ro
   const formSource = readFileSync(join(ROOT, "tattoos", "inquire", "custom", "index.html"), "utf8");
   const projectTypeIndex = formSource.indexOf('name="project_type"');
   const firstNameIndex = formSource.indexOf('name="firstName"');
-  assert.ok(projectTypeIndex > -1 && projectTypeIndex < firstNameIndex, "project type appears before client details");
+  assert.ok(firstNameIndex > -1 && firstNameIndex < projectTypeIndex, "client details appear before project type");
   assert.match(formSource, /data-project-field="cover_up large_cover_up"/);
   assert.match(formSource, /name="rework_interventions" value="refresh_color"/);
   assert.match(formSource, /name="rework_interventions" value="repair_linework"/);

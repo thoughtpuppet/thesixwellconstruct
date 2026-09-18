@@ -22,9 +22,8 @@
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
   }
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-  html,body { background:var(--bg); color:var(--text); font-family:var(--serif); min-height:100vh; overflow-x:clip; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+  html,body { background:var(--color-bg); color:var(--text); font-family:var(--serif); min-height:100vh; overflow-x:clip; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   a { color:inherit; text-decoration:none; }
-  .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
   header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
 main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
   .layout { display:grid; grid-template-columns:minmax(0,0.72fr) minmax(360px,580px); gap:72px; align-items:start; }
@@ -90,8 +89,10 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 <link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
+<link rel="stylesheet" href="/css/tattoo-request-form.css">
+<link rel="stylesheet" href="/css/tattoo-custom-inquiry.css">
 </head>
-<body class="tattoo-flow" data-venture="tattooing">
+<body class="tattoo-flow tattoo-form-treatment custom-inquiry-page" data-venture="tattooing">
   <script>
   (function(){
     var o = document.createElement('div');
@@ -102,24 +103,23 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fadeOut); else fadeOut();
   })();
   </script>
-  <div class="grain"></div>
   <header class="top">
   </header>
   <main>
     <div class="layout">
       <section class="site-hero site-hero--supporting">
-        <h1 class="page-title hero-title" data-copy-id="inquiry-page-title">Project Inquiry.</h1>
-        <p class="intro-body hero-descriptor" data-copy-id="inquiry-intro-primary">Use this form for an original custom tattoo that is not available flash.</p>
+        <h1 class="page-title hero-title" data-copy-id="inquiry-page-title">Custom Tattoo.</h1>
+        <p class="intro-body hero-descriptor" data-copy-id="inquiry-intro-primary">Tell me what you want, where you want it, and which details matter most.</p>
       </section>
       <section class="form-panel" aria-label="Tattoo inquiry form">
         <aside class="portfolio-reference" id="portfolioReference" hidden aria-live="polite"></aside>
-        <h2 class="form-title" data-copy-id="inquiry-form-title">Submit for Review</h2>
         <div class="form-note-group" data-copy-id="inquiry-form-note">
           <p class="form-note">Every request is reviewed and approved before booking. After approval, you will receive a booking link to choose your appointment day &amp; time and pay the deposit.</p>
           <p class="form-note">Please fill out all questions in detail. Vague answers may delay approval.</p>
         </div>
-        <form class="public-form" id="inquiryForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
+        <form class="public-form" id="inquiryForm" data-tattoo-project-planning method="POST" action="/api/submissions" enctype="multipart/form-data">
           <input type="hidden" name="type" value="tattoo_inquiry">
+          <input type="hidden" name="inquiry_flow_version" value="2">
           <input type="hidden" name="source_path" value="/tattoos/inquire/custom/">
           <input type="hidden" name="subject" value="New Art.Pill tattoo inquiry">
           <input type="hidden" name="reference_entity_id" value="">
@@ -127,6 +127,19 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           <input type="hidden" name="reference_route" value="">
           <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
           <div class="field-grid">
+            <h2 class="tattoo-planning-heading"><span class="custom-section-kicker">Client details</span>About you</h2>
+            <p class="custom-section-intro">Your contact details, date of birth, and travel plans help me review the request and reach you with next steps.</p>
+            <div class="field"><label for="firstName">First name <span class="required-mark">*</span></label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
+            <div class="field"><label for="lastName">Last name <span class="required-mark">*</span></label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
+            <div class="field"><label for="email">Email <span class="required-mark">*</span></label><input id="email" name="email" type="email" autocomplete="email" required></div>
+            <div class="field"><label for="phone">Phone <span class="required-mark">*</span></label><input id="phone" name="phone" type="tel" autocomplete="tel" required></div>
+            <div class="field"><label for="instagram">Instagram (optional)</label><input id="instagram" name="instagram" placeholder="@"></div>
+            <div class="field"><label for="preferred_contact_method">Preferred contact (optional)</label><select id="preferred_contact_method" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
+            <div class="field"><label for="dob">Date of birth <span class="required-mark">*</span></label><input id="dob" name="dob" type="date" autocomplete="bday" required></div>
+            <fieldset class="field tattoo-planning-fieldset"><legend>Have you been tattooed by me before? <span class="required-mark">*</span></legend><div class="radio-group"><label class="radio-option"><input type="radio" name="previous_client" value="yes" required><span>Yes</span></label><label class="radio-option"><input type="radio" name="previous_client" value="no"><span>No</span></label></div></fieldset>
+            <fieldset class="field full tattoo-planning-fieldset"><legend>Are you traveling to Atlanta? <span class="required-mark">*</span></legend><div class="radio-group"><label class="radio-option"><input type="radio" name="traveling_to_atlanta" value="yes" required><span>Yes</span></label><label class="radio-option"><input type="radio" name="traveling_to_atlanta" value="no"><span>No</span></label></div></fieldset>
+            <h2 class="tattoo-planning-heading"><span class="custom-section-kicker">Tattoo</span>What kind of tattoo do you want?</h2>
+            <p class="custom-section-intro">Select the closest project type. The questions below will change to match it.</p>
             <div class="field full">
               <label for="project_type">Project type <span class="required-mark">*</span></label>
               <select id="project_type" name="project_type" aria-describedby="projectTypeNote projectContextCopy" required>
@@ -143,25 +156,10 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
               <strong class="project-context-title" id="projectContextTitle"></strong>
               <p class="project-context-copy" id="projectContextCopy"></p>
             </div>
-            <div class="field"><label for="firstName">First name <span class="required-mark">*</span></label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
-            <div class="field"><label for="lastName">Last name <span class="required-mark">*</span></label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
-            <div class="field"><label for="email">Email <span class="required-mark">*</span></label><input id="email" name="email" type="email" autocomplete="email" required></div>
-            <div class="field"><label for="phone">Phone <span class="required-mark">*</span></label><input id="phone" name="phone" type="tel" autocomplete="tel" required></div>
-            <div class="field"><label for="preferred_name">Preferred name (optional)</label><input id="preferred_name" name="preferred_name" autocomplete="nickname"></div>
-            <div class="field"><label for="pronouns">Pronouns (optional)</label><input id="pronouns" name="pronouns"></div>
-            <div class="field"><label for="instagram">Instagram (optional)</label><input id="instagram" name="instagram" placeholder="@"></div>
-            <div class="field"><label for="preferred_contact_method">Preferred contact (optional)</label><select id="preferred_contact_method" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
-            <div class="field full"><label for="referral_source">How did you hear about me? (optional)</label><select id="referral_source" name="referral_source"><option value="">Choose one</option><option value="friend_family">Friend / family</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="google_search">Google / search</option><option value="event_in_person">Event / in person</option><option value="returning_client">Returning client</option><option value="other">Other</option></select></div>
-            <div class="field"><label for="dob">Date of birth <span class="required-mark">*</span></label><input id="dob" name="dob" type="date" autocomplete="bday" required></div>
-            <div class="field">
-              <label>Previous client? <span class="required-mark">*</span></label>
-              <div class="radio-group">
-                <label class="radio-option"><input type="radio" name="previous_client" value="yes" required><span>Yes</span></label>
-                <label class="radio-option"><input type="radio" name="previous_client" value="no"><span>No</span></label>
-              </div>
-            </div>
-            <div class="field"><label for="placement">Placement <span class="required-mark">*</span></label><input id="placement" name="placement" required></div>
-            <div class="field"><label for="size">Approx. size <span class="required-mark">*</span></label><input id="size" name="size" placeholder="Example: 4-6 in" required></div>
+            <div class="field"><label for="size">Estimated size <span class="required-mark">*</span></label><select id="size" name="size" data-planning-size required><option value="">Choose the closest size</option><option value="small">Small · 2 in or less</option><option value="medium">Medium · over 2–5 in</option><option value="large">Large · over 5–8 in</option><option value="xl">XL · over 8 in, one area</option><option value="large_scale">Large-scale work / body-area coverage</option></select><p class="field-note">For a single area, estimate the longest side. Size does not set the session count.</p></div>
+            <div class="field"><label for="estimated_dimensions">Estimated dimensions (optional)</label><input id="estimated_dimensions" name="estimated_dimensions" placeholder="Example: about 5 × 7 in"><p class="field-note">Leave blank if you are choosing body-area coverage below.</p></div>
+            <div class="field full" data-planning-coverage-group hidden><label for="body_area_coverage">Which area would it cover? <span class="required-mark">*</span></label><select id="body_area_coverage" name="body_area_coverage" data-planning-coverage data-required-when-visible="true" disabled><option value="">Choose the closest fit</option><optgroup label="Arm"><option>¼ arm sleeve</option><option>½ arm sleeve</option><option>Full arm sleeve</option></optgroup><optgroup label="Leg"><option>¼ leg sleeve</option><option>½ leg sleeve</option><option>Full leg sleeve</option></optgroup><optgroup label="Back"><option>Half back</option><option>Full back</option><option>Spine</option></optgroup><optgroup label="Front and neck"><option>Chest / front torso</option><option>Neck · front</option><option>Neck · back</option><option>Neck · side</option><option>Full neck</option></optgroup><option value="other">Other area or combination</option></select><p class="field-note">Coverage helps plan the work; it does not decide how many appointments it needs.</p></div>
+            <div class="field full" data-planning-other-coverage-group hidden><label for="body_area_coverage_other">Describe the area</label><input id="body_area_coverage_other" name="body_area_coverage_other" disabled></div>
             <div class="field full" id="desiredStyleField" data-project-field="new_work" hidden>
               <label for="desired_style">Desired style or visual direction (optional)</label>
               <input id="desired_style" name="desired_style" disabled>
@@ -198,12 +196,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field" id="largerFootprintField" data-project-field="large_cover_up" hidden>
               <label for="open_to_larger_footprint">Open to a larger tattoo footprint? <span class="required-mark">*</span></label>
               <select id="open_to_larger_footprint" name="open_to_larger_footprint" disabled>
-                <option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="discuss">Needs discussion</option>
-              </select>
-            </div>
-            <div class="field" id="multipleSessionsField" data-project-field="large_cover_up" hidden>
-              <label for="open_to_multiple_sessions">Open to multiple sessions? <span class="required-mark">*</span></label>
-              <select id="open_to_multiple_sessions" name="open_to_multiple_sessions" disabled>
                 <option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="discuss">Needs discussion</option>
               </select>
             </div>
@@ -246,37 +238,17 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
                 <option value="">Choose one</option><option value="standalone">Read as a standalone tattoo</option><option value="connect_blend">Connect or blend with surrounding work</option><option value="unsure">Unsure - needs assessment</option>
               </select>
             </div>
-            <div class="field full">
-              <label for="budget_range">What total project budget are you comfortable working within? <span class="required-mark">*</span></label>
-              <select id="budget_range" name="budget_range" aria-describedby="budgetRangeHelp" data-tattoo-budget-select data-specific-budget-target="#specificBudgetField" required>
-                <option value="">Select a range</option>
-                <option value="Up to $300">Up to $300</option>
-                <option value="$300–$500">$300–$500</option>
-                <option value="$500–$800">$500–$800</option>
-                <option value="$800–$1,200">$800–$1,200</option>
-                <option value="$1,200–$2,000">$1,200–$2,000</option>
-                <option value="$2,000+">$2,000+</option>
-                <option value="I’m flexible / I’d like guidance">I’m flexible / I’d like guidance</option>
-              </select>
-              <div class="tattoo-budget-specific" id="specificBudgetField" hidden aria-hidden="true">
-                <label for="budget_amount_dollars">Specific project budget (USD)</label>
-                <input id="budget_amount_dollars" name="budget_amount_dollars" type="number" min="150" step="1" inputmode="numeric" placeholder="Minimum $150" disabled>
-                <p class="field-note">Enter a whole-dollar amount of at least $150. This is still a comfort budget for review, not your final quote.</p>
-              </div>
-              <p class="field-note" id="budgetRangeHelp">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid.</p>
-            </div>
-            <div class="field">
-              <label for="color_preference">Color preference <span class="required-mark">*</span></label>
-              <select id="color_preference" name="color_preference" required>
-                <option value="">Select an option</option>
-                <option value="Color">Color</option>
-                <option value="Black & grey">Black &amp; grey</option>
-                <option value="Mix of both">Mix of both</option>
-              </select>
-            </div>
-            <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline"></div>
-            <div class="field"><label for="requested_date">Requested date</label><input id="requested_date" name="requested_date" type="date"></div>
+            <h2 class="tattoo-planning-heading"><span class="custom-section-kicker">Your idea</span>What do you want tattooed?</h2>
+            <p class="custom-section-intro">Describe the subject or idea. If it has a personal meaning you want me to know, include that too.</p>
+            <div class="field full"><label for="message" id="messageLabel">Describe your idea <span class="required-mark">*</span></label><textarea class="project-description" id="message" name="message" required></textarea></div>
+            <fieldset class="field full tattoo-planning-fieldset"><legend>Any examples of my work you want me to see? (optional)</legend><div class="radio-group custom-example-choices"><label class="radio-option"><input type="checkbox" name="work_resonance" value="tattoo"><span>A tattoo</span></label><label class="radio-option"><input type="checkbox" name="work_resonance" value="tattoo_design"><span>A tattoo design</span></label><label class="radio-option"><input type="checkbox" name="work_resonance" value="legend_symbol"><span>A Legend symbol</span></label><label class="radio-option"><input type="checkbox" name="work_resonance" value="style_detail"><span>A style or detail</span></label></div></fieldset>
+            <div class="field full"><label for="work_resonance_reference">Which example? (optional)</label><input id="work_resonance_reference" name="work_resonance_reference" placeholder="Tattoo or design title, link, or Legend symbol"><p class="field-note">Leave blank if none applies.</p></div>
             <div class="field full"><label for="reference_links">Reference links (optional)</label><textarea id="reference_links" name="reference_links" placeholder="Paste links if your references already live online."></textarea></div>
+            <h2 class="tattoo-planning-heading"><span class="custom-section-kicker">Placement</span>Where do you want the tattoo?</h2>
+            <p class="custom-section-intro">Tell me the body area and any existing tattoos I need to work around.</p>
+            <div class="field"><label for="placement">Body area <span class="required-mark">*</span></label><input id="placement" name="placement" placeholder="Example: outer upper arm" required></div>
+            <div class="field"><label for="color_preference">Color preference <span class="required-mark">*</span></label><select id="color_preference" name="color_preference" required><option value="">Choose one</option><option value="Color">Color</option><option value="Black & grey">Black &amp; grey</option><option value="Mix of both">Mix of both</option></select></div>
+            <div class="field full"><label for="body_context">Existing tattoos or placement concerns (optional)</label><textarea id="body_context" name="body_context" placeholder="Nearby tattoos, a scar, or a question about placement"></textarea><p class="field-note">Share only the details needed to review the placement.</p></div>
             <div class="field full" id="existingTattooPhotosField" hidden>
               <label for="existing_tattoo_photos" id="existingTattooPhotosLabel">Existing tattoo photographs <span class="required-mark">*</span></label>
               <input id="existing_tattoo_photos" name="existing_tattoo_photos" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="existingTattooPhotosNote" multiple disabled>
@@ -292,14 +264,75 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
               <input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" aria-describedby="referencesNote" multiple>
               <p class="file-note" id="referencesNote">Upload only helpful references. Multiple PNG, JPG, WEBP, or PDF files are accepted.</p>
             </div>
-            <div class="field full"><label for="message" id="messageLabel">Project concept, subject, meaning, or mood <span class="required-mark">*</span></label><textarea class="project-description" id="message" name="message" required></textarea></div>
+            <h2 class="tattoo-planning-heading"><span class="custom-section-kicker">Details and references</span>What details are important to you?</h2>
+            <p class="custom-section-intro">Tell me what must be included and what you are open to changing. Reference images help explain the request; they will not be copied exactly.</p>
+            <div class="field"><label for="must_have_details">Must-have details (optional)</label><textarea id="must_have_details" name="must_have_details" placeholder="Words, symbols, colors, or placement that must stay"></textarea></div>
+            <div class="field"><label for="creative_freedom">What can I decide? (optional)</label><textarea id="creative_freedom" name="creative_freedom" placeholder="Layout, size, background, or other details"></textarea></div>
+            <div class="field full"><label for="reference_intent">What are your references showing? (optional)</label><select id="reference_intent" name="reference_intent"><option value="">Choose one</option><option value="subject">The subject</option><option value="style_color">Style or color</option><option value="layout">Layout</option><option value="own_image">My sketch or digital image</option><option value="unsure">Not sure</option></select><p class="field-note">A reference, including an AI-generated image, is not a finished design to copy.</p></div>
+            <h2 class="tattoo-planning-heading"><span class="custom-section-kicker">Planning</span>When can you come in, and what is your budget?</h2>
+            <p class="custom-section-intro">This helps me review the request. It does not hold a date or set a price.</p>
+            <div class="field"><label for="timeline">General timeline (optional)</label><input id="timeline" name="timeline" placeholder="Example: fall, flexible weekdays"><p class="field-note">Wait for a confirmed appointment before booking non-refundable travel.</p></div>
+            <div class="field"><label for="requested_date">Requested date (optional)</label><input id="requested_date" name="requested_date" type="date"><p class="field-note">This is context for review, not a reservation.</p></div>
+            <fieldset class="field full tattoo-planning-fieldset" data-planning-preference-group hidden><legend>If this needs more than one appointment, what would work best for you?</legend><div class="radio-group"><label class="radio-option"><input type="radio" name="multi_session_preference" value="back_to_back" disabled><span>Back-to-back days in one trip</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="separate_healed_visits" disabled><span>Separate visits with healing time in between</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="either" disabled><span>Either works</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="discuss" disabled><span>Need to discuss</span></label></div><p class="field-note">This is a planning preference, not a booking choice. A ¼ sleeve may still be one appointment.</p></fieldset>
+            <div class="field" id="multipleSessionsField" data-project-field="large_cover_up" hidden>
+              <label for="open_to_multiple_sessions">Open to multiple sessions? <span class="required-mark">*</span></label>
+              <select id="open_to_multiple_sessions" name="open_to_multiple_sessions" disabled>
+                <option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="discuss">Needs discussion</option>
+              </select>
+            </div>
+            <div class="field" data-planning-travel-detail hidden><label for="can_return_for_healed_visit">Could you return for another trip if needed?</label><select id="can_return_for_healed_visit" name="can_return_for_healed_visit" disabled><option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="unsure">Not sure</option></select></div>
+            <div class="field" data-planning-travel-detail hidden><label for="days_per_trip">How many appointment days could you make in one trip?</label><select id="days_per_trip" name="days_per_trip" disabled><option value="">Choose one</option><option value="1">1 day</option><option value="2">2 days</option><option value="3">3 days</option><option value="4_plus">4 or more days</option><option value="unsure">Not sure</option></select></div>
+            <div class="field" data-planning-travel-detail hidden><label for="travel_origin">Traveling from (optional)</label><input id="travel_origin" name="travel_origin" placeholder="City, state, or country" disabled></div>
+            <p class="tattoo-planning-note" data-planning-feedback hidden aria-live="polite"></p>
+            <p class="tattoo-planning-note">Your answers help me propose a plan after reviewing the project. A ¼ sleeve may still be one appointment. I confirm the appointment count, pacing, and project budget after review; no date is reserved here.</p>
+            <div class="field full">
+              <label for="budget_range">Total budget you are comfortable with <span class="required-mark">*</span></label>
+              <select id="budget_range" name="budget_range" aria-describedby="budgetRangeHelp" data-tattoo-budget-select data-specific-budget-target="#specificBudgetField" required>
+                <option value="">Select a range</option>
+                <option value="Up to $300">Up to $300</option>
+                <option value="$300–$500">$300–$500</option>
+                <option value="$500–$800">$500–$800</option>
+                <option value="$800–$1,200">$800–$1,200</option>
+                <option value="$1,200–$2,000">$1,200–$2,000</option>
+                <option value="$2,000+">$2,000+</option>
+                <option value="I’m flexible / I’d like guidance">I’m flexible / I’d like guidance</option>
+              </select>
+              <div class="tattoo-budget-specific" id="specificBudgetField" hidden aria-hidden="true">
+                <label for="budget_amount_dollars">Specific project budget (USD)</label>
+                <input id="budget_amount_dollars" name="budget_amount_dollars" type="number" min="150" step="1" inputmode="numeric" placeholder="Minimum $150" disabled>
+                <p class="field-note">Enter a whole-dollar amount of at least $150. This is still a comfort budget for review, not your final quote.</p>
+              </div>
+              <p class="field-note" id="budgetRangeHelp">Your answer is not a quote. I confirm the price after reviewing the project. One developed design direction is included after your deposit is paid.</p>
+            </div>
+            <h2 class="tattoo-planning-heading"><span class="custom-section-kicker">Before sending a request</span>Terms &amp; Conditions</h2>
+            <p class="custom-section-intro">Read the <a href="/tattoos/inquire/#terms">terms in 01 / Start Here</a> and the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a> before submitting. The checkboxes below confirm you have done so; an inquiry is not an appointment.</p>
+            <ul class="custom-terms-points">
+              <li>You must be at least 18 and bring valid ID to an appointment.</li>
+              <li>An inquiry starts project review. It does not reserve a tattoo appointment.</li>
+              <li>After approval, you review the project budget and session plan before booking. Tattoo deposits are non-refundable and credited toward the tattoo.</li>
+              <li>Design changes, rescheduling, late arrival, and no-shows are covered by the current policies.</li>
+            </ul>
           </div>
           <label class="form-check"><input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required><span class="form-check__label">I confirm that I am 18 years of age or older. <span class="required-mark">*</span></span></label>
           <label class="form-check"><input class="form-check__input" type="checkbox" name="review_consent" value="yes" required><span class="form-check__label">I understand this is an inquiry and does not guarantee an appointment.</span></label>
-          <div class="submit-row">
-            <button class="cta-primary" type="submit" id="submitBtn">Submit for Review</button>
-            <p class="form-status" id="formStatus">Inquiry received means your submission was captured for review. Booking confirmation comes after approval.</p>
-          </div>
+          <label class="form-check"><input class="form-check__input" type="checkbox" name="policies_read" value="yes" required><span class="form-check__label">I have read <a href="/tattoos/inquire/#terms">and agreed to the Terms &amp; Conditions</a> and the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>. <span>*</span></span></label>
+          <section class="custom-answer-review" aria-labelledby="answerReviewTitle">
+            <p class="custom-section-kicker">Review</p>
+            <h2 id="answerReviewTitle">Review your answers</h2>
+            <p>Check your project details before sending. Your name, contact details, and date of birth are not shown in this summary; they will be included in the inquiry you submit.</p>
+            <button class="tattoo-preview-button" type="button" id="previewAnswersButton">Preview answers →</button>
+            <p class="custom-review-status" id="previewAnswersStatus" role="status" aria-live="polite" hidden></p>
+            <div class="custom-review-card" id="answerReview" hidden aria-live="polite">
+              <h3>Your answers</h3>
+              <p>Review this summary, then send your inquiry. Nothing is sent until you select Submit for Review.</p>
+              <ul id="answerReviewList"></ul>
+            </div>
+            <div class="submit-row" id="reviewSubmitRow" hidden>
+              <button class="cta-primary" type="submit" id="submitBtn">Submit for Review</button>
+              <p class="form-status" id="formStatus">Inquiry received means your submission was captured for review. Booking confirmation comes after approval.</p>
+            </div>
+            <a class="custom-back-link" href="/tattoos/inquire/#project-lane-title">Back to project paths →</a>
+          </section>
         </form>
       </section>
       <div class="guide-stack" aria-label="Custom inquiry guidance">
@@ -348,6 +381,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
   <script src="/js/tattoo-budget-field.js"></script>
+  <script src="/js/tattoo-project-planning.js"></script>
   <script src="/js/submission-form.js"></script>
   <script>
     (function(){
@@ -377,10 +411,10 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       var projectConfigs = {
         new_work: {
           title: "New work",
-          copy: "Share the concept, placement, scale, and visual direction for a new original tattoo.",
+          copy: "New work: describe the idea and any style or visual direction you have in mind.",
           fields: ["desiredStyleField"],
           requiredNames: [],
-          messageLabel: "Project concept, subject, meaning, or mood",
+          messageLabel: "Describe your idea",
           messagePlaceholder: "Describe the concept, imagery, meaning, atmosphere, and anything that should guide the original design.",
           referencesLabel: "Concept and visual reference uploads (optional)",
           referencesNote: "Upload only helpful visual references. Multiple PNG, JPG, WEBP, or PDF files are accepted.",
@@ -507,7 +541,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           setProjectField(field, active, config ? config.requiredNames : []);
         });
 
-        messageLabel.innerHTML = (config ? config.messageLabel : "Project description") + requiredMark;
+        messageLabel.innerHTML = (config ? config.messageLabel : "Describe your idea") + requiredMark;
         message.placeholder = config ? config.messagePlaceholder : "";
         referencesLabel.textContent = config ? config.referencesLabel : "Reference uploads (optional)";
         referencesNote.textContent = config ? config.referencesNote : "Upload only helpful references. Multiple PNG, JPG, WEBP, or PDF files are accepted.";
@@ -533,6 +567,108 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       reworkChoices.forEach(function(choice){ choice.addEventListener("change", validateProjectInputs); });
       form.addEventListener("submit", validateProjectInputs, true);
       syncProjectType();
+
+      var previewButton = document.getElementById("previewAnswersButton");
+      var previewStatus = document.getElementById("previewAnswersStatus");
+      var answerReview = document.getElementById("answerReview");
+      var answerReviewList = document.getElementById("answerReviewList");
+      var reviewSubmitRow = document.getElementById("reviewSubmitRow");
+      var previewReady = false;
+      function hideAnswerReview() {
+        previewReady = false;
+        answerReview.hidden = true;
+        reviewSubmitRow.hidden = true;
+        previewStatus.hidden = true;
+      }
+      function reviewValue(name) {
+        var controls = Array.prototype.filter.call(form.querySelectorAll('[name="' + name + '"]'), function(control){ return !control.disabled; });
+        if (!controls.length) return "Not provided";
+        var first = controls[0];
+        if (first.type === "file") {
+          var count = first.files ? first.files.length : 0;
+          return count ? count + " file" + (count === 1 ? "" : "s") + " selected" : "No files added";
+        }
+        if (first.type === "checkbox" || first.type === "radio") {
+          var selected = controls.filter(function(control){ return control.checked; });
+          return selected.length ? selected.map(function(control){
+            return control.closest("label")?.textContent.trim() || control.value;
+          }).join(", ") : "Not selected";
+        }
+        if (first.tagName === "SELECT") return first.value ? first.selectedOptions[0].textContent.trim() : "Not provided";
+        return first.value.trim() || "Not provided";
+      }
+      function addReviewLine(label, value) {
+        var item = document.createElement("li");
+        var heading = document.createElement("strong");
+        heading.textContent = label + ": ";
+        item.append(heading, document.createTextNode(value));
+        answerReviewList.append(item);
+      }
+      previewButton.addEventListener("click", function(){
+        validateProjectInputs();
+        if (!form.reportValidity()) {
+          hideAnswerReview();
+          previewStatus.textContent = "Complete the required questions and photographs above, then preview your answers.";
+          previewStatus.hidden = false;
+          return;
+        }
+        answerReviewList.replaceChildren();
+        [
+          ["Project type", "project_type"],
+          ["Estimated size", "size"],
+          ["Estimated dimensions", "estimated_dimensions"],
+          ["Body-area coverage", "body_area_coverage"],
+          ["Other coverage", "body_area_coverage_other"],
+          ["Previous client", "previous_client"],
+          ["Tattoo idea", "message"],
+          ["Examples of my work", "work_resonance"],
+          ["Which example", "work_resonance_reference"],
+          ["Reference links", "reference_links"],
+          ["Body area", "placement"],
+          ["Color preference", "color_preference"],
+          ["Placement concerns", "body_context"],
+          ["Must-have details", "must_have_details"],
+          ["What I can decide", "creative_freedom"],
+          ["What references show", "reference_intent"],
+          ["Timeline", "timeline"],
+          ["Requested date", "requested_date"],
+          ["Multiple-appointment preference", "multi_session_preference"],
+          ["Traveling to Atlanta", "traveling_to_atlanta"],
+          ["Can return after healing", "can_return_for_healed_visit"],
+          ["Days per trip", "days_per_trip"],
+          ["Traveling from", "travel_origin"],
+          ["Budget range", "budget_range"],
+          ["Specific budget", "budget_amount_dollars"],
+          ["Existing tattoo photos", "existing_tattoo_photos"],
+          ["Body-area photos", "placement_photos"],
+          ["Reference files", "references"]
+        ].forEach(function(entry){
+          var controls = Array.prototype.filter.call(form.querySelectorAll('[name="' + entry[1] + '"]'), function(control){ return !control.disabled; });
+          if (controls.length) addReviewLine(entry[0], reviewValue(entry[1]));
+        });
+        var branch = {
+          new_work: [["Style direction", "desired_style"]],
+          cover_up: [["Cover-up goal", "cover_up_goal"], ["Size or placement flexibility", "size_placement_flexibility"]],
+          large_cover_up: [["Cover-up goal", "cover_up_goal"], ["Size or placement flexibility", "size_placement_flexibility"], ["Existing tattoo size", "existing_tattoo_dimensions"], ["Larger tattoo", "open_to_larger_footprint"], ["Laser or scarring context", "treatment_scarring_context"], ["Open to multiple sessions", "open_to_multiple_sessions"]],
+          rework: [["Current tattoo age", "existing_tattoo_age"], ["Work considered", "rework_interventions"], ["Current condition", "rework_tattoo_condition"], ["Making the tattoo larger", "rework_expansion_flexibility"]],
+          space_filler: [["Gap size", "gap_dimensions"], ["Surrounding tattoos", "surrounding_work"], ["How the filler should fit", "filler_relationship"]]
+        }[projectType.value] || [];
+        branch.forEach(function(entry){ addReviewLine(entry[0], reviewValue(entry[1])); });
+        previewReady = true;
+        previewStatus.hidden = true;
+        answerReview.hidden = false;
+        reviewSubmitRow.hidden = false;
+        answerReview.scrollIntoView({ block: "start", behavior: "smooth" });
+      });
+      form.addEventListener("input", hideAnswerReview);
+      form.addEventListener("change", hideAnswerReview);
+      form.addEventListener("submit", function(event){
+        if (previewReady) return;
+        event.preventDefault();
+        previewStatus.textContent = "Preview your answers before submitting.";
+        previewStatus.hidden = false;
+        previewButton.focus();
+      }, true);
 
       fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
         .then(function(response){ if (!response.ok) throw new Error(); return response.json(); })

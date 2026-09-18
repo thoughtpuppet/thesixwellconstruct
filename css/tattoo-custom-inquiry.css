@@ -1,0 +1,308 @@
+/* Custom inquiry: the prototype's bounded form treatment in the live page shell. */
+body.custom-inquiry-page .layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+body.custom-inquiry-page .site-hero {
+  margin-bottom: 48px;
+}
+
+body.custom-inquiry-page .form-panel {
+  max-width: 960px;
+  padding: 0;
+  border: 0;
+}
+
+body.custom-inquiry-page .form-note-group {
+  max-width: 780px;
+  margin-bottom: 38px;
+  padding: 18px 20px;
+  border-left: 5px solid var(--color-tattooing-bright);
+  background: #15110f;
+}
+
+body.custom-inquiry-page .public-form {
+  --form-control-border: rgba(109, 61, 21, 0.42);
+  --form-control-bg: #15110f;
+  --form-control-placeholder: var(--color-text-muted);
+  --form-control-accent: var(--color-tattooing-bright);
+  --form-control-height: 48px;
+  --form-control-textarea-min-height: 130px;
+}
+
+body.custom-inquiry-page .public-form .field-grid {
+  gap: 16px;
+}
+
+body.custom-inquiry-page .public-form .tattoo-planning-heading {
+  grid-column: 1 / -1;
+  margin: 28px 0 4px;
+  padding: 36px 0 0;
+  border-top: 5px solid rgba(109, 61, 21, 0.42);
+  color: var(--color-body);
+  font-family: var(--sans);
+  font-size: clamp(23px, 3vw, 34px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  text-transform: uppercase;
+}
+
+body.custom-inquiry-page .public-form .tattoo-planning-heading:first-child {
+  margin-top: 0;
+}
+
+body.custom-inquiry-page .custom-section-kicker {
+  display: block;
+  margin-bottom: 13px;
+  color: var(--color-accent);
+  font: 700 10px/1.5 var(--serif);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+body.custom-inquiry-page .public-form .custom-section-intro {
+  grid-column: 1 / -1;
+  max-width: 690px;
+  margin: 0 0 8px;
+  color: var(--color-text-muted);
+  font: 400 14px/1.7 var(--serif);
+}
+
+body.custom-inquiry-page .public-form .custom-section-intro a {
+  color: var(--color-accent);
+}
+
+body.custom-inquiry-page .custom-terms-points {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  max-width: 780px;
+  margin: 0 0 16px;
+  padding-left: 24px;
+  color: var(--color-text-muted);
+  font: 400 14px/1.7 var(--serif);
+}
+
+body.custom-inquiry-page .public-form :is(.field, .field-group) > label,
+body.custom-inquiry-page .public-form .tattoo-planning-fieldset legend {
+  color: var(--color-body);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
+body.custom-inquiry-page .public-form .radio-group {
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 0;
+}
+
+body.custom-inquiry-page .public-form .radio-option {
+  min-height: 45px;
+  padding: 8px 12px;
+  border: 5px solid rgba(109, 61, 21, 0.27);
+  background: #15110f;
+  color: var(--color-body);
+  cursor: pointer;
+}
+
+body.custom-inquiry-page .public-form .radio-option:hover,
+body.custom-inquiry-page .public-form .radio-option:has(input:checked) {
+  border-color: var(--color-tattooing-bright);
+}
+
+body.custom-inquiry-page .public-form .radio-option input {
+  accent-color: var(--color-tattooing-bright);
+}
+
+body.custom-inquiry-page .public-form .radio-option span {
+  color: var(--color-body);
+}
+
+body.custom-inquiry-page .project-context {
+  border: 0;
+  border-left: 5px solid var(--color-tattooing-bright);
+  background: #15110f;
+}
+
+body.custom-inquiry-page .public-form :is(#existingTattooPhotosField, #placementPhotosField, #referencesField) {
+  padding: 20px;
+  border: 5px dashed rgba(109, 61, 21, 0.42);
+  background: #15110f;
+}
+
+body.custom-inquiry-page .project-checks label.form-check {
+  padding: 11px;
+  border: 5px solid rgba(109, 61, 21, 0.27);
+  background: #15110f;
+}
+
+body.custom-inquiry-page .project-checks label.form-check:hover,
+body.custom-inquiry-page .project-checks label.form-check:has(input:checked) {
+  border-color: var(--color-tattooing-bright);
+}
+
+body.custom-inquiry-page .public-form .tattoo-planning-note {
+  max-width: 780px;
+  padding: 14px 17px;
+  border-left: 5px solid var(--color-tattooing-bright);
+  background: #15110f;
+}
+
+body.custom-inquiry-page .public-form > label.form-check {
+  max-width: 780px;
+  margin-top: 12px;
+  padding: 16px;
+  border: 5px solid rgba(109, 61, 21, 0.27);
+  background: #15110f;
+}
+
+body.custom-inquiry-page .public-form > label.form-check:hover,
+body.custom-inquiry-page .public-form > label.form-check:has(input:checked) {
+  border-color: var(--color-tattooing-bright);
+}
+
+body.custom-inquiry-page .submit-row {
+  margin-top: 24px;
+}
+
+body.custom-inquiry-page .custom-answer-review {
+  max-width: 960px;
+  margin-top: 36px;
+  padding-top: 36px;
+  border-top: 5px solid rgba(109, 61, 21, 0.42);
+}
+
+body.custom-inquiry-page .custom-answer-review > .custom-section-kicker {
+  margin-bottom: 13px;
+}
+
+body.custom-inquiry-page .custom-answer-review h2 {
+  margin: 0 0 14px;
+  color: var(--color-body);
+  font: 900 clamp(23px, 3vw, 34px)/1 var(--sans);
+  text-transform: uppercase;
+}
+
+body.custom-inquiry-page .custom-answer-review > p:not(.custom-section-kicker),
+body.custom-inquiry-page .custom-review-card p {
+  max-width: 690px;
+  margin: 0 0 20px;
+  color: var(--color-text-muted);
+  font: 400 14px/1.7 var(--serif);
+}
+
+body.custom-inquiry-page .custom-review-card {
+  max-width: 780px;
+  margin-top: 24px;
+  padding: 25px;
+  border: 5px solid var(--color-tattooing-bright);
+  background: #15110f;
+}
+
+body.custom-inquiry-page .custom-review-card h3 {
+  margin: 0 0 13px;
+  color: var(--color-body);
+  font: 900 24px/1.1 var(--sans);
+  text-transform: uppercase;
+}
+
+body.custom-inquiry-page .custom-review-card ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+  font: 400 14px/1.7 var(--serif);
+}
+
+body.custom-inquiry-page .custom-review-card li {
+  white-space: pre-wrap;
+}
+
+body.custom-inquiry-page .custom-review-card strong {
+  color: var(--color-body);
+}
+
+body.custom-inquiry-page .custom-review-status {
+  margin: 16px 0;
+  color: var(--color-body);
+  font: 400 13px/1.6 var(--serif);
+}
+
+body.custom-inquiry-page .custom-back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 50px;
+  margin-top: 22px;
+  padding: 9px 16px;
+  border: 5px solid rgba(109, 61, 21, 0.42);
+  color: var(--color-body);
+  font: 800 11px/1.35 var(--sans);
+  letter-spacing: 0.15em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+body.custom-inquiry-page .custom-back-link:hover {
+  border-color: var(--color-tattooing-bright);
+}
+
+body.custom-inquiry-page :is(.custom-review-card, .custom-review-status, #reviewSubmitRow)[hidden] {
+  display: none !important;
+}
+
+body.custom-inquiry-page .submit-row .cta-primary {
+  border-color: var(--color-tattooing-bright);
+  color: var(--color-body);
+}
+
+body.custom-inquiry-page .submit-row .cta-primary:hover,
+body.custom-inquiry-page .submit-row .cta-primary:focus-visible {
+  border-color: var(--color-tattooing-bright);
+  background: var(--color-tattooing-dark);
+  color: var(--color-body);
+}
+
+body.custom-inquiry-page .guide-stack {
+  margin-top: 64px;
+}
+
+body.custom-inquiry-page .guide-stack details {
+  background: #15110f;
+}
+
+body.custom-inquiry-page .guide-stack details:hover,
+body.custom-inquiry-page .guide-stack details[open] {
+  border-color: var(--color-tattooing-bright);
+}
+
+body.custom-inquiry-page .guide-links a {
+  border-width: 5px;
+}
+
+body.custom-inquiry-page .guide-links a:hover {
+  border-color: var(--color-tattooing-bright);
+}
+
+@media (max-width: 640px) {
+  body.custom-inquiry-page .site-hero {
+    margin-bottom: 36px;
+  }
+
+  body.custom-inquiry-page .form-note-group {
+    padding: 16px;
+  }
+
+  body.custom-inquiry-page .public-form .tattoo-planning-heading {
+    margin-top: 22px;
+    padding-top: 28px;
+  }
+
+  body.custom-inquiry-page .guide-stack {
+    margin-top: 45px;
+  }
+}

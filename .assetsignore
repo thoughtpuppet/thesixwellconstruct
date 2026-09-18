@@ -33,6 +33,8 @@ tools/gallery-preview-server.mjs
 tools/media-catalogue-backfill.mjs
 tools/writing-editor
 tools/writing-editor/**
+tools/tattooing-prototype
+tools/tattooing-prototype/**
 tools/writing-preview-server.mjs
 tools/writing-local-runtime.mjs
 functions
