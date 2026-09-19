@@ -19,7 +19,7 @@
     --text-dim:var(--color-text-dim, rgba(251,209,157,0.38)); --text-ghost:var(--color-text-ghost, rgba(251,209,157,0.16));
     --sans:'Inter',Arial,sans-serif; --serif:Georgia,'Times New Roman',Times,serif;
     --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
-    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
+    --cell-hover:#1d1813; --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
   }
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
   html,body { background:var(--bg); color:var(--text); font-family:var(--serif); min-height:100vh; overflow-x:clip; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
@@ -30,10 +30,20 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .page-title { margin-bottom:34px; }
   .intro-body { font-size:17px; line-height:1.8; color:var(--text); max-width:660px; }
   .decision-surface { border:5px solid var(--ring-faint); }
-  .lane { display:grid; grid-template-columns:minmax(200px,0.3fr) minmax(0,1fr); gap:40px; padding:34px; border-bottom:5px solid var(--ring-faint); }
+  .lane { position:relative; display:grid; grid-template-columns:minmax(200px,0.3fr) minmax(0,1fr); gap:40px; padding:34px; border-bottom:5px solid var(--ring-faint); }
+  .consultation-lane { grid-template-columns:minmax(390px,0.38fr) minmax(0,1fr); }
+  .lane.is-collapsed { grid-template-columns:minmax(0,1fr); }
   .lane:last-child { border-bottom:none; }
+  .lane-content[hidden] { display:none; }
   .lane-index { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; margin-bottom:12px; }
   .lane-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.6vw,48px); letter-spacing:-0.04em; line-height:0.92; color:var(--signal); text-transform:uppercase; margin-bottom:14px; }
+  .lane-title-row { margin-bottom:14px; }
+  .lane-title-row .lane-title { margin-bottom:0; }
+  .lane-toggle { position:absolute; top:4px; right:4px; z-index:1; display:grid; width:44px; height:44px; place-items:center; padding:0; border:0; background:transparent; color:var(--signal); cursor:pointer; }
+  .lane-toggle-mark { color:inherit; font:700 32px/0.8 var(--sans); letter-spacing:0 !important; line-height:0.8 !important; }
+  .lane-toggle:hover { color:var(--accent); }
+  .lane.is-collapsed .lane-intro { max-width:none; }
+  .lane:not(.is-collapsed) > .lane-content { margin-top:58px; }
   .lane-intro { font-size:13px; line-height:1.7; color:var(--text-mute); max-width:260px; }
   .guide-list { border:5px solid var(--ring-faint); }
   .guide-item { border-bottom:5px solid var(--ring-faint); }
@@ -53,7 +63,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .path-card { display:grid; grid-template-rows:auto 1fr auto; gap:18px; min-height:230px; padding:24px; border-right:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); transition:background var(--t-fast), color var(--t-fast); }
   .path-card:nth-child(2n) { border-right:none; }
   .path-card:nth-last-child(-n+2) { border-bottom:none; }
-  .path-card:hover,.path-card:focus-visible { background:rgba(109,61,21,0.18); outline:none; }
+  .path-card:hover,.path-card:focus-visible { background:var(--cell-hover); outline:5px solid var(--cell-hover); outline-offset:-5px; }
   .path-card.is-closed { opacity:0.58; }
   .path-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; }
   .path-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.5vw,48px); letter-spacing:-0.05em; line-height:0.9; color:var(--signal); text-transform:uppercase; margin-bottom:12px; }
@@ -63,7 +73,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .consult-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:5px solid var(--ring-faint); }
   .consult-option { display:grid; grid-template-rows:auto 1fr auto; gap:18px; min-height:210px; padding:22px; border-right:5px solid var(--ring-faint); transition:background var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
   .consult-option:last-child { border-right:none; }
-  .consult-option:hover,.consult-option:focus-visible { background:rgba(109,61,21,0.16); outline:none; }
+  .consult-option:hover,.consult-option:focus-visible { background:var(--cell-hover); outline:5px solid var(--cell-hover); outline-offset:-5px; }
   .consult-option-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; }
   .consult-option-title { font-family:var(--sans); font-weight:900; font-size:clamp(22px,3vw,36px); letter-spacing:-0.04em; line-height:0.94; color:var(--text); text-transform:uppercase; margin-bottom:12px; }
   .consult-option-body { font-size:14px; line-height:1.7; color:var(--text-mute); }
@@ -76,6 +86,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     main { padding:var(--s6) var(--s5); }
     .intro { margin-bottom:42px; }
     .lane { grid-template-columns:1fr; gap:24px; padding:24px; }
+    .lane:not(.is-collapsed) > .lane-content { margin-top:0; }
     .lane-intro { max-width:680px; }
     .consult-options { grid-template-columns:1fr; }
     .consult-option,.consult-option:last-child { border-right:none; border-bottom:5px solid var(--ring-faint); }
@@ -123,13 +134,13 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       <p class="intro-body hero-descriptor" data-copy-id="inquire-chooser-intro">Each form carries a different kind of request into review. Choose the path closest to what you want, then submit the details there.</p>
     </section>
     <div class="decision-surface" aria-label="Choose a tattoo path">
-      <section class="lane" id="before-booking" aria-labelledby="guide-title">
-        <div>
+      <section class="lane is-collapsed" id="before-booking" aria-labelledby="guide-title" data-collapsible-lane>
+        <div class="lane-head">
           <p class="lane-index">01 / Start here</p>
-          <h2 class="lane-title" id="guide-title">What You Should Know Before Booking</h2>
+          <div class="lane-title-row"><h2 class="lane-title" id="guide-title">What You Should Know Before Booking</h2><button class="lane-toggle" type="button" aria-label="Expand What You Should Know Before Booking" aria-expanded="false" aria-controls="before-booking-content" data-lane-label="What You Should Know Before Booking"><span class="lane-toggle-mark" aria-hidden="true">+</span></button></div>
           <p class="lane-intro">Open a subject for the full guidance. The studio policies linked below remain the terms that govern appointments.</p>
         </div>
-        <div class="guide-list" aria-label="Before booking guidance">
+        <div class="guide-list lane-content" id="before-booking-content" aria-label="Before booking guidance" hidden>
           <details class="guide-item" name="before-booking">
             <summary>How requests are reviewed</summary>
             <div class="guide-copy"><p>I review the idea, placement, size, timing, budget, and whether it fits my style or if I can translate it into my style. I work best with full artistic freedom over the composition and orientation. Be as detailed as possible to make this process as smooth as possible; vagueness will delay the process or even lead to complete rejection of your project. A submission does not guarantee approval or an appointment. You will be notified by email if a project has been rejected.</p><p>Flash, Custom, Build, and Special Projects have different starting points. If your project needs more discussion, I may ask for more context or recommend a consultation before a date is offered. Or I might recommend another artist that would best fit your needs.<br><br>If you need one-on-one planning time, you can book a consultation below.</p></div>
@@ -152,15 +163,23 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           </details>
           <details class="guide-item" name="before-booking">
             <summary>Rates, budgets, and deposits</summary>
-            <div class="guide-copy"><p><br></p><p><br></p></div>
+            <div class="guide-copy"><p>The <a href="/tattoos/#project-fit">Tattooing rates</a> show current starting rates by path. Your inquiry budget tells me what you are comfortable spending; it is not an approved quote. If your project is accepted, I will present a reviewed scope, session plan, and cost before private scheduling. I do try to work with everyone's budget as much as I can.</p><p>Booking requires a deposit. Tattoo deposits are non-refundable and credited toward the tattoo. Deposits depend on the session length and range from $50 to $300. You will review the appointment length and exact deposit in your private booking plan; payment and rescheduling rules are in the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking">
+            <summary>How I Build Structure, Layers, and Depth</summary>
+            <div class="guide-copy"><p>For larger work, I plan the whole composition around your body before deciding how each appointment should be used. My process is similar to building a painting: I usually establish the overall structure and middle values first, then develop the darker shadows and contrast, followed by brighter highlights, details, and refinement.</p><p>That order can change when the tattoo, placement, skin, or schedule calls for it. I may build the full composition in layers or bring one section further along at a time. If appointments are on back-to-back days, each day is planned around fresh areas so I am not repeatedly working over skin that has not healed. When there is healing time between visits, later sessions can deepen, balance, and refine the work after I see how it has settled.</p></div>
           </details>
           <details class="guide-item" name="before-booking">
             <summary>How sessions are planned</summary>
             <div class="guide-copy"><p><br></p><p>For larger work, we may complete sections across back-to-back days on one trip, or make separate visits with healing time in between for further depth and refinement. The first approach does not guarantee a whole sleeve in one trip; the second is not required for every project. Your travel limits help shape the plan, which you review before booking.</p></div>
           </details>
           <details class="guide-item" name="before-booking">
+            <summary>Estimated Session Lengths &amp; Needs</summary>
+            <div class="guide-copy"><p>During the planning phase, you choose how long each session will be from the session lengths available for your project. Shorter sessions usually divide the work across more appointments, while longer sessions may reduce the number of visits. That choice does not change the total amount of work the tattoo requires.</p><p>I use your chosen session length, the size and placement, level of detail, travel plans, and whether the work should be built in layers or section by section to propose the appointment count. Your skin response, comfort, breaks, and the amount we can complete safely can still affect the pace. The final session plan and cost are confirmed after review, before dates are booked.</p></div>
+          </details>
+          <details class="guide-item" name="before-booking">
             <summary>If you are traveling to Atlanta</summary>
-            <div class="guide-copy"><p>The <a href="/tattoos/#project-fit">Tattooing rates</a> show current starting rates by path. Your inquiry budget tells me what you are comfortable spending; it is not an approved quote. If your project is accepted, I will present a reviewed scope, session plan, and cost before private scheduling. I do try to work with everyone's budget as much as I can.</p><p>Booking requires a deposit. Tattoo deposits are non-refundable and credited toward the tattoo. Deposits depend on the session length and range from $50 to $300. You will review the appointment length and exact deposit in your private booking plan; payment and rescheduling rules are in the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</p></div>
+            <div class="guide-copy"><p>Tell me whether you are traveling, how many appointment days you can make in one trip, and whether returning after healing is possible. If more than one appointment is needed, you can state a preference for back-to-back days or separate visits with healing time in between. These are preferences for planning, not guaranteed schedules.</p><p>Please wait for project approval, an agreed session plan, and confirmed appointments before buying non-refundable travel.</p></div>
           </details>
           <details class="guide-item" name="before-booking">
             <summary>What Happens During Each Session</summary>
@@ -172,7 +191,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           </details>
           <details class="guide-item" name="before-booking">
             <summary>Preparing for your appointment</summary>
-            <div class="guide-copy"><p>Clients must be at least 18 with valid ID. Arrive rested, fed, hydrated, and wearing clothing that gives access to the tattoo area. Review the <a href="/tattoos/day-of/">day-of preparation</a>, <a href="/tattoos/location-parking/">location and parking</a>, and <a href="/tattoos/aftercare/">aftercare</a> before your visit.</p><p>Timing, late arrival, rescheduling, and health requirements are covered in the full <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</p></div>
+            <div class="guide-copy"><p>You must be at least 18 and bring a valid ID. Eat a meal within four hours <strong>before</strong> your appointment, drink water, and arrive rested. Wear clothing that gives easy access to the area being tattooed. Before your visit, review <a href="/tattoos/day-of/">day-of preparation</a>, <a href="/tattoos/location-parking/">location and parking</a>, and <a href="/tattoos/aftercare/">aftercare</a>.</p><p>Timing, late arrival, rescheduling, and health requirements are covered in the full <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</p></div>
           </details>
           <details class="guide-item" name="before-booking" id="terms">
             <summary>Terms &amp; Conditions</summary>
@@ -219,7 +238,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         </div>
       </section>
 
-      <section class="lane" aria-labelledby="consult-options-title">
+      <section class="lane consultation-lane" aria-labelledby="consult-options-title">
         <div>
           <p class="lane-index">03 / Paid planning</p>
           <h2 class="lane-title" id="consult-options-title">Book a Consultation</h2>
@@ -253,6 +272,43 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     <a href="/home/" data-copy-id="inquire-footer-home">the six.well construct</a>
   </footer>
   <script src="/js/consultation-context.js"></script>
+  <script>
+  (function() {
+    var lanes = Array.from(document.querySelectorAll("[data-collapsible-lane]"));
+
+    function setLaneOpen(lane, open) {
+      var toggle = lane.querySelector(".lane-toggle");
+      var content = document.getElementById(toggle.getAttribute("aria-controls"));
+      var mark = toggle.querySelector(".lane-toggle-mark");
+      toggle.setAttribute("aria-expanded", String(open));
+      toggle.setAttribute("aria-label", (open ? "Collapse " : "Expand ") + toggle.dataset.laneLabel);
+      content.hidden = !open;
+      lane.classList.toggle("is-collapsed", !open);
+      mark.textContent = open ? "−" : "+";
+    }
+
+    lanes.forEach(function(lane) {
+      var toggle = lane.querySelector(".lane-toggle");
+      setLaneOpen(lane, false);
+      toggle.addEventListener("click", function() {
+        setLaneOpen(lane, toggle.getAttribute("aria-expanded") !== "true");
+      });
+    });
+
+    function openLaneForHash() {
+      if (!location.hash) return;
+      var target = document.getElementById(location.hash.slice(1));
+      var lane = target && target.closest("[data-collapsible-lane]");
+      if (!lane) return;
+      setLaneOpen(lane, true);
+      if (target.tagName === "DETAILS") target.open = true;
+      requestAnimationFrame(function() { target.scrollIntoView({ block: "start" }); });
+    }
+
+    openLaneForHash();
+    window.addEventListener("hashchange", openLaneForHash);
+  })();
+  </script>
   <script>
   (function() {
     hydrateConsultationContext(document);
