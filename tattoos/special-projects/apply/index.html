@@ -65,6 +65,7 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 <link rel="stylesheet" href="/css/tattoo-request-form.css">
+<link rel="stylesheet" href="/css/tattoo-before-booking.css">
 </head>
 <body class="tattoo-flow tattoo-form-treatment" data-venture="tattooing">
   <script>
@@ -93,7 +94,7 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
       </section>
       <section class="form-panel" aria-label="Special Projects application form">
         <h2 class="form-title">Apply for Review</h2>
-        <p class="form-note">Use this form for projects that need deeper concept, trust, time, or scale. Applications are reviewed before a private token booking link is sent.</p>
+        <div data-tattoo-before-booking></div>
         <form class="public-form" id="specialProjectForm" data-tattoo-project-planning method="POST" action="/api/submissions" enctype="multipart/form-data">
           <input type="hidden" name="type" value="special_project">
           <input type="hidden" name="inquiry_flow_version" value="2">
@@ -174,6 +175,7 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+  <script src="/js/tattoo-before-booking.js"></script>
   <script src="/js/tattoo-budget-field.js"></script>
   <script src="/js/tattoo-project-planning.js"></script>
   <script src="/js/submission-form.js"></script>

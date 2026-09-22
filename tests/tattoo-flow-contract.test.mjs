@@ -1013,7 +1013,6 @@ function validCustomForProject(projectType, overrides = {}) {
     large_cover_up: {
       cover_up_goal: "transform",
       size_placement_flexibility: "flexible",
-      existing_tattoo_dimensions: "8 x 12 inches",
       open_to_larger_footprint: "yes",
       open_to_multiple_sessions: "yes",
     },
@@ -4529,11 +4528,14 @@ test("Tattoo aftercare is part of the client resource packet and keeps medical e
   assert.match(location, /\.parking-guide \{[\s\S]*?border: 5px solid/);
 });
 
-test("Custom Tattoo Inquiry explains approval and booking before asking for detail", () => {
+test("Custom Tattoo Inquiry presents the shared before-booking guide before asking for detail", () => {
   const source = readFileSync(join(ROOT, "tattoos", "inquire", "custom", "index.html"), "utf8");
   assert.match(source, /data-copy-id="inquiry-intro-primary">Tell me what you want, where you want it, and which details matter most\.<\/p>/);
   assert.doesNotMatch(source, /Submitting starts review; it does not reserve an appointment\./);
-  assert.match(source, /class="form-note-group" data-copy-id="inquiry-form-note">[\s\S]*?<p class="form-note">Every request is reviewed and approved before booking\. After approval, you will receive a booking link to choose your appointment day &amp; time and pay the deposit\.<\/p>[\s\S]*?<p class="form-note">Please fill out all questions in detail\. Vague answers may delay approval\.<\/p>/);
+  assert.match(source, /href="\/css\/tattoo-before-booking\.css"/);
+  assert.match(source, /<div data-tattoo-before-booking><\/div>\s*<form class="public-form" id="inquiryForm"/);
+  assert.match(source, /src="\/js\/tattoo-before-booking\.js"/);
+  assert.doesNotMatch(source, /Every request is reviewed and approved before booking/);
   assert.doesNotMatch(source, /private token link into the studio booking and deposit flow/i);
 });
 
@@ -6773,6 +6775,61 @@ test("project-aware custom inquiries validate conditional answers, upload counts
   assert.match((await rejectedThirteen.json()).error, /at most 12 uploaded files/i);
 });
 
+test("Custom inquiry accepts at most three published work references and stores canonical snapshots", async () => {
+  const database = migratedDatabase();
+  const env = { SUBMISSIONS_DB: new LocalD1(database), PUBLIC_SITE_URL: "https://example.test" };
+  database.exec(`
+    INSERT INTO content_entities (id,entity_type,visibility,created_at,updated_at)
+    VALUES ('picker-tattoo','portfolio_item','public',datetime('now'),datetime('now'));
+    INSERT INTO portfolio_items (id,source_url,title,state,primary_public_visible,created_at,updated_at)
+    VALUES ('picker-tattoo','/assets/picker-tattoo.jpg','Published tattoo','published',1,datetime('now'),datetime('now'));
+    INSERT INTO content_entities (id,entity_type,visibility,created_at,updated_at)
+    VALUES ('picker-design','tattoo_design','public',datetime('now'),datetime('now'));
+    INSERT INTO tattoo_designs (id,slug,title,state,created_at,updated_at)
+    VALUES ('picker-design','picker-design','Published design','published',datetime('now'),datetime('now'));
+    INSERT OR IGNORE INTO archive_dossiers (entity_id,archive_slug,state,public_visible,created_at,updated_at)
+    VALUES ('picker-design','picker-design','published',1,datetime('now'),datetime('now'));
+    UPDATE archive_dossiers SET state='published',public_visible=1 WHERE entity_id='picker-design';
+  `);
+  const choices = [
+    { kind: "tattoo", id: "picker-tattoo", title: "Client supplied title", route: "https://example.test/not-the-work", imageUrl: "https://example.test/not-the-work.jpg" },
+    { kind: "design", id: "picker-design" },
+    { kind: "symbol", id: "maze-path" },
+  ];
+  const accepted = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
+    email: "picker@example.test",
+    selected_references_json: JSON.stringify(choices),
+    selected_reference_note: "The shape and spacing.",
+  })), env);
+  assert.equal(accepted.status, 200, await accepted.clone().text());
+  const { submissionId } = await accepted.json();
+  const payload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(submissionId).payload_json);
+  assert.deepEqual(payload.selected_references.map((item) => [item.kind, item.title, item.route]), [
+    ["tattoo", "Published tattoo", "/tattoos/portfolio/?work=picker-tattoo"],
+    ["design", "Published design", "/archive/records/picker-design/"],
+    ["symbol", "The Path", "/about/legend/maze-path/"],
+  ]);
+  assert.equal(payload.selected_reference_note, "The shape and spacing.");
+  assert.equal(payload.selected_references_json, undefined);
+
+  const tooMany = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
+    selected_references_json: JSON.stringify([...choices, { kind: "symbol", id: "maze-room" }]),
+  })), env);
+  assert.equal(tooMany.status, 400);
+
+  const duplicate = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
+    selected_references_json: JSON.stringify([choices[0], choices[0]]),
+  })), env);
+  assert.equal(duplicate.status, 400);
+
+  database.prepare("UPDATE content_entities SET visibility='internal' WHERE id='picker-design'").run();
+  const hidden = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
+    selected_references_json: JSON.stringify([{ kind: "design", id: "picker-design" }]),
+  })), env);
+  assert.equal(hidden.status, 409);
+  assert.equal((await hidden.json()).code, "TATTOO_REFERENCE_UNAVAILABLE");
+});
+
 test("updated tattoo inquiry forms require the booking-policy acknowledgment without blocking older cached forms", async () => {
   const database = migratedDatabase();
   const env = {
@@ -8857,6 +8914,7 @@ test("Custom Inquiry configures project-aware questions and multi-file upload ro
   const firstNameIndex = formSource.indexOf('name="firstName"');
   assert.ok(firstNameIndex > -1 && firstNameIndex < projectTypeIndex, "client details appear before project type");
   assert.match(formSource, /data-project-field="cover_up large_cover_up"/);
+  assert.doesNotMatch(formSource, /existing_tattoo_dimensions|existingTattooDimensionsField/);
   assert.match(formSource, /name="rework_interventions" value="refresh_color"/);
   assert.match(formSource, /name="rework_interventions" value="repair_linework"/);
   assert.match(formSource, /name="rework_interventions" value="redesign_part"/);
@@ -8865,9 +8923,47 @@ test("Custom Inquiry configures project-aware questions and multi-file upload ro
   assert.match(formSource, /name="placement_photos"[^>]*multiple|multiple[^>]*name="placement_photos"/);
   assert.match(formSource, /name="existing_tattoo_photos"[^>]*multiple|multiple[^>]*name="existing_tattoo_photos"/);
   assert.match(formSource, /name="references"[^>]*multiple|multiple[^>]*name="references"/);
+  for (const upload of ["references", "existing_tattoo_photos", "placement_photos"]) {
+    assert.match(formSource, new RegExp(`data-upload-selection-for="${upload}"`));
+  }
+  assert.match(formSource, /input\.files = next\.files/);
+  assert.match(formSource, /new DataTransfer\(\)/);
+  assert.match(formSource, /input\.dispatchEvent\(new Event\("change", \{ bubbles: true \}\)\)/);
+  assert.match(formSource, /URL\.revokeObjectURL\(url\)/);
+  assert.match(formSource, /id="tattooReferencePicker"/);
+  assert.match(formSource, /id="tattooReferenceSelectedCount"[^>]*>Selected art\.pill references \(0 of 3\)/);
+  assert.match(formSource, /name="selected_references_json"/);
+  assert.ok(formSource.indexOf('id="tattooReferencePicker"') < formSource.indexOf('id="referencesField"'), "work picker precedes uploads in the idea section");
+  assert.ok(formSource.indexOf('id="referencesField"') < formSource.indexOf('id="reference_intent"') && formSource.indexOf('id="reference_intent"') < formSource.indexOf('<span class="custom-section-kicker">Placement</span>'), "reference intent follows uploads before placement");
+  assert.match(formSource, /\/js\/tattoo-reference-picker\.js/);
+  const pickerSource = readFileSync(join(ROOT, "js", "tattoo-reference-picker.js"), "utf8");
+  const pickerStyles = readFileSync(join(ROOT, "css", "tattoo-reference-picker.css"), "utf8");
+  assert.match(pickerSource, /selected\.size >= 3/);
+  assert.match(pickerSource, /createElement\("article"\)/);
+  assert.match(pickerSource, /tattoo-reference-picker__select/);
+  assert.match(pickerSource, /tattoo-reference-picker__item-kind/);
+  assert.match(pickerSource, /button\.textContent = selected\.has\(key\(item\)\) \? "Added" : "Add"/);
+  assert.match(pickerSource, /remove\.textContent = `\$\{item\.title\} ×`/);
+  assert.match(pickerSource, /count\.textContent = `Selected art\.pill references \(\$\{items\.length\} of 3\)`/);
+  assert.match(pickerStyles, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(pickerStyles, /\.tattoo-reference-picker__grid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  assert.match(pickerStyles, /max-height: 348px/);
+  assert.match(pickerStyles, /object-fit: contain/);
+  assert.match(pickerStyles, /\.tattoo-reference-picker__thumb img\s*\{\s*position: absolute;\s*inset: 0;/);
+  assert.match(pickerSource, /\/api\/portfolio/);
+  assert.match(pickerSource, /\/api\/archive\/items\?medium=tattoos/);
+  assert.match(pickerSource, /\/api\/legend/);
+  for (const otherForm of ["tattoos/flash/claim/index.html", "tattoos/build/index.html", "tattoos/special-projects/apply/index.html"]) {
+    assert.doesNotMatch(readFileSync(join(ROOT, otherForm), "utf8"), /tattoo-reference-picker\.js/, `${otherForm} keeps its existing inquiry path`);
+  }
   assert.match(formSource, /var maxFiles = 12;/);
   assert.match(formSource, /control\.disabled = !active;/);
   assert.doesNotMatch(formSource, /(?:existingPhotos|placementPhotos|references)\.value\s*=\s*""/);
+
+  const prototypeFormSource = readFileSync(join(ROOT, "tools", "tattooing-prototype", "custom.html"), "utf8");
+  const prototypePreviewSource = readFileSync(join(ROOT, "tools", "tattooing-prototype", "prototype.js"), "utf8");
+  assert.doesNotMatch(prototypeFormSource, /existingTattooDimensions/);
+  assert.doesNotMatch(prototypePreviewSource, /existingTattooDimensions/);
 
   const submissionsSource = readFileSync(join(ROOT, "functions", "api", "submissions", "_lib.js"), "utf8");
   assert.match(submissionsSource, /tattoo_inquiry:\s*12/);
@@ -8875,10 +8971,12 @@ test("Custom Inquiry configures project-aware questions and multi-file upload ro
   assert.match(submissionsSource, /cover_up_photos:\s*"existing_tattoo_photos"/);
 
   const studioSource = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(studioSource, /selectedReferencesMarkup/);
   assert.match(studioSource, /Rework Interventions/);
   assert.match(studioSource, /Existing tattoo photograph/);
 
   const notificationSource = readFileSync(join(ROOT, "functions", "api", "notifications", "_lib.js"), "utf8");
+  assert.match(notificationSource, /Selected work and symbols/);
   assert.match(notificationSource, /rework_interventions:\s*"Rework interventions"/);
   assert.match(notificationSource, /refresh_color:\s*"Refresh or restore color"/);
 });

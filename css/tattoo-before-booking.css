@@ -1,0 +1,207 @@
+.tattoo-before-booking {
+  --before-booking-ring: var(--ring-faint, rgba(109, 61, 21, 0.18));
+  --before-booking-signal: var(--signal, var(--color-tattooing, #6e0404));
+  --before-booking-accent: var(--accent, var(--color-accent, #fcb867));
+  --before-booking-text: var(--text, var(--color-body, #fbd19d));
+  --before-booking-muted: var(--text-mute, var(--color-text-muted, rgba(251, 209, 157, 0.66)));
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(200px, 0.3fr) minmax(0, 1fr);
+  gap: 40px;
+  width: 100%;
+  margin: 0 0 clamp(40px, 6vw, 64px);
+  padding: 34px;
+  border: 5px solid var(--before-booking-ring);
+  background: var(--color-bg, #0e0e0e);
+  color: var(--before-booking-text);
+}
+
+.tattoo-before-booking.is-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.tattoo-before-booking__index {
+  margin: 0 0 12px;
+  color: var(--before-booking-accent);
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.tattoo-before-booking__title {
+  margin: 0 54px 14px 0;
+  color: var(--before-booking-signal);
+  font-family: Inter, Arial, sans-serif;
+  font-size: clamp(26px, 3.6vw, 48px);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+  text-transform: uppercase;
+}
+
+.tattoo-before-booking__intro {
+  max-width: 260px;
+  margin: 0;
+  color: var(--before-booking-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.tattoo-before-booking.is-collapsed .tattoo-before-booking__intro {
+  max-width: none;
+}
+
+.tattoo-before-booking__toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--before-booking-signal);
+  cursor: pointer;
+}
+
+.tattoo-before-booking__toggle:hover,
+.tattoo-before-booking__toggle:focus-visible {
+  color: var(--before-booking-accent);
+  outline: none;
+}
+
+.tattoo-before-booking__toggle-mark {
+  color: inherit;
+  font: 700 32px/0.8 Inter, Arial, sans-serif;
+  letter-spacing: 0 !important;
+}
+
+.tattoo-before-booking__content[hidden] {
+  display: none;
+}
+
+.tattoo-before-booking:not(.is-collapsed) > .tattoo-before-booking__content {
+  margin-top: 58px;
+}
+
+.tattoo-before-booking__list {
+  border: 5px solid var(--before-booking-ring);
+}
+
+.tattoo-before-booking__item {
+  border-bottom: 5px solid var(--before-booking-ring);
+}
+
+.tattoo-before-booking__item:last-child {
+  border-bottom: 0;
+}
+
+.tattoo-before-booking__item summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px;
+  color: var(--before-booking-text);
+  font-family: Inter, Arial, sans-serif;
+  font-size: clamp(15px, 1.5vw, 19px);
+  font-weight: 700;
+  line-height: 1.25;
+  list-style: none;
+  cursor: pointer;
+  transition: background 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.tattoo-before-booking__item summary::-webkit-details-marker {
+  display: none;
+}
+
+.tattoo-before-booking__item summary::after {
+  content: "+";
+  flex: none;
+  color: var(--before-booking-signal);
+  font-size: 27px;
+  line-height: 1;
+}
+
+.tattoo-before-booking__item[open] summary::after {
+  content: "−";
+}
+
+.tattoo-before-booking__item summary:hover,
+.tattoo-before-booking__item summary:focus-visible {
+  background: rgba(109, 61, 21, 0.18);
+  outline: 5px solid var(--before-booking-signal);
+  outline-offset: -5px;
+}
+
+.tattoo-before-booking__copy {
+  max-width: 790px;
+  padding: 0 24px 24px;
+  color: var(--before-booking-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.tattoo-before-booking__copy p {
+  margin: 0;
+}
+
+.tattoo-before-booking__copy p + p,
+.tattoo-before-booking__copy ul + p {
+  margin-top: 16px;
+}
+
+.tattoo-before-booking__copy ul {
+  margin: 14px 0 0;
+  padding-left: 22px;
+}
+
+.tattoo-before-booking__copy li + li {
+  margin-top: 9px;
+}
+
+.tattoo-before-booking__copy a {
+  color: var(--before-booking-accent);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.tattoo-before-booking__copy strong {
+  color: var(--before-booking-text);
+}
+
+@media (max-width: 780px) {
+  .tattoo-before-booking {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 24px;
+  }
+
+  .tattoo-before-booking:not(.is-collapsed) > .tattoo-before-booking__content {
+    margin-top: 0;
+  }
+
+  .tattoo-before-booking__intro {
+    max-width: 680px;
+  }
+}
+
+@media (max-width: 640px) {
+  .tattoo-before-booking {
+    padding: 20px 16px;
+  }
+
+  .tattoo-before-booking__item summary {
+    padding: 18px 16px;
+  }
+
+  .tattoo-before-booking__copy {
+    padding: 0 16px 20px;
+  }
+}

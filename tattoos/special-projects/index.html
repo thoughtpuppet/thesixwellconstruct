@@ -452,6 +452,7 @@ main { padding:var(--s6) var(--s5); }
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 <link rel="stylesheet" href="/css/tattoo-request-form.css">
+<link rel="stylesheet" href="/css/tattoo-before-booking.css">
 </head>
 <body class="tattoo-flow tattoo-form-treatment" data-venture="tattooing" data-special-project-page="overview">
   <script>
@@ -540,6 +541,7 @@ main { padding:var(--s6) var(--s5); }
       <h2 id="artistLedHeading">Artist-led designs.</h2>
       <p>Choose the kind of work and tell me where it would go. For Floral, Narrative, and Figurative, I choose the subject and composition. For Anime, you choose the show, character, or arc; I interpret it for the body area you offer. These are requests for new work, not finished designs to claim.</p>
       <div class="artist-led-explainer"><p><strong>Your choice:</strong> The type, placement, estimated size, and the schedule that could work for you.</p><p><strong>My part:</strong> The subject and composition, made for your body. I review fit, scope, budget, and likely sessions before offering a private booking link. The deposit is paid at booking, before design work begins.</p></div>
+      <div data-tattoo-before-booking></div>
       <form class="public-form artist-led-form" id="artistLedForm" data-tattoo-project-planning data-tattoo-request-review method="POST" action="/api/submissions" enctype="multipart/form-data">
         <input type="hidden" name="type" value="tattoo_inquiry">
         <input type="hidden" name="inquiry_flow_version" value="2">
@@ -604,6 +606,7 @@ main { padding:var(--s6) var(--s5); }
     <section class="application-panel" id="application" aria-label="Special Projects application" data-project-detail-only hidden>
       <h2 class="application-heading">Apply for <span id="applicationProjectTitle">this project</span></h2>
       <p class="application-note" id="applicationInstructions">Choose an open project above to begin.</p>
+      <div data-tattoo-before-booking></div>
       <form class="public-form" id="specialProjectForm" data-tattoo-project-planning method="POST" action="/api/submissions" enctype="multipart/form-data">
         <input type="hidden" name="type" value="special_project">
         <input type="hidden" name="inquiry_flow_version" value="2">
@@ -670,6 +673,7 @@ main { padding:var(--s6) var(--s5); }
     <a id="specialProjectsBackLink" href="/tattoos/">&larr; back to Art.Pill</a>
     <a href="/home/">the six.well construct</a>
   </footer>
+  <script src="/js/tattoo-before-booking.js"></script>
   <script src="/js/tattoo-budget-field.js"></script>
   <script src="/js/tattoo-project-planning.js"></script>
   <script src="/js/submission-form.js"></script>

@@ -57,15 +57,35 @@ test("tattoo inquiry and booking paths remain connected", () => {
 
 test("inquiry guide precedes the unchanged project choices and consultation", () => {
   const chooser = read("tattoos/inquire/index.html");
+  const hero = read("css/hero.css");
   const guide = chooser.indexOf('id="before-booking"');
   const project = chooser.indexOf('id="project-lane-title"');
   const consultation = chooser.indexOf('id="consult-options-title"');
   assert.ok(guide >= 0 && guide < project && project < consultation);
+  assert.match(chooser, /class="intro-body hero-descriptor hero-descriptor--wide" data-copy-id="inquire-chooser-intro"/);
+  assert.match(hero, /\.site-hero \.hero-descriptor\.hero-descriptor--wide \{[\s\S]*?width: 100%;[\s\S]*?max-width: 100% !important;/);
   assert.match(chooser, /01 \/ Start here[\s\S]*What You Should Know Before Booking/);
   assert.match(chooser, /02 \/ Submit a project[\s\S]*Submit a Project/);
   assert.match(chooser, /03 \/ Paid planning[\s\S]*Book a Consultation/);
-  assert.equal((chooser.match(/<details class="guide-item"/g) || []).length, 10);
-  assert.equal((chooser.match(/<details class="guide-item" name="before-booking"/g) || []).length, 10);
+  assert.match(chooser, /<section class="lane consultation-lane" aria-labelledby="consult-options-title">/);
+  assert.match(chooser, /\.consultation-lane \{ grid-template-columns:minmax\(390px,0\.38fr\) minmax\(0,1fr\); \}/);
+  assert.equal((chooser.match(/<details class="guide-item"/g) || []).length, 13);
+  assert.equal((chooser.match(/<details class="guide-item" name="before-booking"/g) || []).length, 13);
+  assert.equal((chooser.match(/data-collapsible-lane>/g) || []).length, 1);
+  assert.equal((chooser.match(/class="lane-toggle"[^>]*aria-expanded="false"/g) || []).length, 1);
+  assert.equal((chooser.match(/class="guide-list lane-content"[^>]*hidden/g) || []).length, 1);
+  assert.doesNotMatch(chooser, /class="(?:path-grid|consult-options) lane-content"/);
+  assert.match(chooser, /function setLaneOpen\(lane, open\)[\s\S]*?content\.hidden = !open[\s\S]*?setLaneOpen\(lane, false\)/);
+  assert.match(chooser, /function openLaneForHash\(\)[\s\S]*?setLaneOpen\(lane, true\)[\s\S]*?target\.tagName === "DETAILS"/);
+  assert.match(chooser, /\.lane-toggle \{ position:absolute; top:4px; right:4px;/);
+  assert.match(chooser, /\.lane:not\(\.is-collapsed\) > \.lane-content \{ margin-top:58px; \}/);
+  assert.match(chooser, /\.lane\.is-collapsed \.lane-intro \{ max-width:none; \}/);
+  assert.match(chooser, /<summary>What Happens During Each Session<\/summary>[\s\S]*?approve the design and stencil placement[\s\S]*?payment is taken at the start of each day[\s\S]*?If you need a break, tell me and we'll pause[\s\S]*?review what was completed/);
+  assert.match(chooser, /<summary>How I Build Structure, Layers, and Depth<\/summary>[\s\S]*?establish the overall structure and middle values first[\s\S]*?darker shadows and contrast[\s\S]*?brighter highlights, details, and refinement[\s\S]*?back-to-back days[\s\S]*?healing time between visits/);
+  assert.match(chooser, /<summary>Estimated Session Lengths &amp; Needs<\/summary>[\s\S]*?you choose how long each session will be[\s\S]*?Shorter sessions usually divide the work across more appointments[\s\S]*?chosen session length[\s\S]*?built in layers or section by section[\s\S]*?confirmed after review/);
+  assert.match(chooser, /<summary>Rates, budgets, and deposits<\/summary>[\s\S]*?Tattooing rates[\s\S]*?not an approved quote[\s\S]*?Deposits depend on the session length and range from \$50 to \$300/);
+  assert.match(chooser, /<summary>If you are traveling to Atlanta<\/summary>[\s\S]*?how many appointment days you can make in one trip[\s\S]*?returning after healing[\s\S]*?before buying non-refundable travel/);
+  assert.ok(chooser.indexOf("<summary>What Happens During Each Session</summary>") < chooser.indexOf("<summary>Preparing for your appointment</summary>"));
   assert.match(chooser, /<summary>Terms &amp; Conditions<\/summary>/);
   assert.match(chooser, /Choose the request that already matches your idea\. Submissions enter review before any tattoo appointment is offered\./);
   assert.match(chooser, /Browse available work, open the design you want, and send its attached claim form\./);
@@ -78,6 +98,18 @@ test("Tattoo index changes only its collaboration actions into 5px outlines", ()
   const landing = read("tattoos/index.html");
   assert.match(landing, /\.ledger-action \{[\s\S]*?border:5px solid var\(--ring-soft\); padding:10px 14px;/);
   assert.equal((landing.match(/class="ledger-action"/g) || []).length, 4);
+});
+
+test("inquiry project and consultation actions use the outlined Tattoo treatment", () => {
+  const chooser = read("tattoos/inquire/index.html");
+  assert.equal((chooser.match(/class="path-action"/g) || []).length, 4);
+  assert.equal((chooser.match(/class="path-action" id="specialProjectAction"/g) || []).length, 1);
+  assert.equal((chooser.match(/class="consult-option-action"/g) || []).length, 2);
+  assert.match(chooser, /--cell-hover:#1d1813/);
+  assert.match(chooser, /\.path-card:hover,\.path-card:focus-visible \{ background:var\(--cell-hover\); outline:5px solid var\(--cell-hover\); outline-offset:-5px; \}/);
+  assert.match(chooser, /\.consult-option:hover,\.consult-option:focus-visible \{ background:var\(--cell-hover\); outline:5px solid var\(--cell-hover\); outline-offset:-5px; \}/);
+  assert.match(chooser, /\.path-action,\.consult-option-action \{[^}]*border:5px solid var\(--ring-soft\)/);
+  assert.match(chooser, /\.path-card:hover \.path-action,\.path-card:focus-visible \.path-action,\.consult-option:hover \.consult-option-action,\.consult-option:focus-visible \.consult-option-action \{ border-color:var\(--signal\)/);
 });
 
 test("Custom, Flash, and active Special application share the new planning fields", () => {

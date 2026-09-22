@@ -266,7 +266,7 @@
       const branchAnswers = {
         new_work: [["Style direction", value("desiredStyle")]],
         cover_up: [["Cover-up goal", value("coverUpGoal")]],
-        large_cover_up: [["Cover-up goal", value("coverUpGoal")], ["Existing tattoo size", value("existingTattooDimensions")], ["Laser or scarring context", value("treatmentScarringContext")]],
+        large_cover_up: [["Cover-up goal", value("coverUpGoal")], ["Laser or scarring context", value("treatmentScarringContext")]],
         rework: [["Current tattoo age", value("existingTattooAge")], ["Work considered", selected("reworkIntervention").join(", ") || "Not selected"], ["Current condition", value("reworkCondition")], ["Making the tattoo larger", value("reworkExpansion")]],
         space_filler: [["Gap size", value("gapDimensions")], ["Surrounding tattoos", value("surroundingWork")], ["How the filler should fit", value("fillerRelationship")]],
       };

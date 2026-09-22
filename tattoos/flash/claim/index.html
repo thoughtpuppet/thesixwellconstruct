@@ -100,6 +100,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 <link rel="stylesheet" href="/css/tattoo-request-form.css">
+<link rel="stylesheet" href="/css/tattoo-before-booking.css">
 </head>
 <body class="tattoo-flow tattoo-form-treatment flash-request-page" data-venture="tattooing">
   <script>
@@ -152,6 +153,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       <section class="form-panel" aria-label="Flash claim form">
         <h2 class="form-title">Submit Claim</h2>
         <p class="form-note">Available flash only. If you are looking for a custom variation, use the standard tattoo inquiry instead.</p>
+        <div data-tattoo-before-booking></div>
         <form class="public-form" id="flashClaimForm" data-tattoo-project-planning data-tattoo-request-review method="POST" action="/api/submissions" enctype="multipart/form-data">
           <input type="hidden" name="type" value="flash_claim">
           <input type="hidden" name="inquiry_flow_version" value="2">
@@ -612,6 +614,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 
     init();
   </script>
+  <script src="/js/tattoo-before-booking.js"></script>
   <script src="/js/tattoo-budget-field.js"></script>
   <script src="/js/tattoo-project-planning.js"></script>
   <script src="/js/submission-form.js"></script>

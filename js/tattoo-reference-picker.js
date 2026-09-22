@@ -109,7 +109,7 @@
     const items = [...selected.values()];
     hidden.value = JSON.stringify(items.map(({ kind, id }) => ({ kind, id })));
     hidden.dispatchEvent(new Event("input", { bubbles: true }));
-    count.textContent = `Selected references (${items.length} of 3)`;
+    count.textContent = `Selected art.pill references (${items.length} of 3)`;
     followup.hidden = items.length === 0;
     note.disabled = items.length === 0;
     if (!items.length) note.value = "";

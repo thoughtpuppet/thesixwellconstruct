@@ -92,6 +92,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 <link rel="stylesheet" href="/css/tattoo-request-form.css">
 <link rel="stylesheet" href="/css/tattoo-custom-inquiry.css">
 <link rel="stylesheet" href="/css/tattoo-reference-picker.css">
+<link rel="stylesheet" href="/css/tattoo-before-booking.css">
 </head>
 <body class="tattoo-flow tattoo-form-treatment custom-inquiry-page" data-venture="tattooing">
   <script>
@@ -114,10 +115,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       </section>
       <section class="form-panel" aria-label="Tattoo inquiry form">
         <aside class="portfolio-reference" id="portfolioReference" hidden aria-live="polite"></aside>
-        <div class="form-note-group" data-copy-id="inquiry-form-note">
-          <p class="form-note">Every request is reviewed and approved before booking. After approval, you will receive a booking link to choose your appointment day &amp; time and pay the deposit.</p>
-          <p class="form-note">Please fill out all questions in detail. Vague answers may delay approval.</p>
-        </div>
+        <div data-tattoo-before-booking></div>
         <form class="public-form" id="inquiryForm" data-tattoo-project-planning method="POST" action="/api/submissions" enctype="multipart/form-data">
           <input type="hidden" name="type" value="tattoo_inquiry">
           <input type="hidden" name="inquiry_flow_version" value="2">
@@ -377,6 +375,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+  <script src="/js/tattoo-before-booking.js"></script>
   <script src="/js/tattoo-budget-field.js"></script>
   <script src="/js/tattoo-project-planning.js"></script>
   <script src="/js/legend-record-view.js"></script>

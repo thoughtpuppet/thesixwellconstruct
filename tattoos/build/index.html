@@ -301,6 +301,7 @@
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 <link rel="stylesheet" href="/css/tattoo-request-form.css">
+<link rel="stylesheet" href="/css/tattoo-before-booking.css">
 </head>
 <body class="tattoo-flow tattoo-form-treatment" data-venture="tattooing">
   <script>
@@ -422,8 +423,9 @@
           <div class="form-header">
             <p class="form-kicker" data-copy-id="build-form-kicker">Submit your brief</p>
             <h2 class="form-title" data-copy-id="build-form-title">From the language<br>to the skin.</h2>
-            <p class="form-note" data-copy-id="build-form-note">Your selected elements will carry into this form automatically. Add placement, design intent, desired budget for this project and contact details. Briefs are reviewed before a private token booking link is sent.</p>
           </div>
+
+          <div data-tattoo-before-booking></div>
 
           <div class="selected-summary" id="selectedSummary" aria-live="polite">
             <p class="summary-label">Selected elements</p>
@@ -645,6 +647,7 @@
   </script>
 
   <!-- Brief builder -->
+  <script src="/js/tattoo-before-booking.js"></script>
   <script src="/js/tattoo-budget-field.js"></script>
   <script type="module" src="/js/build-builder.js"></script>
   <script src="/js/submission-form.js"></script>
