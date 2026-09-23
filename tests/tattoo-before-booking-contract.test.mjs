@@ -52,6 +52,7 @@ test("shared guide matches the inquiry guide subjects and accordion behavior", (
   const component = read("js/tattoo-before-booking.js");
   const chooser = read("tattoos/inquire/index.html");
   const styles = read("css/tattoo-before-booking.css");
+  const customStyles = read("css/tattoo-custom-inquiry.css");
   const componentTitles = [...component.matchAll(/title: "([^"]+)"/g)].map((match) => match[1]);
   const chooserTitles = [...chooser.matchAll(/<summary>([^<]+)<\/summary>/g)].map((match) => match[1].replaceAll("&amp;", "&"));
 
@@ -66,6 +67,9 @@ test("shared guide matches the inquiry guide subjects and accordion behavior", (
   assert.match(styles, /border: 5px solid var\(--before-booking-ring\)/);
   assert.match(styles, /\.tattoo-before-booking\.is-collapsed/);
   assert.match(styles, /\.tattoo-before-booking\.is-collapsed \.tattoo-before-booking__toggle \{[\s\S]*?top: auto;[\s\S]*?bottom: 4px;/);
-  assert.match(styles, /\.tattoo-before-booking:hover,[\s\S]*?background: var\(--before-booking-hover\);/);
+  assert.match(styles, /\.tattoo-before-booking\.is-collapsed:hover \{[\s\S]*?background: var\(--before-booking-hover\);/);
+  assert.doesNotMatch(styles, /\.tattoo-before-booking:focus-within/);
+  assert.match(styles, /\.tattoo-before-booking__title-button \{[\s\S]*?letter-spacing: inherit !important;[\s\S]*?line-height: inherit !important;/);
+  assert.match(customStyles, /@media \(max-width: 640px\) \{[\s\S]*?body\.custom-inquiry-page \.layout \{[\s\S]*?gap: 0 !important;[\s\S]*?body\.custom-inquiry-page \.site-hero \{[\s\S]*?margin-bottom: 24px;[\s\S]*?body\.custom-inquiry-page \.form-panel \{[\s\S]*?padding-top: 0 !important;/);
   assert.match(styles, /@media \(max-width: 780px\)/);
 });

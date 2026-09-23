@@ -80,7 +80,9 @@ test("inquiry guide precedes the unchanged project choices and consultation", ()
   assert.match(chooser, /function openLaneForHash\(\)[\s\S]*?setLaneOpen\(lane, true\)[\s\S]*?target\.tagName === "DETAILS"/);
   assert.match(chooser, /\.lane-toggle \{ position:absolute; top:4px; right:4px;/);
   assert.match(chooser, /\.lane\.is-collapsed \.lane-toggle \{ top:auto; bottom:4px; \}/);
-  assert.match(chooser, /\.lane\[data-collapsible-lane\]:hover,\.lane\[data-collapsible-lane\]:focus-within \{ background:var\(--cell-hover\); \}/);
+  assert.match(chooser, /\.lane\[data-collapsible-lane\]\.is-collapsed:hover \{ background:var\(--cell-hover\); \}/);
+  assert.doesNotMatch(chooser, /\.lane\[data-collapsible-lane\]:focus-within/);
+  assert.match(chooser, /\.lane-title-toggle \{[^}]*letter-spacing:inherit!important; line-height:inherit!important;/);
   assert.match(chooser, /\[toggle, titleToggle\]\.forEach/);
   assert.match(chooser, /\.lane:not\(\.is-collapsed\) > \.lane-content \{ margin-top:58px; \}/);
   assert.match(chooser, /\.lane\.is-collapsed \.lane-intro \{ max-width:none; \}/);

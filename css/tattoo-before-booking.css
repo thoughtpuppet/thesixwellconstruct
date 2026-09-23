@@ -18,8 +18,7 @@
   transition: background var(--t-fast, 0.18s cubic-bezier(0.2, 0, 0.2, 1));
 }
 
-.tattoo-before-booking:hover,
-.tattoo-before-booking:focus-within {
+.tattoo-before-booking.is-collapsed:hover {
   background: var(--before-booking-hover);
 }
 
@@ -56,10 +55,10 @@
   background: transparent;
   color: inherit;
   font: inherit;
-  letter-spacing: inherit;
-  line-height: inherit;
+  letter-spacing: inherit !important;
+  line-height: inherit !important;
   text-align: left;
-  text-transform: inherit;
+  text-transform: inherit !important;
   cursor: pointer;
 }
 

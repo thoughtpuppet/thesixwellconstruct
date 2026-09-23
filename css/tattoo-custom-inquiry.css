@@ -352,8 +352,16 @@ body.custom-inquiry-page .guide-links a:hover {
 }
 
 @media (max-width: 640px) {
+  body.custom-inquiry-page .layout {
+    gap: 0 !important;
+  }
+
   body.custom-inquiry-page .site-hero {
-    margin-bottom: 36px;
+    margin-bottom: 24px;
+  }
+
+  body.custom-inquiry-page .form-panel {
+    padding-top: 0 !important;
   }
 
   body.custom-inquiry-page .form-note-group {
