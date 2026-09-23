@@ -20,6 +20,7 @@ import {
 import { bookingTokenFromUrl, bookingUrlForToken, createBookingRawToken } from "../booking-links.js";
 import { studioAddress } from "../_shared/studio.js";
 import { effectiveTattooSpecialSalesClose } from "../tattoo-specials/_sales-window.js";
+import { checkIcloudCalendarConflict } from "./_calendar-sync.js";
 
 const BOOKING_STATUSES = new Set([
   "pending_deposit",
@@ -2126,7 +2127,15 @@ export async function handleSaveBookingSessionPlan(request, env) {
   }
 }
 
-async function ensureAvailable(db, windowId, bookingTypeId, excludeAppointmentId = "", bookingTypeOverride = null) {
+async function ensureAvailable(
+  db,
+  env,
+  windowId,
+  bookingTypeId,
+  excludeAppointmentId = "",
+  bookingTypeOverride = null,
+  overrideExternalConflict = false,
+) {
   let window;
   if (parseGeneratedWindowId(windowId)) {
     const materialized = await materializeGeneratedWindow(db, windowId, bookingTypeId, bookingTypeOverride);
@@ -2182,6 +2191,15 @@ async function ensureAvailable(db, windowId, bookingTypeId, excludeAppointmentId
     .all();
   if (isBlockedByBlackout(effectiveWindow, blackoutResult.results || [], bookingTypeId)) {
     return { error: "That appointment time is blocked out." };
+  }
+  const externalCalendar = overrideExternalConflict
+    ? { conflict: false, checked: false, overridden: true }
+    : await checkIcloudCalendarConflict(env, db, effectiveWindow);
+  if (externalCalendar.conflict) {
+    return {
+      error: "That appointment time conflicts with existing calendar availability.",
+      code: "EXTERNAL_CALENDAR_CONFLICT",
+    };
   }
   const activeAppointments = (await loadActiveAppointments(
     db,
@@ -2945,6 +2963,7 @@ async function promoteApprovedTattooSpecialRequest(db, values) {
 
 async function createPendingAppointment(
   db,
+  env,
   tokenContext,
   bookingTypeId,
   windowId,
@@ -3084,6 +3103,7 @@ async function createPendingAppointment(
 
   const availability = await ensureAvailable(
     db,
+    env,
     windowId,
     bookingType.id,
     "",
@@ -3193,6 +3213,7 @@ async function releaseUnpaidCheckoutGroup(db, appointments, reason) {
 
 async function createPendingAppointmentGroup(
   db,
+  env,
   tokenContext,
   requestedSessions,
   tipCents,
@@ -3205,6 +3226,7 @@ async function createPendingAppointmentGroup(
     const requestedSession = requestedSessions[index];
     const result = await createPendingAppointment(
       db,
+      env,
       tokenContext,
       requestedSession.bookingTypeId,
       requestedSession.availabilityWindowId,
@@ -3236,7 +3258,7 @@ async function createPendingAppointmentGroup(
   };
 }
 
-async function createTattooSpecialTimeRequest(db, tokenContext, bookingTypeId, windowId) {
+async function createTattooSpecialTimeRequest(db, env, tokenContext, bookingTypeId, windowId) {
   const now = new Date().toISOString();
   const bookingType = await db.prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
     .bind(bookingTypeId)
@@ -3255,7 +3277,7 @@ async function createTattooSpecialTimeRequest(db, tokenContext, bookingTypeId, w
   if (existing) {
     return { appointment: normalizeAppointment(existing), bookingType: normalizeBookingType(bookingType), existing: true };
   }
-  const availability = await ensureAvailable(db, windowId, bookingType.id);
+  const availability = await ensureAvailable(db, env, windowId, bookingType.id);
   if (availability.error) return availability;
   const appointmentId = crypto.randomUUID();
   const results = await db.batch([
@@ -3604,6 +3626,7 @@ async function createPublicConsultationSubmission(db, body, client, bookingType)
 
 async function createPublicConsultationAppointment(
   db,
+  env,
   body,
   allowedTypeIds = PUBLIC_CONSULTATION_BOOKING_TYPE_IDS
 ) {
@@ -3651,7 +3674,7 @@ async function createPublicConsultationAppointment(
     };
   }
 
-  const availability = await ensureAvailable(db, windowId, bookingType.id);
+  const availability = await ensureAvailable(db, env, windowId, bookingType.id);
   if (availability.error) return availability;
 
   const now = new Date().toISOString();
@@ -3765,7 +3788,7 @@ async function handlePublicSessionCheckoutForTypes(request, env, allowedTypeIds,
 
   try {
     const db = requireBookingDb(env);
-    const result = await createPublicConsultationAppointment(db, body, allowedTypeIds);
+    const result = await createPublicConsultationAppointment(db, env, body, allowedTypeIds);
     if (result.spam) return json({ ok: true, spam: true });
     if (result.error) return errorResponse(result.error, result.code ? 409 : 400, {
       ...(result.code ? { code: result.code } : {}),
@@ -3999,7 +4022,7 @@ async function createPublicStudioSubmission(db, body, client, bookingType) {
   };
 }
 
-async function createPublicStudioAppointment(db, body) {
+async function createPublicStudioAppointment(db, env, body) {
   const bookingTypeId = asString(body.bookingTypeId);
   const bookingType = await db
     .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
@@ -4044,7 +4067,7 @@ async function createPublicStudioAppointment(db, body) {
     };
   }
 
-  const availability = await ensureAvailable(db, windowId, bookingType.id);
+  const availability = await ensureAvailable(db, env, windowId, bookingType.id);
   if (availability.error) return availability;
 
   const now = new Date().toISOString();
@@ -4156,7 +4179,7 @@ export async function handlePublicStudioCheckout(request, env) {
 
   try {
     const db = requireBookingDb(env);
-    const result = await createPublicStudioAppointment(db, body);
+    const result = await createPublicStudioAppointment(db, env, body);
     if (result.spam) return json({ ok: true, spam: true });
     if (result.error) return errorResponse(result.error, result.code ? 409 : 400, {
       ...(result.code ? { code: result.code } : {}),
@@ -4240,13 +4263,15 @@ export async function handleCreateBookingHold(request, env) {
     const result = context.pendingSpecialApproval
       ? await createTattooSpecialTimeRequest(
           db,
+          env,
           context,
           asString(body.bookingTypeId),
           asString(body.availabilityWindowId),
         )
       : await createPendingAppointment(
-          db,
-          context,
+        db,
+        env,
+        context,
           asString(body.bookingTypeId),
           asString(body.availabilityWindowId),
           0,
@@ -5020,6 +5045,7 @@ export async function handleCreateBookingCheckout(request, env) {
 
     const result = await createPendingAppointmentGroup(
       db,
+      env,
       context,
       requestedSessions.sessions,
       tip.tipCents,
@@ -6604,8 +6630,8 @@ async function createReplacementCheckout(request, env, db, appointmentRow, avail
     .bind(original.bookingTypeId)
     .first();
   if (!bookingTypeRow) return { error: "This appointment type is no longer available.", status: 409 };
-  const availability = await ensureAvailable(db, availabilityWindowId, original.bookingTypeId);
-  if (availability.error) return { error: availability.error, status: 409 };
+  const availability = await ensureAvailable(db, env, availabilityWindowId, original.bookingTypeId);
+  if (availability.error) return { error: availability.error, status: 409, code: availability.code || "" };
   const now = new Date().toISOString();
   const appointmentId = crypto.randomUUID();
   const inserted = await insertPendingAppointment(db, {
@@ -6673,6 +6699,7 @@ async function moveConfirmedAppointment(
   note = "",
   overridePolicy = false,
   notifyClient = true,
+  overrideConflict = false,
 ) {
   const original = normalizeAppointment(appointmentRow);
   const hoursUntilStart = (new Date(original.startAt).getTime() - Date.now()) / (60 * 60 * 1000);
@@ -6684,11 +6711,14 @@ async function moveConfirmedAppointment(
   }
   const availability = await ensureAvailable(
     db,
+    env,
     availabilityWindowId,
     original.bookingTypeId,
     original.id,
+    null,
+    overrideConflict,
   );
-  if (availability.error) return { error: availability.error, status: 409 };
+  if (availability.error) return { error: availability.error, status: 409, code: availability.code || "" };
   const dayGuard = await bookingDayGuardForWindow(db, availability.window.id);
   if (!dayGuard) return { error: "That appointment time is unavailable.", status: 409 };
 
@@ -6972,8 +7002,8 @@ async function changeApprovedTattooSpecialRequestedTime(request, env, db, appoin
   if (!appointmentCanChangeApprovedSpecialTime(original)) {
     return { error: "This Tattoo Special requested time can no longer be changed before payment.", status: 409 };
   }
-  const availability = await ensureAvailable(db, availabilityWindowId, original.bookingTypeId, original.id);
-  if (availability.error) return { error: availability.error, status: 409 };
+  const availability = await ensureAvailable(db, env, availabilityWindowId, original.bookingTypeId, original.id);
+  if (availability.error) return { error: availability.error, status: 409, code: availability.code || "" };
   if (original.status === "requested" && !original.holdState) {
     const clientAccess = await db.prepare("SELECT booking_url FROM submissions WHERE id = ? AND type = 'tattoo_special'")
       .bind(original.submissionId)
@@ -7268,7 +7298,7 @@ export async function handleAdminRescheduleAppointment(request, env, appointment
       const bookingType = await db.prepare("SELECT * FROM booking_types WHERE id=? AND active=1").bind(row.booking_type_id).first();
       if (!bookingType) return errorResponse("This appointment type is no longer available.", 409);
       const created = await createPrivateManualWindow(
-        db, bookingType, customStartAt, note, appointmentId, body.overrideConflict === true,
+        db, env, bookingType, customStartAt, note, appointmentId, body.overrideConflict === true,
       );
       if (created.error) {
         return errorResponse(created.error, 409, { code: created.code || "", conflicts: created.conflicts || [] });
@@ -7292,6 +7322,7 @@ export async function handleAdminRescheduleAppointment(request, env, appointment
         note,
         body.overridePolicy === true,
         body.notifyClient !== false,
+        body.overrideConflict === true,
       );
     }
     if (moved?.error && privateWindow) await cleanupManualAppointmentDraft(db, env, "", privateWindow.id);
@@ -11180,7 +11211,7 @@ async function cleanupManualAppointmentDraft(db, env, appointmentId, windowId = 
 }
 
 async function createPrivateManualWindow(
-  db, bookingType, startAt, note, excludeAppointmentId = "", overrideConflict = false,
+  db, env, bookingType, startAt, note, excludeAppointmentId = "", overrideConflict = false,
 ) {
   const startMs = new Date(startAt).getTime();
   const durationMinutes = Number(bookingType.duration_minutes || 0);
@@ -11217,6 +11248,18 @@ async function createPrivateManualWindow(
         endAt: appointment.end_at,
       })),
     };
+  }
+  if (!overrideConflict) {
+    const blackouts = await db.prepare(
+      "SELECT * FROM availability_windows WHERE active=1 AND is_blackout=1 AND availability_scope=? AND end_at>?",
+    ).bind(candidate.availability_scope, candidate.start_at).all();
+    if (isBlockedByBlackout(candidate, blackouts.results || [], bookingType.id)) {
+      return { error: "That time conflicts with existing calendar availability.", code: "EXTERNAL_CALENDAR_CONFLICT", conflicts: [] };
+    }
+    const externalCalendar = await checkIcloudCalendarConflict(env, db, candidate);
+    if (externalCalendar.conflict) {
+      return { error: "That time conflicts with existing calendar availability.", code: "EXTERNAL_CALENDAR_CONFLICT", conflicts: [] };
+    }
   }
   const now = new Date().toISOString();
   await db.prepare(
@@ -11397,8 +11440,8 @@ export async function handleAdminCreateAppointment(request, env) {
     let inserted = false;
     let paymentDueAt = "";
     if (customStartAt) {
-      const created = await createPrivateManualWindow(db, bookingType, customStartAt, note);
-      if (created.error) return errorResponse(created.error, 409);
+      const created = await createPrivateManualWindow(db, env, bookingType, customStartAt, note, "", body.overrideConflict === true);
+      if (created.error) return errorResponse(created.error, 409, { code: created.code || "", conflicts: created.conflicts || [] });
       window = created.window;
       if (paymentMode === "square_link") {
         const startMs = new Date(window.start_at).getTime();
@@ -11418,8 +11461,16 @@ export async function handleAdminCreateAppointment(request, env) {
         note, crmPersonId, notifyClient, now,
       }, window);
     } else {
-      const availability = await ensureAvailable(db, availabilityWindowId, bookingTypeId);
-      if (availability.error) return errorResponse(availability.error, 409);
+      const availability = await ensureAvailable(
+        db,
+        env,
+        availabilityWindowId,
+        bookingTypeId,
+        "",
+        null,
+        body.overrideConflict === true,
+      );
+      if (availability.error) return errorResponse(availability.error, 409, { code: availability.code || "" });
       window = availability.window;
       if (paymentMode === "square_link") {
         const startMs = new Date(window.start_at).getTime();

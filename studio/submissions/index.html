@@ -344,6 +344,14 @@
   .booking-readiness-card.ready .pill { color:#55BA5A; border-color:rgba(85,186,90,0.5); }
   .booking-readiness-card.needs_attention .pill { color:#EC5E26; border-color:rgba(236,94,38,0.72); }
   .booking-readiness-detail { color:var(--dim); font-family:var(--sans); font-size:10px; line-height:1.6; overflow-wrap:anywhere; }
+  .calendar-sync-panel { display:grid; gap:14px; }
+  .calendar-sync-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; min-width:0; }
+  .calendar-sync-card { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:10px; min-width:0; }
+  .calendar-sync-card.is-warning { border-color:rgba(236,94,38,0.72); }
+  .calendar-sync-calendars { display:grid; gap:8px; max-height:260px; overflow:auto; padding-right:4px; }
+  .calendar-sync-choice { display:grid; grid-template-columns:auto minmax(0,1fr); gap:8px; align-items:start; color:var(--text); font-family:var(--sans); font-size:11px; line-height:1.5; }
+  .calendar-sync-choice input { margin-top:2px; }
+  .calendar-sync-actions { display:flex; flex-wrap:wrap; gap:10px; }
   .availability-manager .day-button { border:5px solid var(--ring-faint); background:transparent; color:var(--dim); transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .availability-manager .day-button.booked-bright { background:#BE1919; border-color:#BE1919; color:#1a0000; }
   .availability-manager .day-button.booked-medium { background:#6E0404; border-color:#6E0404; color:var(--text); }
@@ -914,6 +922,8 @@
   let appointments = [];
   let configuredStudioAddress = "";
   let bookingTypes = [];
+  let calendarSyncState = null;
+  let discoveredIcloudCalendars = [];
   let appointmentEditorState = null;
   let appointmentEditorWindows = [];
   let appointmentEditorPeople = [];
@@ -5435,6 +5445,16 @@
     const contactName = appointment.clientName || related?.contactName || "Unnamed";
     const contactEmail = appointment.clientEmail || related?.contactEmail || "";
     const contactPhone = appointment.clientPhone || related?.contactPhone || "";
+    const calendarLink = calendarSyncState?.appointmentLinks?.find((item) => item.appointmentId === appointment.id) || null;
+    const calendarSyncLabel = !calendarSyncState?.settings?.outboundEnabled
+      ? "Not enabled"
+      : calendarLink?.state === "synced"
+        ? `Synced${calendarLink.lastSyncedAt ? ` / ${formatDate(calendarLink.lastSyncedAt)}` : ""}`
+        : calendarLink?.state === "error"
+          ? `Retry pending${calendarLink.error ? ` / ${calendarLink.error}` : ""}`
+          : calendarLink?.state === "deleted"
+            ? "Removed from Apple Calendar"
+            : appointmentIsConfirmed(appointment) ? "Pending next sync" : "Not eligible";
     detailEl.innerHTML = `
       <div class="detail-head">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -5466,6 +5486,7 @@
         ${detailField("When", `${formatDate(appointment.startAt)}${appointment.endAt ? `\nEnds: ${formatDate(appointment.endAt)}` : ""}`)}
         ${detailField("Client", `${contactName}\n${contactEmail}${contactPhone ? `\n${contactPhone}` : ""}`)}
         ${detailField("Payment", appointmentPaymentDetail(appointment))}
+        ${isTattooAppointment ? detailField("Apple Calendar", calendarSyncLabel) : ""}
         ${detailField("Appointment ID", appointment.id || "")}
         ${detailField("Submission ID", related?.id || appointment.submissionId || "No linked submission")}
       </div>
@@ -7823,6 +7844,106 @@ ${meetingLines}
     renderBookingReadiness(payload);
   }
 
+  function calendarSyncOptions() {
+    const selected = calendarSyncState?.settings || {};
+    const known = [...discoveredIcloudCalendars];
+    [selected.destinationCalendar, ...(selected.blockingCalendars || [])].filter(Boolean).forEach((calendar) => {
+      if (!known.some((item) => item.href === calendar.href)) known.push(calendar);
+    });
+    return known.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  }
+
+  function renderCalendarSyncPanel() {
+    const panel = document.getElementById("calendarSyncPanel");
+    if (!panel || !calendarSyncState) return;
+    const settings = calendarSyncState.settings || {};
+    const options = calendarSyncOptions();
+    const destinationHref = settings.destinationCalendar?.href || "";
+    const blockers = new Set((settings.blockingCalendars || []).map((item) => item.href));
+    const credentialsReady = Boolean(calendarSyncState.configured);
+    const latestRun = calendarSyncState.recentRuns?.[0] || null;
+    const healthClass = settings.stale || settings.lastError ? "is-warning" : "";
+    panel.innerHTML = `
+      <div class="calendar-sync-grid">
+        <div class="calendar-sync-card ${credentialsReady ? "" : "is-warning"}">
+          <span class="pill">Connection / ${credentialsReady ? "credentials present" : "credentials missing"}</span>
+          <p class="contact">The Apple Account and app-specific password stay in Cloudflare Worker secrets. They are never stored or displayed here.</p>
+          <div class="booking-readiness-detail">Apple Account secret: ${calendarSyncState.credentials?.username ? "present" : "missing"}<br>App-specific password: ${calendarSyncState.credentials?.appPassword ? "present" : "missing"}</div>
+          <button class="button" type="button" data-calendar-sync-discover ${credentialsReady ? "" : "disabled"}>Discover Calendars</button>
+        </div>
+        <div class="calendar-sync-card ${healthClass}">
+          <span class="pill">Health / ${settings.stale ? "stale cache" : settings.lastError ? "needs attention" : latestRun?.status || "not run"}</span>
+          <div class="booking-readiness-detail">Inbound success: ${escapeHtml(settings.lastInboundSucceededAt ? formatDate(settings.lastInboundSucceededAt) : "never")}<br>Outbound success: ${escapeHtml(settings.lastOutboundSucceededAt ? formatDate(settings.lastOutboundSucceededAt) : "never")}<br>Cached busy intervals: ${escapeHtml(calendarSyncState.busyIntervalCount || 0)}${settings.lastError ? `<br>Error: ${escapeHtml(settings.lastError)}` : ""}</div>
+          <button class="button" type="button" data-calendar-sync-run ${credentialsReady && (settings.inboundEnabled || settings.outboundEnabled) ? "" : "disabled"}>${settings.lastError ? "Retry Sync" : "Sync Now"}</button>
+        </div>
+      </div>
+      <form id="calendarSyncForm" class="calendar-sync-card">
+        <div class="field">
+          <label for="calendarSyncDestination">Appointment Destination</label>
+          <select id="calendarSyncDestination" name="destinationCalendarHref">
+            <option value="">Choose art.pill Tattoo House</option>
+            ${options.map((calendar) => `<option value="${escapeHtml(calendar.href)}" ${calendar.href === destinationHref ? "selected" : ""}>${escapeHtml(calendar.name)}</option>`).join("")}
+          </select>
+        </div>
+        <label class="calendar-sync-choice"><input type="checkbox" name="outboundEnabled" ${settings.outboundEnabled ? "checked" : ""}><span>Write confirmed tattoo sessions, consultations, and in-person Build sessions to this calendar.</span></label>
+        <label class="calendar-sync-choice"><input type="checkbox" name="inboundEnabled" ${settings.inboundEnabled ? "checked" : ""}><span>Use every non-cancelled event on selected calendars to block tattoo availability.</span></label>
+        <div class="field">
+          <label>Calendars That Block Availability</label>
+          <div class="calendar-sync-calendars">
+            ${options.length ? options.map((calendar) => `<label class="calendar-sync-choice"><input type="checkbox" data-calendar-sync-blocker value="${escapeHtml(calendar.href)}" ${blockers.has(calendar.href) ? "checked" : ""} ${calendar.href === destinationHref ? "disabled" : ""}><span>${escapeHtml(calendar.name)}${calendar.href === destinationHref ? " — appointment destination" : ""}</span></label>`).join("") : '<p class="contact">Discover calendars after the Worker secrets are configured.</p>'}
+          </div>
+        </div>
+        <div class="calendar-sync-actions"><button class="button" type="submit" ${credentialsReady ? "" : "disabled"}>Save Calendar Sync</button></div>
+      </form>
+    `;
+    enhanceControls(panel);
+  }
+
+  async function loadCalendarSync() {
+    const panel = document.getElementById("calendarSyncPanel");
+    if (!panel) return;
+    try {
+      calendarSyncState = await api("/api/admin/booking/calendar-sync");
+      if (!panel.isConnected || panel !== document.getElementById("calendarSyncPanel")) return;
+      renderCalendarSyncPanel();
+    } catch (error) {
+      panel.innerHTML = `<div class="calendar-sync-card is-warning"><span class="pill">Calendar sync unavailable</span><p class="contact">${escapeHtml(error.message || "Calendar sync could not be loaded.")}</p></div>`;
+    }
+  }
+
+  async function discoverCalendarSync() {
+    setStatus("Discovering iCloud calendars");
+    const payload = await api("/api/admin/booking/calendar-sync/discover", { method: "POST" });
+    discoveredIcloudCalendars = payload.calendars || [];
+    renderCalendarSyncPanel();
+    setStatus(`${discoveredIcloudCalendars.length} iCloud calendar${discoveredIcloudCalendars.length === 1 ? "" : "s"} found`);
+  }
+
+  async function saveCalendarSync(form) {
+    const destinationCalendarHref = form.querySelector("[name='destinationCalendarHref']")?.value || "";
+    const blockingCalendarHrefs = [...form.querySelectorAll("[data-calendar-sync-blocker]:checked")].map((input) => input.value);
+    calendarSyncState = await api("/api/admin/booking/calendar-sync", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        destinationCalendarHref,
+        blockingCalendarHrefs,
+        inboundEnabled: Boolean(form.querySelector("[name='inboundEnabled']")?.checked),
+        outboundEnabled: Boolean(form.querySelector("[name='outboundEnabled']")?.checked),
+      }),
+    });
+    renderCalendarSyncPanel();
+    setStatus("Apple Calendar sync settings saved");
+  }
+
+  async function runCalendarSyncNow() {
+    setStatus("Syncing Apple Calendar");
+    const result = await api("/api/admin/booking/calendar-sync/run", { method: "POST" });
+    await loadCalendarSync();
+    await loadAvailability();
+    setStatus(result.status === "succeeded" ? "Apple Calendar sync complete" : `Apple Calendar sync ${result.status || "finished"}`);
+  }
+
   async function loadAvailabilityPreview() {
     const calendar = document.getElementById("bookedCalendar");
     if (!calendar) return;
@@ -8289,6 +8410,15 @@ ${meetingLines}
           ${appointmentCalendarMarkup()}
         </div>
       </section>` : "";
+    const calendarSyncSection = activeTab === "studio" || activeTab === "art" ? "" : `
+      <section class="schedule-section is-open" data-collapse-section>
+        <button class="section-toggle" type="button">Apple Calendar Sync</button>
+        <div class="section-body">
+          <div id="calendarSyncPanel" class="calendar-sync-panel" aria-live="polite">
+            <p class="empty" style="font-family:var(--sans);font-size:11px;">Loading Apple Calendar sync.</p>
+          </div>
+        </div>
+      </section>`;
     detailEl.innerHTML = `
       <div class="availability-manager">
         <div class="detail-head">
@@ -8304,6 +8434,7 @@ ${meetingLines}
           </div>
         </div>
       </section>
+      ${calendarSyncSection}
       <section class="schedule-section is-open" data-collapse-section>
         <button class="section-toggle" type="button">Booking Prices</button>
         <div class="section-body">
@@ -8438,6 +8569,7 @@ ${meetingLines}
     `;
     enhanceControls(detailEl);
     await loadBookingReadiness();
+    if (document.getElementById("calendarSyncPanel")) await loadCalendarSync();
     await loadBookingTypes();
     await loadSchedule();
     await loadSchedulePeriods();
@@ -8532,13 +8664,15 @@ ${meetingLines}
     const payload = await api(availabilityApi("/api/admin/booking/availability"));
     if (!list.isConnected || list !== document.getElementById("availabilityList")) return;
     const windows = payload.availabilityWindows || [];
-    list.innerHTML = windows.length ? windows.map((windowItem) => `
+    list.innerHTML = windows.length ? windows.map((windowItem) => {
+      const importedBusy = String(windowItem.id || "").startsWith("icloud:");
+      return `
       <div class="availability-item" data-availability-item="${escapeHtml(windowItem.id)}">
-        <span class="pill">${windowItem.isBlackout ? "exception blackout" : "extra bookable block"} / ${windowItem.active ? "active" : "inactive"}</span>
+        <span class="pill">${importedBusy ? "iCloud Busy / synced" : `${windowItem.isBlackout ? "exception blackout" : "extra bookable block"} / ${windowItem.active ? "active" : "inactive"}`}</span>
         <div class="contact">${escapeHtml(formatDateTimeLocal(windowItem.startAt))} - ${escapeHtml(formatDateTimeLocal(windowItem.endAt))}</div>
-        <div class="meta">${escapeHtml(sessionTypeLabel(windowItem.bookingTypeId))} / capacity ${escapeHtml(windowItem.capacity)} / buffer ${escapeHtml(windowItem.bufferBeforeMinutes)} before, ${escapeHtml(windowItem.bufferAfterMinutes)} after</div>
+        <div class="meta">${importedBusy ? "Blocks tattoo availability with the existing booking buffers." : `${escapeHtml(sessionTypeLabel(windowItem.bookingTypeId))} / capacity ${escapeHtml(windowItem.capacity)} / buffer ${escapeHtml(windowItem.bufferBeforeMinutes)} before, ${escapeHtml(windowItem.bufferAfterMinutes)} after`}</div>
         <div class="meta">${escapeHtml(windowItem.note || "")}</div>
-        <div class="booking-actions">
+        ${importedBusy ? "" : `<div class="booking-actions">
           <button class="button" type="button" data-edit-window="${escapeHtml(windowItem.id)}">Edit</button>
           <button class="button" type="button" data-toggle-window="${escapeHtml(windowItem.id)}" data-active="${windowItem.active ? "0" : "1"}">${windowItem.active ? "Disable" : "Enable"}</button>
           <button class="button danger-button" type="button" data-delete-window="${escapeHtml(windowItem.id)}">Delete</button>
@@ -8592,9 +8726,10 @@ ${meetingLines}
             <button class="button" type="submit">Save Exception</button>
             <button class="button" type="button" data-cancel-edit="${escapeHtml(windowItem.id)}">Cancel</button>
           </div>
-        </form>
+        </form>`}
       </div>
-    `).join("") : '<p class="empty">No exceptions yet. Weekly schedule rules will generate booking times automatically.</p>';
+    `;
+    }).join("") : '<p class="empty">No exceptions yet. Weekly schedule rules will generate booking times automatically.</p>';
     enhanceControls(detailEl);
   }
 
@@ -8703,6 +8838,11 @@ ${meetingLines}
     appointments = appointmentPayload.appointments || [];
     configuredStudioAddress = appointmentPayload.studioAddress || "";
     try {
+      calendarSyncState = await api("/api/admin/booking/calendar-sync");
+    } catch {
+      calendarSyncState = null;
+    }
+    try {
       const eventsPayload = await api("/api/admin/events");
       events = eventsPayload.events || [];
     } catch {
@@ -8761,6 +8901,11 @@ ${meetingLines}
     const archiveEntityId = archiveEntityIdFromLocation();
     if (archiveEntityId) {
       await openArchiveRecord(archiveEntityId, { historyMode: "replace" });
+      return;
+    }
+    const requestedAppointmentId = new URLSearchParams(window.location.search).get("appointment") || "";
+    if (requestedAppointmentId && appointments.some((appointment) => appointment.id === requestedAppointmentId)) {
+      openAppointment(requestedAppointmentId);
       return;
     }
     renderActiveTab();
@@ -8927,6 +9072,14 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("change", (event) => {
+    if (event.target.id === "calendarSyncDestination") {
+      const destination = event.target.value;
+      detailEl.querySelectorAll("[data-calendar-sync-blocker]").forEach((input) => {
+        input.disabled = input.value === destination;
+        if (input.disabled) input.checked = false;
+      });
+      return;
+    }
     if (event.target.matches("[data-appointment-booking-type]")) {
       const form = event.target.closest("[data-appointment-editor]");
       if (appointmentEditorState) appointmentEditorState.bookingTypeId = event.target.value;
@@ -9746,6 +9899,24 @@ ${meetingLines}
           completeAppointment.textContent = originalLabel;
         }
       }
+      return;
+    }
+
+    const discoverCalendar = event.target.closest("[data-calendar-sync-discover]");
+    if (discoverCalendar) {
+      discoverCalendar.disabled = true;
+      try { await discoverCalendarSync(); }
+      catch (error) { setStatus(error.message || "iCloud calendars could not be discovered"); }
+      finally { if (discoverCalendar.isConnected) discoverCalendar.disabled = false; }
+      return;
+    }
+
+    const runCalendar = event.target.closest("[data-calendar-sync-run]");
+    if (runCalendar) {
+      runCalendar.disabled = true;
+      try { await runCalendarSyncNow(); }
+      catch (error) { setStatus(error.message || "Apple Calendar sync failed"); }
+      finally { if (runCalendar.isConnected) runCalendar.disabled = false; }
       return;
     }
 
@@ -10838,6 +11009,21 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("submit", async (event) => {
+    const calendarSyncForm = event.target.closest("#calendarSyncForm");
+    if (calendarSyncForm) {
+      event.preventDefault();
+      const buttons = [...calendarSyncForm.querySelectorAll("button[type='submit']")];
+      buttons.forEach((button) => { button.disabled = true; });
+      setStatus("Saving Apple Calendar sync settings");
+      try {
+        await saveCalendarSync(calendarSyncForm);
+      } catch (error) {
+        setStatus(error.message || "Apple Calendar sync settings could not be saved");
+        buttons.forEach((button) => { if (button.isConnected) button.disabled = false; });
+      }
+      return;
+    }
+
     const appointmentForm = event.target.closest("[data-appointment-editor]");
     if (appointmentForm) {
       event.preventDefault();
@@ -10870,26 +11056,31 @@ ${meetingLines}
           try {
             payload = await moveAppointment(false);
           } catch (error) {
-            if (error.code !== "APPOINTMENT_TIME_CONFLICT") throw error;
+            if (!["APPOINTMENT_TIME_CONFLICT", "EXTERNAL_CALENDAR_CONFLICT"].includes(error.code)) throw error;
             const conflictTimes = (error.payload?.conflicts || [])
               .map((conflict) => formatDate(conflict.startAt))
               .filter(Boolean)
               .join("\n");
             const detail = conflictTimes ? `\n\nConflicting appointment${conflictTimes.includes("\n") ? "s" : ""}:\n${conflictTimes}` : "";
-            if (!window.confirm(`That time conflicts with another active appointment.${detail}\n\nReschedule anyway?`)) {
+            const conflictLabel = error.code === "EXTERNAL_CALENDAR_CONFLICT"
+              ? "That time is blocked by an external calendar."
+              : "That time conflicts with another active appointment.";
+            if (!window.confirm(`${conflictLabel}${detail}\n\nReschedule anyway?`)) {
               if (status) status.textContent = "Choose a different appointment time.";
               setStatus("Reschedule conflict not overridden");
+              buttons.forEach((button) => { if (button.isConnected) button.disabled = false; });
               return;
             }
             payload = await moveAppointment(true);
           }
         } else {
           const paymentMode = String(values.paymentMode || "none");
-          payload = await api("/api/admin/booking/appointments", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
+          const scheduleAppointment = (overrideConflict = false) => api("/api/admin/booking/appointments", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
               ...common,
+              overrideConflict,
               bookingTypeId: String(values.bookingTypeId || ""),
               crmPersonId: String(values.crmPersonId || ""),
               submissionId: String(values.submissionId || ""),
@@ -10902,6 +11093,21 @@ ${meetingLines}
               paymentNote: String(values.paymentNote || "").trim(),
             }),
           });
+          try {
+            payload = await scheduleAppointment(false);
+          } catch (error) {
+            if (!["APPOINTMENT_TIME_CONFLICT", "EXTERNAL_CALENDAR_CONFLICT"].includes(error.code)) throw error;
+            const conflictLabel = error.code === "EXTERNAL_CALENDAR_CONFLICT"
+              ? "That time is blocked by an external calendar."
+              : "That time conflicts with another active appointment.";
+            if (!window.confirm(`${conflictLabel}\n\nSchedule anyway?`)) {
+              if (status) status.textContent = "Choose a different appointment time.";
+              setStatus("Scheduling conflict not overridden");
+              buttons.forEach((button) => { if (button.isConnected) button.disabled = false; });
+              return;
+            }
+            payload = await scheduleAppointment(true);
+          }
         }
         const savedAppointmentId = payload.appointment?.id || appointmentId;
         appointmentEditorState = null;

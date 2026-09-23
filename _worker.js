@@ -102,6 +102,13 @@ import {
   handleStudioSquareWebhook,
   handleAdminExperimentalAppointmentAction,
 } from "./functions/api/booking/_lib.js";
+import {
+  handleAdminDiscoverCalendars,
+  handleAdminGetCalendarSync,
+  handleAdminRunCalendarSync,
+  handleAdminUpdateCalendarSync,
+  runIcloudCalendarSync,
+} from "./functions/api/booking/_calendar-sync.js";
 import { shortBookingTokenFromPath } from "./functions/api/booking-links.js";
 import {
   handleEventsApi,
@@ -1158,6 +1165,22 @@ async function handleBookingApi(request, env) {
     return handleAdminCreateBookingToken(request, env);
   }
 
+  if (pathname === "/api/admin/booking/calendar-sync") {
+    if (method === "GET") return handleAdminGetCalendarSync(request, env);
+    if (method === "PUT") return handleAdminUpdateCalendarSync(request, env);
+    return methodNotAllowed(method, ["GET", "PUT"]);
+  }
+
+  if (pathname === "/api/admin/booking/calendar-sync/discover") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminDiscoverCalendars(request, env);
+  }
+
+  if (pathname === "/api/admin/booking/calendar-sync/run") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminRunCalendarSync(request, env);
+  }
+
   if (pathname === "/api/admin/booking/direct-invites") {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handleAdminCreateDirectBookingInvite(request, env);
@@ -1844,6 +1867,7 @@ export default {
     ctx.waitUntil(retryPendingAdjustedOfferNotifications(env));
     ctx.waitUntil(reapExpiredAdjustedOffers(env));
     ctx.waitUntil(retryPendingAdminAppointmentNotifications(env));
+    ctx.waitUntil(runIcloudCalendarSync(env, "scheduled"));
     ctx.waitUntil(sendDueAppointmentReminders(env));
     ctx.waitUntil(sendDueEventTicketReminders(env));
     ctx.waitUntil(sendDueExperimentalHealedReminders(env));
