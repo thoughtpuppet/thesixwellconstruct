@@ -4539,6 +4539,15 @@ test("Custom Tattoo Inquiry presents the shared before-booking guide before aski
   assert.doesNotMatch(source, /private token link into the studio booking and deposit flow/i);
 });
 
+test("shared form consent inserts safely beside nested submit controls", () => {
+  const submissionForm = readFileSync(join(ROOT, "js", "submission-form.js"), "utf8");
+  const bookingCalendar = readFileSync(join(ROOT, "js", "booking-calendar.js"), "utf8");
+  assert.match(submissionForm, /anchor = anchor \|\| submit;[\s\S]*?anchor\.parentNode\.insertBefore\(wrap, anchor\)[\s\S]*?form\.appendChild\(wrap\)/);
+  assert.match(bookingCalendar, /const anchor = submit\?\.closest\("\.submit-row,\.form-actions,\.actions"\) \|\| submit;[\s\S]*?anchor\.parentNode\.insertBefore\(wrap, anchor\)[\s\S]*?form\.appendChild\(wrap\)/);
+  assert.doesNotMatch(submissionForm, /form\.insertBefore\(wrap, anchor/);
+  assert.doesNotMatch(bookingCalendar, /form\.insertBefore\(wrap, submit/);
+});
+
 test("Submission receipt keeps the shared Tattoo breadcrumb outside its narrow content column", () => {
   const source = readFileSync(join(ROOT, "tattoos", "submission-received", "index.html"), "utf8");
   assert.match(source, /<body class="tattoo-flow" data-venture="tattooing">\s*<main class="receipt-shell">\s*<div class="receipt-content site-hero site-hero--supporting">/);

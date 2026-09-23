@@ -12,7 +12,9 @@
     ].join("");
     var submit = form.querySelector('[type="submit"]');
     var anchor = submit && submit.closest(".form-actions,.submit-row,.actions");
-    form.insertBefore(wrap, anchor || submit || null);
+    anchor = anchor || submit;
+    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(wrap, anchor);
+    else form.appendChild(wrap);
   }
 
   function setStatus(statusEl, message, state) {

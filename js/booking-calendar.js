@@ -76,7 +76,9 @@
       <a class="form-check-group__manage" href="/preferences/">Manage communication preferences</a>
     `;
     const submit = form.querySelector('[type="submit"]');
-    form.insertBefore(wrap, submit?.closest(".submit-row,.form-actions,.actions") || submit || null);
+    const anchor = submit?.closest(".submit-row,.form-actions,.actions") || submit;
+    if (anchor?.parentNode) anchor.parentNode.insertBefore(wrap, anchor);
+    else form.appendChild(wrap);
   }
 
   function initBookingCalendar(options) {
