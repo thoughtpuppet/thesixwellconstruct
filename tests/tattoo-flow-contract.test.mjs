@@ -6799,10 +6799,17 @@ test("Custom inquiry accepts at most three published work references and stores 
     INSERT OR IGNORE INTO archive_dossiers (entity_id,archive_slug,state,public_visible,created_at,updated_at)
     VALUES ('picker-design','picker-design','published',1,datetime('now'),datetime('now'));
     UPDATE archive_dossiers SET state='published',public_visible=1 WHERE entity_id='picker-design';
+    INSERT INTO content_entities (id,entity_type,visibility,created_at,updated_at)
+    VALUES ('picker-flash-design','flash_item','public',datetime('now'),datetime('now'));
+    INSERT INTO flash_items (id,slug,title,state,created_at,updated_at)
+    VALUES ('picker-flash-design','picker-flash-design','Published flash design','available',datetime('now'),datetime('now'));
+    INSERT OR IGNORE INTO archive_dossiers (entity_id,archive_slug,state,public_visible,created_at,updated_at)
+    VALUES ('picker-flash-design','picker-flash-design','published',1,datetime('now'),datetime('now'));
+    UPDATE archive_dossiers SET state='published',public_visible=1 WHERE entity_id='picker-flash-design';
   `);
   const choices = [
     { kind: "tattoo", id: "picker-tattoo", title: "Client supplied title", route: "https://example.test/not-the-work", imageUrl: "https://example.test/not-the-work.jpg" },
-    { kind: "design", id: "picker-design" },
+    { kind: "design", id: "picker-flash-design" },
     { kind: "symbol", id: "maze-path" },
   ];
   const accepted = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
@@ -6815,11 +6822,26 @@ test("Custom inquiry accepts at most three published work references and stores 
   const payload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(submissionId).payload_json);
   assert.deepEqual(payload.selected_references.map((item) => [item.kind, item.title, item.route]), [
     ["tattoo", "Published tattoo", "/tattoos/portfolio/?work=picker-tattoo"],
-    ["design", "Published design", "/archive/records/picker-design/"],
+    ["design", "Published flash design", "/archive/records/picker-flash-design/"],
     ["symbol", "The Path", "/about/legend/maze-path/"],
   ]);
   assert.equal(payload.selected_reference_note, "The shape and spacing.");
   assert.equal(payload.selected_references_json, undefined);
+
+  const canonicalDesign = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
+    email: "picker-design@example.test",
+    selected_references_json: JSON.stringify([{ kind: "design", id: "picker-design" }]),
+  })), env);
+  assert.equal(canonicalDesign.status, 200, await canonicalDesign.clone().text());
+  const canonicalDesignId = (await canonicalDesign.json()).submissionId;
+  const canonicalDesignPayload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(canonicalDesignId).payload_json);
+  assert.deepEqual(canonicalDesignPayload.selected_references, [{
+    kind: "design",
+    id: "picker-design",
+    title: "Published design",
+    route: "/archive/records/picker-design/",
+    imageUrl: "",
+  }]);
 
   const tooMany = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
     selected_references_json: JSON.stringify([...choices, { kind: "symbol", id: "maze-room" }]),
@@ -6831,9 +6853,9 @@ test("Custom inquiry accepts at most three published work references and stores 
   })), env);
   assert.equal(duplicate.status, 400);
 
-  database.prepare("UPDATE content_entities SET visibility='internal' WHERE id='picker-design'").run();
+  database.prepare("UPDATE content_entities SET visibility='internal' WHERE id='picker-flash-design'").run();
   const hidden = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
-    selected_references_json: JSON.stringify([{ kind: "design", id: "picker-design" }]),
+    selected_references_json: JSON.stringify([{ kind: "design", id: "picker-flash-design" }]),
   })), env);
   assert.equal(hidden.status, 409);
   assert.equal((await hidden.json()).code, "TATTOO_REFERENCE_UNAVAILABLE");
@@ -8583,6 +8605,34 @@ test("tattoo admin notification subjects use canonical art.pill names without ch
   assert.match(sent.at(-1).text, /Budget Range: \$500–\$800/);
   assert.match(sent.at(-1).text, /Design Intent: A protected route\./);
 
+  const tattooReferencePayload = {
+    selected_references: [
+      { kind: "tattoo", id: "picker-tattoo", title: "Published tattoo", route: "/tattoos/portfolio/?work=picker-tattoo" },
+      { kind: "design", id: "picker-flash-design", title: "Published flash design", route: "/archive/records/picker-flash-design/" },
+      { kind: "symbol", id: "maze-path", title: "The Path", route: "/about/legend/maze-path/" },
+    ],
+    selected_reference_note: "The shape and spacing.",
+  };
+  await notifyAdminSubmissionReceived(env, {
+    id: "tattoo-reference-detail-notification",
+    type: "tattoo_inquiry",
+    contact: { name: "Collector", email: "collector@example.test" },
+    payload: tattooReferencePayload,
+  });
+  assert.match(sent.at(-1).text, /Selected work and symbols/);
+  assert.match(sent.at(-1).text, /Tattoo: Published tattoo \(\/tattoos\/portfolio\/\?work=picker-tattoo\)/);
+  assert.match(sent.at(-1).text, /Tattoo Design: Published flash design \(\/archive\/records\/picker-flash-design\/\)/);
+  assert.match(sent.at(-1).text, /Legend symbol: The Path \(\/about\/legend\/maze-path\/\)/);
+  assert.match(sent.at(-1).text, /Selected Reference Note: The shape and spacing\./);
+
+  await notifySubmissionReceived(env, {
+    id: "tattoo-reference-client-receipt",
+    type: "tattoo_inquiry",
+    contact: { name: "Collector", email: "collector@example.test" },
+    payload: tattooReferencePayload,
+  });
+  assert.doesNotMatch(sent.at(-1).text, /Selected work and symbols|The shape and spacing\./);
+
   await notifyAdminSubmissionReceived(env, {
     id: "maze-detail-notification",
     type: "maze_design",
@@ -8961,6 +9011,7 @@ test("Custom Inquiry configures project-aware questions and multi-file upload ro
   assert.match(pickerStyles, /\.tattoo-reference-picker__thumb img\s*\{\s*position: absolute;\s*inset: 0;/);
   assert.match(pickerSource, /\/api\/portfolio/);
   assert.match(pickerSource, /\/api\/archive\/items\?medium=tattoos/);
+  assert.match(pickerSource, /entityType === "flash_item" && text\(item\.catalogue_prefix\) === "TAT-DES"/);
   assert.match(pickerSource, /\/api\/legend/);
   for (const otherForm of ["tattoos/flash/claim/index.html", "tattoos/build/index.html", "tattoos/special-projects/apply/index.html"]) {
     assert.doesNotMatch(readFileSync(join(ROOT, otherForm), "utf8"), /tattoo-reference-picker\.js/, `${otherForm} keeps its existing inquiry path`);
@@ -8981,6 +9032,9 @@ test("Custom Inquiry configures project-aware questions and multi-file upload ro
 
   const studioSource = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
   assert.match(studioSource, /selectedReferencesMarkup/);
+  assert.match(studioSource, /aria-label="Selected work and symbols"/);
+  assert.match(studioSource, /item\.kind === "design" \? "Tattoo Design"/);
+  assert.match(studioSource, /What They Like About Selected References/);
   assert.match(studioSource, /Rework Interventions/);
   assert.match(studioSource, /Existing tattoo photograph/);
 

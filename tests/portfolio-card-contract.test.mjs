@@ -90,6 +90,12 @@ test("catalog pages no longer duplicate the shared card rules inline", async () 
   }
 });
 
+test("Tattoo Portfolio reserves its async desktop catalog footprint", async () => {
+  const tattoo = await source("tattoos/portfolio/index.html");
+
+  assert.match(tattoo, /@media \(min-width:901px\)\s*\{[\s\S]*nav\.filters\s*\{\s*min-height:120px;\s*\}[\s\S]*#gridTattoo\s*\{\s*min-height:55vh;\s*\}/);
+});
+
 test("Flash remains on the general media card system", async () => {
   const flash = await source("tattoos/flash/index.html");
 

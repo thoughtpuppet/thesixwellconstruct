@@ -1,8 +1,16 @@
 export const PAGE_VISIBILITY_PAGES = Object.freeze([
   { label: "Home", path: "/" },
   { label: "About", path: "/about/" },
+  { label: "Saiel Dauhn Solehman", path: "/about/saieldauhnsolehman/" },
+  { label: "About Art.Pill Tattoo House", path: "/about/artpilltattoohouse/" },
+  { label: "Ways In", path: "/about/ways-in/" },
+  { label: "Exhibitions & Appearances", path: "/about/exhibitions-appearances/" },
+  { label: "Contact / Press", path: "/about/contact-press/" },
+  { label: "Current Works", path: "/currently/" },
   { label: "Archive", path: "/archive/" },
+  { label: "Gallery", path: "/gallery/" },
   { label: "Events", path: "/events/" },
+  { label: "Atlanta Creative Calendar", path: "/calendar/" },
   { label: "Film", path: "/film/" },
   { label: "Music", path: "/music/" },
   { label: "Writings", path: "/writings/" },
@@ -30,6 +38,7 @@ export const PAGE_VISIBILITY_PAGES = Object.freeze([
   { label: "Flash Claim", path: "/tattoos/flash/claim/" },
   { label: "Inquire", path: "/tattoos/inquire/" },
   { label: "Portfolio", path: "/tattoos/portfolio/" },
+  { label: "Location & Parking", path: "/tattoos/location-parking/" },
   { label: "Submission Received", path: "/tattoos/submission-received/" },
 ]);
 

@@ -1487,3 +1487,41 @@ test("Studio ingests SVG as an exact protected archival artifact", async () => {
   assert.equal(response.status, 415);
   assert.match((await response.json()).error, /not a valid SVG document/i);
 });
+
+test("portfolio SEO readiness is authenticated, read-only, and evidence based", async () => {
+  const database = migratedDatabase();
+  insertPortfolioItem(database, { id: "seo-ready", state: "published", primaryPublicVisible: true });
+  insertPortfolioItem(database, { id: "seo-needs-review", state: "published", primaryPublicVisible: true });
+  insertPortfolioItem(database, { id: "seo-draft", state: "draft" });
+  assignTattooStyles(database, "seo-ready", ["symbolic"]);
+  database.prepare(`
+    UPDATE portfolio_items
+    SET primary_style='symbolic',placement='arm',year='2026',caption='Symbolic tattoo on an arm.'
+    WHERE id='seo-ready'
+  `).run();
+  database.prepare(`
+    UPDATE portfolio_items SET title='',alt_text='',primary_style='unclassified'
+    WHERE id='seo-needs-review'
+  `).run();
+
+  let response = await handlePortfolioApi(request("/api/admin/portfolio/seo-readiness"), env(database));
+  assert.equal(response.status, 401);
+
+  response = await handlePortfolioApi(request("/api/admin/portfolio/seo-readiness", { admin: true }), env(database));
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.deepEqual(payload.totals, { published: 2, ready: 1, needsReview: 1 });
+  const ready = payload.items.find((item) => item.id === "seo-ready");
+  const review = payload.items.find((item) => item.id === "seo-needs-review");
+  assert.equal(ready.ready, true);
+  assert.deepEqual(review.issues.map((issue) => issue.code), [
+    "missing_title",
+    "missing_alt_text",
+    "missing_style",
+    "missing_placement",
+    "missing_year",
+    "missing_caption",
+  ]);
+  assert.equal(database.prepare("SELECT state FROM portfolio_items WHERE id='seo-needs-review'").get().state, "published");
+  assert.equal(payload.items.some((item) => item.id === "seo-draft"), false);
+});

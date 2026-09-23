@@ -75,6 +75,11 @@ test("Special Project routes serve shared public details and closed documentatio
   assert.match(html, /data-project-detail-only/);
   assert.match(html, /id="projectConnections"/);
   assert.match(html, /id="application"/);
+  assert.match(html, /data-special-project-page="detail"/);
+  assert.match(html, /<h1 class="detail-title" id="projectTitle">Mythic Body Studies<\/h1>/);
+  assert.match(html, /id="projectAvailability">Closed<\/p>/);
+  assert.match(html, /id="special-project-record-data"/);
+  assert.equal((html.match(/<h1\b/g) || []).length, 1);
 
   database.prepare("UPDATE special_project_calls SET status='open', opens_at='2999-01-01T00:00:00.000Z' WHERE id='mythic-body-studies'").run();
   const openingSoon = await worker.fetch(new Request("https://example.test/tattoos/special-projects/mythic-body-studies/"), env, {});
@@ -116,4 +121,21 @@ test("Special Project routes canonicalize legacy destinations and reject non-pub
   database.prepare("UPDATE content_entities SET visibility='internal' WHERE id='mythic-body-studies'").run();
   const privateRecord = await worker.fetch(new Request("https://example.test/tattoos/special-projects/mythic-body-studies/"), env, {});
   assert.equal(privateRecord.status, 404);
+});
+
+test("managed draft events cannot fall through to indexable bespoke assets", async () => {
+  const database = migratedDatabase();
+  const env = environment(database);
+  const draft = database.prepare("SELECT publication_state FROM events WHERE slug='solehmans-new-year'").get();
+  assert.equal(draft.publication_state, "draft");
+
+  const response = await worker.fetch(new Request("https://example.test/events/solehmans-new-year/"), env, {});
+  assert.equal(response.status, 404);
+  assert.match(response.headers.get("x-robots-tag"), /noindex/);
+  assert.doesNotMatch(await response.text(), /SOLEHMAN'S NEW YEAR I/);
+
+  const preview = await worker.fetch(new Request("https://example.test/particle-preview.html"), env, {});
+  assert.equal(preview.status, 200);
+  assert.match(preview.headers.get("x-robots-tag"), /noindex/);
+  assert.match(await preview.text(), /<meta name="robots" content="noindex,nofollow,noarchive">/);
 });

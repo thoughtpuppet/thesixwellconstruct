@@ -457,6 +457,16 @@
   .portfolio-drop.is-over { border-color:var(--accent); background:rgba(252,184,103,0.08); }
   .portfolio-drop input { position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; }
   .portfolio-upload-status { min-height:18px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+  .portfolio-seo-readiness { display:grid; gap:14px; border:5px solid var(--ring-faint); padding:16px; background:var(--panel); }
+  .portfolio-seo-readiness-head { display:flex; align-items:end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .portfolio-seo-readiness-head h3 { margin:0 0 6px; font-family:var(--sans); font-size:13px; letter-spacing:.12em; text-transform:uppercase; }
+  .portfolio-seo-readiness-summary { color:var(--accent); font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+  .portfolio-seo-readiness-counts { display:flex; gap:8px; flex-wrap:wrap; }
+  .portfolio-seo-readiness-counts span { border:5px solid var(--ring-faint); padding:8px 10px; color:var(--muted); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+  .portfolio-seo-readiness-list { display:grid; gap:8px; }
+  .portfolio-seo-readiness-item { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; border-top:5px solid var(--ring-faint); padding-top:10px; }
+  .portfolio-seo-readiness-item strong { display:block; font-family:var(--sans); font-size:10px; letter-spacing:.08em; text-transform:uppercase; }
+  .portfolio-seo-readiness-issues { margin-top:5px; color:var(--dim); font-size:10px; line-height:1.55; }
   .portfolio-batch[hidden] { display:none; }
   .portfolio-batch { display:grid; gap:16px; border:5px solid var(--ring-faint); padding:16px; background:var(--panel); }
   .portfolio-batch-head { display:flex; align-items:end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
@@ -948,6 +958,7 @@
   let selectedHomeDay = "";
   let selectedEventSlug = "";
   let portfolioItems = [];
+  let portfolioSeoReadiness = { totals: { published: 0, ready: 0, needsReview: 0 }, issueCounts: {}, items: [] };
   let portfolioState = "published";
   let activePortfolioItemId = "";
   let portfolioObjectUrls = [];
@@ -2811,10 +2822,34 @@
     hydratePortfolioImages(grid);
   }
 
+  function paintPortfolioSeoReadiness() {
+    const host = document.getElementById("portfolioSeoReadiness");
+    if (!host) return;
+    const totals = portfolioSeoReadiness.totals || { published: 0, ready: 0, needsReview: 0 };
+    const issueCounts = portfolioSeoReadiness.issueCounts || {};
+    const labels = {
+      missing_title: "title",
+      missing_alt_text: "alt text",
+      missing_style: "style",
+      missing_placement: "placement",
+      missing_year: "year",
+      missing_caption: "caption",
+    };
+    const counts = Object.entries(labels).map(([code, label]) => `<span>${escapeHtml(label)} · ${Number(issueCounts[code] || 0)}</span>`).join("");
+    const needsReview = (portfolioSeoReadiness.items || []).filter((item) => !item.ready);
+    const rows = needsReview.slice(0, 12).map((item) => `<div class="portfolio-seo-readiness-item"><div><strong>${escapeHtml(item.title)}</strong><div class="portfolio-seo-readiness-issues">${item.issues.map((issue) => escapeHtml(issue.label)).join(" · ")}</div></div><button class="button" type="button" data-portfolio-open="${escapeHtml(item.id)}">Review</button></div>`).join("");
+    host.innerHTML = `<div class="portfolio-seo-readiness-head"><div><h3>Search readiness</h3><p class="contact">Published work stays public. This queue identifies missing descriptive evidence without inventing it.</p></div><span class="portfolio-seo-readiness-summary">${totals.ready} ready · ${totals.needsReview} need review</span></div><div class="portfolio-seo-readiness-counts">${counts}</div>${rows ? `<div class="portfolio-seo-readiness-list">${rows}</div>` : `<p class="contact">All ${totals.published} published portfolio records are ready.</p>`}`;
+  }
+
   async function loadPortfolioItems() {
-    const payload = await api("/api/admin/portfolio");
+    const [payload, readiness] = await Promise.all([
+      api("/api/admin/portfolio"),
+      api("/api/admin/portfolio/seo-readiness"),
+    ]);
     portfolioItems = payload.items || [];
     portfolioOptions = payload.options || { styles: [], collections: [] };
+    portfolioSeoReadiness = readiness;
+    paintPortfolioSeoReadiness();
     paintPortfolioItems();
   }
 
@@ -3508,6 +3543,7 @@
           <div class="portfolio-head"><div><h2>Portfolio</h2><p class="contact">Upload, describe, and publish tattoo work. Newest entries appear first in Studio and on the public gallery.</p></div>
             <div class="portfolio-filters">${["published", "draft", "archived"].map((state) => `<button class="subnav-btn ${portfolioState === state ? "is-active" : ""}" type="button" data-portfolio-filter="${state}">${state} (${counts[state] || 0})</button>`).join("")}</div>
           </div>
+          <section class="portfolio-seo-readiness" id="portfolioSeoReadiness" aria-live="polite"><p class="contact">Loading search readiness...</p></section>
           <div class="portfolio-drop" id="portfolioDrop"><input id="portfolioFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple><strong>Drop JPEG, PNG, or WebP images here</strong><span class="contact">Up to 15 MB each and 50 draft entries per batch. Organize related photographs before upload; the temporary organizer clears if Studio reloads.</span><button class="button" id="portfolioChoose" type="button">Choose images</button><div class="portfolio-upload-status" id="portfolioUploadStatus" aria-live="polite"></div></div>
           <section class="portfolio-batch" id="portfolioBatch" aria-label="Organize portfolio upload batch" hidden></section>
           <div class="portfolio-grid" id="portfolioGrid"><div class="portfolio-empty">Loading portfolio...</div></div>

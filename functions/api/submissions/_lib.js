@@ -543,24 +543,31 @@ async function resolveTattooSelectedReferences(db, references) {
         imageUrl: publicReferenceImageUrl(row.image_url),
       });
     } else if (reference.kind === "design") {
-      row = await db.prepare(`SELECT td.id,td.title,ad.archive_slug,
+      row = await db.prepare(`SELECT ce.id,
+        CASE ce.entity_type WHEN 'tattoo_design' THEN td.title WHEN 'flash_item' THEN fi.title END title,
+        ad.archive_slug,
         (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id)
          FROM archive_materials am JOIN media_assets m ON m.id=am.media_id
-         WHERE am.dossier_entity_id=td.id AND am.state='published' AND am.visibility='public'
-           AND (am.state_id IS NULL OR NOT EXISTS(SELECT 1 FROM archive_catalogue_entries ace WHERE ace.entity_id=td.id)
+         WHERE am.dossier_entity_id=ce.id AND am.state='published' AND am.visibility='public'
+           AND (am.state_id IS NULL OR NOT EXISTS(SELECT 1 FROM archive_catalogue_entries material_catalogue WHERE material_catalogue.entity_id=ce.id)
              OR EXISTS(SELECT 1 FROM archive_object_states aos
                JOIN archive_object_versions aov ON aov.id=aos.version_id
-               WHERE aos.id=am.state_id AND aov.entity_id=td.id
+               WHERE aos.id=am.state_id AND aov.entity_id=ce.id
                  AND aos.publication_state='published' AND aos.public_visible=1
                  AND aov.publication_state='published' AND aov.public_visible=1))
            AND m.state='active' AND m.privacy='public' AND m.public_presentation='inline'
            AND m.mime_type LIKE 'image/%'
            AND NOT EXISTS(SELECT 1 FROM media_asset_variants mav WHERE mav.master_media_id=m.id)
          ORDER BY CASE am.material_type WHEN 'final-image' THEN 0 ELSE 1 END,am.sort_order,am.created_at LIMIT 1) image_url
-        FROM tattoo_designs td
-        JOIN content_entities ce ON ce.id=td.id AND ce.visibility='public'
-        JOIN archive_dossiers ad ON ad.entity_id=td.id AND ad.state='published' AND ad.public_visible=1
-        WHERE td.id=? AND td.state='published'`).bind(reference.id).first();
+        FROM content_entities ce
+        JOIN archive_dossiers ad ON ad.entity_id=ce.id AND ad.state='published' AND ad.public_visible=1
+        LEFT JOIN tattoo_designs td ON ce.entity_type='tattoo_design' AND td.id=ce.id
+        LEFT JOIN flash_items fi ON ce.entity_type='flash_item' AND fi.id=ce.id
+        LEFT JOIN archive_catalogue_entries ace ON ace.entity_id=ce.id
+        WHERE ce.id=? AND ce.visibility='public' AND (
+          (ce.entity_type='tattoo_design' AND td.id IS NOT NULL AND td.state='published')
+          OR (ce.entity_type='flash_item' AND fi.id IS NOT NULL AND ace.catalogue_prefix='TAT-DES')
+        )`).bind(reference.id).first();
       if (row) resolved.push({
         kind: "design", id: row.id, title: row.title || "Untitled design",
         route: `/archive/records/${encodeURIComponent(row.archive_slug)}/`,

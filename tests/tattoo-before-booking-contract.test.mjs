@@ -36,6 +36,16 @@ test("public tattoo request forms use the shared before-booking guide", () => {
   assert.ok(application.indexOf("data-tattoo-before-booking") < application.indexOf('id="specialProjectForm"'));
 });
 
+test("Tattoo index places the shared guide before Ways to Collaborate", () => {
+  const landing = read("tattoos/index.html");
+  assert.match(landing, /href="\/css\/tattoo-before-booking\.css"/);
+  assert.match(landing, /src="\/js\/tattoo-before-booking\.js"/);
+  assert.equal((landing.match(/data-tattoo-before-booking/g) || []).length, 1);
+  assert.match(landing, /\.index-before-booking \.tattoo-before-booking \{ margin-bottom:0; \}/);
+  assert.ok(landing.indexOf('id="booking-process"') < landing.indexOf('id="before-booking"'));
+  assert.ok(landing.indexOf('id="before-booking"') < landing.indexOf('id="ways-to-work"'));
+});
+
 test("consultation, planning, healed-photo, and internal preview forms do not receive the guide", () => {
   for (const relativePath of [
     "tattoos/inquire/consultation/index.html",

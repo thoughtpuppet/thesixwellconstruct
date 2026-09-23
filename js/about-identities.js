@@ -511,6 +511,11 @@
       return;
     }
     try {
+      const embeddedNode = document.getElementById("identity-record-data");
+      if (embeddedNode?.textContent.trim()) {
+        paintDetail(JSON.parse(embeddedNode.textContent));
+        return;
+      }
       const response = await fetch(`/api/identities/${encodeURIComponent(slug)}`, {
         cache: "no-store",
         headers: { accept: "application/json" },

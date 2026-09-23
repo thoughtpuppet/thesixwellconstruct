@@ -437,9 +437,10 @@ test("new artwork stages privately, publishes to its canonical route, locks its 
   assert.equal(publicPage.status, 200);
   const publicHtml = await publicPage.text();
   assert.match(publicHtml, /<title data-art-record-title>Exorcism: Indigo · art · the six\.well construct<\/title>/);
-  assert.match(publicHtml, /content="index,follow"/);
+  assert.match(publicHtml, /content="index,follow,max-image-preview:large"/);
   assert.match(publicHtml, /href="https:\/\/example\.test\/art\/exorcism-indigo\/"/);
   assert.match(publicHtml, /"id":"art-indigo-auto"/);
+  assert.match(publicHtml, /data-seo-record-summary[\s\S]*Exorcism: Indigo/);
 
   const canonicalRedirect = await worker.fetch(new Request("https://example.test/art/exorcism-indigo"), workerEnv, {});
   assert.equal(canonicalRedirect.status, 308);

@@ -150,12 +150,15 @@ test("unified Worker gate runs before static and dynamic public page handlers", 
     "/tattoos/special-projects/example-project/",
   ]) {
     const response = await worker.fetch(new Request(`https://example.test${path}`), env, {});
-    assert.equal(response.status, 302, path);
-    assert.equal(response.headers.get("location"), "https://example.test/404.html", path);
+    assert.equal(response.status, 404, path);
+    assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow, noarchive", path);
   }
+  const hiddenAlias = await worker.fetch(new Request("https://example.test/about"), env, {});
+  assert.equal(hiddenAlias.status, 404);
+  assert.equal(hiddenAlias.headers.get("x-robots-tag"), "noindex, nofollow, noarchive");
   for (const path of ["/api/site/visibility?path=/about/", "/studio/submissions/", "/assets/example.css", "/b/private-token", "/o/private-offer"]) {
     const response = await worker.fetch(new Request(`https://example.test${path}`), env, {});
-    assert.notEqual(response.status, 302, path);
+    assert.notEqual(response.status, 404, path);
   }
 });
 

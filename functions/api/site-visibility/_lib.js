@@ -63,9 +63,17 @@ function migrationFailure(error) {
   });
 }
 
-export async function publicPageVisibilityDecision(pathname, env) {
-  const state = await readVisibilityState(env, { allowFallback: true });
+export async function publicPageVisibilityDecision(pathname, env, { allowFallback = true } = {}) {
+  const state = await readVisibilityState(env, { allowFallback });
   return { ...resolvePageVisibility(pathname, state.rules, state.homeOnly), source: state.source };
+}
+
+export async function publicPageVisibilityDecisions(pathnames, env, { allowFallback = true } = {}) {
+  const state = await readVisibilityState(env, { allowFallback });
+  return (pathnames || []).map((pathname) => ({
+    ...resolvePageVisibility(pathname, state.rules, state.homeOnly),
+    source: state.source,
+  }));
 }
 
 export async function handlePublicSiteVisibility(request, env) {

@@ -362,6 +362,52 @@ async function listAdmin(request, env) {
   });
 }
 
+const SEO_READINESS_FIELDS = Object.freeze([
+  { code: "missing_title", label: "Title", severity: "high", missing: (row) => !cleanText(row.title) },
+  { code: "missing_alt_text", label: "Alt text", severity: "high", missing: (row) => !cleanText(row.alt_text) },
+  { code: "missing_style", label: "Style", severity: "high", missing: (row) => !row.style_count || cleanText(row.primary_style).toLowerCase() === "unclassified" },
+  { code: "missing_placement", label: "Placement", severity: "medium", missing: (row) => !cleanText(row.placement) },
+  { code: "missing_year", label: "Year", severity: "medium", missing: (row) => !cleanText(row.year) },
+  { code: "missing_caption", label: "Caption", severity: "medium", missing: (row) => !cleanText(row.caption) },
+]);
+
+async function seoReadiness(request, env) {
+  const authError = adminError(request, env);
+  if (authError) return authError;
+  const db = requireDb(env);
+  const result = await db.prepare(`
+    SELECT p.id,p.title,p.alt_text,p.primary_style,p.placement,p.year,p.caption,p.state,p.updated_at,
+      (SELECT COUNT(*) FROM tattoo_item_styles tis WHERE tis.entity_id=p.id) style_count
+    FROM portfolio_items p
+    JOIN content_entities ce ON ce.id=p.id
+    WHERE p.state='published' AND ce.visibility='public'
+    ORDER BY p.created_at DESC,p.rowid DESC
+  `).all();
+  const issueCounts = Object.fromEntries(SEO_READINESS_FIELDS.map((field) => [field.code, 0]));
+  const items = (result.results || []).map((row) => {
+    const issues = SEO_READINESS_FIELDS.filter((field) => field.missing(row)).map((field) => {
+      issueCounts[field.code] += 1;
+      return { code: field.code, label: field.label, severity: field.severity };
+    });
+    return {
+      id: row.id,
+      title: row.title || "Untitled portfolio work",
+      state: row.state,
+      updatedAt: row.updated_at,
+      detailUrl: `/tattoos/portfolio/?work=${encodeURIComponent(row.id)}`,
+      issues,
+      ready: issues.length === 0,
+    };
+  });
+  const ready = items.filter((item) => item.ready).length;
+  return json({
+    generatedAt: new Date().toISOString(),
+    totals: { published: items.length, ready, needsReview: items.length - ready },
+    issueCounts,
+    items,
+  });
+}
+
 async function getPublicItem(env, id) {
   const db = requireDb(env);
   const row = await db.prepare(`
@@ -1205,6 +1251,10 @@ export async function handlePortfolioApi(request, env) {
         return response;
       }
       return methodNotAllowed(["GET", "POST"]);
+    }
+    if (path === "/api/admin/portfolio/seo-readiness") {
+      if (method !== "GET") return methodNotAllowed(["GET"]);
+      return seoReadiness(request, env);
     }
     if (path === "/api/admin/portfolio/reorder") {
       if (method !== "POST") return methodNotAllowed(["POST"]);

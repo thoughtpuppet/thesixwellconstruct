@@ -35,6 +35,14 @@ tools/writing-editor
 tools/writing-editor/**
 tools/tattooing-prototype
 tools/tattooing-prototype/**
+prototypes
+prototypes/**
+*prototype*.html
+*preview*.html
+**/*prototype*.html
+**/*preview*.html
+**/*preview*/**
+about/about-next.html
 tools/writing-preview-server.mjs
 tools/writing-local-runtime.mjs
 functions

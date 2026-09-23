@@ -100,10 +100,12 @@ test("inquiry guide precedes the unchanged project choices and consultation", ()
   assert.match(chooser, /participate in an open concept-led, long-form, collaborative, or experimental call\./);
 });
 
-test("Tattoo index changes only its collaboration actions into 5px outlines", () => {
+test("Tattoo index keeps its outlined collaboration actions and shared booking guide", () => {
   const landing = read("tattoos/index.html");
   assert.match(landing, /\.ledger-action \{[\s\S]*?border:5px solid var\(--ring-soft\); padding:10px 14px;/);
   assert.equal((landing.match(/class="ledger-action"/g) || []).length, 4);
+  assert.equal((landing.match(/data-tattoo-before-booking/g) || []).length, 1);
+  assert.ok(landing.indexOf('id="before-booking"') < landing.indexOf('id="ways-to-work"'));
 });
 
 test("inquiry project and consultation actions use the outlined Tattoo treatment", () => {

@@ -141,6 +141,13 @@
   .catalog-state { border:5px solid var(--ring-faint); padding:var(--s6); color:var(--text-mute); font-family:var(--sans); font-size:12px; line-height:1.7; }
   .catalog-state a { color:var(--accent); text-decoration:underline; text-underline-offset:3px; }
 
+  /* Reserve the async catalog footprint so its first render does not move the
+     footer through the desktop viewport. The populated grid exceeds this. */
+  @media (min-width:901px) {
+    nav.filters { min-height:120px; }
+    #gridTattoo { min-height:55vh; }
+  }
+
   /* ── Overlay ──────────────────────────────────────────────── */
   #work-overlay {
     position:fixed; inset:0; z-index:200;

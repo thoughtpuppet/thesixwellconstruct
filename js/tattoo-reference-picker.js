@@ -59,7 +59,10 @@
 
   function normalizeDesign(item) {
     const id = text(item.entity_id || item.entityId);
-    if (item.entity_type !== "tattoo_design" || !id) return null;
+    const entityType = text(item.entity_type || item.entityType);
+    const isTattooDesign = entityType === "tattoo_design";
+    const isFlashBackedDesign = entityType === "flash_item" && text(item.catalogue_prefix) === "TAT-DES";
+    if ((!isTattooDesign && !isFlashBackedDesign) || !id) return null;
     return { kind: "design", id, title: text(item.title) || "Untitled design", imageUrl: text(item.primaryImage || item.imageUrl), svgMarkup: "" };
   }
 

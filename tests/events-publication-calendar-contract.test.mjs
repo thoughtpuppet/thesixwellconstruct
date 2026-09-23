@@ -560,7 +560,7 @@ test("Events board contracts retain the shared shell, 5px cards, calendar, and s
   assert.match(page, /function eventHref\(ev, occurrence\)[\s\S]*occurrence\.id/);
   assert.match(page, /occurrencesForEvent\(ev\)\.forEach/);
   assert.match(readFileSync(join(ROOT, "events", "detail", "index.html"), "utf8"), /occurrenceId:selected\.id/);
-  assert.match(readFileSync(join(ROOT, "_worker.js"), "utf8"), /bespokeEventPage\.status !== 404[\s\S]*events\/detail\/index\.html/);
+  assert.match(readFileSync(join(ROOT, "_worker.js"), "utf8"), /serveEventDetailPage[\s\S]*?bespoke\.status === 404[\s\S]*?events\/detail\/index\.html/);
 });
 
 test("SS&F bespoke event page activates the shared entrance transition", () => {

@@ -55,7 +55,8 @@ test("public Creative Identities shells load safely and expose gated ThoughtPupp
   assert.match(devServer, /function identityProfileRouteFile\(urlPath\)[\s\S]*?parts\[0\]\s*!==\s*"about"[\s\S]*?parts\[1\]\s*!==\s*"identities"[\s\S]*?"about",\s*"identities",\s*"detail",\s*"index\.html"/);
   assert.match(worker, /function identityProfileSlug\(pathname\)[\s\S]*?parts\[0\]\s*!==\s*"about"[\s\S]*?parts\[1\]\s*!==\s*"identities"/);
   assert.match(worker, /new URL\(`\/api\/identities\/\$\{encodeURIComponent\(slug\)\}`,[^;]+\);/);
-  assert.match(worker, /apiResponse\.status\s*===\s*404[\s\S]*?notFoundPage\(request, env\)[\s\S]*?servePublicAsset\(request, env, "\/about\/identities\/detail\/index\.html"\)/);
+  assert.match(worker, /apiResponse\.status\s*===\s*404[\s\S]*?notFoundPage\(request, env\)[\s\S]*?servePublicAsset\(request, env, "\/about\/identities\/detail\/index\.html", \{ seo: false \}\)/);
+  assert.match(identityJs, /identity-record-data[\s\S]*?paintDetail\(JSON\.parse\(embeddedNode\.textContent\)\)/);
 
   assert.match(identityJs, /fetch\("\/api\/identities",\s*\{[\s\S]*?cache:\s*"no-store"[\s\S]*?accept:\s*"application\/json"/);
   assert.match(identityJs, /if \(!response\.ok\) throw new Error\("Creative identities unavailable\."\)/);

@@ -148,12 +148,13 @@ test("approved curated records expose canonical detail APIs, routes, metadata, a
   const page = await worker.fetch(new Request(`https://example.test${occurrence.detailUrl}`), env, {});
   assert.equal(page.status, 200);
   const html = await page.text();
-  assert.match(html, /<title data-calendar-event-title>Canonical Atlanta Sound Series — Opening Performance · Atlanta Calendar · the six\.well construct<\/title>/);
+  assert.match(html, /<title data-calendar-event-title>Canonical Atlanta Sound Series — Opening Performance · Atlanta Creative Calendar<\/title>/);
   assert.match(html, new RegExp(`href="https://example\\.test${occurrence.detailUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
   assert.match(html, /property="og:title"/);
   assert.match(html, /property="og:description"/);
   assert.match(html, new RegExp(`"id":"${occurrence.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
   assert.doesNotMatch(html, /verificationNotes|privateRationale|sourceEventId/);
+  assert.match(html, /data-seo-record-summary[\s\S]*Atlanta Creative Calendar/);
 
   const withoutSlash = await worker.fetch(new Request(`https://example.test${occurrence.detailUrl.slice(0, -1)}`), env, {});
   assert.equal(withoutSlash.status, 308);
@@ -189,6 +190,10 @@ test("calendar detail UI keeps titles plain and replaces new in-page event ancho
   assert.match(calendar, /event\.target\.closest\("\[data-calendar-card-href\]"\)/);
   assert.match(calendar, /interactiveCardTarget = event\.target\.closest\('a,button,summary,input,select,textarea,label,\[contenteditable="true"\]'\)/);
   assert.match(calendar, /location\.assign\(clickableCard\.dataset\.calendarCardHref\)/);
+  assert.match(calendar, /var LOCAL_DATE_PARTS_FORMATTER = new Intl\.DateTimeFormat/);
+  assert.match(calendar, /function localParts\(value\)[\s\S]*return LOCAL_DATE_PARTS_FORMATTER\.formatToParts\(date\)/);
+  assert.match(record, /var LOCAL_DATE_PARTS_FORMATTER = new Intl\.DateTimeFormat/);
+  assert.match(record, /function localParts\(value\)[\s\S]*return LOCAL_DATE_PARTS_FORMATTER\.formatToParts\(date\)/);
   assert.match(record, /data-share-url=/);
   assert.match(detail, /Back to your calendar view/);
   assert.doesNotMatch(detail, /syncDescriptionToggles|data-tag-toggle|data-description-toggle/);

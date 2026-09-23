@@ -114,6 +114,7 @@
     padding:48px 0;
     border-top:5px solid var(--ring-faint);
   }
+  .index-before-booking .tattoo-before-booking { margin-bottom:0; }
   .section:first-of-type { border-top:none; padding-top:0; }
   .section-label {
     font-family:var(--serif); font-size:10px;
@@ -509,6 +510,7 @@
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/identity-bands.css">
 <link rel="stylesheet" href="/css/hero.css">
+<link rel="stylesheet" href="/css/tattoo-before-booking.css">
 </head>
 <body class="tattoo-flow" data-venture="tattooing" data-landing-family="tattoo-service">
   <script>
@@ -613,6 +615,10 @@
           </article>
         </div>
       </div>
+    </section>
+
+    <section class="section index-before-booking" id="before-booking" aria-label="What you should know before booking">
+      <div data-tattoo-before-booking></div>
     </section>
 
     <section class="section" id="ways-to-work">
@@ -838,6 +844,7 @@
         if (status) status.textContent = "view current calls";
       });
   </script>
+  <script src="/js/tattoo-before-booking.js"></script>
   <script src="/js/identity-band-lightbox.js"></script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>

@@ -200,10 +200,21 @@ import {
   publicPageVisibilityDecision,
 } from "./functions/api/site-visibility/_lib.js";
 import { isPageVisibilityOperationalExemptPath } from "./shared/page-visibility.js";
+import {
+  applySeoDocument,
+  applySeoResponse,
+  canonicalOrigin,
+  canonicalRedirect,
+  dynamicStructuredGraph,
+  handleRobots,
+  handleSitemap,
+  normalizeSeoPath,
+} from "./functions/api/seo/_lib.js";
 
 const PUBLIC_FRONT_DOOR_PATHS = new Set(["/", "/index", "/index/", "/index.html"]);
 const PUBLIC_ENTRY_ROOM_ALIAS_PATHS = new Set(["/entry-room", "/entry-room/", "/entry-room/index.html"]);
 const PUBLIC_HOME_PATHS = new Set(["/home", "/home/", "/home/index.html"]);
+const LEGACY_BESPOKE_EVENT_SLUGS = new Set(["kinmarking", "open-studios"]);
 
 function notFound(message = "Not found.") {
   return json({ error: message }, { status: 404 });
@@ -214,14 +225,13 @@ async function notFoundPage(request, env) {
   url.pathname = "/404.html";
   url.search = "";
   const response = await env.ASSETS.fetch(new Request(url, request));
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", "no-store");
+  headers.set("x-robots-tag", "noindex, nofollow, noarchive");
   return new Response(response.body, {
     status: 404,
-    headers: response.headers,
+    headers,
   });
-}
-
-function redirectToNotFoundPage(request) {
-  return Response.redirect(new URL("/404.html", request.url), 302);
 }
 
 function assetRequest(request, pathname) {
@@ -267,14 +277,18 @@ export function browserAnalyticsMarkup(env, pathname) {
   return scripts.join("");
 }
 
-async function servePublicAsset(request, env, pathname) {
-  const response = await env.ASSETS.fetch(assetRequest(request, pathname));
-  if (!shouldInjectSiteAnalytics(request, response) || typeof HTMLRewriter === "undefined") return response;
-  return new HTMLRewriter().on("body", {
-    element(element) {
-      element.append(browserAnalyticsMarkup(env, new URL(request.url).pathname), { html: true });
-    },
-  }).transform(response);
+async function servePublicAsset(request, env, pathname, { seo = true } = {}) {
+  let response = await env.ASSETS.fetch(assetRequest(request, pathname));
+  if (shouldInjectSiteAnalytics(request, response) && typeof HTMLRewriter !== "undefined") {
+    response = new HTMLRewriter().on("body", {
+      element(element) {
+        element.append(browserAnalyticsMarkup(env, new URL(request.url).pathname), { html: true });
+      },
+    }).transform(response);
+  }
+  const contentType = response.headers.get("content-type") || "";
+  if (!seo || response.status !== 200 || !contentType.includes("text/html") || !["GET", "HEAD"].includes(request.method)) return response;
+  return applySeoResponse(request, env, response);
 }
 
 function privateLinkResponse(response) {
@@ -352,7 +366,7 @@ async function pageVisibilityResponse(request, env) {
   const pathname = new URL(request.url).pathname;
   if (!isPublicPagePath(pathname) || isPageVisibilityExemptPath(pathname)) return null;
   const decision = await publicPageVisibilityDecision(pathname, env);
-  return decision.hidden ? redirectToNotFoundPage(request) : null;
+  return decision.hidden ? notFoundPage(request, env) : null;
 }
 
 function isPublicPagePath(pathname) {
@@ -519,6 +533,19 @@ function legendRecordJson(payload) {
     .replace(/\u2029/g, "\\u2029");
 }
 
+function seoRecordSummary({ title, description = "", eyebrow = "", meta = [], links = [], headingTag = "h1" }) {
+  const heading = headingTag === "h2" ? "h2" : "h1";
+  const rows = meta
+    .filter((item) => item?.label && item?.value)
+    .map((item) => `<div><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(item.value)}</dd></div>`)
+    .join("");
+  const actions = links
+    .filter((item) => item?.href && item?.label)
+    .map((item) => `<a href="${escapeHtml(item.href)}">${escapeHtml(item.label)}</a>`)
+    .join("");
+  return `<div data-seo-record-summary>${eyebrow ? `<p>${escapeHtml(eyebrow)}</p>` : ""}<${heading}>${escapeHtml(title)}</${heading}>${description ? `<p>${escapeHtml(description)}</p>` : ""}${rows ? `<dl>${rows}</dl>` : ""}${actions ? `<nav aria-label="Record pathways">${actions}</nav>` : ""}</div>`;
+}
+
 async function serveLegendRecordPage(request, env, slug) {
   const apiUrl = new URL(`/api/legend/${encodeURIComponent(slug)}`, request.url);
   const apiResponse = await handleConstructApi(new Request(apiUrl, {
@@ -531,13 +558,25 @@ async function serveLegendRecordPage(request, env, slug) {
   const payload = await apiResponse.json();
   if (!payload.record || payload.record.slug !== slug) return notFoundPage(request, env);
 
-  const assetResponse = await servePublicAsset(request, env, "/about/legend/detail/index.html");
-  if (request.method === "HEAD") return assetResponse;
-
+  const assetResponse = await servePublicAsset(request, env, "/about/legend/detail/index.html", { seo: false });
   const siteOrigin = String(env.PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/g, "");
   const canonicalUrl = `${siteOrigin}${payload.record.canonicalRoute}`;
   const title = `${payload.record.name} · The Legend · the six.well construct`;
   const description = payload.record.meaning || "A published symbol record from the living Legend.";
+  const seo = {
+    title,
+    description,
+    canonicalUrl,
+    structuredData: dynamicStructuredGraph({
+      type: "DefinedTerm",
+      canonicalUrl,
+      title: payload.record.name,
+      description,
+      origin: siteOrigin,
+      extra: { inDefinedTermSet: `${siteOrigin}/about/legend/`, creator: { "@id": `${siteOrigin}/about/saieldauhnsolehman/#person` } },
+    }),
+  };
+  if (request.method === "HEAD") return applySeoResponse(request, env, assetResponse, seo);
   const html = (await assetResponse.text())
     .replace(
       /<title data-legend-record-title>[\s\S]*?<\/title>/,
@@ -554,19 +593,36 @@ async function serveLegendRecordPage(request, env, slug) {
     .replace(
       '<script id="legend-record-data" type="application/json"></script>',
       `<script id="legend-record-data" type="application/json">${legendRecordJson(payload)}</script>`,
+    )
+    .replace(
+      /<article class="legend-record" data-live-legend-record[^>]*>[\s\S]*?<\/article>/,
+      `<article class="legend-record" data-live-legend-record aria-live="polite">${seoRecordSummary({
+        title: payload.record.name,
+        description,
+        eyebrow: "The living Legend",
+        links: [
+          { href: "/about/legend/", label: "Explore the Legend" },
+          { href: "/tattoos/build/", label: "Build with symbols" },
+          { href: "/archive/", label: "Search the living Archive" },
+        ],
+      })}</article>`,
     );
   const headers = new Headers(assetResponse.headers);
   headers.delete("content-length");
   headers.delete("etag");
   headers.set("cache-control", "no-store");
-  return new Response(html, { status: assetResponse.status, headers });
+  return applySeoResponse(request, env, new Response(html, { status: assetResponse.status, headers }), seo);
 }
 
 async function publicSpecialProjectRecord(env, reference) {
   const value = String(reference || "").trim();
   if (!value) return null;
   return env.SUBMISSIONS_DB.prepare(
-    `SELECT spc.id,spc.slug,spc.title,COALESCE(spc.summary,'') summary
+    `SELECT spc.id,spc.slug,spc.title,COALESCE(spc.summary,'') summary,
+            COALESCE(spc.artist_statement,'') artist_statement,
+            COALESCE(spc.application_instructions,'') application_instructions,
+            COALESCE(spc.rate_text,'') rate_text,
+            spc.status,spc.opens_at,spc.closes_at
      FROM special_project_calls spc
      JOIN content_entities ce ON ce.id=spc.id AND ce.entity_type='special_project'
      WHERE (spc.slug=?1 OR spc.id=?1)
@@ -575,18 +631,54 @@ async function publicSpecialProjectRecord(env, reference) {
   ).bind(value).first();
 }
 
+function specialProjectStatus(record, now = Date.now()) {
+  if (record.status !== "open") return "closed";
+  const opensAt = record.opens_at ? Date.parse(record.opens_at) : NaN;
+  const closesAt = record.closes_at ? Date.parse(record.closes_at) : NaN;
+  if (Number.isFinite(opensAt) && opensAt > now) return "opening soon";
+  if (Number.isFinite(closesAt) && closesAt <= now) return "closed";
+  return "open";
+}
+
+function specialProjectWindow(record) {
+  const opens = record.opens_at ? publicEventDateText(record.opens_at) : "";
+  const closes = record.closes_at ? publicEventDateText(record.closes_at) : "";
+  if (opens && closes) return `${opens} – ${closes}`;
+  if (closes) return `Through ${closes}`;
+  if (opens) return `Opens ${opens}`;
+  return "Dates set in Studio";
+}
+
 async function serveSpecialProjectRecordPage(request, env, slug) {
   const record = await publicSpecialProjectRecord(env, slug);
   if (!record || record.slug !== slug) return notFoundPage(request, env);
 
-  const assetResponse = await servePublicAsset(request, env, "/tattoos/special-projects/index.html");
-  if (request.method === "HEAD") return assetResponse;
-
+  const assetResponse = await servePublicAsset(request, env, "/tattoos/special-projects/index.html", { seo: false });
   const siteOrigin = String(env.PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/g, "");
   const canonicalUrl = `${siteOrigin}/tattoos/special-projects/${encodeURIComponent(record.slug)}/`;
   const title = `${record.title} · Special Projects · Art.Pill Tattoo House`;
-  const description = record.summary || `Special Project detail for ${record.title}.`;
-  const html = (await assetResponse.text())
+  const description = record.summary || record.artist_statement || `Special Project detail for ${record.title}.`;
+  const effectiveStatus = specialProjectStatus(record);
+  const availability = effectiveStatus === "open"
+    ? "Open for review"
+    : effectiveStatus === "opening soon" ? "Opening soon" : "Closed";
+  const applicationCopy = record.application_instructions
+    || "Special Projects are reviewed before booking. Open-call applications receive call-specific next steps if accepted.";
+  const seo = {
+    title,
+    description,
+    canonicalUrl,
+    structuredData: dynamicStructuredGraph({
+      type: "CreativeWork",
+      canonicalUrl,
+      title: record.title,
+      description,
+      origin: siteOrigin,
+      extra: { creator: { "@id": `${siteOrigin}/about/saieldauhnsolehman/#person` } },
+    }),
+  };
+  if (request.method === "HEAD") return applySeoResponse(request, env, assetResponse, seo);
+  let html = (await assetResponse.text())
     .replace(
       /<title data-special-project-title>[\s\S]*?<\/title>/,
       `<title data-special-project-title>${escapeHtml(title)}</title>`,
@@ -599,11 +691,41 @@ async function serveSpecialProjectRecordPage(request, env, slug) {
       /<link data-special-project-canonical rel="canonical" href="[^"]*">/,
       `<link data-special-project-canonical rel="canonical" href="${escapeHtml(canonicalUrl)}">`,
     );
+  html = html
+    .replace('data-special-project-page="overview"', 'data-special-project-page="detail"')
+    .replace(
+      '<h1 class="page-title hero-title" data-copy-id="special-projects-page-title">Special Projects</h1>',
+      '<h2 class="page-title hero-title" data-copy-id="special-projects-page-title">Special Projects</h2>',
+    )
+    .replace('<span id="projectBreadcrumbTitle">Project</span>', `<span id="projectBreadcrumbTitle">${escapeHtml(record.title)}</span>`)
+    .replace('<p class="detail-kicker" id="projectKicker">Loading / Current status</p>', `<p class="detail-kicker" id="projectKicker">Special Project / ${escapeHtml(availability)}</p>`)
+    .replace('<h1 class="detail-title" id="projectTitle">Current Calls</h1>', `<h1 class="detail-title" id="projectTitle">${escapeHtml(record.title)}</h1>`)
+    .replace('<p class="detail-summary" id="projectSummary">Loading Special Project records from Studio.</p>', `<p class="detail-summary" id="projectSummary">${escapeHtml(description)}</p>`)
+    .replace('<p class="meta-value" id="projectStyle">Confirmed after review</p>', `<p class="meta-value" id="projectStyle">${escapeHtml(record.rate_text || "Confirmed after review")}</p>`)
+    .replace('<p class="meta-value" id="projectFormat">Managed in Studio</p>', `<p class="meta-value" id="projectFormat">${escapeHtml(specialProjectWindow(record))}</p>`)
+    .replace('<p class="meta-value" id="projectAvailability">Checking</p>', `<p class="meta-value" id="projectAvailability">${escapeHtml(availability)}</p>`)
+    .replace('<p class="intention-body" id="projectIntention">Open calls accept applications for review. Closed calls remain visible as context but cannot be submitted.</p>', `<p class="intention-body" id="projectIntention">${escapeHtml(applicationCopy)}</p>`)
+    .replace('<p class="application-copy" id="applicationCopy">Special Projects are reviewed before booking. Open-call applications receive call-specific next steps if accepted.</p>', `<p class="application-copy" id="applicationCopy">${escapeHtml(applicationCopy)}</p>`)
+    .replace(
+      '<a class="cta-primary is-disabled" id="projectApply" aria-disabled="true">Loading call status</a>',
+      effectiveStatus === "open"
+        ? '<a class="cta-primary" id="projectApply" href="#application">Apply for review</a>'
+        : `<a class="cta-primary is-disabled" id="projectApply" aria-disabled="true">${escapeHtml(availability)}</a>`,
+    )
+    .replace(
+      '<script src="/js/tattoo-before-booking.js"></script>',
+      `<script id="special-project-record-data" type="application/json">${legendRecordJson({ record: { ...record, effectiveStatus } })}</script>\n  <script src="/js/tattoo-before-booking.js"></script>`,
+    );
+  if (record.artist_statement) {
+    html = html
+      .replace('<section class="artist-statement" id="projectArtistStatement" hidden>', '<section class="artist-statement" id="projectArtistStatement">')
+      .replace('<p class="artist-statement-copy" id="projectArtistStatementCopy"></p>', `<p class="artist-statement-copy" id="projectArtistStatementCopy">${escapeHtml(record.artist_statement)}</p>`);
+  }
   const headers = new Headers(assetResponse.headers);
   headers.delete("content-length");
   headers.delete("etag");
   headers.set("cache-control", "no-store");
-  return new Response(html, { status: assetResponse.status, headers });
+  return applySeoResponse(request, env, new Response(html, { status: assetResponse.status, headers }), seo);
 }
 
 async function serveArtRecordPage(request, env, slug) {
@@ -619,13 +741,32 @@ async function serveArtRecordPage(request, env, slug) {
   const record = payload.record;
   if (!record || record.slug !== slug || record.legacy_path) return notFoundPage(request, env);
 
-  const assetResponse = await servePublicAsset(request, env, "/art/detail/index.html");
-  if (request.method === "HEAD") return assetResponse;
-
+  const assetResponse = await servePublicAsset(request, env, "/art/detail/index.html", { seo: false });
   const siteOrigin = String(env.PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/g, "");
   const canonicalUrl = `${siteOrigin}${record.canonicalRoute}`;
   const title = `${record.title} · art · the six.well construct`;
   const description = record.statement || `Artwork detail for ${record.title}.`;
+  const primaryImage = record.primaryMedia?.url || record.imageUrl || record.media?.[0]?.url || "";
+  const seo = {
+    title,
+    description,
+    canonicalUrl,
+    image: primaryImage,
+    structuredData: dynamicStructuredGraph({
+      type: "VisualArtwork",
+      canonicalUrl,
+      title: record.title,
+      description,
+      image: primaryImage,
+      origin: siteOrigin,
+      extra: {
+        creator: { "@id": `${siteOrigin}/about/saieldauhnsolehman/#person` },
+        ...(record.year ? { dateCreated: record.year } : {}),
+        ...(record.medium ? { artMedium: record.medium } : {}),
+      },
+    }),
+  };
+  if (request.method === "HEAD") return applySeoResponse(request, env, assetResponse, seo);
   const html = (await assetResponse.text())
     .replace(
       /<title data-art-record-title>[\s\S]*?<\/title>/,
@@ -646,12 +787,31 @@ async function serveArtRecordPage(request, env, slug) {
     .replace(
       '<script id="art-record-data" type="application/json"></script>',
       `<script id="art-record-data" type="application/json">${legendRecordJson(payload)}</script>`,
-    );
+    )
+    .replace(
+      /<main class="art-detail-state" data-art-detail-state role="status">[\s\S]*?<\/main>/,
+      `<main class="art-detail-state" data-art-detail-state role="status">${seoRecordSummary({
+        title: record.title,
+        description,
+        eyebrow: "Artwork by Saiel Dauhn Solehman",
+        headingTag: "h2",
+        meta: [
+          { label: "Year", value: record.year },
+          { label: "Medium", value: record.medium },
+          { label: "Dimensions", value: record.dimensions },
+        ],
+        links: [
+          { href: "/art/", label: "Explore more artwork" },
+          { href: "/about/contact-press/", label: "Ask about collecting or exhibitions" },
+        ],
+      })}</main>`,
+    )
+    .replace(/(<h1 class="painting-title hero-title" data-art-field="title">)[\s\S]*?(<\/h1>)/, `$1${escapeHtml(record.title)}$2`);
   const headers = new Headers(assetResponse.headers);
   headers.delete("content-length");
   headers.delete("etag");
   headers.set("cache-control", "no-store");
-  return new Response(html, { status: assetResponse.status, headers });
+  return applySeoResponse(request, env, new Response(html, { status: assetResponse.status, headers }), seo);
 }
 
 async function serveWritingRecordPage(request, env, slug) {
@@ -660,16 +820,37 @@ async function serveWritingRecordPage(request, env, slug) {
   if (response.status === 404) return notFoundPage(request,env);
   if (!response.ok) return response;
   const {entry} = await response.json();
-  const asset = await servePublicAsset(request,env,"/writings/mindful-darkness/wrkng/detail/index.html");
+  const asset = await servePublicAsset(request,env,"/writings/mindful-darkness/wrkng/detail/index.html", { seo: false });
   if (!asset.ok) return asset;
   const origin = String(env.PUBLIC_SITE_URL || "https://thesixwellconstruct.com").replace(/\/+$/, "");
   const headers = new Headers(asset.headers); headers.delete("content-length"); headers.delete("etag"); headers.set("cache-control","no-store");
-  if (request.method === "HEAD") return new Response(null,{status:200,headers});
-  return new Response(renderWritingPageTemplate(await asset.text(),entry,origin),{headers});
+  const canonicalUrl = `${origin}/writings/mindful-darkness/wrkng/${encodeURIComponent(entry.slug)}/`;
+  const title = `${entry.snapshot.title} · WRKNG* · the six.well construct`;
+  const description = entry.snapshot.excerpt || `Writing by ${entry.snapshot.author || "Saiel Dauhn Solehman"}.`;
+  const seo = {
+    title,
+    description,
+    canonicalUrl,
+    ogType: "article",
+    structuredData: dynamicStructuredGraph({
+      type: "Article",
+      canonicalUrl,
+      title: entry.snapshot.title,
+      description,
+      origin,
+      extra: {
+        author: { "@id": `${origin}/about/saieldauhnsolehman/#person` },
+        ...(entry.firstPublishedAt ? { datePublished: entry.firstPublishedAt } : {}),
+        ...(entry.publishedUpdatedAt ? { dateModified: entry.publishedUpdatedAt } : {}),
+      },
+    }),
+  };
+  if (request.method === "HEAD") return applySeoResponse(request, env, new Response(null,{status:200,headers}), seo);
+  return applySeoResponse(request, env, new Response(renderWritingPageTemplate(await asset.text(),entry,origin),{headers}), seo);
 }
 
 async function serveArtPreviewPage(request, env) {
-  const response = await servePublicAsset(request, env, "/art/detail/index.html");
+  const response = await servePublicAsset(request, env, "/art/detail/index.html", { seo: false });
   const headers = new Headers(response.headers);
   headers.set("cache-control", "no-store");
   headers.set("x-robots-tag", "noindex, nofollow");
@@ -685,22 +866,58 @@ async function serveMerchRecordPage(request, env, slug) {
   const payload = await apiResponse.json();
   const product = payload.product;
   if (!product || product.slug !== slug) return notFoundPage(request, env);
-  const assetResponse = await servePublicAsset(request, env, "/merch/detail/index.html");
-  if (request.method === "HEAD") return assetResponse;
+  const assetResponse = await servePublicAsset(request, env, "/merch/detail/index.html", { seo: false });
   const siteOrigin = String(env.PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/g, "");
   const canonicalUrl = `${siteOrigin}${product.canonicalRoute}`;
   const title = `${product.title} · merch · the six.well construct`;
   const description = product.description || product.statement || `Merch detail for ${product.title}.`;
+  const purchasable = product.availableForSale === true && product.price?.amount != null && Boolean(product.price?.currencyCode);
+  const structuredType = purchasable ? "Product" : "CreativeWork";
+  const productExtra = purchasable ? {
+    brand: { "@type": "Brand", name: product.sourceLabel || "Six.Well Clothing" },
+    sku: product.catalogNumber || product.slug,
+    offers: {
+      "@type": "Offer",
+      url: canonicalUrl,
+      availability: "https://schema.org/InStock",
+      price: String(product.price.amount),
+      priceCurrency: product.price.currencyCode,
+      seller: { "@type": "Organization", "@id": `${siteOrigin}/#organization`, name: "The Six.Well Construct", url: `${siteOrigin}/` },
+    },
+  } : { creator: { "@id": `${siteOrigin}/about/saieldauhnsolehman/#person` } };
+  const seo = {
+    title,
+    description,
+    canonicalUrl,
+    image: product.heroImage || "",
+    structuredData: dynamicStructuredGraph({
+      type: structuredType,
+      canonicalUrl,
+      title: product.title,
+      description,
+      image: product.heroImage || "",
+      origin: siteOrigin,
+      extra: productExtra,
+    }),
+  };
+  if (request.method === "HEAD") return applySeoResponse(request, env, assetResponse, seo);
   const html = (await assetResponse.text())
     .replace(/<title data-merch-record-title>[\s\S]*?<\/title>/, `<title data-merch-record-title>${escapeHtml(title)}</title>`)
     .replace(/<meta data-merch-record-description name="description" content="[^"]*">/, `<meta data-merch-record-description name="description" content="${escapeHtml(description)}">`)
     .replace(/<link data-merch-record-canonical rel="canonical" href="[^"]*">/, `<link data-merch-record-canonical rel="canonical" href="${escapeHtml(canonicalUrl)}">`)
+    .replace(/(<h1 class="product-name hero-title" id="productName">)[\s\S]*?(<\/h1>)/, `$1${escapeHtml(product.title)}$2`)
+    .replace(/(<p class="hero-descriptor" id="productDescription">)[\s\S]*?(<\/p>)/, `$1${escapeHtml(description)}$2`)
+    .replace(/(<p class="product-price" id="productPrice">)[\s\S]*?(<\/p>)/, `$1${escapeHtml(product.price?.formatted || product.priceNote || "")}$2`)
+    .replace(/(<p class="product-edition" id="productEdition">)[\s\S]*?(<\/p>)/, `$1${escapeHtml(product.editionText || "")}$2`)
+    .replace(/<img id="productHeroImage"[^>]*>/, product.heroImage
+      ? `<img id="productHeroImage" src="${escapeHtml(product.heroImage)}" alt="${escapeHtml(product.heroImageAlt || product.title)}">`
+      : '<img id="productHeroImage" alt="">')
     .replace('<script id="merch-record-data" type="application/json"></script>', `<script id="merch-record-data" type="application/json">${legendRecordJson(payload)}</script>`);
   const headers = new Headers(assetResponse.headers);
   headers.delete("content-length");
   headers.delete("etag");
   headers.set("cache-control", "no-store");
-  return new Response(html, { status: assetResponse.status, headers });
+  return applySeoResponse(request, env, new Response(html, { status: assetResponse.status, headers }), seo);
 }
 
 async function serveIdentityProfilePage(request, env, slug) {
@@ -711,7 +928,174 @@ async function serveIdentityProfilePage(request, env, slug) {
   }), env);
   if (apiResponse.status === 404) return notFoundPage(request, env);
   if (!apiResponse.ok) return apiResponse;
-  return servePublicAsset(request, env, "/about/identities/detail/index.html");
+  const payload = await apiResponse.json();
+  const profile = payload.profile || payload.record || payload.identity;
+  if (!profile) return notFoundPage(request, env);
+  const assetResponse = await servePublicAsset(request, env, "/about/identities/detail/index.html", { seo: false });
+  if (request.method === "HEAD") return applySeoResponse(request, env, assetResponse, {
+    title: `${profile.name || profile.title || slug} · Creative Identity · the six.well construct`,
+    description: profile.heroDescriptor || profile.currentRole || profile.originBody || "A published creative identity within the Six.Well Construct.",
+    canonicalPath: `/about/identities/${encodeURIComponent(slug)}/`,
+  });
+  const origin = canonicalOrigin(env, request.url);
+  const canonicalUrl = `${origin}/about/identities/${encodeURIComponent(slug)}/`;
+  const title = `${profile.name || profile.title || slug} · Creative Identity · the six.well construct`;
+  const description = profile.heroDescriptor || profile.currentRole || profile.originBody || "A published creative identity within the Six.Well Construct.";
+  const html = (await assetResponse.text())
+    .replace(
+      /<article class="identity-profile" data-identity-detail[^>]*>[\s\S]*?<\/article>/,
+      `<article class="identity-profile" data-identity-detail aria-live="polite" aria-busy="true">${seoRecordSummary({
+        title: profile.name || profile.title || slug,
+        description,
+        eyebrow: "Creative identity within the Six.Well Construct",
+        meta: [
+          { label: "Current role", value: profile.currentRole },
+          { label: "Origin", value: profile.originTitle },
+        ],
+        links: [
+          { href: "/about/identities/", label: "Explore creative identities" },
+          { href: "/archive/", label: "Search the living Archive" },
+        ],
+      })}</article>`,
+    )
+    .replace('<script src="/js/about-identities.js"></script>', `<script id="identity-record-data" type="application/json">${legendRecordJson(payload)}</script>\n<script src="/js/about-identities.js"></script>`);
+  const headers = new Headers(assetResponse.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  const response = new Response(html, { status: assetResponse.status, headers });
+  return applySeoResponse(request, env, response, {
+    title,
+    description,
+    canonicalUrl,
+    structuredData: dynamicStructuredGraph({
+      type: "CreativeWork",
+      canonicalUrl,
+      title: profile.name || profile.title || slug,
+      description,
+      origin,
+      extra: { creator: { "@id": `${origin}/about/saieldauhnsolehman/#person` } },
+    }),
+  });
+}
+
+async function serveFlashRecordPage(request, env, slug) {
+  const apiUrl = new URL(`/api/flash/${encodeURIComponent(slug)}`, request.url);
+  const apiResponse = await handleConstructApi(new Request(apiUrl, { method: "GET", headers: { accept: "application/json" } }), env);
+  if (apiResponse.status === 404) return notFoundPage(request, env);
+  if (!apiResponse.ok) return apiResponse;
+  const payload = await apiResponse.json();
+  const record = payload.record;
+  if (!record || record.slug !== slug) return notFoundPage(request, env);
+  const assetResponse = await servePublicAsset(request, env, "/tattoos/flash/detail/index.html", { seo: false });
+  const origin = canonicalOrigin(env, request.url);
+  const canonicalUrl = `${origin}${record.canonicalRoute || `/tattoos/flash/${encodeURIComponent(slug)}/`}`;
+  const title = `${record.title} · Tattoo Flash · art.pill Tattoo House`;
+  const description = record.description || `${record.title}, tattoo flash by Saiel Dauhn Solehman at art.pill Tattoo House in Atlanta.`;
+  const image = record.media?.[0]?.url || record.image_url || "";
+  const seo = {
+    title,
+    description,
+    canonicalUrl,
+    image,
+    structuredData: dynamicStructuredGraph({
+      type: "VisualArtwork",
+      canonicalUrl,
+      title: record.title,
+      description,
+      image,
+      origin,
+      extra: {
+        creator: { "@id": `${origin}/about/saieldauhnsolehman/#person` },
+        artform: "Tattoo flash",
+      },
+    }),
+  };
+  if (request.method === "HEAD") return applySeoResponse(request, env, assetResponse, seo);
+  let html = (await assetResponse.text())
+    .replace(
+      /<section class="state site-hero site-hero--supporting" id="loadingState"[^>]*>[\s\S]*?<\/section>/,
+      `<section class="state site-hero site-hero--supporting" id="loadingState" role="status" aria-live="polite">${seoRecordSummary({
+        title: record.title,
+        description,
+        eyebrow: "Tattoo flash by Saiel Dauhn Solehman",
+        headingTag: "h2",
+        meta: [
+          { label: "Size", value: record.size_bucket || record.sizeBucket },
+          { label: "Format", value: record.item_type || record.type },
+          { label: "Availability", value: record.claimableNow === true || record.claimable_now === true ? "Available for Studio review" : "Past work or unavailable" },
+        ],
+        links: [
+          { href: "/tattoos/flash/", label: "Explore tattoo flash" },
+          { href: "/tattoos/inquire/", label: "Start a tattoo inquiry" },
+        ],
+      })}</section>`,
+    )
+    .replace(/(<h1 class="hero-title" id="flashTitle">)[\s\S]*?(<\/h1>)/, `$1${escapeHtml(record.title)}$2`)
+    .replace("</body>", `<script id="flash-record-data" type="application/json">${legendRecordJson(payload)}</script>\n</body>`);
+  const headers = new Headers(assetResponse.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  headers.set("cache-control", "public, max-age=60");
+  return applySeoResponse(request, env, new Response(html, { status: assetResponse.status, headers }), seo);
+}
+
+async function serveArchiveRecordPage(request, env, pathname, assetPath) {
+  const parts = normalizePath(pathname).split("/").filter(Boolean);
+  const slug = parts[2] || "";
+  if (!slug) return notFoundPage(request, env);
+  const apiUrl = new URL(`/api/archive/${encodeURIComponent(slug)}`, request.url);
+  const apiResponse = await handleConstructApi(new Request(apiUrl, { method: "GET", headers: { accept: "application/json" } }), env);
+  if (apiResponse.status === 404) return notFoundPage(request, env);
+  if (!apiResponse.ok) return apiResponse;
+  const payload = await apiResponse.json();
+  const record = payload.record;
+  if (!record) return notFoundPage(request, env);
+  const assetResponse = await servePublicAsset(request, env, assetPath, { seo: false });
+  const origin = canonicalOrigin(env, request.url);
+  const canonicalUrl = `${origin}${record.canonicalRoute || record.canonical_route || normalizeSeoPath(pathname)}`;
+  const recordTitle = record.title || record.name || slug.replace(/-/g, " ");
+  const title = `${recordTitle} · Living Archive · the six.well construct`;
+  const description = record.orientation || record.summary || record.story || `A published record from the living Archive of the Six.Well Construct.`;
+  const image = record.media?.[0]?.url || record.image_url || "";
+  const seo = {
+    title,
+    description,
+    canonicalUrl,
+    image,
+    structuredData: dynamicStructuredGraph({
+      type: "CreativeWork",
+      canonicalUrl,
+      title: recordTitle,
+      description,
+      image,
+      origin,
+      extra: { creator: { "@id": `${origin}/about/saieldauhnsolehman/#person` } },
+    }),
+  };
+  if (request.method === "HEAD") return applySeoResponse(request, env, assetResponse, seo);
+  const html = (await assetResponse.text())
+    .replace(
+      /<div data-archive-app>[\s\S]*?<\/div>\s*<\/main>/,
+      `<div data-archive-app>${seoRecordSummary({
+        title: recordTitle,
+        description,
+        eyebrow: "Published living Archive record",
+        meta: [
+          { label: "Record type", value: record.recordType || record.record_type },
+          { label: "Period", value: record.periodLabel || record.period_label },
+        ],
+        links: [
+          { href: "/archive/", label: "Search the Archive" },
+          { href: "/about/saieldauhnsolehman/", label: "About Saiel Dauhn Solehman" },
+        ],
+      })}</div></main>`,
+    )
+    .replace("</body>", `<script id="archive-record-seo-data" type="application/json">${legendRecordJson(payload)}</script>\n</body>`);
+  const headers = new Headers(assetResponse.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  headers.set("cache-control", "public, max-age=60");
+  return applySeoResponse(request, env, new Response(html, { status: assetResponse.status, headers }), seo);
 }
 
 async function serveCalendarEventPage(request, env, reference) {
@@ -733,14 +1117,50 @@ async function serveCalendarEventPage(request, env, reference) {
     return Response.redirect(canonicalUrl, 308);
   }
 
-  const assetResponse = await servePublicAsset(request, env, "/calendar/event/index.html");
-  if (request.method === "HEAD") return assetResponse;
+  const assetResponse = await servePublicAsset(request, env, "/calendar/event/index.html", { seo: false });
   const siteOrigin = String(env.PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/g, "");
   const canonicalUrl = `${siteOrigin}${canonicalPath}`;
-  const title = `${event.title} · Atlanta Calendar · the six.well construct`;
+  const title = `${event.title} · Atlanta Creative Calendar`;
   const description = String(event.description || `${event.title}, an approved Atlanta Calendar event.`).slice(0, 320);
   const media = Array.isArray(event.media) && event.media.length ? event.media : (event.flyer?.url ? [event.flyer] : []);
   const imageUrl = media[0]?.url ? new URL(media[0].url, `${siteOrigin}/`).toString() : "";
+  const eventStatus = event.status === "cancelled"
+    ? "https://schema.org/EventCancelled"
+    : event.status === "postponed"
+      ? "https://schema.org/EventPostponed"
+      : "https://schema.org/EventScheduled";
+  const seo = {
+    title,
+    description,
+    canonicalUrl,
+    image: imageUrl,
+    ogType: "article",
+    structuredData: dynamicStructuredGraph({
+      type: "Event",
+      canonicalUrl,
+      title: event.title,
+      description,
+      image: imageUrl,
+      origin: siteOrigin,
+      extra: {
+        startDate: event.startsAt,
+        ...(event.endsAt ? { endDate: event.endsAt } : {}),
+        eventStatus,
+        eventAttendanceMode: event.virtual ? "https://schema.org/OnlineEventAttendanceMode" : "https://schema.org/OfflineEventAttendanceMode",
+        ...(event.organizer ? { organizer: { "@type": "Organization", name: event.organizer, ...(event.sourceUrl ? { url: event.sourceUrl } : {}) } } : {}),
+        ...(event.virtual
+          ? { location: { "@type": "VirtualLocation", url: event.actionUrl || event.sourceUrl || canonicalUrl } }
+          : (event.venueName || event.venueAddress || event.city || event.region) ? {
+              location: {
+                "@type": "Place",
+                ...(event.venueName ? { name: event.venueName } : {}),
+                ...(event.venueAddress || event.city || event.region ? { address: event.venueAddress || [event.city, event.region].filter(Boolean).join(", ") } : {}),
+              },
+            } : {}),
+      },
+    }),
+  };
+  if (request.method === "HEAD") return applySeoResponse(request, env, assetResponse, seo);
   const html = (await assetResponse.text())
     .replace(/<title data-calendar-event-title>[\s\S]*?<\/title>/, `<title data-calendar-event-title>${escapeHtml(title)}</title>`)
     .replace(/<meta data-calendar-event-description name="description" content="[^"]*">/, `<meta data-calendar-event-description name="description" content="${escapeHtml(description)}">`)
@@ -749,12 +1169,141 @@ async function serveCalendarEventPage(request, env, reference) {
     .replace(/<meta data-calendar-event-og-url property="og:url" content="[^"]*">/, `<meta data-calendar-event-og-url property="og:url" content="${escapeHtml(canonicalUrl)}">`)
     .replace(/<meta data-calendar-event-og-image property="og:image" content="[^"]*">/, `<meta data-calendar-event-og-image property="og:image" content="${escapeHtml(imageUrl)}">`)
     .replace(/<link data-calendar-event-canonical rel="canonical" href="[^"]*">/, `<link data-calendar-event-canonical rel="canonical" href="${escapeHtml(canonicalUrl)}">`)
+    .replace(
+      /<div id="calendarEventDetail"[^>]*>[\s\S]*?<\/div>/,
+      `<div id="calendarEventDetail" aria-live="polite">${seoRecordSummary({
+        title: event.title,
+        description,
+        eyebrow: "Atlanta Creative Calendar",
+        meta: [
+          { label: "Starts", value: publicEventDateText(event.startsAt) },
+          { label: "Venue", value: event.venueName || (event.virtual ? "Online" : "") },
+          { label: "Location", value: event.venueAddress || [event.city, event.region].filter(Boolean).join(", ") },
+          { label: "Organizer", value: event.organizer },
+        ],
+        links: [
+          { href: event.actionUrl || event.sourceUrl, label: event.actionLabel || "View event source" },
+          { href: "/calendar/", label: "Back to Atlanta Creative Calendar" },
+          { href: "/events/", label: "Explore Six.Well-produced events" },
+        ],
+      })}</div>`,
+    )
     .replace('<script id="calendar-event-data" type="application/json"></script>', `<script id="calendar-event-data" type="application/json">${legendRecordJson(payload)}</script>`);
   const headers = new Headers(assetResponse.headers);
   headers.delete("content-length");
   headers.delete("etag");
   headers.set("cache-control", "no-store");
-  return new Response(html, { status:assetResponse.status, headers });
+  return applySeoResponse(request, env, new Response(html, { status:assetResponse.status, headers }), seo);
+}
+
+function publicEventDateText(value) {
+  if (!value) return "Date to be announced";
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(new Date(value));
+  } catch {
+    return String(value);
+  }
+}
+
+async function serveEventDetailPage(request, env, pathname) {
+  const slug = normalizePath(pathname).split("/").filter(Boolean)[1] || "";
+  if (!slug) return notFoundPage(request, env);
+  const contextUrl = new URL(`/api/events/${encodeURIComponent(slug)}/context`, request.url);
+  const requestedOccurrence = new URL(request.url).searchParams.get("occurrence");
+  if (requestedOccurrence) contextUrl.searchParams.set("occurrence", requestedOccurrence);
+  const apiResponse = await handleEventsApi(new Request(contextUrl, { method: "GET", headers: { accept: "application/json" } }), env);
+  if (apiResponse.status === 404) {
+    if (requestedOccurrence) return notFoundPage(request, env);
+    const managedEvent = await env.SUBMISSIONS_DB.prepare(
+      "SELECT publication_state FROM events WHERE slug=? LIMIT 1",
+    ).bind(slug).first();
+    if (managedEvent || !LEGACY_BESPOKE_EVENT_SLUGS.has(slug)) return notFoundPage(request, env);
+    const bespoke = await servePublicAsset(request, env, eventDetailAssetPath(pathname), { seo: false });
+    if (bespoke.status === 404) return notFoundPage(request, env);
+    return applySeoResponse(request, env, bespoke, {
+      canonicalPath: `/events/${encodeURIComponent(slug)}/`,
+      title: `${slug.replace(/-/g, " ")} · Six.Well Events`,
+      description: "A public creative program produced through the Six.Well Construct in Atlanta.",
+    });
+  }
+  if (!apiResponse.ok) return apiResponse;
+  const payload = await apiResponse.json();
+  const event = payload.event;
+  if (!event) return notFoundPage(request, env);
+
+  let assetResponse = await servePublicAsset(request, env, eventDetailAssetPath(pathname), { seo: false });
+  if (assetResponse.status === 404) assetResponse = await servePublicAsset(request, env, "/events/detail/index.html", { seo: false });
+  const origin = canonicalOrigin(env, request.url);
+  const canonicalPath = `/events/${encodeURIComponent(slug)}/`;
+  const canonicalUrl = `${origin}${canonicalPath}`;
+  const selected = payload.occurrence || event.occurrences?.[0] || null;
+  const title = `${event.title} · Six.Well Events · Atlanta`;
+  const description = event.description || "A public creative program produced through the Six.Well Construct in Atlanta.";
+  const image = event.imageUrl || "";
+  const eventStatus = event.status === "cancelled"
+    ? "https://schema.org/EventCancelled"
+    : "https://schema.org/EventScheduled";
+  const startDate = selected?.startsAt || event.startsAt || undefined;
+  const endDate = selected?.endsAt || event.endsAt || undefined;
+  const location = selected?.location || event.location || "";
+  const offers = event.publicationState === "published" && event.open ? {
+    "@type": "Offer",
+    url: canonicalUrl,
+    price: String((Number(event.priceCents || 0) / 100).toFixed(2)),
+    priceCurrency: event.currency || "USD",
+    availability: event.soldOut ? "https://schema.org/SoldOut" : "https://schema.org/InStock",
+  } : null;
+  const seo = {
+    title,
+    description,
+    canonicalUrl,
+    image,
+    ogType: "article",
+    structuredData: dynamicStructuredGraph({
+      type: "Event",
+      canonicalUrl,
+      title: event.title,
+      description,
+      image,
+      origin,
+      extra: {
+        ...(startDate ? { startDate } : {}),
+        ...(endDate ? { endDate } : {}),
+        eventStatus,
+        eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+        organizer: { "@type": "Organization", "@id": `${origin}/#organization`, name: "The Six.Well Construct", url: `${origin}/` },
+        ...(location ? { location: { "@type": "Place", name: location, address: location } } : {}),
+        ...(offers ? { offers } : {}),
+      },
+    }),
+  };
+  if (request.method === "HEAD") return applySeoResponse(request, env, assetResponse, seo);
+
+  const occurrenceMarkup = (event.occurrences || []).map((occurrence) => {
+    const href = `${canonicalPath}?occurrence=${encodeURIComponent(occurrence.id)}`;
+    return `<a class="event-date${selected?.id === occurrence.id ? " is-selected" : ""}" href="${escapeHtml(href)}"><strong>${escapeHtml(publicEventDateText(occurrence.startsAt))}</strong><span>${escapeHtml(occurrence.location || event.location || "")}</span></a>`;
+  }).join("");
+  const html = (await assetResponse.text())
+    .replace(/(<h1[^>]*id="eventTitle"[^>]*>)[\s\S]*?(<\/h1>)/, `$1${escapeHtml(event.title)}$2`)
+    .replace(/(<p[^>]*id="eventDescription"[^>]*>)[\s\S]*?(<\/p>)/, `$1${escapeHtml(description)}$2`)
+    .replace(/(<p[^>]*id="eventDetails"[^>]*>)[\s\S]*?(<\/p>)/, `$1${escapeHtml(event.details || event.included || description)}$2`)
+    .replace(/(<p[^>]*id="eventStatus"[^>]*>)[\s\S]*?(<\/p>)/, `$1${escapeHtml(startDate ? [publicEventDateText(startDate), location].filter(Boolean).join(" · ") : event.publicationState === "announced" ? "Announced" : "Public event")}$2`)
+    .replace(/(<div[^>]*id="eventDates"[^>]*>)[\s\S]*?(<\/div>)/, `$1${occurrenceMarkup}$2`)
+    .replace("</body>", `<script id="event-record-data" type="application/json">${legendRecordJson(payload)}</script>\n</body>`);
+  const headers = new Headers(assetResponse.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  headers.set("cache-control", "public, max-age=60");
+  return applySeoResponse(request, env, new Response(html, { status: assetResponse.status, headers }), seo);
 }
 
 async function legacyMerchResponse(request, env, pathname) {
@@ -1421,8 +1970,16 @@ export default {
       );
     }
 
-    const visibilityResponse = await pageVisibilityResponse(request, env);
+    const canonicalResponse = canonicalRedirect(request, env);
+    const visibilityRequest = canonicalResponse?.headers.get("location")
+      ? new Request(canonicalResponse.headers.get("location"), request)
+      : request;
+    const visibilityResponse = await pageVisibilityResponse(visibilityRequest, env);
     if (visibilityResponse) return visibilityResponse;
+    if (canonicalResponse) return canonicalResponse;
+
+    if (url.pathname === "/robots.txt") return handleRobots(request, env);
+    if (url.pathname === "/sitemap.xml") return handleSitemap(request, env);
 
     if (url.pathname === "/explore" || url.pathname === "/explore/" || url.pathname === "/explore/index.html") {
       const adventureUrl = new URL(request.url);
@@ -1832,9 +2389,7 @@ export default {
     }
 
     if (isEventDetailPagePath(url.pathname)) {
-      const bespokeEventPage = await servePublicAsset(request, env, eventDetailAssetPath(url.pathname));
-      if (bespokeEventPage.status !== 404) return bespokeEventPage;
-      return servePublicAsset(request, env, "/events/detail/index.html");
+      return serveEventDetailPage(request, env, url.pathname);
     }
 
     if (appearanceDetailSlug(url.pathname)) {
@@ -1853,11 +2408,15 @@ export default {
     }
 
     if (isFlashDetailPagePath(url.pathname)) {
-      return servePublicAsset(request, env, "/tattoos/flash/detail/index.html");
+      const slug = normalizePath(url.pathname).split("/").filter(Boolean)[2];
+      return serveFlashRecordPage(request, env, slug);
     }
 
     const archiveAssetPath = archiveDynamicAssetPath(url.pathname);
     if (archiveAssetPath) {
+      if (normalizePath(url.pathname).startsWith("/archive/records/")) {
+        return serveArchiveRecordPage(request, env, url.pathname, archiveAssetPath);
+      }
       return servePublicAsset(request, env, archiveAssetPath);
     }
 

@@ -10,6 +10,7 @@
   var SCHEDULE_LABELS = { postponed:"Postponed", rescheduled:"Rescheduled", cancelled:"Cancelled", moved_online:"Moved Online" };
   var TICKET_LABELS = { not_required:"No Ticket Required", not_yet_on_sale:"Tickets Not Yet On Sale", on_sale:"Tickets On Sale", sold_out:"Sold Out", registration_open:"Registration Open", registration_closed:"Registration Closed" };
   var TIME_ZONE = "America/New_York";
+  var LOCAL_DATE_PARTS_FORMATTER = new Intl.DateTimeFormat("en-US", { timeZone:TIME_ZONE, year:"numeric", month:"2-digit", day:"2-digit" });
   var allEvents = [];
   var matchedEvents = [];
   var filtered = [];
@@ -76,7 +77,7 @@
   function localParts(value) {
     var date = validDate(value);
     if (!date) return null;
-    return new Intl.DateTimeFormat("en-US", { timeZone:TIME_ZONE, year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(date).reduce(function (result, part) { result[part.type] = part.value; return result; }, {});
+    return LOCAL_DATE_PARTS_FORMATTER.formatToParts(date).reduce(function (result, part) { result[part.type] = part.value; return result; }, {});
   }
 
   function dateKey(value) {
