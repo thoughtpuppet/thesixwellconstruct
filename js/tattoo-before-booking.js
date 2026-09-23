@@ -65,7 +65,7 @@
     host.innerHTML = '<section class="tattoo-before-booking is-collapsed" aria-labelledby="' + headingId + '">' +
       '<div class="tattoo-before-booking__head">' +
         '<p class="tattoo-before-booking__index">01 / Start here</p>' +
-        '<h2 class="tattoo-before-booking__title" id="' + headingId + '">What You Should Know Before Booking</h2>' +
+        '<h2 class="tattoo-before-booking__title" id="' + headingId + '"><button class="tattoo-before-booking__title-button" type="button" aria-expanded="false" aria-controls="' + contentId + '">What You Should Know Before Booking</button></h2>' +
         '<button class="tattoo-before-booking__toggle" type="button" aria-label="Expand What You Should Know Before Booking" aria-expanded="false" aria-controls="' + contentId + '"><span class="tattoo-before-booking__toggle-mark" aria-hidden="true">+</span></button>' +
         '<p class="tattoo-before-booking__intro">Open a subject for the full guidance. The studio policies linked below remain the terms that govern appointments.</p>' +
       '</div>' +
@@ -79,16 +79,23 @@
 
     var section = host.querySelector(".tattoo-before-booking");
     var toggle = section.querySelector(".tattoo-before-booking__toggle");
+    var titleToggle = section.querySelector(".tattoo-before-booking__title-button");
     var content = section.querySelector(".tattoo-before-booking__content");
     var mark = section.querySelector(".tattoo-before-booking__toggle-mark");
 
-    toggle.addEventListener("click", function () {
-      var open = toggle.getAttribute("aria-expanded") !== "true";
+    function setOpen(open) {
       toggle.setAttribute("aria-expanded", String(open));
+      titleToggle.setAttribute("aria-expanded", String(open));
       toggle.setAttribute("aria-label", (open ? "Collapse " : "Expand ") + "What You Should Know Before Booking");
       content.hidden = !open;
       section.classList.toggle("is-collapsed", !open);
       mark.textContent = open ? "−" : "+";
+    }
+
+    [toggle, titleToggle].forEach(function (control) {
+      control.addEventListener("click", function () {
+        setOpen(toggle.getAttribute("aria-expanded") !== "true");
+      });
     });
   }
 

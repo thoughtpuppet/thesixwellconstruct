@@ -31,15 +31,20 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .intro-body { font-size:17px; line-height:1.8; color:var(--text); max-width:660px; }
   .decision-surface { border:5px solid var(--ring-faint); }
   .lane { position:relative; display:grid; grid-template-columns:minmax(200px,0.3fr) minmax(0,1fr); gap:40px; padding:34px; border-bottom:5px solid var(--ring-faint); }
+  .lane[data-collapsible-lane] { transition:background var(--t-fast); }
+  .lane[data-collapsible-lane]:hover,.lane[data-collapsible-lane]:focus-within { background:var(--cell-hover); }
   .consultation-lane { grid-template-columns:minmax(390px,0.38fr) minmax(0,1fr); }
-  .lane.is-collapsed { grid-template-columns:minmax(0,1fr); }
+  .lane.is-collapsed { grid-template-columns:minmax(0,1fr); padding-bottom:56px; }
   .lane:last-child { border-bottom:none; }
   .lane-content[hidden] { display:none; }
   .lane-index { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; margin-bottom:12px; }
   .lane-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.6vw,48px); letter-spacing:-0.04em; line-height:0.92; color:var(--signal); text-transform:uppercase; margin-bottom:14px; }
   .lane-title-row { margin-bottom:14px; }
   .lane-title-row .lane-title { margin-bottom:0; }
+  .lane-title-toggle { display:block; padding:0; border:0; background:transparent; color:inherit; font:inherit; letter-spacing:inherit; line-height:inherit; text-align:left; text-transform:inherit; cursor:pointer; }
+  .lane-title-toggle:focus-visible { outline:5px solid var(--accent); outline-offset:4px; }
   .lane-toggle { position:absolute; top:4px; right:4px; z-index:1; display:grid; width:44px; height:44px; place-items:center; padding:0; border:0; background:transparent; color:var(--signal); cursor:pointer; }
+  .lane.is-collapsed .lane-toggle { top:auto; bottom:4px; }
   .lane-toggle-mark { color:inherit; font:700 32px/0.8 var(--sans); letter-spacing:0 !important; line-height:0.8 !important; }
   .lane-toggle:hover { color:var(--accent); }
   .lane.is-collapsed .lane-intro { max-width:none; }
@@ -137,7 +142,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       <section class="lane is-collapsed" id="before-booking" aria-labelledby="guide-title" data-collapsible-lane>
         <div class="lane-head">
           <p class="lane-index">01 / Start here</p>
-          <div class="lane-title-row"><h2 class="lane-title" id="guide-title">What You Should Know Before Booking</h2><button class="lane-toggle" type="button" aria-label="Expand What You Should Know Before Booking" aria-expanded="false" aria-controls="before-booking-content" data-lane-label="What You Should Know Before Booking"><span class="lane-toggle-mark" aria-hidden="true">+</span></button></div>
+          <div class="lane-title-row"><h2 class="lane-title" id="guide-title"><button class="lane-title-toggle" type="button" aria-expanded="false" aria-controls="before-booking-content">What You Should Know Before Booking</button></h2><button class="lane-toggle" type="button" aria-label="Expand What You Should Know Before Booking" aria-expanded="false" aria-controls="before-booking-content" data-lane-label="What You Should Know Before Booking"><span class="lane-toggle-mark" aria-hidden="true">+</span></button></div>
           <p class="lane-intro">Open a subject for the full guidance. The studio policies linked below remain the terms that govern appointments.</p>
         </div>
         <div class="guide-list lane-content" id="before-booking-content" aria-label="Before booking guidance" hidden>
@@ -278,9 +283,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 
     function setLaneOpen(lane, open) {
       var toggle = lane.querySelector(".lane-toggle");
+      var titleToggle = lane.querySelector(".lane-title-toggle");
       var content = document.getElementById(toggle.getAttribute("aria-controls"));
       var mark = toggle.querySelector(".lane-toggle-mark");
       toggle.setAttribute("aria-expanded", String(open));
+      titleToggle.setAttribute("aria-expanded", String(open));
       toggle.setAttribute("aria-label", (open ? "Collapse " : "Expand ") + toggle.dataset.laneLabel);
       content.hidden = !open;
       lane.classList.toggle("is-collapsed", !open);
@@ -289,9 +296,12 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 
     lanes.forEach(function(lane) {
       var toggle = lane.querySelector(".lane-toggle");
+      var titleToggle = lane.querySelector(".lane-title-toggle");
       setLaneOpen(lane, false);
-      toggle.addEventListener("click", function() {
-        setLaneOpen(lane, toggle.getAttribute("aria-expanded") !== "true");
+      [toggle, titleToggle].forEach(function(control) {
+        control.addEventListener("click", function() {
+          setLaneOpen(lane, toggle.getAttribute("aria-expanded") !== "true");
+        });
       });
     });
 

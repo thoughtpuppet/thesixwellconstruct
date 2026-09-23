@@ -58,10 +58,14 @@ test("shared guide matches the inquiry guide subjects and accordion behavior", (
   assert.equal(componentTitles.length, 13);
   assert.deepEqual(componentTitles, chooserTitles);
   assert.match(component, /aria-expanded="false"/);
+  assert.match(component, /class="tattoo-before-booking__title-button"/);
+  assert.match(component, /\[toggle, titleToggle\]\.forEach/);
   assert.match(component, /content\.hidden = !open/);
   assert.match(component, /section\.classList\.toggle\("is-collapsed", !open\)/);
   assert.match(component, /name="' \+ groupName/);
   assert.match(styles, /border: 5px solid var\(--before-booking-ring\)/);
   assert.match(styles, /\.tattoo-before-booking\.is-collapsed/);
+  assert.match(styles, /\.tattoo-before-booking\.is-collapsed \.tattoo-before-booking__toggle \{[\s\S]*?top: auto;[\s\S]*?bottom: 4px;/);
+  assert.match(styles, /\.tattoo-before-booking:hover,[\s\S]*?background: var\(--before-booking-hover\);/);
   assert.match(styles, /@media \(max-width: 780px\)/);
 });

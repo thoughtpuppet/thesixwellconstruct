@@ -73,11 +73,15 @@ test("inquiry guide precedes the unchanged project choices and consultation", ()
   assert.equal((chooser.match(/<details class="guide-item" name="before-booking"/g) || []).length, 13);
   assert.equal((chooser.match(/data-collapsible-lane>/g) || []).length, 1);
   assert.equal((chooser.match(/class="lane-toggle"[^>]*aria-expanded="false"/g) || []).length, 1);
+  assert.equal((chooser.match(/class="lane-title-toggle"[^>]*aria-expanded="false"/g) || []).length, 1);
   assert.equal((chooser.match(/class="guide-list lane-content"[^>]*hidden/g) || []).length, 1);
   assert.doesNotMatch(chooser, /class="(?:path-grid|consult-options) lane-content"/);
   assert.match(chooser, /function setLaneOpen\(lane, open\)[\s\S]*?content\.hidden = !open[\s\S]*?setLaneOpen\(lane, false\)/);
   assert.match(chooser, /function openLaneForHash\(\)[\s\S]*?setLaneOpen\(lane, true\)[\s\S]*?target\.tagName === "DETAILS"/);
   assert.match(chooser, /\.lane-toggle \{ position:absolute; top:4px; right:4px;/);
+  assert.match(chooser, /\.lane\.is-collapsed \.lane-toggle \{ top:auto; bottom:4px; \}/);
+  assert.match(chooser, /\.lane\[data-collapsible-lane\]:hover,\.lane\[data-collapsible-lane\]:focus-within \{ background:var\(--cell-hover\); \}/);
+  assert.match(chooser, /\[toggle, titleToggle\]\.forEach/);
   assert.match(chooser, /\.lane:not\(\.is-collapsed\) > \.lane-content \{ margin-top:58px; \}/);
   assert.match(chooser, /\.lane\.is-collapsed \.lane-intro \{ max-width:none; \}/);
   assert.match(chooser, /<summary>What Happens During Each Session<\/summary>[\s\S]*?approve the design and stencil placement[\s\S]*?payment is taken at the start of each day[\s\S]*?If you need a break, tell me and we'll pause[\s\S]*?review what was completed/);
