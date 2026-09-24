@@ -25,6 +25,8 @@ node_modules
 node_modules/**
 
 # Private and server-side source that must never be served as static assets.
+docs
+docs/**
 .hidden-pages
 .hidden-pages/**
 assets/gallery/peer-amid

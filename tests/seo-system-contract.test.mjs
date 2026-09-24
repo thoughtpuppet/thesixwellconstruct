@@ -152,6 +152,7 @@ test("robots rules exclude operational paths and advertise the absolute sitemap"
 
 test("prototype assets are excluded from publication and the public tattoo policy contains no phone number", () => {
   const ignored = readFileSync(join(ROOT, ".assetsignore"), "utf8");
+  assert.match(ignored, /^docs\/\*\*$/m);
   assert.match(ignored, /^prototypes\/\*\*$/m);
   assert.match(ignored, /^\*prototype\*\.html$/m);
   assert.match(ignored, /^\*preview\*\.html$/m);
