@@ -211,4 +211,5 @@ test("Worker routes robots, sitemap, real hidden 404s, and server SEO transforma
   assert.match(worker, /seoRecordSummary/);
   assert.match(worker, /serveCalendarEventPage/);
   assert.match(worker, /serveMerchRecordPage/);
+  assert.match(worker, /new URL\(`\/api\/archive\/items\/\$\{encodeURIComponent\(slug\)\}`/);
 });

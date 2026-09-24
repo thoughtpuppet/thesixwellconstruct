@@ -1043,7 +1043,7 @@ async function serveArchiveRecordPage(request, env, pathname, assetPath) {
   const parts = normalizePath(pathname).split("/").filter(Boolean);
   const slug = parts[2] || "";
   if (!slug) return notFoundPage(request, env);
-  const apiUrl = new URL(`/api/archive/${encodeURIComponent(slug)}`, request.url);
+  const apiUrl = new URL(`/api/archive/items/${encodeURIComponent(slug)}`, request.url);
   const apiResponse = await handleConstructApi(new Request(apiUrl, { method: "GET", headers: { accept: "application/json" } }), env);
   if (apiResponse.status === 404) return notFoundPage(request, env);
   if (!apiResponse.ok) return apiResponse;
