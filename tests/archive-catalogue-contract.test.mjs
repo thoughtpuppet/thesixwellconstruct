@@ -1232,7 +1232,7 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(sourceSetEditor, /Published automatically makes this source set public\. Draft and Archived keep it internal/);
   assert.match(originThreadEditor, /Published automatically makes this Origin Thread public/);
   assert.match(timelineEditor, /Published automatically makes this timeline public/);
-  assert.match(chapterEditor, /Published automatically makes this chapter public on its timeline/);
+  assert.match(chapterEditor, /Published automatically makes this act public on its timeline/);
 
   assert.match(studio, /publication_state:publicationState,public_visible:publicationState==="published"/);
   assert.match(studio, /state:publicationState,public_visible:publicationState==="published",lead_material_id/);
