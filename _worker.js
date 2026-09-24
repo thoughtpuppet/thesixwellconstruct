@@ -1048,15 +1048,15 @@ async function serveArchiveRecordPage(request, env, pathname, assetPath) {
   if (apiResponse.status === 404) return notFoundPage(request, env);
   if (!apiResponse.ok) return apiResponse;
   const payload = await apiResponse.json();
-  const record = payload.record;
+  const record = payload.record || payload.item || payload.dossier;
   if (!record) return notFoundPage(request, env);
   const assetResponse = await servePublicAsset(request, env, assetPath, { seo: false });
   const origin = canonicalOrigin(env, request.url);
-  const canonicalUrl = `${origin}${record.canonicalRoute || record.canonical_route || normalizeSeoPath(pathname)}`;
+  const canonicalUrl = `${origin}${record.archiveRoute || record.archive_route || normalizeSeoPath(pathname)}`;
   const recordTitle = record.title || record.name || slug.replace(/-/g, " ");
   const title = `${recordTitle} · Living Archive · the six.well construct`;
   const description = record.orientation || record.summary || record.story || `A published record from the living Archive of the Six.Well Construct.`;
-  const image = record.media?.[0]?.url || record.image_url || "";
+  const image = record.primary_media?.url || record.media?.[0]?.url || record.image_url || record.imageUrl || "";
   const seo = {
     title,
     description,

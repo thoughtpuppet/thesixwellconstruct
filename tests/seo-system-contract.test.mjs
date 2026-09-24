@@ -17,6 +17,7 @@ import {
   staticSeoPage,
   tattooParlorStructuredData,
 } from "../functions/api/seo/_lib.js";
+import worker from "../_worker.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const ORIGIN = "https://thesixwellconstruct.com";
@@ -203,6 +204,27 @@ test("public person, event, calendar, and location pages expose crawlable distin
   assert.doesNotMatch(location, /(?:tel:|telephone|opening hours|latitude|longitude)/i);
 });
 
+test("a published Archive dossier is server-rendered at its sitemap route", async () => {
+  const database = migratedDatabase();
+  const template = readFileSync(join(ROOT, "archive", "records", "index.html"), "utf8");
+  const env = {
+    PUBLIC_SITE_URL: ORIGIN,
+    SUBMISSIONS_DB: new LocalD1(database),
+    ASSETS: {
+      async fetch() {
+        return new Response(template, { status: 200, headers: { "content-type": "text/html; charset=utf-8" } });
+      },
+    },
+  };
+  const response = await worker.fetch(new Request(`${ORIGIN}/archive/records/lostmarbles/`), env, {});
+  const html = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(html, /<title>AM I LOSING MY MARBLES OR HIDING THEM\? · Living Archive/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/thesixwellconstruct\.com\/archive\/records\/lostmarbles\/">/);
+  assert.match(html, /<meta name="robots" content="index,follow(?:,[^"]+)?">/);
+  assert.match(html, /<script id="archive-record-seo-data" type="application\/json">/);
+});
+
 test("Worker routes robots, sitemap, real hidden 404s, and server SEO transformations", () => {
   const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
   assert.match(worker, /url\.pathname === "\/robots\.txt"/);
@@ -212,4 +234,6 @@ test("Worker routes robots, sitemap, real hidden 404s, and server SEO transforma
   assert.match(worker, /serveCalendarEventPage/);
   assert.match(worker, /serveMerchRecordPage/);
   assert.match(worker, /new URL\(`\/api\/archive\/items\/\$\{encodeURIComponent\(slug\)\}`/);
+  assert.match(worker, /payload\.record \|\| payload\.item \|\| payload\.dossier/);
+  assert.match(worker, /record\.archiveRoute \|\| record\.archive_route \|\| normalizeSeoPath\(pathname\)/);
 });
