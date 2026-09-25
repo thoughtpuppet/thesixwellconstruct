@@ -881,7 +881,7 @@
 
   <!-- HEADER -->
   <header class="top" style="justify-content:flex-end;">
-    <button class="cart-toggle" id="cartToggle" type="button" aria-label="open cart">
+    <button class="cart-toggle" id="cartToggle" type="button" aria-label="open cart" data-copy-id="live-merch-button-1">
       <span class="cart-label">cart</span>
       <span class="cart-count" id="cartCount">0</span>
     </button>
@@ -907,7 +907,7 @@
       <div class="band-content">
         <div class="band-lockup">
           <p class="band-kicker"><br></p>
-          <h2 class="band-title" id="sixwell-brand-title"><span style="font-size: 64px;"><span style="color: rgb(58, 36, 24)"><span style="color: rgba(240, 143, 0, 0.25)"><span style="color: rgb(58, 36, 24)"><span style="color: rgba(240, 143, 0, 0.25)"><span style="color: rgba(252, 184, 103, 0.64)"><span style="color: rgb(252, 184, 103)">six.</span></span></span></span></span></span></span><span style="font-size: 64px;"><span style="color: rgb(109, 61, 21)"><span style="color: rgb(109, 61, 21)"><span style="color: rgb(252, 184, 103)">we</span></span></span></span><span style="font-size: 64px;"><span style="color: rgb(252, 184, 103)">ll</span></span></h2>
+          <h2 class="band-title" id="sixwell-brand-title" data-copy-id="live-merch-h2-1"><span style="font-size: 64px;"><span style="color: rgb(58, 36, 24)"><span style="color: rgba(240, 143, 0, 0.25)"><span style="color: rgb(58, 36, 24)"><span style="color: rgba(240, 143, 0, 0.25)"><span style="color: rgba(252, 184, 103, 0.64)"><span style="color: rgb(252, 184, 103)">six.</span></span></span></span></span></span></span><span style="font-size: 64px;"><span style="color: rgb(109, 61, 21)"><span style="color: rgb(109, 61, 21)"><span style="color: rgb(252, 184, 103)">we</span></span></span></span><span style="font-size: 64px;"><span style="color: rgb(252, 184, 103)">ll</span></span></h2>
         </div>
         <p class="band-copy" data-copy-id="merch-brand-copy">the clothing and objects &nbsp;<span style="color: rgb(109, 61, 21)">medium</span> of the construct began as a <span style="color: rgb(240, 143, 0)">clothing-based</span> <span style="color: rgb(0, 57, 189)">installation</span> known as <span style="color: rgb(252, 184, 103)">six.well</span>.</p>
         <div class="band-actions">
@@ -917,12 +917,12 @@
     </section>
 
     <nav class="merch-context-tabs" aria-label="Merch context">
-      <button type="button" class="merch-context-tab active" data-merch-context="current" aria-pressed="true">Current</button>
-      <button type="button" class="merch-context-tab" data-merch-context="from_archive" aria-pressed="false">From the Archive</button>
+      <button type="button" class="merch-context-tab active" data-merch-context="current" aria-pressed="true" data-copy-id="live-merch-button-2">Current</button>
+      <button type="button" class="merch-context-tab" data-merch-context="from_archive" aria-pressed="false" data-copy-id="live-merch-button-3">From the Archive</button>
     </nav>
     <section class="from-archive-intro" data-from-archive-intro hidden aria-labelledby="from-archive-title">
-      <figure><img src="/api/gallery/media/MED-000056?asset=placeholder" alt="SIX.WELL editorial portrait used as temporary atmosphere for From the Archive." loading="lazy"><figcaption>Temporary editorial image · MED-000056. This image is not evidence for any individual garment.</figcaption></figure>
-      <div><span class="card-plaque">Sales context</span><h2 id="from-archive-title">From the Archive</h2><p>Past garments and one-of-one objects remain part of the record while they are offered. Sold pieces stay visible, with purchasing removed.</p></div>
+      <figure><img src="/api/gallery/media/MED-000056?asset=placeholder" alt="SIX.WELL editorial portrait used as temporary atmosphere for From the Archive." loading="lazy"><figcaption data-copy-id="live-merch-figcaption-1">Temporary editorial image · MED-000056. This image is not evidence for any individual garment.</figcaption></figure>
+      <div><span class="card-plaque" data-copy-id="live-merch-span-1">Sales context</span><h2 id="from-archive-title" data-copy-id="live-merch-h2-2">From the Archive</h2><p data-copy-id="live-merch-p-5">Past garments and one-of-one objects remain part of the record while they are offered. Sold pieces stay visible, with purchasing removed.</p></div>
     </section>
     <!-- filter rows — row 1: source medium, row 2: type (only when source active) -->
     <nav class="filters" id="filters" aria-label="merch filters">
@@ -930,47 +930,47 @@
         <option value="all">filter by source</option>
       </select>
       <div class="source-filter-menu" id="sourceFilterMenu">
-        <button class="source-filter-trigger" id="sourceFilterTrigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="sourceFilterOptions">
+        <button class="source-filter-trigger" id="sourceFilterTrigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="sourceFilterOptions" data-copy-id="live-merch-button-4">
           <span class="source-filter-value" id="sourceFilterValue">filter by source</span>
           <span class="source-filter-arrow" aria-hidden="true"></span>
         </button>
-        <ul class="source-filter-options" id="sourceFilterOptions" role="listbox" aria-label="filter by source"></ul>
+        <ul class="source-filter-options" id="sourceFilterOptions" role="listbox" aria-label="filter by source" data-live-edit-owner="managed" data-live-edit-label="Studio-managed product sources" data-live-edit-owner-href="/studio/submissions/#merch/products" data-live-edit-owner-label="Open Merch Products in Studio"></ul>
       </div>
-      <div class="filter-row" id="sourceRow"></div>
-      <div class="filter-row" id="typeRow"></div>
+      <div class="filter-row" id="sourceRow" data-live-edit-owner="managed" data-live-edit-label="Studio-managed product source filters" data-live-edit-owner-href="/studio/submissions/#merch/products" data-live-edit-owner-label="Open Merch Products in Studio"></div>
+      <div class="filter-row" id="typeRow" data-live-edit-owner="managed" data-live-edit-label="Studio-managed product type filters" data-live-edit-owner-href="/studio/submissions/#merch/products" data-live-edit-owner-label="Open Merch Products in Studio"></div>
     </nav>
 
     <!-- product grid — rendered by JS -->
-    <section class="grid" id="productGrid"></section>
+    <section class="grid" id="productGrid" data-live-edit-owner="managed" data-live-edit-label="Studio-managed merch products" data-live-edit-owner-href="/studio/submissions/#merch/products" data-live-edit-owner-label="Open Merch Products in Studio"></section>
   </main>
 
   <!-- FOOTER -->
   <footer class="bottom">
     <p data-copy-id="merch-footer-copyright">&copy; the six.well construct</p>
-    <a href="/home/">return to construct</a>
+    <a href="/home/" data-copy-id="live-merch-a-3">return to construct</a>
   </footer>
 
   <!-- CART DRAWER -->
   <div class="cart-overlay" id="cartOverlay"></div>
   <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
     <div class="drawer-header">
-      <span class="title">cart</span>
-      <button class="drawer-close" id="drawerClose" type="button" aria-label="close cart">×</button>
+      <span class="title" data-copy-id="live-merch-span-2">cart</span>
+      <button class="drawer-close" id="drawerClose" type="button" aria-label="close cart" data-copy-id="live-merch-button-5">×</button>
     </div>
     <div class="drawer-items" id="drawerItems">
-      <p class="drawer-empty">cart is empty</p>
+      <p class="drawer-empty" data-copy-id="live-merch-p-7">cart is empty</p>
     </div>
     <div class="drawer-footer">
       <div class="subtotal">
-        <span class="subtotal-label">subtotal</span>
-        <span class="subtotal-val" id="subtotal">$0</span>
+        <span class="subtotal-label" data-copy-id="live-merch-span-3">subtotal</span>
+        <span class="subtotal-val" id="subtotal" data-copy-id="live-merch-span-4">$0</span>
       </div>
       <!-- CHECKOUT INTEGRATION POINT
            replace click handler with Shopify SDK checkout.create()
            or hosted-checkout redirect built from cart line items -->
-      <button class="checkout-btn" id="checkoutBtn" type="button" disabled>proceed to checkout</button>
+      <button class="checkout-btn" id="checkoutBtn" type="button" disabled data-copy-id="live-merch-button-6">proceed to checkout</button>
       <p class="drawer-status" id="checkoutStatus" aria-live="polite"></p>
-      <p class="drawer-note">shipping &amp; taxes calculated at checkout</p>
+      <p class="drawer-note" data-copy-id="live-merch-p-9">shipping &amp; taxes calculated at checkout</p>
     </div>
   </aside>
 

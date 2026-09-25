@@ -57,6 +57,10 @@
   ];
 
   function render(host, index) {
+    if (!host.hasAttribute("data-live-edit-owner")) {
+      host.setAttribute("data-live-edit-owner", "preview");
+      host.setAttribute("data-live-edit-label", "Shared tattoo before-booking guide");
+    }
     var baseId = host.id || "tattoo-before-booking-" + (index + 1);
     var contentId = baseId + "-content";
     var headingId = baseId + "-title";

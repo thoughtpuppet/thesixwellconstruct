@@ -302,11 +302,11 @@
     if (owner === 'preview') {
       return ownerTarget(element, 'preview');
     }
+    var ownerContainer = element && element.parentElement && element.parentElement.closest('[data-live-edit-owner="managed"], [data-live-edit-owner="preview"]');
+    if (ownerContainer) return ownerTarget(ownerContainer, ownerContainer.getAttribute('data-live-edit-owner'));
     if (copyId) {
       return { kind: 'html', copyId: copyId, label: element.getAttribute('data-live-edit-label') || 'Page HTML', applyable: true };
     }
-    var ownerContainer = element && element.parentElement && element.parentElement.closest('[data-live-edit-owner="managed"], [data-live-edit-owner="preview"]');
-    if (ownerContainer) return ownerTarget(ownerContainer, ownerContainer.getAttribute('data-live-edit-owner'));
     return { kind: 'preview', label: 'Preview-only element without a stable copy ID', applyable: false };
   }
 

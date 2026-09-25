@@ -83,17 +83,17 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
   <main>
     <div class="layout">
       <section class="site-hero site-hero--supporting">
-        <h1 class="gate-title hero-title">Application Path.</h1>
-        <p class="gate-body hero-descriptor">Special Projects applications are for concept-driven, long-form, symbolic, collaborative, and experimental tattoo work.</p>
-        <p class="gate-body">Special Projects move through review before booking. If approved, you will receive a private token booking link and next steps.</p>
+        <h1 class="gate-title hero-title" data-copy-id="live-tattoos-special-projects-apply-h1-1">Application Path.</h1>
+        <p class="gate-body hero-descriptor" data-copy-id="live-tattoos-special-projects-apply-p-1">Special Projects applications are for concept-driven, long-form, symbolic, collaborative, and experimental tattoo work.</p>
+        <p class="gate-body" data-copy-id="live-tattoos-special-projects-apply-p-2">Special Projects move through review before booking. If approved, you will receive a private token booking link and next steps.</p>
         <div class="review-panel">
-          <p class="review-label">Application Frame</p>
-          <p class="review-copy">This application gives larger symbolic projects room for review before booking. Share the project title, body placement, scale, conceptual direction, timeline, budget range, and references that describe feeling, source, or atmosphere.</p>
-          <a class="custom-route" href="/tattoos/inquire/custom/">No matching open call? Use Custom &rarr;</a>
+          <p class="review-label" data-copy-id="live-tattoos-special-projects-apply-p-3">Application Frame</p>
+          <p class="review-copy" data-copy-id="live-tattoos-special-projects-apply-p-4">This application gives larger symbolic projects room for review before booking. Share the project title, body placement, scale, conceptual direction, timeline, budget range, and references that describe feeling, source, or atmosphere.</p>
+          <a class="custom-route" href="/tattoos/inquire/custom/" data-copy-id="live-tattoos-special-projects-apply-a-1">No matching open call? Use Custom &rarr;</a>
         </div>
       </section>
       <section class="form-panel" aria-label="Special Projects application form">
-        <h2 class="form-title">Apply for Review</h2>
+        <h2 class="form-title" data-copy-id="live-tattoos-special-projects-apply-h2-1">Apply for Review</h2>
         <div data-tattoo-before-booking></div>
         <form class="public-form" id="specialProjectForm" data-tattoo-project-planning method="POST" action="/api/submissions" enctype="multipart/form-data">
           <input type="hidden" name="type" value="special_project">
@@ -104,7 +104,7 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
           <input type="hidden" name="subject" value="New Art.Pill Special Projects application">
           <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
           <div class="field-grid">
-            <h3 class="tattoo-planning-heading">About you</h3>
+            <h3 class="tattoo-planning-heading" data-copy-id="live-tattoos-special-projects-apply-h3-1">About you</h3>
             <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
             <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
             <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
@@ -112,20 +112,20 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
             <div class="field"><label for="dob">Date of birth</label><input id="dob" name="dob" type="date" autocomplete="bday" required></div>
             <div class="field"><label for="instagram">Instagram (optional)</label><input id="instagram" name="instagram" placeholder="@"></div>
             <div class="field"><label for="preferred_contact_method">Preferred contact (optional)</label><select id="preferred_contact_method" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
-            <fieldset class="field full tattoo-planning-fieldset"><legend>Have you been tattooed by me before?</legend><div class="radio-group"><label class="radio-option"><input type="radio" name="previous_client" value="yes"><span>Yes</span></label><label class="radio-option"><input type="radio" name="previous_client" value="no"><span>No</span></label></div></fieldset>
-            <fieldset class="field full tattoo-planning-fieldset"><legend>Are you traveling to Atlanta? <span class="required-mark">*</span></legend><div class="radio-group"><label class="radio-option"><input type="radio" name="traveling_to_atlanta" value="yes" required><span>Yes</span></label><label class="radio-option"><input type="radio" name="traveling_to_atlanta" value="no"><span>No</span></label></div></fieldset>
-            <h3 class="tattoo-planning-heading">Your project</h3>
+            <fieldset class="field full tattoo-planning-fieldset"><legend>Have you been tattooed by me before?</legend><div class="radio-group"><label class="radio-option"><input type="radio" name="previous_client" value="yes"><span data-copy-id="live-tattoos-special-projects-apply-span-1">Yes</span></label><label class="radio-option"><input type="radio" name="previous_client" value="no"><span data-copy-id="live-tattoos-special-projects-apply-span-2">No</span></label></div></fieldset>
+            <fieldset class="field full tattoo-planning-fieldset"><legend>Are you traveling to Atlanta? <span class="required-mark" data-copy-id="live-tattoos-special-projects-apply-span-3">*</span></legend><div class="radio-group"><label class="radio-option"><input type="radio" name="traveling_to_atlanta" value="yes" required><span data-copy-id="live-tattoos-special-projects-apply-span-4">Yes</span></label><label class="radio-option"><input type="radio" name="traveling_to_atlanta" value="no"><span data-copy-id="live-tattoos-special-projects-apply-span-5">No</span></label></div></fieldset>
+            <h3 class="tattoo-planning-heading" data-copy-id="live-tattoos-special-projects-apply-h3-2">Your project</h3>
             <div class="field full">
               <label for="project_title">Special Project call</label>
               <select id="project_title" name="project_title" required>
                 <option value="">Loading Studio-managed calls&hellip;</option>
               </select>
             </div>
-            <div class="field full"><p class="application-state" id="applicationState" aria-live="polite">Checking which Special Project calls are open.</p></div>
+            <div class="field full"><p class="application-state" id="applicationState" aria-live="polite" data-copy-id="live-tattoos-special-projects-apply-p-5">Checking which Special Project calls are open.</p></div>
             <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" required></div>
-            <div class="field"><label for="scale">Estimated size <span class="required-mark">*</span></label><select id="scale" name="scale" data-planning-size required><option value="">Choose the closest size</option><option value="small">Small · 2 in or less</option><option value="medium">Medium · over 2–5 in</option><option value="large">Large · over 5–8 in</option><option value="xl">XL · over 8 in, one area</option><option value="large_scale">Large-scale work / body-area coverage</option></select><p class="file-note">I confirm the final size and session structure after review.</p></div>
+            <div class="field"><label for="scale">Estimated size <span class="required-mark" data-copy-id="live-tattoos-special-projects-apply-span-6">*</span></label><select id="scale" name="scale" data-planning-size required><option value="">Choose the closest size</option><option value="small">Small · 2 in or less</option><option value="medium">Medium · over 2–5 in</option><option value="large">Large · over 5–8 in</option><option value="xl">XL · over 8 in, one area</option><option value="large_scale">Large-scale work / body-area coverage</option></select><p class="file-note" data-copy-id="live-tattoos-special-projects-apply-p-6">I confirm the final size and session structure after review.</p></div>
             <div class="field"><label for="estimated_dimensions">Estimated dimensions (optional)</label><input id="estimated_dimensions" name="estimated_dimensions" placeholder="Example: about 5 × 7 in"></div>
-            <div class="field full" data-planning-coverage-group hidden><label for="body_area_coverage">Which area would it cover? <span class="required-mark">*</span></label><select id="body_area_coverage" name="body_area_coverage" data-planning-coverage data-required-when-visible="true" disabled><option value="">Choose the closest fit</option><optgroup label="Arm"><option>¼ arm sleeve</option><option>½ arm sleeve</option><option>Full arm sleeve</option></optgroup><optgroup label="Leg"><option>¼ leg sleeve</option><option>½ leg sleeve</option><option>Full leg sleeve</option></optgroup><optgroup label="Back"><option>Half back</option><option>Full back</option><option>Spine</option></optgroup><optgroup label="Front and neck"><option>Chest / front torso</option><option>Neck · front</option><option>Neck · back</option><option>Neck · side</option><option>Full neck</option></optgroup><option value="other">Other area or combination</option></select></div>
+            <div class="field full" data-planning-coverage-group hidden><label for="body_area_coverage">Which area would it cover? <span class="required-mark" data-copy-id="live-tattoos-special-projects-apply-span-7">*</span></label><select id="body_area_coverage" name="body_area_coverage" data-planning-coverage data-required-when-visible="true" disabled><option value="">Choose the closest fit</option><optgroup label="Arm"><option>¼ arm sleeve</option><option>½ arm sleeve</option><option>Full arm sleeve</option></optgroup><optgroup label="Leg"><option>¼ leg sleeve</option><option>½ leg sleeve</option><option>Full leg sleeve</option></optgroup><optgroup label="Back"><option>Half back</option><option>Full back</option><option>Spine</option></optgroup><optgroup label="Front and neck"><option>Chest / front torso</option><option>Neck · front</option><option>Neck · back</option><option>Neck · side</option><option>Full neck</option></optgroup><option value="other">Other area or combination</option></select></div>
             <div class="field full" data-planning-other-coverage-group hidden><label for="body_area_coverage_other">Describe the area</label><input id="body_area_coverage_other" name="body_area_coverage_other" disabled></div>
             <div class="field full">
               <label for="budget_range">What total project budget are you comfortable working within?</label>
@@ -142,35 +142,35 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
               <div class="tattoo-budget-specific" id="specificBudgetField" hidden aria-hidden="true">
                 <label for="budget_amount_dollars">Specific project budget (USD)</label>
                 <input id="budget_amount_dollars" name="budget_amount_dollars" type="number" min="150" step="1" inputmode="numeric" placeholder="Minimum $150" disabled>
-                <p class="file-note">Enter a whole-dollar amount of at least $150. This is still a comfort budget for review, not your final quote.</p>
+                <p class="file-note" data-copy-id="live-tattoos-special-projects-apply-p-7">Enter a whole-dollar amount of at least $150. This is still a comfort budget for review, not your final quote.</p>
               </div>
-              <p class="file-note" id="budgetRangeHelp">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.</p>
+              <p class="file-note" id="budgetRangeHelp" data-copy-id="live-tattoos-special-projects-apply-p-8">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.</p>
             </div>
-            <h3 class="tattoo-planning-heading">When can you come in?</h3>
+            <h3 class="tattoo-planning-heading" data-copy-id="live-tattoos-special-projects-apply-h3-3">When can you come in?</h3>
             <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline"></div>
-            <fieldset class="field full tattoo-planning-fieldset" data-planning-preference-group hidden><legend>If this needs more than one appointment, what would work best for you?</legend><div class="radio-group"><label class="radio-option"><input type="radio" name="multi_session_preference" value="back_to_back" disabled><span>Back-to-back days in one trip</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="separate_healed_visits" disabled><span>Separate visits with healing time in between</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="either" disabled><span>Either works</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="discuss" disabled><span>Need to discuss</span></label></div><p class="file-note">Your preference informs review; artist-set project terms still take priority.</p></fieldset>
+            <fieldset class="field full tattoo-planning-fieldset" data-planning-preference-group hidden><legend>If this needs more than one appointment, what would work best for you?</legend><div class="radio-group"><label class="radio-option"><input type="radio" name="multi_session_preference" value="back_to_back" disabled><span data-copy-id="live-tattoos-special-projects-apply-span-8">Back-to-back days in one trip</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="separate_healed_visits" disabled><span data-copy-id="live-tattoos-special-projects-apply-span-9">Separate visits with healing time in between</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="either" disabled><span data-copy-id="live-tattoos-special-projects-apply-span-10">Either works</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="discuss" disabled><span data-copy-id="live-tattoos-special-projects-apply-span-11">Need to discuss</span></label></div><p class="file-note" data-copy-id="live-tattoos-special-projects-apply-p-9">Your preference informs review; artist-set project terms still take priority.</p></fieldset>
             <div class="field" data-planning-travel-detail hidden><label for="can_return_for_healed_visit">Could you return for another trip if needed?</label><select id="can_return_for_healed_visit" name="can_return_for_healed_visit" disabled><option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="unsure">Not sure</option></select></div>
             <div class="field" data-planning-travel-detail hidden><label for="days_per_trip">How many appointment days could you tolerate in one trip?</label><select id="days_per_trip" name="days_per_trip" disabled><option value="">Choose one</option><option value="1">1 day</option><option value="2">2 days</option><option value="3">3 days</option><option value="4_plus">4 or more days</option><option value="unsure">Not sure</option></select></div>
             <div class="field" data-planning-travel-detail hidden><label for="travel_origin">Traveling from (optional)</label><input id="travel_origin" name="travel_origin" placeholder="City, state, or country" disabled></div>
             <p class="tattoo-planning-note" data-planning-feedback hidden aria-live="polite"></p>
             <div class="field full"><label for="reference_links">Reference links (optional)</label><textarea id="reference_links" name="reference_links" placeholder="Paste links if your references already live online."></textarea></div>
-            <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
+            <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note" data-copy-id="live-tattoos-special-projects-apply-p-11">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
             <div class="field full"><label for="message">Concept direction</label><textarea id="message" name="message" required></textarea></div>
           </div>
-          <label class="form-check"><input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required><span class="form-check__label">I confirm that I am 18 years of age or older.</span></label>
-          <label class="form-check"><input class="form-check__input" type="checkbox" name="review_consent" value="yes" required><span class="form-check__label">I understand the final image is developed through shared symbolic direction while remaining rooted in the artist's existing body of work.</span></label>
-          <label class="form-check"><input class="form-check__input" type="checkbox" name="policies_read" value="yes" required><span class="form-check__label">I have read <a href="/tattoos/inquire/#terms">What You Should Know Before Booking: Terms &amp; Conditions</a> and the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</span></label>
+          <label class="form-check"><input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required><span class="form-check__label" data-copy-id="live-tattoos-special-projects-apply-span-12">I confirm that I am 18 years of age or older.</span></label>
+          <label class="form-check"><input class="form-check__input" type="checkbox" name="review_consent" value="yes" required><span class="form-check__label" data-copy-id="live-tattoos-special-projects-apply-span-13">I understand the final image is developed through shared symbolic direction while remaining rooted in the artist's existing body of work.</span></label>
+          <label class="form-check"><input class="form-check__input" type="checkbox" name="policies_read" value="yes" required><span class="form-check__label" data-copy-id="live-tattoos-special-projects-apply-span-14">I have read <a href="/tattoos/inquire/#terms">What You Should Know Before Booking: Terms &amp; Conditions</a> and the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</span></label>
           <div class="submit-row">
-            <button class="cta-primary" type="submit" id="submitBtn">Submit Application</button>
-            <p class="form-status" id="formStatus">Inquiry received. Booking confirmation comes after review.</p>
+            <button class="cta-primary" type="submit" id="submitBtn" data-copy-id="live-tattoos-special-projects-apply-button-1">Submit Application</button>
+            <p class="form-status" id="formStatus" data-copy-id="live-tattoos-special-projects-apply-p-12">Inquiry received. Booking confirmation comes after review.</p>
           </div>
         </form>
       </section>
     </div>
   </main>
   <footer class="bottom">
-    <a href="/tattoos/special-projects/">&larr; back to Special Projects</a>
-    <a href="/home/">the six.well construct</a>
+    <a href="/tattoos/special-projects/" data-copy-id="live-tattoos-special-projects-apply-a-2">&larr; back to Special Projects</a>
+    <a href="/home/" data-copy-id="live-tattoos-special-projects-apply-a-3">the six.well construct</a>
   </footer>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>

@@ -46,11 +46,12 @@ function cleanText(value) {
 }
 
 function attribute(attributes, name) {
-  const match = attributes.match(new RegExp(`\\b${name}=["']([^"']*)["']`, "i"));
+  const match = attributes.match(new RegExp(`(?:^|\\s)${name}=["']([^"']*)["']`, "i"));
   return match ? match[1] : "";
 }
 
 function inventory(html) {
+  html = html.replace(/\sdata-(?:copy-id|live-edit-[\w-]+)=(?:"[^"]*"|'[^']*')/gi, "");
   const body = (html.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i) || ["", html])[1];
   return {
     title: (html.match(/<title>([\s\S]*?)<\/title>/i) || ["", ""])[1].trim(),

@@ -45,6 +45,7 @@ const specialProjects = read("tattoos/special-projects/index.html");
 const flashClaim = read("tattoos/flash/claim/index.html");
 const booking = read("booking/index.html");
 const studio = read("studio/submissions/index.html");
+const tattooPolicies = read("tattoos/policies/index.html");
 
 assert.match(editor, /__tools\/live-editor\/context/);
 assert.match(editor, /__tools\/live-editor\/apply/);
@@ -55,6 +56,10 @@ assert.match(editor, /data-live-edit-applyable/);
 assert.match(editor, /function toggleCoverage\(/);
 assert.match(editor, /Unsupported targets stay navigable and cannot be edited accidentally/);
 assert.match(editor, /parentElement\.closest\('\[data-live-edit-owner="managed"\], \[data-live-edit-owner="preview"\]'\)/);
+assert.ok(
+  editor.indexOf("var ownerContainer = element && element.parentElement") < editor.indexOf("if (copyId)"),
+  "an explicit managed or preview container must override stale nested copy IDs",
+);
 assert.match(editor, /data-live-edit-owner-href/);
 assert.match(editor, /coverage-owner-link/);
 assert.match(editor, /function toggleHistory\(/);
@@ -71,6 +76,7 @@ assert.match(server, /live-editor-backups/);
 assert.match(server, /undoLiveEditorApply/);
 assert.match(server, /persistLiveEditorRevision/);
 assert.match(server, /live-editor-history/);
+assert.match(server, /__tools\/live-editor\/pages/);
 assert.match(server, /restoreLiveEditorRevision/);
 assert.match(server, /isOriginalBaseline/);
 assert.match(server, /resolved\.startsWith\(`\$\{root\}\$\{path\.sep\}`\)/);
@@ -93,5 +99,11 @@ assert.match(booking, /id="bookingApp"[^>]+data-live-edit-owner="managed"/);
 assert.match(booking, /data-live-edit-owner-href="\/studio\/submissions\/#tattoo\/appointments"/);
 assert.match(studio, /function studioOwnerViewFromLocation\(\)/);
 assert.match(studio, /appointments\|flash\|special-projects/);
+assert.match(tattooPolicies, /data-copy-id="tattoo-policies-title"/);
+assert.match(tattooPolicies, /data-copy-id="tattoo-policies-descriptor"/);
+assert.match(tattooPolicies, /data-copy-id="tattoo-policies-design-direction"/);
+assert.match(tattooPolicies, /data-copy-id="tattoo-policies-final-payment"/);
+assert.match(tattooPolicies, /data-copy-id="tattoo-policies-questions-copy"/);
+assert.match(tattooPolicies, /data-copy-id="tattoo-policies-footer-return"/);
 
 console.log("live text editor contract tests passed");

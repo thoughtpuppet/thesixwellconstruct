@@ -116,11 +116,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   <header class="top"></header>
   <main>
     <nav class="breadcrumb" aria-label="breadcrumb">
-      <a href="/home/">construct</a>
-      <span class="breadcrumb-sep">:</span>
-      <a class="breadcrumb-link" href="/tattoos/flash/">Flash</a>
-      <span class="breadcrumb-sep">:</span>
-      <span class="breadcrumb-current">Claim</span>
+      <a href="/home/" data-copy-id="live-tattoos-flash-claim-a-1">construct</a>
+      <span class="breadcrumb-sep" data-copy-id="live-tattoos-flash-claim-span-1">:</span>
+      <a class="breadcrumb-link" href="/tattoos/flash/" data-copy-id="live-tattoos-flash-claim-a-2">Flash</a>
+      <span class="breadcrumb-sep" data-copy-id="live-tattoos-flash-claim-span-2">:</span>
+      <span class="breadcrumb-current" data-copy-id="live-tattoos-flash-claim-span-3">Claim</span>
     </nav>
     <div class="layout">
       <section class="site-hero site-hero--supporting">
@@ -154,7 +154,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         <h2 class="form-title" data-copy-id="flash-claim-form-title">Submit Claim</h2>
         <p class="form-note" data-copy-id="flash-claim-form-note">Available flash only. If you are looking for a custom variation, use the standard tattoo inquiry instead.</p>
         <div data-tattoo-before-booking data-live-edit-owner="preview" data-live-edit-label="Shared tattoo before-booking guide"></div>
-        <form class="public-form" id="flashClaimForm" data-tattoo-project-planning data-tattoo-request-review method="POST" action="/api/submissions" enctype="multipart/form-data">
+        <form class="public-form" id="flashClaimForm" data-tattoo-project-planning data-tattoo-request-review method="POST" action="/api/submissions" enctype="multipart/form-data" data-live-edit-owner="preview" data-live-edit-label="Operational Flash claim flow">
           <input type="hidden" name="type" value="flash_claim">
           <input type="hidden" name="inquiry_flow_version" value="2">
           <input type="hidden" name="source_path" value="/tattoos/flash/claim/">
@@ -185,8 +185,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field"><label for="dob">Date of birth</label><input id="dob" name="dob" type="date" autocomplete="bday" required></div>
             <div class="field"><label for="instagram">Instagram (optional)</label><input id="instagram" name="instagram" placeholder="@"></div>
             <div class="field"><label for="preferred_contact_method">Preferred contact (optional)</label><select id="preferred_contact_method" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
-            <fieldset class="field full tattoo-planning-fieldset"><legend>Have you been tattooed by me before?</legend><div class="radio-group"><label class="radio-option"><input type="radio" name="previous_client" value="yes"><span>Yes</span></label><label class="radio-option"><input type="radio" name="previous_client" value="no"><span>No</span></label></div></fieldset>
-            <fieldset class="field full tattoo-planning-fieldset"><legend>Are you traveling to Atlanta? <span class="required-mark">*</span></legend><div class="radio-group"><label class="radio-option"><input type="radio" name="traveling_to_atlanta" value="yes" required data-review-label="Traveling to Atlanta"><span>Yes</span></label><label class="radio-option"><input type="radio" name="traveling_to_atlanta" value="no"><span>No</span></label></div></fieldset>
+            <fieldset class="field full tattoo-planning-fieldset"><legend>Have you been tattooed by me before?</legend><div class="radio-group"><label class="radio-option"><input type="radio" name="previous_client" value="yes"><span data-copy-id="live-tattoos-flash-claim-span-4">Yes</span></label><label class="radio-option"><input type="radio" name="previous_client" value="no"><span data-copy-id="live-tattoos-flash-claim-span-5">No</span></label></div></fieldset>
+            <fieldset class="field full tattoo-planning-fieldset"><legend>Are you traveling to Atlanta? <span class="required-mark" data-copy-id="live-tattoos-flash-claim-span-6">*</span></legend><div class="radio-group"><label class="radio-option"><input type="radio" name="traveling_to_atlanta" value="yes" required data-review-label="Traveling to Atlanta"><span data-copy-id="live-tattoos-flash-claim-span-7">Yes</span></label><label class="radio-option"><input type="radio" name="traveling_to_atlanta" value="no"><span data-copy-id="live-tattoos-flash-claim-span-8">No</span></label></div></fieldset>
             <h3 class="tattoo-planning-heading" data-copy-id="flash-claim-design-heading"><span class="form-section-kicker">Chosen work</span>Which flash design?</h3>
             <p class="form-section-intro" data-copy-id="flash-claim-design-intro">The selected design and its published size or session terms carry into this claim. Those terms take priority over your estimate.</p>
             <div class="field full">
@@ -203,8 +203,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             </section>
             <div class="field" id="placementField"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="Example: left forearm" required data-review-label="Placement"></div>
             <div class="field" id="scaleField"><label for="scale">Estimated size note (optional)</label><input id="scale" name="scale" placeholder="Example: palm-size, 5 in"></div>
-            <div class="field"><label for="estimated_size">Estimated size (optional)</label><select id="estimated_size" name="estimated_size" data-planning-size data-review-label="Estimated size"><option value="">Choose the closest size</option><option value="small">Small · 2 in or less</option><option value="medium">Medium · over 2–5 in</option><option value="large">Large · over 5–8 in</option><option value="xl">XL · over 8 in, one area</option><option value="large_scale">Large-scale work / body-area coverage</option></select><p class="file-note">The design's published size and session terms take priority over this estimate.</p></div>
-            <div class="field full" data-planning-coverage-group hidden><label for="body_area_coverage">Which area would it cover? <span class="required-mark">*</span></label><select id="body_area_coverage" name="body_area_coverage" data-planning-coverage data-required-when-visible="true" data-review-label="Body-area coverage" disabled><option value="">Choose the closest fit</option><optgroup label="Arm"><option>¼ arm sleeve</option><option>½ arm sleeve</option><option>Full arm sleeve</option></optgroup><optgroup label="Leg"><option>¼ leg sleeve</option><option>½ leg sleeve</option><option>Full leg sleeve</option></optgroup><optgroup label="Back"><option>Half back</option><option>Full back</option><option>Spine</option></optgroup><optgroup label="Front and neck"><option>Chest / front torso</option><option>Neck · front</option><option>Neck · back</option><option>Neck · side</option><option>Full neck</option></optgroup><option value="other">Other area or combination</option></select></div>
+            <div class="field"><label for="estimated_size">Estimated size (optional)</label><select id="estimated_size" name="estimated_size" data-planning-size data-review-label="Estimated size"><option value="">Choose the closest size</option><option value="small">Small · 2 in or less</option><option value="medium">Medium · over 2–5 in</option><option value="large">Large · over 5–8 in</option><option value="xl">XL · over 8 in, one area</option><option value="large_scale">Large-scale work / body-area coverage</option></select><p class="file-note" data-copy-id="live-tattoos-flash-claim-p-6">The design's published size and session terms take priority over this estimate.</p></div>
+            <div class="field full" data-planning-coverage-group hidden><label for="body_area_coverage">Which area would it cover? <span class="required-mark" data-copy-id="live-tattoos-flash-claim-span-9">*</span></label><select id="body_area_coverage" name="body_area_coverage" data-planning-coverage data-required-when-visible="true" data-review-label="Body-area coverage" disabled><option value="">Choose the closest fit</option><optgroup label="Arm"><option>¼ arm sleeve</option><option>½ arm sleeve</option><option>Full arm sleeve</option></optgroup><optgroup label="Leg"><option>¼ leg sleeve</option><option>½ leg sleeve</option><option>Full leg sleeve</option></optgroup><optgroup label="Back"><option>Half back</option><option>Full back</option><option>Spine</option></optgroup><optgroup label="Front and neck"><option>Chest / front torso</option><option>Neck · front</option><option>Neck · back</option><option>Neck · side</option><option>Full neck</option></optgroup><option value="other">Other area or combination</option></select></div>
             <div class="field full" data-planning-other-coverage-group hidden><label for="body_area_coverage_other">Describe the area</label><input id="body_area_coverage_other" name="body_area_coverage_other" disabled></div>
             <h3 class="tattoo-planning-heading" data-copy-id="flash-claim-planning-heading"><span class="form-section-kicker">Planning</span>When can you come in?</h3>
             <p class="form-section-intro" data-copy-id="flash-claim-planning-intro">A larger placement does not automatically require multiple sessions. Your preference matters if more than one appointment is needed; a Flash design's artist-set terms still take priority.</p>
@@ -223,27 +223,27 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
               <div class="tattoo-budget-specific" id="specificBudgetField" hidden aria-hidden="true">
                 <label for="budget_amount_dollars">Specific project budget (USD)</label>
                 <input id="budget_amount_dollars" name="budget_amount_dollars" type="number" min="150" step="1" inputmode="numeric" placeholder="Minimum $150" disabled>
-                <p class="file-note">Enter a whole-dollar amount of at least $150. This is still a comfort budget for review, not your final quote.</p>
+                <p class="file-note" data-copy-id="live-tattoos-flash-claim-p-8">Enter a whole-dollar amount of at least $150. This is still a comfort budget for review, not your final quote.</p>
               </div>
-              <p class="file-note" id="budgetRangeHelp">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote.</p>
+              <p class="file-note" id="budgetRangeHelp" data-copy-id="live-tattoos-flash-claim-p-9">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote.</p>
             </div>
             <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="Example: no rush, June, weekend preferred"></div>
-            <fieldset class="field full tattoo-planning-fieldset" data-planning-preference-group hidden><legend>If this needs more than one appointment, what would work best for you?</legend><div class="radio-group"><label class="radio-option"><input type="radio" name="multi_session_preference" value="back_to_back" data-review-label="Session preference" disabled><span>Back-to-back days in one trip</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="separate_healed_visits" disabled><span>Separate visits with healing time in between</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="either" disabled><span>Either works</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="discuss" disabled><span>Need to discuss</span></label></div><p class="file-note">This is a preference only. Any artist-set session structure for the flash design takes priority.</p></fieldset>
+            <fieldset class="field full tattoo-planning-fieldset" data-planning-preference-group hidden><legend>If this needs more than one appointment, what would work best for you?</legend><div class="radio-group"><label class="radio-option"><input type="radio" name="multi_session_preference" value="back_to_back" data-review-label="Session preference" disabled><span data-copy-id="live-tattoos-flash-claim-span-10">Back-to-back days in one trip</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="separate_healed_visits" disabled><span data-copy-id="live-tattoos-flash-claim-span-11">Separate visits with healing time in between</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="either" disabled><span data-copy-id="live-tattoos-flash-claim-span-12">Either works</span></label><label class="radio-option"><input type="radio" name="multi_session_preference" value="discuss" disabled><span data-copy-id="live-tattoos-flash-claim-span-13">Need to discuss</span></label></div><p class="file-note" data-copy-id="live-tattoos-flash-claim-p-10">This is a preference only. Any artist-set session structure for the flash design takes priority.</p></fieldset>
             <div class="field" data-planning-travel-detail hidden><label for="can_return_for_healed_visit">Could you return for another trip if needed?</label><select id="can_return_for_healed_visit" name="can_return_for_healed_visit" disabled><option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="unsure">Not sure</option></select></div>
             <div class="field" data-planning-travel-detail hidden><label for="days_per_trip">How many appointment days could you tolerate in one trip?</label><select id="days_per_trip" name="days_per_trip" disabled><option value="">Choose one</option><option value="1">1 day</option><option value="2">2 days</option><option value="3">3 days</option><option value="4_plus">4 or more days</option><option value="unsure">Not sure</option></select></div>
             <div class="field" data-planning-travel-detail hidden><label for="travel_origin">Traveling from (optional)</label><input id="travel_origin" name="travel_origin" placeholder="City, state, or country" disabled></div>
             <p class="tattoo-planning-note" data-planning-feedback hidden aria-live="polite" data-live-edit-owner="preview" data-live-edit-label="Runtime planning feedback"></p>
-            <div class="field full is-hidden" id="sheetCodeField" aria-hidden="true"><label for="sheet_code">Specific design code on sheet</label><input id="sheet_code" name="sheet_code" placeholder="Example: A, B3, AP-01-C"><p class="file-note">Use this when the selected flash is a sheet and you want one exact item from it.</p></div>
-            <div class="field full"><label for="body_references">Body / placement uploads</label><input id="body_references" name="body_references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Optional. Helpful for placement, scale, or body-area context.</p></div>
+            <div class="field full is-hidden" id="sheetCodeField" aria-hidden="true"><label for="sheet_code">Specific design code on sheet</label><input id="sheet_code" name="sheet_code" placeholder="Example: A, B3, AP-01-C"><p class="file-note" data-copy-id="live-tattoos-flash-claim-p-11">Use this when the selected flash is a sheet and you want one exact item from it.</p></div>
+            <div class="field full"><label for="body_references">Body / placement uploads</label><input id="body_references" name="body_references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note" data-copy-id="live-tattoos-flash-claim-p-12">Optional. Helpful for placement, scale, or body-area context.</p></div>
             <div class="field full"><label for="message">Claim notes (optional)</label><textarea id="message" name="message" placeholder="Anything the studio should know about placement, meaning, availability, or fit."></textarea></div>
             </div>
           </fieldset>
           <fieldset class="form-fieldset">
-            <legend class="form-legend"><span class="form-section-kicker">Before sending a claim</span>Terms &amp; Conditions</legend>
-            <label class="form-check"><input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required><span class="form-check__label">I confirm that I am 18 years of age or older.</span></label>
-            <label class="form-check"><input class="form-check__input" type="checkbox" name="flash_claim_acknowledged" value="yes" required><span class="form-check__label">I understand that submitting begins studio review and does not reserve or book the design until availability is confirmed.</span></label>
-            <label class="form-check"><input class="form-check__input" type="checkbox" name="review_consent" value="yes" required><span class="form-check__label">I understand this claim begins review before an appointment is confirmed, and that availability is confirmed by the studio.</span></label>
-            <label class="form-check"><input class="form-check__input" type="checkbox" name="policies_read" value="yes" required><span class="form-check__label">I have read <a href="/tattoos/inquire/#terms">What You Should Know Before Booking: Terms &amp; Conditions</a> and the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</span></label>
+            <legend class="form-legend"><span class="form-section-kicker" data-copy-id="live-tattoos-flash-claim-span-14">Before sending a claim</span>Terms &amp; Conditions</legend>
+            <label class="form-check"><input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required><span class="form-check__label" data-copy-id="live-tattoos-flash-claim-span-15">I confirm that I am 18 years of age or older.</span></label>
+            <label class="form-check"><input class="form-check__input" type="checkbox" name="flash_claim_acknowledged" value="yes" required><span class="form-check__label" data-copy-id="live-tattoos-flash-claim-span-16">I understand that submitting begins studio review and does not reserve or book the design until availability is confirmed.</span></label>
+            <label class="form-check"><input class="form-check__input" type="checkbox" name="review_consent" value="yes" required><span class="form-check__label" data-copy-id="live-tattoos-flash-claim-span-17">I understand this claim begins review before an appointment is confirmed, and that availability is confirmed by the studio.</span></label>
+            <label class="form-check"><input class="form-check__input" type="checkbox" name="policies_read" value="yes" required><span class="form-check__label" data-copy-id="live-tattoos-flash-claim-span-18">I have read <a href="/tattoos/inquire/#terms">What You Should Know Before Booking: Terms &amp; Conditions</a> and the <a href="/tattoos/policies/">Studio &amp; Booking Policies</a>.</span></label>
           </fieldset>
           <div class="request-answer-review" aria-label="Review Flash claim" data-live-edit-owner="preview" data-live-edit-label="Runtime claim preview">
             <span class="form-section-kicker">Review</span>
@@ -253,7 +253,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="request-review-card" data-request-review hidden aria-live="polite"><h4>Your Flash claim</h4><ul></ul></div>
           </div>
           <div class="submit-row" data-request-submit hidden>
-            <button class="cta-primary" type="submit" id="submitBtn">Submit Claim</button>
+            <button class="cta-primary" type="submit" id="submitBtn" data-copy-id="live-tattoos-flash-claim-button-1">Submit Claim</button>
             <p class="form-status" id="formStatus" role="status" aria-live="polite" data-live-edit-owner="preview" data-live-edit-label="Runtime submission status">Flash claims are reviewed before booking link is sent.</p>
           </div>
         </form>
@@ -261,8 +261,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     </div>
   </main>
   <footer class="bottom">
-    <a href="/tattoos/flash/">&larr; back to flash</a>
-    <a href="/home/">the six.well construct</a>
+    <a href="/tattoos/flash/" data-copy-id="live-tattoos-flash-claim-a-3">&larr; back to flash</a>
+    <a href="/home/" data-copy-id="live-tattoos-flash-claim-a-4">the six.well construct</a>
   </footer>
   <script>
     const els = {

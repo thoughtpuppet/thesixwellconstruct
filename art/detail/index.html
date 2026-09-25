@@ -38,31 +38,31 @@
   </script>
 
   <header class="top">
-    <button class="cart-toggle" id="cartToggle" aria-label="open cart">
+    <button class="cart-toggle" id="cartToggle" aria-label="open cart" data-copy-id="live-art-detail-button-1">
       <span class="cart-label">cart</span>
       <span class="cart-count">0</span>
     </button>
   </header>
 
   <nav class="breadcrumb" aria-label="breadcrumb">
-    <a href="/home/">construct</a>
-    <span class="breadcrumb-sep">:</span>
-    <a href="/art/">art making</a>
-    <span class="breadcrumb-sep">:</span>
-    <span class="breadcrumb-current" data-art-field="breadcrumb">artwork</span>
+    <a href="/home/" data-copy-id="live-art-detail-a-1">construct</a>
+    <span class="breadcrumb-sep" data-copy-id="live-art-detail-span-1">:</span>
+    <a href="/art/" data-copy-id="live-art-detail-a-2">art making</a>
+    <span class="breadcrumb-sep" data-copy-id="live-art-detail-span-2">:</span>
+    <span class="breadcrumb-current" data-art-field="breadcrumb" data-copy-id="live-art-detail-span-3">artwork</span>
   </nav>
 
   <div class="cart-overlay" id="cartOverlay"></div>
   <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
     <div class="drawer-header">
-      <span class="drawer-title">cart</span>
-      <button class="drawer-close" id="drawerClose" aria-label="close cart">&times;</button>
+      <span class="drawer-title" data-copy-id="live-art-detail-span-4">cart</span>
+      <button class="drawer-close" id="drawerClose" aria-label="close cart" data-copy-id="live-art-detail-button-2">&times;</button>
     </div>
     <div class="drawer-body">
-      <p class="drawer-empty">cart is empty</p>
+      <p class="drawer-empty" data-copy-id="live-art-detail-p-1">cart is empty</p>
     </div>
     <div class="drawer-footer">
-      <button class="checkout-btn" disabled>proceed to checkout</button>
+      <button class="checkout-btn" disabled data-copy-id="live-art-detail-button-3">proceed to checkout</button>
     </div>
   </aside>
 
@@ -72,38 +72,38 @@
     <div class="split-image">
       <div class="painting-frame" data-art-lightbox-trigger>
         <img data-art-field="primary-image" alt="" loading="eager">
-        <span class="painting-badge" data-art-field="availability-badge">unavailable</span>
+        <span class="painting-badge" data-art-field="availability-badge" data-copy-id="live-art-detail-span-5">unavailable</span>
       </div>
     </div>
 
     <div class="split-content">
       <header class="painting-header site-hero site-hero--supporting">
-        <span class="venture-label">art making</span>
-        <h1 class="painting-title hero-title" data-art-field="title">Untitled work</h1>
+        <span class="venture-label" data-copy-id="live-art-detail-span-6">art making</span>
+        <h1 class="painting-title hero-title" data-art-field="title" data-copy-id="live-art-detail-h1-1">Untitled work</h1>
         <div class="painting-meta" data-art-meta></div>
       </header>
 
       <section class="statement-block">
-        <p class="block-label">statement</p>
+        <p class="block-label" data-copy-id="live-art-detail-p-2">statement</p>
         <div class="statement-body placeholder" data-art-field="statement"></div>
       </section>
 
       <section class="availability-block">
-        <p class="block-label">availability</p>
+        <p class="block-label" data-copy-id="live-art-detail-p-3">availability</p>
         <div class="availability-rows">
           <div class="avail-row" data-art-original-row data-original-state="unavailable">
             <div class="avail-left">
-              <span class="avail-label">original</span>
-              <span class="avail-status unavailable" data-art-original-status>unavailable</span>
+              <span class="avail-label" data-copy-id="live-art-detail-span-7">original</span>
+              <span class="avail-status unavailable" data-art-original-status data-copy-id="live-art-detail-span-8">unavailable</span>
             </div>
-            <a class="avail-action disabled" data-art-original-action aria-disabled="true" tabindex="-1">unavailable</a>
+            <a class="avail-action disabled" data-art-original-action aria-disabled="true" tabindex="-1" data-copy-id="live-art-detail-a-3">unavailable</a>
           </div>
           <div class="avail-row" data-art-print-row data-print-state="unavailable">
             <div class="avail-left">
-              <span class="avail-label">prints</span>
-              <span class="avail-status unavailable" data-art-print-status>unavailable</span>
+              <span class="avail-label" data-copy-id="live-art-detail-span-9">prints</span>
+              <span class="avail-status unavailable" data-art-print-status data-copy-id="live-art-detail-span-10">unavailable</span>
             </div>
-            <a class="avail-action disabled" data-art-print-action aria-disabled="true" tabindex="-1">unavailable</a>
+            <a class="avail-action disabled" data-art-print-action aria-disabled="true" tabindex="-1" data-copy-id="live-art-detail-a-4">unavailable</a>
           </div>
         </div>
       </section>
@@ -112,13 +112,13 @@
     </div>
 
     <footer class="bottom">
-      <p>&copy; the six.well construct</p>
-      <a href="/art/">back to art making</a>
+      <p data-copy-id="live-art-detail-p-4">&copy; the six.well construct</p>
+      <a href="/art/" data-copy-id="live-art-detail-a-5">back to art making</a>
     </footer>
   </div>
 
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Full size artwork">
-    <button class="lightbox-close" id="lightboxClose" aria-label="Close">&times;</button>
+    <button class="lightbox-close" id="lightboxClose" aria-label="Close" data-copy-id="live-art-detail-button-4">&times;</button>
     <img id="lightboxImg" alt="">
   </div>
 

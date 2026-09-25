@@ -64,54 +64,54 @@
 <body class="venture-page" data-venture="events" data-landing-family="events-program">
   <main class="venture-shell entrance-fade">
     <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="eventTitle">
-      <div><span class="venture-kicker">event record</span><h1 class="venture-title hero-title" id="eventTitle">Loading event.</h1></div>
-      <div class="hero-copy"><p class="hero-descriptor hero-lede" id="eventDescription">Loading the public event record.</p><div class="hero-actions"><a class="venture-link" href="/events/">all events</a><a class="venture-link" href="#eventDates">dates</a><a class="venture-link" id="kinmarkingSeriesLink" href="/events/kinmarking/" hidden>KINMARKING series</a></div></div>
+      <div><span class="venture-kicker" data-copy-id="live-events-detail-span-1">event record</span><h1 class="venture-title hero-title" id="eventTitle" data-copy-id="live-events-detail-h1-1">Loading event.</h1></div>
+      <div class="hero-copy"><p class="hero-descriptor hero-lede" id="eventDescription" data-copy-id="live-events-detail-p-1">Loading the public event record.</p><div class="hero-actions"><a class="venture-link" href="/events/" data-copy-id="live-events-detail-a-1">all events</a><a class="venture-link" href="#eventDates" data-copy-id="live-events-detail-a-2">dates</a><a class="venture-link" id="kinmarkingSeriesLink" href="/events/kinmarking/" hidden data-copy-id="live-events-detail-a-3">KINMARKING series</a></div></div>
     </section>
 
     <section class="section event-detail-grid" aria-live="polite">
       <article class="event-panel">
-        <span class="section-kicker">schedule</span><h2 class="section-title">Event Dates</h2>
+        <span class="section-kicker" data-copy-id="live-events-detail-span-2">schedule</span><h2 class="section-title" data-copy-id="live-events-detail-h2-1">Event Dates</h2>
         <p class="event-copy" id="eventDetails"></p>
         <figure class="kinmarking-flyer" id="kinmarkingFlyer" hidden><img id="kinmarkingFlyerImage" alt=""></figure>
         <div class="event-dates" id="eventDates"></div>
       </article>
       <aside class="event-panel" id="registrationPanel">
-        <p class="event-status" id="eventStatus">Loading</p>
+        <p class="event-status" id="eventStatus" data-copy-id="live-events-detail-p-3">Loading</p>
         <form class="event-form" id="registrationForm" novalidate>
           <label>Name<input id="eventName" autocomplete="name" required></label>
           <label>Email<input id="eventEmail" type="email" autocomplete="email" required></label>
           <label>Phone<input id="eventPhone" type="tel" autocomplete="tel" required></label>
           <label>Seats<select id="eventSeats"></select></label>
           <label class="event-honeypot" aria-hidden="true">Leave blank<input id="eventGotcha" tabindex="-1" autocomplete="off"></label>
-          <button class="event-action" id="registrationButton" type="submit" disabled>Loading</button>
+          <button class="event-action" id="registrationButton" type="submit" disabled data-copy-id="live-events-detail-button-1">Loading</button>
           <p class="event-message" id="registrationMessage"></p>
         </form>
         <div class="event-waitlist" id="waitlistPanel" hidden>
-          <p class="event-copy">Ask for an update if a seat opens for this date.</p>
-          <button class="event-action" id="waitlistButton" type="button">Join waitlist</button>
+          <p class="event-copy" data-copy-id="live-events-detail-p-5">Ask for an update if a seat opens for this date.</p>
+          <button class="event-action" id="waitlistButton" type="button" data-copy-id="live-events-detail-button-2">Join waitlist</button>
         </div>
       </aside>
     </section>
 
     <section class="section kinmarking-experience" id="kinmarkingExperience" hidden>
       <header class="section-head">
-        <div><span class="section-kicker">participant guide</span><h2 class="section-title">Bring a history into conversation.</h2></div>
-        <p class="section-copy">The participating archivist and tattoo artist help distinguish what is known, remembered, inherited, uncertain, and possible to carry forward.</p>
+        <div><span class="section-kicker" data-copy-id="live-events-detail-span-3">participant guide</span><h2 class="section-title" data-copy-id="live-events-detail-h2-2">Bring a history into conversation.</h2></div>
+        <p class="section-copy" data-copy-id="live-events-detail-p-6">The participating archivist and tattoo artist help distinguish what is known, remembered, inherited, uncertain, and possible to carry forward.</p>
       </header>
       <div class="kinmarking-guide-grid">
-        <article class="kinmarking-guide-card"><h3>What to bring</h3><ul><li>Bring one to three photographs, scans, documents, objects, stories, inherited symbols, or other references.</li><li>Identify what is known and what remains uncertain.</li><li>Leave irreplaceable originals at home when a photograph or scan will work.</li><li>Consider permission and privacy when the material involves other people.</li></ul></article>
-        <article class="kinmarking-guide-card"><h3>How it works</h3><p>No finished tattoo design is required. Begin with conversation: consider the material with an archivist, then explore with the tattoo artist how—or whether—it may become a mark in the skin.</p></article>
-        <article class="kinmarking-guide-card"><h3>Possible outcomes</h3><p>Participation does not require getting tattooed. Small, resolved tattoos may be possible that day as time and technical readiness allow. Developing work may move into a future appointment secured by a separate tattoo deposit.</p></article>
-        <article class="kinmarking-guide-card"><h3>Same-day readiness</h3><p>Same-day tattooing is not guaranteed. Anyone hoping for possible same-day work should eat beforehand, hydrate, arrive sober, and bring government-issued photo identification.</p></article>
-        <article class="kinmarking-guide-card"><h3>Privacy + consent</h3><p>Materials, conversations, photographs, scans, recordings, and tattoo images are not retained or published without separate consent. Bringing material does not place it in the public Archive.</p></article>
-        <article class="kinmarking-guide-card"><h3>RSVP + walk-ins</h3><p>RSVP is optional and provides event correspondence, calendar details, and a reminder. Walk-ins remain welcome. An RSVP is not a tattoo appointment and does not reserve same-day tattoo time.</p></article>
+        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-1">What to bring</h3><ul><li data-copy-id="live-events-detail-li-1">Bring one to three photographs, scans, documents, objects, stories, inherited symbols, or other references.</li><li data-copy-id="live-events-detail-li-2">Identify what is known and what remains uncertain.</li><li data-copy-id="live-events-detail-li-3">Leave irreplaceable originals at home when a photograph or scan will work.</li><li data-copy-id="live-events-detail-li-4">Consider permission and privacy when the material involves other people.</li></ul></article>
+        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-2">How it works</h3><p data-copy-id="live-events-detail-p-7">No finished tattoo design is required. Begin with conversation: consider the material with an archivist, then explore with the tattoo artist how—or whether—it may become a mark in the skin.</p></article>
+        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-3">Possible outcomes</h3><p data-copy-id="live-events-detail-p-8">Participation does not require getting tattooed. Small, resolved tattoos may be possible that day as time and technical readiness allow. Developing work may move into a future appointment secured by a separate tattoo deposit.</p></article>
+        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-4">Same-day readiness</h3><p data-copy-id="live-events-detail-p-9">Same-day tattooing is not guaranteed. Anyone hoping for possible same-day work should eat beforehand, hydrate, arrive sober, and bring government-issued photo identification.</p></article>
+        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-5">Privacy + consent</h3><p data-copy-id="live-events-detail-p-10">Materials, conversations, photographs, scans, recordings, and tattoo images are not retained or published without separate consent. Bringing material does not place it in the public Archive.</p></article>
+        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-6">RSVP + walk-ins</h3><p data-copy-id="live-events-detail-p-11">RSVP is optional and provides event correspondence, calendar details, and a reminder. Walk-ins remain welcome. An RSVP is not a tattoo appointment and does not reserve same-day tattoo time.</p></article>
       </div>
       <div>
-        <header class="section-head"><div><span class="section-kicker">first cycle</span><h2 class="section-title">Connected Editions</h2></div><a class="venture-link" href="/events/kinmarking/">series overview</a></header>
-        <div class="kinmarking-edition-links" id="kinmarkingEditionLinks" aria-live="polite"><p class="kinmarking-empty">Loading connected editions.</p></div>
+        <header class="section-head"><div><span class="section-kicker" data-copy-id="live-events-detail-span-4">first cycle</span><h2 class="section-title" data-copy-id="live-events-detail-h2-3">Connected Editions</h2></div><a class="venture-link" href="/events/kinmarking/" data-copy-id="live-events-detail-a-4">series overview</a></header>
+        <div class="kinmarking-edition-links" id="kinmarkingEditionLinks" aria-live="polite"><p class="kinmarking-empty" data-copy-id="live-events-detail-p-12">Loading connected editions.</p></div>
       </div>
     </section>
-    <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">events</a><a href="/home/">return to construct</a></div></footer>
+    <footer class="footer"><p data-copy-id="live-events-detail-p-13">&copy; the six.well construct</p><div class="page-links"><a href="/events/" data-copy-id="live-events-detail-a-5">events</a><a href="/home/" data-copy-id="live-events-detail-a-6">return to construct</a></div></footer>
   </main>
 <script src="/js/kinmarking-series.js?v=20260902-series-sessions"></script>
 <script>

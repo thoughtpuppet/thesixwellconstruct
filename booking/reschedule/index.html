@@ -34,22 +34,22 @@
 </head>
 <body class="tattoo-flow booking-client-flow" data-venture="tattooing">
   <div class="grain"></div>
-  <header><a class="back-link" id="backToConfirmation" href="/tattoos/">&larr; Back</a></header>
+  <header><a class="back-link" id="backToConfirmation" href="/tattoos/" data-copy-id="live-booking-reschedule-a-1">&larr; Back</a></header>
   <main class="site-hero site-hero--supporting">
-    <p class="kicker">Manage booking</p>
-    <h1 class="hero-title" id="pageTitle">Choose a new time.</h1>
-    <p class="lead" id="pageDescriptor">Confirm the email used for this booking. We will show only availability for the same appointment type. Your current appointment is never cancelled before the reschedule is complete.</p>
+    <p class="kicker" data-copy-id="live-booking-reschedule-p-1">Manage booking</p>
+    <h1 class="hero-title" id="pageTitle" data-copy-id="live-booking-reschedule-h1-1">Choose a new time.</h1>
+    <p class="lead" id="pageDescriptor" data-copy-id="live-booking-reschedule-p-2">Confirm the email used for this booking. We will show only availability for the same appointment type. Your current appointment is never cancelled before the reschedule is complete.</p>
 
     <section class="auth-panel" id="authPanel" aria-labelledby="authHeading">
-      <h2 class="field-label" id="authHeading">Find your booking</h2>
+      <h2 class="field-label" id="authHeading" data-copy-id="live-booking-reschedule-h2-1">Find your booking</h2>
       <form class="public-form" id="contextForm" novalidate>
         <div class="field">
           <label class="field-label" for="bookingEmail">Booking email</label>
           <input id="bookingEmail" name="email" type="email" autocomplete="email" required aria-describedby="emailHelp">
-          <p class="field-help" id="emailHelp">Use the exact email entered when this appointment was booked.</p>
+          <p class="field-help" id="emailHelp" data-copy-id="live-booking-reschedule-p-3">Use the exact email entered when this appointment was booked.</p>
         </div>
         <div class="auth-actions">
-          <button class="button" id="loadButton" type="submit">Show same-type times</button>
+          <button class="button" id="loadButton" type="submit" data-copy-id="live-booking-reschedule-button-1">Show same-type times</button>
           <p class="status" id="contextStatus" role="status" aria-live="polite"></p>
         </div>
         <p class="error" id="contextError" role="alert" aria-live="assertive" hidden></p>
@@ -66,27 +66,27 @@
           <div class="reschedule-calendar cal-wrap" id="dayTabs" role="group" aria-label="Available dates"></div>
           <div class="time-panel" id="timePanel" role="tabpanel" aria-live="polite"></div>
         </fieldset>
-        <p class="selection-status" id="selectionStatus" role="status" aria-live="polite">Choose a date and time.</p>
+        <p class="selection-status" id="selectionStatus" role="status" aria-live="polite" data-copy-id="live-booking-reschedule-p-6">Choose a date and time.</p>
         <div class="submit-actions">
-          <button class="button" id="rescheduleButton" type="submit" disabled>Confirm new time</button>
-          <button class="button secondary" id="startOverButton" type="button">Use another email</button>
+          <button class="button" id="rescheduleButton" type="submit" disabled data-copy-id="live-booking-reschedule-button-2">Confirm new time</button>
+          <button class="button secondary" id="startOverButton" type="button" data-copy-id="live-booking-reschedule-button-3">Use another email</button>
         </div>
         <p class="error" id="rescheduleError" role="alert" aria-live="assertive" hidden></p>
       </form>
     </section>
 
     <section class="success-panel" id="successPanel" role="status" aria-live="polite" hidden>
-      <h2>Your booking moved.</h2>
+      <h2 data-copy-id="live-booking-reschedule-h2-2">Your booking moved.</h2>
       <p id="successCopy"></p>
-      <p><a class="button" id="confirmationLink" href="/tattoos/">View updated confirmation</a></p>
+      <p data-copy-id="live-booking-reschedule-p-9"><a class="button" id="confirmationLink" href="/tattoos/">View updated confirmation</a></p>
     </section>
 
     <section class="blocked-panel" id="blockedPanel" role="alert" hidden>
-      <h2>This booking cannot be rescheduled online.</h2>
+      <h2 data-copy-id="live-booking-reschedule-h2-3">This booking cannot be rescheduled online.</h2>
       <p id="blockedCopy"></p>
     </section>
   </main>
-  <footer><a href="/tattoos/policies/">Policies</a><a href="/home/">the six.well construct</a></footer>
+  <footer><a href="/tattoos/policies/" data-copy-id="live-booking-reschedule-a-2">Policies</a><a href="/home/" data-copy-id="live-booking-reschedule-a-3">the six.well construct</a></footer>
   <script>
   (() => {
     const TIME_ZONE = 'America/New_York';

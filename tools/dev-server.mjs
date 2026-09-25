@@ -23,6 +23,7 @@ import {
   resolvePageVisibility,
 } from "../shared/page-visibility.js";
 import { contentHash, readHtmlCopy, readSourceMarker, replaceHtmlCopy, replaceSourceMarker } from "./live-editor-source.mjs";
+import { auditLiveEditorCoverage } from "./live-editor-coverage.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -808,6 +809,25 @@ async function handleToolApi(req, res) {
       return toolJson(res, 200, await liveEditorContext(body));
     } catch (error) {
       return toolJson(res, error.statusCode || (error.code === "ENOENT" ? 404 : 500), { error: error.message });
+    }
+  }
+
+  if (req.url === "/__tools/live-editor/pages") {
+    try {
+      const audit = await auditLiveEditorCoverage();
+      return toolJson(res, 200, {
+        pages: audit.pages.map((page) => ({
+          relativePath: page.relativePath,
+          pathname: page.relativePath === "index.html" ? "/" : `/${page.relativePath.replace(/\/index\.html$/, "")}`,
+          browserAudit: page.relativePath !== "writings/mindful-darkness/wrkng/detail/index.html",
+          sourceOwners: page.owners,
+          missingOwners: page.inserted,
+          duplicates: page.duplicates,
+        })),
+        totals: audit.totals,
+      });
+    } catch (error) {
+      return toolJson(res, 500, { error:error.message });
     }
   }
 

@@ -316,7 +316,7 @@
 
 
   <header class="top">
-    <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
+    <a class="nav-inquire" href="/tattoos/inquire/" data-copy-id="live-tattoos-build-a-1">Inquire</a>
   </header>
 
   <main>
@@ -355,12 +355,12 @@
 
       <!-- DOOR TABS -->
       <div class="door-tabs" role="tablist" aria-label="Choose how to build" aria-orientation="horizontal">
-        <button type="button" class="door-tab active" id="doorTabBrief" role="tab" aria-selected="true" aria-controls="doorBrief" tabindex="0">
+        <button type="button" class="door-tab active" id="doorTabBrief" role="tab" aria-selected="true" aria-controls="doorBrief" tabindex="0" data-copy-id="live-tattoos-build-button-1">
           <span class="door-tab-num">Path I</span>
           <span class="door-tab-name">Build a Brief</span>
           <span class="door-tab-sub">Select meaningful symbols from the Legend of saiel solehman's visual language.</span>
         </button>
-        <button type="button" class="door-tab" id="doorTabMaze" role="tab" aria-selected="false" aria-controls="doorMaze" tabindex="-1">
+        <button type="button" class="door-tab" id="doorTabMaze" role="tab" aria-selected="false" aria-controls="doorMaze" tabindex="-1" data-copy-id="live-tattoos-build-button-2">
           <span class="door-tab-num">Path II</span>
           <span class="door-tab-name">Draw a Maze</span>
           <span class="door-tab-sub">Compose your own maze in the drawing studio.</span>
@@ -382,9 +382,9 @@
                 <label class="filter-label" for="themeFilterRow">Theme</label>
                 <select class="filter-select" id="themeFilterRow" aria-label="Filter by theme" disabled></select>
               </div>
-              <a class="legend-link legend-outbound" href="/about/legend/" target="_blank" rel="noopener">Open the Full Legend</a>
+              <a class="legend-link legend-outbound" href="/about/legend/" target="_blank" rel="noopener" data-copy-id="live-tattoos-build-a-2">Open the Full Legend</a>
             </div>
-            <p class="builder-state" id="builderState" role="status" aria-live="polite">
+            <p class="builder-state" id="builderState" role="status" aria-live="polite" data-copy-id="live-tattoos-build-p-9">
               <span id="builderStateText">Loading the Legend.</span>
               <button type="button" id="legendRetry" hidden>Try again</button>
             </p>
@@ -395,25 +395,25 @@
           <!-- BRIEF PANEL -->
           <div class="brief-col" role="complementary" aria-label="Your build brief">
             <div class="brief-header">
-              <span class="brief-heading">your build</span>
-              <span class="brief-count" id="briefCount" role="status" aria-live="polite">0 of 12</span>
+              <span class="brief-heading" data-copy-id="live-tattoos-build-span-1">your build</span>
+              <span class="brief-count" id="briefCount" role="status" aria-live="polite" data-copy-id="live-tattoos-build-span-2">0 of 12</span>
             </div>
             <p class="brief-empty" id="briefEmpty" data-copy-id="build-brief-empty">Select symbols from the library to begin building your brief. Each piece you choose carries its meaning into the design.</p>
             <ul class="brief-items" id="briefItems" aria-live="polite"></ul>
             <section class="composition-reading" id="briefComposition" aria-live="polite" hidden>
-              <h3>Your symbolic composition</h3>
+              <h3 data-copy-id="live-tattoos-build-h3-4">Your symbolic composition</h3>
               <p id="briefCompositionText"></p>
               <ul class="composition-relationships" id="briefCompositionRules"></ul>
             </section>
             <p class="brief-limit" id="briefLimit" role="status" aria-live="polite" data-copy-id="build-brief-limit">Twelve elements selected. Remove one to add another, or proceed with this build.</p>
             <div class="brief-spacer"></div>
-            <button class="brief-begin" id="briefBegin" disabled aria-controls="build-form">
+            <button class="brief-begin" id="briefBegin" disabled aria-controls="build-form" data-copy-id="live-tattoos-build-button-3">
               Build this brief →
             </button>
             <div class="draft-controls">
-              <p class="draft-status" id="buildDraftStatus" role="status" aria-live="polite">Changes will save on this device.</p>
-              <button class="draft-save" id="briefEmailSave" type="button" disabled>Save &amp; Email This Build</button>
-              <button class="draft-clear" id="briefClearDraft" type="button" hidden>Clear Saved Draft</button>
+              <p class="draft-status" id="buildDraftStatus" role="status" aria-live="polite" data-copy-id="live-tattoos-build-p-14">Changes will save on this device.</p>
+              <button class="draft-save" id="briefEmailSave" type="button" disabled data-copy-id="live-tattoos-build-button-4">Save &amp; Email This Build</button>
+              <button class="draft-clear" id="briefClearDraft" type="button" hidden data-copy-id="live-tattoos-build-button-5">Clear Saved Draft</button>
             </div>
           </div>
         </div>
@@ -428,7 +428,7 @@
           <div data-tattoo-before-booking></div>
 
           <div class="selected-summary" id="selectedSummary" aria-live="polite">
-            <p class="summary-label">Selected elements</p>
+            <p class="summary-label" data-copy-id="live-tattoos-build-p-16">Selected elements</p>
             <div class="summary-tags" id="summaryTags"></div>
           </div>
 
@@ -475,13 +475,13 @@
                   <div class="tattoo-budget-specific" id="specificBudgetField" hidden aria-hidden="true">
                     <label for="budgetAmountDollars">Specific project budget (USD)</label>
                     <input id="budgetAmountDollars" name="budget_amount_dollars" type="number" min="150" step="1" inputmode="numeric" placeholder="Minimum $150" disabled>
-                    <p class="field-help">Enter a whole-dollar amount of at least $150. This is still a comfort budget for review, not your final quote.</p>
+                    <p class="field-help" data-copy-id="live-tattoos-build-p-17">Enter a whole-dollar amount of at least $150. This is still a comfort budget for review, not your final quote.</p>
                   </div>
-                  <p class="field-help" id="budgetRangeHelp">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.</p>
+                  <p class="field-help" id="budgetRangeHelp" data-copy-id="live-tattoos-build-p-18">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.</p>
                 </div>
                 <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="e.g. no rush, within 3 months"></div>
-                <div class="field full intent-field"><label for="designIntent">Design intent</label><textarea id="designIntent" name="design_intent" rows="7" placeholder="What should the piece carry or mean?" aria-describedby="intentHelp" required></textarea><p class="field-help" id="intentHelp">Required. Describe the meaning, direction, or feeling the selected symbols should carry.</p></div>
-                <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple aria-describedby="referencesHelp"><p class="field-help" id="referencesHelp">Optional. Body reference or placement images only — not mood boards.</p></div>
+                <div class="field full intent-field"><label for="designIntent">Design intent</label><textarea id="designIntent" name="design_intent" rows="7" placeholder="What should the piece carry or mean?" aria-describedby="intentHelp" required></textarea><p class="field-help" id="intentHelp" data-copy-id="live-tattoos-build-p-19">Required. Describe the meaning, direction, or feeling the selected symbols should carry.</p></div>
+                <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple aria-describedby="referencesHelp"><p class="field-help" id="referencesHelp" data-copy-id="live-tattoos-build-p-20">Optional. Body reference or placement images only — not mood boards.</p></div>
                 <div class="field full"><label for="message">Anything else to add</label><textarea id="message" name="message"></textarea></div>
               </div>
             </fieldset>
@@ -490,18 +490,18 @@
               <legend class="form-legend">Confirm before sending</legend>
               <label class="form-check">
                 <input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required>
-                <span class="form-check__label">I confirm that I am 18 years of age or older.</span>
+                <span class="form-check__label" data-copy-id="live-tattoos-build-span-3">I confirm that I am 18 years of age or older.</span>
               </label>
 
               <label class="form-check">
                 <input class="form-check__input" type="checkbox" name="review_consent" value="yes" required>
-                <span class="form-check__label">I understand this brief is reviewed before a private token booking link is sent, and that submitting does not guarantee a session.</span>
+                <span class="form-check__label" data-copy-id="live-tattoos-build-span-4">I understand this brief is reviewed before a private token booking link is sent, and that submitting does not guarantee a session.</span>
               </label>
             </fieldset>
 
             <div class="submit-row">
-              <button class="submit-btn" type="submit" id="submitBtn">Submit Brief</button>
-              <p class="form-status" id="formStatus" role="status" aria-live="polite">Reviewed within a few days. Booking access follows if it's a fit.</p>
+              <button class="submit-btn" type="submit" id="submitBtn" data-copy-id="live-tattoos-build-button-6">Submit Brief</button>
+              <p class="form-status" id="formStatus" role="status" aria-live="polite" data-copy-id="live-tattoos-build-p-21">Reviewed within a few days. Booking access follows if it's a fit.</p>
             </div>
           </form>
         </section>
@@ -511,10 +511,10 @@
       <!-- DOOR: DRAW A MAZE -->
       <div class="door" id="doorMaze" role="tabpanel" aria-labelledby="doorTabMaze" hidden>
         <div class="maze-door">
-          <h2 class="maze-door-title">The Maze Studio.</h2>
-          <p class="maze-door-body">Compose your own maze — paths, rooms, thresholds, and the shapes of the visual language — on an open drawing surface. When it carries what you mean, write a short note and submit it the same way as a brief.</p>
-          <a class="maze-door-cta" href="/tattoos/build/maze/">Open the Maze Studio →</a>
-          <p class="maze-door-note">The maze studio is part of this build and opens in the same flow.</p>
+          <h2 class="maze-door-title" data-copy-id="live-tattoos-build-h2-2">The Maze Studio.</h2>
+          <p class="maze-door-body" data-copy-id="live-tattoos-build-p-22">Compose your own maze — paths, rooms, thresholds, and the shapes of the visual language — on an open drawing surface. When it carries what you mean, write a short note and submit it the same way as a brief.</p>
+          <a class="maze-door-cta" href="/tattoos/build/maze/" data-copy-id="live-tattoos-build-a-3">Open the Maze Studio →</a>
+          <p class="maze-door-note" data-copy-id="live-tattoos-build-p-23">The maze studio is part of this build and opens in the same flow.</p>
         </div>
       </div><!-- /doorMaze -->
 
@@ -523,20 +523,20 @@
   </main>
 
   <aside class="mobile-selection-tray" id="mobileSelectionTray" aria-label="Selected build symbols">
-    <button class="mobile-tray-toggle" id="mobileTrayToggle" type="button" aria-expanded="false" aria-controls="mobileTrayPanel">
+    <button class="mobile-tray-toggle" id="mobileTrayToggle" type="button" aria-expanded="false" aria-controls="mobileTrayPanel" data-copy-id="live-tattoos-build-button-7">
       <span>Your build</span><span class="mobile-tray-count" id="mobileTrayCount">0 of 12</span>
     </button>
     <div class="mobile-tray-panel" id="mobileTrayPanel" hidden>
       <ul class="mobile-tray-items" id="mobileTrayItems"></ul>
       <section class="composition-reading" id="mobileComposition" aria-live="polite" hidden>
-        <h3>Your symbolic composition</h3>
+        <h3 data-copy-id="live-tattoos-build-h3-5">Your symbolic composition</h3>
         <p id="mobileCompositionText"></p>
         <ul class="composition-relationships" id="mobileCompositionRules"></ul>
       </section>
-      <button class="mobile-tray-continue" id="mobileTrayContinue" type="button">Continue to design intent</button>
+      <button class="mobile-tray-continue" id="mobileTrayContinue" type="button" data-copy-id="live-tattoos-build-button-8">Continue to design intent</button>
       <div class="draft-controls">
-        <p class="draft-status" id="mobileBuildDraftStatus" role="status" aria-live="polite">Changes will save on this device.</p>
-        <button class="draft-save" id="mobileEmailSave" type="button">Save &amp; Email This Build</button>
+        <p class="draft-status" id="mobileBuildDraftStatus" role="status" aria-live="polite" data-copy-id="live-tattoos-build-p-25">Changes will save on this device.</p>
+        <button class="draft-save" id="mobileEmailSave" type="button" data-copy-id="live-tattoos-build-button-9">Save &amp; Email This Build</button>
       </div>
     </div>
   </aside>
@@ -544,19 +544,19 @@
   <dialog class="draft-dialog" id="buildDraftEmailDialog" aria-labelledby="buildDraftEmailTitle">
     <form class="draft-dialog-inner public-form" id="buildDraftEmailForm">
       <div class="draft-dialog-head">
-        <h2 class="draft-dialog-title" id="buildDraftEmailTitle">Save this build</h2>
-        <button class="draft-dialog-close" id="buildDraftEmailClose" type="button" aria-label="Close">&times;</button>
+        <h2 class="draft-dialog-title" id="buildDraftEmailTitle" data-copy-id="live-tattoos-build-h2-3">Save this build</h2>
+        <button class="draft-dialog-close" id="buildDraftEmailClose" type="button" aria-label="Close" data-copy-id="live-tattoos-build-button-10">&times;</button>
       </div>
-      <p class="draft-dialog-copy">We will email a private link that reopens this build on another device. The link remains active for 30 days after the last online save.</p>
+      <p class="draft-dialog-copy" data-copy-id="live-tattoos-build-p-26">We will email a private link that reopens this build on another device. The link remains active for 30 days after the last online save.</p>
       <div class="field">
         <label for="buildDraftEmail">Email</label>
         <input id="buildDraftEmail" name="draft_email" type="email" autocomplete="email" required>
       </div>
-      <p class="draft-dialog-copy">Reference uploads are not stored with drafts and must be attached again before final submission.</p>
+      <p class="draft-dialog-copy" data-copy-id="live-tattoos-build-p-27">Reference uploads are not stored with drafts and must be attached again before final submission.</p>
       <p class="draft-dialog-status" id="buildDraftEmailStatus" role="status" aria-live="polite"></p>
       <div class="draft-dialog-actions">
-        <button class="primary" id="buildDraftEmailSubmit" type="submit">Save &amp; Email Link</button>
-        <button id="buildDraftEmailCancel" type="button">Cancel</button>
+        <button class="primary" id="buildDraftEmailSubmit" type="submit" data-copy-id="live-tattoos-build-button-11">Save &amp; Email Link</button>
+        <button id="buildDraftEmailCancel" type="button" data-copy-id="live-tattoos-build-button-12">Cancel</button>
       </div>
     </form>
   </dialog>
@@ -568,29 +568,29 @@
         <span class="legend-drawer-cat" id="legendDrawerCategory"></span>
         <h2 class="legend-drawer-title" id="legendDrawerTitle"></h2>
       </div>
-      <button class="legend-drawer-close" id="legendDrawerClose" type="button" aria-label="Close symbol details">&times;</button>
+      <button class="legend-drawer-close" id="legendDrawerClose" type="button" aria-label="Close symbol details" data-copy-id="live-tattoos-build-button-13">&times;</button>
     </div>
     <div class="legend-drawer-mark" id="legendDrawerMark" aria-hidden="true"></div>
     <div class="legend-drawer-body" id="legendDrawerBody"></div>
     <label class="brief-item-note legend-drawer-note" id="legendDrawerNote">
-      <span>How do you want this symbol to show up in the project? (optional)</span>
+      <span data-copy-id="live-tattoos-build-span-6">How do you want this symbol to show up in the project? (optional)</span>
       <textarea id="legendDrawerNoteInput" maxlength="300" rows="4" disabled></textarea>
-      <span class="brief-note-meta"><span id="legendDrawerNoteHelp">Add this symbol to enable your description.</span><span id="legendDrawerNoteCount">0 / 300</span></span>
+      <span class="brief-note-meta" data-copy-id="live-tattoos-build-span-7"><span id="legendDrawerNoteHelp">Add this symbol to enable your description.</span><span id="legendDrawerNoteCount">0 / 300</span></span>
     </label>
     <div class="legend-drawer-actions">
       <button class="primary" id="legendDrawerSelect" type="button"></button>
-      <button id="legendDrawerPrevious" type="button">Previous</button>
-      <button id="legendDrawerNext" type="button">Next</button>
-      <a class="legend-outbound" id="legendDrawerFullRecord" href="/about/legend/" target="_blank" rel="noopener">View Full Legend Record</a>
+      <button id="legendDrawerPrevious" type="button" data-copy-id="live-tattoos-build-button-15">Previous</button>
+      <button id="legendDrawerNext" type="button" data-copy-id="live-tattoos-build-button-16">Next</button>
+      <a class="legend-outbound" id="legendDrawerFullRecord" href="/about/legend/" target="_blank" rel="noopener" data-copy-id="live-tattoos-build-a-4">View Full Legend Record</a>
     </div>
   </aside>
 
   <footer class="bottom">
-    <p>&copy; the six.well construct</p>
-    <a href="/tattoos/">← back to Art.Pill</a>
+    <p data-copy-id="live-tattoos-build-p-29">&copy; the six.well construct</p>
+    <a href="/tattoos/" data-copy-id="live-tattoos-build-a-5">← back to Art.Pill</a>
   </footer>
 
-  <button type="button" class="kiosk-startover" id="kioskStartOver">Start over</button>
+  <button type="button" class="kiosk-startover" id="kioskStartOver" data-copy-id="live-tattoos-build-button-17">Start over</button>
 
   <!-- Kiosk mode adds terminal behavior to the public builder. -->
   <script>

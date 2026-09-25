@@ -105,7 +105,7 @@
   <div class="grain"></div>
 
   <header class="top">
-    <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
+    <a class="nav-inquire" href="/tattoos/inquire/" data-copy-id="live-tattoos-inquire-consultation-a-1">Inquire</a>
   </header>
 
   <main>
@@ -113,30 +113,30 @@
 
       <!-- LEFT — INFO -->
       <section class="site-hero site-hero--supporting">
-        <h1 class="page-title hero-title">Consultation.</h1>
-        <p class="page-body hero-descriptor">A consultation is a focused session for planning, placement discussion, and cover-up review — useful before or alongside a custom inquiry submission. <strong data-consultation-current aria-live="polite">Loading current price and duration…</strong></p>
-        <p class="page-body">Choose an in-person session at the studio, or a virtual session over video call. After selecting a time, you'll be taken to Square to hold the slot.</p>
+        <h1 class="page-title hero-title" data-copy-id="live-tattoos-inquire-consultation-h1-1">Consultation.</h1>
+        <p class="page-body hero-descriptor" data-copy-id="live-tattoos-inquire-consultation-p-1">A consultation is a focused session for planning, placement discussion, and cover-up review — useful before or alongside a custom inquiry submission. <strong data-consultation-current aria-live="polite">Loading current price and duration…</strong></p>
+        <p class="page-body" data-copy-id="live-tattoos-inquire-consultation-p-2">Choose an in-person session at the studio, or a virtual session over video call. After selecting a time, you'll be taken to Square to hold the slot.</p>
 
         <!-- ADDRESS (in-person only) -->
         <div class="address-block" id="addressBlock">
-          <p class="block-kicker">Studio Location</p>
-          <p class="address-lines" id="addressLines">Loading…</p>
+          <p class="block-kicker" data-copy-id="live-tattoos-inquire-consultation-p-3">Studio Location</p>
+          <p class="address-lines" id="addressLines" data-copy-id="live-tattoos-inquire-consultation-p-4">Loading…</p>
         </div>
         <!-- VIRTUAL NOTE (virtual only) -->
         <div class="virtual-block" id="virtualBlock" style="display:none;">
-          <p class="block-kicker">Virtual Consultation</p>
-          <p class="virtual-note">A video call link will be emailed to you ahead of your appointment time. No travel required — just be ready with any references or questions.</p>
+          <p class="block-kicker" data-copy-id="live-tattoos-inquire-consultation-p-5">Virtual Consultation</p>
+          <p class="virtual-note" data-copy-id="live-tattoos-inquire-consultation-p-6">A video call link will be emailed to you ahead of your appointment time. No travel required — just be ready with any references or questions.</p>
         </div>
       </section>
 
       <!-- RIGHT — FORM -->
       <section class="form-panel" aria-label="Book a consultation">
-        <h2 class="form-title">Book a Consultation.</h2>
-        <p class="form-note">Choose an in-person or virtual consultation. After selecting a time, you'll be taken to Square to hold the slot.</p>
+        <h2 class="form-title" data-copy-id="live-tattoos-inquire-consultation-h2-1">Book a Consultation.</h2>
+        <p class="form-note" data-copy-id="live-tattoos-inquire-consultation-p-7">Choose an in-person or virtual consultation. After selecting a time, you'll be taken to Square to hold the slot.</p>
 
         <!-- STEP 1: FORM -->
         <div id="formStep">
-          <form class="public-form" id="consultForm" novalidate>
+          <form class="public-form" id="consultForm" novalidate data-live-edit-owner="preview" data-live-edit-label="Operational consultation booking flow">
             <input type="hidden" name="type" value="consultation">
             <input type="hidden" name="source_path" value="/tattoos/inquire/consultation/">
             <input type="hidden" name="subject" value="New Art.Pill Consultation Booking Request">
@@ -168,7 +168,7 @@
 
             <!-- SLOT PICKER -->
             <div class="slot-picker">
-              <span class="slot-picker-label">Available consultation times</span>
+              <span class="slot-picker-label" data-copy-id="live-tattoos-inquire-consultation-span-1">Available consultation times</span>
 
               <!-- Selected slots list -->
               <div class="slot-selected" id="slotSelected"></div>
@@ -177,25 +177,25 @@
               <div class="cal-wrap" id="calWrap">
                 <div class="cal-next-available" id="calNextAvailable"></div>
                 <div class="cal-header">
-                  <button type="button" class="cal-nav" id="calPrev">←</button>
+                  <button type="button" class="cal-nav" id="calPrev" data-copy-id="live-tattoos-inquire-consultation-button-1">←</button>
                   <span class="cal-month-label" id="calMonthLabel"></span>
-                  <button type="button" class="cal-nav" id="calNext">→</button>
+                  <button type="button" class="cal-nav" id="calNext" data-copy-id="live-tattoos-inquire-consultation-button-2">→</button>
                 </div>
                 <div class="cal-weekdays">
-                  <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                  <span data-copy-id="live-tattoos-inquire-consultation-span-3">Su</span><span data-copy-id="live-tattoos-inquire-consultation-span-4">Mo</span><span data-copy-id="live-tattoos-inquire-consultation-span-5">Tu</span><span data-copy-id="live-tattoos-inquire-consultation-span-6">We</span><span data-copy-id="live-tattoos-inquire-consultation-span-7">Th</span><span data-copy-id="live-tattoos-inquire-consultation-span-8">Fr</span><span data-copy-id="live-tattoos-inquire-consultation-span-9">Sa</span>
                 </div>
                 <div class="cal-grid" id="calGrid"></div>
                 <div class="time-row" id="timeRow" style="display:none;">
                   <div class="time-dropdown" id="timeDropdown">
-                    <button type="button" class="time-trigger" id="timeTrigger" aria-haspopup="listbox" aria-expanded="false">
+                    <button type="button" class="time-trigger" id="timeTrigger" aria-haspopup="listbox" aria-expanded="false" data-copy-id="live-tattoos-inquire-consultation-button-3">
                       <span class="time-trigger-label" id="timeTriggerLabel">Pick a time</span>
                       <span class="time-trigger-arrow">▾</span>
                     </button>
                     <div class="time-panel" id="timePanel" role="listbox" style="display:none;"></div>
                   </div>
-                  <button type="button" class="time-add-btn" id="timeAddBtn" disabled>Select Time</button>
+                  <button type="button" class="time-add-btn" id="timeAddBtn" disabled data-copy-id="live-tattoos-inquire-consultation-button-4">Select Time</button>
                 </div>
-                <p class="cal-full-note" id="calFullNote" style="display:none;">No consultation times are available for this date.</p>
+                <p class="cal-full-note" id="calFullNote" style="display:none;" data-copy-id="live-tattoos-inquire-consultation-p-8">No consultation times are available for this date.</p>
               </div>
 
               <input type="hidden" name="preferred_slots" id="preferredSlots">
@@ -204,16 +204,16 @@
 
             <label class="form-check">
               <input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required>
-              <span class="form-check__label">I confirm that I am 18 years of age or older.</span>
+              <span class="form-check__label" data-copy-id="live-tattoos-inquire-consultation-span-10">I confirm that I am 18 years of age or older.</span>
             </label>
 
             <label class="form-check">
               <input class="form-check__input" type="checkbox" name="understand" value="yes" required>
-              <span class="form-check__label">I understand this is a paid consultation, not a tattoo appointment. Scheduling a tattoo session follows after the consultation or inquiry review is complete.</span>
+              <span class="form-check__label" data-copy-id="live-tattoos-inquire-consultation-span-11">I understand this is a paid consultation, not a tattoo appointment. Scheduling a tattoo session follows after the consultation or inquiry review is complete.</span>
             </label>
 
             <div class="submit-row">
-              <button class="submit-btn" type="submit" id="submitBtn">Continue to Square</button>
+              <button class="submit-btn" type="submit" id="submitBtn" data-copy-id="live-tattoos-inquire-consultation-button-5">Continue to Square</button>
             </div>
             <p class="form-status" id="formError" style="display:none;color:rgba(110,4,4,0.9);margin-top:14px;"></p>
           </form>
@@ -222,8 +222,8 @@
         <!-- STEP 2: PAYMENT REDIRECT (shown briefly after submit) -->
         <div id="paymentStep" style="display:none;">
           <div class="payment-holding">
-            <p class="payment-holding-title">Details saved.</p>
-            <p class="payment-holding-body">Taking you to complete the deposit now...</p>
+            <p class="payment-holding-title" data-copy-id="live-tattoos-inquire-consultation-p-10">Details saved.</p>
+            <p class="payment-holding-body" data-copy-id="live-tattoos-inquire-consultation-p-11">Taking you to complete the deposit now...</p>
           </div>
         </div>
 
@@ -233,8 +233,8 @@
   </main>
 
   <footer class="bottom">
-    <a href="/tattoos/inquire/custom/">&larr; back to Custom Inquiry</a>
-    <a href="/home/">the six.well construct</a>
+    <a href="/tattoos/inquire/custom/" data-copy-id="live-tattoos-inquire-consultation-a-2">&larr; back to Custom Inquiry</a>
+    <a href="/home/" data-copy-id="live-tattoos-inquire-consultation-a-3">the six.well construct</a>
   </footer>
 
   <script src="/js/consultation-context.js"></script>

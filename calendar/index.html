@@ -20,113 +20,113 @@
     <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="page-title">
       <div>
         <span class="venture-kicker"><br></span>
-<h1 class="venture-title hero-title" id="page-title">Atlanta Creative Calendar.</h1>
+<h1 class="venture-title hero-title" id="page-title" data-copy-id="live-calendar-h1-1">Atlanta Creative Calendar.</h1>
       </div>
       <div class="hero-copy">
-        <p class="hero-descriptor">the latest updates of all Art, art-making, independent film, poetry, music, technology, lectures, conferences, virtual programs, and experimental events across Atlanta.</p>
-        <p class="hero-note">This is the curated citywide guide. For gatherings produced through the Construct, visit <a href="/events/">Six.Well Events</a>.</p>
+        <p class="hero-descriptor" data-copy-id="live-calendar-p-1">the latest updates of all Art, art-making, independent film, poetry, music, technology, lectures, conferences, virtual programs, and experimental events across Atlanta.</p>
+        <p class="hero-note" data-copy-id="live-calendar-p-2">This is the curated citywide guide. For gatherings produced through the Construct, visit <a href="/events/">Six.Well Events</a>.</p>
         <div class="hero-actions">
-          <a class="venture-link" href="#upcoming" data-calendar-view-link="upcoming">upcoming</a>
-          <a class="venture-link" href="#month" data-calendar-view-link="month">month</a>
-          <a class="venture-link" href="#subscribe">subscribe</a>
-          <a class="venture-link" href="/calendar/submit/">submit an event</a>
+          <a class="venture-link" href="#upcoming" data-calendar-view-link="upcoming" data-copy-id="live-calendar-a-1">upcoming</a>
+          <a class="venture-link" href="#month" data-calendar-view-link="month" data-copy-id="live-calendar-a-2">month</a>
+          <a class="venture-link" href="#subscribe" data-copy-id="live-calendar-a-3">subscribe</a>
+          <a class="venture-link" href="/calendar/submit/" data-copy-id="live-calendar-a-4">submit an event</a>
         </div>
       </div>
     </section>
 
     <section class="section calendar-controls" aria-labelledby="filter-title">
       <header class="section-head">
-        <div><span class="section-kicker">find a way in</span><h2 class="section-title" id="filter-title">Search + Filter</h2></div>
-        <p class="section-copy" id="resultCount" aria-live="polite">Loading approved events.</p>
+        <div><span class="section-kicker" data-copy-id="live-calendar-span-2">find a way in</span><h2 class="section-title" id="filter-title" data-copy-id="live-calendar-h2-1">Search + Filter</h2></div>
+        <p class="section-copy" id="resultCount" aria-live="polite" data-copy-id="live-calendar-p-3">Loading approved events.</p>
       </header>
       <div class="calendar-search-row">
-        <label class="calendar-search"><span>Search</span><input id="calendarSearch" type="search" placeholder="Event, artist, venue, organizer, or subject" autocomplete="off"></label>
+        <label class="calendar-search"><span data-copy-id="live-calendar-span-3">Search</span><input id="calendarSearch" type="search" placeholder="Event, artist, venue, organizer, or subject" autocomplete="off"></label>
         <div class="calendar-search-actions">
-          <button class="calendar-button" id="toggleFilters" type="button" aria-expanded="false" aria-controls="calendarFilterPanel">Filters<span id="activeFilterCount"></span></button>
-          <button class="calendar-button is-quiet" id="clearFilters" type="button">Clear filters</button>
+          <button class="calendar-button" id="toggleFilters" type="button" aria-expanded="false" aria-controls="calendarFilterPanel" data-copy-id="live-calendar-button-1">Filters<span id="activeFilterCount"></span></button>
+          <button class="calendar-button is-quiet" id="clearFilters" type="button" data-copy-id="live-calendar-button-2">Clear filters</button>
         </div>
       </div>
       <div class="calendar-filter-panel" id="calendarFilterPanel" hidden>
         <div class="filter-groups">
-          <fieldset><legend>Subjects</legend><div class="filter-options" id="subjectFilters"></div></fieldset>
-          <fieldset><legend>Formats</legend><div class="filter-options" id="formatFilters"></div></fieldset>
-          <fieldset><legend>Admission</legend><div class="filter-options" id="admissionFilters"></div></fieldset>
-          <fieldset><legend>Affiliations</legend><div class="filter-options" id="affiliationFilters"></div></fieldset>
-          <fieldset><legend>Location</legend><div class="filter-options" id="modeFilters"></div></fieldset>
+          <fieldset><legend>Subjects</legend><div class="filter-options" id="subjectFilters" data-live-edit-owner="managed" data-live-edit-label="Studio-managed calendar subjects" data-live-edit-owner-href="/studio/calendar/" data-live-edit-owner-label="Open Calendar Studio"></div></fieldset>
+          <fieldset><legend>Formats</legend><div class="filter-options" id="formatFilters" data-live-edit-owner="managed" data-live-edit-label="Studio-managed calendar formats" data-live-edit-owner-href="/studio/calendar/" data-live-edit-owner-label="Open Calendar Studio"></div></fieldset>
+          <fieldset><legend>Admission</legend><div class="filter-options" id="admissionFilters" data-live-edit-owner="managed" data-live-edit-label="Studio-managed calendar admission filters" data-live-edit-owner-href="/studio/calendar/" data-live-edit-owner-label="Open Calendar Studio"></div></fieldset>
+          <fieldset><legend>Affiliations</legend><div class="filter-options" id="affiliationFilters" data-live-edit-owner="managed" data-live-edit-label="Studio-managed calendar affiliations" data-live-edit-owner-href="/studio/calendar/" data-live-edit-owner-label="Open Calendar Studio"></div></fieldset>
+          <fieldset><legend>Location</legend><div class="filter-options" id="modeFilters" data-live-edit-owner="managed" data-live-edit-label="Studio-managed calendar locations" data-live-edit-owner-href="/studio/calendar/" data-live-edit-owner-label="Open Calendar Studio"></div></fieldset>
         </div>
       </div>
       <div class="calendar-view-switch" role="tablist" aria-label="Calendar view">
-        <button id="calendarViewUpcoming" type="button" role="tab" aria-selected="true" aria-controls="upcoming" data-calendar-view="upcoming">Upcoming <span id="upcomingViewCount">0</span></button>
-        <button id="calendarViewOnView" type="button" role="tab" aria-selected="false" aria-controls="on-view" data-calendar-view="on-view">On View <span id="onViewCount">0</span></button>
-        <button id="calendarViewMonth" type="button" role="tab" aria-selected="false" aria-controls="month" data-calendar-view="month">Month</button>
+        <button id="calendarViewUpcoming" type="button" role="tab" aria-selected="true" aria-controls="upcoming" data-calendar-view="upcoming" data-copy-id="live-calendar-button-3">Upcoming <span id="upcomingViewCount">0</span></button>
+        <button id="calendarViewOnView" type="button" role="tab" aria-selected="false" aria-controls="on-view" data-calendar-view="on-view" data-copy-id="live-calendar-button-4">On View <span id="onViewCount">0</span></button>
+        <button id="calendarViewMonth" type="button" role="tab" aria-selected="false" aria-controls="month" data-calendar-view="month" data-copy-id="live-calendar-button-5">Month</button>
       </div>
     </section>
 
     <section class="section calendar-view-panel" id="upcoming" role="tabpanel" tabindex="0" aria-labelledby="calendarViewUpcoming upcoming-title">
       <header class="section-head">
-        <div><span class="section-kicker"><br></span><h2 class="section-title" id="upcoming-title">Upcoming</h2></div>
+        <div><span class="section-kicker"><br></span><h2 class="section-title" id="upcoming-title" data-copy-id="live-calendar-h2-2">Upcoming</h2></div>
         <p class="section-copy"><br></p>
       </header>
-      <div class="calendar-event-list" id="upcomingEvents" aria-live="polite"><p class="calendar-empty">Loading the calendar.</p></div>
+      <div class="calendar-event-list" id="upcomingEvents" aria-live="polite" data-live-edit-owner="managed" data-live-edit-label="Studio-managed upcoming events" data-live-edit-owner-href="/studio/calendar/" data-live-edit-owner-label="Open Calendar Studio"><p class="calendar-empty" data-copy-id="live-calendar-p-5">Loading the calendar.</p></div>
     </section>
 
     <section class="section calendar-on-view calendar-view-panel" id="on-view" role="tabpanel" tabindex="0" aria-labelledby="calendarViewOnView on-view-title" hidden>
       <header class="section-head">
-        <div><span class="section-kicker">exhibitions</span><h2 class="section-title" id="on-view-title">On View</h2></div>
-        <p class="section-copy">Exhibitions remain here for every month their on-view dates overlap. Openings, talks, mixers, and screenings stay on their exact dates below.</p>
+        <div><span class="section-kicker" data-copy-id="live-calendar-span-5">exhibitions</span><h2 class="section-title" id="on-view-title" data-copy-id="live-calendar-h2-3">On View</h2></div>
+        <p class="section-copy" data-copy-id="live-calendar-p-6">Exhibitions remain here for every month their on-view dates overlap. Openings, talks, mixers, and screenings stay on their exact dates below.</p>
       </header>
-      <div class="calendar-event-list" id="onViewEvents" aria-live="polite"></div>
+      <div class="calendar-event-list" id="onViewEvents" aria-live="polite" data-live-edit-owner="managed" data-live-edit-label="Studio-managed exhibitions" data-live-edit-owner-href="/studio/calendar/" data-live-edit-owner-label="Open Calendar Studio"></div>
     </section>
 
     <section class="section calendar-view-panel" id="month" role="tabpanel" tabindex="0" aria-labelledby="calendarViewMonth month-title" hidden>
       <header class="section-head">
-        <div><span class="section-kicker"><br></span><h2 class="section-title" id="month-title">Calendar</h2></div>
-        <div class="month-controls"><button type="button" id="previousMonth" aria-label="Previous month">Previous</button><span id="monthLabel"></span><button type="button" id="nextMonth" aria-label="Next month">Next</button></div>
+        <div><span class="section-kicker"><br></span><h2 class="section-title" id="month-title" data-copy-id="live-calendar-h2-4">Calendar</h2></div>
+        <div class="month-controls"><button type="button" id="previousMonth" aria-label="Previous month" data-copy-id="live-calendar-button-6">Previous</button><span id="monthLabel"></span><button type="button" id="nextMonth" aria-label="Next month" data-copy-id="live-calendar-button-7">Next</button></div>
       </header>
       <div class="calendar-month" id="calendarMonth">
-        <div class="calendar-weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
-        <div class="calendar-grid" id="calendarGrid" role="grid" aria-label="Events by date"></div>
+        <div class="calendar-weekdays" aria-hidden="true"><span data-copy-id="live-calendar-span-8">Sun</span><span data-copy-id="live-calendar-span-9">Mon</span><span data-copy-id="live-calendar-span-10">Tue</span><span data-copy-id="live-calendar-span-11">Wed</span><span data-copy-id="live-calendar-span-12">Thu</span><span data-copy-id="live-calendar-span-13">Fri</span><span data-copy-id="live-calendar-span-14">Sat</span></div>
+        <div class="calendar-grid" id="calendarGrid" role="grid" aria-label="Events by date" data-live-edit-owner="managed" data-live-edit-label="Studio-managed calendar dates" data-live-edit-owner-href="/studio/calendar/" data-live-edit-owner-label="Open Calendar Studio"></div>
       </div>
-      <div class="calendar-day-agenda" id="dayAgenda" aria-live="polite"></div>
+      <div class="calendar-day-agenda" id="dayAgenda" aria-live="polite" data-live-edit-owner="managed" data-live-edit-label="Studio-managed daily agenda" data-live-edit-owner-href="/studio/calendar/" data-live-edit-owner-label="Open Calendar Studio"></div>
     </section>
 
     <section class="section calendar-utility-section" id="subscribe" aria-labelledby="subscribe-title">
       <details class="calendar-utility-disclosure">
         <summary>
-          <span class="calendar-utility-heading"><span class="section-kicker">live feeds</span><span class="section-title" id="subscribe-title" role="heading" aria-level="2">Subscribe</span></span>
-          <span class="section-copy">Choose one live feed. It installs as a separate calendar and updates automatically.</span>
-          <span class="calendar-disclosure-action">Choose feed</span>
+          <span class="calendar-utility-heading" data-copy-id="live-calendar-span-15"><span class="section-kicker">live feeds</span><span class="section-title" id="subscribe-title" role="heading" aria-level="2">Subscribe</span></span>
+          <span class="section-copy" data-copy-id="live-calendar-span-16">Choose one live feed. It installs as a separate calendar and updates automatically.</span>
+          <span class="calendar-disclosure-action" data-copy-id="live-calendar-span-17">Choose feed</span>
         </summary>
         <div class="feed-grid">
-          <a href="webcal://thesixwellconstruct.com/calendars/atlanta.ics"><strong>All Atlanta Events</strong><span>Every approved listing and Six.Well occurrence</span></a>
-          <a href="webcal://thesixwellconstruct.com/calendars/art.ics"><strong>Art</strong><span>Exhibitions, installations, and visual art</span></a>
-          <a href="webcal://thesixwellconstruct.com/calendars/film.ics"><strong>Film</strong><span>Independent and experimental moving image</span></a>
-          <a href="webcal://thesixwellconstruct.com/calendars/poetry-music.ics"><strong>Poetry + Music</strong><span>Readings, sound, showcases, and performance</span></a>
-          <a href="webcal://thesixwellconstruct.com/calendars/tech-ai.ics"><strong>Tech + AI</strong><span>Technology, AI, and creative technology</span></a>
-          <a href="webcal://thesixwellconstruct.com/calendars/talks-conferences.ics"><strong>Talks + Conferences</strong><span>Lectures, panels, and conferences</span></a>
-          <a href="webcal://thesixwellconstruct.com/calendars/sixwell.ics"><strong>Six.Well Events</strong><span>Events produced by the construct</span></a>
+          <a href="webcal://thesixwellconstruct.com/calendars/atlanta.ics" data-copy-id="live-calendar-a-5"><strong>All Atlanta Events</strong><span>Every approved listing and Six.Well occurrence</span></a>
+          <a href="webcal://thesixwellconstruct.com/calendars/art.ics" data-copy-id="live-calendar-a-6"><strong>Art</strong><span>Exhibitions, installations, and visual art</span></a>
+          <a href="webcal://thesixwellconstruct.com/calendars/film.ics" data-copy-id="live-calendar-a-7"><strong>Film</strong><span>Independent and experimental moving image</span></a>
+          <a href="webcal://thesixwellconstruct.com/calendars/poetry-music.ics" data-copy-id="live-calendar-a-8"><strong>Poetry + Music</strong><span>Readings, sound, showcases, and performance</span></a>
+          <a href="webcal://thesixwellconstruct.com/calendars/tech-ai.ics" data-copy-id="live-calendar-a-9"><strong>Tech + AI</strong><span>Technology, AI, and creative technology</span></a>
+          <a href="webcal://thesixwellconstruct.com/calendars/talks-conferences.ics" data-copy-id="live-calendar-a-10"><strong>Talks + Conferences</strong><span>Lectures, panels, and conferences</span></a>
+          <a href="webcal://thesixwellconstruct.com/calendars/sixwell.ics" data-copy-id="live-calendar-a-11"><strong>Six.Well Events</strong><span>Events produced by the construct</span></a>
         </div>
-        <p class="section-copy">Exhibition ranges stay on this website. Only their dated openings, talks, workshops, screenings, performances, and closings appear in subscription feeds.</p>
+        <p class="section-copy" data-copy-id="live-calendar-p-7">Exhibition ranges stay on this website. Only their dated openings, talks, workshops, screenings, performances, and closings appear in subscription feeds.</p>
       </details>
     </section>
 
     <section class="section calendar-utility-section" id="past" aria-labelledby="past-title">
       <details class="calendar-utility-disclosure" id="pastEventsDisclosure">
         <summary>
-          <span class="calendar-utility-heading"><span class="section-kicker">record</span><span class="section-title" id="past-title" role="heading" aria-level="2">Past Events</span></span>
-          <span class="section-copy">Past events that might have records attached...</span>
-          <span class="calendar-disclosure-action" id="pastEventCount">0 events</span>
+          <span class="calendar-utility-heading" data-copy-id="live-calendar-span-18"><span class="section-kicker">record</span><span class="section-title" id="past-title" role="heading" aria-level="2">Past Events</span></span>
+          <span class="section-copy" data-copy-id="live-calendar-span-19">Past events that might have records attached...</span>
+          <span class="calendar-disclosure-action" id="pastEventCount" data-copy-id="live-calendar-span-20">0 events</span>
         </summary>
-        <div class="calendar-event-list is-past" id="pastEvents"></div>
+        <div class="calendar-event-list is-past" id="pastEvents" data-live-edit-owner="managed" data-live-edit-label="Studio-managed past events" data-live-edit-owner-href="/studio/calendar/" data-live-edit-owner-label="Open Calendar Studio"></div>
       </details>
     </section>
 
-    <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/calendar/submit/">Submit an event</a><a href="/events/">Six.Well events</a><a href="/home/">return to construct</a></div></footer>
+    <footer class="footer"><p data-copy-id="live-calendar-p-8">&copy; the six.well construct</p><div class="page-links"><a href="/calendar/submit/" data-copy-id="live-calendar-a-12">Submit an event</a><a href="/events/" data-copy-id="live-calendar-a-13">Six.Well events</a><a href="/home/" data-copy-id="live-calendar-a-14">return to construct</a></div></footer>
   </main>
   <dialog class="calendar-media-dialog" id="calendarMediaDialog" aria-labelledby="calendarMediaTitle">
-    <div class="calendar-media-dialog-head"><h2 id="calendarMediaTitle">Event media</h2><button id="calendarMediaClose" type="button">Close</button></div>
+    <div class="calendar-media-dialog-head"><h2 id="calendarMediaTitle" data-copy-id="live-calendar-h2-5">Event media</h2><button id="calendarMediaClose" type="button" data-copy-id="live-calendar-button-8">Close</button></div>
     <div class="calendar-media-stage"><img id="calendarMediaImage" alt=""><p id="calendarMediaCaption"></p></div>
-    <div class="calendar-media-dialog-actions"><button id="calendarMediaPrevious" type="button">Previous</button><button id="calendarMediaNext" type="button">Next</button></div>
+    <div class="calendar-media-dialog-actions"><button id="calendarMediaPrevious" type="button" data-copy-id="live-calendar-button-9">Previous</button><button id="calendarMediaNext" type="button" data-copy-id="live-calendar-button-10">Next</button></div>
   </dialog>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>

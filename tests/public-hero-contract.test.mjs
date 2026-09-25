@@ -300,7 +300,7 @@ test("Tattoo landing replaces its lower promotions with client resources", async
 test("Client Resources provides the four appointment-resource destinations", async () => {
   const html = await read("tattoos/client-resources/index.html");
 
-  assert.match(html, /<h1 class="hero-title">Client Resources<\/h1>/);
+  assert.match(html, /<h1 class="hero-title"[^>]*>Client Resources<\/h1>/);
   assert.match(html, /<nav class="resource-directory" aria-label="Client resources">/);
   for (const route of ["policies", "day-of", "location-parking", "aftercare"]) {
     assert.match(html, new RegExp(`class="tattoos-button" href="/tattoos/${route}/"`));

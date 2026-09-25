@@ -605,7 +605,7 @@ statement:    —
   <!-- HEADER — construct-corner.js injects ring lockup top-left.
        cart toggle is visual-only until Shopify Storefront API is connected. -->
   <header class="top">
-    <button class="cart-toggle" id="cartToggle" aria-label="open cart">
+    <button class="cart-toggle" id="cartToggle" aria-label="open cart" data-copy-id="live-art-button-1">
       <span class="cart-label">cart</span>
       <span class="cart-count">0</span>
     </button>
@@ -615,21 +615,21 @@ statement:    —
   <div class="cart-overlay" id="cartOverlay"></div>
   <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
     <div class="drawer-header">
-      <span class="drawer-title">cart</span>
-      <button class="drawer-close" id="drawerClose" aria-label="close cart">&times;</button>
+      <span class="drawer-title" data-copy-id="live-art-span-1">cart</span>
+      <button class="drawer-close" id="drawerClose" aria-label="close cart" data-copy-id="live-art-button-2">&times;</button>
     </div>
     <div class="drawer-body">
-      <p class="drawer-empty">cart is empty</p>
+      <p class="drawer-empty" data-copy-id="live-art-p-1">cart is empty</p>
     </div>
     <div class="drawer-footer">
-      <button class="checkout-btn" disabled>proceed to checkout</button>
-      <p class="drawer-note">shipping &amp; taxes calculated at checkout</p>
+      <button class="checkout-btn" disabled data-copy-id="live-art-button-3">proceed to checkout</button>
+      <p class="drawer-note" data-copy-id="live-art-p-2">shipping &amp; taxes calculated at checkout</p>
     </div>
   </aside>
 
   <!-- EXPANDED WORK OVERLAY -->
   <div id="work-overlay" role="dialog" aria-modal="true" aria-label="Work detail">
-    <button class="overlay-close" id="overlayCloseBtn" aria-label="Close">✕</button>
+    <button class="overlay-close" id="overlayCloseBtn" aria-label="Close" data-copy-id="live-art-button-4">✕</button>
     <div class="overlay-inner">
       <div class="overlay-image-wrap">
         <img id="overlayImg" src="" alt="" />
@@ -640,7 +640,7 @@ statement:    —
         <p  class="overlay-subtitle" id="overlaySubtitle"></p>
         <div class="overlay-tags"    id="overlayTags"></div>
         <p  class="overlay-fragment" id="overlayFragment"></p>
-        <a  href="#" class="overlay-statement-link" id="overlayStLink">artist statement</a>
+        <a  href="#" class="overlay-statement-link" id="overlayStLink" data-copy-id="live-art-a-1">artist statement</a>
       </div>
     </div>
   </div>
@@ -678,22 +678,22 @@ statement:    —
 
     <!-- filter rows — row 1: medium, row 2: type (scoped to active medium) -->
     <nav class="filters" id="filters" role="tablist">
-      <div class="filter-row" id="mediumRow"></div>
-      <div class="filter-row" id="typeRow"></div>
+      <div class="filter-row" id="mediumRow" data-live-edit-ignore="true"></div>
+      <div class="filter-row" id="typeRow" data-live-edit-ignore="true"></div>
     </nav>
 
     <section class="studio-visit-band" aria-label="Studio visits">
       <div>
-        <p class="studio-visit-kicker">Open studio visits</p>
-        <p class="studio-visit-copy">Step into the practice in person: works in progress, finished paintings... sit with me in the room where everything takes shape. Reserve a private studio visit here:</p>
+        <p class="studio-visit-kicker" data-copy-id="live-art-p-8">Open studio visits</p>
+        <p class="studio-visit-copy" data-copy-id="live-art-p-9">Step into the practice in person: works in progress, finished paintings... sit with me in the room where everything takes shape. Reserve a private studio visit here:</p>
       </div>
-      <a class="studio-visit-link" href="/booking/studio-visit/">Reserve a visit</a>
+      <a class="studio-visit-link" href="/booking/studio-visit/" data-copy-id="live-art-a-5">Reserve a visit</a>
     </section>
 
     <!-- PAINTINGS -->
     <section class="medium-section" id="sectionPainting">
       <p class="medium-heading" data-copy-id="art-paintings-heading">Paintings</p>
-      <div class="work-grid" id="gridPainting">
+      <div class="work-grid" id="gridPainting" data-live-edit-owner="managed" data-live-edit-label="Studio-managed paintings" data-live-edit-owner-href="/studio/submissions/#art/works" data-live-edit-owner-label="Open Art Works in Studio">
 
         <!--
           WORK CARD ANATOMY
@@ -720,10 +720,10 @@ statement:    —
              data-fragment="A figure dissolving into colour. Dot by dot, something that was solid becomes scattered — and maybe freer for it."
              data-series="">
           <img src="../assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg" alt="AM I LOSING MY MARBLES OR HIDING THEM?, 2024" loading="lazy" />
-          <span class="work-badge">standalone</span>
+          <span class="work-badge" data-copy-id="live-art-span-2">standalone</span>
           <div class="work-meta">
-            <span class="work-title">AM I LOSING MY MARBLES OR HIDING THEM?</span>
-            <span class="work-info">2023 · Acrylic on wood panel</span>
+            <span class="work-title" data-copy-id="live-art-span-3">AM I LOSING MY MARBLES OR HIDING THEM?</span>
+            <span class="work-info" data-copy-id="live-art-span-4">2023 · Acrylic on wood panel</span>
           </div>
         </div>
 
@@ -736,10 +736,10 @@ statement:    —
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="../assets/paintings/LUST.JPG" alt="" loading="lazy" />
-          <span class="work-badge">narrative</span>
+          <span class="work-badge" data-copy-id="live-art-span-5">narrative</span>
           <div class="work-meta">
-            <span class="work-title">LUST.</span>
-            <span class="work-info">2023 · Acrylic on wood panel</span>
+            <span class="work-title" data-copy-id="live-art-span-6">LUST.</span>
+            <span class="work-info" data-copy-id="live-art-span-7">2023 · Acrylic on wood panel</span>
           </div>
         </div>
 
@@ -750,10 +750,10 @@ statement:    —
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="../assets/paintings/SLOTH.JPG" alt="" loading="lazy" />
-          <span class="work-badge">narrative</span>
+          <span class="work-badge" data-copy-id="live-art-span-8">narrative</span>
           <div class="work-meta">
-            <span class="work-title">SLOTH.</span>
-            <span class="work-info">— · Painting</span>
+            <span class="work-title" data-copy-id="live-art-span-9">SLOTH.</span>
+            <span class="work-info" data-copy-id="live-art-span-10">— · Painting</span>
           </div>
         </div>
 
@@ -764,10 +764,10 @@ statement:    —
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="series-01">
           <img src="../assets/paintings/HOMELAND SECURITY.jpg" alt="" loading="lazy" />
-          <span class="work-badge">series</span>
+          <span class="work-badge" data-copy-id="live-art-span-11">series</span>
           <div class="work-meta">
-            <span class="work-title">HOMELAND SECURITY.</span>
-            <span class="work-info">— · Painting</span>
+            <span class="work-title" data-copy-id="live-art-span-12">HOMELAND SECURITY.</span>
+            <span class="work-info" data-copy-id="live-art-span-13">— · Painting</span>
           </div>
         </div>
 
@@ -778,10 +778,10 @@ statement:    —
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="series-02">
           <img src="../assets/paintings/THE FRUSTRATIONS OF INNER CHAOS.jpg" alt="" loading="lazy" />
-          <span class="work-badge">series</span>
+          <span class="work-badge" data-copy-id="live-art-span-14">series</span>
           <div class="work-meta">
-            <span class="work-title">THE FRUSTRATIONS OF INNER CHAOS.</span>
-            <span class="work-info">— · Painting</span>
+            <span class="work-title" data-copy-id="live-art-span-15">THE FRUSTRATIONS OF INNER CHAOS.</span>
+            <span class="work-info" data-copy-id="live-art-span-16">— · Painting</span>
           </div>
         </div>
 
@@ -792,10 +792,10 @@ statement:    —
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="../assets/paintings/PARANOIA & FOSTERED TRAUMA.jpg" alt="" loading="lazy" />
-          <span class="work-badge">narrative</span>
+          <span class="work-badge" data-copy-id="live-art-span-17">narrative</span>
           <div class="work-meta">
-            <span class="work-title">PARANOIA & FOSTERED TRAUMA.</span>
-            <span class="work-info">— · Painting</span>
+            <span class="work-title" data-copy-id="live-art-span-18">PARANOIA & FOSTERED TRAUMA.</span>
+            <span class="work-info" data-copy-id="live-art-span-19">— · Painting</span>
           </div>
         </div>
 
@@ -805,10 +805,10 @@ statement:    —
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="" alt="" loading="lazy" />
-          <span class="work-badge">standalone</span>
+          <span class="work-badge" data-copy-id="live-art-span-20">standalone</span>
           <div class="work-meta">
-            <span class="work-title">UNTITLED 07</span>
-            <span class="work-info">— · Painting</span>
+            <span class="work-title" data-copy-id="live-art-span-21">UNTITLED 07</span>
+            <span class="work-info" data-copy-id="live-art-span-22">— · Painting</span>
           </div>
         </div>
 
@@ -818,10 +818,10 @@ statement:    —
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="" alt="" loading="lazy" />
-          <span class="work-badge">non-narrative</span>
+          <span class="work-badge" data-copy-id="live-art-span-23">non-narrative</span>
           <div class="work-meta">
-            <span class="work-title">UNTITLED 08</span>
-            <span class="work-info">— · Painting</span>
+            <span class="work-title" data-copy-id="live-art-span-24">UNTITLED 08</span>
+            <span class="work-info" data-copy-id="live-art-span-25">— · Painting</span>
           </div>
         </div>
 
@@ -831,7 +831,7 @@ statement:    —
     <!-- WOOD WORKS — placeholder section, populated in future phase -->
     <section class="medium-section" id="sectionWood">
       <p class="medium-heading" data-copy-id="art-wood-heading">Wood works</p>
-      <div class="work-grid" id="gridWood">
+      <div class="work-grid" id="gridWood" data-live-edit-owner="managed" data-live-edit-label="Studio-managed wood works" data-live-edit-owner-href="/studio/submissions/#art/works" data-live-edit-owner-label="Open Art Works in Studio">
 
         <!-- Remove class="placeholder", add real img + data-* when works are ready -->
 
@@ -856,8 +856,8 @@ statement:    —
   </main>
 
   <footer class="bottom">
-    <p>&copy; the six.well construct</p>
-    <a href="/home/">return to construct</a>
+    <p data-copy-id="live-art-p-12">&copy; the six.well construct</p>
+    <a href="/home/" data-copy-id="live-art-a-6">return to construct</a>
   </footer>
 
   <!-- shared scripts — same load order as merch/index.html -->

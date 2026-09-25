@@ -93,7 +93,7 @@
   <div class="grain"></div>
 
   <header class="top">
-    <a class="nav-inquire" href="/home/">The Construct</a>
+    <a class="nav-inquire" href="/home/" data-copy-id="live-booking-studio-a-1">The Construct</a>
   </header>
 
   <main>
@@ -101,30 +101,30 @@
 
       <!-- LEFT — INFO -->
       <section class="site-hero site-hero--supporting">
-        <h1 class="page-title hero-title">Book the Studio.</h1>
-        <p class="page-body hero-descriptor">Reserve the construct for a private gathering or arrange an external event rental for your own group or organization.</p>
-        <p class="page-body">Choose a booking type and an available time. A deposit holds your date — any remaining balance is settled with the studio directly.</p>
+        <h1 class="page-title hero-title" data-copy-id="live-booking-studio-h1-1">Book the Studio.</h1>
+        <p class="page-body hero-descriptor" data-copy-id="live-booking-studio-p-1">Reserve the construct for a private gathering or arrange an external event rental for your own group or organization.</p>
+        <p class="page-body" data-copy-id="live-booking-studio-p-2">Choose a booking type and an available time. A deposit holds your date — any remaining balance is settled with the studio directly.</p>
 
         <div class="offerings-block">
-          <p class="block-kicker">Ways to book</p>
+          <p class="block-kicker" data-copy-id="live-booking-studio-p-3">Ways to book</p>
           <div class="offering">
-            <p class="offering-name">Private Gathering</p>
-            <p class="offering-desc">Reserve the studio for a small private gathering.</p>
+            <p class="offering-name" data-copy-id="live-booking-studio-p-4">Private Gathering</p>
+            <p class="offering-desc" data-copy-id="live-booking-studio-p-5">Reserve the studio for a small private gathering.</p>
           </div>
           <div class="offering">
-            <p class="offering-name">External Event Rental</p>
-            <p class="offering-desc">For people or organizations renting the construct for their own event.</p>
+            <p class="offering-name" data-copy-id="live-booking-studio-p-6">External Event Rental</p>
+            <p class="offering-desc" data-copy-id="live-booking-studio-p-7">For people or organizations renting the construct for their own event.</p>
           </div>
         </div>
       </section>
 
       <!-- RIGHT — FORM -->
       <section class="form-panel" aria-label="Book the studio">
-        <h2 class="form-title">Reserve Your Time.</h2>
-        <p class="form-note">Pick a booking type and time. After selecting a time, you'll be taken to Square to place the deposit and hold your date.</p>
+        <h2 class="form-title" data-copy-id="live-booking-studio-h2-1">Reserve Your Time.</h2>
+        <p class="form-note" data-copy-id="live-booking-studio-p-8">Pick a booking type and time. After selecting a time, you'll be taken to Square to place the deposit and hold your date.</p>
 
         <div id="formStep">
-          <form class="public-form" id="consultForm" novalidate>
+          <form class="public-form" id="consultForm" novalidate data-live-edit-owner="preview" data-live-edit-label="Operational Studio booking flow">
             <input type="hidden" name="type" value="studio_booking">
             <input type="hidden" name="source_path" value="/booking/studio/">
             <input type="hidden" name="subject" value="New Studio Booking Request">
@@ -156,32 +156,32 @@
 
             <!-- SLOT PICKER -->
             <div class="slot-picker">
-              <span class="slot-picker-label">Available times</span>
+              <span class="slot-picker-label" data-copy-id="live-booking-studio-span-1">Available times</span>
 
               <div class="slot-selected" id="slotSelected"></div>
 
               <div class="cal-wrap" id="calWrap">
                 <div class="cal-next-available" id="calNextAvailable"></div>
                 <div class="cal-header">
-                  <button type="button" class="cal-nav" id="calPrev">←</button>
+                  <button type="button" class="cal-nav" id="calPrev" data-copy-id="live-booking-studio-button-1">←</button>
                   <span class="cal-month-label" id="calMonthLabel"></span>
-                  <button type="button" class="cal-nav" id="calNext">→</button>
+                  <button type="button" class="cal-nav" id="calNext" data-copy-id="live-booking-studio-button-2">→</button>
                 </div>
                 <div class="cal-weekdays">
-                  <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                  <span data-copy-id="live-booking-studio-span-3">Su</span><span data-copy-id="live-booking-studio-span-4">Mo</span><span data-copy-id="live-booking-studio-span-5">Tu</span><span data-copy-id="live-booking-studio-span-6">We</span><span data-copy-id="live-booking-studio-span-7">Th</span><span data-copy-id="live-booking-studio-span-8">Fr</span><span data-copy-id="live-booking-studio-span-9">Sa</span>
                 </div>
                 <div class="cal-grid" id="calGrid"></div>
                 <div class="time-row" id="timeRow" style="display:none;">
                   <div class="time-dropdown" id="timeDropdown">
-                    <button type="button" class="time-trigger" id="timeTrigger" aria-haspopup="listbox" aria-expanded="false">
+                    <button type="button" class="time-trigger" id="timeTrigger" aria-haspopup="listbox" aria-expanded="false" data-copy-id="live-booking-studio-button-3">
                       <span class="time-trigger-label" id="timeTriggerLabel">Pick a time</span>
                       <span class="time-trigger-arrow">▾</span>
                     </button>
                     <div class="time-panel" id="timePanel" role="listbox" style="display:none;"></div>
                   </div>
-                  <button type="button" class="time-add-btn" id="timeAddBtn" disabled>Select Time</button>
+                  <button type="button" class="time-add-btn" id="timeAddBtn" disabled data-copy-id="live-booking-studio-button-4">Select Time</button>
                 </div>
-                <p class="cal-full-note" id="calFullNote" style="display:none;">No studio times are available for this date.</p>
+                <p class="cal-full-note" id="calFullNote" style="display:none;" data-copy-id="live-booking-studio-p-9">No studio times are available for this date.</p>
               </div>
 
               <input type="hidden" name="preferred_slots" id="preferredSlots">
@@ -190,11 +190,11 @@
 
             <label class="form-check">
               <input class="form-check__input" type="checkbox" name="understand" value="yes" required>
-              <span class="form-check__label">I understand the deposit holds my date and any remaining balance is settled with the studio. This is a studio booking, not a tattoo appointment.</span>
+              <span class="form-check__label" data-copy-id="live-booking-studio-span-10">I understand the deposit holds my date and any remaining balance is settled with the studio. This is a studio booking, not a tattoo appointment.</span>
             </label>
 
             <div class="submit-row">
-              <button class="submit-btn" type="submit" id="submitBtn">Continue to Square</button>
+              <button class="submit-btn" type="submit" id="submitBtn" data-copy-id="live-booking-studio-button-5">Continue to Square</button>
             </div>
             <p class="form-status" id="formError" style="display:none;color:rgba(252,184,103,0.9);margin-top:14px;"></p>
           </form>
@@ -202,8 +202,8 @@
 
         <div id="paymentStep" style="display:none;">
           <div class="payment-holding">
-            <p class="payment-holding-title">Details saved.</p>
-            <p class="payment-holding-body">Taking you to complete the deposit now...</p>
+            <p class="payment-holding-title" data-copy-id="live-booking-studio-p-11">Details saved.</p>
+            <p class="payment-holding-body" data-copy-id="live-booking-studio-p-12">Taking you to complete the deposit now...</p>
           </div>
         </div>
 
@@ -213,8 +213,8 @@
   </main>
 
   <footer class="bottom">
-    <a href="/home/">&larr; the six.well construct</a>
-    <a href="/home/">the six.well construct</a>
+    <a href="/home/" data-copy-id="live-booking-studio-a-2">&larr; the six.well construct</a>
+    <a href="/home/" data-copy-id="live-booking-studio-a-3">the six.well construct</a>
   </footer>
 
   <script src="/js/booking-calendar.js"></script>

@@ -44,8 +44,8 @@
   <main class="venture-shell entrance-fade">
     <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="page-title">
       <div>
-        <span class="venture-kicker">recurring showcase</span>
-        <h1 class="venture-title hero-title" id="page-title">GREEN[FIELD]</h1>
+        <span class="venture-kicker" data-copy-id="live-events-greenfield-span-1">recurring showcase</span>
+        <h1 class="venture-title hero-title" id="page-title" data-copy-id="live-events-greenfield-h1-1">GREEN[FIELD]</h1>
       </div>
     </section>
 
@@ -53,17 +53,17 @@
       <div class="event-grid">
         <div class="stack">
           <div class="line-panel">
-            <div class="detail-row"><span class="detail-key">When</span><span id="ev-when">Loading</span></div>
+            <div class="detail-row"><span class="detail-key" data-copy-id="live-events-greenfield-span-2">When</span><span id="ev-when" data-copy-id="live-events-greenfield-span-3">Loading</span></div>
             <div class="detail-row" id="ev-date-choice-row" hidden><label class="detail-key" for="ev-date-choice">Choose date</label><select id="ev-date-choice"></select></div>
-            <div class="detail-row"><span class="detail-key">Where</span><span id="ev-where">Loading</span></div>
-            <div class="detail-row"><span class="detail-key">Ticket</span><span id="ev-price">Loading</span></div>
-            <div class="detail-row"><span class="detail-key">Seats left</span><span id="ev-seats">Loading</span></div>
-            <div class="detail-row"><span class="detail-key">Night shape</span><span>Audience entry, open mic sequence, intermission feature, then the closing run.</span></div>
+            <div class="detail-row"><span class="detail-key" data-copy-id="live-events-greenfield-span-4">Where</span><span id="ev-where" data-copy-id="live-events-greenfield-span-5">Loading</span></div>
+            <div class="detail-row"><span class="detail-key" data-copy-id="live-events-greenfield-span-6">Ticket</span><span id="ev-price" data-copy-id="live-events-greenfield-span-7">Loading</span></div>
+            <div class="detail-row"><span class="detail-key" data-copy-id="live-events-greenfield-span-8">Seats left</span><span id="ev-seats" data-copy-id="live-events-greenfield-span-9">Loading</span></div>
+            <div class="detail-row"><span class="detail-key" data-copy-id="live-events-greenfield-span-10">Night shape</span><span data-copy-id="live-events-greenfield-span-11">Audience entry, open mic sequence, intermission feature, then the closing run.</span></div>
           </div>
 
           <article class="form-card" id="open-mic">
-            <span class="form-title">Open Mic Request</span>
-            <form class="public-form" id="micForm" novalidate>
+            <span class="form-title" data-copy-id="live-events-greenfield-span-12">Open Mic Request</span>
+            <form class="public-form" id="micForm" novalidate data-live-edit-owner="preview" data-live-edit-label="Operational open-mic request flow">
               <div class="field">
                 <label for="performerName">Performer name</label>
                 <input id="performerName" name="performerName" autocomplete="name" required>
@@ -81,7 +81,7 @@
               <div class="field"><label for="micInstagram">Instagram (optional)</label><input id="micInstagram" name="instagram" placeholder="@"></div>
               <div class="field"><label for="micPreferredContact">Preferred contact (optional)</label><select id="micPreferredContact" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
               <div class="field"><label for="micReferralSource">How did you hear about me? (optional)</label><select id="micReferralSource" name="referral_source"><option value="">Choose one</option><option value="friend_family">Friend / family</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="google_search">Google / search</option><option value="event_in_person">Event / in person</option><option value="returning_client">Returning client</option><option value="other">Other</option></select></div>
-              <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="newsletter_consent" value="yes"><span class="form-check__label">Send me The Six.Well newsletter by email (optional).</span></label>
+              <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="newsletter_consent" value="yes"><span class="form-check__label" data-copy-id="live-events-greenfield-span-13">Send me The Six.Well newsletter by email (optional).</span></label>
               <div class="field">
                 <label for="actType">Act type</label>
                 <input id="actType" name="actType" placeholder="poem, song, monologue, movement, reading">
@@ -99,16 +99,16 @@
                 <textarea id="notes" name="notes" placeholder="Tell us anything needed for the piece, timing, intro, or setup."></textarea>
               </div>
               <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
-              <button class="submit-btn" type="submit" id="micBtn">Request a slot</button>
+              <button class="submit-btn" type="submit" id="micBtn" data-copy-id="live-events-greenfield-button-1">Request a slot</button>
               <p class="form-message form-status" id="micMessage"></p>
-              <p class="form-note">Requests are not final until the host assigns a slot. You will receive an email with your time and performer notes.</p>
+              <p class="form-note" data-copy-id="live-events-greenfield-p-2">Requests are not final until the host assigns a slot. You will receive an email with your time and performer notes.</p>
             </form>
           </article>
         </div>
 
         <aside class="form-card">
-          <span class="form-title">Tickets</span>
-          <form class="public-form" id="ticketForm" novalidate>
+          <span class="form-title" data-copy-id="live-events-greenfield-span-14">Tickets</span>
+          <form class="public-form" id="ticketForm" novalidate data-live-edit-owner="preview" data-live-edit-label="Operational ticket request flow">
             <div class="field">
               <label for="name">Your name</label>
               <input id="name" name="name" autocomplete="name" required>
@@ -126,26 +126,26 @@
             <div class="field"><label for="ticketInstagram">Instagram (optional)</label><input id="ticketInstagram" name="instagram" placeholder="@"></div>
             <div class="field"><label for="ticketPreferredContact">Preferred contact (optional)</label><select id="ticketPreferredContact" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
             <div class="field"><label for="ticketReferralSource">How did you hear about me? (optional)</label><select id="ticketReferralSource" name="referral_source"><option value="">Choose one</option><option value="friend_family">Friend / family</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="google_search">Google / search</option><option value="event_in_person">Event / in person</option><option value="returning_client">Returning client</option><option value="other">Other</option></select></div>
-            <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="newsletter_consent" value="yes"><span class="form-check__label">Send me The Six.Well newsletter by email (optional).</span></label>
+            <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="newsletter_consent" value="yes"><span class="form-check__label" data-copy-id="live-events-greenfield-span-15">Send me The Six.Well newsletter by email (optional).</span></label>
             <div class="field">
               <label for="seats">Seats</label>
               <select id="seats" name="seats"></select>
             </div>
             <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
-            <div class="total-line"><span>Total</span><strong id="total">-</strong></div>
-            <button class="submit-btn" type="submit" id="ticketBtn" disabled>Loading</button>
+            <div class="total-line"><span data-copy-id="live-events-greenfield-span-16">Total</span><strong id="total" data-copy-id="live-events-greenfield-strong-1">-</strong></div>
+            <button class="submit-btn" type="submit" id="ticketBtn" disabled data-copy-id="live-events-greenfield-button-2">Loading</button>
             <p class="form-message form-status" id="ticketMessage"></p>
-            <p class="form-note" id="ticketNote">Tickets are confirmed after registration or Square payment clears.</p>
+            <p class="form-note" id="ticketNote" data-copy-id="live-events-greenfield-p-4">Tickets are confirmed after registration or Square payment clears.</p>
           </form>
         </aside>
       </div>
     </section>
 
     <footer class="footer">
-      <p>&copy; the six.well construct</p>
+      <p data-copy-id="live-events-greenfield-p-5">&copy; the six.well construct</p>
       <div class="page-links">
-        <a href="/events/">events</a>
-        <a href="/home/">return to construct</a>
+        <a href="/events/" data-copy-id="live-events-greenfield-a-1">events</a>
+        <a href="/home/" data-copy-id="live-events-greenfield-a-2">return to construct</a>
       </div>
     </footer>
   </main>

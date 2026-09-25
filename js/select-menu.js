@@ -256,6 +256,7 @@
     const root = document.createElement("div");
     root.className = "custom-select";
     root.dataset.sixwellSelect = "1";
+    root.dataset.liveEditIgnore = "true";
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "custom-select-trigger";

@@ -98,64 +98,64 @@
   <main class="venture-shell entrance-fade">
     <section class="landing-hero venture-hero site-hero site-hero--landing" aria-labelledby="page-title">
       <div>
-        <span class="venture-kicker">live container</span>
-        <h1 class="venture-title hero-title" id="page-title">Events.</h1>
+        <span class="venture-kicker" data-copy-id="live-events-span-1">live container</span>
+        <h1 class="venture-title hero-title" id="page-title" data-copy-id="live-events-h1-1">Events.</h1>
       </div>
       <div class="hero-copy">
-        <p class="hero-descriptor hero-lede">Gatherings, open calls, temporary rooms, and live experiments attached to the construct.</p>
-        <p class="hero-note">These programs are produced or operated by Six.Well. Announced events mark what is forming; active events open the path to attend, register, or reserve a seat.</p>
+        <p class="hero-descriptor hero-lede" data-copy-id="live-events-p-1">Gatherings, open calls, temporary rooms, and live experiments attached to the construct.</p>
+        <p class="hero-note" data-copy-id="live-events-p-2">These programs are produced or operated by Six.Well. Announced events mark what is forming; active events open the path to attend, register, or reserve a seat.</p>
         <div class="hero-actions">
-          <a class="venture-link" href="#upcoming">upcoming</a>
-          <a class="venture-link" href="#calendar">event calendar</a>
-          <a class="venture-link" href="/calendar/">Atlanta Creative Calendar</a>
-          <a class="venture-link" href="#past">past events</a>
-          <a class="venture-link" href="/events/kinmarking/">KINMARKING series</a>
+          <a class="venture-link" href="#upcoming" data-copy-id="live-events-a-1">upcoming</a>
+          <a class="venture-link" href="#calendar" data-copy-id="live-events-a-2">event calendar</a>
+          <a class="venture-link" href="/calendar/" data-copy-id="live-events-a-3">Atlanta Creative Calendar</a>
+          <a class="venture-link" href="#past" data-copy-id="live-events-a-4">past events</a>
+          <a class="venture-link" href="/events/kinmarking/" data-copy-id="live-events-a-5">KINMARKING series</a>
         </div>
       </div>
     </section>
 
     <section class="section" id="upcoming">
       <header class="section-head">
-        <div><span class="section-kicker">public board</span><h2 class="section-title">Upcoming Events</h2></div>
-        <p class="section-copy">What has been announced and what is currently active.</p>
+        <div><span class="section-kicker" data-copy-id="live-events-span-2">public board</span><h2 class="section-title" data-copy-id="live-events-h2-1">Upcoming Events</h2></div>
+        <p class="section-copy" data-copy-id="live-events-p-3">What has been announced and what is currently active.</p>
       </header>
       <div class="event-card-list" id="upcomingEvents" aria-live="polite">
-        <p class="event-board-empty">Loading the public event board.</p>
+        <p class="event-board-empty" data-copy-id="live-events-p-4">Loading the public event board.</p>
       </div>
     </section>
 
     <section class="section" id="calendar">
       <header class="section-head">
-        <div><span class="section-kicker">calendar layer</span><h2 class="section-title">Event Calendar</h2></div>
-        <p class="section-copy">Event dates remain visible after they pass. Past dates are quieter, but the record stays open.</p>
+        <div><span class="section-kicker" data-copy-id="live-events-span-3">calendar layer</span><h2 class="section-title" data-copy-id="live-events-h2-2">Event Calendar</h2></div>
+        <p class="section-copy" data-copy-id="live-events-p-5">Event dates remain visible after they pass. Past dates are quieter, but the record stays open.</p>
       </header>
       <div class="cal-wrap events-calendar" id="eventsCalendar" hidden>
         <div class="cal-header">
           <span class="cal-month-count" id="eventMonthCount"></span>
           <div class="cal-month-nav">
-            <button class="cal-nav" id="eventMonthPrev" type="button" aria-label="Previous event month">‹</button>
-            <label><span class="cal-announcement">Event month</span><select class="cal-month-select" id="eventMonthSelect"></select></label>
-            <button class="cal-nav" id="eventMonthNext" type="button" aria-label="Next event month">›</button>
+            <button class="cal-nav" id="eventMonthPrev" type="button" aria-label="Previous event month" data-copy-id="live-events-button-1">‹</button>
+            <label><span class="cal-announcement" data-copy-id="live-events-span-5">Event month</span><select class="cal-month-select" id="eventMonthSelect"></select></label>
+            <button class="cal-nav" id="eventMonthNext" type="button" aria-label="Next event month" data-copy-id="live-events-button-2">›</button>
           </div>
         </div>
-        <div class="cal-weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+        <div class="cal-weekdays" aria-hidden="true"><span data-copy-id="live-events-span-6">Sun</span><span data-copy-id="live-events-span-7">Mon</span><span data-copy-id="live-events-span-8">Tue</span><span data-copy-id="live-events-span-9">Wed</span><span data-copy-id="live-events-span-10">Thu</span><span data-copy-id="live-events-span-11">Fri</span><span data-copy-id="live-events-span-12">Sat</span></div>
         <div class="cal-grid" id="eventCalendarGrid" role="grid" aria-label="Events by date"></div>
         <div class="event-day-agenda" id="eventDayAgenda" aria-live="polite"></div>
       </div>
-      <p class="event-board-empty" id="calendarEmpty">Loading event dates.</p>
+      <p class="event-board-empty" id="calendarEmpty" data-copy-id="live-events-p-6">Loading event dates.</p>
     </section>
 
     <section class="section" id="past">
       <header class="section-head">
-        <div><span class="section-kicker">record</span><h2 class="section-title">Past Events</h2></div>
-        <p class="section-copy">Completed gatherings remain as a quieter public trail into the wider archive.</p>
+        <div><span class="section-kicker" data-copy-id="live-events-span-13">record</span><h2 class="section-title" data-copy-id="live-events-h2-3">Past Events</h2></div>
+        <p class="section-copy" data-copy-id="live-events-p-7">Completed gatherings remain as a quieter public trail into the wider archive.</p>
       </header>
       <div class="event-card-list" id="pastEvents" aria-live="polite">
-        <p class="event-board-empty">Loading past events.</p>
+        <p class="event-board-empty" data-copy-id="live-events-p-8">Loading past events.</p>
       </div>
     </section>
 
-    <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/calendar/">Atlanta Creative Calendar</a><a href="/home/">return to construct</a><a href="/archive/events/">event archive</a></div></footer>
+    <footer class="footer"><p data-copy-id="live-events-p-9">&copy; the six.well construct</p><div class="page-links"><a href="/calendar/" data-copy-id="live-events-a-6">Atlanta Creative Calendar</a><a href="/home/" data-copy-id="live-events-a-7">return to construct</a><a href="/archive/events/" data-copy-id="live-events-a-8">event archive</a></div></footer>
   </main>
 
   <script src="/js/kinmarking-series.js?v=20260902-series-sessions"></script>
