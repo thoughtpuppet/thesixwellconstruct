@@ -1,9 +1,10 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import {
   clientEmailPreviewCatalog,
   emailTemplateDefinition,
@@ -21,6 +22,7 @@ import {
   isPageVisibilityOperationalExemptPath,
   resolvePageVisibility,
 } from "../shared/page-visibility.js";
+import { contentHash, readHtmlCopy, readSourceMarker, replaceHtmlCopy, replaceSourceMarker } from "./live-editor-source.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -397,7 +399,385 @@ function safeToolPath(pathSegments) {
     return null;
   }
   const resolved = path.resolve(root, ...pathSegments);
-  return resolved.startsWith(root) ? resolved : null;
+  return resolved.startsWith(`${root}${path.sep}`) ? resolved : null;
+}
+
+function toolPathSegments(filePath) {
+  const relative = path.relative(root, filePath);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return null;
+  return relative.split(path.sep).filter(Boolean);
+}
+
+async function atomicWrite(filePath, content) {
+  const temporaryPath = `${filePath}.live-editor-${randomUUID()}.tmp`;
+  await writeFile(temporaryPath, content, "utf8");
+  try {
+    await rename(temporaryPath, filePath);
+  } catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+function toolJson(res, status, payload) {
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+  res.end(JSON.stringify(payload));
+  return true;
+}
+
+async function liveEditorContext(body) {
+  const pathname = typeof body.pathname === "string" ? body.pathname : "/";
+  const pagePath = await resolveFile(pathname);
+  if (!pagePath) throw Object.assign(new Error("No source file is mapped to this route."), { statusCode: 404 });
+  const pageSegments = toolPathSegments(pagePath);
+  if (!pageSegments) throw Object.assign(new Error("The route resolves outside the workspace."), { statusCode: 400 });
+  const content = await readFile(pagePath, "utf8");
+  return { page: { pathSegments: pageSegments, hash: contentHash(content) } };
+}
+
+const liveEditorHistoryRoot = path.join(root, ".codex-tmp", "live-editor-history");
+
+function liveEditorPathname(value) {
+  const pathname = String(value || "/");
+  if (!pathname.startsWith("/") || pathname.length > 2048 || /[\u0000-\u001f]/.test(pathname)) {
+    throw Object.assign(new Error("Invalid live-editor page path."), { statusCode: 400 });
+  }
+  return pathname;
+}
+
+function liveEditorRevisionId(value) {
+  const id = String(value || "");
+  if (!/^\d{10,}-[0-9a-f-]{36}$/i.test(id)) throw Object.assign(new Error("Invalid revision ID."), { statusCode: 400 });
+  return id;
+}
+
+function newLiveEditorRevisionId() {
+  return `${Date.now()}-${randomUUID()}`;
+}
+
+async function readLiveEditorRevision(revisionId) {
+  const id = liveEditorRevisionId(revisionId);
+  try {
+    return JSON.parse(await readFile(path.join(liveEditorHistoryRoot, id, "manifest.json"), "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") throw Object.assign(new Error("Live-editor revision not found."), { statusCode: 404 });
+    throw error;
+  }
+}
+
+async function liveEditorRevisionManifests(pathname = "") {
+  let entries = [];
+  try {
+    entries = await readdir(liveEditorHistoryRoot, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+  const manifests = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^\d{10,}-[0-9a-f-]{36}$/i.test(entry.name)) continue;
+    try {
+      const manifest = JSON.parse(await readFile(path.join(liveEditorHistoryRoot, entry.name, "manifest.json"), "utf8"));
+      if (!pathname || manifest.pathname === pathname) manifests.push(manifest);
+    } catch {
+      // An incomplete directory has no authority until its manifest is written.
+    }
+  }
+  return manifests.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+}
+
+function liveEditorEditSummary(beforeSource, afterSource, edit) {
+  if (edit.kind === "html") {
+    return {
+      kind: "html",
+      copyId: edit.copyId,
+      before: readHtmlCopy(beforeSource, edit.copyId),
+      after: readHtmlCopy(afterSource, edit.copyId),
+    };
+  }
+  if (edit.kind === "source-marker") {
+    return {
+      kind: "source-marker",
+      marker: edit.marker,
+      before: { text: readSourceMarker(beforeSource, edit.marker) },
+      after: { text: readSourceMarker(afterSource, edit.marker) },
+    };
+  }
+  throw Object.assign(new Error(`Unsupported live-editor target ${edit.kind || "unknown"}.`), { statusCode: 400 });
+}
+
+async function persistLiveEditorRevision({ revisionId, action, pathname, files, relatedRevisionId = "", restoreMode = "" }) {
+  const id = liveEditorRevisionId(revisionId);
+  const pagePathname = liveEditorPathname(pathname);
+  const existing = await liveEditorRevisionManifests(pagePathname);
+  const revisionNumber = existing.reduce((highest, item) => Math.max(highest, Number(item.revisionNumber) || 0), 0) + 1;
+  const revisionRoot = path.join(liveEditorHistoryRoot, id);
+  const manifest = {
+    id,
+    revisionNumber,
+    createdAt: new Date().toISOString(),
+    actor: "Local live editor",
+    action,
+    pathname: pagePathname,
+    relatedRevisionId: relatedRevisionId || "",
+    restoreMode: restoreMode || "",
+    isOriginalBaseline: existing.length === 0,
+    editCount: files.reduce((count, file) => count + file.edits.length, 0),
+    files: files.map((file) => ({
+      pathSegments: file.pathSegments,
+      beforeHash: contentHash(file.original),
+      afterHash: contentHash(file.next),
+      edits: file.edits.map((edit) => liveEditorEditSummary(file.original, file.next, edit)),
+    })),
+  };
+
+  try {
+    for (const file of files) {
+      const beforePath = path.join(revisionRoot, "before", ...file.pathSegments);
+      const afterPath = path.join(revisionRoot, "after", ...file.pathSegments);
+      await mkdir(path.dirname(beforePath), { recursive: true });
+      await mkdir(path.dirname(afterPath), { recursive: true });
+      await writeFile(beforePath, file.original, "utf8");
+      await writeFile(afterPath, file.next, "utf8");
+    }
+    await writeFile(path.join(revisionRoot, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
+    return manifest;
+  } catch (error) {
+    await rm(revisionRoot, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+function compactLiveEditorRevision(manifest) {
+  return {
+    id: manifest.id,
+    revisionNumber: manifest.revisionNumber,
+    createdAt: manifest.createdAt,
+    actor: manifest.actor,
+    action: manifest.action,
+    pathname: manifest.pathname,
+    relatedRevisionId: manifest.relatedRevisionId || "",
+    restoreMode: manifest.restoreMode || "",
+    isOriginalBaseline: Boolean(manifest.isOriginalBaseline),
+    editCount: Number(manifest.editCount || 0),
+    files: (manifest.files || []).map((file) => ({
+      pathSegments: file.pathSegments,
+      beforeHash: file.beforeHash,
+      afterHash: file.afterHash,
+      targets: (file.edits || []).map((edit) => ({ kind: edit.kind, id: edit.copyId || edit.marker || "" })),
+    })),
+  };
+}
+
+async function listLiveEditorHistory(body) {
+  const pathname = liveEditorPathname(body.pathname);
+  const revisions = await liveEditorRevisionManifests(pathname);
+  return { ok: true, revisions: revisions.slice(0, 100).map(compactLiveEditorRevision) };
+}
+
+async function liveEditorHistoryDetail(body) {
+  const manifest = await readLiveEditorRevision(body.revisionId);
+  const pathname = liveEditorPathname(body.pathname);
+  if (manifest.pathname !== pathname) throw Object.assign(new Error("That revision belongs to a different page."), { statusCode: 409 });
+  return { ok: true, revision: manifest };
+}
+
+async function backupLiveEditorFiles(files, appliedHashes, metadata = {}) {
+  const token = `${Date.now()}-${randomUUID()}`;
+  const backupRoot = path.join(root, ".codex-tmp", "live-editor-backups", token);
+  const manifest = {
+    token,
+    createdAt: new Date().toISOString(),
+    sourceRevisionId: metadata.sourceRevisionId || "",
+    pathname: metadata.pathname || "/",
+    files: [],
+  };
+  await mkdir(backupRoot, { recursive: true });
+  for (const file of files) {
+    const backupPath = path.join(backupRoot, ...file.pathSegments);
+    await mkdir(path.dirname(backupPath), { recursive: true });
+    await writeFile(backupPath, file.original, "utf8");
+    manifest.files.push({ pathSegments: file.pathSegments, beforeHash: contentHash(file.original), appliedHash: appliedHashes[file.key] });
+  }
+  await writeFile(path.join(backupRoot, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
+  return token;
+}
+
+async function commitLiveEditorFiles({ files, pathname, action, relatedRevisionId = "", restoreMode = "" }) {
+  const pagePathname = liveEditorPathname(pathname);
+  const revisionId = newLiveEditorRevisionId();
+  const appliedHashes = Object.fromEntries(files.map((file) => [file.key, contentHash(file.next)]));
+  const undoToken = await backupLiveEditorFiles(files, appliedHashes, { sourceRevisionId:revisionId, pathname:pagePathname });
+  const backupRoot = path.join(root, ".codex-tmp", "live-editor-backups", undoToken);
+  const written = [];
+  let revision;
+  try {
+    for (const file of files) {
+      await atomicWrite(file.filePath, file.next);
+      written.push(file);
+    }
+    revision = await persistLiveEditorRevision({ revisionId, action, pathname:pagePathname, files, relatedRevisionId, restoreMode });
+  } catch (error) {
+    for (const file of written.reverse()) await atomicWrite(file.filePath, file.original).catch(() => {});
+    await rm(backupRoot, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+  return {
+    revision,
+    undoToken,
+    files: files.map((file) => ({ pathSegments:file.pathSegments, hash:appliedHashes[file.key] })),
+  };
+}
+
+async function applyLiveEditorEdits(body) {
+  const edits = Array.isArray(body.edits) ? body.edits : [];
+  if (!edits.length || edits.length > 100) throw Object.assign(new Error("Choose between 1 and 100 edits to apply."), { statusCode: 400 });
+  const grouped = new Map();
+
+  for (const edit of edits) {
+    const filePath = safeToolPath(edit.pathSegments);
+    if (!filePath) throw Object.assign(new Error("An edit has an invalid source path."), { statusCode: 400 });
+    const pathSegments = toolPathSegments(filePath);
+    const key = pathSegments.join("/");
+    if (!grouped.has(key)) grouped.set(key, { key, filePath, pathSegments, edits: [], expectedHash: String(edit.expectedHash || "") });
+    const group = grouped.get(key);
+    if (!group.expectedHash || group.expectedHash !== String(edit.expectedHash || "")) {
+      throw Object.assign(new Error(`The edit set for ${key} does not share a valid source revision.`), { statusCode: 400 });
+    }
+    group.edits.push(edit);
+  }
+
+  const files = [];
+  for (const group of grouped.values()) {
+    const original = await readFile(group.filePath, "utf8");
+    const actualHash = contentHash(original);
+    if (actualHash !== group.expectedHash) {
+      throw Object.assign(new Error(`${group.key} changed after editing began. Reload before applying.`), { statusCode: 409, file: group.key, expectedHash: group.expectedHash, actualHash });
+    }
+    let next = original;
+    for (const edit of group.edits) {
+      if (edit.kind === "html") next = replaceHtmlCopy(next, edit);
+      else if (edit.kind === "source-marker") next = replaceSourceMarker(next, edit);
+      else throw Object.assign(new Error(`Unsupported live-editor target ${edit.kind || "unknown"}.`), { statusCode: 400 });
+    }
+    files.push({ ...group, original, next });
+  }
+
+  const result = await commitLiveEditorFiles({ files, pathname:body.pathname, action:"apply" });
+  return {
+    ok: true,
+    applied: edits.length,
+    files: result.files,
+    undoToken: result.undoToken,
+    revisionId: result.revision.id,
+    revisionNumber: result.revision.revisionNumber,
+  };
+}
+
+function liveEditorRestoreEdit(summary, mode) {
+  const state = summary[mode];
+  if (!state) throw Object.assign(new Error("The selected revision does not contain that version."), { statusCode: 409 });
+  if (summary.kind === "html") return { kind:"html", copyId:summary.copyId, html:state.html || "", styles:state.styles || {} };
+  if (summary.kind === "source-marker") return { kind:"source-marker", marker:summary.marker, text:state.text || "" };
+  throw Object.assign(new Error("The revision contains an unsupported target."), { statusCode: 409 });
+}
+
+async function restoreLiveEditorRevision(body) {
+  const pathname = liveEditorPathname(body.pathname);
+  const sourceRevision = await readLiveEditorRevision(body.revisionId);
+  if (sourceRevision.pathname !== pathname) throw Object.assign(new Error("That revision belongs to a different page."), { statusCode: 409 });
+  const mode = body.mode === "before" ? "before" : body.mode === "after" ? "after" : "";
+  if (!mode) throw Object.assign(new Error("Choose the prior or saved version to restore."), { statusCode: 400 });
+  const files = [];
+  for (const sourceFile of sourceRevision.files || []) {
+    const filePath = safeToolPath(sourceFile.pathSegments);
+    if (!filePath) throw Object.assign(new Error("The revision contains an invalid source path."), { statusCode: 409 });
+    const original = await readFile(filePath, "utf8");
+    let next = original;
+    const edits = (sourceFile.edits || []).map((summary) => liveEditorRestoreEdit(summary, mode));
+    for (const edit of edits) {
+      if (edit.kind === "html") next = replaceHtmlCopy(next, edit);
+      else next = replaceSourceMarker(next, edit);
+    }
+    if (next !== original) {
+      files.push({
+        key: sourceFile.pathSegments.join("/"),
+        filePath,
+        pathSegments: sourceFile.pathSegments,
+        edits,
+        original,
+        next,
+      });
+    }
+  }
+  if (!files.length) throw Object.assign(new Error("The source already matches that revision."), { statusCode: 409 });
+  const result = await commitLiveEditorFiles({
+    files,
+    pathname,
+    action:"restore",
+    relatedRevisionId:sourceRevision.id,
+    restoreMode:mode,
+  });
+  return {
+    ok: true,
+    restored: files.reduce((count, file) => count + file.edits.length, 0),
+    files: result.files,
+    undoToken: result.undoToken,
+    revisionId: result.revision.id,
+    revisionNumber: result.revision.revisionNumber,
+  };
+}
+
+async function undoLiveEditorApply(body) {
+  const token = String(body.undoToken || "");
+  if (!/^\d{10,}-[0-9a-f-]{36}$/i.test(token)) throw Object.assign(new Error("Invalid undo token."), { statusCode: 400 });
+  const backupRoot = path.join(root, ".codex-tmp", "live-editor-backups", token);
+  const manifest = JSON.parse(await readFile(path.join(backupRoot, "manifest.json"), "utf8"));
+  const sourceRevision = manifest.sourceRevisionId ? await readLiveEditorRevision(manifest.sourceRevisionId).catch(() => null) : null;
+  const restore = [];
+  for (const entry of manifest.files || []) {
+    const filePath = safeToolPath(entry.pathSegments);
+    if (!filePath) throw Object.assign(new Error("The undo record contains an invalid path."), { statusCode: 400 });
+    const current = await readFile(filePath, "utf8");
+    if (contentHash(current) !== entry.appliedHash) throw Object.assign(new Error(`${entry.pathSegments.join("/")} changed after the editor applied it. Undo was stopped.`), { statusCode: 409 });
+    const original = await readFile(path.join(backupRoot, ...entry.pathSegments), "utf8");
+    const sourceFile = sourceRevision?.files?.find((file) => file.pathSegments.join("/") === entry.pathSegments.join("/"));
+    const edits = (sourceFile?.edits || []).map((summary) => liveEditorRestoreEdit(summary, "before"));
+    restore.push({
+      key: entry.pathSegments.join("/"),
+      filePath,
+      pathSegments:entry.pathSegments,
+      original:current,
+      next:original,
+      applied:current,
+      edits,
+    });
+  }
+  const restored = [];
+  let revision;
+  try {
+    for (const file of restore) {
+      await atomicWrite(file.filePath, file.next);
+      restored.push(file);
+    }
+    revision = await persistLiveEditorRevision({
+      revisionId:newLiveEditorRevisionId(),
+      action:"undo",
+      pathname:manifest.pathname || sourceRevision?.pathname || "/",
+      files:restore,
+      relatedRevisionId:manifest.sourceRevisionId || "",
+    });
+  } catch (error) {
+    for (const file of restored.reverse()) await atomicWrite(file.filePath, file.applied).catch(() => {});
+    throw error;
+  }
+  await rm(backupRoot, { recursive: true, force: true });
+  return {
+    ok: true,
+    restored:restore.map((file) => ({ pathSegments:file.pathSegments, hash:contentHash(file.next) })),
+    revisionId:revision.id,
+    revisionNumber:revision.revisionNumber,
+  };
 }
 
 async function readJson(req) {
@@ -423,6 +803,54 @@ async function handleToolApi(req, res) {
     return true;
   }
 
+  if (req.url === "/__tools/live-editor/context") {
+    try {
+      return toolJson(res, 200, await liveEditorContext(body));
+    } catch (error) {
+      return toolJson(res, error.statusCode || (error.code === "ENOENT" ? 404 : 500), { error: error.message });
+    }
+  }
+
+  if (req.url === "/__tools/live-editor/apply") {
+    try {
+      return toolJson(res, 200, await applyLiveEditorEdits(body));
+    } catch (error) {
+      return toolJson(res, error.statusCode || 500, { error: error.message, file: error.file, expectedHash: error.expectedHash, actualHash: error.actualHash });
+    }
+  }
+
+  if (req.url === "/__tools/live-editor/undo") {
+    try {
+      return toolJson(res, 200, await undoLiveEditorApply(body));
+    } catch (error) {
+      return toolJson(res, error.statusCode || (error.code === "ENOENT" ? 404 : 500), { error: error.message });
+    }
+  }
+
+  if (req.url === "/__tools/live-editor/history") {
+    try {
+      return toolJson(res, 200, await listLiveEditorHistory(body));
+    } catch (error) {
+      return toolJson(res, error.statusCode || 500, { error:error.message });
+    }
+  }
+
+  if (req.url === "/__tools/live-editor/history/detail") {
+    try {
+      return toolJson(res, 200, await liveEditorHistoryDetail(body));
+    } catch (error) {
+      return toolJson(res, error.statusCode || 500, { error:error.message });
+    }
+  }
+
+  if (req.url === "/__tools/live-editor/history/restore") {
+    try {
+      return toolJson(res, 200, await restoreLiveEditorRevision(body));
+    } catch (error) {
+      return toolJson(res, error.statusCode || 500, { error:error.message });
+    }
+  }
+
   const filePath = safeToolPath(body.pathSegments);
   if (!filePath) {
     res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
@@ -434,7 +862,7 @@ async function handleToolApi(req, res) {
     try {
       const content = await readFile(filePath, "utf8");
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ content }));
+      res.end(JSON.stringify({ content, hash: contentHash(content), pathSegments: toolPathSegments(filePath) }));
     } catch (error) {
       res.writeHead(error.code === "ENOENT" ? 404 : 500, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ error: error.code === "ENOENT" ? "Not found." : error.message }));
@@ -449,8 +877,14 @@ async function handleToolApi(req, res) {
       return true;
     }
     try {
+      if (body.expectedHash) {
+        const current = await readFile(filePath, "utf8");
+        if (contentHash(current) !== body.expectedHash) {
+          return toolJson(res, 409, { error: "The source file changed. Reload before writing." });
+        }
+      }
       if (body.createDirs) await mkdir(path.dirname(filePath), { recursive: true });
-      await writeFile(filePath, body.content, "utf8");
+      await atomicWrite(filePath, body.content);
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ ok: true }));
     } catch (error) {

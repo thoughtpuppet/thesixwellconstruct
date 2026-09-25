@@ -943,6 +943,10 @@
   let activeAppointmentId = "";
   let activeTab = "home";
   let subView = "requests";
+  function studioOwnerViewFromLocation() {
+    const match = window.location.hash.match(/^#(tattoo)\/(appointments|flash|special-projects)$/);
+    return match ? { tab:match[1], view:match[2] } : null;
+  }
   let statusValue = "";
   let typeValue = "";
   let availabilityPreviewMonth = "";
@@ -9000,7 +9004,18 @@ ${meetingLines}
     }
   });
 
-  window.addEventListener("hashchange", activateWebsiteArchiveDeepLink);
+  window.addEventListener("hashchange", () => {
+    const ownerView = studioOwnerViewFromLocation();
+    if (ownerView) {
+      activeTab = ownerView.tab;
+      subView = ownerView.view;
+      tabsEl.querySelectorAll("[data-tab]").forEach((button) => button.classList.toggle("is-active", button.dataset.tab === activeTab));
+      buildSubnav();
+      if (token && tokenModal.classList.contains("hidden")) renderActiveTab();
+      return;
+    }
+    activateWebsiteArchiveDeepLink();
+  });
 
   listEl.addEventListener("click", async (event) => {
     const studioAppointmentRow = event.target.closest("[data-studio-appointment-id]");
@@ -11840,8 +11855,14 @@ ${meetingLines}
 
   const analyticsHashState = window.StudioAnalytics?.hashState?.();
   const websiteArchiveSection = websiteArchiveSectionFromLocation();
+  const ownerView = studioOwnerViewFromLocation();
   setSidebarCollapsed(sidebarCollapsed, false);
-  if (analyticsHashState?.active) {
+  if (ownerView) {
+    activeTab = ownerView.tab;
+    subView = ownerView.view;
+    tabsEl.querySelectorAll("[data-tab]").forEach((button) => button.classList.toggle("is-active", button.dataset.tab === activeTab));
+    buildSubnav();
+  } else if (analyticsHashState?.active) {
     activeTab = "analytics";
     subView = analyticsHashState.view;
   } else if (websiteArchiveSection) {

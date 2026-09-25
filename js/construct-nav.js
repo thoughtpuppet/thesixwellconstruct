@@ -279,6 +279,9 @@
         });
         if (existingAnchor) {
           if (link.enforceLabel) existingAnchor.textContent = link.label;
+          existingAnchor.setAttribute('data-copy-id', 'managed-footer-' + (link.id || link.label));
+          existingAnchor.setAttribute('data-live-edit-owner', 'managed');
+          existingAnchor.setAttribute('data-live-edit-label', 'Managed navigation link');
           return;
         }
 
@@ -286,6 +289,9 @@
         anchor.href = link.route;
         anchor.textContent = link.label;
         anchor.setAttribute('data-construct-footer-link', link.id || link.label);
+        anchor.setAttribute('data-copy-id', 'managed-footer-' + (link.id || link.label));
+        anchor.setAttribute('data-live-edit-owner', 'managed');
+        anchor.setAttribute('data-live-edit-label', 'Managed navigation link');
         linkContainer.appendChild(anchor);
         footerAnchors.push(anchor);
       });

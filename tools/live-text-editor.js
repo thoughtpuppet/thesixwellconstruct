@@ -4,7 +4,7 @@
    Enables canvas-like text edits on the live static site.
 
    Open any page with ?edit=1 or press Cmd/Ctrl+Shift+E.
-   Changes are stored in localStorage by page path + element id.
+   Changes are stored in localStorage by page view + stable element id.
    ============================================================ */
 
 (function() {
@@ -14,6 +14,7 @@
 
   var STORAGE_PREFIX = 'sixwell:liveText:';
   var ENABLED_KEY = STORAGE_PREFIX + 'enabled';
+  var LAST_UNDO_KEY = STORAGE_PREFIX + 'lastUndo';
   var EDITOR_ID = 'live-text-editor';
   var BASE_COLOR_PALETTE = [
     { name: 'Default body', value: '#FFE7CA' },
@@ -87,12 +88,20 @@
   var activeElement = null;
   var helperAvailable = false;
   var reviewDrawer = null;
+  var coverageDrawer = null;
+  var historyDrawer = null;
   var originalRecords = {};
   var controlSelectionRange = null;
   var resizeObserver = null;
+  var toolbarResizeObserver = null;
   var resizeSaveTimers = new WeakMap();
   var activeResizeElement = null;
   var resizeDrag = null;
+  var helperContext = null;
+  var sourceHashes = {};
+  var contentObserver = null;
+  var contentSyncTimer = null;
+  var lastUndoToken = readStoredUndoToken();
 
   var TEXT_SELECTOR = [
     '[data-copy-id]',
@@ -109,7 +118,14 @@
   ].join(',');
 
   function pageKey() {
-    return STORAGE_PREFIX + window.location.pathname;
+    var params = new URLSearchParams(window.location.search);
+    params.delete('edit');
+    var query = Array.from(params.entries()).sort(function(a, b) {
+      return (a[0] + '=' + a[1]).localeCompare(b[0] + '=' + b[1]);
+    }).map(function(entry) {
+      return encodeURIComponent(entry[0]) + '=' + encodeURIComponent(entry[1]);
+    }).join('&');
+    return STORAGE_PREFIX + window.location.pathname + (query ? '?' + query : '');
   }
 
   function shouldAutoEnable() {
@@ -146,6 +162,8 @@
   function buildElementId(element, index, root) {
     var existing = element.getAttribute('data-copy-id') || element.id;
     if (existing) return existing;
+    var runtimeId = element.getAttribute('data-live-edit-id');
+    if (runtimeId) return runtimeId;
     return buildGeneratedElementId(element, index, root);
   }
 
@@ -190,15 +208,24 @@
     window.localStorage.setItem(pageKey(), JSON.stringify(copy));
   }
 
-  function pageFilePath() {
-    var path = window.location.pathname || '/';
-    if (path === '/') return ['index.html'];
-    var trimmed = path.replace(/^\/+|\/+$/g, '');
-    if (!trimmed) return ['index.html'];
-    var segments = trimmed.split('/');
-    if (segments[segments.length - 1].indexOf('.') !== -1) return segments;
-    segments.push('index.html');
-    return segments;
+  function readStoredUndoToken() {
+    try {
+      var record = JSON.parse(window.sessionStorage.getItem(LAST_UNDO_KEY) || '{}');
+      return record.pathname === window.location.pathname && typeof record.token === 'string' ? record.token : '';
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function rememberUndoToken(token) {
+    lastUndoToken = token || '';
+    if (lastUndoToken) {
+      window.sessionStorage.setItem(LAST_UNDO_KEY, JSON.stringify({ pathname:window.location.pathname, token:lastUndoToken }));
+    } else {
+      window.sessionStorage.removeItem(LAST_UNDO_KEY);
+    }
+    var undoButton = document.getElementById('live-text-undo-source');
+    if (undoButton) undoButton.hidden = !lastUndoToken;
   }
 
   function isSourceApplyContext() {
@@ -226,17 +253,107 @@
       updateSourceButton();
       return Promise.resolve(false);
     }
-    return callToolApi('/__tools/read-file', { pathSegments: pageFilePath() })
-      .then(function() {
+    return callToolApi('/__tools/live-editor/context', { pathname: window.location.pathname })
+      .then(function(context) {
+        helperContext = context;
+        if (context.page && context.page.pathSegments && context.page.hash) {
+          sourceHashes[context.page.pathSegments.join('/')] = context.page.hash;
+        }
         helperAvailable = true;
         updateSourceButton();
         return true;
       })
       .catch(function() {
+        helperContext = null;
         helperAvailable = false;
         updateSourceButton();
         return false;
       });
+  }
+
+  function targetForElement(element) {
+    var owner = element && element.getAttribute('data-live-edit-owner') || '';
+    var copyId = copyIdForElement(element);
+    function ownerTarget(ownerElement, kind) {
+      var ownerHref = ownerElement.getAttribute('data-live-edit-owner-href') || '';
+      if (!/^\/(?!\/)/.test(ownerHref)) ownerHref = '';
+      return {
+        kind: kind,
+        label: ownerElement.getAttribute('data-live-edit-label') || (kind === 'managed' ? 'Managed content' : 'Preview-only generated copy'),
+        ownerHref: ownerHref,
+        ownerLabel: ownerElement.getAttribute('data-live-edit-owner-label') || (ownerHref ? 'Open in Studio' : ''),
+        applyable: false
+      };
+    }
+    if (owner === 'source-marker') {
+      var source = element.getAttribute('data-live-edit-source') || '';
+      var marker = element.getAttribute('data-live-edit-marker') || '';
+      return {
+        kind: 'source-marker',
+        source: source,
+        marker: marker,
+        label: element.getAttribute('data-live-edit-label') || marker || 'Shared source copy',
+        applyable: Boolean(source && marker)
+      };
+    }
+    if (owner === 'managed') {
+      return ownerTarget(element, 'managed');
+    }
+    if (owner === 'preview') {
+      return ownerTarget(element, 'preview');
+    }
+    if (copyId) {
+      return { kind: 'html', copyId: copyId, label: element.getAttribute('data-live-edit-label') || 'Page HTML', applyable: true };
+    }
+    var ownerContainer = element && element.parentElement && element.parentElement.closest('[data-live-edit-owner="managed"], [data-live-edit-owner="preview"]');
+    if (ownerContainer) return ownerTarget(ownerContainer, ownerContainer.getAttribute('data-live-edit-owner'));
+    return { kind: 'preview', label: 'Preview-only element without a stable copy ID', applyable: false };
+  }
+
+  function syncElementEditingState(element) {
+    if (!element) return;
+    var target = targetForElement(element);
+    var canEdit = Boolean(isEnabled && target.applyable);
+    element.setAttribute('data-live-edit-target', target.kind);
+    element.setAttribute('data-live-edit-applyable', target.applyable ? 'true' : 'false');
+    element.contentEditable = canEdit ? 'true' : 'false';
+    element.spellcheck = canEdit;
+  }
+
+  function coverageSummary() {
+    var summary = { total:editableElements.length, saveable:0, html:0, source:0, managed:0, preview:0, broken:0 };
+    editableElements.forEach(function(element) {
+      var target = targetForElement(element);
+      if (target.applyable) summary.saveable += 1;
+      if (target.kind === 'html') summary.html += 1;
+      else if (target.kind === 'source-marker' && target.applyable) summary.source += 1;
+      else if (target.kind === 'managed') summary.managed += 1;
+      else if (target.kind === 'preview') summary.preview += 1;
+      else summary.broken += 1;
+    });
+    return summary;
+  }
+
+  function defaultStatusText() {
+    if (!isEnabled) return 'off';
+    var summary = coverageSummary();
+    return 'editing · ' + summary.saveable + '/' + summary.total + ' saveable';
+  }
+
+  function sourcePathForTarget(target) {
+    if (!target) return '';
+    if (target.kind === 'html') return helperContext && helperContext.page && helperContext.page.pathSegments ? helperContext.page.pathSegments.join('/') : '';
+    if (target.kind === 'source-marker') return target.source || '';
+    return '';
+  }
+
+  function ensureSourceHash(target) {
+    var sourcePath = sourcePathForTarget(target);
+    if (!sourcePath || sourceHashes[sourcePath]) return Promise.resolve(sourceHashes[sourcePath] || '');
+    return callToolApi('/__tools/read-file', { pathSegments: sourcePath.split('/') }).then(function(data) {
+      sourceHashes[sourcePath] = data.hash || '';
+      return sourceHashes[sourcePath];
+    }).catch(function() { return ''; });
   }
 
   function normalizeColorValue(value) {
@@ -390,7 +507,9 @@
       html: typeof record.html === 'string' ? record.html : '',
       color: typeof record.color === 'string' ? record.color : '',
       styles: styles,
-      updatedAt: record.updatedAt || ''
+      updatedAt: record.updatedAt || '',
+      target: record.target && typeof record.target === 'object' ? record.target : null,
+      expectedHash: typeof record.expectedHash === 'string' ? record.expectedHash : ''
     };
   }
 
@@ -408,7 +527,8 @@
       if (!hasStableCopyId && !hasDirectText(element)) return;
       if (hasEditableParent(element)) return;
 
-      element.setAttribute('data-live-edit-id', buildElementId(element, collected.length));
+      var nextId = buildElementId(element, collected.length);
+      if (element.getAttribute('data-live-edit-id') !== nextId) element.setAttribute('data-live-edit-id', nextId);
       collected.push(element);
     });
 
@@ -431,30 +551,22 @@
         delete saved[legacyId];
         migrated = true;
       }
+      var target = targetForElement(element);
       if (!originalRecords[id]) {
         originalRecords[id] = {
           html: element.innerHTML,
-          styles: readElementStyles(element)
+          styles: readElementStyles(element),
+          text: element.textContent || '',
+          target: target
         };
       }
       if (saved[id]) {
         var record = normalizeRecord(saved[id]);
-        if (record.html) element.innerHTML = record.html;
-        applyElementStyles(element, record.styles);
+        if (target.kind === 'html' && record.html) element.innerHTML = record.html;
+        else if (record.text) element.textContent = record.text;
+        if (target.kind === 'html') applyElementStyles(element, record.styles);
       }
     });
-
-    var stale = {};
-    Object.keys(saved).forEach(function(id) {
-      if (currentIds[id]) return;
-      stale[id] = saved[id];
-      delete saved[id];
-      migrated = true;
-    });
-
-    if (Object.keys(stale).length) {
-      window.localStorage.setItem(pageKey() + ':stale-backup', JSON.stringify(stale));
-    }
 
     if (migrated) setSavedCopy(saved);
 
@@ -467,15 +579,27 @@
 
     var saved = getSavedCopy();
     var styles = readElementStyles(element);
+    var target = targetForElement(element);
+    var sourcePath = sourcePathForTarget(target);
     saved[id] = {
       text: element.textContent.trim(),
-      html: element.innerHTML,
-      color: styles.color || '',
-      styles: styles,
-      updatedAt: new Date().toISOString()
+      html: target.kind === 'html' ? element.innerHTML : '',
+      color: target.kind === 'html' ? styles.color || '' : '',
+      styles: target.kind === 'html' ? styles : {},
+      updatedAt: new Date().toISOString(),
+      target: target,
+      expectedHash: sourceHashes[sourcePath] || ''
     };
     setSavedCopy(saved);
-    updateStatus('saved');
+    if (target.applyable && !saved[id].expectedHash) {
+      ensureSourceHash(target).then(function(hash) {
+        var latest = getSavedCopy();
+        if (!latest[id]) return;
+        latest[id].expectedHash = hash || '';
+        setSavedCopy(latest);
+      });
+    }
+    updateStatus(target.applyable ? 'Draft saved in this browser' : target.kind === 'managed' ? 'Preview saved · managed elsewhere' : 'Preview saved · no source target');
   }
 
   function getEditableFromSelection() {
@@ -582,11 +706,29 @@
     parent.removeChild(node);
   }
 
+  function richTextAllowed(element) {
+    if (!element || targetForElement(element).kind !== 'html') {
+      updateStatus('This source accepts plain copy only');
+      return false;
+    }
+    return true;
+  }
+
+  function formattingAllowed(element) {
+    if (!richTextAllowed(element)) return false;
+    if (element.matches('.hero-descriptor,[data-live-edit-system-role]')) {
+      updateStatus('Shared typography is controlled by the design system');
+      return false;
+    }
+    return true;
+  }
+
   function applyInlineTag(element, tagName, label) {
     if (!element) {
       updateStatus('select text');
       return;
     }
+    if (!richTextAllowed(element)) return;
 
     restoreControlSelection();
     if (!wrapSelection(element, tagName)) {
@@ -603,6 +745,7 @@
       updateStatus('select text');
       return;
     }
+    if (!richTextAllowed(element)) return;
 
     restoreControlSelection();
     var currentLink = linkFromSelection(element);
@@ -639,6 +782,7 @@
       updateStatus('select text');
       return;
     }
+    if (!richTextAllowed(element)) return;
 
     restoreControlSelection();
     element.focus();
@@ -671,6 +815,7 @@
       updateStatus('select text');
       return;
     }
+    if (!formattingAllowed(element)) return;
 
     if (selectionIsInside(element) && color) {
       colorSelection(element, color);
@@ -688,6 +833,7 @@
       updateStatus('select text');
       return;
     }
+    if (!formattingAllowed(element)) return;
 
     var styles = {};
     styles[property] = value || '';
@@ -708,6 +854,7 @@
       updateStatus('select text');
       return;
     }
+    if (!formattingAllowed(element)) return;
 
     element.focus();
     element.style[property] = value || '';
@@ -732,6 +879,7 @@
       updateStatus('select text');
       return;
     }
+    if (!formattingAllowed(element)) return;
     activeElement = element;
     activeResizeElement = element;
     ensureResizableBox(element);
@@ -832,6 +980,7 @@
       updateStatus('select text');
       return;
     }
+    if (!formattingAllowed(element)) return;
 
     restoreControlSelection();
     if (selectionIsInside(element)) {
@@ -917,10 +1066,10 @@
     var style = document.createElement('style');
     style.id = 'live-text-editor-styles';
     style.textContent = [
-      'body.live-text-editing [data-live-edit-id]{outline:1px dashed rgba(252,184,103,.42);outline-offset:3px;cursor:text;min-width:24px;min-height:20px;}',
-      'body.live-text-editing [data-live-edit-id].is-live-resizing{resize:both;max-width:none!important;overflow:auto!important;cursor:text;}',
-      'body.live-text-editing [data-live-edit-id]:hover,body.live-text-editing [data-live-edit-id]:focus{outline-color:#FCB867;background:rgba(252,184,103,.08);}',
-      'body.live-text-editing [data-live-edit-id]:focus{box-shadow:0 0 0 4px rgba(252,184,103,.12);}',
+      'body.live-text-editing [data-live-edit-applyable="true"]{outline:1px dashed rgba(252,184,103,.42);outline-offset:3px;cursor:text;min-width:24px;min-height:20px;}',
+      'body.live-text-editing [data-live-edit-applyable="true"].is-live-resizing{resize:both;max-width:none!important;overflow:auto!important;cursor:text;}',
+      'body.live-text-editing [data-live-edit-applyable="true"]:hover,body.live-text-editing [data-live-edit-applyable="true"]:focus{outline-color:#FCB867;background:rgba(252,184,103,.08);}',
+      'body.live-text-editing [data-live-edit-applyable="true"]:focus{box-shadow:0 0 0 4px rgba(252,184,103,.12);}',
       '#live-text-editor{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;justify-content:center;gap:8px;width:auto;max-width:calc(100vw - 36px);padding:8px;border:1px solid rgba(252,184,103,.32);background:rgba(14,14,14,.94);backdrop-filter:blur(16px);color:#FFE7CA;font-family:Inter,Arial,sans-serif;font-size:11px;line-height:1;box-shadow:0 14px 34px rgba(0,0,0,.36);}',
       '#live-text-editor .tool-section,#live-text-style-panel .tool-section{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;}',
       '#live-text-editor .tool-label,#live-text-style-panel .tool-label{color:rgba(255,231,202,.48);font-family:Georgia,Times New Roman,serif;text-transform:lowercase;}',
@@ -934,7 +1083,7 @@
       '#live-text-style-panel .font-choice{width:100%;justify-content:flex-start;text-align:left;text-transform:none;font-size:15px;line-height:1.1;}',
       '#live-text-editor button:hover,#live-text-editor button:focus-visible,#live-text-style-panel button:hover,#live-text-style-panel button:focus-visible{border-color:#FCB867;color:#FCB867;outline:none;}',
       '#live-text-editor .is-active{background:#FCB867;color:#0e0e0e;border-color:#FCB867;}',
-      '#live-text-style-panel{position:fixed;left:50%;bottom:68px;transform:translateX(-50%);z-index:2147483647;display:none;grid-template-columns:auto minmax(0,1fr);gap:10px;width:min(760px,calc(100vw - 36px));max-height:min(260px,calc(100vh - 118px));overflow:auto;padding:10px;border:1px solid rgba(252,184,103,.32);background:rgba(14,14,14,.96);backdrop-filter:blur(16px);color:#FFE7CA;font-family:Inter,Arial,sans-serif;font-size:11px;line-height:1;box-shadow:0 18px 44px rgba(0,0,0,.44);}',
+      '#live-text-style-panel{position:fixed;left:50%;bottom:var(--live-text-panel-bottom,118px);transform:translateX(-50%);z-index:2147483647;display:none;grid-template-columns:auto minmax(0,1fr);gap:10px;width:min(760px,calc(100vw - 36px));max-height:min(260px,calc(100vh - var(--live-text-panel-bottom,118px) - 24px));overflow:auto;padding:10px;border:1px solid rgba(252,184,103,.32);background:rgba(14,14,14,.96);backdrop-filter:blur(16px);color:#FFE7CA;font-family:Inter,Arial,sans-serif;font-size:11px;line-height:1;box-shadow:0 18px 44px rgba(0,0,0,.44);}',
       '#live-text-style-panel.is-open{display:grid;}',
       '#live-text-style-panel .style-controls{align-content:start;}',
       '#live-text-style-panel .color-wrap{display:grid;gap:8px;align-content:start;min-width:0;}',
@@ -943,20 +1092,59 @@
       '#live-text-style-panel .color-swatch{width:24px;min-height:24px;padding:0;border-radius:50%;border-color:rgba(255,231,202,.28);background:var(--swatch,transparent);color:transparent;overflow:hidden;flex:0 0 auto;}',
       '#live-text-style-panel .color-swatch:hover,#live-text-style-panel .color-swatch:focus-visible{border-color:#FFE7CA;box-shadow:0 0 0 3px rgba(252,184,103,.12);color:transparent;}',
       '#live-text-style-panel .color-reset{width:24px;min-height:24px;padding:0;border-radius:50%;color:rgba(255,231,202,.62);font-size:16px;line-height:1;}',
-      '#live-text-editor-status{min-width:52px;color:rgba(255,231,202,.62);font-family:Georgia,Times New Roman,serif;text-transform:lowercase;}',
-      '#live-text-export{position:fixed;right:18px;bottom:86px;z-index:2147483647;width:min(560px,calc(100vw - 36px));min-height:220px;padding:12px;border:1px solid rgba(252,184,103,.32);background:#0e0e0e;color:#FFE7CA;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;}',
-      '#live-text-review{position:fixed;right:18px;bottom:86px;z-index:2147483647;width:min(720px,calc(100vw - 36px));max-height:min(680px,calc(100vh - 120px));overflow:auto;border:1px solid rgba(252,184,103,.32);background:#0e0e0e;color:#FFE7CA;box-shadow:0 18px 48px rgba(0,0,0,.48);font-family:Inter,Arial,sans-serif;}',
+      '#live-text-editor-status{min-width:120px;max-width:260px;color:rgba(255,231,202,.62);font-family:Georgia,Times New Roman,serif;line-height:1.25;text-transform:none;}',
+      '#live-text-export{position:fixed;right:18px;bottom:var(--live-text-panel-bottom,118px);z-index:2147483647;width:min(560px,calc(100vw - 36px));min-height:220px;max-height:calc(100vh - var(--live-text-panel-bottom,118px) - 24px);padding:12px;border:1px solid rgba(252,184,103,.32);background:#0e0e0e;color:#FFE7CA;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;}',
+      '#live-text-review{position:fixed;right:18px;bottom:var(--live-text-panel-bottom,118px);z-index:2147483647;width:min(720px,calc(100vw - 36px));max-height:min(680px,calc(100vh - var(--live-text-panel-bottom,118px) - 24px));overflow:auto;border:1px solid rgba(252,184,103,.32);background:#0e0e0e;color:#FFE7CA;box-shadow:0 18px 48px rgba(0,0,0,.48);font-family:Inter,Arial,sans-serif;}',
       '#live-text-review header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-bottom:1px solid rgba(252,184,103,.22);}',
       '#live-text-review h2{margin:0;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#FCB867;}',
       '#live-text-review .review-actions{display:flex;gap:6px;flex-wrap:wrap;}',
       '#live-text-review .review-body{display:grid;gap:10px;padding:12px;}',
       '#live-text-review .review-path{margin:0;color:rgba(255,231,202,.58);font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word;}',
       '#live-text-review .review-item{border:1px solid rgba(252,184,103,.22);padding:10px;background:rgba(255,255,255,.02);}',
+      '#live-text-review .review-select{display:flex;align-items:flex-start;gap:8px;margin:0 0 8px;color:#FCB867;font:700 11px/1.3 Inter,Arial,sans-serif;text-transform:uppercase;}',
+      '#live-text-review .review-select input{margin:1px 0 0;accent-color:#FCB867;}',
+      '#live-text-review .review-target{display:inline-block;margin-top:6px;padding:4px 6px;background:rgba(252,184,103,.08);color:#FCB867;font:10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;}',
+      '#live-text-review .review-target.is-preview{color:rgba(255,231,202,.55);}',
       '#live-text-review .review-id{font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:rgba(255,231,202,.58);word-break:break-word;}',
       '#live-text-review pre{white-space:pre-wrap;word-break:break-word;margin:8px 0 0;color:rgba(255,231,202,.78);font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;}',
       '#live-text-review button{min-height:30px;border:1px solid rgba(252,184,103,.26);background:transparent;color:#FFE7CA;padding:0 10px;font:700 11px/1 Inter,Arial,sans-serif;text-transform:uppercase;cursor:pointer;}',
       '#live-text-review button:hover{border-color:#FCB867;color:#FCB867;}',
-      '@media(max-width:760px){#live-text-editor{left:18px;right:18px;transform:none;justify-content:flex-start;overflow-x:auto;}#live-text-style-panel{left:18px;right:18px;transform:none;width:auto;grid-template-columns:1fr;}#live-text-style-panel select,#live-text-style-panel input{max-width:100%;}}'
+      '#live-text-coverage{position:fixed;right:18px;bottom:var(--live-text-panel-bottom,118px);z-index:2147483647;width:min(720px,calc(100vw - 36px));max-height:min(680px,calc(100vh - var(--live-text-panel-bottom,118px) - 24px));overflow:auto;border:1px solid rgba(252,184,103,.32);background:#0e0e0e;color:#FFE7CA;box-shadow:0 18px 48px rgba(0,0,0,.48);font-family:Inter,Arial,sans-serif;}',
+      '#live-text-coverage header{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-bottom:1px solid rgba(252,184,103,.22);background:#0e0e0e;}',
+      '#live-text-coverage h2{margin:0;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#FCB867;}',
+      '#live-text-coverage button{min-height:30px;border:1px solid rgba(252,184,103,.26);background:transparent;color:#FFE7CA;padding:0 10px;font:700 11px/1 Inter,Arial,sans-serif;text-transform:uppercase;cursor:pointer;}',
+      '#live-text-coverage .coverage-body{display:grid;gap:10px;padding:12px;}',
+      '#live-text-coverage .coverage-summary{margin:0;color:rgba(255,231,202,.78);font:12px/1.5 Inter,Arial,sans-serif;}',
+      '#live-text-coverage .coverage-owner-actions{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:9px;border:1px solid rgba(252,184,103,.22);background:rgba(252,184,103,.04);}',
+      '#live-text-coverage .coverage-owner-actions>span{width:100%;color:rgba(255,231,202,.5);font:700 9px/1.2 Inter,Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;}',
+      '#live-text-coverage .coverage-item{padding:9px;border:1px solid rgba(252,184,103,.18);background:rgba(255,255,255,.02);}',
+      '#live-text-coverage .coverage-kind{color:#FCB867;font:700 10px/1.2 Inter,Arial,sans-serif;text-transform:uppercase;}',
+      '#live-text-coverage .coverage-id{margin-top:4px;color:rgba(255,231,202,.48);font:10px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word;}',
+      '#live-text-coverage .coverage-copy{margin:6px 0 0;color:rgba(255,231,202,.78);font:11px/1.4 Georgia,Times New Roman,serif;}',
+      '#live-text-coverage .coverage-owner-link{display:inline-flex;margin-top:8px;min-height:30px;align-items:center;border:1px solid rgba(252,184,103,.34);padding:0 9px;color:#FCB867;font:700 10px/1 Inter,Arial,sans-serif;letter-spacing:.06em;text-decoration:none;text-transform:uppercase;}',
+      '#live-text-coverage .coverage-owner-link:hover,#live-text-coverage .coverage-owner-link:focus-visible{border-color:#FCB867;color:#FFE7CA;}',
+      '#live-text-history{position:fixed;right:18px;bottom:var(--live-text-panel-bottom,118px);z-index:2147483647;width:min(760px,calc(100vw - 36px));max-height:min(680px,calc(100vh - var(--live-text-panel-bottom,118px) - 24px));overflow:auto;border:1px solid rgba(252,184,103,.32);background:#0e0e0e;color:#FFE7CA;box-shadow:0 18px 48px rgba(0,0,0,.48);font-family:Inter,Arial,sans-serif;}',
+      '#live-text-history header{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-bottom:1px solid rgba(252,184,103,.22);background:#0e0e0e;}',
+      '#live-text-history h2{margin:0;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#FCB867;}',
+      '#live-text-history .history-actions,#live-text-history .history-item-actions{display:flex;gap:6px;flex-wrap:wrap;}',
+      '#live-text-history button{min-height:30px;border:1px solid rgba(252,184,103,.26);background:transparent;color:#FFE7CA;padding:0 10px;font:700 10px/1 Inter,Arial,sans-serif;text-transform:uppercase;cursor:pointer;}',
+      '#live-text-history button:hover,#live-text-history button:focus-visible{border-color:#FCB867;color:#FCB867;}',
+      '#live-text-history button:disabled{cursor:wait;opacity:.48;}',
+      '#live-text-history .history-body{display:grid;gap:10px;padding:12px;}',
+      '#live-text-history .history-empty,#live-text-history .history-summary{margin:0;color:rgba(255,231,202,.7);font:12px/1.5 Inter,Arial,sans-serif;}',
+      '#live-text-history .history-item{display:grid;gap:8px;padding:10px;border:1px solid rgba(252,184,103,.2);background:rgba(255,255,255,.02);}',
+      '#live-text-history .history-item-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}',
+      '#live-text-history .history-item h3{margin:0;color:#FCB867;font:700 11px/1.3 Inter,Arial,sans-serif;text-transform:uppercase;}',
+      '#live-text-history .history-kind{color:rgba(255,231,202,.52);font:700 9px/1.2 Inter,Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;}',
+      '#live-text-history .history-meta{margin:0;color:rgba(255,231,202,.58);font:10px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word;}',
+      '#live-text-history .history-baseline{width:max-content;max-width:100%;padding:3px 5px;background:rgba(252,184,103,.1);color:#FCB867;font:700 9px/1.2 Inter,Arial,sans-serif;text-transform:uppercase;}',
+      '#live-text-history .history-detail{display:grid;gap:8px;padding-top:8px;border-top:1px solid rgba(252,184,103,.14);}',
+      '#live-text-history .history-file{display:grid;gap:6px;}',
+      '#live-text-history .history-file>strong{color:rgba(255,231,202,.62);font:10px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;}',
+      '#live-text-history .history-change{padding:8px;background:rgba(0,0,0,.28);}',
+      '#live-text-history .history-change strong{color:#FCB867;font:700 9px/1.2 Inter,Arial,sans-serif;text-transform:uppercase;}',
+      '#live-text-history .history-change pre{margin:6px 0 0;white-space:pre-wrap;word-break:break-word;color:rgba(255,231,202,.72);font:10px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;}',
+      '@media(max-width:760px){#live-text-editor{left:12px;right:12px;bottom:12px;transform:none;justify-content:flex-start;max-width:none;max-height:160px;overflow:auto;align-items:flex-start;flex-wrap:wrap;}#live-text-style-panel{left:12px;right:12px;transform:none;width:auto;grid-template-columns:1fr;}#live-text-review,#live-text-coverage,#live-text-history{left:12px;right:12px;top:12px;width:auto;max-height:none;}#live-text-review header{position:sticky;top:0;z-index:1;background:#0e0e0e;}#live-text-export{left:12px;right:12px;width:auto;}#live-text-style-panel select,#live-text-style-panel input{max-width:100%;}}'
     ].join('\n');
     document.head.appendChild(style);
   }
@@ -968,13 +1156,24 @@
     status.textContent = message;
     window.clearTimeout(updateStatus._timer);
     updateStatus._timer = window.setTimeout(function() {
-      status.textContent = isEnabled ? 'editing' : 'off';
-    }, 900);
+      status.textContent = defaultStatusText();
+      updateStatus._timer = null;
+    }, 2600);
   }
 
   function updateSourceButton() {
     var button = document.getElementById('live-text-apply-source');
     if (button) button.hidden = !helperAvailable;
+    var historyButton = document.getElementById('live-text-history-button');
+    if (historyButton) historyButton.hidden = !helperAvailable;
+  }
+
+  function syncFloatingPanelInset() {
+    var toolbar = document.getElementById(EDITOR_ID);
+    if (!toolbar) return;
+    var rect = toolbar.getBoundingClientRect();
+    var inset = Math.max(86, Math.ceil(window.innerHeight - rect.top + 12));
+    document.documentElement.style.setProperty('--live-text-panel-bottom', inset + 'px');
   }
 
   function makeButton(label, onClick, className) {
@@ -1264,23 +1463,35 @@
 
     var actionSection = makeSection('');
     var exportButton = makeButton('Export', toggleExport);
+    var coverageButton = makeButton('Coverage', toggleCoverage);
     var reviewButton = makeButton('Review', toggleReview);
-    var applyButton = makeButton('Apply Source', applyToSource);
+    var historyButton = makeButton('History', toggleHistory);
+    historyButton.id = 'live-text-history-button';
+    historyButton.hidden = true;
+    var applyButton = makeButton('Apply Changes', applyToSource);
     applyButton.id = 'live-text-apply-source';
     applyButton.hidden = true;
+    var undoButton = makeButton('Undo Apply', undoLastApply);
+    undoButton.id = 'live-text-undo-source';
+    undoButton.hidden = !lastUndoToken;
     var reset = makeButton('Reset', function() {
       if (!window.confirm('Clear saved copy edits for this page?')) return;
       window.localStorage.removeItem(pageKey());
       window.location.reload();
     });
+    actionSection.appendChild(coverageButton);
     actionSection.appendChild(reviewButton);
+    actionSection.appendChild(historyButton);
     actionSection.appendChild(applyButton);
+    actionSection.appendChild(undoButton);
     actionSection.appendChild(exportButton);
     actionSection.appendChild(reset);
 
     var status = document.createElement('span');
     status.id = 'live-text-editor-status';
     status.textContent = 'off';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
     actionSection.appendChild(status);
 
     colorWrap.appendChild(colorGroup);
@@ -1295,27 +1506,37 @@
     toolbar.appendChild(actionSection);
     document.body.appendChild(toolbar);
     document.body.appendChild(stylePanel);
+    if (typeof ResizeObserver === 'function') {
+      toolbarResizeObserver = new ResizeObserver(syncFloatingPanelInset);
+      toolbarResizeObserver.observe(toolbar);
+    }
+    window.requestAnimationFrame(syncFloatingPanelInset);
     updateSourceButton();
   }
 
   function savedEntries() {
     var saved = getSavedCopy();
-    var currentIds = {};
+    var currentElements = {};
     editableElements.forEach(function(element) {
       var id = element.getAttribute('data-live-edit-id');
-      if (id) currentIds[id] = true;
+      if (id) currentElements[id] = element;
     });
     return Object.keys(saved).map(function(id) {
-      return { id: id, record: normalizeRecord(saved[id]) };
+      var element = currentElements[id];
+      var record = normalizeRecord(saved[id]);
+      var target = element ? targetForElement(element) : record.target || { kind:'preview', label:'Element is not present in this view', applyable:false };
+      var sourcePath = sourcePathForTarget(target);
+      return {
+        id: id,
+        element: element,
+        record: record,
+        target: target,
+        sourcePath: sourcePath,
+        expectedHash: record.expectedHash || sourceHashes[sourcePath] || ''
+      };
     }).filter(function(entry) {
-      if (editableElements.length && !currentIds[entry.id]) return false;
+      if (editableElements.length && !entry.element) return false;
       return entry.record.html || entry.record.text || hasMeaningfulStyles(entry.record.styles);
-    }).map(function(entry) {
-      // Any entry that matches a currently-tracked element can be located in the
-      // source document, either via a stable data-copy-id or via the same
-      // path/text/index id scheme used to generate data-live-edit-id values.
-      entry.sourceBacked = true;
-      return entry;
     });
   }
 
@@ -1331,6 +1552,236 @@
     });
   }
 
+  function escapeAttribute(value) {
+    return escapeText(value).replace(/`/g, '&#96;');
+  }
+
+  function renderCoverageBody() {
+    if (!coverageDrawer) return;
+    var summary = coverageSummary();
+    var semanticPriority = { h1:0, h2:1, h3:2, h4:3, p:4, figcaption:5, blockquote:6, a:7, button:8, li:9 };
+    var unsupported = editableElements.map(function(element) {
+      return {
+        id: element.getAttribute('data-live-edit-id') || '',
+        tag: element.tagName.toLowerCase(),
+        text: (element.textContent || '').trim().replace(/\s+/g, ' '),
+        target: targetForElement(element)
+      };
+    }).filter(function(entry) { return !entry.target.applyable; }).sort(function(a, b) {
+      if (a.target.kind === 'managed' && b.target.kind !== 'managed') return -1;
+      if (b.target.kind === 'managed' && a.target.kind !== 'managed') return 1;
+      var aPriority = Object.prototype.hasOwnProperty.call(semanticPriority, a.tag) ? semanticPriority[a.tag] : 20;
+      var bPriority = Object.prototype.hasOwnProperty.call(semanticPriority, b.tag) ? semanticPriority[b.tag] : 20;
+      return aPriority - bPriority;
+    });
+    var shown = unsupported.slice(0, 40);
+    var ownerLinks = [];
+    var seenOwnerHrefs = {};
+    unsupported.forEach(function(entry) {
+      var href = entry.target.ownerHref || '';
+      if (!href || seenOwnerHrefs[href]) return;
+      seenOwnerHrefs[href] = true;
+      ownerLinks.push({ href:href, label:entry.target.ownerLabel || 'Open owner' });
+    });
+    var body = coverageDrawer.querySelector('.coverage-body');
+    body.innerHTML = [
+      '<p class="coverage-summary"><strong>' + summary.saveable + ' of ' + summary.total + '</strong> text targets are saveable on this view. ' + summary.html + ' belong to this page, ' + summary.source + ' belong to shared source, ' + summary.managed + ' are managed elsewhere, and ' + summary.preview + ' are preview-only.</p>',
+      unsupported.length ? '<p class="coverage-summary">Unsupported targets stay navigable and cannot be edited accidentally. Showing ' + shown.length + ' of ' + unsupported.length + '.</p>' : '<p class="coverage-summary">Every detected text target has a verified source owner.</p>',
+      ownerLinks.length ? '<div class="coverage-owner-actions"><span>Managed owners</span>' + ownerLinks.map(function(ownerLink) { return '<a class="coverage-owner-link" href="' + escapeAttribute(ownerLink.href) + '" target="_blank" rel="noopener">' + escapeText(ownerLink.label) + ' →</a>'; }).join('') + '</div>' : '',
+      shown.map(function(entry) {
+        return [
+          '<article class="coverage-item">',
+          '<div class="coverage-kind">' + escapeText(entry.target.kind === 'managed' ? 'Managed elsewhere' : 'Preview only') + ' · ' + escapeText(entry.tag) + '</div>',
+          '<div class="coverage-id">' + escapeText(entry.id) + '</div>',
+          '<p class="coverage-copy">' + escapeText(entry.text.slice(0, 240)) + '</p>',
+          '</article>'
+        ].join('');
+      }).join('')
+    ].join('');
+  }
+
+  function toggleCoverage() {
+    if (coverageDrawer) {
+      coverageDrawer.remove();
+      coverageDrawer = null;
+      return;
+    }
+    if (reviewDrawer) {
+      reviewDrawer.remove();
+      reviewDrawer = null;
+    }
+    if (historyDrawer) {
+      historyDrawer.remove();
+      historyDrawer = null;
+    }
+    coverageDrawer = document.createElement('section');
+    coverageDrawer.id = 'live-text-coverage';
+    coverageDrawer.setAttribute('data-live-edit-ignore', 'true');
+    coverageDrawer.innerHTML = '<header><h2>Source Coverage</h2></header><div class="coverage-body"></div>';
+    coverageDrawer.querySelector('header').appendChild(makeButton('Close', toggleCoverage));
+    document.body.appendChild(coverageDrawer);
+    renderCoverageBody();
+  }
+
+  function historyActionLabel(revision) {
+    if (revision.action === 'undo') return 'Immediate undo';
+    if (revision.action === 'restore') return revision.restoreMode === 'before' ? 'Prior version restored' : 'Saved version restored';
+    return 'Source apply';
+  }
+
+  function historyTimestamp(value) {
+    var date = new Date(value || '');
+    return Number.isNaN(date.getTime()) ? String(value || '') : date.toLocaleString();
+  }
+
+  function historyTargetLabel(target) {
+    return target.kind === 'html' ? target.copyId : target.marker;
+  }
+
+  function historyStateText(state) {
+    if (!state) return '';
+    var value = Object.prototype.hasOwnProperty.call(state, 'html') ? state.html : state.text;
+    var styles = state.styles && Object.keys(state.styles).length ? '\nstyles: ' + JSON.stringify(state.styles) : '';
+    return String(value || '').slice(0, 4000) + styles;
+  }
+
+  function renderHistoryList(revisions) {
+    if (!historyDrawer) return;
+    var body = historyDrawer.querySelector('.history-body');
+    if (!revisions.length) {
+      body.innerHTML = '<p class="history-empty">No source revisions have been saved from this page yet. The first apply will protect its starting source as the original baseline.</p>';
+      return;
+    }
+    body.innerHTML = '<p class="history-summary">Immutable local history for this page. Restoring changes only the recorded copy targets, preserves unrelated source edits, and creates a new revision.</p>' + revisions.map(function(revision) {
+      var fileLabels = (revision.files || []).map(function(file) { return (file.pathSegments || []).join('/'); }).join(' · ');
+      var targetCount = (revision.files || []).reduce(function(count, file) { return count + (file.targets || []).length; }, 0);
+      return [
+        '<article class="history-item" data-history-revision="' + escapeAttribute(revision.id) + '">',
+        '<div class="history-item-head"><div><h3>Revision ' + escapeText(revision.revisionNumber) + '</h3><span class="history-kind">' + escapeText(historyActionLabel(revision)) + '</span></div><span class="history-kind">' + escapeText(historyTimestamp(revision.createdAt)) + '</span></div>',
+        revision.isOriginalBaseline ? '<span class="history-baseline">Protected original captured</span>' : '',
+        '<p class="history-meta">' + escapeText(targetCount + ' target' + (targetCount === 1 ? '' : 's') + ' · ' + fileLabels) + '</p>',
+        revision.relatedRevisionId ? '<p class="history-meta">Based on ' + escapeText(revision.relatedRevisionId) + '</p>' : '',
+        '<div class="history-item-actions">',
+        '<button type="button" data-history-details="' + escapeAttribute(revision.id) + '">View details</button>',
+        '<button type="button" data-history-restore="after" data-history-id="' + escapeAttribute(revision.id) + '">Restore saved version</button>',
+        '<button type="button" data-history-restore="before" data-history-id="' + escapeAttribute(revision.id) + '">' + escapeText(revision.isOriginalBaseline ? 'Restore protected original' : 'Restore prior version') + '</button>',
+        '</div>',
+        '<div class="history-detail" data-history-detail-body hidden></div>',
+        '</article>'
+      ].join('');
+    }).join('');
+  }
+
+  function loadHistory() {
+    if (!historyDrawer) return;
+    var body = historyDrawer.querySelector('.history-body');
+    body.innerHTML = '<p class="history-empty">Loading revision history…</p>';
+    callToolApi('/__tools/live-editor/history', { pathname:window.location.pathname }).then(function(result) {
+      renderHistoryList(result.revisions || []);
+    }).catch(function(error) {
+      if (historyDrawer) body.innerHTML = '<p class="history-empty">' + escapeText(error.message || 'Revision history could not be loaded.') + '</p>';
+    });
+  }
+
+  function loadHistoryDetail(revisionId, button) {
+    var item = button.closest('[data-history-revision]');
+    var detail = item && item.querySelector('[data-history-detail-body]');
+    if (!detail) return;
+    if (!detail.hidden) {
+      detail.hidden = true;
+      button.textContent = 'View details';
+      return;
+    }
+    if (detail.getAttribute('data-loaded') === 'true') {
+      detail.hidden = false;
+      button.textContent = 'Hide details';
+      return;
+    }
+    button.disabled = true;
+    detail.hidden = false;
+    detail.innerHTML = '<p class="history-meta">Loading exact before and after values…</p>';
+    callToolApi('/__tools/live-editor/history/detail', { pathname:window.location.pathname, revisionId:revisionId }).then(function(result) {
+      var revision = result.revision || {};
+      detail.innerHTML = (revision.files || []).map(function(file) {
+        return [
+          '<section class="history-file">',
+          '<strong>' + escapeText((file.pathSegments || []).join('/')) + '</strong>',
+          (file.edits || []).map(function(edit) {
+            return '<div class="history-change"><strong>' + escapeText(edit.kind + ' · ' + historyTargetLabel(edit)) + '</strong><pre>before: ' + escapeText(historyStateText(edit.before)) + '\n\nafter: ' + escapeText(historyStateText(edit.after)) + '</pre></div>';
+          }).join(''),
+          '</section>'
+        ].join('');
+      }).join('') || '<p class="history-meta">This revision contains only a file-level recovery snapshot.</p>';
+      detail.setAttribute('data-loaded', 'true');
+      button.textContent = 'Hide details';
+    }).catch(function(error) {
+      detail.innerHTML = '<p class="history-meta">' + escapeText(error.message || 'Revision details could not be loaded.') + '</p>';
+    }).finally(function() {
+      button.disabled = false;
+    });
+  }
+
+  function restoreHistoryRevision(revisionId, mode, button) {
+    if (savedEntries().length) {
+      updateStatus('Review, apply, or reset browser drafts before restoring history');
+      return;
+    }
+    var versionLabel = mode === 'before' ? 'the version before this revision' : 'this saved version';
+    if (!window.confirm('Restore ' + versionLabel + '? This updates only its recorded copy targets and creates a new revision.')) return;
+    button.disabled = true;
+    updateStatus('Restoring source targets…');
+    callToolApi('/__tools/live-editor/history/restore', {
+      pathname:window.location.pathname,
+      revisionId:revisionId,
+      mode:mode
+    }).then(function(result) {
+      (result.files || []).forEach(function(file) {
+        sourceHashes[(file.pathSegments || []).join('/')] = file.hash || '';
+      });
+      rememberUndoToken(result.undoToken || '');
+      updateStatus('Restored as Revision ' + result.revisionNumber + ' · undo available');
+      window.setTimeout(function() { window.location.reload(); }, 650);
+    }).catch(function(error) {
+      button.disabled = false;
+      updateStatus(error.message || 'Revision restore failed');
+    });
+  }
+
+  function toggleHistory() {
+    if (historyDrawer) {
+      historyDrawer.remove();
+      historyDrawer = null;
+      return;
+    }
+    if (reviewDrawer) {
+      reviewDrawer.remove();
+      reviewDrawer = null;
+    }
+    if (coverageDrawer) {
+      coverageDrawer.remove();
+      coverageDrawer = null;
+    }
+    closeExportIfOpen();
+    historyDrawer = document.createElement('section');
+    historyDrawer.id = 'live-text-history';
+    historyDrawer.setAttribute('data-live-edit-ignore', 'true');
+    historyDrawer.innerHTML = '<header><h2>Revision History</h2><div class="history-actions"></div></header><div class="history-body"></div>';
+    var actions = historyDrawer.querySelector('.history-actions');
+    actions.appendChild(makeButton('Refresh', loadHistory));
+    actions.appendChild(makeButton('Close', toggleHistory));
+    historyDrawer.addEventListener('click', function(event) {
+      var detailButton = event.target.closest('[data-history-details]');
+      if (detailButton) {
+        loadHistoryDetail(detailButton.getAttribute('data-history-details'), detailButton);
+        return;
+      }
+      var restoreButton = event.target.closest('[data-history-restore]');
+      if (restoreButton) restoreHistoryRevision(restoreButton.getAttribute('data-history-id'), restoreButton.getAttribute('data-history-restore'), restoreButton);
+    });
+    document.body.appendChild(historyDrawer);
+    loadHistory();
+  }
+
   function renderReviewBody() {
     if (!reviewDrawer) return;
     var body = reviewDrawer.querySelector('.review-body');
@@ -1340,14 +1791,22 @@
       return;
     }
 
-    var targetPath = isSourceApplyContext() ? pageFilePath().join('/') : 'preview only - open via localhost to apply source';
-    body.innerHTML = '<p class="review-path">target: ' + escapeText(targetPath) + '</p>' + entries.map(function(entry) {
+    var applyableCount = entries.filter(function(entry) { return entry.target.applyable; }).length;
+    body.innerHTML = '<p class="review-path">' + applyableCount + ' of ' + entries.length + ' changes have verified source targets. Managed and preview-only copy will not be written.</p>' + entries.map(function(entry) {
+      var targetLabel = entry.target.kind === 'html'
+        ? (entry.sourcePath || 'page HTML') + ' · ' + entry.target.copyId
+        : entry.target.kind === 'source-marker'
+          ? entry.sourcePath + ' · ' + entry.target.marker
+          : entry.target.label;
+      var original = originalRecords[entry.id];
       return [
         '<article class="review-item">',
-        '<div class="review-id">' + escapeText(entry.id) + ' - ' + (entry.sourceBacked ? 'source-backed' : 'preview-only') + '</div>',
-        originalRecords[entry.id] ? '<pre>old: ' + escapeText(originalRecords[entry.id].html) + '</pre>' : '',
+        '<label class="review-select"><input type="checkbox" data-live-edit-apply-id="' + escapeAttribute(entry.id) + '"' + (entry.target.applyable ? ' checked' : ' disabled') + '> ' + escapeText(entry.target.applyable ? 'Apply this change' : 'Not directly applyable') + '</label>',
+        '<div class="review-id">' + escapeText(entry.id) + '</div>',
+        '<div class="review-target' + (entry.target.applyable ? '' : ' is-preview') + '">' + escapeText(targetLabel) + '</div>',
+        original ? '<pre>old: ' + escapeText(original.target && original.target.kind !== 'html' ? original.text : original.html) + '</pre>' : '',
         '<pre>new: ' + escapeText(entry.record.html || entry.record.text) + '</pre>',
-        hasMeaningfulStyles(entry.record.styles) ? '<pre>styles: ' + escapeText(JSON.stringify(entry.record.styles)) + '</pre>' : '',
+        entry.target.kind === 'html' && hasMeaningfulStyles(entry.record.styles) ? '<pre>styles: ' + escapeText(JSON.stringify(entry.record.styles)) + '</pre>' : '',
         '</article>'
       ].join('');
     }).join('');
@@ -1358,6 +1817,15 @@
       reviewDrawer.remove();
       reviewDrawer = null;
       return;
+    }
+
+    if (coverageDrawer) {
+      coverageDrawer.remove();
+      coverageDrawer = null;
+    }
+    if (historyDrawer) {
+      historyDrawer.remove();
+      historyDrawer = null;
     }
 
     reviewDrawer = document.createElement('section');
@@ -1372,7 +1840,10 @@
     ].join('');
 
     var actions = reviewDrawer.querySelector('.review-actions');
-    actions.appendChild(makeButton('Apply Source', applyToSource));
+    actions.appendChild(makeButton('Apply Selected', applyToSource));
+    var undo = makeButton('Undo Last Apply', undoLastApply);
+    undo.hidden = !lastUndoToken;
+    actions.appendChild(undo);
     actions.appendChild(makeButton('Close', toggleReview));
     document.body.appendChild(reviewDrawer);
     renderReviewBody();
@@ -1383,6 +1854,18 @@
     if (existing) {
       closeExportIfOpen();
       return;
+    }
+    if (reviewDrawer) {
+      reviewDrawer.remove();
+      reviewDrawer = null;
+    }
+    if (coverageDrawer) {
+      coverageDrawer.remove();
+      coverageDrawer = null;
+    }
+    if (historyDrawer) {
+      historyDrawer.remove();
+      historyDrawer = null;
     }
 
     var textarea = document.createElement('textarea');
@@ -1404,7 +1887,7 @@
     importButton.id = 'live-text-import-button';
     importButton.style.position = 'fixed';
     importButton.style.right = '28px';
-    importButton.style.bottom = '96px';
+    importButton.style.bottom = 'calc(var(--live-text-panel-bottom,118px) + 10px)';
     importButton.style.zIndex = '2147483647';
     importButton.setAttribute('data-live-edit-ignore', 'true');
     document.body.appendChild(importButton);
@@ -1419,334 +1902,107 @@
     if (importButton) importButton.remove();
   }
 
-  // data-live-edit-id is a runtime-only marker (set on parsed source documents by
-  // collectDocEditableElements). Strip it before serializing outerHTML so it never
-  // gets written into source files.
-  function stripLiveEditIds(element) {
-    element.removeAttribute('data-live-edit-id');
-    var nested = element.querySelectorAll('[data-live-edit-id]');
-    for (var i = 0; i < nested.length; i += 1) nested[i].removeAttribute('data-live-edit-id');
-  }
-
-  function applyRecordToElement(element, record) {
-    var newHtml = sanitizeHtml(record.html || '');
-    if (newHtml && newHtml !== element.innerHTML) {
-      element.innerHTML = newHtml;
-    }
-    applyElementStyles(element, record.styles);
-  }
-
-  // Replicates collectEditableElements() against a parsed source document so that
-  // elements without a stable data-copy-id can still be located by the same
-  // path/text/index scheme used to build data-live-edit-id values in the live DOM.
-  // Mutates `doc` by setting data-live-edit-id on each collected element, mirroring
-  // the live-document behavior so hasEditableParent() and ordering line up.
-  function collectDocEditableElements(doc) {
-    var root = doc.body;
-    var candidates = Array.prototype.slice.call(doc.querySelectorAll(TEXT_SELECTOR));
-    var collected = [];
-
-    candidates.forEach(function(element) {
-      var hasStableCopyId = Boolean(copyIdForElement(element));
-      if (element.closest('script, style, noscript, svg, canvas, input, textarea, select')) return;
-      if (element.closest('#construct-fade, #construct-corner, #construct-nav')) return;
-      if (element.closest('[data-live-edit-ignore]')) return;
-      if (!element.textContent || !element.textContent.trim()) return;
-      if (!hasStableCopyId && !hasDirectText(element)) return;
-      if (hasEditableParent(element)) return;
-
-      var id = buildElementId(element, collected.length, root);
-      element.setAttribute('data-live-edit-id', id);
-      collected.push({ element: element, id: id });
-    });
-
-    return collected;
-  }
-
-  // Generated ids have the shape "path:signature:index". Parsing from the right
-  // keeps any ':' inside the path intact.
-  function parseGeneratedId(id) {
-    var match = String(id).match(/^(.*):([a-z0-9-]+):(\d+)$/);
-    if (!match) return null;
-    return { path: match[1], signature: match[2], index: Number(match[3]) };
-  }
-
-  function findSourceElement(doc, id) {
-    var candidates = Array.prototype.slice.call(doc.querySelectorAll('[data-copy-id]'));
-    for (var i = 0; i < candidates.length; i += 1) {
-      if (candidates[i].getAttribute('data-copy-id') === id) return candidates[i];
-    }
-    var generated = collectDocEditableElements(doc);
-    for (var j = 0; j < generated.length; j += 1) {
-      if (generated[j].id === id) return generated[j].element;
-    }
-
-    // Fuzzy matching for generated ids. The index component counts elements
-    // across the whole live page, so JS-injected content (walk-in cards, flash
-    // grids) shifts it relative to the static source file; the signature
-    // component changes when the text itself was edited. Match on the stable
-    // parts instead of requiring all three to line up.
-    var wanted = parseGeneratedId(id);
-    if (!wanted) return null;
-    var parsed = generated.map(function(entry) {
-      return { entry: entry, id: parseGeneratedId(entry.id) };
-    }).filter(function(item) { return item.id; });
-
-    var samePathSig = parsed.filter(function(item) {
-      return item.id.path === wanted.path && item.id.signature === wanted.signature;
-    });
-    if (samePathSig.length) {
-      samePathSig.sort(function(a, b) {
-        return Math.abs(a.id.index - wanted.index) - Math.abs(b.id.index - wanted.index);
-      });
-      return samePathSig[0].entry.element;
-    }
-
-    var samePathIndex = parsed.filter(function(item) {
-      return item.id.path === wanted.path && item.id.index === wanted.index;
-    });
-    if (samePathIndex.length === 1) return samePathIndex[0].entry.element;
-
-    var samePath = parsed.filter(function(item) { return item.id.path === wanted.path; });
-    if (samePath.length === 1) return samePath[0].entry.element;
-
-    return null;
-  }
-
-  function sourceEditableIds(doc) {
-    var ids = Array.prototype.slice.call(doc.querySelectorAll('[data-copy-id]')).map(function(element) {
-      return element.getAttribute('data-copy-id') || '';
-    }).filter(Boolean);
-    collectDocEditableElements(doc).forEach(function(entry) { ids.push(entry.id); });
-    return ids;
-  }
-
-  function sampleIds(ids) {
-    return ids.slice(0, 4).join(', ');
-  }
-
-  // Strip the current origin (e.g. "http://localhost:4173") from href/src/action/srcset
-  // attribute values in a serialized HTML string. DOMParser absolutizes all relative URLs
-  // when it serializes outerHTML, so "href="/tattoos/"" becomes
-  // "href="http://localhost:4173/tattoos/"". Without this normalization, indexOf searches
-  // against the raw source file (which has relative URLs) always fail for link elements.
-  function deabsolutizeHtml(html) {
-    var origin = window.location.origin;
-    if (!origin || origin === 'null') return html;
-    var escaped = origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return html.replace(
-      new RegExp('((?:href|src|action|srcset)=")' + escaped, 'g'),
-      '$1'
-    );
-  }
-
-  // Find an element in the raw HTML source string by its stable data-copy-id
-  // attribute, then replace its entire span (opening tag through closing tag) with
-  // `replacement`. Returns the updated source string, or null if the element cannot
-  // be located. This avoids the DOMParser-to-outerHTML roundtrip that causes
-  // serialization mismatches (e.g. trailing semicolons on inline style values).
-  // Given the position of an element's '<' in the raw source, return the index of
-  // the final '>' that closes the element (its full outer span), or -1 if the span
-  // cannot be determined.
-  function elementSpanEnd(source, tagStart, tagName) {
-    var openEnd = source.indexOf('>', tagStart);
-    if (openEnd === -1) return -1;
-
-    // Void elements and explicit self-closing tags have no children or closing tag.
-    var VOID = { area: 1, base: 1, br: 1, col: 1, embed: 1, hr: 1, img: 1, input: 1, link: 1, meta: 1, param: 1, source: 1, track: 1, wbr: 1 };
-    if (VOID[tagName] || source[openEnd - 1] === '/') return openEnd;
-
-    // Walk forward to find the matching closing tag, tracking nesting depth.
-    var pos = openEnd + 1;
-    var depth = 1;
-    var openPat = '<' + tagName;
-    var closePat = '</' + tagName;
-
-    while (depth > 0 && pos < source.length) {
-      var nc = source.indexOf(closePat, pos);
-      if (nc === -1) return -1; // malformed HTML
-
-      var no = source.indexOf(openPat, pos);
-      if (no !== -1 && no < nc) {
-        var c = source[no + openPat.length];
-        // Confirm this is an actual opening tag, not a prefix match (e.g. <paragraph vs <p).
-        if (c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '>' || c === '/') {
-          depth += 1;
-          pos = no + 1;
-          continue;
-        }
-      }
-
-      var ce = source.indexOf('>', nc);
-      if (ce === -1) return -1;
-      depth -= 1;
-      if (depth === 0) return ce;
-      pos = ce + 1;
-    }
-
-    return -1;
-  }
-
-  function normalizeMatchText(text) {
-    return String(text || '').replace(/\s+/g, ' ').trim();
-  }
-
-  function replaceSourceElement(source, element, replacement, originalText) {
-    var copyId = element.getAttribute('data-copy-id') || '';
-    var tagName = element.tagName.toLowerCase();
-
-    if (copyId) {
-      var searches = ['data-copy-id="' + copyId + '"', "data-copy-id='" + copyId + "'"];
-      for (var si = 0; si < searches.length; si += 1) {
-        var attrPos = source.indexOf(searches[si]);
-        if (attrPos === -1) continue;
-
-        // Walk backward from the attribute to find the '<' that opens this tag.
-        var tagStart = source.lastIndexOf('<', attrPos);
-        if (tagStart === -1) continue;
-
-        // Confirm the tag name at this position matches (case-insensitive).
-        var nameSlice = source.slice(tagStart + 1, tagStart + 1 + tagName.length);
-        if (nameSlice.toLowerCase() !== tagName) continue;
-        var boundaryChar = source[tagStart + 1 + tagName.length];
-        if (!boundaryChar || !/[\s>\/]/.test(boundaryChar)) continue;
-
-        var spanEnd = elementSpanEnd(source, tagStart, tagName);
-        if (spanEnd === -1) continue;
-        return source.slice(0, tagStart) + replacement + source.slice(spanEnd + 1);
-      }
-    }
-
-    // Fallback for elements without a data-copy-id: scan the raw source for tags of
-    // the same name (and class, when the element has one) and compare decoded text
-    // content. Parsing each candidate span through DOMParser makes the comparison
-    // immune to entity differences (&mdash; vs the literal character) and attribute
-    // serialization drift that defeat plain outerHTML string matching.
-    var wanted = normalizeMatchText(originalText);
-    if (!wanted) return null;
-    var firstClass = (typeof element.className === 'string' && element.className.trim().split(/\s+/)[0]) || '';
-    var openPattern = '<' + tagName;
-    var parser = new DOMParser();
-    var from = 0;
-
-    while (true) {
-      var start = source.indexOf(openPattern, from);
-      if (start === -1) break;
-      from = start + 1;
-
-      var boundary = source[start + openPattern.length];
-      if (!boundary || !/[\s>\/]/.test(boundary)) continue;
-
-      var openClose = source.indexOf('>', start);
-      if (openClose === -1) break;
-      if (firstClass && source.slice(start, openClose + 1).indexOf(firstClass) === -1) continue;
-
-      var end = elementSpanEnd(source, start, tagName);
-      if (end === -1) continue;
-
-      var spanDoc = parser.parseFromString(source.slice(start, end + 1), 'text/html');
-      var spanElement = spanDoc.body && spanDoc.body.firstElementChild;
-      if (!spanElement || normalizeMatchText(spanElement.textContent) !== wanted) continue;
-
-      return source.slice(0, start) + replacement + source.slice(end + 1);
-    }
-
-    return null;
-  }
-
   function applyToSource() {
     if (!isSourceApplyContext()) {
-      updateStatus('localhost only');
+      updateStatus('Applying changes is available on localhost only');
       return;
     }
 
     if (!helperAvailable) {
-      updateStatus('no helper');
+      updateStatus('No verified source target is available for this route');
       detectHelper();
       return;
     }
 
     var entries = savedEntries();
     if (!entries.length) {
-      updateStatus('no edits');
+      updateStatus('No saved edits');
       return;
+    }
+    var selectedIds = null;
+    if (reviewDrawer) {
+      selectedIds = {};
+      Array.prototype.slice.call(reviewDrawer.querySelectorAll('[data-live-edit-apply-id]:checked')).forEach(function(input) {
+        selectedIds[input.getAttribute('data-live-edit-apply-id')] = true;
+      });
     }
     var sourceEntries = entries.filter(function(entry) {
-      return entry.sourceBacked;
+      return entry.target.applyable && (!selectedIds || selectedIds[entry.id]);
     });
     if (!sourceEntries.length) {
-      updateStatus('preview only');
+      updateStatus('No applyable changes are selected');
       return;
     }
 
-    var pathSegments = pageFilePath();
-    callToolApi('/__tools/read-file', { pathSegments: pathSegments })
-      .then(function(data) {
-        var rawContent = data.content || '';
-        var parser = new DOMParser();
-        var doc = parser.parseFromString(rawContent, 'text/html');
-        var applied = 0;
-        var skipped = 0;
-        var nextContent = rawContent;
-
-        sourceEntries.forEach(function(entry) {
-          var target = findSourceElement(doc, entry.id);
-          if (!target) {
-            skipped += 1;
-            return;
-          }
-          // Deabsolutize immediately: DOMParser converts relative URLs (href="/tattoos/")
-          // to absolute ones (href="http://localhost:4173/tattoos/") when serializing
-          // outerHTML. Strip the origin prefix so comparisons against raw source work.
-          stripLiveEditIds(target);
-          var originalOuterHTML = deabsolutizeHtml(target.outerHTML);
-          var originalText = target.textContent;
-          applyRecordToElement(target, entry.record);
-          var modifiedOuterHTML = deabsolutizeHtml(target.outerHTML);
-          if (modifiedOuterHTML === originalOuterHTML) {
-            applied += 1;
-            return;
-          }
-
-          // Primary path: locate the element in the raw source by its stable data-copy-id
-          // and replace its full span. This is immune to DOMParser serialization differences
-          // (trailing semicolons on inline styles, attribute-order shifts, etc.) that make
-          // outerHTML string matching unreliable.
-          var replaced = replaceSourceElement(nextContent, target, modifiedOuterHTML, originalText);
-          if (replaced !== null) {
-            nextContent = replaced;
-            applied += 1;
-            return;
-          }
-
-          // Fallback: outerHTML string match after deabsolutizing relative URLs.
-          var idx = nextContent.indexOf(originalOuterHTML);
-          if (idx !== -1) {
-            nextContent = nextContent.slice(0, idx) + modifiedOuterHTML + nextContent.slice(idx + originalOuterHTML.length);
-            applied += 1;
-            return;
-          }
-
-          skipped += 1;
-        });
-
-        if (!applied) {
-          var savedIds = sourceEntries.map(function(entry) { return entry.id; });
-          var sourceIds = sourceEditableIds(doc);
-          throw new Error('No IDs matched ' + pathSegments.join('/') + '. Saved: ' + (sampleIds(savedIds) || 'none') + '. Source: ' + (sampleIds(sourceIds) || 'none') + '.');
+    updateStatus('Verifying source revisions…');
+    Promise.all(sourceEntries.map(function(entry) {
+      if (entry.expectedHash) return Promise.resolve(entry.expectedHash);
+      return ensureSourceHash(entry.target).then(function(hash) {
+        entry.expectedHash = hash;
+        return hash;
+      });
+    })).then(function(hashes) {
+      if (hashes.some(function(hash) { return !hash; })) throw new Error('A selected source could not be verified. Reload and try again.');
+      var edits = sourceEntries.map(function(entry) {
+        var base = {
+          kind: entry.target.kind,
+          pathSegments: entry.sourcePath.split('/'),
+          expectedHash: entry.expectedHash
+        };
+        if (entry.target.kind === 'html') {
+          base.copyId = entry.target.copyId;
+          base.html = sanitizeHtml(entry.record.html || '');
+          base.styles = entry.record.styles || {};
+        } else {
+          base.marker = entry.target.marker;
+          base.text = entry.record.text || '';
         }
-
-        return callToolApi('/__tools/write-file', {
-          pathSegments: pathSegments,
-          content: nextContent
-        }).then(function() {
-          updateStatus(skipped ? 'applied ' + applied + ', skipped ' + skipped : 'applied ' + applied);
-          if (reviewDrawer) renderReviewBody();
-        });
+        return base;
+      });
+      return callToolApi('/__tools/live-editor/apply', { pathname:window.location.pathname, edits:edits });
+    }).then(function(result) {
+      (result.files || []).forEach(function(file) {
+        sourceHashes[(file.pathSegments || []).join('/')] = file.hash || '';
+      });
+      rememberUndoToken(result.undoToken || '');
+      var saved = getSavedCopy();
+      sourceEntries.forEach(function(entry) {
+        delete saved[entry.id];
+        if (entry.element) {
+          originalRecords[entry.id] = {
+            html: entry.element.innerHTML,
+            text: entry.element.textContent || '',
+            styles: readElementStyles(entry.element),
+            target: targetForElement(entry.element)
+          };
+        }
+      });
+      setSavedCopy(saved);
+      updateStatus('Applied ' + result.applied + ' change' + (result.applied === 1 ? '' : 's') + ' as Revision ' + result.revisionNumber + ' · undo available');
+      if (reviewDrawer) renderReviewBody();
+      if (historyDrawer) loadHistory();
       })
       .catch(function(error) {
-        updateStatus(error.message || 'apply failed');
+        updateStatus(error.message || 'Apply failed');
       });
+  }
+
+  function undoLastApply() {
+    if (!lastUndoToken) {
+      updateStatus('Nothing is available to undo');
+      return;
+    }
+    callToolApi('/__tools/live-editor/undo', { undoToken: lastUndoToken }).then(function(result) {
+      (result.restored || []).forEach(function(file) {
+        sourceHashes[(file.pathSegments || []).join('/')] = file.hash || '';
+      });
+      rememberUndoToken('');
+      updateStatus('Undo saved as Revision ' + result.revisionNumber);
+      window.setTimeout(function() { window.location.reload(); }, 450);
+    }).catch(function(error) {
+      if (/not found/i.test(error.message || '')) rememberUndoToken('');
+      updateStatus(error.message || 'Undo failed');
+    });
   }
 
   function setEnabled(next) {
@@ -1756,8 +2012,7 @@
     window.localStorage.setItem(ENABLED_KEY, isEnabled ? '1' : '0');
 
     editableElements.forEach(function(element) {
-      element.contentEditable = isEnabled ? 'true' : 'false';
-      element.spellcheck = isEnabled;
+      syncElementEditingState(element);
     });
 
     if (isEnabled) {
@@ -1768,46 +2023,98 @@
 
     var toggle = document.getElementById('live-text-editor-toggle');
     if (toggle) toggle.classList.toggle('is-active', isEnabled);
-    updateStatus(isEnabled ? 'editing' : 'off');
+    updateStatus(defaultStatusText());
   }
 
   function refreshEditableElements() {
     if (!isHydrated) return;
-    var wasEnabled = isEnabled;
+    var saved = getSavedCopy();
+    var nextElements = collectEditableElements();
+    nextElements.forEach(function(element) {
+      var id = element.getAttribute('data-live-edit-id');
+      var target = targetForElement(element);
+      if (!originalRecords[id]) {
+        originalRecords[id] = { html:element.innerHTML, text:element.textContent || '', styles:readElementStyles(element), target:target };
+      }
+      if (saved[id]) {
+        var record = normalizeRecord(saved[id]);
+        if (target.kind === 'html' && record.html && element.innerHTML !== record.html) element.innerHTML = record.html;
+        else if (target.kind !== 'html' && record.text && element.textContent !== record.text) element.textContent = record.text;
+        if (target.kind === 'html') applyElementStyles(element, record.styles);
+      }
+      syncElementEditingState(element);
+    });
     editableElements.forEach(function(element) {
+      if (nextElements.indexOf(element) !== -1 || !element.isConnected) return;
       element.contentEditable = 'false';
       element.removeAttribute('data-live-edit-id');
+      element.removeAttribute('data-live-edit-target');
+      element.removeAttribute('data-live-edit-applyable');
     });
-    stopWatchingEditableResizes();
-    activeElement = null;
-    isHydrated = false;
-    hydrateSavedText();
-    if (wasEnabled) setEnabled(true);
+    editableElements = nextElements;
+    if (isEnabled) watchEditableResizes();
+    if (reviewDrawer) renderReviewBody();
+    if (coverageDrawer) renderCoverageBody();
+    var status = document.getElementById('live-text-editor-status');
+    if (status && (!updateStatus._timer || status.textContent === 'editing')) status.textContent = defaultStatusText();
+  }
+
+  function scheduleEditableRefresh() {
+    window.clearTimeout(contentSyncTimer);
+    contentSyncTimer = window.setTimeout(refreshEditableElements, 40);
+  }
+
+  function watchDynamicContent() {
+    if (contentObserver) contentObserver.disconnect();
+    contentObserver = new MutationObserver(function(mutations) {
+      var relevant = mutations.some(function(mutation) {
+        return !isEditorNode(mutation.target);
+      });
+      if (relevant) scheduleEditableRefresh();
+    });
+    contentObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-copy-id', 'data-live-edit-owner', 'data-live-edit-source', 'data-live-edit-marker', 'data-live-edit-label', 'data-live-edit-owner-href', 'data-live-edit-owner-label']
+    });
   }
 
   document.addEventListener('input', function(event) {
     if (!isEnabled) return;
     var element = event.target.closest && event.target.closest('[data-live-edit-id]');
-    if (!element) return;
+    if (!element || !targetForElement(element).applyable) return;
     activeElement = element;
     saveElement(element);
   });
 
+  document.addEventListener('paste', function(event) {
+    if (!isEnabled) return;
+    var element = event.target.closest && event.target.closest('[data-live-edit-id]');
+    var target = element && targetForElement(element);
+    if (!element || !target.applyable || target.kind === 'html') return;
+    event.preventDefault();
+    var text = (event.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
+  });
+
   document.addEventListener('focusin', function(event) {
     var element = event.target.closest && event.target.closest('[data-live-edit-id]');
-    if (element) activeElement = element;
+    if (element && targetForElement(element).applyable) activeElement = element;
   });
 
   document.addEventListener('selectionchange', function() {
     if (!isEnabled) return;
     var element = getEditableFromSelection();
-    if (element) activeElement = element;
+    if (element && targetForElement(element).applyable) activeElement = element;
   });
 
   document.addEventListener('click', function(event) {
     if (!isEnabled) return;
     var link = event.target.closest && event.target.closest('a');
     if (!link || isEditorNode(link)) return;
+    var editableLink = link.closest('[data-live-edit-id]');
+    if (!editableLink || !targetForElement(editableLink).applyable) return;
     event.preventDefault();
     event.stopImmediatePropagation();
   }, true);
@@ -1826,11 +2133,14 @@
   });
 
   window.addEventListener('sixwell:booking-rendered', refreshEditableElements);
+  window.addEventListener('resize', syncFloatingPanelInset);
+  window.addEventListener('popstate', function() { window.location.reload(); });
 
   function init() {
     injectStyles();
     makeToolbar();
     hydrateSavedText();
+    watchDynamicContent();
     detectHelper();
     if (shouldAutoEnable()) setEnabled(true);
   }

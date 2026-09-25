@@ -49,7 +49,7 @@ test("Studio exposes the Website Inception workspace and keeps creation private"
   }
   assert.match(page, /function activateWebsiteArchiveDeepLink\(\)/);
   assert.match(page, /activeTab = "archive";[\s\S]*subView = "web-snapshots";/);
-  assert.match(page, /window\.addEventListener\("hashchange", activateWebsiteArchiveDeepLink\)/);
+  assert.match(page, /window\.addEventListener\("hashchange", \(\) => \{[\s\S]*?studioOwnerViewFromLocation\(\)[\s\S]*?activateWebsiteArchiveDeepLink\(\);[\s\S]*?\}\);/);
   assert.match(manager, /scrollToRequestedWebsiteSection\(\)/);
   assert.match(manager, /window\.addEventListener\("hashchange", \(\) => scrollToRequestedWebsiteSection/);
 });

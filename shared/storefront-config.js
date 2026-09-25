@@ -11,7 +11,7 @@ export const SOURCES = {
     label: "six.well clothing",
     color: tokenColor("--color-merch", "#F08F00"),
     brightColor: tokenColor("--color-merch-bright", "#FF9933"),
-    statement: "garments from the construct's own hand",
+    statement: /* live-copy:storefront.source.six-well.statement */ "garments from the construct's own hand",
     logo: "/assets/brand/six-well-clothing.svg.svg",
     logoAlt: "Six.Well Clothing logo",
   },
@@ -19,13 +19,13 @@ export const SOURCES = {
     label: "thoughtpuppet",
     color: tokenColor("--color-art", "#0039BD"),
     brightColor: tokenColor("--color-art-bright", "#2054FF"),
-    statement: "objects that carry the paintings outward",
+    statement: /* live-copy:storefront.source.thoughtpuppet.statement */ "objects that carry the paintings outward",
   },
   "art.pill": {
     label: "art.pill Tattoo Supply",
     color: tokenColor("--color-tattooing", "#6E0404"),
     brightColor: tokenColor("--color-tattooing-bright", "#BE281F"),
-    statement: "materials behind the marks",
+    statement: /* live-copy:storefront.source.art-pill.statement */ "materials behind the marks",
     logo: "/assets/brand/art-pill-tattoo-house.svg.svg",
     logoAlt: "art.pill Tattoo House logo",
   },
@@ -33,7 +33,7 @@ export const SOURCES = {
     label: "GREEN[FIELD]",
     color: tokenColor("--color-events", "#005D25"),
     brightColor: tokenColor("--color-events-bright", "#2E8B57"),
-    statement: "event artifacts from the construct's live gathering field",
+    statement: /* live-copy:storefront.source.greenfield.statement */ "event artifacts from the construct's live gathering field",
   },
 };
 

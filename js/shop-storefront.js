@@ -615,17 +615,33 @@ export async function initMerchCatalogPage() {
     }
   }
 
-  function setFilter(key) {
+  function applyFilterIdentity(key, mode = "push") {
     activeFilter = key;
     activeTypeFilter = "all";
     setHeroState(key);
+    const editorSourceKey = key === "all" ? "all" : key.replace(/\./g, "-");
+    introDesc.dataset.copyId = `merch-source-${editorSourceKey}-statement`;
+    introDesc.dataset.liveEditOwner = "source-marker";
+    introDesc.dataset.liveEditSource = key === "all" ? "js/shop-storefront.js" : "shared/storefront-config.js";
+    introDesc.dataset.liveEditMarker = key === "all"
+      ? "storefront.all.statement"
+      : `storefront.source.${editorSourceKey}.statement`;
+    introDesc.dataset.liveEditLabel = key === "all" ? "Merch default descriptor" : `${SOURCES[key]?.label || key} descriptor`;
+    const filterUrl = new URL(window.location.href);
+    key === "all" ? filterUrl.searchParams.delete("filter") : filterUrl.searchParams.set("filter", key);
+    if (mode === "replace") history.replaceState({}, "", filterUrl);
+    else history.pushState({}, "", filterUrl);
     if (key === "all") {
       introAbove.classList.remove("visible");
-      introDesc.textContent = "everything sellable from the construct";
+      introDesc.textContent = /* live-copy:storefront.all.statement */ "everything sellable from the construct";
     } else {
       introAbove.classList.add("visible");
       introDesc.textContent = SOURCES[key]?.statement || "";
     }
+  }
+
+  function setFilter(key, mode = "push") {
+    applyFilterIdentity(key, mode);
     renderFilters();
     renderTypeFilters();
     renderGrid();
@@ -813,19 +829,16 @@ export async function initMerchCatalogPage() {
     setupLaunchAlertForms(grid);
   }
 
+  const requestedFilter = canonicalSourceKey(new URLSearchParams(window.location.search).get("filter"));
+  applyFilterIdentity(requestedFilter && SOURCES[requestedFilter] ? requestedFilter : "all", "replace");
+
   try {
     grid.innerHTML = `<p class="drawer-empty">loading merch...</p>`;
     products = (await loadCatalog()).map((product) => ({
       ...product,
       sourceVenture: canonicalSourceKey(product.sourceVenture || product.sourceLabel),
     }));
-    renderFilters();
-    renderTypeFilters();
-    renderGrid();
-    setHeroState("all");
     setContext(activeContext,"replace");
-    const initFilter = canonicalSourceKey(new URLSearchParams(window.location.search).get("filter"));
-    if (initFilter && SOURCES[initFilter]) setFilter(initFilter);
   } catch (error) {
     grid.innerHTML = `<p class="drawer-empty">shop is temporarily unavailable: ${error.message || "unknown error"}</p>`;
     console.error(error);

@@ -6,16 +6,18 @@
   window.__constructWayfindingLoaded = true;
   if (document.body && document.body.getAttribute('data-construct-wayfinding') === 'off') return;
 
+  var ROOT_LABEL = /* live-copy:wayfinding.root.label */ 'Construct';
+  var RETURN_LABEL = /* live-copy:wayfinding.footer.return */ 'Return to construct';
   var MEDIUMS = {
-    tattooing: { label: 'Art.Pill Tattoo House', url: '/tattoos/' },
-    art: { label: 'Art', url: '/art/' },
-    merch: { label: 'Merch', url: '/merch/' },
-    about: { label: 'About', url: '/about/' },
-    archive: { label: 'Archive', url: '/archive/' },
-    events: { label: 'Events', url: '/events/' },
-    music: { label: 'Music', url: '/music/' },
-    writings: { label: 'Writings', url: '/writings/' },
-    film: { label: 'Film', url: '/film/' },
+    tattooing: { key:'tattooing', label: /* live-copy:wayfinding.medium.tattooing.label */ 'Art.Pill Tattoo House', backLabel: /* live-copy:wayfinding.medium.tattooing.back-label */ 'Back to Art.Pill Tattoo House', url: '/tattoos/' },
+    art: { key:'art', label: /* live-copy:wayfinding.medium.art.label */ 'Art', backLabel: /* live-copy:wayfinding.medium.art.back-label */ 'Back to Art', url: '/art/' },
+    merch: { key:'merch', label: /* live-copy:wayfinding.medium.merch.label */ 'Merch', backLabel: /* live-copy:wayfinding.medium.merch.back-label */ 'Back to Merch', url: '/merch/' },
+    about: { key:'about', label: /* live-copy:wayfinding.medium.about.label */ 'About', backLabel: /* live-copy:wayfinding.medium.about.back-label */ 'Back to About', url: '/about/' },
+    archive: { key:'archive', label: /* live-copy:wayfinding.medium.archive.label */ 'Archive', backLabel: /* live-copy:wayfinding.medium.archive.back-label */ 'Back to Archive', url: '/archive/' },
+    events: { key:'events', label: /* live-copy:wayfinding.medium.events.label */ 'Events', backLabel: /* live-copy:wayfinding.medium.events.back-label */ 'Back to Events', url: '/events/' },
+    music: { key:'music', label: /* live-copy:wayfinding.medium.music.label */ 'Music', backLabel: /* live-copy:wayfinding.medium.music.back-label */ 'Back to Music', url: '/music/' },
+    writings: { key:'writings', label: /* live-copy:wayfinding.medium.writings.label */ 'Writings', backLabel: /* live-copy:wayfinding.medium.writings.back-label */ 'Back to Writings', url: '/writings/' },
+    film: { key:'film', label: /* live-copy:wayfinding.medium.film.label */ 'Film', backLabel: /* live-copy:wayfinding.medium.film.back-label */ 'Back to Film', url: '/film/' },
   };
 
   var SECTION_LABELS = {
@@ -82,10 +84,20 @@
     return MEDIUMS[first] || null;
   }
 
+  function markEditable(element, id, marker, label) {
+    if (!element || !id || !marker) return element;
+    element.setAttribute('data-copy-id', id);
+    element.setAttribute('data-live-edit-owner', 'source-marker');
+    element.setAttribute('data-live-edit-source', 'js/construct-wayfinding.js');
+    element.setAttribute('data-live-edit-marker', marker);
+    element.setAttribute('data-live-edit-label', label || id);
+    return element;
+  }
+
   function breadcrumbItems(medium) {
     var parts = location.pathname.split('/').filter(Boolean);
-    var items = [{ label: 'Construct', url: '/home/' }];
-    if (medium) items.push({ label: medium.label, url: medium.url });
+    var items = [{ label: ROOT_LABEL, url: '/home/', editorId:'wayfinding-root-label', editorMarker:'wayfinding.root.label', editorLabel:'Breadcrumb root label' }];
+    if (medium) items.push({ label: medium.label, url: medium.url, editorId:'wayfinding-medium-' + medium.key + '-label', editorMarker:'wayfinding.medium.' + medium.key + '.label', editorLabel:medium.label + ' breadcrumb label' });
 
     var currentLabel = document.body.getAttribute('data-construct-breadcrumb-current') || '';
     if (currentLabel) {
@@ -124,17 +136,21 @@
         var sep = document.createElement('span');
         sep.textContent = ':';
         sep.className = 'construct-breadcrumb-sep';
+        sep.setAttribute('data-live-edit-ignore', 'true');
         nav.appendChild(sep);
       }
       if (item.url && index < items.length - 1) {
         var link = document.createElement('a');
         link.href = item.url;
         link.textContent = item.label;
+        markEditable(link, item.editorId, item.editorMarker, item.editorLabel);
         nav.appendChild(link);
       } else {
         var current = document.createElement('span');
         current.className = 'construct-breadcrumb-current';
         current.textContent = item.label;
+        if (item.editorMarker) markEditable(current, item.editorId, item.editorMarker, item.editorLabel);
+        else current.setAttribute('data-live-edit-owner', 'preview');
         nav.appendChild(current);
       }
     });
@@ -217,20 +233,23 @@
         return;
       }
       link.setAttribute('href', '/home/');
-      link.textContent = 'Return to construct';
+      link.textContent = RETURN_LABEL;
+      markEditable(link, 'wayfinding-footer-return', 'wayfinding.footer.return', 'Footer return label');
     });
 
     if (medium && !footer.querySelector('a[href="' + medium.url + '"]')) {
       var mediumLink = document.createElement('a');
       mediumLink.href = medium.url;
-      mediumLink.textContent = 'Back to ' + medium.label;
+      mediumLink.textContent = medium.backLabel;
+      markEditable(mediumLink, 'wayfinding-footer-' + medium.key + '-back-label', 'wayfinding.medium.' + medium.key + '.back-label', medium.label + ' footer label');
       footer.appendChild(mediumLink);
     }
 
     if (!footer.querySelector('a[href="/home/"], a[href="/home"], a[href="/home/index.html"]')) {
       var constructLink = document.createElement('a');
       constructLink.href = '/home/';
-      constructLink.textContent = 'Return to construct';
+      constructLink.textContent = RETURN_LABEL;
+      markEditable(constructLink, 'wayfinding-footer-return', 'wayfinding.footer.return', 'Footer return label');
       footer.appendChild(constructLink);
     }
   }

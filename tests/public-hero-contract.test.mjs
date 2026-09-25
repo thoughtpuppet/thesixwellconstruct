@@ -331,7 +331,10 @@ test("Merch filters update only the shared hero title variable and descriptor te
   assert.match(heroCss, /\.hero-descriptor\s*\{[^}]*color:\s*var\(--type-descriptor-color,\s*rgba\(252,\s*184,\s*103,\s*0\.55\)\)\s*!important/s);
   assert.match(shop, /merchHero\?\.style\.setProperty\("--hero-title-color",\s*color\)/);
   assert.match(shop, /introDesc\.textContent\s*=\s*SOURCES\[key\]\?\.statement\s*\|\|\s*""/);
-  assert.match(shop, /introDesc\.textContent\s*=\s*"everything sellable from the construct"/);
+  assert.match(
+    shop,
+    /introDesc\.textContent\s*=\s*\/\*\s*live-copy:storefront\.all\.statement\s*\*\/\s*"everything sellable from the construct"/
+  );
   assert.doesNotMatch(shop, /introDesc\.style|--title-color/);
 
   for (const key of ["six.well", "thoughtpuppet", "art.pill"]) {

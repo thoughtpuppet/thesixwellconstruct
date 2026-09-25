@@ -223,6 +223,10 @@
       <h2>Merch</h2>
       <ul>
         <li><a data-path="/merch/?edit=1"><span class="label">Merch Index</span><span class="path">/merch/?edit=1</span></a></li>
+        <li><a data-path="/merch/?filter=six.well&amp;edit=1"><span class="label">Six.Well Merch View</span><span class="path">/merch/?filter=six.well&amp;edit=1</span></a></li>
+        <li><a data-path="/merch/?filter=thoughtpuppet&amp;edit=1"><span class="label">ThoughtPuppet Merch View</span><span class="path">/merch/?filter=thoughtpuppet&amp;edit=1</span></a></li>
+        <li><a data-path="/merch/?filter=art.pill&amp;edit=1"><span class="label">Art.Pill Merch View</span><span class="path">/merch/?filter=art.pill&amp;edit=1</span></a></li>
+        <li><a data-path="/merch/?filter=greenfield&amp;edit=1"><span class="label">GREEN[FIELD] Merch View</span><span class="path">/merch/?filter=greenfield&amp;edit=1</span></a></li>
         <li><a data-path="/studio/submissions/#merch/products"><span class="label">Merch Products</span><span class="path">Studio-managed pages and launch alerts</span></a></li>
       </ul>
     </section>
@@ -282,7 +286,7 @@
   const initialPort = params.get('port') || window.location.port || input.value;
 
   function updateLinks(port) {
-    const base = 'http://localhost:' + port;
+    const base = window.location.protocol + '//' + window.location.hostname + ':' + port;
     links.forEach(a => {
       a.href = base + a.dataset.path;
     });
