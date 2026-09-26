@@ -7,10 +7,26 @@
       number:"01",
       slug:"kinmarking-01-skin-as-archive",
       title:"Skin As Archive",
-      description:"KINMARKING 01: Skin As Archive is the first edition of KINMARKING, a participatory memory, archive, and tattoo practice. Participants are invited to bring photographs, documents, objects, stories, inherited symbols, and fragments of family history into conversation with an archivist and tattoo artist.",
+      description: /* live-copy:kinmarking.01.description */ "KINMARKING 01: Skin As Archive is the first edition of KINMARKING, a participatory memory, archive, and tattoo practice. Participants are invited to bring photographs, documents, objects, stories, inherited symbols, and fragments of family history into conversation with an archivist and tattoo artist.",
     },
-    { number:"02", slug:"kinmarking-02", title:"", description:"Theme to be announced." },
-    { number:"03", slug:"kinmarking-03", title:"", description:"Theme to be announced." },
+    {
+      number:"02", slug:"kinmarking-02", title:"Color as Inheritance", theme:"Color",
+      description: /* live-copy:kinmarking.02.description */ "Explore the meanings we inherit through color, from family and cultural traditions to personal associations. Through conversation and visual experimentation, develop palettes, shapes, and symbols into possibilities for tattooing.",
+      details: /* live-copy:kinmarking.02.details */ "How did a color come to mean something to you? This edition follows color through textiles, objects, images, ceremonies, and everyday life. Consider the meanings you have received, the associations you have made yourself, and what you want to preserve or reinterpret in a tattoo.",
+      guideTitle: /* live-copy:kinmarking.02.guide-title */ "Begin with a color.",
+      guideIntro: /* live-copy:kinmarking.02.guide-intro */ "Arrive with a color, palette, reference, or curiosity. A personal association can be your starting point, and new connections can develop through the session.",
+      bring: /* live-copy:kinmarking.02.bring */ "Bring one to three color references if you have them: a textile, photograph, object, palette, or image of something you are drawn to.",
+      how: /* live-copy:kinmarking.02.how */ "Explore colors within particular histories and traditions, consider your own associations, and experiment with palettes and forms. Work with the tattoo artist to develop a design through color, shape, scale, and placement.",
+    },
+    {
+      number:"03", slug:"kinmarking-03", title:"Symbols as Language", theme:"Symbolism",
+      description: /* live-copy:kinmarking.03.description */ "Explore how symbols, badges, and visual signs communicate identity, belief, belonging, and personal history. Interpret inherited meanings and develop a visual language of your own through drawing and tattoo design.",
+      details: /* live-copy:kinmarking.03.details */ "What does a symbol say, and who knows how to read it? This edition considers the signs we encounter, inherit, wear, and create. Explore how context changes their interpretation, what you want a mark to communicate, and how to preserve, combine, or transform those meanings in a tattoo.",
+      guideTitle: /* live-copy:kinmarking.03.guide-title */ "Begin with a sign.",
+      guideIntro: /* live-copy:kinmarking.03.guide-intro */ "Bring a symbol you recognize, wear, question, or want to understand. You can also begin with an idea or affiliation and discover its visual form through the session.",
+      bring: /* live-copy:kinmarking.03.bring */ "Bring one to three references if you have them: a symbol, badge, pattern, piece of lettering, photograph, or object bearing a sign.",
+      how: /* live-copy:kinmarking.03.how */ "Discuss symbols in their specific contexts, explore how you and others read them, and experiment with drawing, abstraction, and composition. Work with the tattoo artist to develop a mark that expresses what you want to communicate.",
+    },
     { number:"04", slug:"kinmarking-04", title:"", description:"Theme to be announced." },
   ]);
   var TIME_ZONE = "America/New_York";
@@ -50,9 +66,24 @@
     var number = normalizedNumber(occurrence && occurrence.sessionNumber, Number(index) || 0);
     var fallback = fallbackForNumber(number);
     if (fallback && fallback.description) {
-      return number === "01" ? fallback.description : fallback.description + " A future edition of KINMARKING, a participatory memory, archive, and tattoo practice.";
+      return fallback.description;
     }
     return (event && event.description) || "A KINMARKING session.";
+  }
+
+  function copyAttributes(number, field) {
+    var edition = fallbackForNumber(String(number || ""));
+    if (!edition || !edition[field] || edition.number === "04") return "";
+    var marker = "kinmarking." + edition.number + "." + field.replace(/[A-Z]/g, function (letter) { return "-" + letter.toLowerCase(); });
+    return ' data-copy-id="' + marker + '" data-live-edit-owner="source-marker" data-live-edit-source="js/kinmarking-series.js" data-live-edit-marker="' + marker + '"';
+  }
+
+  function applyEditionCopy(element, number, field) {
+    var edition = fallbackForNumber(String(number || ""));
+    if (!element || !edition || !edition[field]) return;
+    element.textContent = edition[field];
+    var attributes = copyAttributes(number, field);
+    attributes.replace(/([\w-]+)="([^"]*)"/g, function (_, name, value) { element.setAttribute(name, value); });
   }
 
   function editionHref(edition) {
@@ -140,6 +171,8 @@
 
   global.KinmarkingSeries = Object.freeze({
     editions:FALLBACKS,
+    applyEditionCopy:applyEditionCopy,
+    copyAttributes:copyAttributes,
     seriesSlug:SERIES_SLUG,
     editionDescription:editionDescription,
     editionHref:editionHref,

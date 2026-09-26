@@ -48,6 +48,7 @@
   .kinmarking-guide-card h3 { margin:0; color:var(--text); font-size:clamp(20px,2.5vw,28px); }
   .kinmarking-guide-card p,.kinmarking-guide-card li { color:var(--text-muted); line-height:1.7; }
   .kinmarking-guide-card ul { margin:16px 0 0; padding-left:20px; }
+  .kinmarking-stages { margin:0; padding:0; list-style:none; }
   .kinmarking-edition-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
   .kinmarking-edition-link { min-width:0; display:grid; gap:7px; border:5px solid var(--ring-faint); padding:16px; color:var(--text); text-decoration:none; }
   .kinmarking-edition-link:hover,.kinmarking-edition-link:focus-visible,.kinmarking-edition-link.is-current { border-color:var(--color-events); outline:none; }
@@ -93,14 +94,27 @@
       </aside>
     </section>
 
+    <section class="section kinmarking-experience" id="kinmarkingProcess" aria-labelledby="kinmarkingProcessTitle" hidden>
+      <header class="section-head">
+        <div><span class="section-kicker" data-copy-id="kinmarking-process-kicker">from inquiry to tattoo</span><h2 class="section-title" id="kinmarkingProcessTitle" data-copy-id="kinmarking-process-title">How the session unfolds.</h2></div>
+        <p class="section-copy" data-copy-id="kinmarking-process-intro">Four stages connect each edition's theme to conversation, visual experimentation, and possibilities for tattooing.</p>
+      </header>
+      <ol class="kinmarking-guide-grid kinmarking-stages" role="list">
+        <li class="kinmarking-guide-card"><span class="section-kicker" aria-hidden="true">01</span><h3 data-copy-id="kinmarking-stage-encounter-title">Encounter &amp; Study.</h3><p data-copy-id="kinmarking-stage-encounter-copy">Meet the session's theme through examples, references, and stories rooted in particular histories and traditions.</p></li>
+        <li class="kinmarking-guide-card"><span class="section-kicker" aria-hidden="true">02</span><h3 data-copy-id="kinmarking-stage-interpret-title">Interpret &amp; Translate.</h3><p data-copy-id="kinmarking-stage-interpret-copy">Consider what you recognize, what you have learned or inherited, and what you want to preserve, question, or reinterpret.</p></li>
+        <li class="kinmarking-guide-card"><span class="section-kicker" aria-hidden="true">03</span><h3 data-copy-id="kinmarking-stage-compose-title">Compose &amp; Render.</h3><p data-copy-id="kinmarking-stage-compose-copy">Experiment with combining color, symbols, and composition to develop a personal visual response. New connections can emerge through this process. That's my favorite part.</p></li>
+        <li class="kinmarking-guide-card"><span class="section-kicker" aria-hidden="true">04</span><h3 data-copy-id="kinmarking-stage-develop-title">Tattoo &amp; Embody.</h3><p data-copy-id="kinmarking-stage-develop-copy">Work with the tattoo artist to consider your response as a tattoo through its form, scale, color, and placement. Decide what you want to take into the body and what needs further exploration.</p></li>
+      </ol>
+    </section>
+
     <section class="section kinmarking-experience" id="kinmarkingExperience" hidden>
       <header class="section-head">
-        <div><span class="section-kicker" data-copy-id="live-events-detail-span-3">participant guide</span><h2 class="section-title" data-copy-id="live-events-detail-h2-2">Bring a history into conversation.</h2></div>
-        <p class="section-copy" data-copy-id="live-events-detail-p-6">The participating archivist and tattoo artist help distinguish what is known, remembered, inherited, uncertain, and possible to carry forward.</p>
+        <div><span class="section-kicker" data-copy-id="live-events-detail-span-3">participant guide</span><h2 class="section-title" id="kinmarkingGuideTitle" data-copy-id="live-events-detail-h2-2">Bring a history into conversation.</h2></div>
+        <p class="section-copy" id="kinmarkingGuideIntro" data-copy-id="live-events-detail-p-6">The participating archivist and tattoo artist help distinguish what is known, remembered, inherited, uncertain, and possible to carry forward.</p>
       </header>
       <div class="kinmarking-guide-grid">
-        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-1">What to bring</h3><ul><li data-copy-id="live-events-detail-li-1">Bring one to three photographs, scans, documents, objects, stories, inherited symbols, or other references.</li><li data-copy-id="live-events-detail-li-2">Identify what is known and what remains uncertain.</li><li data-copy-id="live-events-detail-li-3">Leave irreplaceable originals at home when a photograph or scan will work.</li><li data-copy-id="live-events-detail-li-4">Consider permission and privacy when the material involves other people.</li></ul></article>
-        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-2">How it works</h3><p data-copy-id="live-events-detail-p-7">No finished tattoo design is required. Begin with conversation: consider the material with an archivist, then explore with the tattoo artist how—or whether—it may become a mark in the skin.</p></article>
+        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-1">What to bring</h3><ul><li id="kinmarkingBring" data-copy-id="live-events-detail-li-1">Bring one to three photographs, scans, documents, objects, stories, inherited symbols, or other references.</li><li data-copy-id="live-events-detail-li-2">Identify what is known and what remains uncertain.</li><li data-copy-id="live-events-detail-li-3">Leave irreplaceable originals at home when a photograph or scan will work.</li><li data-copy-id="live-events-detail-li-4">Consider permission and privacy when the material involves other people.</li></ul></article>
+        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-2">How it works</h3><p id="kinmarkingHow" data-copy-id="live-events-detail-p-7">No finished tattoo design is required. Begin with conversation: consider the material with an archivist, then explore with the tattoo artist how—or whether—it may become a mark in the skin.</p></article>
         <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-3">Possible outcomes</h3><p data-copy-id="live-events-detail-p-8">Participation does not require getting tattooed. Small, resolved tattoos may be possible that day as time and technical readiness allow. Developing work may move into a future appointment secured by a separate tattoo deposit.</p></article>
         <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-4">Same-day readiness</h3><p data-copy-id="live-events-detail-p-9">Same-day tattooing is not guaranteed. Anyone hoping for possible same-day work should eat beforehand, hydrate, arrive sober, and bring government-issued photo identification.</p></article>
         <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-5">Privacy + consent</h3><p data-copy-id="live-events-detail-p-10">Materials, conversations, photographs, scans, recordings, and tattoo images are not retained or published without separate consent. Bringing material does not place it in the public Archive.</p></article>
@@ -113,7 +127,7 @@
     </section>
     <footer class="footer"><p data-copy-id="live-events-detail-p-13">&copy; the six.well construct</p><div class="page-links"><a href="/events/" data-copy-id="live-events-detail-a-5">events</a><a href="/home/" data-copy-id="live-events-detail-a-6">return to construct</a></div></footer>
   </main>
-<script src="/js/kinmarking-series.js?v=20260902-series-sessions"></script>
+<script src="/js/kinmarking-series.js?v=20260926-edition-themes"></script>
 <script>
 (function () {
   var parts = location.pathname.split("/").filter(Boolean);
@@ -152,8 +166,16 @@
   function setMessage(text,state) { message.textContent=text || ""; message.dataset.state=state || ""; }
   function renderKinmarking(event) {
     if (!isKinmarking) return;
+    document.getElementById("kinmarkingProcess").hidden = false;
     kinmarkingExperience.hidden = false;
     kinmarkingSeriesLink.hidden = false;
+    var number = selected ? selected.sessionNumber : requestedSessionNumber;
+    kinmarking.applyEditionCopy(description, number, "description");
+    kinmarking.applyEditionCopy(details, number, "details");
+    kinmarking.applyEditionCopy(document.getElementById("kinmarkingGuideTitle"), number, "guideTitle");
+    kinmarking.applyEditionCopy(document.getElementById("kinmarkingGuideIntro"), number, "guideIntro");
+    kinmarking.applyEditionCopy(document.getElementById("kinmarkingBring"), number, "bring");
+    kinmarking.applyEditionCopy(document.getElementById("kinmarkingHow"), number, "how");
     if (event.imageUrl) {
       kinmarkingFlyerImage.src = event.imageUrl;
       kinmarkingFlyerImage.alt = (selected ? kinmarking.editionTitle(event, selected, event.occurrences.indexOf(selected)) : event.title) + " event flyer";

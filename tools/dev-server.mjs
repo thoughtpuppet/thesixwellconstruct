@@ -233,6 +233,11 @@ const checkRoutes = [
   ["/art/example-managed-work/", 200],
   ["/studio/art-preview/?work=example", 200],
   ["/js/live-text-editor.js", 200],
+  ["/events/kinmarking/", 200],
+  ["/events/kinmarking-01-skin-as-archive/", 200],
+  ["/events/kinmarking-02/", 200],
+  ["/events/kinmarking-03/", 200],
+  ["/events/kinmarking-04/", 200],
 ];
 
 const localOnlyRoutes = new Map([
@@ -1186,6 +1191,8 @@ async function resolveFile(urlPath) {
     const info = await stat(file);
     return info.isFile() ? file : null;
   } catch {
+    // Match the Worker's shared detail page for events without a bespoke page.
+    if (isEventDetailRoute(urlPath)) return path.join(root, "events", "detail", "index.html");
     return null;
   }
 }

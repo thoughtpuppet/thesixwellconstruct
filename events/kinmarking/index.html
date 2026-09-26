@@ -48,12 +48,12 @@
 
     <section class="section kinmarking-intro" aria-labelledby="seriesTitle">
       <article class="kinmarking-panel">
-        <span class="section-kicker" data-copy-id="live-events-kinmarking-span-2">the series</span><h2 class="section-title" id="seriesTitle" data-copy-id="live-events-kinmarking-h2-1">Marks carried forward.</h2>
-        <p data-copy-id="live-events-kinmarking-p-2">KINMARKING is a participatory memory, archive, and tattoo practice exploring how photographs, documents, objects, stories, inherited symbols, and family histories may be interpreted as marks carried in the skin.</p>
+        <span class="section-kicker" data-copy-id="live-events-kinmarking-span-2">the series</span><h2 class="section-title" id="seriesTitle" data-copy-id="live-events-kinmarking-h2-1">The body as Legend and Archive.</h2>
+        <p data-copy-id="live-events-kinmarking-p-2">KINMARKING is a communal series about the body, rituals of inheritance, and the desire for something to persist.</p>
       </article>
       <aside class="kinmarking-panel">
-        <span class="section-kicker" data-copy-id="live-events-kinmarking-span-3">the interval</span><h2 class="section-title" data-copy-id="live-events-kinmarking-h2-2">Every four months.</h2>
-        <p data-copy-id="live-events-kinmarking-p-3">Each edition holds its own theme, archival questions, participating archivist, and tattoo possibilities while remaining connected to the wider KINMARKING practice.</p>
+        <span class="section-kicker" data-copy-id="live-events-kinmarking-span-3">the intervals</span><h2 class="section-title" data-copy-id="live-events-kinmarking-h2-2">Every four months.</h2>
+        <p data-copy-id="live-events-kinmarking-p-3">Each session introduces a distinct theme, inviting participants to explore its histories, meanings, and personal associations through conversation and visual experimentation, then develop those discoveries into possible tattoos.</p>
       </aside>
     </section>
 
@@ -67,7 +67,7 @@
 
     <footer class="footer"><p data-copy-id="live-events-kinmarking-p-6">&copy; the six.well construct</p><div class="page-links"><a href="/events/" data-copy-id="live-events-kinmarking-a-3">events</a><a href="/home/" data-copy-id="live-events-kinmarking-a-4">return to construct</a></div></footer>
   </main>
-<script src="/js/kinmarking-series.js?v=20260902-series-sessions"></script>
+<script src="/js/kinmarking-series.js?v=20260926-edition-themes"></script>
 <script>
 (function () {
   var root = document.getElementById("kinmarkingEditions");
@@ -80,7 +80,7 @@
         '<p class="edition-state">KINMARKING ' + series.escapeHtml(event.number) + ' · ' + series.escapeHtml(series.stateLabel(event)) + '</p>' +
         '<h3>' + series.escapeHtml(event.title) + '</h3>' +
         '<p class="edition-date">' + series.escapeHtml(series.formatDate(event.startsAt)) + '</p>' +
-        '<p class="edition-copy">' + series.escapeHtml(event.description) + '</p>' +
+        '<p class="edition-copy"' + series.copyAttributes(event.number, "description") + '>' + series.escapeHtml(event.description) + '</p>' +
         '<a class="venture-link" href="' + series.editionHref(event) + '">view edition</a>' +
       '</article>';
     }).join("");
