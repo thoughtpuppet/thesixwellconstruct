@@ -1136,7 +1136,7 @@ test("public tattoo rates and session lengths keep their approved copy and peer 
   const source = readFileSync(join(ROOT, "tattoos", "index.html"), "utf8");
   const siteTypography = readFileSync(join(ROOT, "css", "site-typography.css"), "utf8");
   assert.match(source, /<section class="section" id="project-fit">[\s\S]*?<h2 class="section-title"[^>]*>Hourly Rates<\/h2>[\s\S]*?<\/section>\s*<section class="section session-offerings" id="session-lengths"/);
-  assert.match(source, /<h2 class="section-title" id="sessionOfferingsTitle">Session Lengths<\/h2>/);
+  assert.match(source, /<h2 class="section-title" id="sessionOfferingsTitle"[^>]*>Session Lengths<\/h2>/);
   assert.doesNotMatch(source, /The Review Process:|Ways to Collaborate:/);
   assert.match(siteTypography, /\.section-title\s*\{[\s\S]*?color:\s*var\(--type-section-color,[\s\S]*?font-size:\s*var\(--type-section-size-active,/);
   assert.match(source, /\.section-title\s*\{\s*margin-bottom:24px;\s*\}/);
@@ -1158,6 +1158,10 @@ test("public tattoo rates and session lengths keep their approved copy and peer 
   assert.match(source, /<ul class="session-list" id="tattooSessionList"[\s\S]*data-booking-type="tattoo_extended"[\s\S]*<\/ul>/);
   assert.doesNotMatch(source, /class="extended-day-policy"/);
   assert.match(source, /tattooSessionTypes = Array\.isArray\(payload\.bookingTypes\)/);
+  assert.doesNotMatch(source, /id="tattooRateList"[^>]+data-live-edit-owner="managed"/);
+  assert.doesNotMatch(source, /id="tattooSessionList"[^>]+data-live-edit-owner="managed"/);
+  assert.doesNotMatch(source, /rateList\.replaceChildren\(\)/);
+  assert.doesNotMatch(source, /description\.textContent\s*=\s*type\.description/);
 });
 
 test("Studio approved booking links allow per-client tattoo appointment types", () => {

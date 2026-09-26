@@ -6,7 +6,7 @@
   window.__constructWayfindingLoaded = true;
   if (document.body && document.body.getAttribute('data-construct-wayfinding') === 'off') return;
 
-  var ROOT_LABEL = /* live-copy:wayfinding.root.label */ 'Construct';
+  var ROOT_LABEL = /* live-copy:wayfinding.root.label */ "The six.well Construct";
   var RETURN_LABEL = /* live-copy:wayfinding.footer.return */ 'Return to construct';
   var MEDIUMS = {
     tattooing: { key:'tattooing', label: /* live-copy:wayfinding.medium.tattooing.label */ 'Art.Pill Tattoo House', backLabel: /* live-copy:wayfinding.medium.tattooing.back-label */ 'Back to Art.Pill Tattoo House', url: '/tattoos/' },

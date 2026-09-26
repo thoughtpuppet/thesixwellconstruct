@@ -143,7 +143,6 @@
   display:block;
   width:72px;
   height:72px;
-  border:5px solid var(--archive-ink);
   background:var(--swatch);
 }
 .archive-color-family-copy { display:grid; gap:5px; min-width:0; }
@@ -196,7 +195,6 @@
   flex:0 0 72px;
   width:72px;
   height:72px;
-  border:5px solid var(--archive-ink);
   background:var(--swatch,var(--archive-faint));
 }
 .archive-color-dialog-filters {

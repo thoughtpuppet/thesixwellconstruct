@@ -290,9 +290,10 @@ function collectCompletedCandidates(source) {
     }
     const explicitCopyId = attributeValue(tagText, "data-copy-id");
     const liveOwner = attributeValue(tagText, "data-live-edit-owner");
+    const containerOnly = hasAttribute(tagText, "data-live-edit-container");
     const skip = isSkipped() || SKIP_TAGS.has(name) || hasAttribute(tagText, "data-live-edit-ignore") || liveOwner === "managed" || liveOwner === "preview";
     let editableOwner = activeOwner();
-    if (!skip && EDITABLE_TAGS.has(name) && !editableOwner) {
+    if (!skip && !containerOnly && EDITABLE_TAGS.has(name) && !editableOwner) {
       const ordinal = (tagOrdinals.get(name) || 0) + 1;
       tagOrdinals.set(name, ordinal);
       editableOwner = {

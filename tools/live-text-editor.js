@@ -523,6 +523,7 @@
       if (element.closest('script, style, noscript, svg, canvas, input, textarea, select')) return;
       if (element.closest('#construct-fade, #construct-corner, #construct-nav')) return;
       if (element.closest('[data-live-edit-ignore]')) return;
+      if (element.hasAttribute('data-live-edit-container')) return;
       if (!element.textContent || !element.textContent.trim()) return;
       if (!hasStableCopyId && !hasDirectText(element)) return;
       if (hasEditableParent(element)) return;

@@ -19,7 +19,7 @@ export const SOURCES = {
     label: "thoughtpuppet",
     color: tokenColor("--color-art", "#0039BD"),
     brightColor: tokenColor("--color-art-bright", "#2054FF"),
-    statement: /* live-copy:storefront.source.thoughtpuppet.statement */ "objects that carry the paintings outward",
+    statement: /* live-copy:storefront.source.thoughtpuppet.statement */ "objects derived from paintings, woodworks and installations",
   },
   "art.pill": {
     label: "art.pill Tattoo Supply",
