@@ -17,6 +17,12 @@ import { handleConstructApi } from "../functions/api/construct/_lib.js";
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TOKEN = "calendar-contract-token";
 
+// The source fixtures describe the fall 2026 season. Keep horizon and due-time
+// checks deterministic instead of letting real time age those fixtures out.
+test.beforeEach((context) => {
+  context.mock.method(Date, "now", () => Date.parse("2026-08-25T12:00:00Z"));
+});
+
 class D1Statement {
   constructor(database, sql, values = []) { this.database = database; this.sql = sql; this.values = values; }
   bind(...values) { return new D1Statement(this.database, this.sql, values); }
@@ -53,12 +59,15 @@ class MemoryBucket {
   async delete(key) { this.objects.delete(key); }
 }
 
+const migrationFixtures = new Map();
+
 function databaseThrough(lastMigration = "") {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
   for (const name of readdirSync(join(ROOT, "migrations")).filter((item) => item.endsWith(".sql") && !["0147_calendar_creative_scout_import.sql", "0160_atlanta_fall_2026_arts_preview.sql", "0162_calendar_latest_creative_scout_strong_picks.sql"].includes(item)).sort()) {
     if (lastMigration && name > lastMigration) break;
-    db.exec(readFileSync(join(ROOT, "migrations", name), "utf8"));
+    if (!migrationFixtures.has(name)) migrationFixtures.set(name, readFileSync(join(ROOT, "migrations", name), "utf8"));
+    db.exec(migrationFixtures.get(name));
   }
   return db;
 }
@@ -1135,7 +1144,7 @@ test("We Hold These Truths publishes eight official conversations as one series,
   assert.doesNotMatch(feed, /DTSTART;VALUE=DATE:20260820/);
 });
 
-test("Out of Hand adapter renders one complete private series and records bounded browser diagnostics", async () => {
+test("Out of Hand adapter renders one complete published series and records bounded browser diagnostics", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_out_of_hand_truths'");
   const facts = [
@@ -1172,15 +1181,15 @@ test("Out of Hand adapter renders one complete private series and records bounde
     assert.equal(direct.browserMs, 95);
     assert.equal(browserCalls.length, 9);
     assert.equal(Math.max(...facts.map(([id]) => browserCalls.filter((call) => call.url.includes(`/conversations/${id}`)).length)), 1);
-    assert.deepEqual({ ...db.prepare("SELECT event_structure,status,verification_state FROM calendar_candidates WHERE id='cal_candidate_gulch_we_hold_truths'").get() }, { event_structure:"series", status:"candidate", verification_state:"verified" });
+    assert.deepEqual({ ...db.prepare("SELECT event_structure,status,verification_state FROM calendar_candidates WHERE id='cal_candidate_gulch_we_hold_truths'").get() }, { event_structure:"series", status:"published", verification_state:"verified" });
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 8);
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_gulch_we_hold_truths'").get().count, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("Eventbrite discovery uses bounded rendered detail extraction and keeps verified ticket events private", async () => {
+test("Eventbrite discovery uses bounded rendered detail extraction and publishes ready verified ticket events", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0; UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_eventbrite_atlanta'");
   const eventUrl = "https://www.eventbrite.com/e/experimental-art-and-creative-technology-exhibition-tickets-123456";
@@ -1217,10 +1226,10 @@ test("Eventbrite discovery uses bounded rendered detail extraction and keeps ver
     assert.deepEqual(browserCalls.map((call) => call.action), ["json", "json"]);
     const candidate = db.prepare("SELECT status,verification_state,ends_at,source_authority,source_url,ticket_url FROM calendar_candidates WHERE source_event_id='eventbrite-123456'").get();
     assert.deepEqual({ ...candidate }, {
-      status:"candidate", verification_state:"verified", ends_at:"2026-10-10T21:00:00-04:00",
+      status:"published", verification_state:"verified", ends_at:"2026-10-10T21:00:00-04:00",
       source_authority:"authorized_ticket_host", source_url:eventUrl, ticket_url:eventUrl,
     });
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id='eventbrite-123456')").get().count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id='eventbrite-123456')").get().count, 1);
     const sources = await (await admin(db, "/sources")).json();
     assert.equal(sources.sources.find((source) => source.id === "cal_source_eventbrite_atlanta").adapterKey, "eventbrite");
     assert.equal(db.prepare("SELECT adapter_key FROM calendar_sources WHERE id='cal_source_eventbrite_atlanta'").get().adapter_key, "automatic");
@@ -1328,7 +1337,7 @@ test("a pasted Eventbrite SocialEvent uses structured data without Browser extra
   }
 });
 
-test("LOOP's embedded BigTickets calendar creates complete private event candidates", async () => {
+test("LOOP's embedded BigTickets calendar publishes complete event candidates", async () => {
   const db = database();
   const source = db.prepare("SELECT id,url,adapter_config_json FROM calendar_sources WHERE lower(rtrim(url,'/'))='https://loopatl.space/event-calendar'").get();
   assert.ok(source);
@@ -1378,13 +1387,13 @@ test("LOOP's embedded BigTickets calendar creates complete private event candida
     );
     const candidate = db.prepare("SELECT status,title,starts_at,ends_at,venue_name,venue_address,source_url,ticket_url,source_authority,verification_state,subjects_json,formats_json FROM calendar_candidates WHERE source_event_id=?").get(`bigtickets-${eventToken.toLowerCase()}`);
     assert.deepEqual({ ...candidate }, {
-      status:"candidate", title:"Art in Transit: Research, Innovation & Global Exchange",
+      status:"published", title:"Art in Transit: Research, Innovation & Global Exchange",
       starts_at:"2026-09-09T16:00:00-04:00", ends_at:"2026-09-09T18:00:00-04:00",
       venue_name:"LOOP", venue_address:"665 Marietta Street NW, Atlanta, GA 30313",
       source_url:detailUrl, ticket_url:detailUrl, source_authority:"authorized_ticket_host", verification_state:"verified",
       subjects_json:'["art"]', formats_json:'["exhibition","panel"]',
     });
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id=?)").get(`bigtickets-${eventToken.toLowerCase()}`).count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id=?)").get(`bigtickets-${eventToken.toLowerCase()}`).count, 1);
     db.exec("UPDATE calendar_scout_connectors SET enabled=1 WHERE id='instagram_web'");
     const browser = { async quickAction(action) { assert.equal(action, "links"); return Response.json({ result:[] }); } };
     const socialRun = await runCalendarScout(env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }), { runKind:"manual", channels:["instagram_web"] });
@@ -1458,20 +1467,18 @@ test("Posh Atlanta scouting spans organizers and accepts event-host identity pro
     assert.match(browserCalls[0].prompt, /currently shown for Atlanta, GA/);
     const candidate = db.prepare("SELECT verification_state,starts_at,ends_at,venue_address,source_url,discovery_url,organizer_url,source_authority,pending_revision_id FROM calendar_candidates WHERE id='cal_candidate_posh_orca_open_house_2026'").get();
     assert.deepEqual({ ...candidate }, {
-      verification_state:"needs_verification", starts_at:"2026-08-23T16:00:00-04:00", ends_at:"2026-08-23T19:00:00-04:00",
-      venue_address:"6000 Lake Forrest Dr NW, Sandy Springs, GA 30328, USA", source_url:eventUrl, discovery_url:discoveryUrl,
+      verification_state:"verified", starts_at:"2026-08-23T16:00:00-04:00", ends_at:"2026-08-23T19:00:00-04:00",
+      venue_address:"6000 Lake Forrest Dr NW, Sandy Springs, GA, 30328", source_url:eventUrl, discovery_url:discoveryUrl,
       organizer_url:"https://posh.vip/g/orca", source_authority:"authorized_ticket_host", pending_revision_id:candidate.pending_revision_id,
     });
-    assert.ok(candidate.pending_revision_id);
-    const proposed=JSON.parse(db.prepare("SELECT snapshot_json FROM calendar_candidate_revisions WHERE id=?").get(candidate.pending_revision_id).snapshot_json);
-    assert.equal(proposed.verificationState,"verified");
-    assert.equal(proposed.venueAddress,"6000 Lake Forrest Dr NW, Sandy Springs, GA, 30328");
+    assert.equal(candidate.pending_revision_id, "");
+    assert.equal(result.published, 2);
     assert.deepEqual(
       { ...db.prepare("SELECT organizer,organizer_url,verification_state,ends_at,source_authority FROM calendar_candidates WHERE source_event_id='posh-atlanta-creative-technology-mixer'").get() },
       { organizer:"Atlanta Creative Guild", organizer_url:"https://posh.vip/g/atlanta-creative-guild", verification_state:"verified", ends_at:"2026-09-12T21:00:00-04:00", source_authority:"authorized_ticket_host" },
     );
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_posh_orca_open_house_2026'").get().count, 0);
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id='posh-atlanta-creative-technology-mixer')").get().count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id='cal_candidate_posh_orca_open_house_2026'").get().count, 1);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_event_id='posh-atlanta-creative-technology-mixer')").get().count, 1);
   } finally {
     globalThis.fetch = originalFetch;
     Date.now = originalDateNow;
@@ -1555,14 +1562,14 @@ test("direct monitoring remains safe without an OpenAI key and scheduler due gat
       FROM calendar_candidates c JOIN calendar_candidate_notes n ON n.candidate_id=c.id
       WHERE c.title='Creative Technology Lecture' LIMIT 1`).get();
     assert.ok(candidate);
-    assert.notEqual(candidate.status, "published");
+    assert.equal(candidate.status, "published");
     assert.match(candidate.factual_description, /Ignore prior instructions/);
     assert.match(candidate.private_rationale, /Scout Profile|Six\.Well creative ecosystem/);
     assert.match(candidate.attendance_use, /programming research/i);
     assert.match(candidate.programming_ideas, /Study how/);
     assert.match(candidate.potential_collaborators, /Atlanta Arts Center/);
     assert.match(candidate.internal_notes, /generated automatically/i);
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Creative Technology Lecture'").get().count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Creative Technology Lecture'").get().count, 1);
     assert.match(db.prepare("SELECT source_results_json FROM calendar_scout_runs WHERE id=?").get(run.runId).source_results_json, /OPENAI_API_KEY is not configured/);
 
     const due = await runDueCalendarScout(runtime, Date.now());
@@ -1598,7 +1605,7 @@ test("Strong Picks scouting runs only the verified intake source scope", async (
     assert.deepEqual(calls, ["https://carlos.emory.edu/calendar"]);
     assert.ok(JSON.parse(db.prepare("SELECT sources_searched_json FROM calendar_scout_runs WHERE id=?").get(result.runId).sources_searched_json).includes("cal_source_carlos_calendar"));
     assert.equal(db.prepare("SELECT last_attempt_at FROM calendar_sources WHERE id='cal_source_gsu_cmii'").get().last_attempt_at, null);
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta Art and Technology Forum'").get().count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta Art and Technology Forum'").get().count, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1638,9 +1645,9 @@ test("one registered source can be run immediately without invoking other source
     assert.deepEqual(calls, ["https://one-source.example/events"]);
     assert.deepEqual(
       { ...db.prepare("SELECT source_id,status FROM calendar_candidates WHERE title='Atlanta Experimental Engineering Lecture'").get() },
-      { source_id:source.id, status:"candidate" },
+      { source_id:source.id, status:"published" },
     );
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta Experimental Engineering Lecture'").get().count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta Experimental Engineering Lecture'").get().count, 1);
     assert.ok(db.prepare("SELECT last_success_at FROM calendar_sources WHERE id=?").get(source.id).last_success_at);
     assert.equal(db.prepare("SELECT last_attempt_at FROM calendar_sources WHERE id='cal_source_must_not_run'").get().last_attempt_at, null);
     const run = db.prepare("SELECT sources_searched_json,source_results_json FROM calendar_scout_runs WHERE id=?").get(result.runId);
@@ -1722,8 +1729,8 @@ test("Wix event sources group confirmed sessions under a series and honor the St
     assert.equal(candidate.venue_name, "Virtual");
     assert.deepEqual(JSON.parse(candidate.subjects_json).sort(), ["anthropology","technology"].sort());
     assert.deepEqual(JSON.parse(candidate.formats_json), ["workshop"]);
-    assert.equal(candidate.status, "candidate");
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_id=?)").get(source.id).count, 0);
+    assert.equal(candidate.status, "published");
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_id=?)").get(source.id).count, 1);
     assert.deepEqual(
       { ...db.prepare("SELECT source_event_id,occurrence_type,title,starts_at,ends_at,venue_name,source_url,status FROM calendar_candidate_occurrences WHERE candidate_id=?").get(candidate.id) },
       {
@@ -1770,7 +1777,7 @@ test("Wix event sources group confirmed sessions under a series and honor the St
   }
 });
 
-test("Eyedrum's Squarespace calendar groups weekly drawing listings into one private series with dated occurrences", async () => {
+test("Eyedrum's Squarespace calendar groups weekly drawing listings into one published series with dated occurrences", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0");
   db.exec("UPDATE calendar_sources SET enabled=1 WHERE id='cal_source_eyedrum'");
@@ -1819,7 +1826,7 @@ test("Eyedrum's Squarespace calendar groups weekly drawing listings into one pri
       venue_url:sourceUrl, source_authority:"official_calendar", title:"High Contrast Drawing Group",
       event_structure:"series", date_kind:"date_range", starts_at:"2026-08-26", ends_at:"2026-09-02",
       venue_name:"eyedrum", venue_address:"515 Ralph David Abernathy Boulevard Southwest Atlanta, GA, 30312 United States",
-      subjects:["art","art-making"], formats:["workshop"], status:"candidate", verification_state:"verified",
+      subjects:["art","art-making"], formats:["workshop"], status:"published", verification_state:"verified",
     });
     assert.deepEqual(
       db.prepare(`SELECT source_event_id,title,starts_at,ends_at,source_url,status,verification_state
@@ -1833,7 +1840,7 @@ test("Eyedrum's Squarespace calendar groups weekly drawing listings into one pri
     assert.match(notes.private_rationale, /art/);
     assert.match(notes.attendance_use, /programming research/i);
     assert.match(notes.programming_ideas, /Study how Eyedrum/i);
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 1);
 
     const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
     assert.equal(approved.status, 200, await approved.clone().text());
@@ -1920,7 +1927,7 @@ test("Gallery FC's Squarespace calendar captures one exhibition with its related
       venueUrl:sourceUrl, sourceAuthority:"official_calendar", title:"Home Team Exhibition",
       eventStructure:"exhibition", dateKind:"date_range", startsAt:"2026-08-11", endsAt:"2026-10-09",
       venueName:"The CTR South Lobby", venueAddress:"190 Marietta St NW Atlanta, GA 30303",
-      subjects:["art"], formats:["exhibition"], status:"candidate", verificationState:"verified",
+      subjects:["art"], formats:["exhibition"], status:"published", verificationState:"verified",
     });
     assert.deepEqual(
       db.prepare(`SELECT source_event_id,occurrence_type,title,starts_at,ends_at,source_url,status,verification_state
@@ -1930,7 +1937,7 @@ test("Gallery FC's Squarespace calendar captures one exhibition with its related
         { source_event_id:"home-team-panel", occurrence_type:"panel", title:'“Home Team” panel discussion moderated by Living Walls', starts_at:"2026-09-17T22:00:00Z", ends_at:"2026-09-18T00:00:00Z", source_url:`${sourceUrl}/home-team-panel`, status:"scheduled", verification_state:"verified" },
       ],
     );
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1966,7 +1973,7 @@ test("High Art Making monitoring groups month-specific Study Hall pages and clas
     }, {
       source_event_id:"high-art-making-series-study-hall-a-creative-connection-space-for-working-artists",
       source_url:sourceUrl, event_structure:"series", date_kind:"date_range", starts_at:"2026-08-23", ends_at:"2026-09-27",
-      subjects:["art","art-making"], formats:["workshop"], status:"candidate",
+      subjects:["art","art-making"], formats:["workshop"], status:"published",
     });
     assert.deepEqual(
       db.prepare("SELECT source_event_id,starts_at,ends_at,source_url FROM calendar_candidate_occurrences WHERE candidate_id=? ORDER BY starts_at").all(candidate.id).map((row) => ({ ...row })),
@@ -1983,7 +1990,7 @@ test("High Art Making monitoring groups month-specific Study Hall pages and clas
     assert.equal(recheckPayload.candidate.occurrences.length, 2);
     const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
     assert.equal(publicPayload.subjects.includes("art-making"), true);
-    assert.equal(publicPayload.events.some((event) => event.title.includes("Study Hall")), false);
+    assert.equal(publicPayload.events.some((event) => event.title.includes("Study Hall")), true);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2285,7 +2292,7 @@ test("Rampant Gallery monitoring extracts the current exhibition, opening occurr
       sourceAuthority:"venue_event", title:"POORTREAT", eventStructure:"exhibition", dateKind:"date_range",
       startsAt:startDay, endsAt:endDay, venueName:"Rampant Gallery",
       venueAddress:"1200 Foster Street NW, Studio 119, Atlanta, GA 30318", subjects:["art"], formats:["exhibition"],
-      status:"candidate", verificationState:"verified", flyerSourceUrl:flyerUrl,
+      status:"published", verificationState:"verified", flyerSourceUrl:flyerUrl,
     });
     assert.ok(candidate.flyer_media_id);
     assert.deepEqual(
@@ -2298,7 +2305,7 @@ test("Rampant Gallery monitoring extracts the current exhibition, opening occurr
     assert.match(notes.attendance_use, /programming research/i);
     assert.match(notes.programming_ideas, /Study how Rampant Gallery/i);
     assert.equal(db.prepare("SELECT privacy,public_presentation FROM media_assets WHERE id=?").get(candidate.flyer_media_id).privacy, "internal");
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2439,7 +2446,7 @@ test("zero-result official sources crawl bounded same-origin event paths beyond 
     assert.deepEqual(calls, ["https://official.example/", "https://official.example/programming", fallUrl, detailUrl]);
     assert.equal(calls.every((url) => new URL(url).hostname === "official.example"), true);
     assert.equal(db.prepare("SELECT source_url FROM calendar_candidates WHERE title='Atlanta Fall Art Exhibition Opening'").get().source_url, detailUrl);
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries").get().count, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2482,13 +2489,13 @@ test("Eyedrum's configured creative-music series groups lineup aliases and retai
     assert.equal(run.status, "completed");
     assert.equal(run.warnings, 0);
     assert.equal(before, 2);
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_eyedrum_anniversary'").get().count, 2);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id='cal_candidate_eyedrum_anniversary'").get().count, 3);
     const parent = db.prepare("SELECT title,starts_at,ends_at,pending_revision_id FROM calendar_candidates WHERE id='cal_candidate_eyedrum_anniversary'").get();
     assert.deepEqual({ title:parent.title, startsAt:parent.starts_at, endsAt:parent.ends_at }, {
-      title:"Monday Night Creative Music", startsAt:"2026-09-14", endsAt:"2026-09-21",
+      title:"Monday Night Creative Music", startsAt:"2026-09-07", endsAt:"2026-09-21",
     });
-    assert.ok(parent.pending_revision_id);
-    const proposal = JSON.parse(db.prepare("SELECT snapshot_json FROM calendar_candidate_revisions WHERE id=?").get(parent.pending_revision_id).snapshot_json);
+    assert.equal(parent.pending_revision_id, "");
+    const proposal = (await (await admin(db, "/candidates/cal_candidate_eyedrum_anniversary")).json()).candidate;
     assert.equal(proposal.title, "Monday Night Creative Music");
     assert.equal(proposal.eventStructure, "series");
     assert.equal(proposal.startsAt, "2026-09-07");
@@ -2509,10 +2516,11 @@ test("Eyedrum's configured creative-music series groups lineup aliases and retai
     const cancellationRun = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false, sourceId:"cal_source_eyedrum" });
     assert.equal(cancellationRun.status, "completed");
     const afterCancellationCheck = db.prepare("SELECT pending_revision_id FROM calendar_candidates WHERE id='cal_candidate_eyedrum_anniversary'").get();
-    const cancellationProposal = JSON.parse(db.prepare("SELECT snapshot_json FROM calendar_candidate_revisions WHERE id=?").get(afterCancellationCheck.pending_revision_id).snapshot_json);
+    assert.equal(afterCancellationCheck.pending_revision_id, "");
+    const cancellationProposal = (await (await admin(db, "/candidates/cal_candidate_eyedrum_anniversary")).json()).candidate;
     assert.equal(cancellationProposal.occurrences.find((occurrence) => /Angela Winter/.test(occurrence.title)).status, "cancelled");
     assert.equal(cancellationProposal.occurrences.some((occurrence) => /Danny Kamins/.test(occurrence.title)), true);
-    assert.equal(db.prepare("SELECT status FROM calendar_candidate_occurrences WHERE id='cal_occurrence_mncm_angela_20260921'").get().status, "scheduled");
+    assert.equal(db.prepare("SELECT status FROM calendar_candidate_occurrences WHERE id='cal_occurrence_mncm_angela_20260921'").get().status, "cancelled");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2749,7 +2757,7 @@ test("new generic sources can recover rendered event cards through bounded dynam
   }
 });
 
-test("Atlanta BeltLine uses rendered event links and deterministic detail metadata without publishing candidates", async () => {
+test("Atlanta BeltLine uses rendered metadata and keeps unverified candidates private", async () => {
   const db = database();
   db.exec("UPDATE calendar_sources SET enabled=0");
   db.exec(`UPDATE calendar_scout_profiles
@@ -2887,7 +2895,7 @@ test("registered calendar feeds are parsed through the direct-source lane", asyn
     const run = await runCalendarScout(env(db), { runKind:"manual", includeWeb:false });
     assert.equal(run.status, "completed", JSON.stringify(db.prepare("SELECT source_results_json,error_message FROM calendar_scout_runs WHERE id=?").get(run.runId)));
     const candidate = db.prepare("SELECT source_event_id,status FROM calendar_candidates WHERE title='Atlanta Sound Technology Workshop'").get();
-    assert.deepEqual({ ...candidate }, { source_event_id:"ics-atlanta-1", status:"candidate" });
+    assert.deepEqual({ ...candidate }, { source_event_id:"ics-atlanta-1", status:"published" });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2929,7 +2937,7 @@ test("GSU Localist monitoring publishes confirmed audience restrictions across A
     assert.deepEqual(JSON.parse(candidate.subjects_json).sort(), ["ai","engineering","technology"].sort());
     assert.deepEqual(JSON.parse(candidate.formats_json), ["lecture-talk"]);
     assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_occurrences WHERE candidate_id=?").get(candidate.id).count, 1);
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 1);
     const approved = await admin(db, `/candidates/${candidate.id}/approve`, { method:"POST", body:{} });
     assert.equal(approved.status, 200, await approved.clone().text());
     const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events?affiliation=gsu&q=alumni"), env(db))).json();
@@ -2947,7 +2955,7 @@ test("GSU Localist monitoring publishes confirmed audience restrictions across A
   }
 });
 
-test("OpenAI discovery uses web_search structured output, stores citations, and never auto-publishes", async () => {
+test("OpenAI discovery uses web_search structured output, stores citations, and auto-publishes ready events", async () => {
   const db = database();
   const profilePatch = await admin(db, "/profile", { method:"PATCH", body:{ model:"gpt-5.6-luna" } });
   assert.equal(profilePatch.status, 200, await profilePatch.clone().text());
@@ -2992,7 +3000,7 @@ test("OpenAI discovery uses web_search structured output, stores citations, and 
     assert.ok(openAiBody.text.format.schema.properties.events.items.properties.sourceAuthority);
     assert.match(openAiBody.instructions, /Keep this intelligence out of factualDescription/i);
     assert.equal(run.candidates, 1);
-    assert.equal(db.prepare("SELECT status FROM calendar_candidates WHERE title='Atlanta AI + Art Panel'").get().status, "candidate");
+    assert.equal(db.prepare("SELECT status FROM calendar_candidates WHERE title='Atlanta AI + Art Panel'").get().status, "published");
     const intelligence = db.prepare(`SELECT n.private_rationale,n.attendance_use,n.programming_ideas,n.potential_collaborators
       FROM calendar_candidate_notes n JOIN calendar_candidates c ON c.id=n.candidate_id WHERE c.title='Atlanta AI + Art Panel'`).get();
     assert.deepEqual({ ...intelligence }, {
@@ -3001,7 +3009,7 @@ test("OpenAI discovery uses web_search structured output, stores citations, and 
       programming_ideas:"Study how the panel stages dialogue between artists and AI practitioners.",
       potential_collaborators:"Official Organizer; participating artists and AI practitioners.",
     });
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta AI + Art Panel'").get().count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta AI + Art Panel'").get().count, 1);
     const history = db.prepare("SELECT citations_json,openai_usage_json FROM calendar_scout_runs WHERE id=?").get(run.runId);
     assert.match(history.citations_json, /official\.example/);
     assert.match(history.openai_usage_json, /input_tokens/);
@@ -3061,7 +3069,7 @@ test("a registered discovery source is searched through to the original organize
       organizer_url:"https://gallery.example/",
       venue_url:"https://gallery.example/",
       source_authority:"organizer_event",
-      status:"candidate",
+      status:"published",
       verification_state:"verified",
     });
     const discoveryLink = db.prepare("SELECT link_role,include_public,url FROM calendar_candidate_links WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE source_id=?)").get(source.id);
@@ -3335,7 +3343,7 @@ test("Threads rate limits use bounded retries and surface an isolated connector 
   }
 });
 
-test("TikTok web discovery is domain-filtered, ignores thumbnails, and remains approval-gated", async () => {
+test("TikTok web discovery is domain-filtered, ignores thumbnails, and publishes only source-verified events", async () => {
   const db = database();
   await admin(db, "/connectors/tiktok_web", { method:"PATCH", body:{ enabled:true, perRunLimit:6 } });
   const runtime = env(db, { OPENAI_API_KEY:"test-key" });
@@ -3360,9 +3368,9 @@ test("TikTok web discovery is domain-filtered, ignores thumbnails, and remains a
     assert.deepEqual(body.tools[0].filters.allowed_domains, ["tiktok.com"]);
     assert.equal(body.tool_choice, "required");
     const candidate = db.prepare("SELECT id,status,flyer_media_id FROM calendar_candidates WHERE title='Atlanta Creative Tech Conference'").get();
-    assert.equal(candidate.status, "candidate");
+    assert.equal(candidate.status, "published");
     assert.equal(candidate.flyer_media_id, null);
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -3648,7 +3656,7 @@ test("official-source scouting captures at most one private R2 flyer and private
     assert.deepEqual({ ...media }, { privacy:"internal", public_presentation:"hidden", mime_type:"image/jpeg" });
     assert.equal(bucket.objects.size, 1);
     assert.deepEqual({ ...db.prepare("SELECT include_public,url FROM calendar_candidate_links WHERE candidate_id=(SELECT id FROM calendar_candidates WHERE title='Atlanta Experimental Flyer Event')").get() }, { include_public:0, url:"https://official.example/artists" });
-    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta Experimental Flyer Event'").get().count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE title='Atlanta Experimental Flyer Event'").get().count, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -6314,6 +6322,142 @@ test("Calendar Studio exposes batch paste-and-scout site discovery", () => {
   assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.link-intake \{ grid-template-columns:minmax\(0,1fr\); \}/);
 });
 
+function readyScoutEvent(overrides = {}) {
+  const startsAt = new Date(Date.now() + 20 * 86_400_000).toISOString();
+  return {
+    title:"Experimental Memory and Sound", sourceUrl:"https://artist-led.example/events/memory-sound",
+    organizerUrl:"https://artist-led.example/", venueUrl:"https://artist-led.example/", sourceAuthority:"organizer_event",
+    organizer:"Artist-Led Atlanta", factualDescription:"An artist-led interdisciplinary performance combining film and sound.",
+    dateKind:"timed", eventStructure:"single", startsAt, endsAt:new Date(Date.parse(startsAt) + 7_200_000).toISOString(),
+    timezone:"America/New_York", venueName:"Artist-Led Atlanta", venueAddress:"100 Edgewood Ave SE, Atlanta, GA 30303",
+    city:"Atlanta", region:"GA", subjects:["art","film","poetry-music"], formats:["performance","experimental-event"],
+    experimental:true, verificationState:"verified", verificationNotes:"Exact organizer event, venue, schedule, and audience verified.",
+    accessStatus:"public", audiences:["Public"], privateRationale:"PRIVATE STRATEGY sentinel", ...overrides,
+  };
+}
+
+async function scoutHandoff(db, events) {
+  const response = await admin(db, "/strong-picks", { method:"POST", body:{events} });
+  assert.equal(response.status, 200, await response.clone().text());
+  const payload = await response.json();
+  assert.equal(payload.failures, 0, JSON.stringify(payload));
+  return payload;
+}
+
+test("Scout automation publishes ready facts, stays idempotent, and holds unverified public updates", async () => {
+  const db = database();
+  const event = readyScoutEvent({ticketStatus:"on_sale"});
+  const first = await scoutHandoff(db, [event]);
+  assert.equal(first.published, 1);
+  const pick = first.strongPicks[0];
+  assert.equal(pick.candidateStatus, "published");
+  assert.equal(pick.publishedThisRun, true);
+  assert.ok(pick.publicEntryId);
+  const sequence = () => db.prepare("SELECT sequence FROM calendar_entries WHERE id=?").get(pick.publicEntryId).sequence;
+  const firstSequence = sequence();
+  const repeat = await scoutHandoff(db, [event]);
+  assert.equal(repeat.published, 0);
+  assert.equal(repeat.strongPicks.length, 0);
+  assert.equal(sequence(), firstSequence);
+  const update = await scoutHandoff(db, [{...event, ticketStatus:"sold_out"}]);
+  assert.equal(update.published, 1);
+  assert.equal(update.strongPicks[0].publishedThisRun, true);
+  assert.equal(db.prepare("SELECT ticket_status FROM calendar_entries WHERE id=?").get(pick.publicEntryId).ticket_status, "sold_out");
+  const held = await scoutHandoff(db, [{...event, ticketStatus:"registration_closed", verificationState:"needs_verification", verificationNotes:"Conflicting ticket status."}]);
+  assert.equal(held.published, 0);
+  assert.equal(held.strongPicks[0].publishedThisRun, false);
+  assert.equal(held.strongPicks[0].publicationHold, "verification-required");
+  assert.equal(db.prepare("SELECT ticket_status FROM calendar_entries WHERE id=?").get(pick.publicEntryId).ticket_status, "sold_out");
+  assert.ok(db.prepare("SELECT pending_revision_id FROM calendar_candidates WHERE id=?").get(pick.candidateId).pending_revision_id);
+  const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"), env(db))).json();
+  assert.ok(publicPayload.events.some((item) => item.title === event.title));
+  assert.doesNotMatch(JSON.stringify(publicPayload), /PRIVATE STRATEGY|privateRationale|attendanceUse/);
+});
+
+test("Scout automation holds incomplete parents and occurrences then publishes a ready pending revision", async () => {
+  const db = database();
+  const event = readyScoutEvent({venueAddress:""});
+  const first = await scoutHandoff(db, [event]);
+  assert.equal(first.published, 0);
+  assert.equal(first.strongPicks[0].publicationHold, "not-ready");
+  const candidateId = first.strongPicks[0].candidateId;
+  const complete = {...event, venueAddress:"100 Edgewood Ave SE, Atlanta, GA 30303"};
+  const updated = await scoutHandoff(db, [complete]);
+  assert.equal(updated.published, 1);
+  assert.equal(updated.strongPicks[0].candidateId, candidateId);
+  assert.equal(db.prepare("SELECT venue_address FROM calendar_entries WHERE candidate_id=?").get(candidateId).venue_address, complete.venueAddress);
+  const other = readyScoutEvent({ title:"Experimental Memory Series", sourceUrl:"https://artist-led.example/events/series", eventStructure:"series" });
+  other.occurrences = [{ title:"Unconfirmed performance", occurrenceType:"performance", startsAt:other.startsAt, sourceUrl:other.sourceUrl, verificationState:"needs_verification", includePublic:true }];
+  const held = await scoutHandoff(db, [other]);
+  assert.equal(held.published, 0);
+  assert.equal(held.strongPicks[0].publicationHold, "verification-required");
+});
+
+test("Scout automation boxes confirmed cross-source duplicates without merging distinct performances", async () => {
+  const db = database();
+  const event = readyScoutEvent();
+  const first = await scoutHandoff(db, [event]);
+  const canonical = first.strongPicks[0].candidateId;
+  const duplicate = await scoutHandoff(db, [{...event, sourceUrl:"https://artist-led.example/tickets/memory-sound"}]);
+  assert.equal(duplicate.published, 0);
+  assert.equal(duplicate.duplicates, 1);
+  assert.equal(duplicate.strongPicks.length, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE status='duplicate' AND duplicate_of=?").get(canonical).count, 1);
+  const later = {...event, sourceUrl:"https://artist-led.example/events/memory-sound-late", startsAt:new Date(Date.parse(event.startsAt)+14_400_000).toISOString(), endsAt:new Date(Date.parse(event.endsAt)+14_400_000).toISOString()};
+  assert.equal((await scoutHandoff(db, [later])).published, 1);
+  assert.equal((await scoutHandoff(db, [{...event, title:"Experimental Memory and Sound II", sourceUrl:"https://artist-led.example/events/second-program"}])).published, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE status='published'").get().count, 3);
+  const repeatedDuplicate = await scoutHandoff(db, [{...event, sourceUrl:"https://artist-led.example/tickets/memory-sound"}]);
+  assert.equal(repeatedDuplicate.duplicates, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidates WHERE status='duplicate' AND duplicate_of=?").get(canonical).count, 1);
+});
+
+test("Scout automation removes a confirmed extra public listing but preserves its recoverable record", async () => {
+  const db = database();
+  const event = readyScoutEvent();
+  const first = await scoutHandoff(db, [event]);
+  const canonical = first.strongPicks[0].candidateId;
+  const duplicate = (await (await admin(db,"/candidates",{method:"POST",body:{...event,sourceUrl:"https://artist-led.example/extra"}})).json()).candidate;
+  await admin(db, `/candidates/${duplicate.id}/approve`, {method:"POST",body:{}});
+  assert.equal(db.prepare("SELECT status FROM calendar_candidates WHERE id=?").get(duplicate.id).status, "published");
+  db.prepare("UPDATE calendar_candidates SET created_at='2000-01-01' WHERE id=?").run(canonical);
+  const cleaned = await scoutHandoff(db, [event]);
+  assert.equal(cleaned.duplicates, 1);
+  assert.deepEqual({...db.prepare("SELECT status,duplicate_of FROM calendar_candidates WHERE id=?").get(duplicate.id)}, {status:"duplicate",duplicate_of:canonical});
+  assert.equal(db.prepare("SELECT status FROM calendar_entries WHERE candidate_id=?").get(duplicate.id).status,"cancelled");
+  assert.equal(db.prepare("SELECT status FROM calendar_entries WHERE candidate_id=?").get(canonical).status,"published");
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_candidate_notes WHERE candidate_id=?").get(duplicate.id).count,1);
+  const publicPayload = await (await handleCalendarPublicApi(request("/api/calendar/events"),env(db))).json();
+  assert.equal(publicPayload.events.filter((item)=>item.title===event.title).length,1);
+  const duplicateEntry = db.prepare("SELECT id,uid FROM calendar_entries WHERE candidate_id=?").get(duplicate.id);
+  assert.equal((await handleCalendarPublicApi(request(`/api/calendar/events/curated:${duplicateEntry.id}`),env(db))).status,404);
+  const cancelledIcs = await (await handleCalendarPublicApi(request(`/api/calendar/events/curated:${duplicateEntry.id}.ics`),env(db))).text();
+  assert.match(cancelledIcs,/STATUS:CANCELLED/);
+  const subscription = await (await handleCalendarFeed(request("/calendars/atlanta.ics"),env(db))).text();
+  assert.ok(subscription.includes(`UID:${duplicateEntry.uid}`));
+  assert.match(subscription,/STATUS:CANCELLED/);
+  assert.ok((await (await admin(db,"/strong-picks")).json()).strongPicks.every((pick)=>pick.candidateId!==duplicate.id));
+});
+
+test("Scout automation preserves partially reviewed revisions and source safety holds", async () => {
+  const db = database();
+  const event = readyScoutEvent();
+  const first = await scoutHandoff(db, [event]);
+  const id = first.strongPicks[0].candidateId;
+  const proposed = {...event, ticketStatus:"sold_out", factualDescription:"A revised interdisciplinary film and sound performance.", verificationState:"needs_verification"};
+  await scoutHandoff(db, [proposed]);
+  const revisionId = db.prepare("SELECT pending_revision_id FROM calendar_candidates WHERE id=?").get(id).pending_revision_id;
+  const applied = await admin(db,`/candidates/${id}/revisions/${revisionId}/apply`,{method:"POST",body:{fields:["ticketStatus"]}});
+  assert.equal(applied.status,200,await applied.clone().text());
+  const repeat = await scoutHandoff(db,[{...proposed, verificationState:"verified", factualDescription:"Another revised interdisciplinary performance."}]);
+  assert.equal(repeat.published,0);
+  assert.equal(db.prepare("SELECT pending_revision_id FROM calendar_candidates WHERE id=?").get(id).pending_revision_id,revisionId);
+  assert.equal(db.prepare("SELECT factual_description FROM calendar_entries WHERE candidate_id=?").get(id).factual_description,event.factualDescription);
+  const held = await scoutHandoff(db,[readyScoutEvent({title:"Experimental Festival Preview",sourceUrl:"https://artist-led.example/preview",sourceId:"cal_source_out_on_film_2026",sourceEventId:"test-preview"})]);
+  assert.equal(held.published,0);
+  assert.equal(held.strongPicks[0].publicationHold,"source-automation-hold");
+});
+
 test("scheduled Creative Scout handoffs create dated strong picks without repeating unchanged events", async () => {
   const db = database();
   const scoutToken = "calendar-scout-intake-token";
@@ -6495,7 +6639,7 @@ test("Calendar Studio renders a private scrollable Strong Picks dashboard linked
   assert.match(studioHtml,/id="toggleStrongPicks" type="button" aria-expanded="true" aria-controls="strongPicksContent">Collapse<\/button>/);
   assert.match(studioHtml,/class="strong-picks-content" id="strongPicksContent"/);
   assert.match(studioHtml,/id="strongPicksRefreshStatus" role="status" aria-live="polite"/);
-  assert.match(studioHtml,/Run Scout searches the verified Strong Picks source intake and saves strong matches to the private candidate queue/);
+  assert.match(studioHtml,/Run Scout searches the verified Strong Picks source intake, publishes ready events, and moves confirmed duplicates to Duplicates/);
   assert.match(studioHtml,/Private Scout intelligence/);
   assert.match(studio,/\/api\/admin\/calendar\/strong-picks/);
   assert.match(studio,/async function refreshStrongPicks\(\)/);
@@ -6504,7 +6648,7 @@ test("Calendar Studio renders a private scrollable Strong Picks dashboard linked
   assert.match(studio,/\/api\/admin\/calendar\/scout\/run/);
   assert.match(studio,/JSON\.stringify\(scope\?\{scope:scope\}:\{\}\)/);
   assert.match(studio,/runEnabledScouts\(button,"Run Scout",status,"strong-picks"\)/);
-  assert.match(studio,/Review every result before publishing/);
+  assert.match(studio,/Review unresolved facts in the queue; confirmed duplicates are recoverable in Duplicates/);
   assert.match(studio,/STRONG_PICKS_COLLAPSE_KEY = "swc_calendar_strong_picks_open"/);
   assert.match(studio,/function setStrongPicksExpanded\(expanded, persist\)/);
   assert.match(studio,/button\.setAttribute\("aria-expanded",String\(expanded\)\)/);

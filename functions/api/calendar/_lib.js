@@ -1690,20 +1690,33 @@ function distinctSourceEventIdentity(row, proposal) {
   );
 }
 
-async function findDuplicate(db, proposal, excludeId = "", sensitivity = 0.84) {
+function confirmedDuplicateIdentity(row, proposal) {
+  if (distinctSourceEventIdentity(row, proposal)) return false;
+  if (proposal.sourceId && proposal.sourceEventId
+    && asString(row.source_id ?? row.sourceId) === proposal.sourceId
+    && asString(row.source_event_id ?? row.sourceEventId) === proposal.sourceEventId) return true;
+  if (!proposal.startsAt || !sameEventStart(row.starts_at ?? row.startsAt, proposal.startsAt)) return false;
+  if (!normalizeText(proposal.title) || normalizeText(row.title) !== normalizeText(proposal.title)) return false;
+  const venue = normalizeText(proposal.venueName);
+  return Boolean((proposal.sourceUrl && asString(row.source_url ?? row.sourceUrl) === proposal.sourceUrl)
+    || (venue && normalizeText(row.venue_name ?? row.venueName ?? row.location) === venue));
+}
+
+async function findDuplicate(db, proposal, excludeId = "", sensitivity = 0.84, confirmedOnly = false) {
   if (proposal.sourceId && proposal.sourceEventId) {
     const exact = await db.prepare(
-      "SELECT id,status FROM calendar_candidates WHERE source_id=? AND source_event_id=? AND id<>? LIMIT 1"
+      "SELECT id,status FROM calendar_candidates WHERE source_id=? AND source_event_id=? AND id<>? ORDER BY CASE status WHEN 'published' THEN 0 WHEN 'duplicate' THEN 2 ELSE 1 END,created_at,id LIMIT 1"
     ).bind(proposal.sourceId, proposal.sourceEventId, excludeId).first();
     if (exact) return { type: "source-id", id: exact.id };
   }
   if (proposal.sourceUrl) {
     const exactUrl = await db.prepare(
-      `SELECT id,status,title,starts_at,source_id,source_event_id FROM calendar_candidates
-       WHERE source_url=? AND id<>? ORDER BY updated_at DESC`
+      `SELECT id,status,title,starts_at,source_id,source_event_id,source_url,venue_name FROM calendar_candidates
+       WHERE source_url=? AND id<>? ORDER BY CASE status WHEN 'published' THEN 0 WHEN 'duplicate' THEN 2 ELSE 1 END,created_at,id`
     ).bind(proposal.sourceUrl, excludeId).all();
     for (const row of exactUrl.results || []) {
       if (distinctSourceEventIdentity(row, proposal)) continue;
+      if (confirmedOnly && !confirmedDuplicateIdentity(row, proposal)) continue;
       const sameTitleAndDay = normalizeText(row.title) === normalizeText(proposal.title)
         && dateKey(row.starts_at) === dateKey(proposal.startsAt);
       if (sameEventStart(row.starts_at, proposal.startsAt) || sameTitleAndDay) {
@@ -1717,6 +1730,7 @@ async function findDuplicate(db, proposal, excludeId = "", sensitivity = 0.84) {
   ).bind(dateKey(proposal.startsAt), excludeId).all();
   for (const row of sameDay.results || []) {
     if (distinctSourceEventIdentity(row, proposal)) continue;
+    if (confirmedOnly && !confirmedDuplicateIdentity(row, proposal)) continue;
     const score = similarity(row.title, proposal.title) * 0.75 + similarity(row.venue_name, proposal.venueName) * 0.25;
     if (score >= sensitivity) return { type: "candidate-similarity", id: row.id, score };
   }
@@ -1726,6 +1740,7 @@ async function findDuplicate(db, proposal, excludeId = "", sensitivity = 0.84) {
      WHERE substr(COALESCE(o.starts_at,e.starts_at,''),1,10)=?`
   ).bind(dateKey(proposal.startsAt)).all();
   for (const row of owned.results || []) {
+    if (confirmedOnly && !confirmedDuplicateIdentity(row, proposal)) continue;
     const score = similarity(row.title, proposal.title) * 0.75 + similarity(row.location, proposal.venueName || proposal.venueAddress) * 0.25;
     if (score >= sensitivity) return { type: "sixwell-similarity", id: `sixwell:${row.id}`, score };
   }
@@ -2290,7 +2305,7 @@ async function createCandidate(env, body, discoveredBy = "manual", provenance = 
   if (!proposal.title) throw new Error("A title or source URL is required.");
   if (proposal.sourceUrl && !validHttpUrl(proposal.sourceUrl)) throw new Error("Source URL must use http or https.");
   const profile = await db.prepare("SELECT duplicate_sensitivity FROM calendar_scout_profiles WHERE id='atlanta-default'").first();
-  const duplicate = await findDuplicate(db, proposal, "", Number(profile?.duplicate_sensitivity) || 0.84);
+  const duplicate = await findDuplicate(db, proposal, "", Number(profile?.duplicate_sensitivity) || 0.84, discoveredBy !== "manual");
   const now = isoNow();
   const id = `cal_candidate_${crypto.randomUUID()}`;
   const status = duplicate ? "duplicate" : proposal.verificationState === "needs_verification" || !proposal.startsAt ? "needs_verification" : "candidate";
@@ -2655,6 +2670,22 @@ async function applyReviewedVenueCoordinates(db, candidate) {
   return candidate;
 }
 
+async function candidatePublicationReadiness(db, candidate) {
+  const errors = publicationErrors(candidate);
+  for (const occurrence of candidate.occurrences || []) {
+    if (occurrence.includePublic !== false) errors.push(...occurrencePublicationErrors(occurrence, candidate));
+  }
+  let flyer = null;
+  if (candidate.flyerPublicApproved) {
+    try { flyer = await validateCandidateFlyer(db, candidate); }
+    catch (error) { errors.push(error.message); }
+  }
+  for (const media of (candidate.media || []).filter((item) => item.includePublic)) {
+    if (!media.altText) errors.push("Every public gallery image requires alt text.");
+  }
+  return { errors, flyer };
+}
+
 async function approveCandidate(env, id) {
   const db = requireDb(env);
   let candidate = await applyReviewedVenueCoordinates(db, await getCandidate(db, id));
@@ -2684,19 +2715,7 @@ async function approveCandidate(env, id) {
       }
     }
   }
-  const errors = publicationErrors(candidate);
-  for (const occurrence of candidate.occurrences || []) {
-    if (occurrence.includePublic === false) continue;
-    errors.push(...occurrencePublicationErrors(occurrence, candidate));
-  }
-  let flyer = null;
-  if (candidate.flyerPublicApproved) {
-    try { flyer = await validateCandidateFlyer(db, candidate); }
-    catch (error) { errors.push(error.message); }
-  }
-  for (const media of (candidate.media || []).filter((item) => item.includePublic)) {
-    if (!media.altText) errors.push("Every public gallery image requires alt text.");
-  }
+  const { errors, flyer } = await candidatePublicationReadiness(db, candidate);
   if (errors.length) return { error: "Candidate is not eligible to publish.", status: 409, errors };
   const now = isoNow();
   const existing = await db.prepare("SELECT id,sequence,published_at FROM calendar_entries WHERE candidate_id=?").bind(id).first();
@@ -3151,7 +3170,7 @@ function curatedOccurrencePublicView(row, parent) {
   };
 }
 
-async function loadCuratedEvents(db) {
+async function loadCuratedEvents(db, { includeDuplicates = false } = {}) {
   const creditRolesEnabled = await calendarCreditRolesEnabled(db);
   const [result, links, occurrenceRows, mediaRows] = await Promise.all([
     db.prepare(
@@ -3159,8 +3178,10 @@ async function loadCuratedEvents(db) {
               m.public_presentation flyer_public_presentation,m.mime_type flyer_mime_type,
               m.width flyer_width,m.height flyer_height
        FROM calendar_entries e LEFT JOIN media_assets m ON m.id=e.flyer_media_id
+       LEFT JOIN calendar_candidates c ON c.id=e.candidate_id
+       WHERE c.status IS NULL OR c.status<>'duplicate' OR (?=1 AND e.status='cancelled')
        ORDER BY e.starts_at ASC,e.title ASC`
-    ).all(),
+    ).bind(includeDuplicates ? 1 : 0).all(),
     db.prepare(`SELECT entry_id,label,url,link_role,${creditRolesEnabled ? "credit_role" : "'' credit_role"},sort_order FROM calendar_entry_links ORDER BY entry_id,sort_order,id`).all(),
     db.prepare("SELECT * FROM calendar_entry_occurrences ORDER BY starts_at,title,id").all(),
     db.prepare(
@@ -3293,8 +3314,8 @@ function calendarEventDetailUrl(event) {
   return `/calendar/events/${calendarEventTitleSlug(event.title)}--${encodeURIComponent(event.id)}/`;
 }
 
-async function normalizedEvents(db) {
-  const [curated, sixwell] = await Promise.all([loadCuratedEvents(db), loadSixWellEvents(db)]);
+async function normalizedEvents(db, options = {}) {
+  const [curated, sixwell] = await Promise.all([loadCuratedEvents(db, options), loadSixWellEvents(db)]);
   const events = [...curated, ...sixwell];
   const detailUrls = new Map(events.map((event) => [event.id, calendarEventDetailUrl(event)]));
   return events.map((event) => ({
@@ -3515,7 +3536,7 @@ export async function handleCalendarPublicApi(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/api/calendar/plan") return handleCalendarPlan(request, env, db);
     const match = url.pathname.match(/^\/api\/calendar\/events\/(.+)\.ics$/);
-    const events = await normalizedEvents(db);
+    const events = await normalizedEvents(db, { includeDuplicates: Boolean(match) });
     if (match) {
       const id = decodeURIComponent(match[1]);
       const event = events.find((item) => item.id === id);
@@ -3570,7 +3591,7 @@ export async function handleCalendarFeed(request, env) {
       sixwell: { name: "Six.Well Events", test: (event) => event.origin === "sixwell" },
     };
     if (!definitions[feed]) return errorResponse("Calendar feed not found.", 404);
-    const events = calendarSubscriptionEvents(await normalizedEvents(requireDb(env))).filter(definitions[feed].test);
+    const events = calendarSubscriptionEvents(await normalizedEvents(requireDb(env), { includeDuplicates: true })).filter(definitions[feed].test);
     return calendarResponse(events, definitions[feed].name, `${feed}.ics`);
   } catch (error) {
     return errorResponse("Unable to build the calendar feed.", 500, error.message);
@@ -5251,6 +5272,7 @@ async function listStrongPicks(db, limit = 100) {
       `SELECT p.*,c.status candidate_status,c.verification_state,c.public_entry_id
        FROM calendar_scout_strong_picks p
        JOIN calendar_candidates c ON c.id=p.candidate_id
+       WHERE c.status<>'duplicate'
        ORDER BY p.detected_at DESC,p.id DESC LIMIT ?`
     ).bind(Math.max(1, Math.min(250, Number(limit) || 100))).all();
   } catch (error) {
@@ -5283,10 +5305,12 @@ async function handleStrongPicks(request, env) {
   ).bind(runId, "scheduled", model, startedAt).run();
   const outcomes = [];
   const created = [];
+  const publications = [];
   let candidateCount = 0;
   let duplicateCount = 0;
   let updateCount = 0;
   let unchangedCount = 0;
+  let publishedCount = 0;
   let failureCount = 0;
   let suppressedCount = 0;
   for (const rawEvent of events) {
@@ -5316,17 +5340,25 @@ async function handleStrongPicks(request, env) {
         env, db, resolved.proposal, "openai_web_search", provenance, profile,
         { refreshPrivateIntelligence: true, allowIncompleteCandidate: true },
       );
+      await finalizeScoutIntake(env, db, stored, resolved.proposal);
+      if (stored.publication?.published) {
+        publishedCount += 1;
+        publications.push({ candidateId: stored.candidate.id, title: stored.candidate.title, publicEntryId: stored.publication.entryId });
+      }
+      duplicateCount += Math.max(stored.boxedDuplicates || 0, stored.duplicate || stored.candidate?.status === "duplicate" ? 1 : 0);
       await recordSourceResolutionAttempt(db, resolved.audit, stored.candidate?.id || "", runId);
       const pick = await recordStrongPick(db, runId, stored, startedAt);
       if (pick) {
+        pick.publishedThisRun = Boolean(stored.publication?.published);
+        pick.publicationHold = stored.publication?.reason || "";
         created.push(pick);
         if (pick.kind === "new") candidateCount += 1;
         else updateCount += 1;
       } else if (stored.skipped === "suppressed") suppressedCount += 1;
-      else if (stored.duplicate || stored.candidate?.status === "duplicate") duplicateCount += 1;
-      else if (stored.existing) unchangedCount += 1;
+      else if (stored.existing && !stored.duplicate && stored.candidate?.status !== "duplicate") unchangedCount += 1;
       outcomes.push({
-        title: asString(rawEvent.title), candidateId: stored.candidate?.id || "", status: pick ? pick.kind : stored.skipped || (stored.existing ? "unchanged" : "duplicate"),
+        title: asString(rawEvent.title), candidateId: stored.candidate?.id || "", status: pick ? pick.kind : stored.skipped || (stored.duplicate || stored.candidate?.status === "duplicate" ? "duplicate" : stored.existing ? "unchanged" : "saved"),
+        publication: stored.publication || null, boxedDuplicates: stored.boxedDuplicates || 0,
       });
     } catch (error) {
       failureCount += 1;
@@ -5344,7 +5376,7 @@ async function handleStrongPicks(request, env) {
     candidateCount, duplicateCount, failureCount, JSON.stringify(outcomes), created.length, updateCount, suppressedCount,
     outcomes.filter((item) => item.error).map((item) => `${item.title}: ${item.error}`).join(" | "), runId,
   ).run();
-  return json({ runId, status, strongPicks: created, candidates: candidateCount, updates: updateCount, unchanged: unchangedCount, duplicates: duplicateCount, suppressed: suppressedCount, failures: failureCount });
+  return json({ runId, status, strongPicks: created, publications, candidates: candidateCount, updates: updateCount, unchanged: unchangedCount, published: publishedCount, duplicates: duplicateCount, suppressed: suppressedCount, failures: failureCount });
 }
 
 async function handleSuggestions(request, env, parts) {
@@ -10864,13 +10896,13 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
       if (distinctSourceEventIdentity(row, proposal)) return false;
       const sameTitleAndDay = normalizeText(row.title) === normalizeText(proposal.title)
         && dateKey(row.starts_at) === dateKey(proposal.startsAt);
-      return sameEventStart(row.starts_at, proposal.startsAt) || sameTitleAndDay;
+      return normalizeText(row.title) === normalizeText(proposal.title)
+        && (sameEventStart(row.starts_at, proposal.startsAt) || sameTitleAndDay);
     }) || null;
   }
-  if (!existing) {
-    const duplicate = await findDuplicate(db, proposal, "", profile.duplicateSensitivity);
-    if (duplicate && !duplicate.id.startsWith("sixwell:")) existing = { id: duplicate.id };
-  }
+  // A repeat of this source updates its existing record. A separate source's
+  // confirmed duplicate is retained in Duplicates by createCandidate instead
+  // of silently rewriting the canonical record with another source's facts.
   if (!existing) {
     const suppressions = await matchingEventSuppressions(db, proposal);
     if (suppressions.length) return { skipped: "suppressed", suppressionId: suppressions[0] };
@@ -10906,6 +10938,9 @@ async function upsertScoutProposal(env, db, rawProposal, discoveredBy, provenanc
   ).bind(current.pendingRevisionId, current.id).first() : null;
   const automatedPending = pendingProposal
     && revisionRequiresStudioSelection(pendingProposal.created_by, parseJson(pendingProposal.change_set_json, []));
+  if (pendingProposal && parseJson(pendingProposal.change_set_json, []).some((change) => change.applied)) {
+    return { candidate: current, existing: true, publicationBlocked: "studio-review-in-progress" };
+  }
   const pendingSnapshot = automatedPending ? parseJson(pendingProposal.snapshot_json, {}) : null;
   const occurrenceBaseline = [...current.occurrences];
   for (const pendingOccurrence of pendingSnapshot?.occurrences || []) {
@@ -11229,7 +11264,7 @@ async function recordCandidateCheckFailure(db, candidate, status, summary) {
   return getCandidate(db, candidate.id);
 }
 
-async function recheckCandidateSource(env, db, id) {
+async function recheckCandidateSource(env, db, id, { automatic = false } = {}) {
   const candidate = await getCandidate(db, id, false);
   if (!candidate) return { error: "Candidate not found.", status: 404 };
   if (!validHttpUrl(candidate.sourceUrl)) return { error: "An event-specific public source URL is required before rechecking.", status: 409 };
@@ -11244,12 +11279,13 @@ async function recheckCandidateSource(env, db, id) {
       [{ url: candidate.sourceUrl, role: "event_recheck", retrievedAt: isoNow(), diagnostics: extracted.diagnostics }],
       normalizeProfile(profileRow), { targetCandidateId: candidate.id },
     );
+    if (automatic) await finalizeScoutIntake(env, db, result, extracted.proposal);
     if (result.skipped) {
       const saved = await recordCandidateCheckFailure(db, candidate, "needs_verification", `The source response could not be safely applied (${result.skipped}).`);
       return { candidate: saved, checkStatus: "needs_verification", summary: saved.lastCheckSummary, changes: [] };
     }
     const saved = await getCandidate(db, candidate.id);
-    return { candidate: saved, checkStatus: saved.lastCheckStatus, summary: saved.lastCheckSummary, changes: result.changes || [], blockedChanges: result.blockedChanges || [] };
+    return { candidate: saved, checkStatus: saved.lastCheckStatus, summary: saved.lastCheckSummary, changes: result.changes || [], blockedChanges: result.blockedChanges || [], publication: result.publication || null };
   } catch (error) {
     const checkStatus = SOURCE_CHECK_STATUSES.has(error.checkStatus) ? error.checkStatus : "source_unavailable";
     const saved = await recordCandidateCheckFailure(db, candidate, checkStatus, error.message || "The source check failed.");
@@ -11268,7 +11304,7 @@ async function monitorDueCandidates(env, db, scheduledTime) {
   ).bind(now, now).all();
   const outcomes = [];
   for (const row of rows.results || []) {
-    const result = await recheckCandidateSource(env, db, row.id);
+    const result = await recheckCandidateSource(env, db, row.id, { automatic: true });
     outcomes.push({ candidateId: row.id, status: result.checkStatus || "needs_verification", summary: result.summary || result.error || "" });
   }
   return { checked: outcomes.length, outcomes };
@@ -11386,22 +11422,101 @@ async function markSourceSnapshotPromoted(db, sourceId, snapshotId) {
   }
 }
 
+async function boxScoutDuplicates(db, stored) {
+  const candidate = stored?.candidate;
+  if (!candidate || ["duplicate", "rejected", "cancelled"].includes(candidate.status)) return 0;
+  const rows = await db.prepare(
+    `SELECT id,title,source_id,source_event_id,source_url,starts_at,venue_name,status,public_entry_id
+     FROM calendar_candidates WHERE status IN ('candidate','needs_verification','published')
+       AND (substr(COALESCE(starts_at,''),1,10)=? OR (source_id=? AND source_event_id=? AND source_event_id<>''))
+     ORDER BY CASE status WHEN 'published' THEN 0 ELSE 1 END,created_at,id`
+  ).bind(dateKey(candidate.startsAt), candidate.sourceId || "", candidate.sourceEventId || "").all();
+  const matches = (rows.results || []).filter((row) => row.id === candidate.id || confirmedDuplicateIdentity(row, candidate));
+  if (matches.length < 2) return 0;
+  const canonical = matches[0];
+  const now = isoNow();
+  for (const duplicate of matches.slice(1)) {
+    const statements = [db.prepare(
+      "UPDATE calendar_candidates SET status='duplicate',duplicate_of=?,monitoring_enabled=0,next_check_at=NULL,last_check_summary=?,updated_at=? WHERE id=?"
+    ).bind(canonical.id, `Automatically moved to Duplicates; retained record: ${canonical.id}.`, now, duplicate.id)];
+    if (duplicate.public_entry_id) {
+      // Preserve the UID as an ICS cancellation, but remove the extra listing
+      // from the public calendar. This does not cancel the retained event.
+      statements.push(db.prepare("UPDATE calendar_entries SET status='cancelled',sequence=sequence+1,last_modified_at=? WHERE id=? AND status<>'cancelled'").bind(now, duplicate.public_entry_id));
+      statements.push(db.prepare("UPDATE calendar_entry_occurrences SET status='cancelled',sequence=sequence+1,last_modified_at=? WHERE entry_id=? AND status<>'cancelled'").bind(now, duplicate.public_entry_id));
+    }
+    statements.push(db.prepare("UPDATE calendar_candidates SET duplicate_of=? WHERE status='duplicate' AND duplicate_of=?").bind(canonical.id, duplicate.id));
+    await db.batch(statements);
+  }
+  if (candidate.id !== canonical.id) {
+    stored.candidate = await getCandidate(db, candidate.id, false);
+    delete stored.proposedCandidate;
+    stored.duplicate = { type: "confirmed-identity", id: canonical.id };
+  }
+  return matches.length - 1;
+}
+
+async function finalizeScoutIntake(env, db, stored, rawProposal, autoPublish = true) {
+  stored.boxedDuplicates = await boxScoutDuplicates(db, stored);
+  if (!autoPublish || !stored.candidate || stored.duplicate || stored.skipped) return stored;
+  if (stored.publicationBlocked) {
+    stored.publication = { published: false, reason: stored.publicationBlocked };
+    return stored;
+  }
+  if (stored.candidate.sourceId) {
+    const automation = await db.prepare("SELECT automation_state,automation_mode FROM calendar_source_automation WHERE source_id=?").bind(stored.candidate.sourceId).first().catch((error) => {
+      if (/no such table:\s*calendar_source_automation/i.test(asString(error?.message))) return null;
+      throw error;
+    });
+    if (automation && (automation.automation_state !== "active" || automation.automation_mode === "review")) {
+      stored.publication = { published: false, reason: "source-automation-hold" };
+      return stored;
+    }
+  }
+  // Do not mistake a previous record's inherited verified state for verification
+  // of new facts. Unknown occurrences and blocked regressions stay pending.
+  if (rawProposal.verificationState !== "verified" || stored.blockedChanges?.length
+    || (rawProposal.occurrences || []).some((item) => item.includePublic !== false && item.status !== "tbd" && item.verificationState !== "verified")) {
+    stored.publication = { published: false, reason: "verification-required" };
+    return stored;
+  }
+  stored.publication = await autoPublishScoutCandidate(env, db, stored);
+  if (stored.publication.published) {
+    await db.prepare("UPDATE calendar_candidates SET last_check_summary=? WHERE id=?")
+      .bind("Automatically published verified Scout facts after all publication checks passed.", stored.candidate.id).run();
+    stored.candidate = await getCandidate(db, stored.candidate.id, false);
+    // Strong Pick receipts must describe the saved lifecycle, not the old
+    // proposed snapshot's private status or stale public entry identifier.
+    if (stored.proposedCandidate) stored.proposedCandidate = stored.candidate;
+  }
+  return stored;
+}
+
 async function autoPublishScoutCandidate(env, db, stored) {
   const candidate = stored?.candidate;
   if (!candidate || ["rejected", "duplicate", "cancelled"].includes(candidate.status)) return { published:false };
-  let current = await getCandidate(db, candidate.id, false);
-  if (current.pendingRevisionId && current.status === "published") {
-    const revision = await db.prepare("SELECT change_set_json FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'")
+  let current = await getCandidate(db, candidate.id);
+  if (current.status === "published" && !current.pendingRevisionId) return { published: false, unchanged: true, entryId: current.publicEntryId };
+  if (current.pendingRevisionId) {
+    const revision = await db.prepare("SELECT created_by,snapshot_json,change_set_json FROM calendar_candidate_revisions WHERE id=? AND candidate_id=? AND revision_state='pending'")
       .bind(current.pendingRevisionId, current.id).first();
-    const fields = parseJson(revision?.change_set_json, []).filter((change) => !change.applied && Object.hasOwn(CANDIDATE_CHANGE_LABELS, change.field)).map((change) => change.field);
+    const changes = parseJson(revision?.change_set_json, []);
+    if (changes.length && (!["source_monitor", "openai_web_search"].includes(revision?.created_by) || changes.some((change) => change.applied))) {
+      return { published: false, reason: "studio-review-in-progress" };
+    }
+    const fields = changes.filter((change) => !change.applied && Object.hasOwn(CANDIDATE_CHANGE_LABELS, change.field)).map((change) => change.field);
     if (fields.length) {
+      const snapshot = parseJson(revision.snapshot_json, {});
+      const preview = proposalFromBody(Object.fromEntries(fields.map((field) => [field, snapshot[field]])), current, { allowVerifiedInstagramSource: true });
+      const readiness = await candidatePublicationReadiness(db, { ...current, ...preview });
+      if (readiness.errors.length) return { published: false, reason: "not-ready", errors: readiness.errors };
       const applied = await applyCandidateRevision(env, db, current.id, current.pendingRevisionId, { fields });
       if (applied.error) return { published:false, error:applied.error };
       current = await getCandidate(db, current.id, false);
     }
   }
   const approved = await approveCandidate(env, current.id);
-  return approved.error ? { published:false, error:approved.error, errors:approved.errors || [] } : { published:true, entryId:approved.entryId };
+  return approved.error ? { published:false, reason:"not-ready", errors:approved.errors || [approved.error] } : { published:!approved.unchanged, entryId:approved.entryId };
 }
 
 async function monitorSources(env, db, profile, sourceId = "", runId = "", sourceScope = "", scheduled = false) {
@@ -11487,7 +11602,7 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
       const fingerprint = await sha256(adapterKey === "bigtickets" || adapterKey === "high_art_making" || bundle.diagnostics.retrieval === "site-crawl" ? `${text}\n${proposalFingerprint}` : (text || proposalFingerprint));
       const automation = adapterKey === "eventive"
         ? await recordSourceSyncSnapshot(db, source, runId, adapterKey, bundle)
-        : { canonicalEligible:true, autoPublish:false, automationState:"shadow", snapshotId:"", completeRunStreak:0, requiredStableRuns:0 };
+        : { canonicalEligible:true, autoPublish:true, automationState:"active", snapshotId:"", completeRunStreak:0, requiredStableRuns:0 };
       const proposalLimit = adapterKey === "eventive" ? eventiveProgramLimit(source) + 10 : sourceLimit;
       const proposals = automation.canonicalEligible ? bundle.proposals.slice(0, proposalLimit) : [];
       const renderedEmpty = ["browser-extraction", "beltline-rendered-details", "browser-diagnostic"].includes(bundle.diagnostics.retrieval);
@@ -11548,6 +11663,8 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
           { url: proposal.sourceUrl || source.url, role: "discovery", retrievedAt: now },
           ...resolved.citations,
         ], profile, { authoritativeCompleteSchedule:adapterKey === "eventive" && automation.canonicalEligible });
+        await finalizeScoutIntake(env, db, stored, resolved.proposal, automation.autoPublish);
+        if (stored.publication?.published) autoPublished += 1;
         await recordSourceResolutionAttempt(db, resolved.audit, stored.candidate?.id || "", runId);
         const strongPick = await recordStrongPick(db, runId, stored, now);
         if (strongPick) {
@@ -11555,14 +11672,9 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
           if (strongPick.kind === "material_update") materialUpdateCount += 1;
         }
         if (stored.candidate && !stored.existing) candidateCount += 1;
-        if (stored.duplicate) duplicateCount += 1;
+        duplicateCount += Math.max(stored.boxedDuplicates || 0, stored.duplicate || stored.candidate?.status === "duplicate" ? 1 : 0);
         if (stored.skipped) skippedReasons[stored.skipped] = (skippedReasons[stored.skipped] || 0) + 1;
-        if (automation.autoPublish && stored.candidate && !stored.duplicate && !stored.skipped
-          && stored.candidate.verificationState === "verified") {
-          const publication = await autoPublishScoutCandidate(env, db, stored);
-          if (publication.published) autoPublished += 1;
-          else if (publication.error) automationErrors.push(`${stored.candidate.title}: ${publication.error}${publication.errors?.length ? ` ${publication.errors.join(" ")}` : ""}`);
-        }
+        if (stored.publication?.error) automationErrors.push(`${stored.candidate.title}: ${stored.publication.error}`);
       }
       if (adapterKey === "eventive" && automation.canonicalEligible && !automationErrors.length) {
         const festivalState = await db.prepare(
@@ -11629,6 +11741,7 @@ async function monitorSources(env, db, profile, sourceId = "", runId = "", sourc
   }
   return {
     outcomes, candidateCount, duplicateCount,
+    published: outcomes.reduce((sum, outcome) => sum + Number(outcome.autoPublished || 0), 0),
     suppressedCount: outcomes.reduce((sum, outcome) => sum + Number(outcome.skipReasons?.suppressed || 0), 0),
     failureCount, warningCount, strongPickCount, materialUpdateCount, sourceIds: sources.map((source) => source.id),
   };
@@ -12171,6 +12284,7 @@ async function maybeRegisterEventiveFestivalSource(db, rawEvent) {
 
 async function storeOpenAiEvents(env, db, profile, events, { provenance = [], platform = "", channel = "general_web", allowNativeFlyer = false, allowRenderedFlyer = false, resolveSources = true, nativePosts = [], limit = 20, runId = "" } = {}) {
   let candidates = 0;
+  let published = 0;
   let duplicates = 0;
   let suppressed = 0;
   let failures = 0;
@@ -12193,6 +12307,8 @@ async function storeOpenAiEvents(env, db, profile, events, { provenance = [], pl
         : { proposal:event, citations:[], audit:null };
       event = resolved.proposal;
       const stored = await upsertScoutProposal(env, db, event, "openai_web_search", [...provenance, ...resolved.citations], profile);
+      await finalizeScoutIntake(env, db, stored, event);
+      if (stored.publication?.published) published += 1;
       await recordSourceResolutionAttempt(db, resolved.audit, stored.candidate?.id || "", runId);
       const strongPick = await recordStrongPick(db, runId, stored);
       if (strongPick) {
@@ -12200,7 +12316,7 @@ async function storeOpenAiEvents(env, db, profile, events, { provenance = [], pl
         if (strongPick.kind === "material_update") materialUpdates += 1;
       }
       if (stored.candidate && !stored.existing) candidates += 1;
-      if (stored.duplicate) duplicates += 1;
+      duplicates += Math.max(stored.boxedDuplicates || 0, stored.duplicate || stored.candidate?.status === "duplicate" ? 1 : 0);
       if (stored.skipped === "suppressed") suppressed += 1;
       else if (stored.skipped) details.push({ status:"skipped", title:asString(event.title), sourceUrl:asString(event.sourceUrl), reason:stored.skipped });
     } catch (error) {
@@ -12208,7 +12324,7 @@ async function storeOpenAiEvents(env, db, profile, events, { provenance = [], pl
       details.push({ status:"failed", title:asString(rawEvent?.title), sourceUrl:asString(rawEvent?.sourceUrl), error:asString(error?.message || error).slice(0, 300) });
     }
   }
-  return { candidates, duplicates, suppressed, failures, strongPicks, materialUpdates, details };
+  return { candidates, published, duplicates, suppressed, failures, strongPicks, materialUpdates, details };
 }
 
 async function runOpenAiDiscovery(env, db, profile, limit = profile.perRunLimit, runId = "") {
@@ -12742,6 +12858,7 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
   let warningCount = 0;
   let strongPickCount = 0;
   let materialUpdateCount = 0;
+  let publishedCount = 0;
   for (const id of requested) {
     const row = connectorRows.find((item) => item.id === id);
     const manualSourceRun = id === "direct" && Boolean(sourceId);
@@ -12759,12 +12876,13 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
       let result;
       if (id === "direct") {
         const direct = await monitorSources(env, db, profile, sourceId, runId, sourceScope, runKind === "scheduled");
-        result = { candidates: direct.candidateCount, duplicates: direct.duplicateCount, suppressed: direct.suppressedCount, failures: direct.failureCount, warnings: direct.warningCount, strongPicks: direct.strongPickCount, materialUpdates: direct.materialUpdateCount, citations: [], usage: {}, queries: [], postsInspected: 0, details: direct.outcomes };
+        result = { candidates: direct.candidateCount, published: direct.published, duplicates: direct.duplicateCount, suppressed: direct.suppressedCount, failures: direct.failureCount, warnings: direct.warningCount, strongPicks: direct.strongPickCount, materialUpdates: direct.materialUpdateCount, citations: [], usage: {}, queries: [], postsInspected: 0, details: direct.outcomes };
         searched.push(...direct.sourceIds);
       } else if (id === "general_web") result = await runOpenAiDiscovery(env, db, profile, connector.perRunLimit, runId);
       else if (id.endsWith("_web")) result = await runSocialWebDiscovery(env, db, profile, connector, runId);
       else result = await runNativeSocialDiscovery(env, db, profile, connector, runKind === "manual", runId);
       candidateCount += result.candidates;
+      publishedCount += Number(result.published) || 0;
       duplicateCount += result.duplicates;
       suppressedCount += Number(result.suppressed) || 0;
       failureCount += result.failures;
@@ -12775,7 +12893,7 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
       citations.push(...(result.citations || []));
       if (result.usage && Object.keys(result.usage).length) usage.push({ channel: id, ...result.usage });
       searched.push(id);
-      outcomes.push({ channel: id, status: result.failures || result.warnings ? "partial" : "ok", candidates: result.candidates, duplicates: result.duplicates, suppressed: Number(result.suppressed) || 0, strongPicks: Number(result.strongPicks) || 0, materialUpdates: Number(result.materialUpdates) || 0, failures: result.failures, warnings: Number(result.warnings) || 0, retries: result.retries || 0, postsInspected: result.postsInspected || 0, browserMs:result.browserMs || 0, ...(result.details ? { sources: result.details } : {}) });
+      outcomes.push({ channel: id, status: result.failures || result.warnings ? "partial" : "ok", candidates: result.candidates, published: Number(result.published) || 0, duplicates: result.duplicates, suppressed: Number(result.suppressed) || 0, strongPicks: Number(result.strongPicks) || 0, materialUpdates: Number(result.materialUpdates) || 0, failures: result.failures, warnings: Number(result.warnings) || 0, retries: result.retries || 0, postsInspected: result.postsInspected || 0, browserMs:result.browserMs || 0, ...(result.details ? { sources: result.details } : {}) });
       await writeConnectorState(db, id, {
         status:"ready",
         success:result.coverageConfirmed !== false,
@@ -12812,7 +12930,7 @@ export async function runCalendarScout(env, { runKind = "scheduled", includeWeb 
        candidate_count=?,duplicate_count=?,failure_count=?,source_results_json=?,openai_usage_json=?,error_message=? WHERE id=?`
     ).bind(...runValues, runError, runId).run();
   }
-  return { runId, status, broadDiscoveryEnabled: Boolean(env.OPENAI_API_KEY), candidates: candidateCount, duplicates: duplicateCount, suppressed: suppressedCount, strongPicks: strongPickCount, materialUpdates: materialUpdateCount, failures: failureCount, warnings: warningCount, outcomes };
+  return { runId, status, broadDiscoveryEnabled: Boolean(env.OPENAI_API_KEY), candidates: candidateCount, published: publishedCount, duplicates: duplicateCount, suppressed: suppressedCount, strongPicks: strongPickCount, materialUpdates: materialUpdateCount, failures: failureCount, warnings: warningCount, outcomes };
   } catch (error) {
     await failActiveScoutRun(db, runId, error);
     throw error;

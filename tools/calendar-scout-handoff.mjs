@@ -122,9 +122,13 @@ export async function sendCalendarScoutHandoff(value, options = {}) {
     candidates: Number(result.candidates) || 0,
     updates: Number(result.updates) || 0,
     unchanged: Number(result.unchanged) || 0,
+    published: Number(result.published) || 0,
     duplicates: Number(result.duplicates) || 0,
     suppressed: Number(result.suppressed) || 0,
     failures: Number(result.failures) || 0,
+    publications: (Array.isArray(result.publications) ? result.publications : []).map((item) => ({
+      candidateId: text(item.candidateId), title: text(item.title), publicEntryId: text(item.publicEntryId),
+    })),
     strongPicks: (Array.isArray(result.strongPicks) ? result.strongPicks : []).map((pick) => ({
       candidateId: text(pick.candidateId),
       title: text(pick.title),
@@ -132,6 +136,9 @@ export async function sendCalendarScoutHandoff(value, options = {}) {
       detectedAt: text(pick.detectedAt),
       candidateStatus: text(pick.candidateStatus),
       verificationState: text(pick.verificationState),
+      publicEntryId: text(pick.publicEntryId),
+      publishedThisRun: pick.publishedThisRun === true,
+      publicationHold: text(pick.publicationHold),
     })),
   };
 }

@@ -43,13 +43,18 @@ Do not discard a strong, clearly identifiable Atlanta event merely because one
 or more facts still need human confirmation. Submit it with
 `verificationState: "needs_verification"` and private `verificationNotes` that
 name every unresolved or conflicting fact. This includes strong events with an
-unresolved original source, organizer or venue identity, exact address, end
-time, a stated or conflicting access restriction, ticket condition, occurrence schedule, or start date. Use null
+unresolved original source, organizer or venue identity, required address,
+a conflicting access restriction, ticket condition, occurrence schedule, or start date. Use null
 or an empty value for an unknown fact; never guess. An event with no confirmed
 start date may still be submitted only when a public evidence URL clearly
 establishes that it is a real, forthcoming Atlanta event. Weak matches, vague
 announcements that do not identify an event, exact duplicates, and suppressed
 events remain excluded.
+
+Readiness is determined by the existing publication checks, not by filling every
+optional field. An unstated end time, price, refund policy, or missing flyer does
+not by itself block a verified event. Leave optional unknown facts empty and
+retain any optional discrepancy privately; never publish a guessed value.
 
 Model exhibitions and series as one parent with every separately dated opening,
 closing reception, artist talk, screening, performance, panel, workshop, or
@@ -90,19 +95,32 @@ node tools/calendar-scout-handoff.mjs --file output/atlanta-creative-scout-hando
 The handoff is complete only when that command returns `status` of `completed`
 or `partial` with `failures` equal to zero. Do not claim an event reached Studio
 when the command was skipped, failed, or could not authenticate. The endpoint
-deduplicates existing records and creates pending updates without changing an
-approved public record.
+automatically publishes verified events and verified updates that pass all
+existing publication checks, including public occurrences, source authority,
+location, access, and media requirements. Never mark uncertain facts verified
+merely to publish them. Incomplete or conflicting records remain private;
+partially reviewed revisions and source-automation safety holds require review.
+Repeated submissions from the same event source update the existing record.
+Confirmed duplicate records are moved out of the active queue into the
+recoverable Duplicates box, linked to the retained record. Evidence is not
+deleted, and similar but distinct events stay separate.
 
 Report in the scheduled chat only when the handoff returns at least one item in
-`strongPicks`. For each returned title, present the event name, date and time,
+`strongPicks` or `publications`. For each returned title, present the event name, date and time,
 venue, announcement or ticket link, concise fit explanation, and its best use as
 Inspiration, Attend/Network, Future GREEN[FIELD] Programming, Future Six.Well
 Programming, or a combination. Call out unusually strong programming models and
 potential collaborators. Clearly label candidates returned with
 `verificationState: "needs_verification"` and summarize what Saiel must confirm
-in Studio. Keep private strategy clearly labeled and do not imply that any
-candidate was published.
+in Studio. Keep private strategy clearly labeled. Report publication or a public
+update only when its receipt has `publishedThisRun: true`,
+`candidateStatus: "published"`, and a nonempty `publicEntryId`. An already-public
+record may still have a pending update; verification or public status alone is
+not proof that this run published its new facts. Report the receipt's `published`
+and `duplicates` totals when nonzero. A `publications` item independently confirms
+publication even when no new Strong Pick alert was needed. Label all other
+changes private or pending.
 
-If the handoff returns no `strongPicks`, send nothing. If research finds strong
+If the handoff returns no `strongPicks` and no `publications`, send nothing. If research finds strong
 matches but the handoff fails, report one concise operational error instead of
 silently presenting unsaved events.

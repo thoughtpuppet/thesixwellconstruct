@@ -72,7 +72,7 @@ test("scheduled Scout handoff sends its scoped token only to the fixed Studio ro
   assert.deepEqual(JSON.parse(request.options.body).events, [event]);
   assert.deepEqual(result.strongPicks, [{
     candidateId:"cal_candidate_test", title:event.title, kind:"new", detectedAt:"",
-    candidateStatus:"needs_verification", verificationState:"needs_verification",
+    candidateStatus:"needs_verification", verificationState:"needs_verification", publicEntryId:"", publishedThisRun:false, publicationHold:"",
   }]);
   assert.equal(JSON.stringify(result).includes("must not echo"), false);
 });
@@ -82,6 +82,17 @@ test("scheduled Scout handoff refuses credential forwarding to another host or r
   assert.throws(() => calendarScoutHandoffEndpoint("http://thesixwellconstruct.com/api/admin/calendar/strong-picks"), /must use HTTPS/);
   assert.throws(() => calendarScoutHandoffEndpoint("https://thesixwellconstruct.com/api/admin/calendar/strong-picks?next=elsewhere"), /without query parameters/);
   assert.equal(calendarScoutHandoffEndpoint("http://127.0.0.1:8787/api/admin/calendar/strong-picks"), "http://127.0.0.1:8787/api/admin/calendar/strong-picks");
+});
+
+test("scheduled Scout handoff receipts retain actual publication evidence", async () => {
+  const publication = {candidateId:"cal_candidate_ready",title:event.title,publicEntryId:"cal_entry_ready"};
+  const result = await sendCalendarScoutHandoff({events:[event]}, {
+    token:"test-token", fetchImpl:async()=>Response.json({status:"completed",published:1,publications:[publication],strongPicks:[{...publication,candidateStatus:"published",verificationState:"verified",publishedThisRun:true}]}),
+  });
+  assert.equal(result.published,1);
+  assert.deepEqual(result.publications,[publication]);
+  assert.equal(result.strongPicks[0].publishedThisRun,true);
+  assert.equal(result.strongPicks[0].publicEntryId,publication.publicEntryId);
 });
 
 test("scheduled Scout handoff reports Studio errors without exposing its token", async () => {
