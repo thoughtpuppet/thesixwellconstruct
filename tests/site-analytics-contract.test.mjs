@@ -12,6 +12,7 @@ import {
   analyticsContentGroup,
   handleAdminAnalytics,
   handleAdminAnalyticsExclusion,
+  handleAdminPuzzleActivity,
   handleAnalyticsEvents,
   normalizeAnalyticsPath,
   rollupSiteAnalytics,
@@ -20,6 +21,20 @@ import {
 import { browserAnalyticsMarkup, shouldInjectSiteAnalytics } from "../_worker.js";
 
 const ROOT = process.cwd();
+
+function d1Database(database) {
+  return {
+    prepare(sql) {
+      const statement = database.prepare(sql);
+      let bindings = [];
+      return {
+        bind(...values) { bindings = values; return this; },
+        async run() { return statement.run(...bindings); },
+        async first() { return statement.get(...bindings); },
+      };
+    },
+  };
+}
 
 test("analytics paths discard query data and normalize public routes", () => {
   assert.equal(normalizeAnalyticsPath("https://example.com/booking/index.html?token=secret&ref=abc"), "/booking/");
@@ -66,6 +81,59 @@ test("browser event endpoint enforces same origin and writes only validated poin
   assert.equal(points[0].blobs[1], "/home/");
   assert.equal(points[0].blobs[2], "/entry-room/");
   assert.equal(JSON.stringify(points[0]).includes("protected"), false);
+});
+
+test("Puzzle activity stores lifetime anonymous-session counts without retaining browser session IDs", async () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(readFileSync(join(ROOT, "migrations", "0232_puzzle_activity_counts.sql"), "utf8"));
+  const points = [];
+  const env = {
+    SUBMISSIONS_ADMIN_TOKEN: "secret",
+    SUBMISSIONS_DB: d1Database(database),
+    SITE_ANALYTICS: { writeDataPoint(point) { points.push(point); } },
+  };
+  const send = (events) => handleAnalyticsEvents(new Request("https://example.com/api/analytics/events", {
+    method: "POST",
+    headers: { origin: "https://example.com", "content-type": "application/json" },
+    body: JSON.stringify({ sessionId: "puzzle_session_123456", events }),
+  }), env);
+
+  assert.equal((await send([{ name: "interactive_start", path: "/", action: "puzzle-attempt", itemId: "entry-room", device: "desktop" }])).status, 204);
+  assert.equal((await send([{ name: "interactive_start", path: "/", action: "puzzle-attempt", itemId: "entry-room", device: "desktop" }])).status, 204);
+  assert.equal((await send([{ name: "interactive_complete", path: "/", action: "enter-home", itemId: "entry-room", progress: 100, device: "desktop" }])).status, 204);
+
+  const stored = database.prepare("SELECT session_hash,attempted_at,solved_at FROM site_puzzle_sessions").all();
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].session_hash.length, 64);
+  assert.equal(stored[0].session_hash.includes("puzzle_session_123456"), false);
+  assert.ok(stored[0].attempted_at);
+  assert.ok(stored[0].solved_at);
+
+  const response = await handleAdminPuzzleActivity(new Request("https://example.com/api/admin/analytics/puzzle", {
+    headers: { authorization: "Bearer secret" },
+  }), env);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.deepEqual(payload.lifetime, { attempted: 1, solved: 1 });
+  assert.deepEqual(payload.last30Days, { attempted: 1, solved: 1 });
+  assert.equal(payload.identityBoundary, "anonymous_browser_tab_sessions");
+  assert.equal(JSON.stringify(payload).includes("puzzle_session_123456"), false);
+  assert.equal(points.length, 3);
+});
+
+test("Puzzle attempt instrumentation and Studio Home default to lifetime counts", () => {
+  const entry = readFileSync(join(ROOT, "entry-room", "3d", "entry-room-3d.js"), "utf8");
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
+  assert.match(entry, /action: 'puzzle-attempt'/);
+  assert.match(entry, /function trackPuzzleAttempt\(\)/);
+  assert.match(entry, /calibrate \|\| previewComplete \|\| puzzleAttemptTracked/);
+  assert.match(studio, /<span class="pill">Lifetime<\/span>/);
+  assert.match(studio, /<span>Attempted<\/span>/);
+  assert.match(studio, /<span>Solved<\/span>/);
+  assert.match(studio, /Each browser tab is counted once; no person or contact identity is stored/);
+  assert.match(studio, /api\("\/api\/admin\/analytics\/puzzle"\)/);
+  assert.match(worker, /handleAdminPuzzleActivity/);
 });
 
 test("event endpoint caps batch count and rejects unknown payload fields", async () => {

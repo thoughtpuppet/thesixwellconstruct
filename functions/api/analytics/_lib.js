@@ -222,6 +222,35 @@ function analyticsPoint(event, sessionId, country) {
   };
 }
 
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value || "")));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function puzzleActivityKind(event) {
+  if (event.itemId !== "entry-room" || !["/", "/entry-room/"].includes(event.path)) return "";
+  if (event.name === "interactive_start" && event.action === "puzzle-attempt") return "attempted";
+  if (event.name === "interactive_complete" && event.action === "enter-home") return "solved";
+  return "";
+}
+
+async function recordPuzzleActivity(env, sessionId, events) {
+  if (!env.SUBMISSIONS_DB) return;
+  const kinds = new Set(events.map(puzzleActivityKind).filter(Boolean));
+  if (!kinds.size) return;
+  const now = new Date().toISOString();
+  const solvedAt = kinds.has("solved") ? now : null;
+  const sessionHash = await sha256Hex(sessionId);
+  await env.SUBMISSIONS_DB.prepare(`INSERT INTO site_puzzle_sessions
+    (session_hash,attempted_at,solved_at,created_at,updated_at)
+    VALUES(?,?,?,?,?)
+    ON CONFLICT(session_hash) DO UPDATE SET
+      attempted_at=COALESCE(site_puzzle_sessions.attempted_at,excluded.attempted_at),
+      solved_at=COALESCE(site_puzzle_sessions.solved_at,excluded.solved_at),
+      updated_at=excluded.updated_at`)
+    .bind(sessionHash, now, solvedAt, now, now).run();
+}
+
 export async function handleAnalyticsEvents(request, env) {
   if (request.method !== "POST") return failure("Method not allowed.", 405);
   if (!sameOriginRequest(request)) return failure("Same-origin analytics requests only.", 403);
@@ -245,12 +274,48 @@ export async function handleAnalyticsEvents(request, env) {
   }
   if (!env.SITE_ANALYTICS?.writeDataPoint) return failure("Site analytics is not configured.", 503);
   const country = safeSlug(request.cf?.country || "unknown", 8) || "unknown";
+  const normalizedEvents = [];
   for (const candidate of body.events) {
     const normalized = sanitizeAnalyticsEvent(candidate);
     if (normalized.error) return failure(normalized.error, 400);
+    normalizedEvents.push(normalized.event);
     env.SITE_ANALYTICS.writeDataPoint(analyticsPoint(normalized.event, sessionId, country));
   }
+  await recordPuzzleActivity(env, sessionId, normalizedEvents);
   return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+}
+
+export async function handleAdminPuzzleActivity(request, env) {
+  const auth = requireStudioAdmin(request, env);
+  if (auth) return auth;
+  if (request.method !== "GET") return failure("Method not allowed.", 405);
+  if (!env.SUBMISSIONS_DB) return failure("Puzzle activity storage is not configured.", 503);
+  try {
+    const [counts, meta] = await Promise.all([
+      env.SUBMISSIONS_DB.prepare(`SELECT
+        COUNT(*) attempted_lifetime,
+        SUM(CASE WHEN solved_at IS NOT NULL THEN 1 ELSE 0 END) solved_lifetime,
+        SUM(CASE WHEN attempted_at >= datetime('now','-30 days') THEN 1 ELSE 0 END) attempted_30d,
+        SUM(CASE WHEN solved_at >= datetime('now','-30 days') THEN 1 ELSE 0 END) solved_30d
+        FROM site_puzzle_sessions`).first(),
+      env.SUBMISSIONS_DB.prepare("SELECT tracking_started_at FROM site_puzzle_activity_meta WHERE id='entry-room'").first(),
+    ]);
+    return json({
+      lifetime: {
+        attempted: Number(counts?.attempted_lifetime || 0),
+        solved: Number(counts?.solved_lifetime || 0),
+      },
+      last30Days: {
+        attempted: Number(counts?.attempted_30d || 0),
+        solved: Number(counts?.solved_30d || 0),
+      },
+      trackingStartedAt: meta?.tracking_started_at || "",
+      identityBoundary: "anonymous_browser_tab_sessions",
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    return failure("Puzzle activity is not available.", 503, { detail: safeString(error?.message, 500) });
+  }
 }
 
 function isoDate(value) {

@@ -192,6 +192,7 @@ const noNavigate = calibrate && urlParams.has('noNavigate');
 if (calibrate) mountCalibrationHud(document.body);
 
 const ENTRY_HANDOFF_KEY = 'swcEntryHandoff';
+let puzzleAttemptTracked = false;
 function markEntryHandoff(mode, extras = {}) {
   try {
     window.sessionStorage.setItem(ENTRY_HANDOFF_KEY, JSON.stringify({
@@ -200,6 +201,25 @@ function markEntryHandoff(mode, extras = {}) {
       ...extras
     }));
   } catch (error) {}
+}
+
+function trackPuzzleAttempt() {
+  if (calibrate || previewComplete || puzzleAttemptTracked) return;
+  if (!window.SixWellAnalytics?.track) return;
+  puzzleAttemptTracked = true;
+  window.SixWellAnalytics.track('interactive_start', {
+    action: 'puzzle-attempt',
+    itemId: 'entry-room'
+  });
+}
+
+function trackPuzzleSolved() {
+  if (calibrate || previewComplete) return;
+  window.SixWellAnalytics?.track('interactive_complete', {
+    action: 'enter-home',
+    itemId: 'entry-room',
+    progress: 100
+  });
 }
 
 const canvas = document.getElementById('entry-canvas');
@@ -4661,11 +4681,7 @@ function finishShapeStreamDoorwayExitHandoff() {
       handoffExtras.homeGhostIntroDelay = ghostIntroDelay;
     }
     markEntryHandoff('complete', handoffExtras);
-    window.SixWellAnalytics?.track('interactive_complete', {
-      action: 'enter-home',
-      itemId: 'entry-room',
-      progress: 100
-    });
+    trackPuzzleSolved();
     window.SixWellAnalytics?.flush?.(true);
     window.location.href = SHAPE_STREAM_FINAL_GRID.homeHref;
   };
@@ -7389,6 +7405,7 @@ function pointerDown(event) {
   const point = eventToWorld(event, CONFIG.dragZ);
   const orb = nearestOrb(point);
   if (!orb) { if (calibrate) calibrateDown(event); return; }
+  trackPuzzleAttempt();
   active = orb;
   activePointer = event.pointerId;
   orb.dragging = true;
@@ -7477,7 +7494,10 @@ function keyboardDown(event) {
   if (Number.isInteger(number) && number >= 1 && number <= orbs.length) {
     primeFeedback();
     const orb = orbs[number - 1];
-    if (orb.seated == null) selectKeyboardOrb(orb);
+    if (orb.seated == null) {
+      trackPuzzleAttempt();
+      selectKeyboardOrb(orb);
+    }
     else status.textContent = `orb ${number} already placed`;
     event.preventDefault();
     event.stopPropagation();
@@ -7488,6 +7508,7 @@ function keyboardDown(event) {
   primeFeedback();
   const orb = ensureKeyboardSelection(!keyboardSelectedOrb);
   if (!orb) return;
+  trackPuzzleAttempt();
   if (event.key === ' ' || event.key === 'Enter') {
     attemptKeyboardSeat(orb);
   } else {

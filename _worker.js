@@ -176,6 +176,7 @@ import {
   analyticsExcluded,
   handleAdminAnalytics,
   handleAdminAnalyticsExclusion,
+  handleAdminPuzzleActivity,
   handleAnalyticsEvents,
   rollupSiteAnalytics,
 } from "./functions/api/analytics/_lib.js";
@@ -2003,6 +2004,10 @@ export default {
 
     if (url.pathname === "/api/admin/analytics/exclusion") {
       return handleAdminAnalyticsExclusion(request, env);
+    }
+
+    if (url.pathname === "/api/admin/analytics/puzzle") {
+      return handleAdminPuzzleActivity(request, env);
     }
 
     if (url.pathname === "/api/site/visibility") {

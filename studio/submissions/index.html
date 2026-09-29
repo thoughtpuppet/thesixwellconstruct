@@ -42,6 +42,14 @@
   .hub-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
   .hub-legend { display:flex; gap:14px; flex-wrap:wrap; }
   .hub-body { display:grid; grid-template-columns:minmax(280px,1fr) minmax(260px,360px); gap:20px; align-items:start; }
+  .puzzle-activity { display:grid; gap:14px; margin-bottom:20px; padding:16px; border:5px solid var(--ring-faint); background:var(--panel); }
+  .puzzle-activity-head { display:flex; align-items:start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .puzzle-activity-head h3 { margin:0 0 5px; font-family:var(--serif); font-size:20px; color:var(--text); }
+  .puzzle-activity-head p,.puzzle-activity-note { margin:0; color:var(--dim); font-family:var(--sans); font-size:10px; line-height:1.55; }
+  .puzzle-activity-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+  .puzzle-activity-metric { display:grid; gap:5px; min-width:0; padding:12px 14px; border-left:5px solid var(--accent); background:var(--bg); }
+  .puzzle-activity-metric span { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+  .puzzle-activity-metric strong { color:var(--text); font-family:var(--sans); font-size:30px; line-height:1; }
   .hub-cal .day-button { aspect-ratio:1; position:relative; overflow:hidden; }
   .hub-cal .day-button.has-entry { background:var(--hub-day-bg); border:0; color:var(--text); text-shadow:-1px -1px 0 rgba(14,14,14,0.85),1px -1px 0 rgba(14,14,14,0.85),-1px 1px 0 rgba(14,14,14,0.85),1px 1px 0 rgba(14,14,14,0.85); }
   .hub-cal .day-button .day-fill { position:absolute; inset:0; z-index:0; pointer-events:none; }
@@ -65,6 +73,7 @@
   .hub-entry.kind-studio .he-kind { color:var(--color-about-bright,#FDC385); }
   .hub-entry.kind-event .he-kind { color:var(--color-events-bright,#397F34); }
   @media (max-width:900px) { .hub-body { grid-template-columns:1fr; } }
+  @media (max-width:520px) { .puzzle-activity-grid { grid-template-columns:1fr; } }
   h1 { margin:0; font-family:var(--sans); font-size:18px; letter-spacing:0.16em; text-transform:uppercase; color:var(--signal); }
   .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .status { color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:0.12em; text-transform:uppercase; }
@@ -960,6 +969,8 @@
   let schedulePeriodDraft = null;
   let homeMonth = "";
   let selectedHomeDay = "";
+  let puzzleActivity = null;
+  let puzzleActivityError = "";
   let selectedEventSlug = "";
   let portfolioItems = [];
   let portfolioSeoReadiness = { totals: { published: 0, ready: 0, needsReview: 0 }, issueCounts: {}, items: [] };
@@ -5701,6 +5712,31 @@
       : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No upcoming bookings or events.</p>';
   }
 
+  function puzzleActivityMarkup() {
+    if (puzzleActivityError) return `
+      <section class="puzzle-activity" aria-labelledby="puzzleActivityTitle">
+        <div class="puzzle-activity-head"><div><h3 id="puzzleActivityTitle">Puzzle Activity</h3><p>Lifetime anonymous browser-tab sessions.</p></div><span class="pill">Unavailable</span></div>
+        <p class="puzzle-activity-note">${escapeHtml(puzzleActivityError)}</p>
+      </section>`;
+    const lifetime = puzzleActivity?.lifetime || { attempted: 0, solved: 0 };
+    const recent = puzzleActivity?.last30Days || { attempted: 0, solved: 0 };
+    const trackingDate = puzzleActivity?.trackingStartedAt
+      ? new Date(puzzleActivity.trackingStartedAt).toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" })
+      : "this release";
+    return `
+      <section class="puzzle-activity" aria-labelledby="puzzleActivityTitle">
+        <div class="puzzle-activity-head">
+          <div><h3 id="puzzleActivityTitle">Puzzle Activity</h3><p>Lifetime anonymous browser-tab sessions · counting began ${escapeHtml(trackingDate)}.</p></div>
+          <span class="pill">Lifetime</span>
+        </div>
+        <div class="puzzle-activity-grid">
+          <div class="puzzle-activity-metric"><span>Attempted</span><strong>${Number(lifetime.attempted || 0).toLocaleString()}</strong></div>
+          <div class="puzzle-activity-metric"><span>Solved</span><strong>${Number(lifetime.solved || 0).toLocaleString()}</strong></div>
+        </div>
+        <p class="puzzle-activity-note">Last 30 days: ${Number(recent.attempted || 0).toLocaleString()} attempted · ${Number(recent.solved || 0).toLocaleString()} solved. Each browser tab is counted once; no person or contact identity is stored.</p>
+      </section>`;
+  }
+
   function renderHome() {
     const byDay = homeEntriesByDay();
     const monthKeys = [...new Set([
@@ -5718,6 +5754,7 @@
           <span class="pill">Hub</span>
           <h2>Everything Booked</h2>
         </div>
+        ${puzzleActivityMarkup()}
         <div class="hub-head">
           <div class="calendar-tools" style="grid-template-columns:38px minmax(0,220px) 38px;">
             <button class="button icon-button" id="homePrevMonth" type="button" aria-label="Previous month">&lt;</button>
@@ -8829,6 +8866,13 @@ ${meetingLines}
 
   function applyHomeCalendarPreviewData() {
     if (!homeCalendarPreview) return false;
+    puzzleActivity = {
+      lifetime: { attempted: 128, solved: 37 },
+      last30Days: { attempted: 19, solved: 8 },
+      trackingStartedAt: "2026-09-29T00:00:00-04:00",
+      identityBoundary: "anonymous_browser_tab_sessions",
+    };
+    puzzleActivityError = "";
     const previewSubmissionId = "preview-studio-visit-july-4";
     if (!submissions.some((submission) => submission.id === previewSubmissionId)) {
       submissions.push({
@@ -8887,6 +8931,13 @@ ${meetingLines}
       events = eventsPayload.events || [];
     } catch {
       events = [];
+    }
+    try {
+      puzzleActivity = await api("/api/admin/analytics/puzzle");
+      puzzleActivityError = "";
+    } catch (error) {
+      puzzleActivity = null;
+      puzzleActivityError = error.message || "Puzzle activity could not be loaded.";
     }
     const previewApplied = applyHomeCalendarPreviewData();
     setStatus(`${submissions.length} loaded${previewApplied ? " + preview" : ""}`);
