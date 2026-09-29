@@ -1,0 +1,67 @@
+import {commentTargetKey} from '../shared/archive-comment-targets.js';
+import {selectionAnchor,openCommentPopup,commentStyles} from '../js/archive-comments.js';
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const jsonOptions=(method,body)=>({method,headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+
+export async function mountArchiveComments(host,{ownerId,api,status=()=>{}}){
+  commentStyles();
+  if(!document.querySelector('[data-retro-studio-css]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/studio/archive-comments-manager.css';css.dataset.retroStudioCss='';document.head.append(css);}
+  let records=[],targets=[],editing=null,anchor=null,previewUrl=null,previewRequest=null;
+  const lifetime=new MutationObserver(()=>{if(!host.isConnected){previewRequest?.abort();if(previewUrl)URL.revokeObjectURL(previewUrl);lifetime.disconnect();}});lifetime.observe(document.body,{childList:true,subtree:true});
+  host.classList.add('retro-studio');
+  host.innerHTML='<h3>Retrospective comments</h3><p>Later reflection is stored separately from source material and Journal entries. Save changes to the source or attachments before selecting a target here.</p><button type="button" data-refresh>Refresh saved targets</button><div data-comments-list></div><form data-comment-form><h4 data-editor-heading>Add retrospective comment</h4><label>Target<select name="target" required></select></label><label data-reattach-label hidden><input type="checkbox" name="reattach"> Explicitly reattach to the selected source</label><div data-target-preview></div><div data-text-controls><button type="button" data-select>Select highlighted passage</button><p data-selection role="status">Select text in the preview above.</p></div><div data-time-controls hidden><p>A blank start applies to the whole recording. Capture playback position, or enter seconds. Seeking never starts playback.</p><label>Start (seconds)<input name="start" type="number" step="0.01" min="0"></label><button type="button" data-capture="start">Use current time as start</button><label>End (optional seconds)<input name="end" type="number" step="0.01" min="0"></label><button type="button" data-capture="end">Use current time as end</button></div><label>Author<input name="author" required maxlength="160" value="Saiel Dauhn Solehman"></label><label>Retrospective comment<textarea name="body" required maxlength="12000" rows="5"></textarea></label><label>Publication<select name="state"><option value="published">Published</option><option value="draft">Draft</option><option value="archived">Archived</option></select></label><div class="retro-studio-actions"><button type="button" data-preview-comment>Preview popup</button><button type="submit">Save comment</button><button type="button" data-new>New comment</button></div></form><p data-comment-status role="status"></p>';
+  const form=host.querySelector('form'),output=host.querySelector('[data-comment-status]'),preview=host.querySelector('[data-target-preview]');
+  const target=()=>targets[Number(form.elements.target.value)];
+  const report=message=>{output.textContent=message;status(message);};
+  function showTarget(){
+    previewRequest?.abort();if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}
+    anchor=null;const t=target();preview.replaceChildren();host.querySelector('[data-selection]').textContent='Select text in the preview above.';
+    form.elements.start.value='';form.elements.end.value='';
+    const media=t?.target_kind==='media',timed=media&&/^(audio|video)\//.test(t.mime_type);
+    host.querySelector('[data-text-controls]').hidden=media||!t;host.querySelector('[data-time-controls]').hidden=!timed;
+    if(!t)return;
+    if(media){const tag=t.mime_type.split('/')[0],element=document.createElement(tag==='image'?'img':tag);if(tag==='image')element.alt=t.label;else {element.controls=true;element.preload='metadata';}preview.append(element);if(!timed)anchor={};
+      if(t.preview_requires_auth){previewRequest=new AbortController();fetch(`/api/admin/media/${encodeURIComponent(t.target_id)}/file`,{headers:{authorization:`Bearer ${localStorage.getItem('swc_submissions_admin_token')||''}`},cache:'no-store',signal:previewRequest.signal}).then(async response=>{if(!response.ok)throw Error('Secure recording/image preview could not load.');const blob=await response.blob();if(element.isConnected){previewUrl=URL.createObjectURL(blob);element.src=previewUrl;}}).catch(e=>{if(e.name!=='AbortError')report(e.message);});}else element.src=t.url;
+    }
+    else {const text=document.createElement('textarea');text.dataset.selectable='';text.readOnly=true;text.rows=5;text.setAttribute('aria-label','Source selection preview');text.value=t.text;text.addEventListener('select',()=>{const selected=selectionAnchor(text);if(selected){anchor=selected;host.querySelector('[data-selection]').textContent=`Selected: “${anchor.quote}”`;}});preview.append(text);}
+    if(!editing)form.elements.state.value=t.public_eligible?'published':'draft';
+  }
+  function reset(){editing=null;form.reset();form.elements.author.value='Saiel Dauhn Solehman';form.elements.target.disabled=false;host.querySelector('[data-reattach-label]').hidden=true;host.querySelector('[data-editor-heading]').textContent='Add retrospective comment';showTarget();}
+  async function load(){const payload=await api(`/api/admin/archive-comments?owner_entity_id=${encodeURIComponent(ownerId)}`);records=payload.records||[];targets=payload.targets||[];
+    form.elements.target.innerHTML=targets.map((t,i)=>`<option value="${i}">${esc(t.label)}${t.public_eligible?'':' · not public'}</option>`).join('');
+    host.querySelector('[data-comments-list]').innerHTML=records.map(c=>`<article><strong>${esc(c.state)}${c.is_stale?' · Attachment needs review':''}</strong><p>${esc(c.body)}</p><small>${esc(c.author_name)} · Added ${esc(c.created_at)}${c.edited_at?` · Edited ${esc(c.edited_at)}`:''}</small><div class="retro-studio-actions"><button type="button" data-edit="${esc(c.id)}">Edit / reattach</button><button type="button" data-archive="${esc(c.id)}">Archive</button><button type="button" data-history="${esc(c.id)}">Revision history</button></div><div data-history-output></div></article>`).join('')||'<p>No retrospective comments yet.</p>';reset();
+  }
+  form.elements.target.addEventListener('change',showTarget);
+  form.elements.reattach.addEventListener('change',()=>{form.elements.target.disabled=Boolean(editing&&!form.elements.reattach.checked);});
+  const selectButton=host.querySelector('[data-select]');selectButton.addEventListener('mousedown',event=>event.preventDefault());
+  selectButton.addEventListener('click',()=>{anchor=selectionAnchor(preview.querySelector('[data-selectable]'));host.querySelector('[data-selection]').textContent=anchor?`Selected: “${anchor.quote}”`:'Select a passage within this preview.';});
+  // Touch/keyboard selection is retained when focus moves onto the action button.
+  preview.addEventListener('pointerup',()=>{const selected=selectionAnchor(preview.querySelector('[data-selectable]'));if(selected){anchor=selected;host.querySelector('[data-selection]').textContent=`Selected: “${anchor.quote}”`;}});
+  host.querySelectorAll('[data-capture]').forEach(button=>button.addEventListener('click',()=>{const player=preview.querySelector('audio,video');if(player)form.elements[button.dataset.capture].value=player.currentTime.toFixed(2);}));
+  host.querySelector('[data-preview-comment]').addEventListener('click',event=>openCommentPopup(event.currentTarget,[{body:form.elements.body.value,author_name:form.elements.author.value,created_at:editing?.created_at||new Date().toISOString(),edited_at:editing?.edited_at}]));
+  host.querySelector('[data-new]').addEventListener('click',reset);
+  host.querySelector('[data-refresh]').addEventListener('click',()=>load().catch(e=>report(e.message)));
+  form.addEventListener('submit',async event=>{event.preventDefault();event.stopPropagation();const button=form.querySelector('[type=submit]');button.disabled=true;
+    try{const t=target(),reattach=!editing||form.elements.reattach.checked;if(!t)throw Error('Choose a saved target.');
+      let selected=anchor;if(t.target_kind==='media')selected=form.elements.start.value===''?{}:{start_seconds:Number(form.elements.start.value),...(form.elements.end.value===''?{}:{end_seconds:Number(form.elements.end.value)})};
+      if(reattach&&!selected)throw Error('Select the passage to attach this comment.');
+      const body={owner_entity_id:ownerId,body:form.elements.body.value,author_name:form.elements.author.value,state:form.elements.state.value,expected_revision:editing?.revision,...(reattach?{target_kind:t.target_kind,target_id:t.target_id,field_key:t.field_key,source_fingerprint:t.source_fingerprint,anchor:selected,observed_duration_seconds:preview.querySelector('audio,video')?.duration,reattach:true}:{})};
+      await api(`/api/admin/archive-comments${editing?`/${encodeURIComponent(editing.id)}`:''}`,jsonOptions(editing?'PATCH':'POST',body));await load();report('Retrospective comment saved separately. Source text and dates are unchanged.');
+    }catch(e){report(e.message);}finally{button.disabled=false;}
+  });
+  host.addEventListener('click',async event=>{const button=event.target.closest('[data-edit],[data-archive],[data-history]');if(!button)return;const c=records.find(c=>c.id===(button.dataset.edit||button.dataset.archive||button.dataset.history));if(!c)return;
+    try{if(button.dataset.edit){editing=c;const index=targets.findIndex(t=>commentTargetKey(t)===commentTargetKey(c));form.elements.target.value=String(index<0?0:index);showTarget();form.elements.target.disabled=true;form.elements.reattach.checked=false;host.querySelector('[data-reattach-label]').hidden=false;host.querySelector('[data-editor-heading]').textContent=c.is_stale?'Review stale attachment':'Edit retrospective comment';form.elements.body.value=c.body;form.elements.author.value=c.author_name;form.elements.state.value=c.state;anchor=c.anchor;host.querySelector('[data-selection]').textContent=c.anchor.quote||'';form.elements.start.value=c.anchor.start_seconds??'';form.elements.end.value=c.anchor.end_seconds??'';form.scrollIntoView({block:'nearest'});}
+    else if(button.dataset.archive){await api(`/api/admin/archive-comments/${encodeURIComponent(c.id)}`,jsonOptions('DELETE',{expected_revision:c.revision}));await load();report('Comment archived. Its revision history is retained.');}
+    else {const payload=await api(`/api/admin/archive-comments/${encodeURIComponent(c.id)}`);const area=button.closest('article').querySelector('[data-history-output]');area.innerHTML=payload.revisions.map(r=>`<details><summary>Revision ${r.revision} · ${esc(r.action)} · ${esc(r.created_at)}</summary><pre>${esc(JSON.stringify(JSON.parse(r.after_json),null,2))}</pre></details>`).join('');}
+    }catch(e){report(e.message);}
+  });
+  try{await load();}catch(e){report(e.message);}
+}
+
+export function mountSourceCorrection(host,{payload,api,onSaved}){
+  const note=payload.note,info=payload.source_preservation;if(!info)return;
+  const section=document.createElement('section');section.className='retro-studio';section.innerHTML=`<h3>Source preservation</h3><p>${info.locked?'This Note has been published. Its source wording and historical dates are read-only in normal editing.':'This is an unpublished source. Corrections are also available as an explicit, recorded action.'}</p><details><summary>Correct source</summary><form data-source-correction><label>Before<textarea readonly rows="8">${esc(note.body_markdown)}</textarea></label><label>After<textarea name="body_markdown" required rows="8">${esc(note.body_markdown)}</textarea></label><label>Reason for correction<textarea name="reason" required maxlength="3000"></textarea></label><details><summary>Correct historical dates with evidence (optional)</summary>${['source_created_at','source_modified_at','date_label'].map(field=>`<label>${esc(field.replaceAll('_',' '))}<input name="${field}" value="${esc(note[field]||'')}"></label>`).join('')}<label>Date evidence<textarea name="date_evidence" maxlength="3000"></textarea></label></details><button type="submit">Record source correction</button><p role="status"></p></form></details><details><summary>Studio-only correction history (${info.history.length})</summary>${info.history.map(h=>`<details><summary>${esc(h.created_at)} · ${esc(h.reason)}</summary><h4>Before</h4><pre>${esc(JSON.parse(h.before_json).body_markdown)}</pre><h4>After</h4><pre>${esc(JSON.parse(h.after_json).body_markdown)}</pre><p>${esc(h.date_evidence)} · ${esc(h.actor)}</p></details>`).join('')}</details>`;host.append(section);
+  section.querySelector('form').addEventListener('submit',async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector('button'),output=form.querySelector('[role=status]');button.disabled=true;
+    try{const values=Object.fromEntries(new FormData(form));for(const f of ['source_created_at','source_modified_at','date_label'])if(values[f]===(note[f]||''))delete values[f];const result=await api(`/api/admin/archive-notes/${encodeURIComponent(note.id)}/source-corrections`,jsonOptions('POST',{...values,expected_revision:info.source_revision,expected_fingerprint:info.source_fingerprint}));onSaved(result);}catch(e){output.textContent=e.message;}finally{button.disabled=false;}
+  });
+}

@@ -1,0 +1,15 @@
+/* Retrospective writing never changes the appearance of source passages. */
+button.retro-marker{display:inline-flex!important;position:relative;align-items:center;justify-content:center;width:44px;min-width:44px;height:44px;min-height:44px;margin:-14px -9px -10px -7px;padding:0!important;vertical-align:super;border:0!important;background:transparent!important;color:#101010!important;box-shadow:none!important;text-decoration:none!important;cursor:pointer;line-height:1!important}
+button.retro-marker span{display:flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:#2054FF!important;color:#101010!important;font:900 15px/1 Inter,sans-serif!important;text-transform:none!important;letter-spacing:0!important}
+button.retro-marker:focus-visible{outline:2px solid #2054FF;outline-offset:-5px;border-radius:50%}
+dialog.retro-popup{position:fixed;inset:0;margin:auto;width:min(540px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);box-sizing:border-box;overflow:auto;padding:24px;border:5px solid #B87A32;border-radius:0;background:var(--color-bg,#101010);color:var(--color-text,#FBD19D);box-shadow:none;text-align:left}
+dialog.retro-popup::backdrop{background:rgba(0,0,0,.55)}
+.retro-popup .retro-header{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;margin:0 0 24px;padding:0;border:0;background:none}
+.retro-popup .retro-header h2{font:700 15px/1.4 Inter,sans-serif!important;text-transform:uppercase!important;letter-spacing:.08em!important;color:#B87A32!important;margin:0!important;padding:0!important}
+.retro-popup button.retro-close,.retro-popup button.retro-close:hover,.retro-popup button.retro-close:focus,.retro-popup button.retro-close:focus-visible,.retro-popup button.retro-close:active{flex:none;min-height:44px;padding:8px 12px;border:5px solid #B87A32!important;background:transparent!important;color:#B87A32!important;outline:none!important;box-shadow:none!important;text-decoration:none!important;font:700 12px/1 Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;border-radius:0}
+.retro-popup .retro-meta{color:rgba(251,209,157,.16)!important;font:400 12px/1.6 Inter,sans-serif!important;text-transform:none!important;letter-spacing:0!important;margin:0 0 18px!important}
+.retro-popup .retro-body{color:var(--color-text,#FBD19D)!important;font:400 18px/1.65 Georgia,serif!important;text-transform:none!important;letter-spacing:0!important;margin:0!important;overflow-wrap:anywhere}
+.retro-popup .retro-list{display:grid;gap:28px}.retro-popup article{padding:0;margin:0;border:0}
+.retro-times{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}.retro-times>span{display:inline-flex;align-items:center}
+.retro-seek{background:transparent;border:0;color:inherit;font:inherit;text-decoration:underline;cursor:pointer;min-height:44px}
+@media(max-width:480px){dialog.retro-popup{padding:16px}.retro-popup .retro-header{gap:12px}.retro-popup .retro-header h2{font-size:13px!important}}

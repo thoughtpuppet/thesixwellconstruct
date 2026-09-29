@@ -13,6 +13,8 @@ import { handleArchiveWebSnapshotsAdmin, loadPublicArchiveWebSnapshots } from ".
 import { enqueueVisualColorEntity, enqueueVisualColorEntityById } from "./_automatic-visual-colors.js";
 import { handleGalleryAdmin, handleGalleryPublic, handleMediaCatalogueAdmin } from "./_gallery.js";
 import { handleWritingApi } from "./_writing.js";
+import { publicIdentityProfileLinkGateSql, archiveIdentityProfilePublicSql, archiveCanonicalOwnerPublicSql, archiveMaterialPublicStateSql } from "./_archive-publication.js";
+import { archiveCommentsAdmin, loadArchiveComments, sourceCorrectionInfo, sourceChanged, protectedNote, correctArchiveSource } from "./_archive-comments.js";
 import { WRITING_ROOT } from "../../../shared/writing-content.js";
 import {
   ArchiveDossierEnsureError,
@@ -1160,48 +1162,8 @@ function archiveEntitySql(where = "1=1") {
   WHERE ${where}`;
 }
 
-function publicIdentityProfileLinkGateSql(profileAlias="profile"){
-  return `(
-    EXISTS(
-      SELECT 1 FROM organizations eligible_identity_organization
-      JOIN content_entities eligible_identity_owner ON eligible_identity_owner.id=eligible_identity_organization.id AND eligible_identity_owner.visibility='public'
-      WHERE eligible_identity_organization.id=${profileAlias}.organization_id AND eligible_identity_organization.state='published'
-    )
-    AND EXISTS(SELECT 1 FROM archive_dossiers eligible_identity_dossier WHERE eligible_identity_dossier.entity_id=${profileAlias}.organization_id AND eligible_identity_dossier.state='published' AND eligible_identity_dossier.public_visible=1)
-    AND (${profileAlias}.timeline_id IS NULL OR EXISTS(SELECT 1 FROM archive_timelines eligible_identity_timeline WHERE eligible_identity_timeline.id=${profileAlias}.timeline_id AND eligible_identity_timeline.subject_entity_id=${profileAlias}.organization_id AND eligible_identity_timeline.state='published' AND eligible_identity_timeline.public_visible=1))
-    AND (${profileAlias}.current_symbol_id IS NULL OR EXISTS(SELECT 1 FROM visual_symbols eligible_identity_symbol JOIN content_entities eligible_identity_symbol_entity ON eligible_identity_symbol_entity.id=eligible_identity_symbol.id AND eligible_identity_symbol_entity.visibility='public' WHERE eligible_identity_symbol.id=${profileAlias}.current_symbol_id AND eligible_identity_symbol.state='published'))
-    AND (${profileAlias}.origin_thread_id IS NULL OR EXISTS(SELECT 1 FROM archive_origin_threads eligible_identity_origin JOIN archive_origin_thread_entities eligible_identity_member ON eligible_identity_member.thread_id=eligible_identity_origin.id AND eligible_identity_member.entity_id=${profileAlias}.organization_id WHERE eligible_identity_origin.id=${profileAlias}.origin_thread_id AND eligible_identity_origin.state='published' AND eligible_identity_origin.public_visible=1))
-    AND (${profileAlias}.featured_origin_entity_id IS NULL OR EXISTS(
-      SELECT 1 FROM archive_records eligible_identity_featured
-      JOIN content_entities eligible_identity_featured_entity ON eligible_identity_featured_entity.id=eligible_identity_featured.id AND eligible_identity_featured_entity.visibility='public'
-      JOIN archive_dossiers eligible_identity_featured_dossier ON eligible_identity_featured_dossier.entity_id=eligible_identity_featured.id AND eligible_identity_featured_dossier.state='published' AND eligible_identity_featured_dossier.public_visible=1
-      WHERE eligible_identity_featured.id=${profileAlias}.featured_origin_entity_id AND eligible_identity_featured.state='published'
-    ))
-  )`;
-}
 
-function archiveIdentityProfilePublicSql(entityAlias = "ce") {
-  return `(${entityAlias}.entity_type<>'organization' OR EXISTS(
-      SELECT 1 FROM about_identity_profiles public_identity_profile
-      WHERE public_identity_profile.organization_id=${entityAlias}.id
-        AND public_identity_profile.publication_state='published'
-        AND public_identity_profile.visibility='public'
-        AND ${publicIdentityProfileLinkGateSql("public_identity_profile")}
-    ) OR EXISTS(
-      SELECT 1 FROM archive_timelines public_identity_timeline
-      WHERE public_identity_timeline.subject_entity_id=${entityAlias}.id
-        AND public_identity_timeline.presentation_mode='editorial'
-        AND public_identity_timeline.state='published'
-        AND public_identity_timeline.public_visible=1
-    ))`;
-}
 
-function archiveCanonicalOwnerPublicSql(entityAlias="ce"){
-  return `(${entityAlias}.entity_type<>'archive_record' OR EXISTS(
-    SELECT 1 FROM archive_records public_archive_owner
-    WHERE public_archive_owner.id=${entityAlias}.id AND public_archive_owner.state='published'
-  ))`;
-}
 
 function publicEntityMediaOwnerSql(entityAlias="ce"){
   return `(
@@ -1220,20 +1182,6 @@ function publicEntityMediaOwnerSql(entityAlias="ce"){
   )`;
 }
 
-function archiveMaterialPublicStateSql(materialAlias="am"){
-  return `(
-    ${materialAlias}.state_id IS NULL
-    OR NOT EXISTS(SELECT 1 FROM archive_catalogue_entries material_catalogue WHERE material_catalogue.entity_id=${materialAlias}.dossier_entity_id)
-    OR EXISTS(
-      SELECT 1 FROM archive_object_states material_public_state
-      JOIN archive_object_versions material_public_version ON material_public_version.id=material_public_state.version_id
-      WHERE material_public_state.id=${materialAlias}.state_id
-        AND material_public_version.entity_id=${materialAlias}.dossier_entity_id
-        AND material_public_state.publication_state='published' AND material_public_state.public_visible=1
-        AND material_public_version.publication_state='published' AND material_public_version.public_visible=1
-    )
-  )`;
-}
 
 function archiveCollectionIds(value){
   const source=Array.isArray(value)?value:String(value||"").split(",");
@@ -2192,7 +2140,8 @@ async function publicArchiveDetail(request,env,archiveSlug){
   const notes=await publicNotesForTarget(database,entityId);
   const originThreads=originThreadsResult.results||[],primaryOriginThread=originThreads.find(thread=>Number(thread.is_primary))||null;
   const webSnapshots=await loadPublicArchiveWebSnapshots(database,entityId,env.ARCHIVE_VIEWER_ORIGIN);
-  return json({item,dossier:item,materials,notes,color_usages:colorUsages,colorUsages,material_usages:materialUsages,materialUsages,palette_maps:paletteMaps,paletteMaps,source_materials:sourceMaterials,sourceMaterials,evidence_sets:sourceMaterials,evidenceSets:sourceMaterials,web_snapshots:webSnapshots,webSnapshots,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states,documentation,terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
+  const retrospective_comments=await loadArchiveComments(database,entityId,{publicOnly:true,mediaIds:[...materials.map(m=>m.media_id),...(sourceMaterialEntriesResult.results||[]).map(m=>m.media_id),...((await publicEntityMedia(database,[entityId])).get(entityId)||[]).map(m=>m.id)]});
+  return json({item,dossier:item,materials,notes,retrospective_comments,color_usages:colorUsages,colorUsages,material_usages:materialUsages,materialUsages,palette_maps:paletteMaps,paletteMaps,source_materials:sourceMaterials,sourceMaterials,evidence_sets:sourceMaterials,evidenceSets:sourceMaterials,web_snapshots:webSnapshots,webSnapshots,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states,documentation,terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
 }
 
 function archiveComparisonSubject(payload,stateId=""){
@@ -7981,7 +7930,7 @@ async function archiveNoteHistorySuggestions(database,noteEntityId){
 }
 
 function presentArchiveNote(row,admin=false){
-  const {reflection_memory_note:_privateReflectionMemoryNote,...safe}=row;
+  const {reflection_memory_note:_privateReflectionMemoryNote,source_revision:_privateSourceRevision,source_ever_published:_privatePublicationMemory,...safe}=row;
   return {
     ...safe,id:row.entity_id,entityId:row.entity_id,noteType:row.note_type,sourceApp:row.source_app,
     bodyMarkdown:row.body_markdown,sourceCreatedAt:row.source_created_at,sourceModifiedAt:row.source_modified_at,
@@ -7989,7 +7938,7 @@ function presentArchiveNote(row,admin=false){
     isReflection:Number(row.is_reflection||0)===1,reflectedOnStart:row.reflected_on_start||null,reflectedOnEnd:row.reflected_on_end||null,
     reflectedOnPrecision:row.reflected_on_precision||"undated",reflectedOnLabel:row.reflected_on_label||"",
     route:archiveNoteRoute(row.slug),preview_url:row.preview_url||"",previewUrl:row.preview_url||"",
-    ...(admin?{reflection_memory_note:row.reflection_memory_note||"",reflectionMemoryNote:row.reflection_memory_note||""}:{}),
+    ...(admin?{source_revision:row.source_revision,reflection_memory_note:row.reflection_memory_note||"",reflectionMemoryNote:row.reflection_memory_note||""}:{}),
   };
 }
 
@@ -8010,7 +7959,8 @@ async function archiveNotePayload(database,row,{publicOnly=false,admin=false}={}
     archiveNoteAssets(database,row.entity_id,{publicOnly,admin}),archiveNoteLinks(database,row.entity_id,{publicOnly}),archiveNoteOrigins(database,row.entity_id,{publicOnly}),
     admin?archiveNoteHistorySuggestions(database,row.entity_id):Promise.resolve([]),
   ]);
-  return {note:presentArchiveNote(row,admin),record:presentArchiveNote(row,admin),assets,links,origin_threads:originThreads,originThreads,history_suggestions:historySuggestions,historySuggestions};
+  const retrospective_comments=await loadArchiveComments(database,row.entity_id,{publicOnly,mediaIds:assets.map(asset=>asset.media_id)});
+  return {note:presentArchiveNote(row,admin),record:presentArchiveNote(row,admin),assets,links,origin_threads:originThreads,originThreads,history_suggestions:historySuggestions,historySuggestions,retrospective_comments,...(admin?{source_preservation:await sourceCorrectionInfo(database,row)}:{})};
 }
 
 async function validateArchiveNotePublication(database,note,assets=null,links=null){
@@ -8204,7 +8154,7 @@ async function archiveNoteExportPayload(database,note){
   for(const asset of exported){const replacement=asset.mime_type.startsWith("image/")?`![${asset.alt_text||""}](Attachments/${asset.export_filename})`:`[${asset.export_filename}](Attachments/${asset.export_filename})`;markdown=markdown.replaceAll(`{{asset:${asset.token}}}`,replacement)}
   for(const asset of payload.assets.filter(asset=>!exported.some(item=>item.id===asset.id)))markdown=markdown.replaceAll(`{{asset:${asset.token}}}`,"");
   const frontmatter=["---",`id: ${JSON.stringify(note.entity_id)}`,`title: ${JSON.stringify(note.title)}`,`slug: ${JSON.stringify(note.slug)}`,`note_type: ${JSON.stringify(note.note_type)}`,`source: ${JSON.stringify(note.source_app||"")}`,`source_created_at: ${JSON.stringify(note.source_created_at||"")}`,`source_modified_at: ${JSON.stringify(note.source_modified_at||"")}`,`date_label: ${JSON.stringify(note.date_label||"")}`,`is_reflection: ${Number(note.is_reflection||0)===1}`,`reflected_on_start: ${JSON.stringify(note.reflected_on_start||"")}`,`reflected_on_end: ${JSON.stringify(note.reflected_on_end||"")}`,`reflected_on_precision: ${JSON.stringify(note.reflected_on_precision||"undated")}`,`reflected_on_label: ${JSON.stringify(note.reflected_on_label||"")}`,`provenance_note: ${JSON.stringify(note.provenance_note||"")}`,`visibility: ${note.state==="published"&&Number(note.public_visible)?"public":"private"}`,`links: ${JSON.stringify(payload.links.map(link=>({target_entity_id:link.target_entity_id,relationship_role:link.relationship_role,is_primary:link.is_primary,public_visible:link.public_visible,sort_order:link.sort_order})))}`,`origin_threads: ${JSON.stringify(payload.origin_threads.map(origin=>origin.id))}`,`primary_origin_thread: ${JSON.stringify(payload.origin_threads.find(origin=>origin.is_primary)?.id||"")}`,"---",""].join("\n");
-  return{filename:`${note.slug}.zip`,markdown_filename:`${note.slug}.md`,markdown:`${frontmatter}${markdown.trim()}\n`,attachments:exported.map(asset=>({token:asset.token,filename:asset.export_filename,mime_type:asset.mime_type,byte_size:asset.byte_size,download_url:asset.url}))};
+  return{retrospective_metadata:{schema:"archive-retrospective-comments/v1",owner_entity_id:note.entity_id,comments:payload.retrospective_comments},filename:`${note.slug}.zip`,markdown_filename:`${note.slug}.md`,markdown:`${frontmatter}${markdown.trim()}\n`,attachments:exported.map(asset=>({token:asset.token,filename:asset.export_filename,mime_type:asset.mime_type,byte_size:asset.byte_size,download_url:asset.url}))};
 }
 
 async function adminArchiveNoteImportApi(request,env){
@@ -8265,6 +8215,11 @@ async function adminArchiveNotesApi(request,env,noteEntityId="",action=""){
     }catch(error){return failure(error.message,/UNIQUE constraint failed/i.test(error.message)?409:400)}
   }
   const before=noteEntityId?await archiveNoteByKey(database,noteEntityId):null;if(!before)return failure("Archive Note not found.",404);
+  if(action==="source-corrections"){
+    if(request.method==="GET")return json(await sourceCorrectionInfo(database,before));
+    if(request.method!=="POST")return failure("Method not allowed.",405);
+    try{const input=await readJson(request);if(!input)return failure("Send a JSON object.");const corrected=await correctArchiveSource(database,before,input,note=>validateArchiveNotePublication(database,note));await syncArchiveNoteSearch(database,before.entity_id);return json(await archiveNotePayload(database,corrected,{admin:true}));}catch(error){return failure(error.message,error.status||400)}
+  }
   if(request.method==="GET")return json(await archiveNotePayload(database,before,{admin:true}));
   if(request.method==="DELETE"){
     await database.batch([
@@ -8277,6 +8232,7 @@ async function adminArchiveNotesApi(request,env,noteEntityId="",action=""){
   const body=await readJson(request);if(!body)return failure("Send a JSON object.");
   try{
     const note=normalizedArchiveNote(body,before),links=normalizedArchiveNoteLinks(body.links,note.public_visible);
+    if(protectedNote(before)&&sourceChanged(before,note))return failure("This source has been published. Use Correct source with a reason and the current source revision.",409);
     await validateArchiveNotePublication(database,{...note,entity_id:before.entity_id},null,links);
     if(links!==null)await replaceArchiveNoteLinks(database,before.entity_id,links);
     if(Array.isArray(body.origin_thread_ids??body.originThreadIds))await replaceEntityOriginThreads(database,before.entity_id,originThreadIds(body.origin_thread_ids??body.originThreadIds),text(body.primary_origin_thread_id??body.primaryOriginThreadId,200));
@@ -8307,12 +8263,13 @@ async function adminArchiveNoteAssetsApi(request,env,noteEntityId,assetId=""){
   }
   if(request.method!=="PATCH")return failure("Method not allowed.",405);
   const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+  if(body.expected_caption!==undefined&&body.expected_caption!==before.caption)return failure("The image caption changed. Reload and review before replacing it.",409);
   const token=text(body.asset_token??body.token??before.token,120).toLowerCase(),role=text(body.role??before.role,40),publicVisible=body.public_visible===undefined&&body.publicVisible===undefined?(before.public_visible?1:0):((body.public_visible??body.publicVisible)?1:0);
   if(!ARCHIVE_NOTE_TOKEN.test(token)||!ARCHIVE_NOTE_ROLES.has(role))return failure("Choose a lowercase asset token and supported role.");
   const media=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(before.media_id).first();if(note.state==="published"&&Number(note.public_visible)&&publicVisible&&!archiveNoteMediaEligible(media))return failure("Public Note assets must be active, public, permitted, and inline.",409);
   if(note.state==="published"&&Number(note.public_visible)&&!publicVisible&&archiveNoteTokens(note.body_markdown).includes(before.token))return failure("A referenced asset cannot be hidden while its Note is public.",409);
   try{await database.prepare("UPDATE archive_note_assets SET asset_token=?,role=?,sort_order=?,alt_text_override=?,caption_override=?,public_visible=?,updated_at=datetime('now') WHERE id=? AND note_entity_id=?")
-    .bind(token,role,Number(body.sort_order??body.sortOrder??before.sort_order)||0,text(body.alt_text??body.altText??before.alt_text,1000),text(body.caption??before.caption,3000),publicVisible,assetId,note.entity_id).run();await syncArchiveNoteSearch(database,note.entity_id);return json({record:(await archiveNoteAssets(database,note.entity_id,{admin:true})).find(item=>item.id===assetId)})}catch(error){return failure(error.message,/UNIQUE constraint failed/i.test(error.message)?409:400)}
+    .bind(token,role,Number(body.sort_order??body.sortOrder??before.sort_order)||0,text(body.alt_text??body.altText??before.alt_text,1000),text(body.caption??before.caption,3000),publicVisible,assetId,note.entity_id).run();await syncArchiveNoteSearch(database,note.entity_id);const after=(await archiveNoteAssets(database,note.entity_id,{admin:true})).find(item=>item.id===assetId);await nextRevision(database,note.entity_id,"archive-note-asset-update",before,after);return json({record:after})}catch(error){return failure(error.message,/UNIQUE constraint failed/i.test(error.message)?409:400)}
 }
 
 async function publicNotesForTarget(database,targetEntityId){
@@ -8438,6 +8395,8 @@ export async function handleConstructApi(request,env){
   const blackboardMatch=path.match(/^\/api\/admin\/archive-blackboards(?:\/([^/]+))?$/);if(blackboardMatch)return archiveBlackboardRecordsAdminApiV2(request,env,blackboardMatch[1]?decodeURIComponent(blackboardMatch[1]):"");
   const materialMatch=path.match(/^\/api\/admin\/archive-materials(?:\/([^/]+))?$/);if(materialMatch)return archiveMaterialsAdminApi(request,env,materialMatch[1]?decodeURIComponent(materialMatch[1]):"");
   if(path==="/api/admin/archive-notes/import")return adminArchiveNoteImportApi(request,env);
+  const commentMatch=path.match(/^\/api\/admin\/archive-comments(?:\/([^/]+))?$/);if(commentMatch)return archiveCommentsAdmin(request,env,commentMatch[1]?decodeURIComponent(commentMatch[1]):"");
+  const correctionMatch=path.match(/^\/api\/admin\/archive-notes\/([^/]+)\/source-corrections$/);if(correctionMatch)return adminArchiveNotesApi(request,env,decodeURIComponent(correctionMatch[1]),"source-corrections");
   const noteExportMatch=path.match(/^\/api\/admin\/archive-notes\/([^/]+)\/export$/);if(noteExportMatch)return adminArchiveNoteExportApi(request,env,decodeURIComponent(noteExportMatch[1]));
   const noteLinksMatch=path.match(/^\/api\/admin\/archive-notes\/([^/]+)\/links$/);if(noteLinksMatch)return adminArchiveNoteLinksApi(request,env,decodeURIComponent(noteLinksMatch[1]));
   const noteHistorySuggestionMatch=path.match(/^\/api\/admin\/archive-notes\/([^/]+)\/history-suggestions(?:\/([^/]+))?$/);if(noteHistorySuggestionMatch)return adminArchiveNoteHistorySuggestionsApi(request,env,decodeURIComponent(noteHistorySuggestionMatch[1]),noteHistorySuggestionMatch[2]?decodeURIComponent(noteHistorySuggestionMatch[2]):"");

@@ -57,6 +57,9 @@ workers
 workers/**
 shared/archive-viewer-javascript.js
 tools/archive-web-history.mjs
+tools/archive-comments-preview.mjs
+tools/archive-note-reader-preview.mjs
+tools/archive-lost-marbles-retrospective.mjs
 _worker.js
 wrangler.jsonc
 

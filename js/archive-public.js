@@ -825,7 +825,7 @@
     return `<div class="archive-documentation-groups">${groups.map(([label, records]) => `<section class="archive-documentation-group"><h3>${escapeHtml(label)}</h3><dl>${records.map((entry) => {
       const entryLabel = text(entry.label, entry.default_label, entry.defaultLabel, titleCase(text(entry.field_key, entry.fieldKey)));
       const url = safeUrl(entry.url);
-      return `<div id="documentation-${escapeHtml(slugify(entry.id))}"><dt>${escapeHtml(entryLabel)}</dt><dd>${paragraphMarkup(entry.value)}${text(entry.citation) ? `<cite>${escapeHtml(entry.citation)}</cite>` : ""}${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">Open source</a>` : ""}</dd></div>`;
+      return `<div id="documentation-${escapeHtml(slugify(entry.id))}"><dt>${escapeHtml(entryLabel)}</dt><dd><div data-retro-kind="documentation" data-retro-id="${escapeHtml(entry.id)}" data-retro-field="value">${paragraphMarkup(entry.value)}</div>${text(entry.citation) ? `<cite>${escapeHtml(entry.citation)}</cite>` : ""}${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">Open source</a>` : ""}</dd></div>`;
     }).join("")}</dl></section>`).join("")}</div>`;
   }
 
@@ -850,7 +850,7 @@
     const poster = safeUrl(first(media.poster, material.poster, posterFallback));
     const imageType = ["image", "photo", "process-photo", "sketch", "final-image", "artifact"].includes(type);
     return {
-      body,
+      body, sourceId:material.id, mediaId:material.media_id||material.mediaId||media.id,
       caption,
       date: dateLabel(material),
       digitalAssetType,
@@ -872,6 +872,9 @@
   }
 
   function materialViewerMarkup(material) {
+    return materialViewerContent(material);
+  }
+  function materialViewerContent(material) {
     if (material.imageType && material.url) {
       return `<figure class="archive-material-viewer"><img src="${escapeHtml(material.url)}" alt="${escapeHtml(text(material.media.alt, material.media.alt_text, material.title))}" loading="lazy" decoding="async"></figure>`;
     }
@@ -885,14 +888,14 @@
       return `<div class="archive-material-viewer"><object class="archive-material-document" data="${escapeHtml(material.url)}" type="application/pdf" aria-label="${escapeHtml(material.title)}"><p class="archive-inline-note">This document cannot be shown inline. <a href="${escapeHtml(material.url)}">Open it in a new view</a>.</p></object></div>`;
     }
     if (material.body) {
-      return `<div class="archive-material-viewer archive-inline-note">${escapeHtml(material.body)}</div>`;
+      return `<div data-retro-kind="material" data-retro-id="${escapeHtml(material.sourceId)}" data-retro-field="body" class="archive-material-viewer archive-inline-note">${escapeHtml(material.body)}</div>`;
     }
     return `<div class="archive-material-viewer archive-material-viewer-empty"><span>No public preview is available for this material.</span></div>`;
   }
 
   function materialMarkup(material, index, posterFallback = "") {
     const presentation = materialPresentation(material, index, posterFallback);
-    return `<article class="archive-material" id="${presentation.id}"><div class="archive-material-header"><div><span class="archive-material-type">${escapeHtml(presentation.reference || titleCase(presentation.type))}</span><div class="archive-date">${escapeHtml(presentation.date)}</div>${presentation.isSample ? `<span class="archive-material-badge">Sample</span>` : ""}</div><div class="archive-material-copy">${presentation.reference ? `<span class="archive-label">${escapeHtml(titleCase(presentation.type))}${presentation.state ? ` · ${escapeHtml(presentation.state)}` : ""}</span>` : ""}${presentation.hasDigitalAsset ? `<span class="archive-digital-asset-label">Digital asset · ${escapeHtml(presentation.digitalAssetType)}</span>` : ""}<h3>${escapeHtml(presentation.title)}</h3>${presentation.caption ? `<p>${escapeHtml(presentation.caption)}</p>` : ""}${presentation.sourceRoute ? `<p><a href="${escapeHtml(presentation.sourceRoute)}">Open source dossier</a></p>` : ""}</div></div>${materialViewerMarkup(presentation)}</article>`;
+    return `<article class="archive-material" data-retro-media="${escapeHtml(presentation.mediaId||'')}" id="${presentation.id}"><div class="archive-material-header"><div><span class="archive-material-type">${escapeHtml(presentation.reference || titleCase(presentation.type))}</span><div class="archive-date">${escapeHtml(presentation.date)}</div>${presentation.isSample ? `<span class="archive-material-badge">Sample</span>` : ""}</div><div class="archive-material-copy">${presentation.reference ? `<span class="archive-label">${escapeHtml(titleCase(presentation.type))}${presentation.state ? ` · ${escapeHtml(presentation.state)}` : ""}</span>` : ""}${presentation.hasDigitalAsset ? `<span class="archive-digital-asset-label">Digital asset · ${escapeHtml(presentation.digitalAssetType)}</span>` : ""}<h3 ${presentation.caption?'':'data-retro-label'}>${escapeHtml(presentation.title)}</h3>${presentation.caption ? `<p data-retro-label>${escapeHtml(presentation.caption)}</p>` : ""}${presentation.sourceRoute ? `<p><a href="${escapeHtml(presentation.sourceRoute)}">Open source dossier</a></p>` : ""}</div></div>${materialViewerMarkup(presentation)}</article>`;
   }
 
   function materialThumbnailMarkup(material, index, posterFallback = "") {
@@ -923,21 +926,21 @@
 
   function setupArchiveNoteQuickView(notes){
     const dialog=app.querySelector("#archive-note-dialog");if(!dialog||!window.ArchiveNoteMarkdown)return;const content=dialog.querySelector("[data-archive-note-dialog-content]"),close=dialog.querySelector("[data-archive-note-close]"),kicker=dialog.querySelector("[data-archive-note-dialog-kicker]");let lastTrigger=null,controller=null;
-    async function openNote(index,trigger){const note=notes[index];if(!note)return;const journal=text(note.note_type,note.noteType)==="journal-entry",publicLabel=journal?"Journal moment":"Archive Note";lastTrigger=trigger;controller?.abort();controller=new AbortController();if(kicker)kicker.textContent=`Complete ${publicLabel}`;content.innerHTML=`<div class="archive-loading" role="status"><p>Opening the ${publicLabel}…</p></div>`;if(!dialog.open)dialog.showModal();document.body.classList.add("archive-note-dialog-open");close.focus();try{const payload=await getJson(`/api/archive/notes/${encodeURIComponent(text(note.slug,note.id))}`,controller.signal),record=first(payload.note,payload.record,note),assets=list(payload.assets);content.innerHTML=`<div class="archive-note-reader" tabindex="0" role="region" aria-label="Complete ${escapeHtml(publicLabel)} ${escapeHtml(text(record.title,"Untitled"))}"><h2 id="archive-note-dialog-title">${escapeHtml(text(record.title,"Untitled"))}</h2>${window.ArchiveNoteMarkdown.render(first(record.body_markdown,record.bodyMarkdown),assets)}<p><a class="archive-button" href="${escapeHtml(safeUrl(record.route)||`/archive/notes/${encodeURIComponent(text(record.slug))}/`)}">Open permanent ${escapeHtml(publicLabel)} record</a></p></div>`;window.ArchiveNoteMarkdown.bindImageLightboxes(content);content.querySelector(".archive-note-reader")?.focus()}catch(error){if(error.name!=="AbortError")content.innerHTML=`<div class="archive-note-empty"><p>This ${escapeHtml(publicLabel)} could not be opened.</p></div>`}}
+    async function openNote(index,trigger){const note=notes[index];if(!note)return;const journal=text(note.note_type,note.noteType)==="journal-entry",publicLabel=journal?"Journal moment":"Archive Note";lastTrigger=trigger;controller?.abort();controller=new AbortController();if(kicker)kicker.textContent=`Complete ${publicLabel}`;content.innerHTML=`<div class="archive-loading" role="status"><p>Opening the ${publicLabel}…</p></div>`;if(!dialog.open)dialog.showModal();document.body.classList.add("archive-note-dialog-open");close.focus();try{const payload=await getJson(`/api/archive/notes/${encodeURIComponent(text(note.slug,note.id))}`,controller.signal),record=first(payload.note,payload.record,note),assets=list(payload.assets);content.innerHTML=`<div class="archive-note-reader" tabindex="0" role="region" aria-label="Complete ${escapeHtml(publicLabel)} ${escapeHtml(text(record.title,"Untitled"))}"><h2 id="archive-note-dialog-title">${escapeHtml(text(record.title,"Untitled"))}</h2>${window.ArchiveNoteMarkdown.render(first(record.body_markdown,record.bodyMarkdown),assets,record.id)}<p><a class="archive-button" href="${escapeHtml(safeUrl(record.route)||`/archive/notes/${encodeURIComponent(text(record.slug))}/`)}">Open permanent ${escapeHtml(publicLabel)} record</a></p></div>`;window.ArchiveNoteMarkdown.bindImageLightboxes(content);await window.ArchiveNoteMarkdown.bindRetrospectiveComments(content,payload);content.querySelector(".archive-note-reader")?.focus()}catch(error){if(error.name!=="AbortError")content.innerHTML=`<div class="archive-note-empty"><p>This ${escapeHtml(publicLabel)} could not be opened.</p></div>`}}
     app.querySelectorAll("[data-archive-note-trigger]").forEach(trigger=>trigger.addEventListener("click",()=>openNote(Number(trigger.dataset.noteIndex),trigger)));close.addEventListener("click",()=>dialog.close());dialog.addEventListener("click",event=>{if(event.target===dialog)dialog.close()});dialog.addEventListener("close",()=>{controller?.abort();document.body.classList.remove("archive-note-dialog-open");lastTrigger?.focus()});
   }
 
   function materialDialogContentMarkup(material, index, posterFallback = "") {
     const presentation = materialPresentation(material, index, posterFallback);
-    return `<div class="archive-material-dialog-layout">
+    return `<div class="archive-material-dialog-layout" data-retro-media="${escapeHtml(presentation.mediaId||'')}">
       ${materialViewerMarkup(presentation)}
       <div class="archive-material-dialog-copy">
         <span class="archive-label">${escapeHtml(titleCase(presentation.type))}${presentation.state ? ` · ${escapeHtml(presentation.state)}` : ""}</span>
         ${presentation.reference ? `<span class="archive-material-type">${escapeHtml(presentation.reference)}</span>` : ""}
         ${presentation.hasDigitalAsset ? `<span class="archive-digital-asset-label">Digital asset · ${escapeHtml(presentation.digitalAssetType)}</span>` : ""}
-        <h2 id="archive-material-dialog-title">${escapeHtml(presentation.title)}</h2>
+        <h2 ${presentation.caption?'':'data-retro-label'} id="archive-material-dialog-title">${escapeHtml(presentation.title)}</h2>
         <div class="archive-date">${escapeHtml(presentation.date)}</div>
-        ${presentation.caption ? `<p>${escapeHtml(presentation.caption)}</p>` : ""}
+        ${presentation.caption ? `<p data-retro-label>${escapeHtml(presentation.caption)}</p>` : ""}
         ${presentation.isSample ? `<span class="archive-material-badge">Sample</span>` : ""}
         ${presentation.sourceRoute ? `<p><a class="archive-button" href="${escapeHtml(presentation.sourceRoute)}">Open source dossier</a></p>` : ""}
       </div>
@@ -1059,8 +1062,8 @@
     } else {
       viewer = `<div class="archive-material-viewer-empty"><span>No public preview is available for this entry.</span></div>`;
     }
-    return `<article class="archive-source-entry">
-      <header><span class="archive-source-entry-index">${String(index + 1).padStart(2, "0")}</span><div><span class="archive-label">${escapeHtml(titleCase(type))}</span><h3>${escapeHtml(title)}</h3>${caption ? `<p>${escapeHtml(caption)}</p>` : ""}</div></header>
+    return `<article class="archive-source-entry" data-retro-media="${escapeHtml(entry.media_id||asset.id||'')}" data-retro-title="${escapeHtml(title)}">
+      <header><span class="archive-source-entry-index">${String(index + 1).padStart(2, "0")}</span><div><span class="archive-label">${escapeHtml(titleCase(type))}</span><h3 ${caption?'':'data-retro-label'}>${escapeHtml(title)}</h3>${caption ? `<p data-retro-label>${escapeHtml(caption)}</p>` : ""}</div></header>
       ${viewer}
     </article>`;
   }
@@ -1313,9 +1316,9 @@
       document.title = `${title} · Archive · the six.well construct`;
       app.innerHTML = `
         <article${mediumKey ? ` data-archive-medium="${escapeHtml(mediumKey)}"` : ""}>
-          <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(archiveObjectTypeLabel(item), item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadataHtml}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${relatedActionMarkup}</div></div></div>${imageUrl || imageMarkup ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${inlineEmphasis(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
+          <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(archiveObjectTypeLabel(item), item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p data-retro-kind="dossier" data-retro-id="${escapeHtml(item.entity_id||item.id)}" data-retro-field="orientation" class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadataHtml}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${relatedActionMarkup}</div></div></div>${imageUrl || imageMarkup ? `<figure data-retro-media="${escapeHtml(primaryMaterial?.media_id||image.id||'')}" class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${inlineEmphasis(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
           <nav class="archive-jump-nav" aria-label="On this record"><a href="#overview">Overview</a><a href="#story">Story</a>${data.documentation.length ? `<a href="#documentation">Documentation</a>` : ""}${data.versions.length ? `<a href="#evolution">Evolution</a>` : ""}${webSnapshotMarkup ? `<a href="#website-snapshots">Website snapshots</a>` : ""}${data.colorUsages.length||data.materialUsages.length||data.paletteMaps.length?`<a href="#palette-materials">Palette &amp; Materials</a>`:""}<a href="#notebook">Notebook</a><a href="#history">History</a><a href="#connections">Connections</a></nav>
-          <section class="archive-document-section" id="story"><header class="archive-section-heading"><span class="archive-section-index">01 / Context</span><h2 class="archive-section-title">The story</h2></header><div><div class="archive-prose">${story ? paragraphMarkup(story) : "<p>This dossier currently holds the public facts of the work. Its fuller story has not been published yet.</p>"}${data.collections.length ? `<div class="archive-link-chips">${data.collections.map((collection) => `<a class="archive-chip" href="/archive/?collection=${encodeURIComponent(text(collection.slug, collection.id, collection.name))}">${escapeHtml(text(collection.name, collection.title, collection.slug))}</a>`).join("")}</div>` : ""}</div>${contextMarkup(data.subjects, data.terms)}</div></section>
+          <section class="archive-document-section" id="story"><header class="archive-section-heading"><span class="archive-section-index">01 / Context</span><h2 class="archive-section-title">The story</h2></header><div><div class="archive-prose"><div data-retro-kind="dossier" data-retro-id="${escapeHtml(item.entity_id||item.id)}" data-retro-field="story">${story ? paragraphMarkup(story) : "<p>This dossier currently holds the public facts of the work. Its fuller story has not been published yet.</p>"}</div>${data.collections.length ? `<div class="archive-link-chips">${data.collections.map((collection) => `<a class="archive-chip" href="/archive/?collection=${encodeURIComponent(text(collection.slug, collection.id, collection.name))}">${escapeHtml(text(collection.name, collection.title, collection.slug))}</a>`).join("")}</div>` : ""}</div>${contextMarkup(data.subjects, data.terms)}</div></section>
           ${data.documentation.length ? `<section class="archive-document-section" id="documentation"><header class="archive-section-heading"><span class="archive-section-index">02 / Catalogue</span><h2 class="archive-section-title">Documentation</h2></header><div>${documentationMarkup(data.documentation)}</div></section>` : ""}
           ${data.versions.length ? `<section class="archive-document-section" id="evolution"><header class="archive-section-heading"><span class="archive-section-index">03 / Evolution</span><h2 class="archive-section-title">Versions and states</h2></header><div>${evolutionMarkup(data, materials, item)}</div></section>` : ""}
           ${webSnapshotMarkup ? `<section class="archive-document-section" id="website-snapshots"><header class="archive-section-heading"><span class="archive-section-index">04 / Living source</span><h2 class="archive-section-title">Website snapshots</h2></header><div>${webSnapshotMarkup}</div></section>` : ""}
@@ -1331,7 +1334,7 @@
       setupSourceMaterialQuickView(sourceMaterials);
       setupArchiveNoteQuickView(notes);
       setupPaletteMaps();
-      setupArchiveWebSnapshots();
+      setupArchiveWebSnapshots(); const {mountComments}=await import("/js/archive-comments.js");mountComments(app,payload.retrospective_comments||[]);
     } catch (error) {
       app.innerHTML = error.status === 404
         ? errorState("This dossier is not public.", "It may be unpublished, unlisted, or no longer available under this address.")

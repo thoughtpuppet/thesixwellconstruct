@@ -1,4 +1,12 @@
+/* Full official Inter build: retain cv11, which the shared subset may omit. */
+@font-face{font-family:"Archive Note Inter";font-style:normal;font-weight:100 900;font-display:swap;src:url("../assets/fonts/inter/InterVariable.woff2") format("woff2");font-feature-settings:"cv11" 1}
 body.archive-public[data-archive-view="notes"]{background:var(--color-bg);color:var(--color-text)}
+/* Confine the page scrollbar to Archive Notes; shared viewers keep the same accent. */
+html:has(body.archive-public[data-archive-view="notes"]),.archive-note-reader,.archive-note-image-dialog-media{scrollbar-color:var(--color-archive-bright,#B87A32) var(--note-control,var(--color-bg,#0e0e0e))}
+html:has(body.archive-public[data-archive-view="notes"])::-webkit-scrollbar,.archive-note-reader::-webkit-scrollbar,.archive-note-image-dialog-media::-webkit-scrollbar{width:12px;height:12px}
+html:has(body.archive-public[data-archive-view="notes"])::-webkit-scrollbar-track,.archive-note-reader::-webkit-scrollbar-track,.archive-note-image-dialog-media::-webkit-scrollbar-track{background:var(--note-control,var(--color-bg,#0e0e0e))}
+html:has(body.archive-public[data-archive-view="notes"])::-webkit-scrollbar-thumb,.archive-note-reader::-webkit-scrollbar-thumb,.archive-note-image-dialog-media::-webkit-scrollbar-thumb{background:var(--color-archive-bright,#B87A32);border:0;border-radius:0;min-height:44px}
+html:has(body.archive-public[data-archive-view="notes"])::-webkit-scrollbar-corner,.archive-note-reader::-webkit-scrollbar-corner,.archive-note-image-dialog-media::-webkit-scrollbar-corner{background:var(--note-control,var(--color-bg,#0e0e0e))}
 .archive-notes-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:32px}
 .archive-note-card{border:5px solid var(--color-archive,#6D3D15);background:var(--color-bg);min-width:0}
 .archive-note-card>a{display:grid;grid-template-columns:minmax(150px,.75fr) minmax(0,1.25fr);color:inherit;text-decoration:none;height:100%}
@@ -12,30 +20,65 @@ body.archive-public[data-archive-view="notes"]{background:var(--color-bg);color:
 .archive-public .archive-note-provenance{margin:16px 0 0;max-width:380px;color:var(--color-text-dim)!important;font-family:inherit;font-size:.78rem;font-weight:400;letter-spacing:normal!important;line-height:1.65!important;text-transform:none!important}
 .archive-public .archive-note-provenance span{display:block;margin-bottom:5px;color:var(--color-text-muted)!important;font:inherit;font-weight:400;letter-spacing:normal!important;text-transform:none!important}
 .archive-note-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,320px);gap:16px;margin-top:32px;align-items:start}
-.archive-note-reader{border:5px solid var(--color-archive,#6D3D15);max-height:min(72dvh,900px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:var(--color-bg);padding:clamp(18px,3vw,42px);outline:none}
+.archive-note-reader{--note-paper:#000;--note-ink:#f5f5f5;--note-muted:#8e8e93;--note-control:#1c1c1e;--type-body-transform:none;--type-body-tracking-active:normal;--type-body-leading-active:1.45;border:0;max-height:min(72dvh,900px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:var(--note-paper);color:var(--note-ink);padding:0 clamp(24px,3vw,32px) 32px;outline:none;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.archive-note-reader[data-note-theme="light"],.archive-note-image-dialog[data-note-theme="light"]{--note-paper:#fff;--note-ink:#1c1c1e;--note-muted:#737378;--note-control:#f2f2f7;color-scheme:light}
+.archive-note-reader[data-note-theme="dark"],.archive-note-image-dialog[data-note-theme="dark"]{color-scheme:dark}
 .archive-note-reader:focus-visible{box-shadow:0 0 0 5px rgba(252,184,103,.7)}
-.archive-note-reader h2,.archive-note-reader h3,.archive-note-reader h4{text-transform:uppercase;line-height:1.05;margin:1.6em 0 .65em}
-.archive-note-reader p,.archive-note-reader li,.archive-note-reader blockquote{font-family:Georgia,serif;font-size:clamp(1rem,1.35vw,1.22rem);line-height:1.75;color:#f4dfc8}
+.archive-note-reader h2,.archive-note-reader h3,.archive-note-reader h4{text-transform:none!important;letter-spacing:normal!important;line-height:1.25!important;margin:1.2em 0 .5em;color:var(--note-ink);font-family:inherit}
+.archive-note-reader p,.archive-note-reader li,.archive-note-reader blockquote{font-family:var(--note-body-font,inherit);font-size:17px;font-weight:400;line-height:var(--note-body-leading,1.529411765)!important;color:var(--note-body-ink,var(--note-ink))!important;text-transform:none!important;letter-spacing:var(--note-body-tracking,-.02em)!important}
 .archive-note-reader p:first-child{margin-top:0}
-.archive-note-reader a{color:#FCB867;text-decoration-thickness:2px;text-underline-offset:4px}
-.archive-note-reader code{font-family:ui-monospace,monospace;color:#FCB867}
+.archive-note-reader a{color:var(--note-ink);text-decoration-thickness:2px;text-underline-offset:4px}
+.archive-note-reader code{font-family:ui-monospace,monospace;color:inherit}
 .archive-note-reader blockquote{border-left:5px solid var(--color-archive,#6D3D15);padding-left:18px;margin-left:0}
-.archive-note-asset{margin:0 0 clamp(28px,5vw,64px);border:5px solid var(--color-archive,#6D3D15);background:#111}
+/* iPhone reference: regular 17px body, approximately 26px baseline spacing.
+   Keep native Apple typography first. Inter is the existing licensed web-font
+   fallback, not a claim that SF Pro is installed on non-Apple devices. */
+.archive-note-content{--note-body-font:-apple-system,BlinkMacSystemFont,"Archive Note Inter",Inter,"Helvetica Neue",Arial,sans-serif;--note-body-leading:1.529411765;--note-body-tracking:-.02em;--note-body-ink:#d6d6d6;--type-body-leading-active:var(--note-body-leading);--type-body-tracking-active:var(--note-body-tracking);max-width:720px;margin:0 auto;font:400 17px/var(--note-body-leading) var(--note-body-font);font-optical-sizing:auto;letter-spacing:var(--note-body-tracking)!important;color:var(--note-body-ink)}
+.archive-note-reader[data-note-theme="light"] .archive-note-content{--note-body-ink:#1c1c1e}
+.archive-note-content,.archive-note-content *{text-transform:none!important}
+.archive-note-content *{letter-spacing:inherit!important}
+.archive-note-content p{margin:0 0 12px}
+/* iOS supplies SF rather than Inter: its single-storey a is a different feature.
+   Keep this off desktop Inter, where ss07 would change punctuation instead. */
+@supports (-webkit-touch-callout:none){.archive-note-content{font-feature-settings:"ss07" 1}}
+.archive-note-reader-toolbar{position:sticky;top:0;z-index:2;display:flex;justify-content:flex-end;padding:8px 0;background:var(--note-paper)}
+.archive-note-appearance{display:flex;gap:4px}
+.archive-note-appearance button{min-width:56px;min-height:44px;padding:8px 12px;border:0;border-radius:0;background:transparent;color:var(--color-archive-bright,#B87A32);font:700 12px/1.2 var(--font-display,Inter,Arial,sans-serif);text-transform:uppercase!important;letter-spacing:.08em!important;cursor:pointer}
+.archive-note-appearance button[aria-pressed="true"]{background:var(--note-control)}
+.archive-note-appearance button:focus-visible{outline:5px solid var(--color-archive-bright,#B87A32);outline-offset:0}
+.archive-note-asset{position:relative;margin:0 0 12px;border:0;background:transparent}
 .archive-note-asset img{display:block;width:100%;height:auto;max-height:none}
 .archive-note-asset-trigger{position:relative;display:block;width:100%;padding:0;border:0;background:transparent;color:inherit;cursor:zoom-in;text-align:left}
-.archive-note-asset-trigger>span{position:absolute;right:12px;bottom:12px;padding:8px 10px;background:var(--color-bg);border:5px solid var(--color-archive,#6D3D15);color:var(--color-text-muted);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;opacity:0;transition:opacity .18s ease}
-.archive-note-asset-trigger:hover>span,.archive-note-asset-trigger:focus-visible>span{opacity:1}
 .archive-note-asset-trigger:focus-visible{outline:5px solid rgba(252,184,103,.7);outline-offset:-5px}
-.archive-note-asset figcaption{border-top:5px solid var(--color-archive,#6D3D15);padding:14px 16px;color:#B87A32;text-transform:uppercase;font-size:.72rem;line-height:1.55;letter-spacing:.07em}
-.archive-note-image-dialog{width:min(1180px,calc(100vw - 32px));max-height:94dvh;padding:0;border:5px solid var(--color-archive,#6D3D15);background:var(--color-bg);color:var(--color-text)}
+.archive-note-image-comments{display:inline-flex;align-items:center;line-height:1}
+.archive-note-asset>.archive-note-image-comments{position:absolute;right:-24px;bottom:0}
+.archive-note-image-comments:empty{display:none}
+.archive-note-image-comments button.retro-marker{margin:0;vertical-align:middle}
+[data-note-theme="dark"] [data-note-drawing="true"] img,[data-note-theme="dark"] img[data-note-drawing="true"]{filter:url(#archive-note-drawing-dark)}
+.archive-note-image-dialog{--note-paper:#000;--note-ink:#f5f5f5;--note-muted:#8e8e93;--note-control:#1c1c1e;position:fixed;inset:0;width:min(1180px,calc(100vw - 24px));height:calc(100dvh - 24px);max-width:none;max-height:none;box-sizing:border-box;margin:auto;padding:0;border:0;background:var(--note-paper);color:var(--note-ink);overflow:hidden}
 .archive-note-image-dialog::backdrop{background:rgba(0,0,0,.9)}
-.archive-note-image-dialog-shell{display:grid;grid-template-rows:auto minmax(0,1fr);max-height:calc(94dvh - 10px)}
-.archive-note-image-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;border-bottom:5px solid var(--color-archive,#6D3D15);color:var(--color-text-muted)}
-.archive-note-image-dialog header button{border:5px solid var(--color-archive,#6D3D15);background:transparent;color:#FCB867;padding:8px 12px;text-transform:uppercase;font-weight:900;cursor:pointer}
-.archive-note-image-dialog-media{overflow:auto;overscroll-behavior:contain;padding:16px;text-align:center}
-.archive-note-image-dialog-media img{display:block;width:auto;max-width:100%;height:auto;max-height:calc(94dvh - 150px);margin:0 auto}
-.archive-note-image-dialog-media p{max-width:760px;margin:14px auto 0;color:var(--color-text-muted);font-family:Georgia,serif;line-height:1.6;text-align:left}
+.archive-note-image-dialog-shell{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);min-width:0;height:100%;max-height:none}
+.archive-note-image-dialog header{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;border:0;color:var(--note-ink)}
+.archive-note-image-dialog header button:not(.retro-marker){min-width:44px;min-height:44px;border:0;border-radius:0;background:var(--note-control);color:var(--color-archive-bright,#B87A32);padding:8px 12px;font:700 12px/1.2 var(--font-display,Inter,Arial,sans-serif);text-transform:uppercase!important;letter-spacing:.08em!important;cursor:pointer}
+.archive-note-image-dialog header button:disabled{opacity:.3;cursor:default}
+.archive-note-image-dialog header button:focus-visible{outline:5px solid var(--color-archive-bright,#B87A32);outline-offset:0}
+.archive-note-image-dialog [data-note-image-close]{margin-left:auto}
+.archive-note-zoom-tools{display:flex;gap:4px;align-items:center}
+.archive-note-zoom-tools output{min-width:40px;text-align:center;color:var(--color-archive-bright,#B87A32);font:400 12px/1.2 var(--font-display,Inter,Arial,sans-serif);letter-spacing:normal!important}
+.archive-note-image-dialog-media{position:relative;overflow:auto;overscroll-behavior:contain;padding:0;touch-action:none;cursor:zoom-in;outline:none}
+.archive-note-image-dialog-media[data-zoomed="true"]{cursor:grab}
+.archive-note-image-dialog-media[data-zoomed="true"]:active{cursor:grabbing}
+.archive-note-image-dialog-media:focus-visible{outline:5px solid var(--color-archive-bright,#B87A32);outline-offset:-5px}
+.archive-note-zoom-stage{position:relative;min-width:100%;min-height:100%}
+.archive-note-image-dialog-media img{position:absolute;display:block;max-width:none;max-height:none;margin:0;user-select:none;-webkit-user-drag:none}
+.archive-note-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 body.archive-note-image-open{overflow:hidden}
+@media(max-width:480px){
+  .archive-note-image-dialog header{gap:4px;padding:8px}
+  .archive-note-image-dialog header button:not(.retro-marker){padding:8px}
+  .archive-note-zoom-tools{gap:2px}
+  .archive-note-zoom-tools output{min-width:36px;font-size:11px}
+}
 .archive-note-context{border:5px solid var(--color-archive,#6D3D15);padding:20px;position:sticky;top:18px}
 .archive-note-context h2{font-size:.78rem;letter-spacing:.15em;text-transform:uppercase;margin:0 0 14px}
 .archive-note-main-record{display:grid;gap:10px;margin:0 0 20px;padding:16px;border:5px solid var(--color-archive-bright,#B87A32)}
@@ -81,14 +124,16 @@ body.archive-note-dialog-open{overflow:hidden}
   .archive-note-card>a{grid-template-columns:1fr}
   .archive-note-card-media{min-height:220px;max-height:55vh}
   .archive-note-context{position:static}
-  .archive-note-reader{max-height:calc(100dvh - 150px);padding:16px}
+  /* The Archive shell already supplies a 10px mobile inset: add 16px here
+     rather than narrowing the source twice. Native overlay scrollbars keep
+     a 341px reading measure in a 393px iPhone viewport. */
+  .archive-note-reader{max-height:calc(100dvh - 150px);padding:0 16px 24px;scrollbar-gutter:auto;scrollbar-width:thin}
+  .archive-note-asset>.archive-note-image-comments{right:-16px}
   .archive-note-dialog{width:calc(100vw - 16px);height:calc(100dvh - 16px);max-height:none}
   .archive-note-dialog-shell{height:100%;max-height:none}
   .archive-note-dialog-content .archive-note-reader{max-height:calc(100dvh - 104px)}
-  .archive-note-asset-trigger>span{opacity:1}
-  .archive-note-image-dialog{width:calc(100vw - 16px);height:calc(100dvh - 16px);max-height:none}
+  .archive-note-image-dialog{width:100vw;height:100dvh;max-height:none}
   .archive-note-image-dialog-shell{height:100%;max-height:none}
-  .archive-note-image-dialog-media img{max-height:calc(100dvh - 130px)}
   .archive-open-notebook-groups{gap:24px}
   .archive-journal-entry-media{grid-auto-columns:minmax(140px,78%)}
 }
