@@ -244,6 +244,11 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
     VALUES('kinmarking-route-test','kinmarking','KINMARKING','announced','closed',datetime('now'),datetime('now'))`).run();
   database.prepare(`INSERT INTO event_occurrences(id,event_id,session_number,title,starts_at,ends_at,status,created_at,updated_at)
     VALUES('kinmarking-route-occurrence','kinmarking-route-test','01','Skin As Archive','2026-11-21T19:00:00Z','2026-11-22T00:00:00Z','closed',datetime('now'),datetime('now'))`).run();
+  const laterEditions = [['02','Color as Inheritance','2027-01-16'],['03','Symbols as Language','2027-03-20'],['04','','2027-05-15']];
+  for (const [number,theme,date] of laterEditions) {
+    database.prepare(`INSERT INTO event_occurrences(id,event_id,session_number,title,starts_at,status,created_at,updated_at)
+      VALUES(?,?,?,?,?,'closed',datetime('now'),datetime('now'))`).run(`kinmarking-route-${number}`,'kinmarking-route-test',number,theme,`${date}T19:00:00Z`);
+  }
   const template = readFileSync(join(ROOT, "events", "detail", "index.html"), "utf8");
   const env = {
     PUBLIC_SITE_URL: ORIGIN,
@@ -263,9 +268,24 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
   assert.equal(payload.event.slug, "kinmarking");
   assert.equal(payload.occurrence.eventId, "kinmarking-route-test");
   assert.equal(payload.occurrence.id, "kinmarking-route-occurrence");
+  for (const [number,theme,date] of laterEditions) {
+    const editionPath = `/events/kinmarking-${number}/`;
+    const later = await worker.fetch(new Request(`${ORIGIN}${editionPath}`),env,{});
+    assert.equal(later.status,200,editionPath);
+    const laterHtml = await later.text();
+    assert.ok(laterHtml.includes(`<title>KINMARKING ${number}${theme ? `: ${theme}` : ''}`));
+    assert.ok(laterHtml.includes(`<link rel="canonical" href="${ORIGIN}${editionPath}">`));
+    const laterPayload = JSON.parse(laterHtml.match(/<script id="event-record-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+    assert.equal(laterPayload.occurrence.id,`kinmarking-route-${number}`);
+    assert.ok(laterPayload.occurrence.startsAt.startsWith(date));
+    const crossed = await worker.fetch(new Request(`${ORIGIN}${editionPath}?occurrence=kinmarking-route-occurrence`),env,{});
+    assert.equal(crossed.status,404);
+  }
   const wrongOccurrence = await worker.fetch(new Request(`${ORIGIN}${path}?occurrence=unknown`), env, {});
   assert.equal(wrongOccurrence.status, 404);
   database.prepare("UPDATE events SET publication_state='draft' WHERE id='kinmarking-route-test'").run();
   const draft = await worker.fetch(new Request(`${ORIGIN}${path}`), env, {});
   assert.equal(draft.status, 404);
+  const laterDraft = await worker.fetch(new Request(`${ORIGIN}/events/kinmarking-02/`),env,{});
+  assert.equal(laterDraft.status,404);
 });

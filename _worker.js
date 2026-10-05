@@ -1220,7 +1220,8 @@ async function serveEventDetailPage(request, env, pathname) {
   const slug = normalizePath(pathname).split("/").filter(Boolean)[1] || "";
   if (!slug) return notFoundPage(request, env);
   const firstKinmarkingEdition = slug === KINMARKING_FIRST_EDITION_SLUG;
-  const contextSlug = firstKinmarkingEdition ? "kinmarking" : slug;
+  const kinmarkingSessionNumber = firstKinmarkingEdition ? "01" : slug.match(/^kinmarking-(02|03|04)$/)?.[1] || "";
+  const contextSlug = kinmarkingSessionNumber ? "kinmarking" : slug;
   const contextUrl = new URL(`/api/events/${encodeURIComponent(contextSlug)}/context`, request.url);
   const requestedOccurrence = new URL(request.url).searchParams.get("occurrence");
   if (requestedOccurrence) contextUrl.searchParams.set("occurrence", requestedOccurrence);
@@ -1243,13 +1244,16 @@ async function serveEventDetailPage(request, env, pathname) {
   const payload = await apiResponse.json();
   const event = payload.event;
   if (!event) return notFoundPage(request, env);
-  const selected = firstKinmarkingEdition
-    ? event.occurrences?.find((occurrence) => occurrence.sessionNumber === "01")
+  const selected = kinmarkingSessionNumber
+    ? event.occurrences?.find((occurrence) => occurrence.sessionNumber === kinmarkingSessionNumber)
     : payload.occurrence || event.occurrences?.[0] || null;
-  if (firstKinmarkingEdition && (!selected || (requestedOccurrence && requestedOccurrence !== selected.id))) return notFoundPage(request, env);
-  if (firstKinmarkingEdition) payload.occurrence = selected;
-  const publicTitle = firstKinmarkingEdition
-    ? `KINMARKING 01: ${selected.title && selected.title !== "Skin As Archive" ? selected.title : "Oral Histories & Tattooing"}`
+  if (kinmarkingSessionNumber && (!selected || (requestedOccurrence && requestedOccurrence !== selected.id))) return notFoundPage(request, env);
+  if (kinmarkingSessionNumber) payload.occurrence = selected;
+  const editionTheme = firstKinmarkingEdition
+    ? selected.title && selected.title !== "Skin As Archive" ? selected.title : "Oral Histories & Tattooing"
+    : selected?.title || "";
+  const publicTitle = kinmarkingSessionNumber
+    ? `KINMARKING ${kinmarkingSessionNumber}${editionTheme ? `: ${editionTheme}` : ""}`
     : event.title;
 
   let assetResponse = await servePublicAsset(request, env, eventDetailAssetPath(pathname), { seo: false });
