@@ -117,6 +117,14 @@
     '.tile-kicker', '.meta-kicker'
   ].join(',');
 
+  function editorPagePathname() {
+    // Keep existing first-edition drafts, history, and undo available after the URL rename.
+    return window.location.pathname.replace(
+      /^\/events\/kinmarking-01-oral-histories-and-tattooing\/$/,
+      '/events/kinmarking-01-skin-as-archive/'
+    );
+  }
+
   function pageKey() {
     var params = new URLSearchParams(window.location.search);
     params.delete('edit');
@@ -125,7 +133,7 @@
     }).map(function(entry) {
       return encodeURIComponent(entry[0]) + '=' + encodeURIComponent(entry[1]);
     }).join('&');
-    return STORAGE_PREFIX + window.location.pathname + (query ? '?' + query : '');
+    return STORAGE_PREFIX + editorPagePathname() + (query ? '?' + query : '');
   }
 
   function shouldAutoEnable() {
@@ -211,7 +219,7 @@
   function readStoredUndoToken() {
     try {
       var record = JSON.parse(window.sessionStorage.getItem(LAST_UNDO_KEY) || '{}');
-      return record.pathname === window.location.pathname && typeof record.token === 'string' ? record.token : '';
+      return record.pathname === editorPagePathname() && typeof record.token === 'string' ? record.token : '';
     } catch (error) {
       return '';
     }
@@ -220,7 +228,7 @@
   function rememberUndoToken(token) {
     lastUndoToken = token || '';
     if (lastUndoToken) {
-      window.sessionStorage.setItem(LAST_UNDO_KEY, JSON.stringify({ pathname:window.location.pathname, token:lastUndoToken }));
+      window.sessionStorage.setItem(LAST_UNDO_KEY, JSON.stringify({ pathname:editorPagePathname(), token:lastUndoToken }));
     } else {
       window.sessionStorage.removeItem(LAST_UNDO_KEY);
     }
@@ -253,7 +261,7 @@
       updateSourceButton();
       return Promise.resolve(false);
     }
-    return callToolApi('/__tools/live-editor/context', { pathname: window.location.pathname })
+    return callToolApi('/__tools/live-editor/context', { pathname: editorPagePathname() })
       .then(function(context) {
         helperContext = context;
         if (context.page && context.page.pathSegments && context.page.hash) {
@@ -1677,7 +1685,7 @@
     if (!historyDrawer) return;
     var body = historyDrawer.querySelector('.history-body');
     body.innerHTML = '<p class="history-empty">Loading revision history…</p>';
-    callToolApi('/__tools/live-editor/history', { pathname:window.location.pathname }).then(function(result) {
+    callToolApi('/__tools/live-editor/history', { pathname:editorPagePathname() }).then(function(result) {
       renderHistoryList(result.revisions || []);
     }).catch(function(error) {
       if (historyDrawer) body.innerHTML = '<p class="history-empty">' + escapeText(error.message || 'Revision history could not be loaded.') + '</p>';
@@ -1701,7 +1709,7 @@
     button.disabled = true;
     detail.hidden = false;
     detail.innerHTML = '<p class="history-meta">Loading exact before and after values…</p>';
-    callToolApi('/__tools/live-editor/history/detail', { pathname:window.location.pathname, revisionId:revisionId }).then(function(result) {
+    callToolApi('/__tools/live-editor/history/detail', { pathname:editorPagePathname(), revisionId:revisionId }).then(function(result) {
       var revision = result.revision || {};
       detail.innerHTML = (revision.files || []).map(function(file) {
         return [
@@ -1732,7 +1740,7 @@
     button.disabled = true;
     updateStatus('Restoring source targets…');
     callToolApi('/__tools/live-editor/history/restore', {
-      pathname:window.location.pathname,
+      pathname:editorPagePathname(),
       revisionId:revisionId,
       mode:mode
     }).then(function(result) {
@@ -1960,7 +1968,7 @@
         }
         return base;
       });
-      return callToolApi('/__tools/live-editor/apply', { pathname:window.location.pathname, edits:edits });
+      return callToolApi('/__tools/live-editor/apply', { pathname:editorPagePathname(), edits:edits });
     }).then(function(result) {
       (result.files || []).forEach(function(file) {
         sourceHashes[(file.pathSegments || []).join('/')] = file.hash || '';

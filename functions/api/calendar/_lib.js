@@ -8979,6 +8979,28 @@ function renderedSocialPostContext(html, media = []) {
   return { author:"", postedDate:"", caption:"" };
 }
 
+function renderedSocialLeadTitle(context, evidenceText) {
+  const explicit = pastedSocialEvidenceTitle(evidenceText);
+  if (explicit) return explicit;
+  const caption = cleanSourceText(context?.caption).replace(/^["“]|["”]$/g, "").trim();
+  if (!caption) return "";
+  const candidates = [
+    caption.match(/^[^:\n]{0,90}:\s*((?:an?|the)\s+(?:discussion|conversation|dialogue|panel|lecture|talk|teach[- ]in|screening|performance|workshop|reading|forum|symposium)\b[^.!?\n]{0,150})/i)?.[1],
+    caption.match(/^([^–—|\n]{3,160})\s*(?:–|—|\|)\s*(?:(?:sun|mon|tue|wed|thu|fri|sat)(?:day)?\b|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\b)/i)?.[1],
+    caption.match(/^([^.!?\n]{8,160})[.!?]/)?.[1],
+  ];
+  for (const value of candidates) {
+    const title = cleanSourceText(value)
+      .replace(/\s+(?:w\/|with)\s+(?:dr\.?\s+)?[\s\S]*$/i, "")
+      .replace(/\s+(?:rsvp|register|tickets?)\b[\s\S]*$/i, "")
+      .trim();
+    if (title.length < 8 || title.length > 180) continue;
+    if (!/\b(?:discussion|conversation|dialogue|panel|lecture|talk|teach[- ]in|screening|exhibition|performance|workshop|concert|showcase|festival|reading|forum|symposium|event)\b/i.test(title)) continue;
+    return title.charAt(0).toUpperCase() + title.slice(1);
+  }
+  return "";
+}
+
 function linkedInstagramRecommendationMedia(html, sourceUrl) {
   const targetPostId = pastedSocialPostId(sourceUrl, "instagram");
   const linkedMedia = new Set();
@@ -9214,6 +9236,63 @@ function enrichPastedSocialEvent(item, sourceUrl, renderedHtml, media) {
     extractionNotes,
     carouselImages,
   };
+}
+
+function renderedSocialRawLeadEvent(sourceUrl, renderedHtml) {
+  const media = renderedSocialMedia(renderedHtml, sourceUrl);
+  const context = renderedSocialPostContext(renderedHtml, media);
+  const focusedEvidenceText = [
+    context.caption,
+    ...renderedSocialMetaContents(renderedHtml),
+    ...media.map((image) => image.altText),
+  ].map(cleanSourceText).filter(Boolean).join("\n");
+  const eventSignal = /\b(?:discussion|conversation|dialogue|panel|lecture|talk|teach[- ]in|screening|exhibition|performance|workshop|concert|showcase|festival|reading|forum|symposium|event)\b/i.test(focusedEvidenceText);
+  const creativeSignal = /\b(?:art(?:ist|s)?|film(?:maker|makers)?|cinema|poet(?:ry)?|writer|author|music(?:ian)?|hip[- ]?hop|design(?:er)?|creative|cultur(?:e|al)|social practice|social change|spiritual(?:ity)?|religion|christian(?:ity)?|theolog|neuroscien|anthropolog|philosoph)\b/i.test(focusedEvidenceText);
+  const localSignal = /\b(?:atlanta|atl)\b|\b(?:on|via)\s+zoom\b|\bvirtual\b|\bonline\b/i.test(focusedEvidenceText);
+  const title = renderedSocialLeadTitle(context, focusedEvidenceText);
+  if (!title || !eventSignal || !creativeSignal || !localSignal) return null;
+  return enrichPastedSocialEvent({
+    title,
+    description: cleanSourceText(context.caption).slice(0, 4000),
+    caption: context.caption,
+    organizer: context.author,
+    organizerUrl: "",
+    venueName: "",
+    venueAddress: "",
+    locationDisclosure: "public",
+    venueUrl: "",
+    city: /\batlanta\b/i.test(focusedEvidenceText) ? "Atlanta" : "",
+    region: /\batlanta\b/i.test(focusedEvidenceText) ? "GA" : "",
+    startsAt: "",
+    endsAt: "",
+    confirmedThrough: "",
+    visitingHours: [],
+    visitingHoursNote: "",
+    visitingHoursSourceUrl: "",
+    eventUrl: sourceUrl,
+    ticketUrl: "",
+    imageUrl: "",
+    imageAlt: "",
+    accessStatus: "public",
+    accessNotes: "",
+    audiences: ["Public"],
+    eventStructure: "single",
+    dateKind: "timed",
+    timezone: TIME_ZONE,
+    subjects: [],
+    formats: [],
+    experimental: false,
+    authorHandle: "",
+    authorDisplayName: context.author,
+    authorIsVerified: false,
+    postedAt: context.postedDate,
+    mediaType: media.length > 1 ? "carousel" : media.length ? "image" : "",
+    extractionNotes: ["AI extraction was unavailable. This private raw lead preserves only deterministic public caption and accessibility evidence; confirm its title, schedule, venue, and registration details in Studio."],
+    conflicts: [],
+    carouselImages: [],
+    occurrences: [],
+    recurringOccurrences: [],
+  }, sourceUrl, renderedHtml, media);
 }
 
 function pastedSocialVisionSchema() {
@@ -10709,20 +10788,23 @@ function inferSubjectsAndFormats(event) {
     subjects.add("art-making");
   }
   if (/film|cinema|screening|moving image/.test(text)) subjects.add("film");
-  if (/poetry|music|sound|open mic/.test(text)) subjects.add("poetry-music");
+  if (/poetry|music|sound|open mic|hip[ -]?hop|rapper|composer|songwriter|\bwriter\b|\bauthor\b|literary/.test(text)) subjects.add("poetry-music");
   if (/technology|tech\b|robot|digital/.test(text)) subjects.add("technology");
   if (/artificial intelligence|\bai\b|machine learning/.test(text)) subjects.add("ai");
   if (/new media|creative technology|interactive|virtual reality|biofeedback/.test(text)) subjects.add("creative-technology");
-  if (/anthropolog|archaeolog|ethnograph|material culture|archiv|memory keeper|cultural heritage|preservation/.test(text)) subjects.add("anthropology");
-  if (/engineering|fabrication|maker(?:space)?|robotics/.test(text)) subjects.add("engineering");
-  if (/philosoph|ethics|aesthetics|epistemolog|metaphysics/.test(text)) subjects.add("philosophy");
+  if (/anthropolog|archaeolog|ethnograph|material culture|archiv|memory keeper|cultural heritage|preservation|cultural criticism|cultural studies|social practice|social change/.test(text)) subjects.add("anthropology");
+  if (/engineering|fabrication|\bmaker(?:space)?\b|robotics/.test(text)) subjects.add("engineering");
+  if (/philosoph|ethics|aesthetics|epistemolog|metaphysics|religion|spiritual|christian|theolog|radicalism/.test(text)) subjects.add("philosophy");
   if (/exhibition|gallery|opening reception/.test(text)) formats.add("exhibition");
   if (/screening|film program/.test(text)) formats.add("screening");
   if (/performance|concert|live music|open mic/.test(text)) formats.add("performance");
   if (/experimental|immersive|interdisciplinary/.test(text)) formats.add("experimental-event");
-  if (/lecture|talk|keynote/.test(text)) formats.add("lecture-talk");
-  if (/panel/.test(text)) formats.add("panel");
-  if (/workshop|drawing group|drawing night|figure drawing/.test(text) || participatoryArt) formats.add("workshop");
+  const panelFormat = /panel|roundtable/.test(text);
+  const workshopFormat = /workshop|drawing group|drawing night|figure drawing/.test(text) || participatoryArt;
+  if (/lecture|\btalk\b|keynote/.test(text)
+    || (/discussion|conversation|dialogue|teach[ -]?in|forum/.test(text) && !panelFormat && !workshopFormat)) formats.add("lecture-talk");
+  if (panelFormat) formats.add("panel");
+  if (workshopFormat) formats.add("workshop");
   if (/conference|symposium/.test(text)) formats.add("conference");
   event.subjects = [...subjects].filter((value) => SUBJECTS.has(value));
   event.formats = [...formats].filter((value) => FORMATS.has(value));
@@ -11806,7 +11888,21 @@ function scoutSchema() {
 
 function socialSearchTerms(profile, platform) {
   const settings = profile.socialSettings?.[platform] || DEFAULT_SOCIAL_SETTINGS[platform];
-  return [...new Set([...(settings.keywords || []), ...profile.positiveConcepts, ...Object.keys(profile.weightedSubjects), ...Object.keys(profile.weightedFormats)].map(asString).filter(Boolean))].slice(0, 12);
+  const groups = [settings.keywords || [], profile.positiveConcepts || [], Object.keys(profile.weightedSubjects || {}), Object.keys(profile.weightedFormats || {})];
+  const terms = [];
+  const seen = new Set();
+  const longest = Math.max(0, ...groups.map((group) => group.length));
+  for (let index = 0; index < longest && terms.length < 24; index += 1) {
+    for (const group of groups) {
+      const value = asString(group[index]);
+      const key = normalizeText(value);
+      if (!value || seen.has(key)) continue;
+      seen.add(key);
+      terms.push(value);
+      if (terms.length >= 24) break;
+    }
+  }
+  return terms;
 }
 
 function exhibitionArtistSchema() {
@@ -12282,7 +12378,7 @@ async function maybeRegisterEventiveFestivalSource(db, rawEvent) {
   return { event, registered:true, sourceId };
 }
 
-async function storeOpenAiEvents(env, db, profile, events, { provenance = [], platform = "", channel = "general_web", allowNativeFlyer = false, allowRenderedFlyer = false, resolveSources = true, nativePosts = [], limit = 20, runId = "" } = {}) {
+async function storeOpenAiEvents(env, db, profile, events, { provenance = [], platform = "", channel = "general_web", allowNativeFlyer = false, allowRenderedFlyer = false, allowIncompleteCandidate = false, resolveSources = true, nativePosts = [], limit = 20, runId = "" } = {}) {
   let candidates = 0;
   let published = 0;
   let duplicates = 0;
@@ -12306,7 +12402,7 @@ async function storeOpenAiEvents(env, db, profile, events, { provenance = [], pl
         ? await resolveDiscoveryProposal(env, db, profile, { name: platform ? `${platform} discovery` : "Web discovery", url: leadUrl, source_type: "discovery", trust_level: "discovery" }, event)
         : { proposal:event, citations:[], audit:null };
       event = resolved.proposal;
-      const stored = await upsertScoutProposal(env, db, event, "openai_web_search", [...provenance, ...resolved.citations], profile);
+      const stored = await upsertScoutProposal(env, db, event, "openai_web_search", [...provenance, ...resolved.citations], profile, { allowIncompleteCandidate });
       await finalizeScoutIntake(env, db, stored, event);
       if (stored.publication?.published) published += 1;
       await recordSourceResolutionAttempt(db, resolved.audit, stored.candidate?.id || "", runId);
@@ -12436,9 +12532,28 @@ function roundRobinInstagramPosts(scans, maximum) {
 
 async function inspectInstagramPost(env, source, postUrl, channel) {
   const rendered = await browserContent(env, postUrl, "", { includeImages:true });
-  const extracted = await openAiPastedSocialEvents(env, postUrl, rendered.text, 1);
-  const event = extracted.events[0];
-  if (!event) return { event:null, browserMs:rendered.browserMs, usage:extracted.usage || {} };
+  let extracted = { events:[], usage:{} };
+  let extractionError = null;
+  try {
+    extracted = await openAiPastedSocialEvents(env, postUrl, rendered.text, 1);
+  } catch (error) {
+    extractionError = error;
+  }
+  let event = extracted.events[0];
+  let fallback = false;
+  let warning = "";
+  if (!event) {
+    event = renderedSocialRawLeadEvent(postUrl, rendered.text);
+    if (event) {
+      fallback = true;
+      warning = extractionError
+        ? `AI extraction failed; the visible post was preserved as a deterministic private lead: ${asString(extractionError.message).slice(0, 180)}`
+        : "AI extraction returned no event; the visible post was preserved as a deterministic private lead.";
+    } else if (extractionError) {
+      throw extractionError;
+    }
+  }
+  if (!event) return { event:null, browserMs:rendered.browserMs, usage:extracted.usage || {}, fallback:false, warning:"" };
   const proposal = browserPastedLinkProposal(event, { name:source.name || `@${source.handle}`, url:postUrl });
   const postId = pastedSocialPostId(postUrl, "instagram");
   return {
@@ -12456,6 +12571,8 @@ async function inspectInstagramPost(env, source, postUrl, channel) {
     }),
     browserMs:rendered.browserMs,
     usage:extracted.usage || {},
+    fallback,
+    warning,
   };
 }
 
@@ -12469,7 +12586,7 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
   const exactAccountInstruction = registeredAccounts
     ? `Inspect the newest public posts from these exact registered accounts first: ${registeredAccounts}. Do not treat a search with zero inspected posts as proof that these accounts have no new events.`
     : "";
-  const query = `${exactAccountInstruction} Search ${platform} for newly announced public Atlanta metro creative events and virtual programs from Atlanta-based organizers: lectures, panels, workshops, screenings, exhibitions, performances, technology, AI, and experimental programs in the next ${profile.dateHorizonDays} days. Prioritize ${[...terms, ...tags, "Atlanta", "ATL"].join(", ")}. Return the original post URL and author handle for every proposal.`;
+  const query = `${exactAccountInstruction} Search ${platform} for newly announced public Atlanta metro creative events and virtual programs from Atlanta-based organizers: lectures, panels, workshops, screenings, exhibitions, performances, technology, AI, experimental programs, and interdisciplinary cultural or intellectual conversations where the creative relevance comes from participating filmmakers, writers, musicians, artists, designers, or cultural workers, in the next ${profile.dateHorizonDays} days. Prioritize ${[...terms, ...tags, "Atlanta interdisciplinary conversation", "Atlanta cultural discussion", "Atlanta filmmaker talk", "Atlanta writers and musicians", "Atlanta spirituality and social change", "Atlanta", "ATL"].join(", ")}. Return the original post URL and author handle for every proposal.`;
   const limit = Math.min(connector.perRunLimit, settings.perRunLimit);
   const sourceDetails = [];
   let exactEvents = [];
@@ -12516,7 +12633,7 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
       try {
         const result = await inspectInstagramPost(env, source, url, connector.id);
         browserMs += result.browserMs;
-        return { source, url, inspected:true, event:result.event, error:"" };
+        return { source, url, inspected:true, event:result.event, fallback:result.fallback, warning:result.warning, error:"" };
       } catch (error) {
         scanFailures += 1;
         return { source, url, inspected:false, event:null, error:asString(error?.message || error) };
@@ -12529,12 +12646,14 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
       const successful = attempts.filter((item) => item.inspected).length;
       const failed = attempts.length - successful;
       const eventCount = attempts.filter((item) => item.event).length;
+      const fallbackCount = attempts.filter((item) => item.fallback).length;
       const error = scan.error || attempts.find((item) => item.error)?.error || "";
-      const warning = successful ? "" : error || (scan.links.length
+      const fallbackWarning = fallbackCount ? `${fallbackCount} post${fallbackCount === 1 ? " was" : "s were"} preserved as deterministic private lead${fallbackCount === 1 ? "" : "s"} because AI extraction was unavailable or incomplete.` : "";
+      const warning = [fallbackWarning, error || (!successful ? scan.links.length
         ? "No post from this account fit within the connector limit or completed inspection."
-        : "No visible post or reel links were found on the rendered profile.");
+        : "No visible post or reel links were found on the rendered profile." : "")].filter(Boolean).join(" ");
       sourceDetails.push({
-        status:successful ? (failed ? "partial" : "ok") : "warning",
+        status:successful ? (failed || fallbackCount ? "partial" : "ok") : "warning",
         sourceId:scan.source.id,
         account:`@${scan.source.handle}`,
         profileUrl:scan.source.profile_url,
@@ -12543,6 +12662,7 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
         postsInspected:successful,
         postsFailed:failed,
         eventsExtracted:eventCount,
+        extractionFallbacks:fallbackCount,
         ...(warning ? { warning } : {}),
       });
       await updateSocialSourceResult(db, scan.source.id, successful
@@ -12554,13 +12674,15 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
       const successful = attempts.filter((item) => item.inspected).length;
       const failed = attempts.length - successful;
       const eventCount = attempts.filter((item) => item.event).length;
-      const warning = scan.error || (!successful
+      const fallbackCount = attempts.filter((item) => item.fallback).length;
+      const fallbackWarning = fallbackCount ? `${fallbackCount} post${fallbackCount === 1 ? " was" : "s were"} preserved as deterministic private lead${fallbackCount === 1 ? "" : "s"} because AI extraction was unavailable or incomplete.` : "";
+      const warning = [fallbackWarning, scan.error || (!successful
         ? scan.links.length
           ? "No post from this hashtag fit within the connector limit or completed inspection."
           : "No visible post or reel links were found on the rendered hashtag page."
-        : "");
+        : "")].filter(Boolean).join(" ");
       sourceDetails.push({
-        status:successful ? (failed ? "partial" : "ok") : "warning",
+        status:successful ? (failed || fallbackCount ? "partial" : "ok") : "warning",
         topic:`#${scan.tag}`,
         topicUrl:scan.topicUrl,
         profileLinksFound:scan.links.length,
@@ -12568,6 +12690,7 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
         postsInspected:successful,
         postsFailed:failed,
         eventsExtracted:eventCount,
+        extractionFallbacks:fallbackCount,
         ...(warning ? { warning } : {}),
       });
     }
@@ -12576,6 +12699,7 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
     platform,
     channel:connector.id,
     allowRenderedFlyer:true,
+    allowIncompleteCandidate:true,
     resolveSources:false,
     limit,
     runId,
@@ -12594,11 +12718,15 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
   const accountCoverageConfirmed = !registered.length || (platform === "instagram" && uncoveredAccounts.length === 0);
   const topicPostsInspected = sourceDetails.filter((detail) => detail.topic).reduce((total, detail) => total + detail.postsInspected, 0);
   const topicCoverageConfirmed = !topicTags.length || topicPostsInspected > 0;
-  const coverageConfirmed = accountCoverageConfirmed && topicCoverageConfirmed;
+  const extractionFallbacks = sourceDetails.reduce((total, detail) => total + (Number(detail.extractionFallbacks) || 0), 0);
+  const processingConfirmed = !webFailure && extractionFallbacks === 0;
+  const coverageConfirmed = accountCoverageConfirmed && topicCoverageConfirmed && processingConfirmed;
   const coverageErrors = [
     uncoveredAccounts.length ? `Registered account inspection was inconclusive for ${uncoveredAccounts.map((detail) => detail.account).join(", ")}.` : "",
     platform !== "instagram" && registered.length ? `Registered ${platform} accounts were not directly inspected by this connector.` : "",
     topicTags.length && !topicCoverageConfirmed ? "Configured Instagram hashtag discovery inspected no posts." : "",
+    extractionFallbacks ? `${extractionFallbacks} Instagram post${extractionFallbacks === 1 ? " was" : "s were"} preserved only as deterministic private lead${extractionFallbacks === 1 ? "" : "s"}; AI extraction needs attention.` : "",
+    webFailure ? `Public Instagram web-index discovery failed: ${asString(webFailure.message).slice(0, 220)}` : "",
   ].filter(Boolean);
   const coverageError = coverageErrors.join(" ");
   return {
@@ -12608,7 +12736,7 @@ async function runSocialWebDiscovery(env, db, profile, connector, runId = "") {
     failures:scanFailures + exactStored.failures + webStored.failures,
     strongPicks:exactStored.strongPicks + webStored.strongPicks,
     materialUpdates:exactStored.materialUpdates + webStored.materialUpdates,
-    warnings:(accountCoverageConfirmed ? 0 : 1) + (topicCoverageConfirmed ? 0 : 1),
+    warnings:(accountCoverageConfirmed ? 0 : 1) + (topicCoverageConfirmed ? 0 : 1) + (processingConfirmed ? 0 : 1),
     details:[...sourceDetails, ...exactStored.details, ...webStored.details],
     citations: result.citations,
     usage: result.usage,

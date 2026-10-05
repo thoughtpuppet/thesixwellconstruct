@@ -461,7 +461,7 @@ test("KINMARKING session reminders use the composed session title and preparatio
       maxSeatsPerOrder:1,
       waitlistEnabled:false,
       isRecurring:true,
-      occurrences:[{ sessionNumber:"01", title:"Skin As Archive", startsAt, location:"art.pill Tattoo House", capacity:0, maxSeatsPerOrder:1, status:"open" }],
+      occurrences:[{ sessionNumber:"01", title:"Oral Histories & Tattooing", startsAt, location:"art.pill Tattoo House", capacity:0, maxSeatsPerOrder:1, status:"open" }],
     },
   }), env);
   assert.equal(response.status, 201, await response.clone().text());
@@ -481,9 +481,12 @@ test("KINMARKING session reminders use the composed session title and preparatio
     NOTIFICATION_FROM_EMAIL:"notifications@example.test",
   });
   assert.equal(result.sent, 1);
-  assert.match(sent[0].subject, /KINMARKING 01: Skin As Archive/);
+  assert.match(sent[0].subject, /KINMARKING 01: Oral Histories & Tattooing/);
   assert.match(sent[0].text, /Event guide/);
-  assert.match(sent[0].text, /one to three references/i);
+  assert.match(sent[0].text, /story, a memory, or a question/i);
+  assert.match(sent[0].text, /sharing is voluntary/i);
+  assert.match(sent[0].text, /optional supporting material/i);
+  assert.doesNotMatch(sent[0].text, /one to three references|same-day/i);
   assert.doesNotMatch(sent[0].text, /ticket purchased|confirmed and paid/i);
 });
 
@@ -529,7 +532,7 @@ test("KINMARKING public pages retain the event shell, conditional flyer, guidanc
   assert.match(hub, /class="venture-hero site-hero site-hero--supporting"/);
   assert.match(hub, /html,body \{ background:var\(--color-bg\); \}/);
   assert.match(hub, /border:5px solid/);
-  assert.match(hub, /Every four months/);
+  assert.match(hub, /Every two months/);
   assert.match(detail, /id="kinmarkingFlyer" hidden/);
   assert.match(detail, /\.event-form\[hidden\][\s\S]*display:none !important/);
   assert.match(detail, /event\.imageUrl[\s\S]*kinmarkingFlyer\.hidden = false/);
@@ -550,7 +553,7 @@ test("Events board contracts retain the shared shell, 5px cards, calendar, and s
   assert.match(page, /\.event-card:hover,\.event-card:focus-within\s*\{\s*border-color:var\(--color-events\)/);
   assert.match(page, /Upcoming Events[\s\S]*Event Calendar[\s\S]*Past Events/);
   for (const label of ["Announced", "Reserve a seat", "RSVP", "Sold out", "Booking closed", "Cancelled", "View event"]) assert.match(page, new RegExp(label, "i"));
-  assert.match(page, /<a\b[^>]*href="\/events\/kinmarking\/"[^>]*>KINMARKING series<\/a>/);
+  assert.match(page, /<a\b[^>]*href="\/events\/kinmarking\/"[^>]*>KINMARKING project<\/a>/);
   assert.match(page, /Announced<\/button><a class="event-action is-secondary" href="' \+ href \+ '">View event<\/a>/);
   assert.match(page, /has-multiple[\s\S]*event-day-agenda/);
   assert.match(studio, /Public stage[\s\S]*Event operations/);

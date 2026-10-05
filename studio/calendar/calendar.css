@@ -358,6 +358,7 @@ input:focus,textarea:focus,select:focus { border-color:var(--accent); outline:no
 .research-composer label>span { color:var(--dim); font-size:9px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
 .research-composer textarea { min-height:110px; }
 .empty-state,.view-note,.system-state,.suggestions-panel>p { margin:0; border:5px solid var(--line); padding:18px; color:var(--dim); line-height:1.55; }
+.system-state.is-error { border-color:var(--danger); color:var(--danger); }
 .source-create-form { display:grid; grid-template-columns:minmax(160px,1fr) minmax(260px,1.7fr) minmax(150px,.7fr) auto; gap:12px; align-items:end; margin-bottom:12px; border:5px solid var(--line); padding:16px; background:var(--surface); }
 .source-create-heading { grid-column:1/-1; display:flex; align-items:end; justify-content:space-between; gap:20px; border-bottom:5px solid var(--line); padding-bottom:14px; }
 .source-create-heading h3 { margin:0; font-size:clamp(22px,3vw,30px); letter-spacing:-.03em; }

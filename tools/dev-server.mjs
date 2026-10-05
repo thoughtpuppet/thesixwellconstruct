@@ -24,6 +24,7 @@ import {
 } from "../shared/page-visibility.js";
 import { contentHash, readHtmlCopy, readSourceMarker, replaceHtmlCopy, replaceSourceMarker } from "./live-editor-source.mjs";
 import { auditLiveEditorCoverage } from "./live-editor-coverage.mjs";
+import { kinmarkingFirstEditionRedirect } from "../shared/kinmarking-routes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -234,7 +235,8 @@ const checkRoutes = [
   ["/studio/art-preview/?work=example", 200],
   ["/js/live-text-editor.js", 200],
   ["/events/kinmarking/", 200],
-  ["/events/kinmarking-01-skin-as-archive/", 200],
+  ["/events/kinmarking-01-skin-as-archive/", 308],
+  ["/events/kinmarking-01-oral-histories-and-tattooing/", 200],
   ["/events/kinmarking-02/", 200],
   ["/events/kinmarking-03/", 200],
   ["/events/kinmarking-04/", 200],
@@ -1201,6 +1203,12 @@ const showHidden = process.argv.includes("--show-hidden");
 
 const server = createServer(async (req, res) => {
   const requestUrl = new URL(req.url || "/", `http://${host}`);
+  const kinmarkingRedirect = kinmarkingFirstEditionRedirect(requestUrl.pathname);
+  if (kinmarkingRedirect) {
+    res.writeHead(308, { "Location": `${kinmarkingRedirect}${requestUrl.search}` });
+    res.end();
+    return;
+  }
   if (requestUrl.pathname === "/explore" || requestUrl.pathname === "/explore/" || requestUrl.pathname === "/explore/index.html") {
     requestUrl.pathname = "/adventure/";
     res.writeHead(308, { "Location": `${requestUrl.pathname}${requestUrl.search}` });

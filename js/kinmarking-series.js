@@ -5,9 +5,34 @@
   var FALLBACKS = Object.freeze([
     {
       number:"01",
-      slug:"kinmarking-01-skin-as-archive",
-      title:"Skin As Archive",
-      description: /* live-copy:kinmarking.01.description */ "KINMARKING 01: Skin As Archive is the first edition of KINMARKING, a participatory memory, archive, and tattoo practice. Participants are invited to bring photographs, documents, objects, stories, inherited symbols, and fragments of family history into conversation with an archivist and tattoo artist.",
+      slug:"kinmarking-01-oral-histories-and-tattooing",
+      legacySlug:"kinmarking-01-skin-as-archive",
+      title:"Oral Histories & Tattooing",
+      previousTitle:"Skin As Archive",
+      description: /* live-copy:kinmarking.01.description */ "The first edition of KINMARKING explores how meaning persists through oral stories, storytelling, and listening, and how what emerges might be expressed through an image or tattoo.",
+      details: /* live-copy:kinmarking.01.details */ "The first edition of KINMARKING explores how meaning persists through telling and listening: experiences we remember, stories passed down to us, and everyday moments that reveal how someone lived.\n\nTogether, we consider what these stories hold, how their meanings change over time, and what we might want to preserve or express through visual symbols. Tattooing offers one way to embody what emerges, using symbolism, color, and composition.\n\nWhat can a mark hold of a person or experience? What might change or be left out when a story becomes a symbol? These questions are part of the exploration.\n\nCome with a story, a memory, or something you want to think about more closely. You are welcome to bring a photograph or object that supports it. Sharing is voluntary, and participation does not require getting tattooed.",
+      guideTitle: /* live-copy:kinmarking.01.guide-title */ "Begin with a story.",
+      guideIntro: /* live-copy:kinmarking.01.guide-intro */ "A memory, a story passed down to you, or a question is enough to begin. The gathering centers storytelling and listening, with photographs and objects optional as supporting material.",
+      bring: /* live-copy:kinmarking.01.bring */ "Come with a story, a memory, or something you want to think about more closely. No physical materials or finished tattoo design are required.",
+      bringSharing: /* live-copy:kinmarking.01.bring-sharing */ "Sharing is voluntary. Listening is also a way to participate.",
+      bringSupport: /* live-copy:kinmarking.01.bring-support */ "Photographs and objects can support your story if you choose to bring them.",
+      how: /* live-copy:kinmarking.01.how */ "Begin with telling and listening. With the participating memory workers and tattoo artist, consider what a story holds, how its meanings connect to personal and cultural histories, and what might change when it becomes an image. The format is developing through collaboration.",
+      outcomes: /* live-copy:kinmarking.01.outcomes */ "Conversation, new associations, and questions worth exploring are meaningful outcomes. An image or tattoo may emerge from the process. Participation does not require getting tattooed.",
+      readinessTitle: /* live-copy:kinmarking.01.readiness-title */ "Considering a tattoo?",
+      readiness: /* live-copy:kinmarking.01.readiness */ "Tattooing is optional, and any tattoo appointment is separate from participation in the gathering. Practical arrangements will be shared as they are confirmed.",
+      participationTitle: /* live-copy:kinmarking.01.participation-title */ "Participation + updates",
+      participation: /* live-copy:kinmarking.01.participation */ "Registration details and the final gathering format will be shared when confirmed. You can participate through listening, and you decide what you wish to share. An RSVP does not reserve a tattoo appointment.",
+      processKicker: /* live-copy:kinmarking.01.process-kicker */ "the inquiry",
+      processTitle: /* live-copy:kinmarking.01.process-title */ "Questions for the gathering.",
+      processIntro: /* live-copy:kinmarking.01.process-intro */ "Storytelling and listening open these connected areas of inquiry. The session format is developing with the participating memory workers.",
+      encounterTitle: /* live-copy:kinmarking.01.encounter-title */ "Remember & Tell.",
+      encounterCopy: /* live-copy:kinmarking.01.encounter-copy */ "What do you remember, and which stories have been passed down to you? Everyday moments, habits, sayings, and gestures can reveal how someone lived. Share what you choose, or begin by listening.",
+      interpretTitle: /* live-copy:kinmarking.01.interpret-title */ "Listen & Connect.",
+      interpretCopy: /* live-copy:kinmarking.01.interpret-copy */ "What becomes visible when we listen to one another? Consider how a personal memory connects to other experiences, cultural traditions, and larger histories.",
+      composeTitle: /* live-copy:kinmarking.01.compose-title */ "Interpret & Question.",
+      composeCopy: /* live-copy:kinmarking.01.compose-copy */ "What feels worth preserving, and why? Explore how a story changes through retelling, what remains uncertain, and what might be simplified or left out when it becomes a symbol.",
+      developTitle: /* live-copy:kinmarking.01.develop-title */ "Imagine & Embody.",
+      developCopy: /* live-copy:kinmarking.01.develop-copy */ "How might an image express what a story holds? Consider symbolism, color, and composition, and whether tattooing could become a way to embody that meaning. Questions and discoveries can remain open.",
     },
     {
       number:"02", slug:"kinmarking-02", title:"Color as Inheritance", theme:"Color",
@@ -47,7 +72,7 @@
   }
 
   function sessionNumberForSlug(slug) {
-    var fallback = FALLBACKS.find(function (item) { return item.slug === String(slug || ""); });
+    var fallback = FALLBACKS.find(function (item) { return item.slug === String(slug || "") || item.legacySlug === String(slug || ""); });
     return fallback ? fallback.number : "";
   }
 
@@ -59,6 +84,9 @@
     var number = normalizedNumber(occurrence && occurrence.sessionNumber, Number(index) || 0);
     var fallback = fallbackForNumber(number);
     var sessionTitle = String((occurrence && occurrence.title) || (fallback && fallback.title) || "").trim();
+    // Use the renamed edition while an existing Event record still has its old title.
+    // Other Studio titles remain authoritative, including future editorial changes.
+    if (fallback && sessionTitle === fallback.previousTitle) sessionTitle = fallback.title;
     return "KINMARKING " + number + (sessionTitle ? ": " + sessionTitle : "");
   }
 
@@ -123,7 +151,7 @@
 
     var bySlug = new Map(list.map(function (event) { return [event.slug, event]; }));
     return FALLBACKS.map(function (fallback) {
-      var event = bySlug.get(fallback.slug);
+      var event = bySlug.get(fallback.slug) || bySlug.get(fallback.legacySlug);
       return event ? Object.assign({}, event, {
         number:fallback.number,
         occurrenceId:event.occurrences && event.occurrences[0] ? event.occurrences[0].id : "",

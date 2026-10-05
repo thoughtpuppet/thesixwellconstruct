@@ -3,9 +3,53 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const source = (relativePath) => readFileSync(path.join(ROOT, relativePath), "utf8");
+
+function renderSymbol(context) {
+  const window = {};
+  runInNewContext(source("js/legend-record-view.js"), { window, URL });
+  const record = { name: "Test symbol", slug: "test-symbol", meaning: "Core meaning", context };
+  const host = { innerHTML: "", querySelector() { return null; } };
+  assert.equal(window.SixWellLegend.renderRecord(host, { record }), true);
+  return { html: host.innerHTML, layers: window.SixWellLegend.recordLayers(record), count: window.SixWellLegend.layerCount(record) };
+}
+
+test("Legend influence renders selected meaning sources without requiring written context", () => {
+  const { html, layers, count } = renderSymbol({ modes: ["cultural", "personal", "reoriented"] });
+  assert.equal(layers.context.authored, true);
+  assert.equal(count, 1);
+  assert.match(html, /id="legend-influence-title"/);
+  assert.match(html, /aria-label="Meaning sources"/);
+  assert.match(html, /Cultural or inherited/);
+  assert.match(html, /Personal or lived/);
+  assert.match(html, /Further context has not been documented/);
+});
+
+test("Legend influence remains visible when no context has been documented", () => {
+  const { html, count } = renderSymbol({});
+  assert.equal(count, 0);
+  assert.match(html, /Influence &amp; relationship/);
+  assert.match(html, /Influence and relationship have not been documented/);
+  for (const label of ["01 · Influence", "02 · Application", "03 · Form", "04 · Trace", "05 · System"]) {
+    assert.ok(html.includes(label));
+  }
+});
+
+test("Legend influence preserves authored writing and curated sources alongside meaning sources", () => {
+  const { html } = renderSymbol({
+    modes: ["system", "personal", "personal", "unrecognized"],
+    personal_relationship: "My <own> relationship",
+    sources: [{ title: "Source", url: "https://example.com/source" }],
+  });
+  assert.match(html, /System or structural/);
+  assert.match(html, /My &lt;own&gt; relationship/);
+  assert.match(html, /Curated sources/);
+  assert.equal((html.match(/>Personal or lived<\/span>/g) || []).length, 2);
+  assert.doesNotMatch(html, /unrecognized|Further context has not been documented/);
+});
 
 const SHARED_STYLES = [
   "/css/tokens.css",

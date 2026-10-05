@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entry puzzle shape variants</title>
+<style>body{background:#0e0e0e;color:#fbd19d;font:16px Georgia;margin:24px}main{max-width:1100px;margin:auto}img{display:block;width:100%;height:auto}a{color:inherit}article{margin-bottom:32px}canvas{display:none}</style>
+<main><h1>Entry puzzle shape variants</h1><p>Source geometry, palette, matte materials, and lights from entry-room/3d/entry-room-3d.js. Each image shows one shape in all ten source colors.</p><div id="variants"></div><p id="status">Rendering…</p></main>
+<script type="module">
+import * as THREE from '/entry-room/3d/vendor/three.module.js';
+const shapes = [{name:'circle',segments:48},{name:'triangle',segments:3},{name:'square',segments:4,twist:Math.PI/4},{name:'pentagon',segments:5},{name:'hexagon',segments:6}];
+const palette = [0xd01006,0xf06c00,0xffbb00,0x008a22,0x00ced1,0x006eff,0xcb5cff,0xffcb70,0x814812,0xfff1e0];
+const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
+renderer.setSize(1024,512); renderer.setPixelRatio(1); renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.setClearColor(0x000000,0);
+const camera = new THREE.OrthographicCamera(-5.5,5.5,2.75,-2.75,.1,50); camera.position.set(0,0,10); camera.lookAt(0,0,0);
+for(const shape of shapes){
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight(0xf6ddad,0x271509,1.5));
+  for(const [color,intensity,distance,x,y,z] of [[0xffc787,55,60,-4,4,8],[0x7d3f18,12,50,4,-2,7],[0xffe0b8,11,45,5,4.5,5]]){const light=new THREE.PointLight(color,intensity,distance,2);light.position.set(x,y,z);scene.add(light);}
+  const geometry = new THREE.CylinderGeometry(1,1,.55,shape.segments); geometry.rotateX(Math.PI/2); if(shape.twist)geometry.rotateZ(shape.twist);
+  const materials = palette.map(color=>new THREE.MeshStandardMaterial({color,roughness:1,metalness:0,flatShading:true}));
+  materials.forEach((material,index)=>{const mesh=new THREE.Mesh(geometry,material);mesh.position.set((index%5-2)*2.15,index<5?1.3:-1.3,0);mesh.scale.setScalar(.8);mesh.rotation.set(-.32,.45,.08);scene.add(mesh);});
+  renderer.render(scene,camera);
+  const uri=renderer.domElement.toDataURL('image/png');
+  const article=document.createElement('article'), title=document.createElement('h2'), image=document.createElement('img'), link=document.createElement('a');
+  title.textContent=shape.name; image.src=uri; image.alt=`Entry room ${shape.name}, in the ten source colors`; image.width=1024;image.height=512;link.href=uri;link.download=`entry-puzzle-${shape.name}-3d-palette.png`;link.textContent=`Download ${shape.name} variant`;article.append(title,image,link);document.querySelector('#variants').append(article);
+  geometry.dispose();materials.forEach(material=>material.dispose());
+}
+renderer.dispose(); document.querySelector('#status').textContent='Five source-based variants ready.';
+</script></html>

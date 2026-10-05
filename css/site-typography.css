@@ -25,6 +25,27 @@ body[data-venture="tattooing"] {
   --type-hero-color: var(--color-tattooing);
 }
 
+/* Events and KINMARKING use sentence case for sustained reading. Inheriting
+   these body-role values also keeps live-editor formatting spans consistent;
+   headings, descriptors, and short labels retain their shared display roles. */
+body[data-landing-family="events-program"] :is(
+  .hero-note,
+  .section-copy,
+  .events-editorial-intro p,
+  .events-project-feature p,
+  .event-card-copy,
+  .kinmarking-reading p,
+  .kinmarking-panel p,
+  .edition-copy,
+  .event-copy,
+  .kinmarking-guide-card p,
+  .kinmarking-guide-card li:not(.kinmarking-guide-card)
+) {
+  --type-body-transform: none;
+  --type-body-tracking: normal;
+  --type-body-tracking-active: normal;
+}
+
 /* Labels keep the shared display treatment, but text people enter must read
    back exactly as entered. This intentionally comes after the broad rule. */
 :where(

@@ -10,6 +10,7 @@ import {
   serverError,
   updateCartLines,
 } from "./functions/api/shop/_lib.js";
+import { KINMARKING_FIRST_EDITION_SLUG, kinmarkingFirstEditionRedirect } from "./shared/kinmarking-routes.js";
 import {
   handleAdminMerchApi,
   handleLaunchAlertSignup,
@@ -1218,7 +1219,9 @@ function publicEventDateText(value) {
 async function serveEventDetailPage(request, env, pathname) {
   const slug = normalizePath(pathname).split("/").filter(Boolean)[1] || "";
   if (!slug) return notFoundPage(request, env);
-  const contextUrl = new URL(`/api/events/${encodeURIComponent(slug)}/context`, request.url);
+  const firstKinmarkingEdition = slug === KINMARKING_FIRST_EDITION_SLUG;
+  const contextSlug = firstKinmarkingEdition ? "kinmarking" : slug;
+  const contextUrl = new URL(`/api/events/${encodeURIComponent(contextSlug)}/context`, request.url);
   const requestedOccurrence = new URL(request.url).searchParams.get("occurrence");
   if (requestedOccurrence) contextUrl.searchParams.set("occurrence", requestedOccurrence);
   const apiResponse = await handleEventsApi(new Request(contextUrl, { method: "GET", headers: { accept: "application/json" } }), env);
@@ -1240,14 +1243,21 @@ async function serveEventDetailPage(request, env, pathname) {
   const payload = await apiResponse.json();
   const event = payload.event;
   if (!event) return notFoundPage(request, env);
+  const selected = firstKinmarkingEdition
+    ? event.occurrences?.find((occurrence) => occurrence.sessionNumber === "01")
+    : payload.occurrence || event.occurrences?.[0] || null;
+  if (firstKinmarkingEdition && (!selected || (requestedOccurrence && requestedOccurrence !== selected.id))) return notFoundPage(request, env);
+  if (firstKinmarkingEdition) payload.occurrence = selected;
+  const publicTitle = firstKinmarkingEdition
+    ? `KINMARKING 01: ${selected.title && selected.title !== "Skin As Archive" ? selected.title : "Oral Histories & Tattooing"}`
+    : event.title;
 
   let assetResponse = await servePublicAsset(request, env, eventDetailAssetPath(pathname), { seo: false });
   if (assetResponse.status === 404) assetResponse = await servePublicAsset(request, env, "/events/detail/index.html", { seo: false });
   const origin = canonicalOrigin(env, request.url);
   const canonicalPath = `/events/${encodeURIComponent(slug)}/`;
   const canonicalUrl = `${origin}${canonicalPath}`;
-  const selected = payload.occurrence || event.occurrences?.[0] || null;
-  const title = `${event.title} · Six.Well Events · Atlanta`;
+  const title = `${publicTitle} · Six.Well Events · Atlanta`;
   const description = event.description || "A public creative program produced through the Six.Well Construct in Atlanta.";
   const image = event.imageUrl || "";
   const eventStatus = event.status === "cancelled"
@@ -1272,7 +1282,7 @@ async function serveEventDetailPage(request, env, pathname) {
     structuredData: dynamicStructuredGraph({
       type: "Event",
       canonicalUrl,
-      title: event.title,
+      title: publicTitle,
       description,
       image,
       origin,
@@ -1290,11 +1300,13 @@ async function serveEventDetailPage(request, env, pathname) {
   if (request.method === "HEAD") return applySeoResponse(request, env, assetResponse, seo);
 
   const occurrenceMarkup = (event.occurrences || []).map((occurrence) => {
-    const href = `${canonicalPath}?occurrence=${encodeURIComponent(occurrence.id)}`;
+    const href = firstKinmarkingEdition
+      ? occurrence.sessionNumber === "01" ? canonicalPath : `/events/kinmarking/?occurrence=${encodeURIComponent(occurrence.id)}`
+      : `${canonicalPath}?occurrence=${encodeURIComponent(occurrence.id)}`;
     return `<a class="event-date${selected?.id === occurrence.id ? " is-selected" : ""}" href="${escapeHtml(href)}"><strong>${escapeHtml(publicEventDateText(occurrence.startsAt))}</strong><span>${escapeHtml(occurrence.location || event.location || "")}</span></a>`;
   }).join("");
   const html = (await assetResponse.text())
-    .replace(/(<h1[^>]*id="eventTitle"[^>]*>)[\s\S]*?(<\/h1>)/, `$1${escapeHtml(event.title)}$2`)
+    .replace(/(<h1[^>]*id="eventTitle"[^>]*>)[\s\S]*?(<\/h1>)/, `$1${escapeHtml(publicTitle)}$2`)
     .replace(/(<p[^>]*id="eventDescription"[^>]*>)[\s\S]*?(<\/p>)/, `$1${escapeHtml(description)}$2`)
     .replace(/(<p[^>]*id="eventDetails"[^>]*>)[\s\S]*?(<\/p>)/, `$1${escapeHtml(event.details || event.included || description)}$2`)
     .replace(/(<p[^>]*id="eventStatus"[^>]*>)[\s\S]*?(<\/p>)/, `$1${escapeHtml(startDate ? [publicEventDateText(startDate), location].filter(Boolean).join(" · ") : event.publicationState === "announced" ? "Announced" : "Public event")}$2`)
@@ -2394,6 +2406,12 @@ export default {
     }
 
     if (isEventDetailPagePath(url.pathname)) {
+      const kinmarkingRedirect = kinmarkingFirstEditionRedirect(url.pathname);
+      if (kinmarkingRedirect) {
+        const redirectUrl = new URL(request.url);
+        redirectUrl.pathname = kinmarkingRedirect;
+        return Response.redirect(redirectUrl, 308);
+      }
       return serveEventDetailPage(request, env, url.pathname);
     }
 

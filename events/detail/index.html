@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="/css/landing-family.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/hero.css">
+<link rel="stylesheet" href="/css/kinmarking-development.css">
 <style>
   :root { --venture-color:var(--color-events); --venture-accent:var(--color-events); --venture-dim:var(--color-events-dim); }
   html,body { background:var(--color-bg); }
@@ -32,9 +33,6 @@
   .event-form label { display:grid; gap:7px; color:var(--text-dim); font-family:var(--font-display); font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
   .event-form input,.event-form select,.event-form textarea { width:100%; min-width:0; border:5px solid var(--ring-faint); padding:12px; background:var(--color-bg); color:var(--text); font:inherit; }
   .event-form input:focus,.event-form select:focus,.event-form textarea:focus { border-color:var(--color-events); outline:none; }
-  .event-action { min-height:50px; border:5px solid var(--color-events); padding:0 18px; background:transparent; color:var(--text); font-family:var(--font-display); font-size:10px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
-  .event-action:not(:disabled):hover,.event-action:not(:disabled):focus-visible { background:var(--color-events); color:var(--color-bg); outline:none; }
-  .event-action:disabled { border-color:var(--color-events-dim); color:var(--text-dim); cursor:not-allowed; }
   .event-message { color:var(--text-dim); line-height:1.55; }
   .event-message[data-state="error"] { color:var(--color-tattoos-bright); }
   .event-message[data-state="ok"] { color:var(--color-events-bright); }
@@ -61,6 +59,7 @@
     .event-panel,.kinmarking-guide-card { padding:22px; }
   }
 </style>
+<link rel="stylesheet" href="/css/events-controls.css">
 </head>
 <body class="venture-page" data-venture="events" data-landing-family="events-program">
   <main class="venture-shell entrance-fade">
@@ -71,7 +70,7 @@
 
     <section class="section event-detail-grid" aria-live="polite">
       <article class="event-panel">
-        <span class="section-kicker" data-copy-id="live-events-detail-span-2">schedule</span><h2 class="section-title" data-copy-id="live-events-detail-h2-1">Event Dates</h2>
+        <span class="section-kicker" data-copy-id="live-events-detail-span-2"><strong><span><span style="font-family: Inter, Arial, sans-serif"><span style="font-family: Georgia, &quot;Times New Roman&quot;, Times, serif">schedule</span></span></span></strong></span><h2 class="section-title" data-copy-id="live-events-detail-h2-1">ITERATIONS:</h2>
         <p class="event-copy" id="eventDetails"></p>
         <figure class="kinmarking-flyer" id="kinmarkingFlyer" hidden><img id="kinmarkingFlyerImage" alt=""></figure>
         <div class="event-dates" id="eventDates"></div>
@@ -94,16 +93,28 @@
       </aside>
     </section>
 
+    <section class="section kinmarking-experience" id="kinmarkingCollaborators" aria-labelledby="kinmarkingCollaboratorsTitle" hidden>
+      <header class="section-head">
+        <div><span class="section-kicker" data-copy-id="kinmarking-01-collaboration-kicker">in collaboration with</span><h2 class="section-title" id="kinmarkingCollaboratorsTitle" data-copy-id="kinmarking-01-collaboration-title">Georgia Dusk</h2></div>
+        <p class="section-copy" data-copy-id="kinmarking-01-collaboration-intro">This edition is developed in collaboration with Georgia Dusk and its co-founders, Dartricia Rollins and Ashby Combahee, as individual oral historians and memory workers. Together, we are shaping the inquiry and format through conversation between oral history and tattooing.</p>
+      </header>
+      <article class="kinmarking-guide-card"><h3 data-copy-id="kinmarking-01-georgia-dusk-subtitle">A southern liberation oral history.</h3><p data-copy-id="kinmarking-01-georgia-dusk-copy">Georgia Dusk documents grassroots movements and cultural work led by Black queer and feminist people in Georgia, connecting stories across generations.</p><a class="venture-link" href="https://www.georgiadusk.com/" data-copy-id="kinmarking-01-georgia-dusk-link">explore Georgia Dusk</a></article>
+      <div class="kinmarking-guide-grid">
+        <article class="kinmarking-guide-card"><h3 data-copy-id="kinmarking-01-dartricia-name">Dartricia Rollins</h3><p data-copy-id="kinmarking-01-dartricia-practice">Oral historian, memory worker, archivist, cultural worker, and organizer.</p><a class="venture-link" href="https://www.georgiadusk.com/meet-the-team" data-copy-id="kinmarking-01-dartricia-link">meet Dartricia</a></article>
+        <article class="kinmarking-guide-card"><h3 data-copy-id="kinmarking-01-ashby-name">Ashby Combahee</h3><p data-copy-id="kinmarking-01-ashby-practice">Oral historian, memory worker, and folklorist.</p><a class="venture-link" href="https://www.georgiadusk.com/meet-the-team" data-copy-id="kinmarking-01-ashby-link">meet Ashby</a></article>
+      </div>
+    </section>
+
     <section class="section kinmarking-experience" id="kinmarkingProcess" aria-labelledby="kinmarkingProcessTitle" hidden>
       <header class="section-head">
-        <div><span class="section-kicker" data-copy-id="kinmarking-process-kicker">from inquiry to tattoo</span><h2 class="section-title" id="kinmarkingProcessTitle" data-copy-id="kinmarking-process-title">How the session unfolds.</h2></div>
-        <p class="section-copy" data-copy-id="kinmarking-process-intro">Four stages connect each edition's theme to conversation, visual experimentation, and possibilities for tattooing.</p>
+        <div><span class="section-kicker" id="kinmarkingProcessKicker" data-copy-id="kinmarking-process-kicker">from inquiry to tattoo</span><h2 class="section-title" id="kinmarkingProcessTitle" data-copy-id="kinmarking-process-title">How the session unfolds.</h2></div>
+        <p class="section-copy" id="kinmarkingProcessIntro" data-copy-id="kinmarking-process-intro">Four stages connect each edition's theme to conversation, visual experimentation, and possibilities for tattooing.</p>
       </header>
       <ol class="kinmarking-guide-grid kinmarking-stages" role="list">
-        <li class="kinmarking-guide-card"><span class="section-kicker" aria-hidden="true">01</span><h3 data-copy-id="kinmarking-stage-encounter-title">Encounter &amp; Study.</h3><p data-copy-id="kinmarking-stage-encounter-copy">Meet the session's theme through examples, references, and stories rooted in particular histories and traditions.</p></li>
-        <li class="kinmarking-guide-card"><span class="section-kicker" aria-hidden="true">02</span><h3 data-copy-id="kinmarking-stage-interpret-title">Interpret &amp; Translate.</h3><p data-copy-id="kinmarking-stage-interpret-copy">Consider what you recognize, what you have learned or inherited, and what you want to preserve, question, or reinterpret.</p></li>
-        <li class="kinmarking-guide-card"><span class="section-kicker" aria-hidden="true">03</span><h3 data-copy-id="kinmarking-stage-compose-title">Compose &amp; Render.</h3><p data-copy-id="kinmarking-stage-compose-copy">Experiment with combining color, symbols, and composition to develop a personal visual response. New connections can emerge through this process. That's my favorite part.</p></li>
-        <li class="kinmarking-guide-card"><span class="section-kicker" aria-hidden="true">04</span><h3 data-copy-id="kinmarking-stage-develop-title">Tattoo &amp; Embody.</h3><p data-copy-id="kinmarking-stage-develop-copy">Work with the tattoo artist to consider your response as a tattoo through its form, scale, color, and placement. Decide what you want to take into the body and what needs further exploration.</p></li>
+        <li class="kinmarking-guide-card" data-live-edit-container="true"><span class="section-kicker" aria-hidden="true" data-live-edit-ignore="true">01</span><h3 id="kinmarkingEncounterTitle" data-copy-id="kinmarking-stage-encounter-title">Encounter &amp; Study.</h3><p id="kinmarkingEncounterCopy" data-copy-id="kinmarking-stage-encounter-copy">Meet the session's theme through examples, references, and stories rooted in particular histories and traditions.</p></li>
+        <li class="kinmarking-guide-card" data-live-edit-container="true"><span class="section-kicker" aria-hidden="true" data-live-edit-ignore="true">02</span><h3 id="kinmarkingInterpretTitle" data-copy-id="kinmarking-stage-interpret-title">Interpret &amp; Translate.</h3><p id="kinmarkingInterpretCopy" data-copy-id="kinmarking-stage-interpret-copy">Consider what you recognize, what you have learned or inherited, and what you want to preserve, question, or reinterpret.</p></li>
+        <li class="kinmarking-guide-card" data-live-edit-container="true"><span class="section-kicker" aria-hidden="true" data-live-edit-ignore="true">03</span><h3 id="kinmarkingComposeTitle" data-copy-id="kinmarking-stage-compose-title">Compose &amp; Render.</h3><p id="kinmarkingComposeCopy" data-copy-id="kinmarking-stage-compose-copy">Experiment with combining color, symbols, and composition to develop a personal visual response. New connections can emerge through this process. That's my favorite part.</p></li>
+        <li class="kinmarking-guide-card" data-live-edit-container="true"><span class="section-kicker" aria-hidden="true" data-live-edit-ignore="true">04</span><h3 id="kinmarkingDevelopTitle" data-copy-id="kinmarking-stage-develop-title">Tattoo &amp; Embody.</h3><p id="kinmarkingDevelopCopy" data-copy-id="kinmarking-stage-develop-copy">Work with the tattoo artist to consider your response as a tattoo through its form, scale, color, and placement. Decide what you want to take into the body and what needs further exploration.</p></li>
       </ol>
     </section>
 
@@ -113,12 +124,12 @@
         <p class="section-copy" id="kinmarkingGuideIntro" data-copy-id="live-events-detail-p-6">The participating archivist and tattoo artist help distinguish what is known, remembered, inherited, uncertain, and possible to carry forward.</p>
       </header>
       <div class="kinmarking-guide-grid">
-        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-1">What to bring</h3><ul><li id="kinmarkingBring" data-copy-id="live-events-detail-li-1">Bring one to three photographs, scans, documents, objects, stories, inherited symbols, or other references.</li><li data-copy-id="live-events-detail-li-2">Identify what is known and what remains uncertain.</li><li data-copy-id="live-events-detail-li-3">Leave irreplaceable originals at home when a photograph or scan will work.</li><li data-copy-id="live-events-detail-li-4">Consider permission and privacy when the material involves other people.</li></ul></article>
+        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-1">What to bring</h3><ul><li id="kinmarkingBring" data-copy-id="live-events-detail-li-1">Bring one to three photographs, scans, documents, objects, stories, inherited symbols, or other references.</li><li id="kinmarkingBringSharing" data-copy-id="live-events-detail-li-2">Identify what is known and what remains uncertain.</li><li id="kinmarkingBringSupport" data-copy-id="live-events-detail-li-3">Leave irreplaceable originals at home when a photograph or scan will work.</li><li data-copy-id="live-events-detail-li-4">Consider permission and privacy when the material involves others.</li></ul></article>
         <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-2">How it works</h3><p id="kinmarkingHow" data-copy-id="live-events-detail-p-7">No finished tattoo design is required. Begin with conversation: consider the material with an archivist, then explore with the tattoo artist how—or whether—it may become a mark in the skin.</p></article>
-        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-3">Possible outcomes</h3><p data-copy-id="live-events-detail-p-8">Participation does not require getting tattooed. Small, resolved tattoos may be possible that day as time and technical readiness allow. Developing work may move into a future appointment secured by a separate tattoo deposit.</p></article>
-        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-4">Same-day readiness</h3><p data-copy-id="live-events-detail-p-9">Same-day tattooing is not guaranteed. Anyone hoping for possible same-day work should eat beforehand, hydrate, arrive sober, and bring government-issued photo identification.</p></article>
+        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-3">Possible outcomes</h3><p id="kinmarkingOutcomes" data-copy-id="live-events-detail-p-8">Participation does not require getting tattooed. Small, resolved tattoos may be possible that day as time and technical readiness allow. Developing work may move into a future appointment secured by a separate tattoo deposit.</p></article>
+        <article class="kinmarking-guide-card"><h3 id="kinmarkingReadinessTitle" data-copy-id="live-events-detail-h3-4">Same-day readiness</h3><p id="kinmarkingReadiness" data-copy-id="live-events-detail-p-9">Same-day tattooing is not guaranteed. Anyone hoping for possible same-day work should eat beforehand, hydrate, arrive sober, and bring government-issued photo identification.</p></article>
         <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-5">Privacy + consent</h3><p data-copy-id="live-events-detail-p-10">Materials, conversations, photographs, scans, recordings, and tattoo images are not retained or published without separate consent. Bringing material does not place it in the public Archive.</p></article>
-        <article class="kinmarking-guide-card"><h3 data-copy-id="live-events-detail-h3-6">RSVP + walk-ins</h3><p data-copy-id="live-events-detail-p-11">RSVP is optional and provides event correspondence, calendar details, and a reminder. Walk-ins remain welcome. An RSVP is not a tattoo appointment and does not reserve same-day tattoo time.</p></article>
+        <article class="kinmarking-guide-card"><h3 id="kinmarkingParticipationTitle" data-copy-id="live-events-detail-h3-6">RSVP + walk-ins</h3><p id="kinmarkingParticipation" data-copy-id="live-events-detail-p-11">RSVP is optional and provides event correspondence, calendar details, and a reminder. Walk-ins remain welcome. An RSVP is not a tattoo appointment and does not reserve same-day tattoo time.</p></article>
       </div>
       <div>
         <header class="section-head"><div><span class="section-kicker" data-copy-id="live-events-detail-span-4">first cycle</span><h2 class="section-title" data-copy-id="live-events-detail-h2-3">Connected Editions</h2></div><a class="venture-link" href="/events/kinmarking/" data-copy-id="live-events-detail-a-4">series overview</a></header>
@@ -127,7 +138,9 @@
     </section>
     <footer class="footer"><p data-copy-id="live-events-detail-p-13">&copy; the six.well construct</p><div class="page-links"><a href="/events/" data-copy-id="live-events-detail-a-5">events</a><a href="/home/" data-copy-id="live-events-detail-a-6">return to construct</a></div></footer>
   </main>
-<script src="/js/kinmarking-series.js?v=20260926-edition-themes"></script>
+<script src="/js/kinmarking-series.js?v=20261002-oral-histories"></script>
+<script src="/js/construct-ambient-field.js"></script>
+<script src="/js/kinmarking-development.js"></script>
 <script>
 (function () {
   var parts = location.pathname.split("/").filter(Boolean);
@@ -137,8 +150,20 @@
   var eventData = null;
   var selected = null;
   var kinmarking = window.KinmarkingSeries;
+  // Also support already-running local servers while they await a restart.
+  var renamedEdition = kinmarking && kinmarking.editions.find(function(edition){ return edition.legacySlug === parts[1]; });
+  if (renamedEdition) {
+    var renamedUrl = new URL(location.href);
+    renamedUrl.pathname = "/events/" + renamedEdition.slug + "/";
+    location.replace(renamedUrl.href);
+    return;
+  }
   var isKinmarking = kinmarking && kinmarking.isKinmarkingSlug(slug);
   var requestedSessionNumber = isKinmarking ? kinmarking.sessionNumberForSlug(slug) : "";
+  if (isKinmarking && window.KinmarkingDevelopment.isDevelopmentEdition(requestedSessionNumber)) {
+    window.KinmarkingDevelopment.mount(requestedSessionNumber, kinmarking);
+    return;
+  }
   var apiSlug = isKinmarking ? kinmarking.seriesSlug : slug;
   var title = document.getElementById("eventTitle");
   var description = document.getElementById("eventDescription");
@@ -170,12 +195,35 @@
     kinmarkingExperience.hidden = false;
     kinmarkingSeriesLink.hidden = false;
     var number = selected ? selected.sessionNumber : requestedSessionNumber;
+    document.getElementById("kinmarkingCollaborators").hidden = number !== "01";
     kinmarking.applyEditionCopy(description, number, "description");
     kinmarking.applyEditionCopy(details, number, "details");
     kinmarking.applyEditionCopy(document.getElementById("kinmarkingGuideTitle"), number, "guideTitle");
     kinmarking.applyEditionCopy(document.getElementById("kinmarkingGuideIntro"), number, "guideIntro");
     kinmarking.applyEditionCopy(document.getElementById("kinmarkingBring"), number, "bring");
     kinmarking.applyEditionCopy(document.getElementById("kinmarkingHow"), number, "how");
+    [
+      ["kinmarkingBringSharing", "bringSharing"],
+      ["kinmarkingBringSupport", "bringSupport"],
+      ["kinmarkingOutcomes", "outcomes"],
+      ["kinmarkingReadinessTitle", "readinessTitle"],
+      ["kinmarkingReadiness", "readiness"],
+      ["kinmarkingParticipationTitle", "participationTitle"],
+      ["kinmarkingParticipation", "participation"],
+      ["kinmarkingProcessKicker", "processKicker"],
+      ["kinmarkingProcessTitle", "processTitle"],
+      ["kinmarkingProcessIntro", "processIntro"],
+      ["kinmarkingEncounterTitle", "encounterTitle"],
+      ["kinmarkingEncounterCopy", "encounterCopy"],
+      ["kinmarkingInterpretTitle", "interpretTitle"],
+      ["kinmarkingInterpretCopy", "interpretCopy"],
+      ["kinmarkingComposeTitle", "composeTitle"],
+      ["kinmarkingComposeCopy", "composeCopy"],
+      ["kinmarkingDevelopTitle", "developTitle"],
+      ["kinmarkingDevelopCopy", "developCopy"],
+    ].forEach(function (target) {
+      kinmarking.applyEditionCopy(document.getElementById(target[0]), number, target[1]);
+    });
     if (event.imageUrl) {
       kinmarkingFlyerImage.src = event.imageUrl;
       kinmarkingFlyerImage.alt = (selected ? kinmarking.editionTitle(event, selected, event.occurrences.indexOf(selected)) : event.title) + " event flyer";
@@ -200,6 +248,11 @@
     var publicTitle = isKinmarking && selected ? kinmarking.editionTitle(eventData, selected, selectedIndex) : eventData.title;
     title.textContent = publicTitle;
     document.title = publicTitle + " — the six.well construct";
+    if (isKinmarking) {
+      document.body.setAttribute("data-construct-breadcrumb-current", publicTitle);
+      var currentBreadcrumb = document.querySelector(".construct-breadcrumb-current");
+      if (currentBreadcrumb) currentBreadcrumb.textContent = publicTitle;
+    }
     description.textContent = isKinmarking && selected ? kinmarking.editionDescription(eventData, selected, selectedIndex) : (eventData.description || "A public event attached to the construct.");
     details.textContent = eventData.details || eventData.included || "Choose a date to view registration availability.";
     renderKinmarking(eventData);

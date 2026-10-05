@@ -3088,6 +3088,7 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
                   ELSE e.title
                 END AS title,
            e.slug,
+           o.session_number,
            COALESCE(a.starts_at,o.starts_at,e.starts_at) AS starts_at,
            COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS location
          FROM events e
@@ -3118,6 +3119,7 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
     ? publicUrl(env, request, `/events/${encodeURIComponent(event.slug)}/`)
     : "";
   const kinmarking = event?.slug === "kinmarking" || String(event?.slug || "").startsWith("kinmarking-");
+  const oralHistories = kinmarking && (event?.session_number === "01" || event?.slug === "kinmarking-01-skin-as-archive");
   const message = buildEventTicketPaidEmail({
     variant: freeRsvp ? "rsvp" : "default",
     free: freeRsvp,
@@ -3130,9 +3132,11 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
     ticketUrl: confirmationUrl,
     calendarUrl: event?.starts_at ? calendarUrl : "",
     eventUrl,
-    preparationNote: kinmarking
-      ? "Review what to bring, privacy and consent, and same-day readiness before attending. An RSVP does not reserve tattoo time."
-      : "",
+    preparationNote: oralHistories
+      ? "Begin with a story, a memory, or a question. Sharing is voluntary; photographs and objects are optional supporting material. Review the participant guide and privacy and consent information. An RSVP does not reserve a tattoo appointment."
+      : kinmarking
+        ? "Review what to bring, privacy and consent, and same-day readiness before attending. An RSVP does not reserve tattoo time."
+        : "",
   });
 
   return sendTransactionalEmail(env, {
@@ -3256,6 +3260,7 @@ export async function sendDueEventTicketReminders(env) {
                   ELSE e.title
                 END AS event_title,
                 e.slug AS event_slug,
+                o.session_number AS event_session_number,
                 COALESCE(a.starts_at,o.starts_at,e.starts_at) AS event_starts_at,
                 COALESCE(NULLIF(a.location,''),NULLIF(o.location,''),e.location) AS event_location
          FROM event_tickets t
@@ -3289,6 +3294,7 @@ export async function sendDueEventTicketReminders(env) {
         ? publicUrl(env, null, `/events/${encodeURIComponent(row.event_slug)}/`)
         : "";
       const kinmarking = row.event_slug === "kinmarking" || String(row.event_slug || "").startsWith("kinmarking-");
+      const oralHistories = kinmarking && (row.event_session_number === "01" || row.event_slug === "kinmarking-01-skin-as-archive");
       const message = buildEventReminderEmail({
         subject: `Reminder: ${title} is tomorrow`,
         title,
@@ -3298,9 +3304,11 @@ export async function sendDueEventTicketReminders(env) {
         seats: String(seats),
         calendarUrl,
         eventUrl,
-        preparationNote: kinmarking
-          ? "Bring one to three references. If you hope for possible same-day work, eat beforehand, hydrate, arrive sober, and bring government-issued photo identification. Same-day tattooing is not guaranteed."
-          : "",
+        preparationNote: oralHistories
+          ? "Come with a story, a memory, or a question. Sharing is voluntary, and listening is also a way to participate. Photographs and objects are optional supporting material. Participation does not require getting tattooed, and any tattoo appointment is separate from the gathering."
+          : kinmarking
+            ? "Bring one to three references. If you hope for possible same-day work, eat beforehand, hydrate, arrive sober, and bring government-issued photo identification. Same-day tattooing is not guaranteed."
+            : "",
       });
       const delivery = await sendTransactionalEmail(env, {
         to: row.contact_email,

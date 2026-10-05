@@ -1,0 +1,87 @@
+.kinmarking-symbol-band {
+  position: relative;
+  margin-top: 8px;
+  background: var(--color-bg);
+  color: var(--color-accent);
+}
+
+.kinmarking-symbol-band[hidden] { display: none; }
+.kinmarking-symbol-viewport { overflow: hidden; padding-block: 28px; }
+.kinmarking-symbol-track {
+  display: flex;
+  width: max-content;
+  animation: kinmarking-symbol-roll var(--symbol-band-duration, 60s) linear infinite;
+}
+.kinmarking-symbol-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 44px;
+  min-width: var(--symbol-band-width, 1200px);
+  padding-right: 44px;
+  box-sizing: border-box;
+}
+.kinmarking-symbol-mark {
+  flex: 0 0 104px;
+  display: grid;
+  place-items: center;
+  width: 104px;
+  height: 96px;
+  color: inherit;
+  text-decoration: none;
+  animation: kinmarking-symbol-color 20s ease-in-out infinite;
+  animation-delay: var(--symbol-color-delay, 0s);
+}
+.kinmarking-symbol-mark svg { display: block; width: 100%; height: 100%; }
+.kinmarking-symbol-mark--shape { color: inherit; }
+.kinmarking-symbol-mark--shape svg { transform: scale(1.18); }
+.kinmarking-symbol-mark--shape svg :is(circle, polygon) { stroke-width: 8px; }
+.kinmarking-symbol-mark:focus-visible { outline: 5px solid var(--color-events-bright); outline-offset: 5px; }
+.kinmarking-symbol-band:hover .kinmarking-symbol-track,
+.kinmarking-symbol-band:focus-within .kinmarking-symbol-track,
+.kinmarking-symbol-band[data-paused="true"] .kinmarking-symbol-track,
+.kinmarking-symbol-band:hover .kinmarking-symbol-mark,
+.kinmarking-symbol-band:focus-within .kinmarking-symbol-mark,
+.kinmarking-symbol-band[data-paused="true"] .kinmarking-symbol-mark { animation-play-state: paused; }
+.kinmarking-symbol-pause {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  border: 0;
+  background: var(--color-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.kinmarking-symbol-pause svg { width: 18px; height: 18px; }
+.kinmarking-symbol-pause:hover { color: var(--color-events-bright); }
+.kinmarking-symbol-pause:focus-visible { outline: 5px solid var(--color-events-bright); outline-offset: -5px; }
+@keyframes kinmarking-symbol-roll { to { transform: translateX(-50%); } }
+/* SHAPE_STREAM_COLORS in entry-room/3d/entry-room-3d.js. */
+@keyframes kinmarking-symbol-color {
+  0%, 100% { color: #d01006; }
+  15% { color: #f06c00; }
+  30% { color: #ffbb00; }
+  45% { color: #008a22; }
+  60% { color: #00ced1; }
+  75% { color: #006eff; }
+  90% { color: #cb5cff; }
+  94% { color: #ffcb70; }
+  96% { color: #814812; }
+  98% { color: #fff1e0; }
+}
+@media (max-width: 760px) {
+  .kinmarking-symbol-viewport { padding-block: 22px; }
+  .kinmarking-symbol-group { gap: 28px; padding-right: 28px; }
+  .kinmarking-symbol-mark { flex-basis: 84px; width: 84px; height: 80px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kinmarking-symbol-viewport { overflow-x: auto; }
+  .kinmarking-symbol-track { animation: none; }
+  .kinmarking-symbol-mark { animation-play-state: paused; }
+  .kinmarking-symbol-group[aria-hidden="true"], .kinmarking-symbol-pause { display: none; }
+}

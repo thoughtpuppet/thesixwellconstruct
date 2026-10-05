@@ -74,6 +74,13 @@
     return `/about/legend/${encodeURIComponent(record?.slug || record?.id || "")}/`;
   }
 
+  const MEANING_SOURCE_LABELS = {
+    cultural: "Cultural or inherited",
+    personal: "Personal or lived",
+    reoriented: "Reoriented",
+    system: "System or structural",
+  };
+
   function recordLayers(record) {
     const rawContext = parseObject(record?.context || record?.context_json);
     const sources = Array.isArray(rawContext.sources) ? rawContext.sources.map((source) => ({
@@ -83,7 +90,7 @@
       note: String(source?.note || "").trim(),
     })).filter((source) => source.title && source.url) : [];
     const context = {
-      modes: parseList(rawContext.modes),
+      modes: [...new Set(parseList(rawContext.modes))].filter((mode) => Object.hasOwn(MEANING_SOURCE_LABELS, mode)),
       cultural_context: String(rawContext.cultural_context || "").trim(),
       personal_relationship: String(rawContext.personal_relationship || "").trim(),
       reorientation: {
@@ -95,6 +102,7 @@
       sources,
     };
     context.authored = Boolean(
+      context.modes.length ||
       context.cultural_context ||
       context.personal_relationship ||
       context.reorientation.statement ||
@@ -144,7 +152,8 @@
   };
 
   function renderInfluence(context) {
-    if (!context.authored) return "";
+    if (!context.authored) return undocumented("Influence and relationship have not been documented for this symbol yet.");
+    const meaningSources = context.modes.length ? `<span class="influence-label metadata legend-accent-meta">Meaning sources</span><div class="theme-list" aria-label="Meaning sources">${context.modes.map((mode) => `<span class="metadata legend-accent-meta">${escapeHtml(MEANING_SOURCE_LABELS[mode])}</span>`).join("")}</div>` : "";
     const cards = [];
     if (context.cultural_context) cards.push(`<article class="influence-card"><span class="influence-label metadata legend-accent-meta">Cultural or inherited</span><h3 class="legend-item-title">Inherited and shared associations</h3><p>${escapeHtml(context.cultural_context)}</p></article>`);
     if (context.personal_relationship) cards.push(`<article class="influence-card"><span class="influence-label metadata legend-accent-meta">Personal or lived</span><h3 class="legend-item-title">My relationship</h3><p>${escapeHtml(context.personal_relationship)}</p></article>`);
@@ -155,7 +164,7 @@
       const external = /^https?:/i.test(source.url);
       return `<li><a href="${escapeHtml(source.url)}"${external ? ' target="_blank" rel="noopener noreferrer"' : ""}><strong class="legend-source-title">${escapeHtml(source.title)}</strong>${source.creator ? `<span class="metadata legend-accent-meta">${escapeHtml(source.creator)}</span>` : ""}</a>${source.note ? `<p>${escapeHtml(source.note)}</p>` : ""}</li>`;
     }).join("")}</ul></div>` : "";
-    return `<div class="influence-grid">${cards.join("")}</div>${sources}`;
+    return `${meaningSources}${cards.length ? `<div class="influence-grid">${cards.join("")}</div>` : ""}${sources}${!cards.length && !sources ? undocumented("Further context has not been documented for this symbol yet.") : ""}`;
   }
 
   function renderApplications(applications) {
@@ -230,7 +239,6 @@
     const categoryName = category.name || record.category_id || "Legend";
     const layers = recordLayers(record);
     const canonical = safeSvg(record.svg_markup);
-    const influenceOffset = layers.context.authored ? 1 : 0;
     host.innerHTML = `<header class="legend-record-hero site-hero site-hero--supporting" aria-labelledby="legend-record-title">
         <div class="detail-mark">${canonical}</div>
         <div class="detail-copy">
@@ -253,11 +261,11 @@
         </nav>
       </header>
       <div class="legend-record-layers">
-        ${layers.context.authored ? `<section class="detail-layer detail-layer--influence" aria-labelledby="legend-influence-title"><div class="layer-heading"><div><span class="kicker">01 · Influence</span><h2 class="band-title section-title legend-layer-title" id="legend-influence-title">Influence &amp; relationship</h2></div><p>Where inherited associations, lived experience, and deliberate reorientation meet. These lenses can overlap without changing the symbol's category.</p></div>${renderInfluence(layers.context)}</section>` : ""}
-        <section class="detail-layer" aria-labelledby="legend-application-title"><div class="layer-heading"><div><span class="kicker">${String(1 + influenceOffset).padStart(2, "0")} · Application</span><h2 class="band-title section-title legend-layer-title" id="legend-application-title">Meaning in application</h2></div><p>These readings belong to particular operations or conditions. They extend the core meaning without replacing it.</p></div>${renderApplications(layers.applications)}</section>
-        <section class="detail-layer" aria-labelledby="legend-form-title"><div class="layer-heading"><div><span class="kicker">${String(2 + influenceOffset).padStart(2, "0")} · Form</span><h2 class="band-title section-title legend-layer-title" id="legend-form-title">Visual versions</h2></div><p>The identity translated through different styles, dimensions, colors, materials, and systems.</p></div>${renderVariants(layers.variants)}</section>
-        <section class="detail-layer" aria-labelledby="legend-trace-title"><div class="layer-heading"><div><span class="kicker">${String(3 + influenceOffset).padStart(2, "0")} · Trace</span><h2 class="band-title section-title legend-layer-title" id="legend-trace-title">Documented appearances</h2></div><p>Image-led evidence of the mark moving through the work.</p></div>${renderAppearances(layers.appearances)}</section>
-        <section class="detail-connections" aria-labelledby="legend-system-title"><div class="layer-heading"><div><span class="kicker">${String(4 + influenceOffset).padStart(2, "0")} · System</span><h2 class="band-title section-title legend-layer-title" id="legend-system-title">Connected work</h2></div><p>Live relationships to tattoos, artworks, archive records, events, objects, and other parts of the Construct.</p></div><div data-detail-connections></div></section>
+        <section class="detail-layer detail-layer--influence" aria-labelledby="legend-influence-title"><div class="layer-heading"><div><span class="kicker">01 · Influence</span><h2 class="band-title section-title legend-layer-title" id="legend-influence-title">Influence &amp; relationship</h2></div><p>Where inherited associations, lived experience, and deliberate reorientation meet. These lenses can overlap without changing the symbol's category.</p></div>${renderInfluence(layers.context)}</section>
+        <section class="detail-layer" aria-labelledby="legend-application-title"><div class="layer-heading"><div><span class="kicker">02 · Application</span><h2 class="band-title section-title legend-layer-title" id="legend-application-title">Meaning in application</h2></div><p>These readings belong to particular operations or conditions. They extend the core meaning without replacing it.</p></div>${renderApplications(layers.applications)}</section>
+        <section class="detail-layer" aria-labelledby="legend-form-title"><div class="layer-heading"><div><span class="kicker">03 · Form</span><h2 class="band-title section-title legend-layer-title" id="legend-form-title">Visual versions</h2></div><p>The identity translated through different styles, dimensions, colors, materials, and systems.</p></div>${renderVariants(layers.variants)}</section>
+        <section class="detail-layer" aria-labelledby="legend-trace-title"><div class="layer-heading"><div><span class="kicker">04 · Trace</span><h2 class="band-title section-title legend-layer-title" id="legend-trace-title">Documented appearances</h2></div><p>Image-led evidence of the mark moving through the work.</p></div>${renderAppearances(layers.appearances)}</section>
+        <section class="detail-connections" aria-labelledby="legend-system-title"><div class="layer-heading"><div><span class="kicker">05 · System</span><h2 class="band-title section-title legend-layer-title" id="legend-system-title">Connected work</h2></div><p>Live relationships to tattoos, artworks, archive records, events, objects, and other parts of the Construct.</p></div><div data-detail-connections></div></section>
       </div>
       ${recordNavigation(payload.navigation)}`;
     mountConnections(record, host);

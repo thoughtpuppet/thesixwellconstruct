@@ -160,6 +160,19 @@ test("calendar migrations preserve seeded private candidates, verified official 
   assert.equal(JSON.parse(scoutProfile.negative_terms_json).includes("online only"), false);
   assert.match(scoutProfile.source_resolution_rules,/standalone website is not required/i);
   assert.doesNotMatch(scoutProfile.source_resolution_rules,/official organizer or venue website supports it/i);
+  const interdisciplinaryProfile = db.prepare("SELECT social_settings_json,positive_concepts_json FROM calendar_scout_profiles WHERE id='atlanta-default'").get();
+  const instagramKeywords = JSON.parse(interdisciplinaryProfile.social_settings_json).instagram.keywords;
+  const positiveConcepts = JSON.parse(interdisciplinaryProfile.positive_concepts_json);
+  assert.equal(instagramKeywords.includes("Atlanta interdisciplinary conversation"), true);
+  assert.equal(instagramKeywords.includes("Atlanta cultural discussion"), true);
+  assert.equal(positiveConcepts.includes("social change"), true);
+  assert.deepEqual(
+    db.prepare("SELECT handle,trust_level,enabled FROM calendar_social_sources WHERE handle IN ('theprayerstudy','arthooker') ORDER BY handle").all().map((row) => ({ ...row })),
+    [
+      { handle:"arthooker", trust_level:"discovery", enabled:1 },
+      { handle:"theprayerstudy", trust_level:"discovery", enabled:1 },
+    ],
+  );
   assert.deepEqual(
     { ...db.prepare("SELECT organizer_url,source_resolution_notes FROM calendar_candidates WHERE id='cal_candidate_posh_orca_open_house_2026'").get() },
     { organizer_url:"https://posh.vip/g/orca",source_resolution_notes:"The exact Posh ticket page supplies event facts and links to ORCA's organizer profile on Posh; Studio review still controls verification and publication." },
@@ -356,6 +369,11 @@ test("social scout preserves calendar data, stages connectors disabled, and list
     enabled:source.enabled,
   })), [{
     platform:"instagram",
+    handle:"arthooker",
+    profileUrl:"https://www.instagram.com/arthooker/",
+    enabled:true,
+  },{
+    platform:"instagram",
     handle:"artistforumatlanta",
     profileUrl:"https://www.instagram.com/artistforumatlanta/",
     enabled:true,
@@ -368,6 +386,11 @@ test("social scout preserves calendar data, stages connectors disabled, and list
     platform:"instagram",
     handle:"loop.atl",
     profileUrl:"https://www.instagram.com/loop.atl/",
+    enabled:true,
+  },{
+    platform:"instagram",
+    handle:"theprayerstudy",
+    profileUrl:"https://www.instagram.com/theprayerstudy/",
     enabled:true,
   }]);
   assert.equal(payload.connectors.find((item) => item.id === "threads_api").status, "disabled");
@@ -3406,7 +3429,7 @@ test("registered Instagram scouting reports zero profile coverage honestly and c
     assert.match(requestBody, /https:\/\/www\.instagram\.com\/loop\.atl\//);
     const outcome = run.outcomes[0];
     assert.equal(outcome.postsInspected, 0);
-    assert.equal(outcome.sources.filter((source) => source.account && source.profileLinksFound === 0).length, 3);
+    assert.equal(outcome.sources.filter((source) => source.account && source.profileLinksFound === 0).length, 5);
     assert.equal(outcome.sources.filter((source) => source.topic && source.profileLinksFound === 0).length, 8);
     assert.match(outcome.sources[0].warning, /No visible post or reel links/);
     assert.deepEqual(
@@ -3489,6 +3512,55 @@ test("registered Instagram scouting opens profile posts and stages the missed Ar
     assert.ok(JSON.parse(evidence.provenance_json).some((item) => item.channel === "instagram_web"));
     assert.ok(db.prepare("SELECT last_success_at FROM calendar_social_sources WHERE handle='artistforumatlanta'").get().last_success_at);
     assert.ok(db.prepare("SELECT last_success_at FROM calendar_scout_connectors WHERE id='instagram_web'").get().last_success_at);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("registered Instagram scouting preserves an interdisciplinary private lead when OpenAI has no credits", async () => {
+  const db = database();
+  db.exec("UPDATE calendar_scout_connectors SET enabled=1,per_run_limit=1 WHERE id='instagram_web'");
+  db.exec("UPDATE calendar_social_sources SET enabled=CASE WHEN handle='theprayerstudy' THEN 1 ELSE 0 END");
+  db.exec(`UPDATE calendar_scout_profiles SET social_settings_json=json_set(social_settings_json,'$.instagram.tags',json('[]'),'$.instagram.perRunLimit',1) WHERE id='atlanta-default'`);
+  const eventUrl = "https://www.instagram.com/p/DdAFOolkgX-/";
+  const caption = "Thursday in Atlanta or on zoom: A discussion of neuroscience, radicalism, Christianity and social change w/ filmmaker and writer Dr. Josh Brahinsky, hip-hop artist Sho Baraka, and Art Hooker. We would love your company -- join in person, or on zoom.";
+  const renderedHtml = `<html><head><meta property="og:description" content="theprayerstudy on September 7, 2026: &quot;${caption}&quot;"></head><body><article><p>${caption}</p></article></body></html>`;
+  const browser = {
+    async quickAction(action, options) {
+      if (action === "links") return Response.json({ result:[eventUrl] }, { headers:{ "x-browser-ms-used":"5" } });
+      assert.equal(action, "content");
+      assert.equal(options.url, eventUrl);
+      return new Response(renderedHtml, { status:200, headers:{ "content-type":"text/html", "x-browser-ms-used":"7" } });
+    },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), "https://api.openai.com/v1/responses");
+    return Response.json({ error:{ message:"You have no credits remaining." } }, { status:402 });
+  };
+  try {
+    const run = await runCalendarScout(env(db, { BROWSER:browser, OPENAI_API_KEY:"test-key" }), { runKind:"manual", channels:["instagram_web"] });
+    assert.equal(run.status, "partial");
+    assert.equal(run.candidates, 1);
+    assert.equal(run.failures, 1);
+    assert.equal(run.warnings, 1);
+    assert.equal(run.outcomes[0].postsInspected, 1);
+    const source = run.outcomes[0].sources.find((item) => item.account === "@theprayerstudy");
+    assert.deepEqual({ events:source.eventsExtracted, fallbacks:source.extractionFallbacks, status:source.status }, { events:1, fallbacks:1, status:"partial" });
+    assert.match(source.warning, /deterministic private lead/i);
+    const candidate = db.prepare("SELECT id,title,status,verification_state,starts_at,source_event_id,discovery_channel,subjects_json,formats_json,verification_notes FROM calendar_candidates WHERE source_event_id='instagram:DdAFOolkgX-'").get();
+    assert.equal(candidate.title, "A discussion of neuroscience, radicalism, Christianity and social change");
+    assert.equal(candidate.status, "needs_verification");
+    assert.equal(candidate.verification_state, "needs_verification");
+    assert.equal(candidate.starts_at, null);
+    assert.equal(candidate.discovery_channel, "instagram_web");
+    assert.deepEqual(JSON.parse(candidate.subjects_json).sort(), ["anthropology","art","film","philosophy","poetry-music"].sort());
+    assert.deepEqual(JSON.parse(candidate.formats_json), ["lecture-talk"]);
+    assert.match(candidate.verification_notes, /private raw lead/i);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM calendar_entries WHERE candidate_id=?").get(candidate.id).count, 0);
+    const connector = db.prepare("SELECT last_error,last_success_at FROM calendar_scout_connectors WHERE id='instagram_web'").get();
+    assert.match(connector.last_error, /AI extraction needs attention/i);
+    assert.equal(connector.last_success_at, null);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -6318,6 +6390,9 @@ test("Calendar Studio exposes batch paste-and-scout site discovery", () => {
   assert.match(studio,/payload\.candidates/);
   assert.match(studio,/Scout saved.*private candidate/);
   assert.match(studio,/same-site event paths/);
+  assert.match(studio,/Instagram discovery needs attention/);
+  assert.match(studio,/Deterministic private leads can still be staged/);
+  assert.match(studioCss,/\.system-state\.is-error/);
   assert.match(studioCss,/\.link-intake \{ display:grid;/);
   assert.match(studioCss,/@media \(max-width:640px\)[\s\S]*\.link-intake \{ grid-template-columns:minmax\(0,1fr\); \}/);
 });

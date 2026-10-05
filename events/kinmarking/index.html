@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KINMARKING — the six.well construct</title>
-<meta name="description" content="KINMARKING is a participatory memory, archive, and tattoo practice presented through connected editions at art.pill Tattoo House.">
+<meta name="description" content="KINMARKING explores what humans choose to preserve, how memory is transmitted, and how tattooing enters that inquiry through a recurring series of collaborative gatherings.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=block" rel="stylesheet">
@@ -14,60 +14,151 @@
 <link rel="stylesheet" href="/css/landing-family.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/hero.css">
+<link rel="stylesheet" href="/css/kinmarking-symbol-band.css">
 <style>
   :root { --venture-color:var(--color-events); --venture-accent:var(--color-events); --venture-dim:var(--color-events-dim); }
   html,body { background:var(--color-bg); }
+  .venture-hero { grid-template-columns:minmax(0,1fr); min-height:0; align-items:start; gap:24px; padding-bottom:40px; }
+  .hero-copy { align-content:start; }
+  .hero-actions { max-width:900px; }
+  .section-title { --type-section-color:var(--color-accent); --type-section-size-active:clamp(28px,3.4vw,42px); }
+  .section-head { grid-template-columns:minmax(0,1fr); gap:16px; align-items:start; }
+  .section-head .section-copy { max-width:none; width:100%; margin:0; }
   .kinmarking-intro { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr); gap:16px; }
   .kinmarking-panel { min-width:0; border:5px solid var(--ring-faint); padding:28px; background:var(--color-bg); }
   .kinmarking-panel p { margin:0; color:var(--text-muted); line-height:1.75; }
   .kinmarking-panel p + p { margin-top:16px; }
+  .kinmarking-reading { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .kinmarking-reading article { min-width:0; }
+  .kinmarking-reading h3 { margin:0 0 16px; color:var(--text); font-size:clamp(20px,2.2vw,26px); line-height:1.15; }
+  .kinmarking-reading p { margin:0; max-width:none; width:100%; color:var(--text-muted); line-height:1.75; }
+  .kinmarking-reading p + p { margin-top:16px; }
+  .kinmarking-reading .venture-link { margin-top:24px; }
   .kinmarking-editions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
   .kinmarking-edition-card { min-width:0; display:flex; flex-direction:column; border:5px solid var(--ring-faint); padding:28px; background:var(--color-bg); }
   .kinmarking-edition-card:hover,.kinmarking-edition-card:focus-within { border-color:var(--color-events); }
   .kinmarking-edition-card .edition-state { margin:0 0 16px; color:var(--color-events-bright); font-family:var(--font-display); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
   .kinmarking-edition-card h3 { margin:0; color:var(--text); font-size:clamp(23px,3vw,34px); line-height:1.08; }
   .kinmarking-edition-card .edition-date { margin:18px 0 0; color:var(--text-dim); font-family:var(--font-display); font-size:10px; font-weight:800; letter-spacing:.12em; line-height:1.65; text-transform:uppercase; }
-  .kinmarking-edition-card .edition-copy { margin:16px 0 0; color:var(--text-muted); line-height:1.68; }
-  .kinmarking-edition-card .venture-link { align-self:flex-start; margin-top:auto; padding-top:24px; }
+  .kinmarking-edition-card .edition-copy { margin:16px 0 24px; color:var(--text-muted); line-height:1.68; }
+  .kinmarking-edition-card .venture-link { align-self:flex-start; margin-top:auto; }
   .kinmarking-empty { grid-column:1/-1; border:5px solid var(--color-events-dim); padding:22px; color:var(--text-dim); }
+  @media (max-width:640px) {
+    .hero-actions .venture-link { width:100%; }
+  }
   @media (max-width:760px) {
-    .kinmarking-intro,.kinmarking-editions { grid-template-columns:minmax(0,1fr); gap:12px; }
+    .kinmarking-intro,.kinmarking-editions,.kinmarking-reading { grid-template-columns:minmax(0,1fr); gap:12px; }
+    .kinmarking-reading { row-gap:32px; }
     .kinmarking-panel,.kinmarking-edition-card { padding:22px; }
   }
 </style>
+<link rel="stylesheet" href="/css/events-controls.css">
 </head>
 <body class="venture-page" data-venture="events" data-landing-family="events-program">
   <main class="venture-shell entrance-fade">
     <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="pageTitle">
-      <div><span class="venture-kicker" data-copy-id="live-events-kinmarking-span-1">participatory practice</span><h1 class="venture-title hero-title" id="pageTitle" data-copy-id="live-events-kinmarking-h1-1">KINMARKING</h1></div>
+      <div><span class="venture-kicker" data-copy-id="live-events-kinmarking-span-1">project + recurring series</span><h1 class="venture-title hero-title" id="pageTitle" data-copy-id="live-events-kinmarking-h1-1">KINMARKING</h1></div>
       <div class="hero-copy">
-        <p class="hero-descriptor hero-lede" data-copy-id="live-events-kinmarking-p-1">Memory, archive + tattoo sessions.</p>
-        <div class="hero-actions"><a class="venture-link" href="#editions" data-copy-id="live-events-kinmarking-a-1">editions</a><a class="venture-link" href="/events/" data-copy-id="live-events-kinmarking-a-2">all events</a></div>
+        <p class="hero-descriptor hero-descriptor--wide hero-lede" data-copy-id="live-events-kinmarking-p-1"><span style="color: rgba(252, 184, 103, 0.55); font-family: Georgia, &quot;Times New Roman&quot;, Times, serif; font-size: 12px; text-transform: uppercase">KINMARKING is a communal series exploring the convergence of the body, rituals of inheritance, the desire for something to persist and the technology of tattooing.</span></p>
+        <div class="hero-actions"><a class="venture-link" href="#inquiry" data-copy-id="kinmarking-project-inquiry-link">the inquiry</a><a class="venture-link" href="#transmission" data-copy-id="kinmarking-project-transmission-link">tattooing + transmission</a><a class="venture-link" href="#editions" data-copy-id="live-events-kinmarking-a-1">editions</a><a class="venture-link" href="/events/" data-copy-id="live-events-kinmarking-a-2">all events</a></div>
+      </div>
+    </section>
+
+    <section class="section" id="inquiry" aria-labelledby="inquiryTitle">
+      <header class="section-head">
+        <div><span class="section-kicker" data-copy-id="kinmarking-project-inquiry-kicker">the inquiry</span><h2 class="section-title" id="inquiryTitle" data-copy-id="kinmarking-project-inquiry-title">Why do we want something to persist?</h2></div>
+        <p class="section-copy" data-copy-id="kinmarking-project-opening">KINMARKING is a project developed to explore how humans decide what is worth preserving, how meaning is carried and stored, and how tattooing can become one method of transmission using symbolism and color and composition to express what’s desired to be communicated and preserved.<br><br>Its mode or form is a recurring gathering about memory, lineage, preservation, symbolism, meaning and tattooing. I’m interested in the human impulse to mark and preserve things, especially through icons/imagery.</p>
+      </header>
+      <div class="kinmarking-reading">
+        <article>
+          <h3 data-copy-id="kinmarking-project-meaning-title">How does meaning move?</h3>
+          <p data-copy-id="kinmarking-project-meaning-copy">Through stories, objects, rituals, images, and bodies, the project considers how meaning moves between people and across generations. Oral history, lineage, family and personal archives, and rituals of inheritance offer different ways into these questions.</p>
+          <p data-copy-id="kinmarking-project-interpretation-copy">What do we receive, what do we interpret, and what do we choose to pass on? A story, an image, or an everyday practice can open questions about how something becomes meaningful and why that meaning matters to us.</p>
+        </article>
+        <article>
+          <h3 data-copy-id="kinmarking-project-preservation-title">What happens when we preserve or embody it?</h3>
+          <p data-copy-id="kinmarking-project-preservation-copy">KINMARKING explores the human impulse to mark and preserve things, especially through the body and through icons and imagery. Tattooing brings symbolism, color, and composition into the inquiry as ways to express what someone wishes to transmit and preserve.</p>
+          <p data-copy-id="kinmarking-project-open-copy">What can an image hold? What changes as a memory becomes a symbol? What remains uncertain or opens to another interpretation? Conversation and making give these questions a place to be explored together.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="visual-vocabulary" aria-labelledby="visualVocabularyTitle">
+      <header class="section-head">
+        <div><span class="section-kicker" data-copy-id="kinmarking-project-goal-kicker">one aim</span><h2 class="section-title" id="visualVocabularyTitle" data-copy-id="kinmarking-project-goal-title">Developing a visual vocabulary</h2></div>
+        <p class="section-copy" data-copy-id="kinmarking-project-goal-intro">One aim of KINMARKING is to expand the ways memory and meaning can be expressed and preserved through tattooing. Through shared examples, conversation, and guided exploration, participants draw out stories, experiences, inherited practices, and associations that might inform an image.</p>
+        <p class="section-copy" data-copy-id="kinmarking-project-goal-process">Together, we lay this material out, navigate its relationships, and explore what becomes significant through that engagement. Color, symbolism, and composition offer ways to develop a visual vocabulary for what participants wish to communicate and preserve.</p>
+      </header>
+      <div class="kinmarking-symbol-band" data-kinmarking-symbol-band hidden role="region" aria-label="Legend symbols and entry puzzle shapes" data-live-edit-owner="managed" data-live-edit-label="Published Legend symbols and entry puzzle shapes" data-live-edit-owner-href="/studio/submissions/#legend/symbols" data-live-edit-owner-label="Manage Legend symbols in Studio">
+        <div class="kinmarking-symbol-viewport"><div class="kinmarking-symbol-track" data-symbol-track></div></div>
+        <button class="kinmarking-symbol-pause" type="button" data-symbol-pause aria-label="Pause symbol band" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14M16 5v14" fill="none" stroke="currentColor" stroke-width="5"/></svg></button>
+      </div>
+    </section>
+
+    <section class="section" id="transmission" aria-labelledby="transmissionTitle">
+      <header class="section-head">
+        <div><span class="section-kicker" data-copy-id="kinmarking-project-transmission-kicker">living histories</span><h2 class="section-title" id="transmissionTitle" data-copy-id="kinmarking-project-transmission-title">Tattooing as transmission.</h2></div>
+        <p class="section-copy" data-copy-id="kinmarking-project-transmission-history">Tattooing has long participated in how people express belonging, remember relationships, and transmit cultural meaning. Within particular spiritual traditions, marks and the rituals surrounding them connect people with ancestors, protection, belief, and responsibilities to others.</p>
+      </header>
+      <div class="kinmarking-reading">
+        <article>
+          <h3 data-copy-id="kinmarking-project-inheritance-title">Embodied knowledge + inheritance.</h3>
+          <p data-copy-id="kinmarking-project-inheritance-copy">KINMARKING invites renewed attention to these relationships between tattooing, embodied knowledge, and rituals of inheritance.</p>
+          <p data-copy-id="kinmarking-project-inheritance-questions">What do we receive through family stories, gestures, images, and silences? How might a tattoo give form to that inheritance, including family secrets and meanings shared selectively or kept private?</p>
+        </article>
+        <article>
+          <h3 data-copy-id="kinmarking-project-frequency-title">A changing frequency.</h3>
+          <p data-copy-id="kinmarking-project-frequency-copy">A mark can become a transmission whose frequency changes over time, resonating differently as its wearer, relationships, and circumstances change.</p>
+          <p data-copy-id="kinmarking-project-transmission-inquiry">Through conversation and making, the project explores what we preserve, what we reveal or withhold, and how meaning continues to move.</p>
+        </article>
       </div>
     </section>
 
     <section class="section kinmarking-intro" aria-labelledby="seriesTitle">
       <article class="kinmarking-panel">
-        <span class="section-kicker" data-copy-id="live-events-kinmarking-span-2">the series</span><h2 class="section-title" id="seriesTitle" data-copy-id="live-events-kinmarking-h2-1">The body as Legend and Archive.</h2>
+        <span class="section-kicker" data-copy-id="live-events-kinmarking-span-2">the gathering</span><h2 class="section-title" id="seriesTitle" data-copy-id="live-events-kinmarking-h2-1">The body as Legend and Archive.</h2>
         <p data-copy-id="live-events-kinmarking-p-2">KINMARKING is a communal series about the body, rituals of inheritance, and the desire for something to persist.</p>
+        <p data-copy-id="kinmarking-project-series-copy">The project takes the form of recurring gatherings about memory, lineage, preservation, and tattooing. Each edition approaches the larger inquiry through a particular subject and through the perspectives of its collaborators and participants.</p>
       </article>
       <aside class="kinmarking-panel">
-        <span class="section-kicker" data-copy-id="live-events-kinmarking-span-3">the intervals</span><h2 class="section-title" data-copy-id="live-events-kinmarking-h2-2">Every four months.</h2>
-        <p data-copy-id="live-events-kinmarking-p-3">Each session introduces a distinct theme, inviting participants to explore its histories, meanings, and personal associations through conversation and visual experimentation, then develop those discoveries into possible tattoos.</p>
+        <span class="section-kicker" data-copy-id="live-events-kinmarking-span-3">the intervals</span><h2 class="section-title" data-copy-id="live-events-kinmarking-h2-2">Every two months.</h2>
+        <p data-copy-id="live-events-kinmarking-p-3">Each session introduces a distinct theme to navigate the larger question: How do we carry, store and navigate meaning? We invite participants to explore personal history, meaning, and internal associations through varying lenses to draft visual representations that may become tattoos.&nbsp;</p>
       </aside>
+    </section>
+
+    <section class="section" id="collaboration" aria-labelledby="collaborationTitle">
+      <header class="section-head">
+        <div><span class="section-kicker" data-copy-id="kinmarking-project-collaboration-kicker">the exchange</span><h2 class="section-title" id="collaborationTitle" data-copy-id="kinmarking-project-collaboration-title">Thinking with others.</h2></div>
+        <p class="section-copy" data-copy-id="kinmarking-project-collaboration-intro">Collaboration is part of how this project deepens. Other thinkers bring their own questions, methods, and experiences, helping shape what each gathering explores.</p>
+      </header>
+      <div class="kinmarking-reading">
+        <article>
+          <h3 data-copy-id="kinmarking-project-first-perspective-title">An opening perspective: oral history.</h3>
+          <p data-copy-id="kinmarking-project-first-perspective-copy">The first edition begins with oral historians and memory workers. Their perspectives open the inquiry through telling and listening, lineage, family and personal archives, and the ways people remember and interpret what has been passed down.</p>
+          <p data-copy-id="kinmarking-project-first-perspective-connection">The series begins here intentionally: drawing out personal material gives participants a starting point for interpretation and visual development. Oral history helps establish the material from which color, symbolism, and composition can emerge.</p>
+          <a class="venture-link" href="/events/kinmarking-01-oral-histories-and-tattooing/" data-copy-id="kinmarking-project-first-edition-link">explore edition 01</a>
+        </article>
+        <article>
+          <h3 data-copy-id="kinmarking-project-future-title">Further perspectives.</h3>
+          <p data-copy-id="kinmarking-project-future-copy">The next two editions explore color and symbolism / iconography in greater depth. Future conversations could involve memory consolidation, ritual marking, tattoo traditions, or grief, alongside thinkers working in neuroscience, anthropology, history, and other fields.</p>
+          <p data-copy-id="kinmarking-project-future-open">These are possibilities for the inquiry to develop. Each encounter can introduce another way of thinking about interpretation, meaning, and preservation.</p>
+        </article>
+      </div>
     </section>
 
     <section class="section" id="editions">
       <header class="section-head">
         <div><span class="section-kicker" data-copy-id="live-events-kinmarking-span-4">first cycle</span><h2 class="section-title" data-copy-id="live-events-kinmarking-h2-3">KINMARKING Editions</h2></div>
-        <p class="section-copy" data-copy-id="live-events-kinmarking-p-4">Four Saturday sessions at art.pill Tattoo House, each held from 2–7 PM.</p>
+        <p class="section-copy" data-copy-id="live-events-kinmarking-p-4">Four Saturday editions, every two months, beginning November 21, 2026. The first edition is developed in collaboration with Georgia Dusk, Dartricia Rollins, and Ashby Combahee.</p>
       </header>
       <div class="kinmarking-editions" id="kinmarkingEditions" aria-live="polite"><p class="kinmarking-empty" data-copy-id="live-events-kinmarking-p-5">Loading the KINMARKING editions.</p></div>
     </section>
 
     <footer class="footer"><p data-copy-id="live-events-kinmarking-p-6">&copy; the six.well construct</p><div class="page-links"><a href="/events/" data-copy-id="live-events-kinmarking-a-3">events</a><a href="/home/" data-copy-id="live-events-kinmarking-a-4">return to construct</a></div></footer>
   </main>
-<script src="/js/kinmarking-series.js?v=20260926-edition-themes"></script>
+<script src="/js/kinmarking-series.js?v=20261002-oral-histories"></script>
+<script src="/js/legend-record-view.js?v=canonical"></script>
+<script src="/js/kinmarking-symbol-band.js"></script>
 <script>
 (function () {
   var root = document.getElementById("kinmarkingEditions");

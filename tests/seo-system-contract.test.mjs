@@ -237,3 +237,35 @@ test("Worker routes robots, sitemap, real hidden 404s, and server SEO transforma
   assert.match(worker, /payload\.record \|\| payload\.item \|\| payload\.dossier/);
   assert.match(worker, /record\.archiveRoute \|\| record\.archive_route \|\| normalizeSeoPath\(pathname\)/);
 });
+
+test("renamed KINMARKING edition redirects legacy links and renders the same public occurrence", async () => {
+  const database = migratedDatabase();
+  database.prepare(`INSERT INTO events(id,slug,title,publication_state,status,created_at,updated_at)
+    VALUES('kinmarking-route-test','kinmarking','KINMARKING','announced','closed',datetime('now'),datetime('now'))`).run();
+  database.prepare(`INSERT INTO event_occurrences(id,event_id,session_number,title,starts_at,ends_at,status,created_at,updated_at)
+    VALUES('kinmarking-route-occurrence','kinmarking-route-test','01','Skin As Archive','2026-11-21T19:00:00Z','2026-11-22T00:00:00Z','closed',datetime('now'),datetime('now'))`).run();
+  const template = readFileSync(join(ROOT, "events", "detail", "index.html"), "utf8");
+  const env = {
+    PUBLIC_SITE_URL: ORIGIN,
+    SUBMISSIONS_DB: new LocalD1(database),
+    ASSETS: { async fetch() { return new Response(template, { headers:{ "content-type":"text/html" } }); } },
+  };
+  const path = "/events/kinmarking-01-oral-histories-and-tattooing/";
+  const old = await worker.fetch(new Request(`${ORIGIN}/events/kinmarking-01-skin-as-archive/?edit=1&occurrence=kinmarking-route-occurrence`), env, {});
+  assert.equal(old.status, 308);
+  assert.equal(old.headers.get("location"), `${ORIGIN}${path}?edit=1&occurrence=kinmarking-route-occurrence`);
+  const response = await worker.fetch(new Request(`${ORIGIN}${path}`), env, {});
+  const html = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(html, /<title>KINMARKING 01: Oral Histories &amp; Tattooing/);
+  assert.ok(html.includes(`<link rel="canonical" href="${ORIGIN}${path}">`));
+  const payload = JSON.parse(html.match(/<script id="event-record-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  assert.equal(payload.event.slug, "kinmarking");
+  assert.equal(payload.occurrence.eventId, "kinmarking-route-test");
+  assert.equal(payload.occurrence.id, "kinmarking-route-occurrence");
+  const wrongOccurrence = await worker.fetch(new Request(`${ORIGIN}${path}?occurrence=unknown`), env, {});
+  assert.equal(wrongOccurrence.status, 404);
+  database.prepare("UPDATE events SET publication_state='draft' WHERE id='kinmarking-route-test'").run();
+  const draft = await worker.fetch(new Request(`${ORIGIN}${path}`), env, {});
+  assert.equal(draft.status, 404);
+});
