@@ -529,7 +529,7 @@ test("KINMARKING public pages retain the event shell, conditional flyer, guidanc
   const hub = readFileSync(join(ROOT, "events", "kinmarking", "index.html"), "utf8");
   const detail = readFileSync(join(ROOT, "events", "detail", "index.html"), "utf8");
   const series = readFileSync(join(ROOT, "js", "kinmarking-series.js"), "utf8");
-  assert.match(hub, /class="venture-hero site-hero site-hero--supporting"/);
+  assert.match(hub, /class="venture-hero site-hero site-hero--landing"/);
   assert.match(hub, /html,body \{ background:var\(--color-bg\); \}/);
   assert.match(hub, /border:5px solid/);
   assert.match(hub, /Every other month/);
