@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import {
   clientEmailPreviewCatalog,
   emailTemplateDefinition,
@@ -440,10 +441,45 @@ async function liveEditorContext(body) {
   const pageSegments = toolPathSegments(pagePath);
   if (!pageSegments) throw Object.assign(new Error("The route resolves outside the workspace."), { statusCode: 400 });
   const content = await readFile(pagePath, "utf8");
-  return { page: { pathSegments: pageSegments, hash: contentHash(content) } };
+  return { page: { pathSegments: pageSegments, hash: await rememberLiveEditorSource(content) } };
 }
 
 const liveEditorHistoryRoot = path.join(root, ".codex-tmp", "live-editor-history");
+const liveEditorSourceRoot = path.join(root, ".codex-tmp", "live-editor-source-bases");
+
+async function rememberLiveEditorSource(content) {
+  const hash = contentHash(content);
+  await mkdir(liveEditorSourceRoot, { recursive: true });
+  await writeFile(path.join(liveEditorSourceRoot, hash), content, { encoding:"utf8", flag:"wx" }).catch((error) => {
+    if (error.code !== "EEXIST") throw error;
+  });
+  return hash;
+}
+
+async function liveEditorSourceAtHash(pathSegments, hash) {
+  try {
+    const source = await readFile(path.join(liveEditorSourceRoot, hash), "utf8");
+    if (contentHash(source) === hash) return source;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  // Recover drafts created before source snapshots were captured on page load.
+  for (const revision of await liveEditorRevisionManifests()) {
+    const file = (revision.files || []).find((entry) => entry.pathSegments.join("/") === pathSegments.join("/"));
+    if (!file) continue;
+    const version = file.beforeHash === hash ? "before" : file.afterHash === hash ? "after" : "";
+    if (!version) continue;
+    const source = await readFile(path.join(liveEditorHistoryRoot, revision.id, version, ...pathSegments), "utf8");
+    if (contentHash(source) === hash) return source;
+  }
+  return null;
+}
+
+function liveEditorTargetState(source, edit) {
+  if (edit.kind === "html") return readHtmlCopy(source, edit.copyId);
+  if (edit.kind === "source-marker") return { text:readSourceMarker(source, edit.marker) };
+  throw Object.assign(new Error(`Unsupported live-editor target ${edit.kind || "unknown"}.`), { statusCode:400 });
+}
 
 function liveEditorPathname(value) {
   const pathname = String(value || "/");
@@ -647,10 +683,10 @@ async function applyLiveEditorEdits(body) {
     if (!filePath) throw Object.assign(new Error("An edit has an invalid source path."), { statusCode: 400 });
     const pathSegments = toolPathSegments(filePath);
     const key = pathSegments.join("/");
-    if (!grouped.has(key)) grouped.set(key, { key, filePath, pathSegments, edits: [], expectedHash: String(edit.expectedHash || "") });
+    if (!grouped.has(key)) grouped.set(key, { key, filePath, pathSegments, edits: [] });
     const group = grouped.get(key);
-    if (!group.expectedHash || group.expectedHash !== String(edit.expectedHash || "")) {
-      throw Object.assign(new Error(`The edit set for ${key} does not share a valid source revision.`), { statusCode: 400 });
+    if (!/^[a-f0-9]{64}$/.test(String(edit.expectedHash || ""))) {
+      throw Object.assign(new Error(`An edit for ${key} has no valid source revision. Your browser draft is preserved.`), { statusCode: 400 });
     }
     group.edits.push(edit);
   }
@@ -659,14 +695,27 @@ async function applyLiveEditorEdits(body) {
   for (const group of grouped.values()) {
     const original = await readFile(group.filePath, "utf8");
     const actualHash = contentHash(original);
-    if (actualHash !== group.expectedHash) {
-      throw Object.assign(new Error(`${group.key} changed after editing began. Reload before applying.`), { statusCode: 409, file: group.key, expectedHash: group.expectedHash, actualHash });
-    }
+    const bases = new Map();
     let next = original;
     for (const edit of group.edits) {
-      if (edit.kind === "html") next = replaceHtmlCopy(next, edit);
-      else if (edit.kind === "source-marker") next = replaceSourceMarker(next, edit);
+      let proposed;
+      if (edit.kind === "html") proposed = replaceHtmlCopy(next, edit);
+      else if (edit.kind === "source-marker") proposed = replaceSourceMarker(next, edit);
       else throw Object.assign(new Error(`Unsupported live-editor target ${edit.kind || "unknown"}.`), { statusCode: 400 });
+      if (edit.expectedHash !== actualHash) {
+        if (!bases.has(edit.expectedHash)) bases.set(edit.expectedHash, await liveEditorSourceAtHash(group.pathSegments, edit.expectedHash));
+        const base = bases.get(edit.expectedHash);
+        const currentState = liveEditorTargetState(original, edit);
+        const alreadyApplied = isDeepStrictEqual(currentState, liveEditorTargetState(proposed, edit));
+        let unchanged = false;
+        if (base) {
+          try { unchanged = isDeepStrictEqual(currentState, liveEditorTargetState(base, edit)); } catch { /* The old target cannot authorize this edit. */ }
+        }
+        if (!unchanged && !alreadyApplied) {
+          throw Object.assign(new Error(`${edit.copyId || edit.marker} in ${group.key} changed or its starting version is unavailable. Review this draft against the current source before applying. Your browser draft is preserved.`), { statusCode:409, file:group.key, expectedHash:edit.expectedHash, actualHash });
+        }
+      }
+      next = proposed;
     }
     files.push({ ...group, original, next });
   }
@@ -838,6 +887,17 @@ async function handleToolApi(req, res) {
     }
   }
 
+  if (req.url === "/__tools/live-editor/source-target") {
+    try {
+      const filePath = safeToolPath(body.pathSegments);
+      if (!filePath) throw Object.assign(new Error("Invalid source path."), { statusCode:400 });
+      const content = await readFile(filePath, "utf8");
+      return toolJson(res, 200, { state:liveEditorTargetState(content, body), hash:await rememberLiveEditorSource(content) });
+    } catch (error) {
+      return toolJson(res, error.statusCode || 400, { error:error.message });
+    }
+  }
+
   if (req.url === "/__tools/live-editor/apply") {
     try {
       return toolJson(res, 200, await applyLiveEditorEdits(body));
@@ -889,7 +949,7 @@ async function handleToolApi(req, res) {
     try {
       const content = await readFile(filePath, "utf8");
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ content, hash: contentHash(content), pathSegments: toolPathSegments(filePath) }));
+      res.end(JSON.stringify({ content, hash: await rememberLiveEditorSource(content), pathSegments: toolPathSegments(filePath) }));
     } catch (error) {
       res.writeHead(error.code === "ENOENT" ? 404 : 500, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ error: error.code === "ENOENT" ? "Not found." : error.message }));

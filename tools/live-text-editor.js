@@ -142,7 +142,7 @@
   }
 
   function isEditorNode(node) {
-    return node && node.closest && node.closest('#' + EDITOR_ID);
+    return node && node.closest && node.closest('#' + EDITOR_ID + ', [data-live-edit-ignore]');
   }
 
   function hasDirectText(element) {
@@ -590,6 +590,7 @@
     var styles = readElementStyles(element);
     var target = targetForElement(element);
     var sourcePath = sourcePathForTarget(target);
+    var previousHash = saved[id] && saved[id].expectedHash;
     saved[id] = {
       text: element.textContent.trim(),
       html: target.kind === 'html' ? element.innerHTML : '',
@@ -597,7 +598,7 @@
       styles: target.kind === 'html' ? styles : {},
       updatedAt: new Date().toISOString(),
       target: target,
-      expectedHash: sourceHashes[sourcePath] || ''
+      expectedHash: previousHash || sourceHashes[sourcePath] || ''
     };
     setSavedCopy(saved);
     if (target.applyable && !saved[id].expectedHash) {
@@ -1794,6 +1795,10 @@
   function renderReviewBody() {
     if (!reviewDrawer) return;
     var body = reviewDrawer.querySelector('.review-body');
+    var selected = {};
+    Array.prototype.slice.call(body.querySelectorAll('[data-live-edit-apply-id]')).forEach(function(input) {
+      selected[input.getAttribute('data-live-edit-apply-id')] = input.checked;
+    });
     var entries = savedEntries();
     if (!entries.length) {
       body.innerHTML = '<p>No saved edits for this page.</p>';
@@ -1810,15 +1815,46 @@
       var original = originalRecords[entry.id];
       return [
         '<article class="review-item">',
-        '<label class="review-select"><input type="checkbox" data-live-edit-apply-id="' + escapeAttribute(entry.id) + '"' + (entry.target.applyable ? ' checked' : ' disabled') + '> ' + escapeText(entry.target.applyable ? 'Apply this change' : 'Not directly applyable') + '</label>',
+        '<label class="review-select"><input type="checkbox" data-live-edit-apply-id="' + escapeAttribute(entry.id) + '"' + (entry.target.applyable ? selected[entry.id] === false ? '' : ' checked' : ' disabled') + '> ' + escapeText(entry.target.applyable ? 'Apply this change' : 'Not directly applyable') + '</label>',
         '<div class="review-id">' + escapeText(entry.id) + '</div>',
         '<div class="review-target' + (entry.target.applyable ? '' : ' is-preview') + '">' + escapeText(targetLabel) + '</div>',
         original ? '<pre>old: ' + escapeText(original.target && original.target.kind !== 'html' ? original.text : original.html) + '</pre>' : '',
         '<pre>new: ' + escapeText(entry.record.html || entry.record.text) + '</pre>',
         entry.target.kind === 'html' && hasMeaningfulStyles(entry.record.styles) ? '<pre>styles: ' + escapeText(JSON.stringify(entry.record.styles)) + '</pre>' : '',
+        entry.target.applyable ? '<button type="button" data-review-source="' + escapeAttribute(entry.id) + '">Review current source</button>' : '',
         '</article>'
       ].join('');
     }).join('');
+  }
+
+  function reviewCurrentSource(id, button) {
+    var entry = savedEntries().find(function(item) { return item.id === id; });
+    if (!entry || !entry.target.applyable) return;
+    button.disabled = true;
+    callToolApi('/__tools/live-editor/source-target', {
+      pathSegments:entry.sourcePath.split('/'), kind:entry.target.kind,
+      copyId:entry.target.copyId, marker:entry.target.marker
+    }).then(function(result) {
+      var item = button.closest('.review-item');
+      var detail = document.createElement('div');
+      var state = result.state || {};
+      detail.innerHTML = '<pre>current source: ' + escapeText(state.html || state.text || '') + '</pre>' +
+        (hasMeaningfulStyles(state.styles) ? '<pre>current styles: ' + escapeText(JSON.stringify(state.styles)) + '</pre>' : '') +
+        '<p>Compare this with your draft above. Use my draft keeps your version for the next apply.</p>';
+      detail.appendChild(makeButton('Use my draft', function() {
+        var saved = getSavedCopy();
+        if (!saved[id]) return;
+        saved[id].expectedHash = result.hash;
+        sourceHashes[entry.sourcePath] = result.hash;
+        setSavedCopy(saved);
+        updateStatus('Draft ready to apply against the reviewed source');
+        renderReviewBody();
+      }));
+      item.appendChild(detail);
+    }).catch(function(error) {
+      button.disabled = false;
+      updateStatus(error.message || 'Current source could not be read');
+    });
   }
 
   function toggleReview() {
@@ -1854,6 +1890,10 @@
     undo.hidden = !lastUndoToken;
     actions.appendChild(undo);
     actions.appendChild(makeButton('Close', toggleReview));
+    reviewDrawer.addEventListener('click', function(event) {
+      var button = event.target.closest('[data-review-source]');
+      if (button) reviewCurrentSource(button.getAttribute('data-review-source'), button);
+    });
     document.body.appendChild(reviewDrawer);
     renderReviewBody();
   }
@@ -1975,6 +2015,18 @@
       });
       rememberUndoToken(result.undoToken || '');
       var saved = getSavedCopy();
+      var appliedHashes = {};
+      (result.files || []).forEach(function(file) {
+        appliedHashes[(file.pathSegments || []).join('/')] = file.hash;
+      });
+      Object.keys(saved).forEach(function(id) {
+        var record = normalizeRecord(saved[id]);
+        var sourcePath = sourcePathForTarget(record.target);
+        var appliedEntry = sourceEntries.find(function(entry) { return entry.sourcePath === sourcePath; });
+        if (appliedEntry && record.expectedHash === appliedEntry.expectedHash && appliedHashes[sourcePath]) {
+          saved[id].expectedHash = appliedHashes[sourcePath];
+        }
+      });
       sourceEntries.forEach(function(entry) {
         delete saved[entry.id];
         if (entry.element) {

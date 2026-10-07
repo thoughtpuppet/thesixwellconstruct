@@ -93,6 +93,7 @@ async function removeArtifactsForPath(root, pathname) {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const artifactRoot = join(root, entry.name);
+    assert.ok(artifactRoot.startsWith(root + (process.platform === "win32" ? "\\" : "/")));
     try {
       const manifest = JSON.parse(await readFile(join(artifactRoot, "manifest.json"), "utf8"));
       if (manifest.pathname === pathname) await rm(artifactRoot, { recursive: true, force: true });
@@ -174,5 +175,63 @@ test("live-editor revisions survive restart and restore as new immutable revisio
     await removeArtifactsForPath(HISTORY_ROOT, pathname);
     await removeArtifactsForPath(BACKUP_ROOT, pathname);
     await rm(fixturePath, { force: true });
+  }
+});
+
+test("mixed-revision drafts rebase unchanged targets and reject conflicts without writing", { timeout:45_000 }, async () => {
+  const fixtureName = `live-editor-mixed-${process.pid}-${Date.now()}.html`;
+  const fixturePath = join(ROOT, "tests", "fixtures", fixtureName);
+  const pathname = `/tests/fixtures/${fixtureName}`;
+  const original = '<main><p data-copy-id="a">A</p><p data-copy-id="b">B</p><p data-copy-id="c">C</p><script>const copy = /* live-copy:mixed.copy */ "Marker";</script></main>';
+  const origin = `http://127.0.0.1:${await availablePort()}`;
+  let preview;
+  await writeFile(fixturePath, original, "utf8");
+  try {
+    preview = await startPreview(Number(new URL(origin).port));
+    const base = (await postJson(origin, "/__tools/live-editor/context", { pathname })).page;
+    const edit = (copyId, html, expectedHash, styles = {}) => ({ kind:"html", copyId, html, styles, expectedHash, pathSegments:base.pathSegments });
+    const apply = (edits) => postJson(origin, "/__tools/live-editor/apply", { pathname, edits });
+    const first = await apply([edit("a", "A updated", base.hash)]);
+    // Emulate drafts left over from a partial apply, alongside a new draft.
+    await apply([edit("b", "B updated", base.hash), edit("c", "C updated", first.files[0].hash)]);
+    let source = await readFile(fixturePath, "utf8");
+    assert.match(source, /A updated/);
+    assert.match(source, /B updated/);
+    assert.match(source, /C updated/);
+    const reject = async (edits) => {
+      const before = await readFile(fixturePath, "utf8");
+      const response = await fetch(`${origin}/__tools/live-editor/apply`, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ pathname, edits }) });
+      assert.equal(response.status, 409);
+      assert.match((await response.json()).error, /browser draft is preserved/);
+      assert.equal(await readFile(fixturePath, "utf8"), before, "a conflicting batch must not apply any selected edit");
+    };
+    const current = (await postJson(origin, "/__tools/live-editor/context", { pathname })).page;
+    await reject([edit("c", "Must not write", current.hash), edit("a", "Stale A", base.hash)]);
+    await reject([edit("b", "Unknown starting point", "0".repeat(64))]);
+    await stopPreview(preview);
+    preview = await startPreview(Number(new URL(origin).port));
+    // Unrelated markup can change without blocking a verified target's draft.
+    source = source.replace("</main>", "<aside>External change</aside></main>");
+    await writeFile(fixturePath, source, "utf8");
+    await apply([edit("a", "A after restart", current.hash)]);
+    assert.match(await readFile(fixturePath, "utf8"), /External change/);
+    // Historical snapshots also recover source-backed generated text drafts.
+    await rm(join(ROOT, ".codex-tmp", "live-editor-source-bases", base.hash), { force:true });
+    await apply([{ kind:"source-marker", marker:"mixed.copy", text:"Marker updated", expectedHash:base.hash, pathSegments:base.pathSegments }]);
+    const styledBase = (await postJson(origin, "/__tools/live-editor/context", { pathname })).page;
+    source = await readFile(fixturePath, "utf8");
+    await writeFile(fixturePath, source.replace('data-copy-id="b"', 'data-copy-id="b" style="color: red"'), "utf8");
+    await reject([edit("b", "B stale style", styledBase.hash)]);
+    const reviewed = await postJson(origin, "/__tools/live-editor/source-target", edit("b", "", styledBase.hash));
+    assert.equal(reviewed.state.html, "B updated");
+    assert.equal(reviewed.state.styles.color, "red");
+    await apply([edit("b", "B reviewed", reviewed.hash, { color:"red" })]);
+    // A draft already present in source is harmless even if its base is unknown.
+    await apply([edit("c", "C updated", "0".repeat(64))]);
+  } finally {
+    await stopPreview(preview);
+    await removeArtifactsForPath(HISTORY_ROOT, pathname);
+    await removeArtifactsForPath(BACKUP_ROOT, pathname);
+    await rm(fixturePath, { force:true });
   }
 });
