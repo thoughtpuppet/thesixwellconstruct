@@ -66,7 +66,7 @@
       ['Current Works + Projects', '/currently'], ['the construct', '/about/#construct'],
       ['Saiel Dauhn Solehman', '/about/saieldauhnsolehman/'],
       ['architecture', '/about/#construct-architecture'], ['nodes', '/about/#access'],
-      ['method', '/about/#library'], ['faq', '/about/#faq'], ['Legend', '/about/legend/'],
+      ['method', '/about/#library'], ['collaborators', '/about/collaborators/'], ['faq', '/about/#faq'], ['Legend', '/about/legend/'],
     ],
     events: [
       ['GREEN[FIELD]', '/events/greenfield/'], ['Signal & Symbol', '/events/signal-symbol/'],

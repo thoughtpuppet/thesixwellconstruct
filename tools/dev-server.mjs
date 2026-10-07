@@ -17,6 +17,7 @@ import { defaultEmailDesignProfile, validateEmailDesignProfile } from "../functi
 import { CLIENT_EMAIL_THEMES } from "../functions/api/notifications/_email-renderer.js";
 import { shortBookingTokenFromPath } from "../functions/api/booking-links.js";
 import { handleConstructApi } from "../functions/api/construct/_lib.js";
+import { renderCollaboratorsDocument } from "../functions/api/construct/_collaborators.js";
 import { writingPageSlug, renderWritingPageTemplate } from "../functions/api/_shared/writing-pages.js";
 import {
   PAGE_VISIBILITY_DEFAULT_RULES,
@@ -82,7 +83,7 @@ async function localArchiveDatabase() {
 }
 
 async function handleLocalArchivePreview(req, res) {
-  if (!localArchivePreviewEnabled || !(req.url || "").startsWith("/api/archive/")) return false;
+  if (!localArchivePreviewEnabled || !/^\/api\/(?:archive\/|collaborators(?:[/?]|$)|connections\/)/.test(req.url || "")) return false;
   try {
     const response = await handleConstructApi(new Request(`http://${host}:${port}${req.url || "/"}`, {
       method: req.method || "GET",
@@ -99,6 +100,21 @@ async function handleLocalArchivePreview(req, res) {
   } catch (error) {
     localEmailResponse(res, 500, { ok: false, error: "Local Archive preview failed.", detail: error.message });
   }
+  return true;
+}
+
+async function handleLocalCollaboratorPage(req, res) {
+  const pathname = new URL(req.url || "/", `http://${host}:${port}`).pathname;
+  const match = pathname.replace(/\/$/, "").match(/^\/about\/collaborators(?:\/([a-z0-9-]+))?$/);
+  if (!localArchivePreviewEnabled || !match) return false;
+  try {
+    const response = await handleConstructApi(new Request(`http://${host}:${port}/api/collaborators${match[1] ? `/${match[1]}` : ""}`), { SUBMISSIONS_DB: await localArchiveDatabase() });
+    if (!response.ok) { res.writeHead(response.status,{"content-type":"text/plain"}); res.end(response.status===404?"Collaborator not found.":"Unable to load collaborators."); return true; }
+    const payload = await response.json();
+    const template = await readFile(path.join(root,"about/collaborators/index.html"),"utf8");
+    res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store"});
+    res.end(renderCollaboratorsDocument(template,payload));
+  } catch(error) { localEmailResponse(res,500,{error:"Local collaborator preview failed.",detail:error.message}); }
   return true;
 }
 
@@ -1292,6 +1308,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (await handleLocalCollaboratorPage(req, res)) return;
   if (await handleLocalArchivePreview(req, res)) {
     return;
   }

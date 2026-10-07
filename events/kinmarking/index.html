@@ -30,11 +30,13 @@
   .section > .section-head:last-child { margin-bottom:0; }
   .kinmarking-part { scroll-margin-top:120px; }
   .kinmarking-part :is(p.section-copy,.kinmarking-reading > article > p,.kinmarking-panel > p,p.edition-copy) { font-size:15px; }
+  #editions :is(p.section-copy,p.edition-copy) { font-size:15px; }
   .kinmarking-part + .kinmarking-part { border-top:5px solid var(--ring-faint); }
   .kinmarking-part-heading { padding-top:var(--space-md); }
-  .section-title.kinmarking-part-title { --type-section-font:var(--font-serif); --type-section-size-active:clamp(24px,2.5vw,32px); --type-section-weight:700; --type-section-color:var(--color-events); --type-body-transform:uppercase; --type-section-transform:uppercase; margin:0; letter-spacing:normal !important; line-height:1.3 !important; }
+  .section-title.kinmarking-part-title { --type-section-font:var(--font-serif); --type-section-size-active:clamp(34px,4vw,48px); --type-section-weight:700; --type-section-color:var(--color-events); --type-body-transform:uppercase; --type-section-transform:uppercase; margin:0; letter-spacing:normal !important; line-height:1.3 !important; }
   .kinmarking-part-title::first-letter,.kinmarking-reading h4::first-letter,.kinmarking-visual-vocabulary h4::first-letter { text-transform:uppercase; }
   .kinmarking-methods { margin-top:var(--space-md); }
+  .kinmarking-collaborator-links { display:flex; flex-wrap:wrap; gap:16px; margin-top:24px; }
   .kinmarking-intro { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; }
   .kinmarking-panel { min-width:0; border:5px solid var(--ring-faint); padding:28px; background:var(--color-bg); }
   .kinmarking-panel p { margin:0; color:var(--text-muted); line-height:1.75; }
@@ -55,7 +57,7 @@
   .kinmarking-edition-card { min-width:0; display:flex; flex-direction:column; border:5px solid var(--ring-faint); padding:28px; background:var(--color-bg); }
   .kinmarking-edition-card:hover,.kinmarking-edition-card:focus-within { border-color:var(--color-events); }
   .kinmarking-edition-card .edition-state { margin:0 0 16px; color:var(--color-events-bright); font-family:var(--font-display); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
-  .kinmarking-edition-card h4 { margin:0; color:var(--text); font-size:clamp(23px,3vw,34px); line-height:1.08; }
+  .kinmarking-edition-card h3 { margin:0; color:var(--text); font-size:clamp(23px,3vw,34px); line-height:1.08; }
   .kinmarking-edition-card .edition-date { margin:18px 0 0; color:var(--text-dim); font-family:var(--font-display); font-size:10px; font-weight:800; letter-spacing:.12em; line-height:1.65; text-transform:uppercase; }
   .kinmarking-edition-card .edition-copy { margin:16px 0 24px; color:var(--text-muted); line-height:1.68; }
   .kinmarking-edition-card .venture-link { align-self:flex-start; margin-top:auto; }
@@ -78,17 +80,25 @@
       <div class="hero-copy">
         <p class="hero-descriptor hero-descriptor--wide hero-lede" data-copy-id="live-events-kinmarking-p-1"><span style="color: rgba(252, 184, 103, 0.55); font-family: Georgia, &quot;Times New Roman&quot;, Times, serif; font-size: 12px; text-transform: uppercase">KINMARKING is a communal series exploring the convergence of the body, rituals of inheritance, the desire for something to persist and the technology of tattooing.</span></p>
         <div class="hero-actions">
-          <a class="venture-link" href="#project-inquiry" data-copy-id="kinmarking-project-part-inquiry-link">The Inquiry</a>
-          <a class="venture-link" href="#mode-structure-development" data-copy-id="kinmarking-project-part-mode-link">Mode, Structure, and Development</a>
           <a class="venture-link" href="#editions" data-copy-id="live-events-kinmarking-a-1">Editions</a>
+          <a class="venture-link" href="#project-inquiry" data-copy-id="kinmarking-project-part-inquiry-link">What KINMARKING explores</a>
+          <a class="venture-link" href="#mode-structure-development" data-copy-id="kinmarking-project-part-mode-link">Mode, Structure, and Development</a>
           <a class="venture-link" href="/events/" data-copy-id="live-events-kinmarking-a-2">All events</a>
         </div>
       </div>
     </section>
 
+    <section class="section" id="editions">
+      <header class="section-head">
+        <div><h2 class="section-title" data-copy-id="live-events-kinmarking-h2-3">Editions.</h2></div>
+        <p class="section-copy" data-copy-id="live-events-kinmarking-p-4">Every two months, beginning November 21, 2026.&nbsp;</p>
+      </header>
+      <div class="kinmarking-editions" id="kinmarkingEditions" aria-live="polite"><p class="kinmarking-empty" data-copy-id="live-events-kinmarking-p-5">Loading the KINMARKING editions.</p></div>
+    </section>
+
     <section class="kinmarking-part" id="project-inquiry" data-kinmarking-part="inquiry" aria-labelledby="projectInquiryTitle">
       <header class="kinmarking-part-heading">
-        <h2 class="section-title kinmarking-part-title" id="projectInquiryTitle" data-copy-id="kinmarking-project-part-inquiry-title">The Inquiry</h2>
+        <h2 class="section-title kinmarking-part-title" id="projectInquiryTitle" data-copy-id="kinmarking-project-part-inquiry-title">What KINMARKING explores</h2>
       </header>
     <section class="section" id="inquiry" aria-labelledby="embodiedKnowledgeTitle">
       <header class="section-head">
@@ -224,14 +234,7 @@
           <p data-copy-id="kinmarking-project-future-open">These are possibilities for the inquiry to develop. Each encounter can introduce another way of thinking about interpretation, meaning, and preservation.</p>
         </article>
       </div>
-    </section>
-
-    <section class="section" id="editions">
-      <header class="section-head">
-        <div><h3 class="section-title" data-copy-id="live-events-kinmarking-h2-3">KINMARKING Editions</h3></div>
-        <p class="section-copy" data-copy-id="live-events-kinmarking-p-4">Four Saturday editions, every two months, beginning November 21, 2026.&nbsp;</p>
-      </header>
-      <div class="kinmarking-editions" id="kinmarkingEditions" aria-live="polite"><p class="kinmarking-empty" data-copy-id="live-events-kinmarking-p-5">Loading the KINMARKING editions.</p></div>
+      <div class="kinmarking-collaborator-links" aria-label="First edition collaborators"><a class="venture-link" href="/about/collaborators/dartricia-rollins/" data-copy-id="kinmarking-dartricia-profile-link">Dartricia Rollins</a><a class="venture-link" href="/about/collaborators/ashby-combahee/" data-copy-id="kinmarking-ashby-profile-link">Ashby Combahee</a><a class="venture-link" href="/about/collaborators/georgia-dusk/" data-copy-id="kinmarking-georgia-dusk-profile-link">Georgia Dusk · Community archive</a></div>
     </section>
 
     </section>
@@ -252,7 +255,7 @@
     root.innerHTML = editions.map(function (event) {
       return '<article class="kinmarking-edition-card">' +
         '<p class="edition-state">KINMARKING ' + series.escapeHtml(event.number) + ' · ' + series.escapeHtml(series.stateLabel(event)) + '</p>' +
-        '<h4>' + series.escapeHtml(event.title) + '</h4>' +
+        '<h3>' + series.escapeHtml(event.title) + '</h3>' +
         '<p class="edition-date">' + series.escapeHtml(series.formatDate(event.startsAt)) + '</p>' +
         '<p class="edition-copy"' + series.copyAttributes(event.number, "description") + '>' + series.escapeHtml(event.description) + '</p>' +
         '<a class="venture-link" href="' + series.editionHref(event) + '">view edition</a>' +

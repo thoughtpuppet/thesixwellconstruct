@@ -1,0 +1,36 @@
+.collaborators-content { margin-top:40px; }
+.collaborator-directory { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.collaborator-card { min-width:0; border:5px solid var(--color-archive-dim); background:var(--color-bg); }
+.collaborator-portrait-link { display:block; }
+.collaborator-portrait-link:empty { display:none; }
+.collaborator-portrait { display:block; width:100%; height:auto; object-fit:contain; background:var(--color-bg); }
+.collaborator-card .collaborator-portrait { height:360px; }
+.collaborator-card-copy { padding:24px; }
+.collaborator-card .section-title { font-size:clamp(24px,3vw,36px); margin:0 0 16px; }
+.collaborator-card p,.collaborator-profile p,.collaborator-profile li { color:var(--color-text-muted); font:15px/1.75 var(--font-serif,Georgia,serif); }
+.collaborator-card .link-row,.collaborator-profile .link-row { justify-content:flex-start; margin-top:20px; }
+.collaborator-profile { display:grid; grid-template-columns:minmax(220px,330px) minmax(0,1fr); gap:32px; align-items:start; }
+.collaborator-profile:not(:has(> img)) { grid-template-columns:minmax(0,1fr); max-width:800px; }
+.collaborator-profile .section-title { margin:0 0 20px; font-size:clamp(30px,4vw,48px); }
+.collaborator-profile h3 { margin:0 0 12px; color:var(--color-about); font:700 20px/1.4 var(--font-serif,Georgia,serif); }
+.collaborator-profile .collaborator-pronouns,.collaborator-card .collaborator-pronouns { margin:0 0 16px; }
+.collaborator-bio { white-space:pre-line; }
+.collaborator-affiliations,.collaborator-projects,.collaborator-work { margin-top:28px; }
+.collaborator-affiliations ul,.collaborator-work ul { padding-left:20px; }
+.collaborator-affiliations a,.collaborator-work a { color:var(--color-about); text-decoration:underline; text-underline-offset:4px; }
+.collaborator-projects p { margin-top:16px; }
+@media(max-width:700px) {
+  .collaborator-directory,.collaborator-profile { grid-template-columns:minmax(0,1fr); }
+  .collaborator-profile > img { max-width:330px; }
+  .collaborator-card .collaborator-portrait { height:auto; max-height:420px; }
+  .collaborator-card-copy { padding:20px; }
+}
+
+/* Optional entity types recede behind names and biographies. */
+.collaborator-kind { --type-eyebrow-color:var(--color-text-ghost); }
+.collaborator-card .collaborator-description,
+.collaborator-profile .collaborator-description {
+  --type-meta-color:var(--color-text-dim);
+  --type-meta-size-active:12px;
+  margin:0 0 16px;
+}

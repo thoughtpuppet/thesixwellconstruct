@@ -23,14 +23,10 @@
     --venture-wash:rgba(0,93,37,0.1);
   }
   html,body { background:var(--color-bg); }
-  .events-editorial { display:grid; grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr); gap:16px; }
+  .landing-hero { grid-template-columns:minmax(0,1fr); min-height:0; align-items:start; gap:24px; }
+  .events-editorial { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; }
   .events-editorial-intro { min-width:0; }
   .events-editorial-intro p { margin:20px 0 0; max-width:56ch; color:var(--text-muted); line-height:1.75; }
-  .events-project-feature { min-width:0; border:5px solid var(--ring-faint); padding:28px; background:var(--color-bg); }
-  .events-project-feature:hover,.events-project-feature:focus-within { border-color:var(--color-events); }
-  .events-project-feature h3 { margin:16px 0 0; color:var(--text); font-size:clamp(28px,4vw,48px); line-height:1.08; }
-  .events-project-feature p { margin:20px 0 0; color:var(--text-muted); line-height:1.75; }
-  .events-project-feature .venture-link { margin-top:24px; }
   .event-card-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
   .event-card {
     min-width:0;
@@ -70,8 +66,6 @@
   .event-day-link:hover,.event-day-link:focus-visible { border-color:var(--color-events); outline:none; }
   .event-day-link span { color:var(--text-dim); font-family:var(--font-display); font-size:9px; letter-spacing:.12em; text-transform:uppercase; }
   @media (max-width:768px) {
-    .events-editorial { grid-template-columns:minmax(0,1fr); gap:16px; }
-    .events-project-feature { padding:22px; }
     .event-card-list { grid-template-columns:minmax(0,1fr); gap:12px; }
     .event-card { padding:22px; }
     .event-card h3 { font-size:24px; }
@@ -90,12 +84,10 @@
   <main class="venture-shell entrance-fade">
     <section class="landing-hero venture-hero site-hero site-hero--landing" aria-labelledby="page-title">
       <div>
-        <span class="venture-kicker" data-copy-id="live-events-span-1">live container</span>
         <h1 class="venture-title hero-title" id="page-title" data-copy-id="live-events-h1-1">Events.</h1>
       </div>
       <div class="hero-copy">
-        <p class="hero-descriptor hero-lede" data-copy-id="live-events-p-1">Gatherings, open calls, temporary rooms, and live experiments attached to the construct.</p>
-        <p class="hero-note" data-copy-id="live-events-p-2">Gatherings make room for conversation, collaboration, and shared experience within the Construct. Explore the projects behind them, the questions they open, and the ways to take part.</p>
+        <p class="hero-descriptor hero-descriptor--wide hero-lede" data-copy-id="live-events-p-1"><span style="color: rgb(251, 209, 157); font-family: Georgia, &quot;Times New Roman&quot;, Times, serif; font-size: 16px; text-transform: none">Gatherings make room for conversation, collaboration, and shared experience within the Construct. Explore the projects behind them, the questions they open, and the ways to take part.</span></p>
         <div class="hero-actions">
           <a class="venture-link" href="#projects" data-copy-id="events-projects-link">projects</a>
           <a class="venture-link" href="#upcoming" data-copy-id="live-events-a-1">upcoming</a>
@@ -113,13 +105,6 @@
         <p data-copy-id="events-editorial-intro">The events produced or operated through Six.Well are places to encounter work, exchange perspectives, and participate in a developing practice. Some belong to ongoing projects that unfold through a series of editions; others create a particular occasion to come together.</p>
         <p data-copy-id="events-editorial-participation">Follow the thinking behind an ongoing project, or find a gathering to take part in. Each event introduces its focus and collaborators, with dates and participation details as they are confirmed.</p>
       </div>
-      <article class="events-project-feature" aria-labelledby="featuredProjectTitle">
-        <span class="section-kicker" data-copy-id="events-kinmarking-feature-kicker">ongoing project · recurring series</span>
-        <h3 id="featuredProjectTitle" data-copy-id="events-kinmarking-feature-title">KINMARKING</h3>
-        <p data-copy-id="events-kinmarking-feature-copy">KINMARKING explores what humans choose to preserve, how memory is carried, and how tattooing can become a method of transmission. Oral history, lineage, family and personal archives, and rituals of inheritance give form to a broader inquiry into interpretation and meaning.</p>
-        <p data-copy-id="events-kinmarking-feature-series">Through recurring gatherings, collaborators and participants approach these questions from different perspectives. Each edition offers a particular starting point, including oral histories, color, and symbolism.</p>
-        <a class="venture-link" href="/events/kinmarking/" data-copy-id="events-kinmarking-feature-link">explore the project</a>
-      </article>
     </section>
 
     <section class="section" id="upcoming">

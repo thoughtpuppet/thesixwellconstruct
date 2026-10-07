@@ -13,6 +13,7 @@ import { handleArchiveWebSnapshotsAdmin, loadPublicArchiveWebSnapshots } from ".
 import { enqueueVisualColorEntity, enqueueVisualColorEntityById } from "./_automatic-visual-colors.js";
 import { handleGalleryAdmin, handleGalleryPublic, handleMediaCatalogueAdmin } from "./_gallery.js";
 import { handleWritingApi } from "./_writing.js";
+import { publicCollaborators } from "./_collaborators.js";
 import { publicIdentityProfileLinkGateSql, archiveIdentityProfilePublicSql, archiveCanonicalOwnerPublicSql, archiveMaterialPublicStateSql } from "./_archive-publication.js";
 import { archiveCommentsAdmin, loadArchiveComments, sourceCorrectionInfo, sourceChanged, protectedNote, correctArchiveSource } from "./_archive-comments.js";
 import { WRITING_ROOT } from "../../../shared/writing-content.js";
@@ -4761,7 +4762,8 @@ function entityDirectorySql(where="1=1"){
       WHEN 'archive_failed_experiment' THEN '/archive/failed-experiments/'||afe.slug||'/'
       WHEN 'archive_blackboard_fragment' THEN '/archive/blackboards/'||abfd.archive_slug||'/#fragment-'||abf.slug
       WHEN 'construct_node' THEN own.route WHEN 'construct_pathway' THEN cp.route
-      WHEN 'organization' THEN CASE WHEN aip.publication_state='published' AND aip.visibility='public' AND ${publicIdentityProfileLinkGateSql("aip")} THEN '/about/identities/'||aip.slug||'/' ELSE '' END
+      WHEN 'person' THEN CASE WHEN pe.state='published' AND pe.privacy='public' AND collab.public_visible=1 THEN '/about/collaborators/'||collab.slug||'/' ELSE '' END
+      WHEN 'organization' THEN CASE WHEN org.state='published' AND collab.public_visible=1 THEN '/about/collaborators/'||collab.slug||'/' WHEN aip.publication_state='published' AND aip.visibility='public' AND ${publicIdentityProfileLinkGateSql("aip")} THEN '/about/identities/'||aip.slug||'/' ELSE '' END
       WHEN 'event' THEN '/events/'||ev.slug||'/' WHEN 'appearance' THEN '/about/exhibitions-appearances/'||app.slug||'/' ELSE '' END route,
     COALESCE(NULLIF(mi.image_url,''),NULLIF(pi.source_url,''),
       CASE WHEN ce.entity_type='archive_blackboard_fragment' AND abf.derivative_media_id IS NOT NULL
@@ -4823,6 +4825,7 @@ function entityDirectorySql(where="1=1"){
   LEFT JOIN people pe ON ce.entity_type='person' AND pe.id=ce.id
   LEFT JOIN organizations org ON ce.entity_type='organization' AND org.id=ce.id
   LEFT JOIN about_identity_profiles aip ON aip.organization_id=org.id
+  LEFT JOIN collaborator_profiles collab ON collab.entity_id=ce.id
   LEFT JOIN places pl ON ce.entity_type='place' AND pl.id=ce.id
   LEFT JOIN events ev ON ce.entity_type='event' AND ev.id=ce.id
   LEFT JOIN artist_appearances app ON ce.entity_type='appearance' AND app.id=ce.id
@@ -8323,6 +8326,8 @@ export async function handleConstructApi(request,env){
   if(path==="/api/current-projects"&&request.method==="GET")return publicCurrentProjects(env);
   if(path==="/api/site/explore")return publicExplore(request,env);
   if(path==="/api/search")return publicSearch(request,env);
+  if(path==="/api/collaborators")return publicCollaborators(request,env);
+  const collaboratorMatch=path.match(/^\/api\/collaborators\/([^/]+)$/);if(collaboratorMatch)return publicCollaborators(request,env,decodeURIComponent(collaboratorMatch[1]));
   if(path==="/api/identities")return publicIdentitiesApi(request,env);
   const identityPublicMatch=path.match(/^\/api\/identities\/([^/]+)$/);if(identityPublicMatch)return publicIdentitiesApi(request,env,decodeURIComponent(identityPublicMatch[1]));
   if(path==="/api/archive/failed-experiments")return publicFailedExperimentsApi(request,env);

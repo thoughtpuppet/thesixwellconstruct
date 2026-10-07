@@ -11,6 +11,7 @@ import {
   updateCartLines,
 } from "./functions/api/shop/_lib.js";
 import { KINMARKING_FIRST_EDITION_SLUG, kinmarkingFirstEditionRedirect } from "./shared/kinmarking-routes.js";
+import { renderCollaboratorsDocument } from "./functions/api/construct/_collaborators.js";
 import {
   handleAdminMerchApi,
   handleLaunchAlertSignup,
@@ -922,6 +923,27 @@ async function serveMerchRecordPage(request, env, slug) {
   headers.delete("etag");
   headers.set("cache-control", "no-store");
   return applySeoResponse(request, env, new Response(html, { status: assetResponse.status, headers }), seo);
+}
+
+async function serveCollaboratorPage(request, env, slug = "") {
+  const apiUrl = new URL(`/api/collaborators${slug ? `/${encodeURIComponent(slug)}` : ""}`, request.url);
+  const apiResponse = await handleConstructApi(new Request(apiUrl, { headers: { accept: "application/json" } }), env);
+  if (apiResponse.status === 404) return notFoundPage(request, env);
+  if (!apiResponse.ok) return apiResponse;
+  const payload = await apiResponse.json();
+  const record = payload.record;
+  const asset = await servePublicAsset(request, env, "/about/collaborators/index.html", { seo: false });
+  if (!asset.ok) return asset;
+  const headers = new Headers(asset.headers);
+  headers.delete("content-length"); headers.delete("etag"); headers.set("cache-control", "no-store");
+  const html = request.method === "HEAD" ? null : renderCollaboratorsDocument(await asset.text(), payload);
+  const canonicalPath = `/about/collaborators/${slug ? `${encodeURIComponent(slug)}/` : ""}`;
+  return applySeoResponse(request, env, new Response(html, { status: 200, headers }), {
+    title: `${record?.name || "Collaborators"} · the six.well construct`,
+    description: record?.bio || "People and organizations collaborating within the Six.Well Construct.",
+    canonicalPath,
+    structuredData: record ? { "@context": "https://schema.org", "@type": record.entityType === "person" ? "Person" : "Organization", name: record.name, description: record.bio, url: `${canonicalOrigin(env, request.url)}${canonicalPath}`, ...(record.image ? { image: `${canonicalOrigin(env, request.url)}${record.image.url}` } : {}) } : undefined,
+  });
 }
 
 async function serveIdentityProfilePage(request, env, slug) {
@@ -2055,6 +2077,7 @@ export default {
       url.pathname === "/api/site/explore" ||
       url.pathname === "/api/site/navigation" ||
       url.pathname === "/api/current-projects" ||
+      url.pathname === "/api/collaborators" || url.pathname.startsWith("/api/collaborators/") ||
       url.pathname === "/api/identities" || url.pathname.startsWith("/api/identities/") ||
       url.pathname.startsWith("/api/connections/") ||
       url.pathname.startsWith("/api/construct/media/") ||
@@ -2430,6 +2453,12 @@ export default {
 
     if (appearanceDetailSlug(url.pathname)) {
       return servePublicAsset(request, env, "/about/exhibitions-appearances/detail/index.html");
+    }
+
+    const collaboratorPage = normalizePath(url.pathname).match(/^\/about\/collaborators(?:\/([a-z0-9-]+))?$/);
+    if (collaboratorPage) {
+      if (!url.pathname.endsWith("/")) return Response.redirect(new URL(`${normalizePath(url.pathname)}/${url.search}`,request.url),308);
+      return serveCollaboratorPage(request,env,collaboratorPage[1] || "");
     }
 
     const requestedIdentitySlug = identityProfileSlug(url.pathname);

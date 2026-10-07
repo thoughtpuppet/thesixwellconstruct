@@ -1,3 +1,4 @@
+import { COLLABORATOR_PUBLIC_SQL } from "../construct/_collaborators.js";
 import { loadPublicCalendarSearchEvents } from "../calendar/_lib.js";
 import { publicPageVisibilityDecisions } from "../site-visibility/_lib.js";
 
@@ -8,6 +9,7 @@ const STATIC_PAGES = Object.freeze([
   ["/home/", "The Six.Well Construct · Creative Ecosystem", "Enter the connected creative ecosystem of Saiel Dauhn Solehman across art, tattooing, clothing, writing, film, sound, events, and Archive."],
   ["/about/", "About the Six.Well Construct · Saiel Dauhn Solehman", "The full operating creative ecosystem of Saiel Dauhn Solehman and the relationships between its mediums, projects, records, and public pathways."],
   ["/about/saieldauhnsolehman/", "Saiel Dauhn Solehman · Interdisciplinary Artist in Atlanta", "Saiel Dauhn Solehman, also known as Saiel Solehman, is an Atlanta interdisciplinary artist, systems thinker, scholar, and veteran working across art, tattooing, clothing, writing, film, sound, and events."],
+  ["/about/collaborators/", "Collaborators · the Six.Well Construct", "People and organizations collaborating within the Six.Well Construct."],
   ["/about/ways-in/", "Ways Into the Six.Well Construct", "Choose a path into Saiel Dauhn Solehman's creative ecosystem through art, tattooing, clothing, writing, film, events, the Legend, or the Archive."],
   ["/about/exhibitions-appearances/", "Exhibitions and Appearances · Saiel Dauhn Solehman", "A public record of exhibitions, appearances, talks, and programs involving interdisciplinary artist Saiel Dauhn Solehman."],
   ["/about/contact-press/", "Contact and Press · Saiel Dauhn Solehman", "Contact and press pathways for Saiel Dauhn Solehman and the Six.Well Construct."],
@@ -373,7 +375,7 @@ function calendarTitleSlug(value) {
 async function dynamicSitemapEntries(env) {
   if (!env.SUBMISSIONS_DB) throw new Error("Missing authoritative D1 binding SUBMISSIONS_DB.");
   const db = env.SUBMISSIONS_DB;
-  const [merch, events, art, legend, flash, identities, archive, writing, calendarEvents] = await Promise.all([
+  const [merch, events, art, legend, flash, identities, collaborators, archive, writing, calendarEvents] = await Promise.all([
     db.prepare(`SELECT m.route path,m.updated_at lastmod FROM merch_items m JOIN content_entities ce ON ce.id=m.id
       WHERE m.state='published' AND ce.visibility='public' AND ce.search_visibility=1`).all(),
     db.prepare(`SELECT '/events/'||slug||'/' path,updated_at lastmod FROM events
@@ -386,6 +388,7 @@ async function dynamicSitemapEntries(env) {
       WHERE f.state NOT IN ('draft','archived') AND ce.visibility='public' AND ce.search_visibility=1`).all(),
     db.prepare(`SELECT '/about/identities/'||slug||'/' path,updated_at lastmod FROM about_identity_profiles
       WHERE publication_state='published' AND visibility='public'`).all(),
+    db.prepare(`SELECT '/about/collaborators/'||slug||'/' path,updated_at lastmod FROM (${COLLABORATOR_PUBLIC_SQL} AND ce.search_visibility=1)`).all(),
     db.prepare(`SELECT '/archive/records/'||d.archive_slug||'/' path,d.updated_at lastmod FROM archive_dossiers d JOIN content_entities ce ON ce.id=d.entity_id
       WHERE d.state='published' AND d.public_visible=1 AND ce.visibility='public' AND ce.search_visibility=1`).all(),
     db.prepare(`SELECT '/writings/mindful-darkness/wrkng/'||w.slug||'/' path,w.published_updated_at lastmod
@@ -393,7 +396,7 @@ async function dynamicSitemapEntries(env) {
       WHERE w.state='published' AND w.is_sample=0 AND ce.visibility='public' AND ce.search_visibility=1`).all(),
     loadPublicCalendarSearchEvents(env),
   ]);
-  const rows = [merch, events, art, legend, flash, identities, archive, writing]
+  const rows = [merch, events, art, legend, flash, identities, collaborators, archive, writing]
     .flatMap((result) => result.results || [])
     .map((row) => ({ path: normalizeSeoPath(row.path), lastmod: row.lastmod || "" }));
   for (const event of calendarEvents || []) {
