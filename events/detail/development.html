@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event — the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
+<link rel="stylesheet" href="/css/landing-family.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
+<link rel="stylesheet" href="/css/kinmarking-development.css">
+<style>
+  :root { --venture-color:var(--color-events); --venture-accent:var(--color-events); --venture-dim:var(--color-events-dim); }
+  html,body { background:var(--color-bg); }
+  .event-detail-grid { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr); gap:16px; }
+  .event-panel { min-width:0; border:5px solid var(--ring-faint); padding:28px; background:var(--color-bg); transition:border-color var(--duration-base) var(--ease-out); }
+  .event-panel:hover,.event-panel:focus-within { border-color:var(--color-events); }
+  .event-copy { color:var(--text-muted); line-height:1.7; white-space:pre-line; }
+  .event-dates { display:grid; gap:12px; margin-top:22px; }
+  .event-date { display:grid; gap:7px; border:5px solid var(--ring-faint); padding:16px; color:var(--text); text-decoration:none; }
+  .event-date:hover,.event-date:focus-visible,.event-date.is-selected { border-color:var(--color-events); outline:none; }
+  .event-date strong { font-size:15px; }
+  .event-date span { color:var(--text-dim); font-family:var(--font-display); font-size:9px; letter-spacing:.12em; line-height:1.5; text-transform:uppercase; }
+  .event-date.is-past { opacity:.55; }
+  .event-status { margin:0 0 18px; color:var(--color-events-bright); font-family:var(--font-display); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
+  .event-form { display:grid; gap:14px; }
+  .event-form[hidden],.kinmarking-experience[hidden],.kinmarking-flyer[hidden],.venture-link[hidden] { display:none !important; }
+  .event-form label { display:grid; gap:7px; color:var(--text-dim); font-family:var(--font-display); font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+  .event-form input,.event-form select,.event-form textarea { width:100%; min-width:0; border:5px solid var(--ring-faint); padding:12px; background:var(--color-bg); color:var(--text); font:inherit; }
+  .event-form input:focus,.event-form select:focus,.event-form textarea:focus { border-color:var(--color-events); outline:none; }
+  .event-message { color:var(--text-dim); line-height:1.55; }
+  .event-message[data-state="error"] { color:var(--color-tattoos-bright); }
+  .event-message[data-state="ok"] { color:var(--color-events-bright); }
+  .event-waitlist { margin-top:22px; padding-top:22px; border-top:5px solid var(--ring-faint); }
+  .event-honeypot { position:absolute; left:-10000px; }
+  .kinmarking-flyer { margin:24px 0 0; border:5px solid var(--color-events-dim); padding:12px; background:var(--color-bg); }
+  .kinmarking-flyer img { display:block; width:100%; height:auto; }
+  .kinmarking-experience { display:grid; gap:16px; }
+  .kinmarking-guide-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .kinmarking-guide-card { min-width:0; border:5px solid var(--ring-faint); padding:24px; background:var(--color-bg); }
+  .kinmarking-guide-card h3 { margin:0; color:var(--text); font-size:clamp(20px,2.5vw,28px); }
+  .kinmarking-guide-card p,.kinmarking-guide-card li { color:var(--text-muted); line-height:1.7; }
+  .kinmarking-guide-card ul { margin:16px 0 0; padding-left:20px; }
+  .kinmarking-stages { margin:0; padding:0; list-style:none; }
+  .kinmarking-edition-links { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .kinmarking-edition-link { min-width:0; display:grid; gap:7px; border:5px solid var(--ring-faint); padding:16px; color:var(--text); text-decoration:none; }
+  .kinmarking-edition-link:hover,.kinmarking-edition-link:focus-visible,.kinmarking-edition-link.is-current { border-color:var(--color-events); outline:none; }
+  .kinmarking-edition-link span,.kinmarking-edition-link small { color:var(--color-events-bright); font-family:var(--font-display); font-size:9px; font-weight:900; letter-spacing:.14em; line-height:1.5; text-transform:uppercase; }
+  .kinmarking-edition-link strong { font-size:16px; line-height:1.25; }
+  .kinmarking-edition-link small { color:var(--text-dim); }
+  .kinmarking-empty { border:5px solid var(--color-events-dim); padding:16px; color:var(--text-dim); }
+  @media (max-width:760px) {
+    .event-detail-grid,.kinmarking-guide-grid,.kinmarking-edition-links { grid-template-columns:minmax(0,1fr); gap:12px; }
+    .event-panel,.kinmarking-guide-card { padding:22px; }
+  }
+</style>
+<link rel="stylesheet" href="/css/events-controls.css">
+</head>
+<body class="venture-page" data-venture="events" data-landing-family="events-program">
+  <main class="venture-shell entrance-fade"><div class="kinmarking-development"><canvas class="kinmarking-development-eyes" aria-hidden="true"></canvas><header class="site-hero site-hero--supporting kinmarking-development-hero" aria-labelledby="eventTitle"><span class="venture-kicker" data-live-edit-owner="managed" data-live-edit-label="KINMARKING edition identity">KINMARKING</span><h1 class="hero-title" id="eventTitle" data-live-edit-owner="managed" data-live-edit-label="KINMARKING edition title">KINMARKING</h1></header><div class="kinmarking-development-stage"><div class="kinmarking-development-backdrop" aria-hidden="true" inert data-live-edit-ignore="true"><div class="kinmarking-development-panel"><h2>The gathering</h2><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p></div><div class="kinmarking-development-panel"><h2>Participation</h2><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p></div></div><section class="kinmarking-development-message" aria-labelledby="developmentStatus"><h2 id="developmentStatus" data-copy-id="kinmarking-development-status" data-live-edit-owner="source-marker" data-live-edit-source="js/kinmarking-development.js" data-live-edit-marker="kinmarking-development-status">In development</h2><p id="developmentNote" data-copy-id="kinmarking-development-note" data-live-edit-owner="source-marker" data-live-edit-source="js/kinmarking-development.js" data-live-edit-marker="kinmarking-development-note">Program and participation details will follow.</p><a class="venture-link" href="/events/kinmarking/" data-copy-id="kinmarking-development-explore" data-live-edit-owner="source-marker" data-live-edit-source="js/kinmarking-development.js" data-live-edit-marker="kinmarking-development-explore">Explore KINMARKING</a></section></div><div class="kinmarking-development-filler" aria-hidden="true" inert data-live-edit-ignore="true"><h2>Lorem ipsum dolor sit amet.</h2><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p><p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p></div></div>
+    <footer class="footer"><p data-copy-id="live-events-detail-p-13">&copy; the six.well construct</p><div class="page-links"><a href="/events/" data-copy-id="live-events-detail-a-5">events</a><a href="/home/" data-copy-id="live-events-detail-a-6">return to construct</a></div></footer>
+  </main>
+<script src="/js/kinmarking-series.js?v=20261002-oral-histories"></script>
+<script src="/js/construct-ambient-field.js"></script>
+<script src="/js/kinmarking-development.js"></script>
+<script>
+(function () {
+  var slug = location.pathname.split('/').filter(Boolean)[1] || '';
+  var series = window.KinmarkingSeries;
+  var number = series.sessionNumberForSlug(slug);
+  window.KinmarkingDevelopment.mount(number, series);
+})();
+</script>
+<script src="/js/transition.js"></script>
+<script src="/js/construct-corner.js"></script>
+<script src="/js/construct-nav.js"></script>
+</body>
+</html>

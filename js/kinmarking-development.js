@@ -1,6 +1,6 @@
 (function (global) {
   'use strict';
-  function isDevelopmentEdition(number) { return ['02', '03', '04'].includes(String(number)); }
+  function isDevelopmentEdition(number) { return ['01', '02', '03', '04'].includes(String(number)); }
   function mount(number, series) {
     if (!isDevelopmentEdition(number)) return;
     var shell = document.querySelector('.venture-shell');

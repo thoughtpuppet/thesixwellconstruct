@@ -244,6 +244,8 @@ const checkRoutes = [
 ];
 
 const localOnlyRoutes = new Map([
+  ["/tools/kinmarking-01-draft/", ".hidden-pages/kinmarking-01/index.html"],
+  ["/tools/kinmarking-01-draft", ".hidden-pages/kinmarking-01/index.html"],
   ["/edit-links", "tools/edit-links.html"],
   ["/edit-links/", "tools/edit-links.html"],
   ["/edit-links.html", "tools/edit-links.html"],
@@ -274,7 +276,7 @@ function hasFileExtension(urlPath) {
 
 function isLocalOnlyRoute(urlPath) {
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
-  return localOnlyRoutes.has(decoded) || decoded.startsWith("/tools/");
+  return localOnlyRoutes.has(decoded) || decoded.startsWith("/tools/") || decoded.startsWith("/.hidden-pages/");
 }
 
 function isPublicPageRoute(urlPath) {
@@ -1209,6 +1211,9 @@ function cloneStructured(value) { return JSON.parse(JSON.stringify(value)); }
 async function resolveFile(urlPath) {
   const decodedPath = requestPathname(urlPath);
   const normalizedPath = normalizeRoute(decodedPath);
+  if (/^\/events\/kinmarking-(?:01-oral-histories-and-tattooing|02|03|04)$/.test(normalizedPath)) {
+    return path.join(root, "events", "detail", "development.html");
+  }
   const artParts = normalizedPath.split("/").filter(Boolean);
   if (artParts.length === 3 && artParts[0] === "archive" && artParts[1] === "blackboards" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(artParts[2])) {
     return path.join(root, "archive", "blackboards", "index.html");

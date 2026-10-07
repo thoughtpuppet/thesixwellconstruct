@@ -103,6 +103,49 @@ async function removeArtifactsForPath(root, pathname) {
   }
 }
 
+test("KINMARKING 01 draft edits stay in private sources while its regular route stays in development", {timeout:45_000}, async () => {
+  const pathname = "/tools/kinmarking-01-draft/";
+  const pagePath = join(ROOT,".hidden-pages","kinmarking-01","index.html");
+  const copyPath = join(ROOT,".hidden-pages","kinmarking-01","series.js");
+  const page = await readFile(pagePath,"utf8");
+  const copy = await readFile(copyPath,"utf8");
+  const publicCopy = await readFile(join(ROOT,"js","kinmarking-series.js"),"utf8");
+  const origin = `http://127.0.0.1:${await availablePort()}`;
+  let preview;
+  try {
+    preview = await startPreview(Number(new URL(origin).port));
+    const publicResponse = await fetch(`${origin}/events/kinmarking-01-oral-histories-and-tattooing/?draft=1`);
+    assert.equal(publicResponse.status,200);
+    const publicHtml = await publicResponse.text();
+    assert.match(publicHtml,/id="developmentStatus"[^>]*>In development/);
+    assert.doesNotMatch(publicHtml,/Georgia Dusk|id="kinmarkingExperience"/);
+    const draftResponse = await fetch(`${origin}${pathname}`);
+    assert.equal(draftResponse.status,200);
+    assert.equal(await draftResponse.text(),page);
+    assert.match(copy,/data-live-edit-source="\.hidden-pages\/kinmarking-01\/series\.js"/);
+    const base = (await postJson(origin,"/__tools/live-editor/context",{pathname})).page;
+    assert.deepEqual(base.pathSegments,[".hidden-pages","kinmarking-01","index.html"]);
+    const copySegments = [".hidden-pages","kinmarking-01","series.js"];
+    const copyBase = await postJson(origin,"/__tools/read-file",{pathSegments:copySegments});
+    const applied = await postJson(origin,"/__tools/live-editor/apply",{pathname,edits:[
+      {kind:"html",copyId:"kinmarking-01-collaboration-title",html:"Draft-only title",styles:{},pathSegments:base.pathSegments,expectedHash:base.hash},
+      {kind:"source-marker",marker:"kinmarking.01.guide-title",text:"Draft-only guide",pathSegments:copySegments,expectedHash:copyBase.hash},
+    ]});
+    assert.match(await readFile(pagePath,"utf8"),/Draft-only title/);
+    assert.match(await readFile(copyPath,"utf8"),/Draft-only guide/);
+    assert.equal(await readFile(join(ROOT,"js","kinmarking-series.js"),"utf8"),publicCopy);
+    await postJson(origin,"/__tools/live-editor/undo",{undoToken:applied.undoToken});
+    assert.equal(await readFile(pagePath,"utf8"),page);
+    assert.equal(await readFile(copyPath,"utf8"),copy);
+  } finally {
+    await stopPreview(preview);
+    await writeFile(pagePath,page,"utf8");
+    await writeFile(copyPath,copy,"utf8");
+    await removeArtifactsForPath(HISTORY_ROOT,pathname);
+    await removeArtifactsForPath(BACKUP_ROOT,pathname);
+  }
+});
+
 test("live-editor revisions survive restart and restore as new immutable revisions", { timeout: 45_000 }, async () => {
   const fixtureName = `live-editor-process-${process.pid}-${Date.now()}.html`;
   const fixturePath = join(ROOT, "tests", "fixtures", fixtureName);

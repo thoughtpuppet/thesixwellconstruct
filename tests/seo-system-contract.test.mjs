@@ -253,7 +253,12 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
   const env = {
     PUBLIC_SITE_URL: ORIGIN,
     SUBMISSIONS_DB: new LocalD1(database),
-    ASSETS: { async fetch() { return new Response(template, { headers:{ "content-type":"text/html" } }); } },
+    ASSETS: { async fetch(request) {
+      const pathname = new URL(request.url).pathname;
+      const source = pathname === "/events/detail/development.html"
+        ? readFileSync(join(ROOT,"events","detail","development.html"),"utf8") : template;
+      return new Response(source, { headers:{ "content-type":"text/html" } });
+    } },
   };
   const path = "/events/kinmarking-01-oral-histories-and-tattooing/";
   const old = await worker.fetch(new Request(`${ORIGIN}/events/kinmarking-01-skin-as-archive/?edit=1&occurrence=kinmarking-route-occurrence`), env, {});
@@ -263,11 +268,17 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
   const html = await response.text();
   assert.equal(response.status, 200);
   assert.match(html, /<title>KINMARKING 01: Oral Histories &amp; Tattooing/);
+  assert.match(html, /id="developmentStatus"[^>]*>In development<\/h2>/);
+  assert.doesNotMatch(html, /id="kinmarkingCollaborators"|id="registrationForm"|id="kinmarkingExperience"/);
   assert.ok(html.includes(`<link rel="canonical" href="${ORIGIN}${path}">`));
   const payload = JSON.parse(html.match(/<script id="event-record-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
   assert.equal(payload.event.slug, "kinmarking");
   assert.equal(payload.occurrence.eventId, "kinmarking-route-test");
   assert.equal(payload.occurrence.id, "kinmarking-route-occurrence");
+  assert.equal(payload.event.details, "");
+  for (const draftPath of ["/tools/kinmarking-01-draft/", "/.hidden-pages/kinmarking-01/index.html", "/.hidden-pages/kinmarking-01/series.js"]) {
+    assert.equal((await worker.fetch(new Request(`${ORIGIN}${draftPath}`),env,{})).status,404,draftPath);
+  }
   for (const [number,theme,date] of laterEditions) {
     const editionPath = `/events/kinmarking-${number}/`;
     const later = await worker.fetch(new Request(`${ORIGIN}${editionPath}`),env,{});

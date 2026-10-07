@@ -330,6 +330,8 @@ function isLocalPreview(url) {
 
 function isLocalOnlyPath(pathname) {
   return (
+    pathname.startsWith("/.hidden-pages/") ||
+    /^\/tools\/kinmarking-01-draft(?:\/|$)/.test(pathname) ||
     pathname === "/edit-links" ||
     pathname === "/edit-links/" ||
     pathname === "/edit-links.html" ||
@@ -1259,13 +1261,16 @@ async function serveEventDetailPage(request, env, pathname) {
     ? `KINMARKING ${kinmarkingSessionNumber}${editionTheme ? `: ${editionTheme}` : ""}`
     : event.title;
 
-  let assetResponse = await servePublicAsset(request, env, eventDetailAssetPath(pathname), { seo: false });
+  const developmentEdition = Boolean(kinmarkingSessionNumber);
+  let assetResponse = await servePublicAsset(request, env, developmentEdition ? "/events/detail/development.html" : eventDetailAssetPath(pathname), { seo: false });
   if (assetResponse.status === 404) assetResponse = await servePublicAsset(request, env, "/events/detail/index.html", { seo: false });
   const origin = canonicalOrigin(env, request.url);
   const canonicalPath = `/events/${encodeURIComponent(slug)}/`;
   const canonicalUrl = `${origin}${canonicalPath}`;
   const title = `${publicTitle} · Six.Well Events · Atlanta`;
-  const description = event.description || "A public creative program produced through the Six.Well Construct in Atlanta.";
+  const description = developmentEdition ? "Program and participation details will follow." : event.description || "A public creative program produced through the Six.Well Construct in Atlanta.";
+  // Development pages retain their occurrence identity without embedding the program draft.
+  if (developmentEdition) payload.event = { ...event, description, details:"", included:"" };
   const image = event.imageUrl || "";
   const eventStatus = event.status === "cancelled"
     ? "https://schema.org/EventCancelled"
@@ -1313,7 +1318,8 @@ async function serveEventDetailPage(request, env, pathname) {
     return `<a class="event-date${selected?.id === occurrence.id ? " is-selected" : ""}" href="${escapeHtml(href)}"><strong>${escapeHtml(publicEventDateText(occurrence.startsAt))}</strong><span>${escapeHtml(occurrence.location || event.location || "")}</span></a>`;
   }).join("");
   const html = (await assetResponse.text())
-    .replace(/(<h1[^>]*id="eventTitle"[^>]*>)[\s\S]*?(<\/h1>)/, `$1${escapeHtml(publicTitle)}$2`)
+    .replace(/(<h1[^>]*id="eventTitle"[^>]*>)[\s\S]*?(<\/h1>)/, `$1${escapeHtml(developmentEdition ? editionTheme : publicTitle)}$2`)
+    .replace('>KINMARKING</span>', `>KINMARKING ${kinmarkingSessionNumber}</span>`)
     .replace(/(<p[^>]*id="eventDescription"[^>]*>)[\s\S]*?(<\/p>)/, `$1${escapeHtml(description)}$2`)
     .replace(/(<p[^>]*id="eventDetails"[^>]*>)[\s\S]*?(<\/p>)/, `$1${escapeHtml(event.details || event.included || description)}$2`)
     .replace(/(<p[^>]*id="eventStatus"[^>]*>)[\s\S]*?(<\/p>)/, `$1${escapeHtml(startDate ? [publicEventDateText(startDate), location].filter(Boolean).join(" · ") : event.publicationState === "announced" ? "Announced" : "Public event")}$2`)
