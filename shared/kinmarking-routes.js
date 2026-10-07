@@ -1,6 +1,10 @@
 export const KINMARKING_FIRST_EDITION_SLUG = "kinmarking-01-oral-histories-and-tattooing";
 export const KINMARKING_FIRST_EDITION_LEGACY_SLUG = "kinmarking-01-skin-as-archive";
 
+export function kinmarkingProjectRedirect(pathname) {
+  return pathname === "/kinmarking" || pathname === "/kinmarking/" ? "/events/kinmarking/" : "";
+}
+
 export function kinmarkingFirstEditionRedirect(pathname) {
   if (!new Set([
     `/events/${KINMARKING_FIRST_EDITION_LEGACY_SLUG}`,

@@ -1,6 +1,7 @@
 import { COLLABORATOR_PUBLIC_SQL } from "../construct/_collaborators.js";
 import { loadPublicCalendarSearchEvents } from "../calendar/_lib.js";
 import { publicPageVisibilityDecisions } from "../site-visibility/_lib.js";
+import { kinmarkingProjectRedirect } from "../../../shared/kinmarking-routes.js";
 
 export const PUBLIC_SITE_ORIGIN = "https://thesixwellconstruct.com";
 
@@ -120,7 +121,9 @@ export function canonicalRedirect(request, env = {}) {
   const requestHost = url.hostname.toLowerCase();
   const isKnownHost = requestHost === productionHost || requestHost === `www.${productionHost}`;
   const requestedPath = url.pathname;
+  const kinmarkingRedirect = kinmarkingProjectRedirect(requestedPath);
   let normalizedPath = normalizeSeoPath(requestedPath);
+  if (kinmarkingRedirect) normalizedPath = kinmarkingRedirect;
   if (/^\/explore(?:\/|\/index\.html)?$/i.test(requestedPath)) normalizedPath = "/adventure/";
   if (/^\/adventure(?:\/index\.html)?$/i.test(requestedPath)) normalizedPath = "/adventure/";
   if (/^\/legend(?:\/|\/index\.html)?$/i.test(requestedPath)) normalizedPath = "/about/legend/";
@@ -135,7 +138,7 @@ export function canonicalRedirect(request, env = {}) {
     url.host = productionHost;
   }
   url.pathname = normalizedPath;
-  if (pathChanged || normalizedPath === "/") url.search = "";
+  if (!kinmarkingRedirect && (pathChanged || normalizedPath === "/")) url.search = "";
   return Response.redirect(url, 308);
 }
 

@@ -26,7 +26,7 @@ import {
 } from "../shared/page-visibility.js";
 import { contentHash, readHtmlCopy, readSourceMarker, replaceHtmlCopy, replaceSourceMarker } from "./live-editor-source.mjs";
 import { auditLiveEditorCoverage } from "./live-editor-coverage.mjs";
-import { kinmarkingFirstEditionRedirect } from "../shared/kinmarking-routes.js";
+import { kinmarkingFirstEditionRedirect, kinmarkingProjectRedirect } from "../shared/kinmarking-routes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -1284,7 +1284,7 @@ const showHidden = process.argv.includes("--show-hidden");
 
 const server = createServer(async (req, res) => {
   const requestUrl = new URL(req.url || "/", `http://${host}`);
-  const kinmarkingRedirect = kinmarkingFirstEditionRedirect(requestUrl.pathname);
+  const kinmarkingRedirect = kinmarkingProjectRedirect(requestUrl.pathname) || kinmarkingFirstEditionRedirect(requestUrl.pathname);
   if (kinmarkingRedirect) {
     res.writeHead(308, { "Location": `${kinmarkingRedirect}${requestUrl.search}` });
     res.end();
