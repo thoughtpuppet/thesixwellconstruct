@@ -273,7 +273,8 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
     const later = await worker.fetch(new Request(`${ORIGIN}${editionPath}`),env,{});
     assert.equal(later.status,200,editionPath);
     const laterHtml = await later.text();
-    assert.ok(laterHtml.includes(`<title>KINMARKING ${number}${theme ? `: ${theme}` : ''}`));
+    const displayTheme = number === '02' ? 'Color &amp; Tattooing' : number === '03' ? 'Iconography &amp; Tattooing' : 'Symbolism, Composition &amp; Tattooing';
+    assert.ok(laterHtml.includes(`<title>KINMARKING ${number}${displayTheme ? `: ${displayTheme}` : ''}`));
     assert.ok(laterHtml.includes(`<link rel="canonical" href="${ORIGIN}${editionPath}">`));
     const laterPayload = JSON.parse(laterHtml.match(/<script id="event-record-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
     assert.equal(laterPayload.occurrence.id,`kinmarking-route-${number}`);

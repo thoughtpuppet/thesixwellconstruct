@@ -1249,9 +1249,12 @@ async function serveEventDetailPage(request, env, pathname) {
     : payload.occurrence || event.occurrences?.[0] || null;
   if (kinmarkingSessionNumber && (!selected || (requestedOccurrence && requestedOccurrence !== selected.id))) return notFoundPage(request, env);
   if (kinmarkingSessionNumber) payload.occurrence = selected;
-  const editionTheme = firstKinmarkingEdition
+  let editionTheme = firstKinmarkingEdition
     ? selected.title && selected.title !== "Skin As Archive" ? selected.title : "Oral Histories & Tattooing"
     : selected?.title || "";
+  if (kinmarkingSessionNumber === "02" && ["Color as Inheritance", "Color"].includes(editionTheme)) editionTheme = "Color & Tattooing";
+  if (kinmarkingSessionNumber === "03" && ["Symbols as Language", "Symbols", "Iconography"].includes(editionTheme)) editionTheme = "Iconography & Tattooing";
+  if (kinmarkingSessionNumber === "04" && (!editionTheme || ["Symbolism and Composition", "Symbolism and Composition & Tattooing"].includes(editionTheme))) editionTheme = "Symbolism, Composition & Tattooing";
   const publicTitle = kinmarkingSessionNumber
     ? `KINMARKING ${kinmarkingSessionNumber}${editionTheme ? `: ${editionTheme}` : ""}`
     : event.title;

@@ -9,14 +9,14 @@
       legacySlug:"kinmarking-01-skin-as-archive",
       title:"Oral Histories & Tattooing",
       previousTitle:"Skin As Archive",
-      description: /* live-copy:kinmarking.01.description */ "The first edition of KINMARKING explores how meaning persists through oral stories, storytelling, and listening, and how what emerges might be expressed through an image or tattoo.",
-      details: /* live-copy:kinmarking.01.details */ "The first edition of KINMARKING explores how meaning persists through telling and listening: experiences we remember, stories passed down to us, and everyday moments that reveal how someone lived.\n\nTogether, we consider what these stories hold, how their meanings change over time, and what we might want to preserve or express through visual symbols. Tattooing offers one way to embody what emerges, using symbolism, color, and composition.\n\nWhat can a mark hold of a person or experience? What might change or be left out when a story becomes a symbol? These questions are part of the exploration.\n\nCome with a story, a memory, or something you want to think about more closely. You are welcome to bring a photograph or object that supports it. Sharing is voluntary, and participation does not require getting tattooed.",
+      description: /* live-copy:kinmarking.01.description */ "Drawing on oral history, the first edition uses telling and listening to bring stories and associations into view, giving interpretation and visual development a place to begin.",
+      details: /* live-copy:kinmarking.01.details */ "The first edition begins with drawing out material. Before developing an image, the series makes room to notice the stories, associations, and patterns of relationship from which meaning can emerge. Oral history and archival practices offer approaches to asking, listening, contextualizing, and collecting.\n\nThis is an intentional starting point for the wider inquiry. KINMARKING approaches the process through which knowledge becomes embodied as ritual, whether or not we consciously recognize it happening. The word ritual is also a way to direct attention toward the significance of processes that may otherwise feel ordinary or automatic.\n\nThrough telling and listening, participants can explore experiences they remember, stories received from others, and associations shaped by shared culture. A phrase, gesture, image, or object may offer a starting point without needing to stand for a single personal memory. Photographs and objects are optional support for the conversation.\n\nTogether, we consider what becomes significant within this material, how its relationships change with context, and what someone might wish to preserve or express. These encounters give later explorations of color, symbolism, and composition a foundation. Tattooing is one possible way to give what emerges a visual form.\n\nCome with a story, an association, or a question you want to follow. Sharing is voluntary, listening is participation, and no finished design or tattoo commitment is required. The final format is developing through collaboration.",
       guideTitle: /* live-copy:kinmarking.01.guide-title */ "Begin with a story.",
-      guideIntro: /* live-copy:kinmarking.01.guide-intro */ "A memory, a story passed down to you, or a question is enough to begin. The gathering centers storytelling and listening, with photographs and objects optional as supporting material.",
-      bring: /* live-copy:kinmarking.01.bring */ "Come with a story, a memory, or something you want to think about more closely. No physical materials or finished tattoo design are required.",
+      guideIntro: /* live-copy:kinmarking.01.guide-intro */ "A story, an association, or a question is enough to begin. Your starting point might come from personal experience, something passed down, or shared culture. The gathering centers telling and listening; photographs and objects can support that exploration.",
+      bring: /* live-copy:kinmarking.01.bring */ "Come with a story, an association, or something you want to think about more closely. It does not have to refer to one personal memory. No physical materials or finished tattoo design are required.",
       bringSharing: /* live-copy:kinmarking.01.bring-sharing */ "Sharing is voluntary. Listening is also a way to participate.",
       bringSupport: /* live-copy:kinmarking.01.bring-support */ "Photographs and objects can support your story if you choose to bring them.",
-      how: /* live-copy:kinmarking.01.how */ "Begin with telling and listening. With the participating memory workers and tattoo artist, consider what a story holds, how its meanings connect to personal and cultural histories, and what might change when it becomes an image. The format is developing through collaboration.",
+      how: /* live-copy:kinmarking.01.how */ "Begin with telling and listening. Conversations, questions, cues, and triggers offer ways to bring associations into view. With the participating memory workers and tattoo artist, navigate the material and its relationships before considering how it might take visual form. The format is developing through collaboration.",
       outcomes: /* live-copy:kinmarking.01.outcomes */ "Conversation, new associations, and questions worth exploring are meaningful outcomes. An image or tattoo may emerge from the process. Participation does not require getting tattooed.",
       readinessTitle: /* live-copy:kinmarking.01.readiness-title */ "Considering a tattoo?",
       readiness: /* live-copy:kinmarking.01.readiness */ "Tattooing is optional, and any tattoo appointment is separate from participation in the gathering. Practical arrangements will be shared as they are confirmed.",
@@ -24,18 +24,18 @@
       participation: /* live-copy:kinmarking.01.participation */ "Registration details and the final gathering format will be shared when confirmed. You can participate through listening, and you decide what you wish to share. An RSVP does not reserve a tattoo appointment.",
       processKicker: /* live-copy:kinmarking.01.process-kicker */ "the inquiry",
       processTitle: /* live-copy:kinmarking.01.process-title */ "Questions for the gathering.",
-      processIntro: /* live-copy:kinmarking.01.process-intro */ "Storytelling and listening open these connected areas of inquiry. The session format is developing with the participating memory workers.",
-      encounterTitle: /* live-copy:kinmarking.01.encounter-title */ "Remember & Tell.",
-      encounterCopy: /* live-copy:kinmarking.01.encounter-copy */ "What do you remember, and which stories have been passed down to you? Everyday moments, habits, sayings, and gestures can reveal how someone lived. Share what you choose, or begin by listening.",
+      processIntro: /* live-copy:kinmarking.01.process-intro */ "Drawing out material comes first because interpretation and visual development need something to work with. These questions open that process through telling and listening. The session format is developing with the participating memory workers.",
+      encounterTitle: /* live-copy:kinmarking.01.encounter-title */ "Notice & Tell.",
+      encounterCopy: /* live-copy:kinmarking.01.encounter-copy */ "Which story, phrase, image, habit, or gesture brings an association into view? Begin with personal experience, something received from others, or shared culture. Share what you choose, or begin by listening.",
       interpretTitle: /* live-copy:kinmarking.01.interpret-title */ "Listen & Connect.",
-      interpretCopy: /* live-copy:kinmarking.01.interpret-copy */ "What becomes visible when we listen to one another? Consider how a personal memory connects to other experiences, cultural traditions, and larger histories.",
+      interpretCopy: /* live-copy:kinmarking.01.interpret-copy */ "What becomes visible when we listen to one another? Lay out the material and explore its relationships: where associations meet, how they have become meaningful, and how context changes what we understand.",
       composeTitle: /* live-copy:kinmarking.01.compose-title */ "Interpret & Question.",
-      composeCopy: /* live-copy:kinmarking.01.compose-copy */ "What feels worth preserving, and why? Explore how a story changes through retelling, what remains uncertain, and what might be simplified or left out when it becomes a symbol.",
+      composeCopy: /* live-copy:kinmarking.01.compose-copy */ "What becomes available to our attention when we approach the embodiment of knowledge as ritual? Consider what feels worth preserving, what remains uncertain, and how one thing might become a way to engage with another.",
       developTitle: /* live-copy:kinmarking.01.develop-title */ "Imagine & Embody.",
-      developCopy: /* live-copy:kinmarking.01.develop-copy */ "How might an image express what a story holds? Consider symbolism, color, and composition, and whether tattooing could become a way to embody that meaning. Questions and discoveries can remain open.",
+      developCopy: /* live-copy:kinmarking.01.develop-copy */ "How might an image give form to a relationship within the material? Consider symbolism, color, composition, and placement as directions for further exploration. A tattoo is one possible outcome, and questions and discoveries can remain open.",
     },
     {
-      number:"02", slug:"kinmarking-02", title:"Color as Inheritance", theme:"Color",
+      number:"02", slug:"kinmarking-02", title:"Color & Tattooing", previousTitle:"Color as Inheritance", theme:"Color",
       description: /* live-copy:kinmarking.02.description */ "Explore the meanings we inherit through color, from family and cultural traditions to personal associations. Through conversation and visual experimentation, develop palettes, shapes, and symbols into possibilities for tattooing.",
       details: /* live-copy:kinmarking.02.details */ "How did a color come to mean something to you? This edition follows color through textiles, objects, images, ceremonies, and everyday life. Consider the meanings you have received, the associations you have made yourself, and what you want to preserve or reinterpret in a tattoo.",
       guideTitle: /* live-copy:kinmarking.02.guide-title */ "Begin with a color.",
@@ -44,7 +44,7 @@
       how: /* live-copy:kinmarking.02.how */ "Explore colors within particular histories and traditions, consider your own associations, and experiment with palettes and forms. Work with the tattoo artist to develop a design through color, shape, scale, and placement.",
     },
     {
-      number:"03", slug:"kinmarking-03", title:"Symbols as Language", theme:"Symbolism",
+      number:"03", slug:"kinmarking-03", title:"Iconography & Tattooing", previousTitle:"Symbols as Language", theme:"Iconography",
       description: /* live-copy:kinmarking.03.description */ "Explore how symbols, badges, and visual signs communicate identity, belief, belonging, and personal history. Interpret inherited meanings and develop a visual language of your own through drawing and tattoo design.",
       details: /* live-copy:kinmarking.03.details */ "What does a symbol say, and who knows how to read it? This edition considers the signs we encounter, inherit, wear, and create. Explore how context changes their interpretation, what you want a mark to communicate, and how to preserve, combine, or transform those meanings in a tattoo.",
       guideTitle: /* live-copy:kinmarking.03.guide-title */ "Begin with a sign.",
@@ -52,7 +52,7 @@
       bring: /* live-copy:kinmarking.03.bring */ "Bring one to three references if you have them: a symbol, badge, pattern, piece of lettering, photograph, or object bearing a sign.",
       how: /* live-copy:kinmarking.03.how */ "Discuss symbols in their specific contexts, explore how you and others read them, and experiment with drawing, abstraction, and composition. Work with the tattoo artist to develop a mark that expresses what you want to communicate.",
     },
-    { number:"04", slug:"kinmarking-04", title:"", description:"Theme to be announced." },
+    { number:"04", slug:"kinmarking-04", title:"Symbolism, Composition & Tattooing", description:"Program and participation details will follow." },
   ]);
   var TIME_ZONE = "America/New_York";
 
@@ -87,6 +87,9 @@
     // Use the renamed edition while an existing Event record still has its old title.
     // Other Studio titles remain authoritative, including future editorial changes.
     if (fallback && sessionTitle === fallback.previousTitle) sessionTitle = fallback.title;
+    if (number === "02" && sessionTitle === "Color") sessionTitle = fallback.title;
+    if (number === "03" && ["Symbols", "Iconography"].includes(sessionTitle)) sessionTitle = fallback.title;
+    if (number === "04" && ["Symbolism and Composition", "Symbolism and Composition & Tattooing"].includes(sessionTitle)) sessionTitle = fallback.title;
     return "KINMARKING " + number + (sessionTitle ? ": " + sessionTitle : "");
   }
 

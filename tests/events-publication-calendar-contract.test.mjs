@@ -532,7 +532,7 @@ test("KINMARKING public pages retain the event shell, conditional flyer, guidanc
   assert.match(hub, /class="venture-hero site-hero site-hero--supporting"/);
   assert.match(hub, /html,body \{ background:var\(--color-bg\); \}/);
   assert.match(hub, /border:5px solid/);
-  assert.match(hub, /Every two months/);
+  assert.match(hub, /Every other month/);
   assert.match(detail, /id="kinmarkingFlyer" hidden/);
   assert.match(detail, /\.event-form\[hidden\][\s\S]*display:none !important/);
   assert.match(detail, /event\.imageUrl[\s\S]*kinmarkingFlyer\.hidden = false/);
