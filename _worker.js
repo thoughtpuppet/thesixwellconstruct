@@ -10,7 +10,7 @@ import {
   serverError,
   updateCartLines,
 } from "./functions/api/shop/_lib.js";
-import { KINMARKING_FIRST_EDITION_SLUG, kinmarkingFirstEditionRedirect } from "./shared/kinmarking-routes.js";
+import { KINMARKING_FIRST_EDITION_SLUG, kinmarkingFirstEditionRedirect, kinmarkingSessionNumber as editionNumberForSlug } from "./shared/kinmarking-routes.js";
 import { renderCollaboratorsDocument } from "./functions/api/construct/_collaborators.js";
 import {
   handleAdminMerchApi,
@@ -1244,7 +1244,7 @@ async function serveEventDetailPage(request, env, pathname) {
   const slug = normalizePath(pathname).split("/").filter(Boolean)[1] || "";
   if (!slug) return notFoundPage(request, env);
   const firstKinmarkingEdition = slug === KINMARKING_FIRST_EDITION_SLUG;
-  const kinmarkingSessionNumber = firstKinmarkingEdition ? "01" : slug.match(/^kinmarking-(02|03|04)$/)?.[1] || "";
+  const kinmarkingSessionNumber = editionNumberForSlug(slug);
   const contextSlug = kinmarkingSessionNumber ? "kinmarking" : slug;
   const contextUrl = new URL(`/api/events/${encodeURIComponent(contextSlug)}/context`, request.url);
   const requestedOccurrence = new URL(request.url).searchParams.get("occurrence");
@@ -1277,8 +1277,9 @@ async function serveEventDetailPage(request, env, pathname) {
     ? selected.title && selected.title !== "Skin As Archive" ? selected.title : "Oral Histories & Tattooing"
     : selected?.title || "";
   if (kinmarkingSessionNumber === "02" && ["Color as Inheritance", "Color"].includes(editionTheme)) editionTheme = "Color & Tattooing";
-  if (kinmarkingSessionNumber === "03" && ["Symbols as Language", "Symbols", "Iconography"].includes(editionTheme)) editionTheme = "Iconography & Tattooing";
-  if (kinmarkingSessionNumber === "04" && (!editionTheme || ["Symbolism and Composition", "Symbolism and Composition & Tattooing"].includes(editionTheme))) editionTheme = "Symbolism, Composition & Tattooing";
+  if (["Symbols as Language", "Symbols", "Iconography"].includes(editionTheme)) editionTheme = "Iconography & Tattooing";
+  if (["Symbolism and Composition", "Symbolism and Composition & Tattooing"].includes(editionTheme)) editionTheme = "Symbolism, Composition & Tattooing";
+  if (!editionTheme && kinmarkingSessionNumber === "05") editionTheme = "Symbolism, Composition & Tattooing";
   const publicTitle = kinmarkingSessionNumber
     ? `KINMARKING ${kinmarkingSessionNumber}${editionTheme ? `: ${editionTheme}` : ""}`
     : event.title;
@@ -1297,8 +1298,8 @@ async function serveEventDetailPage(request, env, pathname) {
   const eventStatus = event.status === "cancelled"
     ? "https://schema.org/EventCancelled"
     : "https://schema.org/EventScheduled";
-  const startDate = selected?.startsAt || event.startsAt || undefined;
-  const endDate = selected?.endsAt || event.endsAt || undefined;
+  const startDate = (developmentEdition ? selected?.startsAt : selected?.startsAt || event.startsAt) || undefined;
+  const endDate = (developmentEdition ? selected?.endsAt : selected?.endsAt || event.endsAt) || undefined;
   const location = selected?.location || event.location || "";
   const offers = event.publicationState === "published" && event.open ? {
     "@type": "Offer",

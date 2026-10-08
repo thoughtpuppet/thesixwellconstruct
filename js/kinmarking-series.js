@@ -44,15 +44,19 @@
       how: /* live-copy:kinmarking.02.how */ "Explore colors within particular histories and traditions, consider your own associations, and experiment with palettes and forms. Work with the tattoo artist to develop a design through color, shape, scale, and placement.",
     },
     {
-      number:"03", slug:"kinmarking-03", title:"Iconography & Tattooing", previousTitle:"Symbols as Language", theme:"Iconography",
-      description: /* live-copy:kinmarking.03.description */ "Explore how symbols, badges, and visual signs communicate identity, belief, belonging, and personal history. Interpret inherited meanings and develop a visual language of your own through drawing and tattoo design.",
-      details: /* live-copy:kinmarking.03.details */ "What does a symbol say, and who knows how to read it? This edition considers the signs we encounter, inherit, wear, and create. Explore how context changes their interpretation, what you want a mark to communicate, and how to preserve, combine, or transform those meanings in a tattoo.",
-      guideTitle: /* live-copy:kinmarking.03.guide-title */ "Begin with a sign.",
-      guideIntro: /* live-copy:kinmarking.03.guide-intro */ "Bring a symbol you recognize, wear, question, or want to understand. You can also begin with an idea or affiliation and discover its visual form through the session.",
-      bring: /* live-copy:kinmarking.03.bring */ "Bring one to three references if you have them: a symbol, badge, pattern, piece of lettering, photograph, or object bearing a sign.",
-      how: /* live-copy:kinmarking.03.how */ "Discuss symbols in their specific contexts, explore how you and others read them, and experiment with drawing, abstraction, and composition. Work with the tattoo artist to develop a mark that expresses what you want to communicate.",
+      number:"03", slug:"kinmarking-03", title:"Grief & Tattooing",
+      description:"An inquiry into how clients use tattooing to face and process grief, alchemizing it into art that lives in the skin.",
     },
-    { number:"04", slug:"kinmarking-04", title:"Symbolism, Composition & Tattooing", description:"Program and participation details will follow." },
+    {
+      number:"04", slug:"kinmarking-04", title:"Iconography & Tattooing", previousTitle:"Symbols as Language", theme:"Iconography",
+      description: /* live-copy:kinmarking.04.description */ "Explore how symbols, badges, and visual signs communicate identity, belief, belonging, and personal history. Interpret inherited meanings and develop a visual language of your own through drawing and tattoo design.",
+      details: /* live-copy:kinmarking.04.details */ "What does a symbol say, and who knows how to read it? This edition considers the signs we encounter, inherit, wear, and create. Explore how context changes their interpretation, what you want a mark to communicate, and how to preserve, combine, or transform those meanings in a tattoo.",
+      guideTitle: /* live-copy:kinmarking.04.guide-title */ "Begin with a sign.",
+      guideIntro: /* live-copy:kinmarking.04.guide-intro */ "Bring a symbol you recognize, wear, question, or want to understand. You can also begin with an idea or affiliation and discover its visual form through the session.",
+      bring: /* live-copy:kinmarking.04.bring */ "Bring one to three references if you have them: a symbol, badge, pattern, piece of lettering, photograph, or object bearing a sign.",
+      how: /* live-copy:kinmarking.04.how */ "Discuss symbols in their specific contexts, explore how you and others read them, and experiment with drawing, abstraction, and composition. Work with the tattoo artist to develop a mark that expresses what you want to communicate.",
+    },
+    { number:"05", slug:"kinmarking-05", title:"Symbolism, Composition & Tattooing", description:"Program and participation details will follow." },
   ]);
   var TIME_ZONE = "America/New_York";
 
@@ -73,7 +77,7 @@
 
   function sessionNumberForSlug(slug) {
     var fallback = FALLBACKS.find(function (item) { return item.slug === String(slug || "") || item.legacySlug === String(slug || ""); });
-    return fallback ? fallback.number : "";
+    return fallback ? fallback.number : (String(slug || "").match(/^kinmarking-(\d{2,})$/) || [])[1] || "";
   }
 
   function isKinmarkingSlug(slug) {
@@ -88,23 +92,26 @@
     // Other Studio titles remain authoritative, including future editorial changes.
     if (fallback && sessionTitle === fallback.previousTitle) sessionTitle = fallback.title;
     if (number === "02" && sessionTitle === "Color") sessionTitle = fallback.title;
-    if (number === "03" && ["Symbols", "Iconography"].includes(sessionTitle)) sessionTitle = fallback.title;
-    if (number === "04" && ["Symbolism and Composition", "Symbolism and Composition & Tattooing"].includes(sessionTitle)) sessionTitle = fallback.title;
+    if (["Symbols as Language", "Symbols", "Iconography"].includes(sessionTitle)) sessionTitle = "Iconography & Tattooing";
+    if (["Symbolism and Composition", "Symbolism and Composition & Tattooing"].includes(sessionTitle)) sessionTitle = "Symbolism, Composition & Tattooing";
     return "KINMARKING " + number + (sessionTitle ? ": " + sessionTitle : "");
   }
 
   function editionDescription(event, occurrence, index) {
+    if (occurrence && Object.prototype.hasOwnProperty.call(occurrence, 'description')) return occurrence.description || "Program and participation details will follow.";
     var number = normalizedNumber(occurrence && occurrence.sessionNumber, Number(index) || 0);
-    var fallback = fallbackForNumber(number);
+    var fallback = occurrence && occurrence.title
+      ? FALLBACKS.find(function (item) { return item.title === occurrence.title || item.previousTitle === occurrence.title; })
+      : fallbackForNumber(number);
     if (fallback && fallback.description) {
       return fallback.description;
     }
-    return (event && event.description) || "A KINMARKING session.";
+    return "Program and participation details will follow.";
   }
 
   function copyAttributes(number, field) {
     var edition = fallbackForNumber(String(number || ""));
-    if (!edition || !edition[field] || edition.number === "04") return "";
+    if (!edition || !edition[field] || ['03', '05'].includes(edition.number)) return ' data-live-edit-owner="managed" data-live-edit-label="Edition description" data-live-edit-owner-href="/studio/submissions/#events" data-live-edit-owner-label="Manage editions in Studio"';
     var marker = "kinmarking." + edition.number + "." + field.replace(/[A-Z]/g, function (letter) { return "-" + letter.toLowerCase(); });
     return ' data-copy-id="' + marker + '" data-live-edit-owner="source-marker" data-live-edit-source="js/kinmarking-series.js" data-live-edit-marker="' + marker + '"';
   }
@@ -120,7 +127,7 @@
   function editionHref(edition) {
     var fallback = fallbackForNumber(String(edition && edition.number || ""));
     if (fallback) return "/events/" + encodeURIComponent(fallback.slug) + "/";
-    return "/events/kinmarking/?occurrence=" + encodeURIComponent(edition && edition.occurrenceId || "");
+    return "/events/kinmarking-" + encodeURIComponent(edition && edition.number || "") + "/";
   }
 
   function orderedEvents(events) {

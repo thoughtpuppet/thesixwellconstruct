@@ -1227,7 +1227,7 @@ function cloneStructured(value) { return JSON.parse(JSON.stringify(value)); }
 async function resolveFile(urlPath) {
   const decodedPath = requestPathname(urlPath);
   const normalizedPath = normalizeRoute(decodedPath);
-  if (/^\/events\/kinmarking-(?:01-oral-histories-and-tattooing|02|03|04)$/.test(normalizedPath)) {
+  if (/^\/events\/kinmarking-(?:01-oral-histories-and-tattooing|\d{2,})$/.test(normalizedPath)) {
     return path.join(root, "events", "detail", "development.html");
   }
   const artParts = normalizedPath.split("/").filter(Boolean);

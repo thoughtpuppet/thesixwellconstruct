@@ -1,9 +1,10 @@
 (function (global) {
   'use strict';
-  function isDevelopmentEdition(number) { return ['01', '02', '03', '04'].includes(String(number)); }
+  function isDevelopmentEdition(number) { return /^\d{2,}$/.test(String(number)) && Number(number) > 0; }
   function mount(number, series) {
     if (!isDevelopmentEdition(number)) return;
     var shell = document.querySelector('.venture-shell');
+    var serverTitle = shell.querySelector('#eventTitle').textContent.trim();
     var footer = shell.querySelector('.footer');
     var edition = series.editions.find(function (item) { return item.number === number; });
     var lorem = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.';
@@ -36,7 +37,10 @@
       var breadcrumb = document.querySelector('.construct-breadcrumb-current');
       if (breadcrumb) breadcrumb.textContent = publicTitle;
     }
-    setTitle(null);
+    var initial = document.getElementById('event-record-data');
+    var initialSession = null;
+    try { initialSession = initial && JSON.parse(initial.textContent).occurrence; } catch (_) {}
+    setTitle(initialSession || (serverTitle && serverTitle !== 'KINMARKING' ? {title:serverTitle} : null));
     global.ConstructAmbientField.mount({root:root, eyesCanvas:root.querySelector('canvas'), eyeFilter:'brightness(0.20) saturate(2)', eyeOpacity:0.28, particleCount:0});
     // Keep published Studio titles authoritative while the program stays in development.
     fetch('/api/events/' + encodeURIComponent(series.seriesSlug) + '/context', {headers:{accept:'application/json'}})

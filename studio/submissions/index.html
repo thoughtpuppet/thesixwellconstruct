@@ -7213,33 +7213,37 @@ ${meetingLines}
   }
 
   function eventOccurrenceEditor(occurrence = {}, index = 0, defaults = {}) {
+    const edition = defaults.slug === "kinmarking";
     return `<div class="event-occurrence-editor" data-event-occurrence>
       <input type="hidden" data-occurrence-field="id" value="${escapeHtml(occurrence.id || "")}">
-      <div class="field"><label>Session number</label><input data-occurrence-field="sessionNumber" value="${escapeHtml(occurrence.sessionNumber || "")}" maxlength="24" placeholder="${String(index + 1).padStart(2, "0")}"></div>
-      <div class="field wide-field"><label>Session title</label><input data-occurrence-field="title" value="${escapeHtml(occurrence.title || "")}" maxlength="200" placeholder="Skin As Archive"></div>
-      <div class="field"><label>Starts</label><input data-occurrence-field="startsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(occurrence.startsAt))}" required></div>
+      <div class="field"><label>${edition ? "Edition number" : "Session number"}</label><input data-occurrence-field="sessionNumber" value="${escapeHtml(edition ? String(index + 1).padStart(2, "0") : occurrence.sessionNumber || "")}" maxlength="24" placeholder="${String(index + 1).padStart(2, "0")}" ${edition ? "readonly" : ""}></div>
+      <div class="field wide-field"><label>${edition ? "Edition title" : "Session title"}</label><input data-occurrence-field="title" value="${escapeHtml(occurrence.title || "")}" maxlength="200" placeholder="${edition ? "Theme & Tattooing" : "Session title"}" ${edition ? "required" : ""}></div>
+      ${edition ? `<div class="field wide-field"><label>Edition description</label><textarea data-occurrence-field="description" rows="3" maxlength="5000">${escapeHtml(occurrence.description || "")}</textarea></div>` : `<input type="hidden" data-occurrence-field="description" value="${escapeHtml(occurrence.description || "")}">`}
+      <div class="field"><label>${edition ? "Starts (leave blank while in development)" : "Starts"}</label><input data-occurrence-field="startsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(occurrence.startsAt))}" ${edition ? "" : "required"}></div>
       <div class="field"><label>Ends</label><input data-occurrence-field="endsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(occurrence.endsAt))}"></div>
       <div class="field"><label>Operations</label><select data-occurrence-field="status">${eventStatusOptions(occurrence.status || defaults.status || "closed")}</select></div>
       <div class="field"><label>Capacity</label><input data-occurrence-field="capacity" type="number" min="0" step="1" value="${escapeHtml(String(occurrence.capacity ?? defaults.capacity ?? 0))}"></div>
       <div class="field"><label>Max seats / order</label><input data-occurrence-field="maxSeatsPerOrder" type="number" min="1" step="1" value="${escapeHtml(String(occurrence.maxSeatsPerOrder ?? defaults.maxSeatsPerOrder ?? 4))}"></div>
       <div class="field wide-field"><label>Location</label><input data-occurrence-field="location" value="${escapeHtml(occurrence.location || defaults.location || "")}" placeholder="Use the event location or override it here"></div>
-      <button class="button danger-button" type="button" data-remove-event-occurrence aria-label="Remove event date ${index + 1}">Remove date</button>
+      ${edition ? `<div class="booking-actions wide-field"><button class="button" type="button" data-move-event-edition="left" aria-label="Move edition left">Move left</button><button class="button" type="button" data-move-event-edition="right" aria-label="Move edition right">Move right</button></div>` : ""}
+      <button class="button danger-button" type="button" data-remove-event-occurrence aria-label="Remove ${edition ? "edition" : "event date"} ${index + 1}">Remove ${edition ? "edition" : "date"}</button>
     </div>`;
   }
 
   function eventOccurrencesMarkup(ev = {}) {
     const occurrences = Array.isArray(ev.occurrences) ? ev.occurrences : [];
-    const rows = occurrences.length ? occurrences : [];
+    const rows = ev.slug === "kinmarking" ? occurrences.slice().sort((a,b) => a.sortOrder - b.sortOrder) : occurrences;
     return rows.map((occurrence, index) => eventOccurrenceEditor(occurrence, index, ev)).join("");
   }
 
   function collectEventOccurrences(form) {
-    return Array.from(form.querySelectorAll("[data-event-occurrence]")).map((row) => {
+    return Array.from(form.querySelectorAll("[data-event-occurrence]")).map((row, index) => {
       const value = (field) => row.querySelector(`[data-occurrence-field="${field}"]`)?.value ?? "";
       return {
         id:value("id"),
-        sessionNumber:value("sessionNumber"),
+        sessionNumber:form.dataset.eventForm === "kinmarking" ? String(index + 1).padStart(2, "0") : value("sessionNumber"),
         title:value("title"),
+        description:value("description"),
         startsAt:value("startsAt") ? localDateTimeToIso(value("startsAt")) : "",
         endsAt:value("endsAt") ? localDateTimeToIso(value("endsAt")) : "",
         status:value("status") || "closed",
@@ -7391,9 +7395,10 @@ ${meetingLines}
                 <textarea data-field="contactNote" rows="2">${escapeHtml(ev.contactNote || "")}</textarea>
               </div>
               <div class="field wide-field">
-                <label>Event dates</label>
+                <label>${ev.slug === "kinmarking" ? "KINMARKING editions" : "Event dates"}</label>
+                ${ev.slug === "kinmarking" ? '<p class="contact">Add an edition, then move it left or right to choose its place in the sequence. Numbers follow this order when you save. Undated editions must stay closed and use the public In development page.</p>' : ""}
                 <div class="event-occurrence-list" data-event-occurrence-list>${eventOccurrencesMarkup(ev)}</div>
-                <button class="button" type="button" data-add-event-occurrence>Add date</button>
+                <button class="button" type="button" data-add-event-occurrence>${ev.slug === "kinmarking" ? "Add edition" : "Add date"}</button>
               </div>
               ${Array.isArray(ev.admissionOptions) && ev.admissionOptions.length ? `<div class="field wide-field">
                 <label>RSVP + ticket options</label>
@@ -7540,6 +7545,7 @@ ${meetingLines}
         ? events.map(renderEventCard).join("")
         : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events yet. Create your first one below.</p>';
       body.innerHTML = renderCreateEventCard() + existing;
+      body.querySelectorAll('[data-event-form="kinmarking"]').forEach(renumberEventEditions);
       enhanceControls(detailEl);
       await Promise.all([...body.querySelectorAll("[data-event-connections]")].map((connections) =>
         window.ConnectionsManager?.mount(connections, { entityId: connections.dataset.eventConnections, originThreads: true })
@@ -7920,6 +7926,17 @@ ${meetingLines}
     const payload = await api(availabilityApi("/api/admin/booking/readiness"));
     if (!panel.isConnected || panel !== document.getElementById("bookingReadinessPanel")) return;
     renderBookingReadiness(payload);
+  }
+
+  function renumberEventEditions(form) {
+    if (form?.dataset.eventForm !== "kinmarking") return;
+    const rows = Array.from(form.querySelectorAll("[data-event-occurrence]"));
+    rows.forEach((row,index) => {
+      row.querySelector('[data-occurrence-field="sessionNumber"]').value = String(index + 1).padStart(2, "0");
+      row.querySelector('[data-move-event-edition="left"]').disabled = index === 0;
+      row.querySelector('[data-move-event-edition="right"]').disabled = index === rows.length - 1;
+      row.querySelector('[data-remove-event-occurrence]').setAttribute('aria-label', `Remove edition ${index + 1}`);
+    });
   }
 
   function calendarSyncOptions() {
@@ -9258,6 +9275,18 @@ ${meetingLines}
       return;
     }
 
+    const moveEventEdition = event.target.closest("[data-move-event-edition]");
+    if (moveEventEdition) {
+      const row = moveEventEdition.closest("[data-event-occurrence]");
+      const form = moveEventEdition.closest("form");
+      if (form?.dataset.eventForm !== "kinmarking" || !row) return;
+      if (moveEventEdition.dataset.moveEventEdition === "left" && row.previousElementSibling) row.previousElementSibling.before(row);
+      if (moveEventEdition.dataset.moveEventEdition === "right" && row.nextElementSibling) row.nextElementSibling.after(row);
+      renumberEventEditions(form);
+      setStatus("Edition order changed; save the event to keep it");
+      return;
+    }
+
     const addEventOccurrence = event.target.closest("[data-add-event-occurrence]");
     if (addEventOccurrence) {
       const form = addEventOccurrence.closest("form");
@@ -9265,7 +9294,8 @@ ${meetingLines}
       if (!form || !list) return;
       const fieldValue = (name) => form.querySelector(`[data-field="${name}"]`)?.value ?? "";
       list.insertAdjacentHTML("beforeend", eventOccurrenceEditor({}, list.children.length, {
-        status:fieldValue("status") || "closed",
+        slug:form.dataset.eventForm,
+        status:form.dataset.eventForm === "kinmarking" ? "closed" : fieldValue("status") || "closed",
         capacity:Number(fieldValue("capacity")) || 0,
         maxSeatsPerOrder:Number(fieldValue("maxSeatsPerOrder")) || 4,
         location:fieldValue("location"),
@@ -9274,7 +9304,8 @@ ${meetingLines}
         const recurring = form.querySelector('[data-field="isRecurring"]');
         if (recurring) recurring.value = "1";
       }
-      setStatus("Event date added; save the event to keep it");
+      renumberEventEditions(form);
+      setStatus(form.dataset.eventForm === "kinmarking" ? "Edition added; save the event to keep it" : "Event date added; save the event to keep it");
       return;
     }
 
@@ -9283,12 +9314,13 @@ ${meetingLines}
       const row = removeEventOccurrence.closest("[data-event-occurrence]");
       const form = removeEventOccurrence.closest("form");
       row?.remove();
+      renumberEventEditions(form);
       const remaining = form?.querySelectorAll("[data-event-occurrence]").length || 0;
       if (remaining < 2) {
         const recurring = form?.querySelector('[data-field="isRecurring"]');
         if (recurring) recurring.value = "0";
       }
-      setStatus("Event date removed; save the event to confirm");
+      setStatus(form?.dataset.eventForm === "kinmarking" ? "Edition removed; save the event to confirm" : "Event date removed; save the event to confirm");
       return;
     }
 

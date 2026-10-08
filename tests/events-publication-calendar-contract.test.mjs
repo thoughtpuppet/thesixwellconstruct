@@ -388,15 +388,16 @@ test("0220 consolidates the existing KINMARKING editions under one preserved Eve
   assert.equal(database.prepare("SELECT archive_slug FROM archive_dossiers WHERE entity_id='evt_kin_01'").get().archive_slug, "kinmarking");
 });
 
-test("KINMARKING is one announced and closed Studio event with four named sessions", async () => {
+test("KINMARKING is one announced and closed Studio event with five named editions", async () => {
   const database = databaseThrough();
   const env = runtime(database);
   const location = "art.pill Tattoo House, 364 Nelson Street SW, Atlanta, GA 30313";
   const sessions = [
     { sessionNumber:"01", title:"Skin As Archive", startsAt:"2026-11-21T14:00:00-05:00", endsAt:"2026-11-21T19:00:00-05:00" },
-    { sessionNumber:"02", title:"", startsAt:"2027-03-20T14:00:00-04:00", endsAt:"2027-03-20T19:00:00-04:00" },
-    { sessionNumber:"03", title:"", startsAt:"2027-07-17T14:00:00-04:00", endsAt:"2027-07-17T19:00:00-04:00" },
-    { sessionNumber:"04", title:"", startsAt:"2027-11-20T14:00:00-05:00", endsAt:"2027-11-20T19:00:00-05:00" },
+    { sessionNumber:"02", title:"Color & Tattooing", startsAt:"2027-01-16T14:00:00-05:00" },
+    { sessionNumber:"03", title:"Grief & Tattooing", startsAt:"", description:"Grief working description." },
+    { sessionNumber:"04", title:"Iconography & Tattooing", startsAt:"2027-03-20T14:00:00-04:00" },
+    { sessionNumber:"05", title:"Symbolism, Composition & Tattooing", startsAt:"2027-05-15T14:00:00-04:00" },
   ];
   const response = await handleAdminEventCreate(request("/api/admin/events", {
     method:"POST",
@@ -427,16 +428,17 @@ test("KINMARKING is one announced and closed Studio event with four named sessio
     slug:"kinmarking", title:"KINMARKING", publication_state:"announced", status:"closed",
     is_recurring:1, image_url:"", waitlist_enabled:0, max_seats_per_order:1,
   });
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM event_occurrences WHERE event_id=(SELECT id FROM events WHERE slug='kinmarking') AND capacity=0 AND max_seats_per_order=1 AND status='closed'").get().count, 4);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM event_occurrences WHERE event_id=(SELECT id FROM events WHERE slug='kinmarking') AND capacity=0 AND max_seats_per_order=1 AND status='closed'").get().count, 5);
 
   const publicList = await (await handleEventsList(request("/api/events"), env)).json();
   const kinmarking = publicList.events.find((event) => event.slug === "kinmarking");
   assert.ok(kinmarking);
   assert.deepEqual(kinmarking.occurrences.map((occurrence) => [occurrence.sessionNumber,occurrence.title,occurrence.displayTitle]), [
     ["01","Skin As Archive","KINMARKING 01: Skin As Archive"],
-    ["02","","KINMARKING 02"],
-    ["03","","KINMARKING 03"],
-    ["04","","KINMARKING 04"],
+    ["02","Color & Tattooing","KINMARKING 02: Color & Tattooing"],
+    ["03","Grief & Tattooing","KINMARKING 03: Grief & Tattooing"],
+    ["04","Iconography & Tattooing","KINMARKING 04: Iconography & Tattooing"],
+    ["05","Symbolism, Composition & Tattooing","KINMARKING 05: Symbolism, Composition & Tattooing"],
   ]);
   const blocked = await handleEventCheckout(request("/api/events/kinmarking/checkout", {
     method:"POST",

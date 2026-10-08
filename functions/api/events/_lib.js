@@ -592,6 +592,7 @@ function normalizeEventOccurrence(row, event) {
     eventId: row.event_id,
     sessionNumber: row.session_number || "",
     title: row.title || "",
+    description: row.description || "",
     startsAt: row.starts_at,
     endsAt: row.ends_at || null,
     location: row.location || event?.location || "",
@@ -619,7 +620,9 @@ async function getEventOccurrences(db, event) {
      WHERE event_id=?
      ORDER BY starts_at ASC,sort_order ASC,id ASC`
   ).bind(event.id).all();
-  return (result.results || []).map((row) => normalizeEventOccurrence(row, event));
+  const occurrences = (result.results || []).map((row) => normalizeEventOccurrence(row, event));
+  if (event.slug === "kinmarking") occurrences.sort((a, b) => a.sortOrder - b.sortOrder);
+  return occurrences;
 }
 
 function normalizeEventAdmissionOption(row, event, stats = {}) {
@@ -702,10 +705,12 @@ async function resolveEventAdmissionOption(db, event, requestedValue) {
 }
 
 function nextEventOccurrence(occurrences, now = Date.now()) {
-  return occurrences.find((occurrence) => {
+  const dated = occurrences.filter((occurrence) => Number.isFinite(Date.parse(occurrence.startsAt || "")))
+    .slice().sort((a,b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+  return dated.find((occurrence) => {
     const end = Date.parse(occurrence.endsAt || occurrence.startsAt || "");
-    return !Number.isFinite(end) || end >= now;
-  }) || occurrences.at(-1) || null;
+    return end >= now;
+  }) || dated.at(-1) || null;
 }
 
 async function resolveEventOccurrence(db, event, requestedId) {
@@ -1316,7 +1321,7 @@ function publicOccurrenceView(event, occurrence, stats = {}) {
     pendingOrders:Number(stats.pendingOrders) || 0,
     seatsRemaining,
     soldOut:occurrence.capacity > 0 && seatsRemaining <= 0,
-    open:occurrence.status === "open" && (occurrence.capacity <= 0 || seatsRemaining > 0),
+    open:Boolean(occurrence.startsAt) && occurrence.status === "open" && (occurrence.capacity <= 0 || seatsRemaining > 0),
     href:`/events/${encodeURIComponent(event.slug)}/?occurrence=${encodeURIComponent(occurrence.id)}`,
   };
 }
@@ -2720,22 +2725,25 @@ function occurrenceInputs(body, defaults = {}) {
   const seenStarts = new Set();
   return body.occurrences.map((input, index) => {
     const startsAt = asString(input?.startsAt || input?.starts_at);
-    if (!startsAt || !Number.isFinite(Date.parse(startsAt))) {
+    if ((!startsAt && !defaults.isKinmarking) || (startsAt && !Number.isFinite(Date.parse(startsAt)))) {
       throw new Error(`Event date ${index + 1} needs a valid start time.`);
     }
-    if (seenStarts.has(startsAt)) throw new Error("Event dates cannot repeat the same start time.");
-    seenStarts.add(startsAt);
+    if (startsAt && seenStarts.has(startsAt)) throw new Error("Event dates cannot repeat the same start time.");
+    if (startsAt) seenStarts.add(startsAt);
     const endsAt = asString(input?.endsAt || input?.ends_at) || null;
-    if (endsAt && (!Number.isFinite(Date.parse(endsAt)) || Date.parse(endsAt) < Date.parse(startsAt))) {
+    if (endsAt && (!startsAt || !Number.isFinite(Date.parse(endsAt)) || Date.parse(endsAt) < Date.parse(startsAt))) {
       throw new Error(`Event date ${index + 1} needs an end time after its start.`);
     }
     const status = asString(input?.status || defaults.status || "closed");
     if (!ADMIN_EVENT_STATUSES.has(status)) throw new Error(`Event date ${index + 1} has an invalid operation state.`);
+    if (!startsAt && status !== "closed") throw new Error(`Edition ${index + 1} must stay closed until a start time is confirmed.`);
+    if (defaults.isKinmarking && !asString(input?.title)) throw new Error(`Edition ${index + 1} needs a title.`);
     return {
       id:asString(input?.id),
-      sessionNumber:asString(input?.sessionNumber || input?.session_number).slice(0, 24),
+      sessionNumber:defaults.isKinmarking ? String(index + 1).padStart(2, "0") : asString(input?.sessionNumber || input?.session_number).slice(0, 24),
       title:asString(input?.title).slice(0, 200),
-      startsAt,
+      description:asString(input?.description).slice(0, 5000),
+      startsAt:startsAt || null,
       endsAt,
       location:asString(input?.location || defaults.location),
       capacity:Math.max(0, Math.floor(Number(input?.capacity ?? defaults.capacity) || 0)),
@@ -2854,11 +2862,11 @@ async function replaceEventOccurrences(db, event, occurrences, now) {
     if (occurrence.id) {
       if (!existingIds.has(occurrence.id)) throw new Error("An event date does not belong to this event.");
       await db.prepare(
-        `UPDATE event_occurrences SET session_number=?,title=?,starts_at=?,ends_at=?,location=?,capacity=?,
+        `UPDATE event_occurrences SET session_number=?,title=?,description=?,starts_at=?,ends_at=?,location=?,capacity=?,
            max_seats_per_order=?,status=?,sort_order=?,updated_at=?
          WHERE id=? AND event_id=?`
       ).bind(
-        occurrence.sessionNumber, occurrence.title, occurrence.startsAt, occurrence.endsAt, occurrence.location, occurrence.capacity,
+        occurrence.sessionNumber, occurrence.title, occurrence.description, occurrence.startsAt, occurrence.endsAt, occurrence.location, occurrence.capacity,
         occurrence.maxSeatsPerOrder, occurrence.status, occurrence.sortOrder, now,
         occurrence.id, event.id,
       ).run();
@@ -2867,11 +2875,11 @@ async function replaceEventOccurrences(db, event, occurrences, now) {
     occurrence.id = `occ_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
     await db.prepare(
       `INSERT INTO event_occurrences (
-         id,event_id,session_number,title,starts_at,ends_at,location,capacity,max_seats_per_order,status,
+         id,event_id,session_number,title,description,starts_at,ends_at,location,capacity,max_seats_per_order,status,
          sort_order,created_at,updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(
-      occurrence.id, event.id, occurrence.sessionNumber, occurrence.title, occurrence.startsAt, occurrence.endsAt, occurrence.location,
+      occurrence.id, event.id, occurrence.sessionNumber, occurrence.title, occurrence.description, occurrence.startsAt, occurrence.endsAt, occurrence.location,
       occurrence.capacity, occurrence.maxSeatsPerOrder, occurrence.status,
       occurrence.sortOrder, now, now,
     ).run();
@@ -2899,6 +2907,7 @@ export async function handleAdminEventCreate(request, env) {
   }
 
   const occurrenceDefaults = {
+    isKinmarking:slug === "kinmarking",
     location:asString(body.location),
     capacity:Math.max(0, Math.floor(Number(body.capacity) || 0)),
     maxSeatsPerOrder:Math.max(1, Math.floor(Number(body.maxSeatsPerOrder) || 4)),
@@ -3023,6 +3032,7 @@ export async function handleAdminEventUpdate(request, env, slug) {
     if (Array.isArray(body.occurrences)) {
       try {
         occurrences = occurrenceInputs(body, {
+          isKinmarking:event.slug === "kinmarking",
           location:body.location !== undefined ? asString(body.location) : event.location,
           capacity:body.capacity !== undefined ? body.capacity : event.capacity,
           maxSeatsPerOrder:body.maxSeatsPerOrder !== undefined ? body.maxSeatsPerOrder : event.maxSeatsPerOrder,

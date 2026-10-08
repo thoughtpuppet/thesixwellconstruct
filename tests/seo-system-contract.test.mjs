@@ -244,10 +244,10 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
     VALUES('kinmarking-route-test','kinmarking','KINMARKING','announced','closed',datetime('now'),datetime('now'))`).run();
   database.prepare(`INSERT INTO event_occurrences(id,event_id,session_number,title,starts_at,ends_at,status,created_at,updated_at)
     VALUES('kinmarking-route-occurrence','kinmarking-route-test','01','Skin As Archive','2026-11-21T19:00:00Z','2026-11-22T00:00:00Z','closed',datetime('now'),datetime('now'))`).run();
-  const laterEditions = [['02','Color as Inheritance','2027-01-16'],['03','Symbols as Language','2027-03-20'],['04','','2027-05-15']];
+  const laterEditions = [['02','Color as Inheritance','2027-01-16'],['03','Grief & Tattooing',null],['04','Symbols as Language','2027-03-20'],['05','Symbolism, Composition & Tattooing','2027-05-15'],['06','Future & Tattooing',null]];
   for (const [number,theme,date] of laterEditions) {
     database.prepare(`INSERT INTO event_occurrences(id,event_id,session_number,title,starts_at,status,created_at,updated_at)
-      VALUES(?,?,?,?,?,'closed',datetime('now'),datetime('now'))`).run(`kinmarking-route-${number}`,'kinmarking-route-test',number,theme,`${date}T19:00:00Z`);
+      VALUES(?,?,?,?,?,'closed',datetime('now'),datetime('now'))`).run(`kinmarking-route-${number}`,'kinmarking-route-test',number,theme,date ? `${date}T19:00:00Z` : null);
   }
   const template = readFileSync(join(ROOT, "events", "detail", "index.html"), "utf8");
   const env = {
@@ -284,12 +284,17 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
     const later = await worker.fetch(new Request(`${ORIGIN}${editionPath}`),env,{});
     assert.equal(later.status,200,editionPath);
     const laterHtml = await later.text();
-    const displayTheme = number === '02' ? 'Color &amp; Tattooing' : number === '03' ? 'Iconography &amp; Tattooing' : 'Symbolism, Composition &amp; Tattooing';
+    const displayTheme = number === '02' ? 'Color &amp; Tattooing' : number === '04' ? 'Iconography &amp; Tattooing' : theme.replaceAll('&','&amp;');
     assert.ok(laterHtml.includes(`<title>KINMARKING ${number}${displayTheme ? `: ${displayTheme}` : ''}`));
     assert.ok(laterHtml.includes(`<link rel="canonical" href="${ORIGIN}${editionPath}">`));
     const laterPayload = JSON.parse(laterHtml.match(/<script id="event-record-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
     assert.equal(laterPayload.occurrence.id,`kinmarking-route-${number}`);
-    assert.ok(laterPayload.occurrence.startsAt.startsWith(date));
+    if (date) assert.ok(laterPayload.occurrence.startsAt.startsWith(date));
+    else {
+      assert.equal(laterPayload.occurrence.startsAt,null);
+      const schema = JSON.parse(laterHtml.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/)[1]);
+      assert.equal(schema['@graph'].find(node => node['@type'] === 'Event').startDate,undefined);
+    }
     const crossed = await worker.fetch(new Request(`${ORIGIN}${editionPath}?occurrence=kinmarking-route-occurrence`),env,{});
     assert.equal(crossed.status,404);
   }

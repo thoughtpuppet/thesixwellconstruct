@@ -223,15 +223,15 @@
       </header>
       <div class="kinmarking-reading">
         <article>
-          <h4 data-copy-id="kinmarking-project-first-perspective-title">An opening perspective: oral history.</h4>
-          <p data-copy-id="kinmarking-project-first-perspective-copy">The first edition is being developed in collaboration with Georgia Dusk and its co-founders, Dartricia Rollins and Ashby Combahee, as individual oral historians and memory workers. Their practices bring distinct approaches to asking and listening into the inquiry, with particular attention to context.</p>
-          <p data-copy-id="kinmarking-project-first-perspective-connection">Their perspectives help shape the gathering’s questions and the ways participants engage with one another’s material. The format is developing through this exchange between oral history and tattooing.</p>
+          <h4 data-copy-id="kinmarking-project-first-perspective-title">Oral history and memory work as a foundation.</h4>
+          <p data-copy-id="kinmarking-project-first-perspective-copy">The first edition is being developed in collaboration with Georgia Dusk and its co-founders, Dartricia Rollins and Ashby Combahee, as oral historians and memory workers. Their practices bring distinct approaches to asking and listening into the inquiry, with particular attention to context.&nbsp;<span style="text-transform: none">Their perspectives help shape the gathering’s questions and the ways participants engage with one another’s material.</span></p>
           <a class="venture-link" href="/events/kinmarking-01-oral-histories-and-tattooing/" data-copy-id="kinmarking-project-first-edition-link">explore edition 01</a>
         </article>
         <article>
-          <h4 data-copy-id="kinmarking-project-future-title">Further perspectives.</h4>
-          <p data-copy-id="kinmarking-project-future-copy">The next two editions explore color and symbolism and iconography in greater depth. Future conversations could involve memory consolidation, ritual marking, tattoo traditions, or grief, alongside thinkers working in neuroscience, anthropology, history, and other fields.</p>
-          <p data-copy-id="kinmarking-project-future-open">These are possibilities for the inquiry to develop. Each encounter can introduce another way of thinking about interpretation, meaning, and preservation.</p>
+          <h4 data-copy-id="kinmarking-project-future-title">A sequence of portable explorations.</h4>
+          <p data-copy-id="kinmarking-project-future-copy">The editions of KINMARKING form a developing sequence, each building on what emerges across the series. The first establishes a foundation through the extraction and collection of material and associations. Upcoming editions utilize that material to develop a visual vocabulary through color, iconography, symbolism, and composition. Participants can move between editions through different points of entry and return, revisiting earlier material as new associations and questions emerge.</p>
+          <p data-copy-id="kinmarking-project-future-open"><span style="text-transform: none">Future conversations could deepen the inquiry into embodied knowledge, memory, ritual, inheritance, and grief, alongside thinkers working in neuroscience, anthropology, history, and other fields. Each conversation can introduce another way of thinking about interpretation, meaning, preservation, and semiotic endurance.</span></p>
+          <p data-copy-id="kinmarking-project-future-portability">Each edition is intended to be portable, offering questions, approaches, and exercises that participants can engage with and use beyond the original gathering. Participants can revisit earlier editions, work through ones they missed, and develop material to bring into later editions. Details on how to work through an edition will be available on its page.</p>
         </article>
       </div>
       <div class="kinmarking-collaborator-links" aria-label="First edition collaborators"><a class="venture-link" href="/about/collaborators/dartricia-rollins/" data-copy-id="kinmarking-dartricia-profile-link">Dartricia Rollins</a><a class="venture-link" href="/about/collaborators/ashby-combahee/" data-copy-id="kinmarking-ashby-profile-link">Ashby Combahee</a><a class="venture-link" href="/about/collaborators/georgia-dusk/" data-copy-id="kinmarking-georgia-dusk-profile-link">Georgia Dusk · Community archive</a></div>
@@ -241,7 +241,7 @@
 
     <footer class="footer"><p data-copy-id="live-events-kinmarking-p-6">&copy; the six.well construct</p><div class="page-links"><a href="/events/" data-copy-id="live-events-kinmarking-a-3">events</a><a href="/home/" data-copy-id="live-events-kinmarking-a-4">return to construct</a></div></footer>
   </main>
-<script src="/js/kinmarking-series.js?v=20261002-oral-histories"></script>
+<script src="/js/kinmarking-series.js?v=20261007-studio-editions"></script>
 <script src="/js/legend-record-view.js?v=canonical"></script>
 <script src="/js/kinmarking-symbol-band.js"></script>
 <script src="/js/kinmarking-painting-detail.js"></script>
@@ -257,7 +257,7 @@
         '<p class="edition-state">KINMARKING ' + series.escapeHtml(event.number) + ' · ' + series.escapeHtml(series.stateLabel(event)) + '</p>' +
         '<h3>' + series.escapeHtml(event.title) + '</h3>' +
         '<p class="edition-date">' + series.escapeHtml(series.formatDate(event.startsAt)) + '</p>' +
-        '<p class="edition-copy"' + series.copyAttributes(event.number, "description") + '>' + series.escapeHtml(event.description) + '</p>' +
+        '<p class="edition-copy"' + (event.occurrence ? ' data-live-edit-owner="managed" data-live-edit-label="Edition description" data-live-edit-owner-href="/studio/submissions/#events" data-live-edit-owner-label="Manage editions in Studio"' : series.copyAttributes(event.number, "description")) + '>' + series.escapeHtml(event.description) + '</p>' +
         '<a class="venture-link" href="' + series.editionHref(event) + '">view edition</a>' +
       '</article>';
     }).join("");
