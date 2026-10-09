@@ -153,6 +153,10 @@
     letter-spacing:.14em; text-transform:uppercase; color:var(--signal);
   }
   .project-card-actions { display:flex; padding:0 18px 18px; margin-top:auto; }
+  .linked-projects { max-width:760px; margin-bottom:40px; }
+  .linked-projects .project-card-body { gap:16px; padding:24px; }
+  .linked-projects .project-card-actions { padding:0 24px 24px; }
+  .linked-project-summary { color:var(--text-mute); font-size:16px; line-height:1.75; }
   .project-card-apply {
     display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:8px 14px;
     border:5px solid var(--signal); font-family:var(--sans); font-size:10px; font-weight:900;
@@ -487,6 +491,18 @@ main { padding:var(--s6) var(--s5); }
         <a class="cta-secondary" href="#artist-led" data-copy-id="live-tattoos-special-projects-a-3">Explore artist-led designs</a>
         <a class="cta-secondary" href="/tattoos/inquire/custom/" data-copy-id="live-tattoos-special-projects-a-4">Other symbolic commission &rarr;</a>
       </div>
+    </section>
+    <section class="linked-projects" aria-labelledby="kinmarkingSpecialProjectTitle" data-project-overview-only>
+      <article class="project-card" data-linked-project="kinmarking">
+        <div class="project-card-body">
+          <p class="project-card-series" data-copy-id="special-projects-kinmarking-context">Communal series · Memory, meaning &amp; tattooing</p>
+          <h2 class="project-card-title" id="kinmarkingSpecialProjectTitle" data-copy-id="special-projects-kinmarking-title">KINMARKING</h2>
+          <p class="linked-project-summary" data-copy-id="special-projects-kinmarking-summary"><span style="text-transform: none">KINMARKING explores the human rituals of preserving, expressing, and embodying meaning. Each session examines the symbols, images, objects, memories, stories, and inherited materials we form attachments to and choose to carry forward. Through conversation and interpretation, the series investigates how these attachments form and why we want them to endure. Tattooing turns that inquiry toward the body, where a person submits themselves to the ritual of making meaning persist. KINMARKING positions tattooing as living preservation: a way to embody knowledge, express identity, celebrate, and decorate the body.</span></p>
+        </div>
+        <div class="project-card-actions">
+          <a class="project-card-apply" href="/events/kinmarking/" data-copy-id="special-projects-kinmarking-link">Explore KINMARKING</a>
+        </div>
+      </article>
     </section>
     <nav class="series-filter" id="seriesFilter" aria-label="Filter Special Projects by series" data-project-overview-only data-live-edit-owner="managed" data-live-edit-label="Studio-managed Special Project series filters" data-live-edit-owner-href="/studio/submissions/#tattoo/special-projects" data-live-edit-owner-label="Open Special Projects in Studio">
       <button type="button" class="is-active" data-series-filter="">All projects</button>

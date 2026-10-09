@@ -70,9 +70,9 @@
     ],
     events: [
       ['GREEN[FIELD]', '/events/greenfield/'], ['Signal & Symbol', '/events/signal-symbol/'],
-      ['Atlanta calendar', '/calendar/'], ['rent the studio', '/booking/studio/'],
-      ['archive', '/archive/events/'], ["solehman's new years", '/events/solehmans-new-year/'],
-      ['SS&F live audience', '/events/ss-and-f-live-audience/'], ['open studios', '/events/open-studios/'],
+      ['Atlanta calendar', '/calendar/'], ['KINMARKING', '/events/kinmarking/'],
+      ['All Construct Events', '/events/'], ["solehman's new years", '/events/solehmans-new-year/'],
+      ['open studios', '/events/open-studios/'],
     ],
     music: [
       ['ringtones', '/music/#listening-surfaces'], ['MILOWALKSONWATER', '/music/#listening-index'],
