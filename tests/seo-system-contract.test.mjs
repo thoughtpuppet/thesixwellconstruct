@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   SEO_STATIC_PAGES,
   applySeoDocument,
+  calendarEventSitemapEligible,
   canonicalRedirect,
   chillSeriesStructuredData,
   handleRobots,
@@ -161,6 +162,34 @@ test("prototype assets are excluded from publication and the public tattoo polic
   assert.doesNotMatch(policy, /770[\s().-]*820[\s.-]*5800|\+17708205800|href=["']tel:/i);
 });
 
+test("the Calendar sitemap prioritizes current and upcoming public records without unpublishing history", () => {
+  const now = new Date("2026-10-15T14:00:00-04:00");
+  const event = {
+    id: "curated:current-event",
+    origin: "curated",
+    status: "published",
+    title: "Current event",
+    startsAt: "2026-10-15T19:00:00-04:00",
+  };
+
+  assert.equal(calendarEventSitemapEligible(event, now), true);
+  assert.equal(calendarEventSitemapEligible({ ...event, startsAt: "2026-10-14T19:00:00-04:00" }, now), false);
+  assert.equal(calendarEventSitemapEligible({
+    ...event,
+    startsAt: "2020-01-04T19:00:00-05:00",
+    endsAt: "2026-12-26T22:30:00-05:00",
+  }, now), true);
+  assert.equal(calendarEventSitemapEligible({
+    ...event,
+    startsAt: "2026-09-10",
+    confirmedThrough: "2026-10-15",
+  }, now), true);
+  assert.equal(calendarEventSitemapEligible({ ...event, status: "cancelled" }, now), false);
+  assert.equal(calendarEventSitemapEligible({ ...event, origin: "sixwell" }, now), false);
+  assert.equal(calendarEventSitemapEligible({ ...event, id: "" }, now), false);
+  assert.equal(calendarEventSitemapEligible({ ...event, startsAt: "not-a-date" }, now), false);
+});
+
 test("sitemap generation obeys authoritative visibility and excludes query states", async () => {
   const database = migratedDatabase();
   database.prepare(`
@@ -187,6 +216,7 @@ test("sitemap generation obeys authoritative visibility and excludes query state
 
 test("public person, event, calendar, and location pages expose crawlable distinctions", () => {
   const person = readFileSync(join(ROOT, "about", "saieldauhnsolehman", "index.html"), "utf8");
+  const tattooHouse = readFileSync(join(ROOT, "about", "artpilltattoohouse", "index.html"), "utf8");
   const events = readFileSync(join(ROOT, "events", "index.html"), "utf8");
   const calendar = readFileSync(join(ROOT, "calendar", "index.html"), "utf8");
   const location = readFileSync(join(ROOT, "tattoos", "location-parking", "index.html"), "utf8");
@@ -195,6 +225,10 @@ test("public person, event, calendar, and location pages expose crawlable distin
   assert.match(person, /Saiel Solehman as Tae “Art Bae”/);
   assert.match(person, /href="https:\/\/www\.theblackoutcompany\.com\/chill-the-series"/);
   for (const path of ["/art/", "/tattoos/", "/merch/", "/writings/", "/archive/", "/events/", "/calendar/"]) assert.match(person, new RegExp(`href=["']${path}`));
+  assert.ok(person.indexOf('href="/tattoos/"') < person.indexOf('href="/art/"'));
+  for (const path of ["/tattoos/portfolio/", "/tattoos/flash/", "/tattoos/special-projects/", "/tattoos/location-parking/", "/tattoos/inquire/"]) {
+    assert.match(tattooHouse, new RegExp(`href=["']${path}`));
+  }
   assert.match(events, /produced|operated|programs/i);
   assert.match(events, /href="\/calendar\/"/);
   assert.match(calendar, /Atlanta Creative Calendar/);

@@ -375,6 +375,29 @@ function calendarTitleSlug(value) {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 96).replace(/-+$/g, "") || "event";
 }
 
+const ATLANTA_DATE_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function calendarDateKey(value) {
+  const direct = String(value || "").match(/^(\d{4}-\d{2}-\d{2})/);
+  if (direct) return direct[1];
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const parts = Object.fromEntries(ATLANTA_DATE_FORMATTER.formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+export function calendarEventSitemapEligible(event, now = new Date()) {
+  if (!event || event.origin === "sixwell" || event.status === "cancelled" || !event.id || !event.title) return false;
+  const currentDate = calendarDateKey(now);
+  const finalPublicDate = calendarDateKey(event.endsAt || event.confirmedThrough || event.startsAt);
+  return Boolean(currentDate && finalPublicDate && finalPublicDate >= currentDate);
+}
+
 async function dynamicSitemapEntries(env) {
   if (!env.SUBMISSIONS_DB) throw new Error("Missing authoritative D1 binding SUBMISSIONS_DB.");
   const db = env.SUBMISSIONS_DB;
@@ -403,7 +426,7 @@ async function dynamicSitemapEntries(env) {
     .flatMap((result) => result.results || [])
     .map((row) => ({ path: normalizeSeoPath(row.path), lastmod: row.lastmod || "" }));
   for (const event of calendarEvents || []) {
-    if (event.origin === "sixwell" || event.status === "cancelled" || !event.id || !event.title) continue;
+    if (!calendarEventSitemapEligible(event)) continue;
     const path = event.detailUrl || `/calendar/events/${calendarTitleSlug(event.title)}--${encodeURIComponent(event.id)}/`;
     if (!path.startsWith("/calendar/events/")) continue;
     rows.push({ path: normalizeSeoPath(path), lastmod: event.lastModified || "" });
