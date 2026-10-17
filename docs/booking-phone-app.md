@@ -58,11 +58,12 @@ Studio token and client details from view while leaving owner-device alerts on.
 - Push HTTPS endpoints are restricted to Apple, Google, Mozilla, and Windows
   services; redirects are rejected. Payloads use RFC 8291 `aes128gcm` encryption
   and RFC 8292 VAPID authentication.
-- Every alert uses the title **art.pill Tattoo House Bookings**. New requests name
-  the form (custom inquiry, flash claim, consultation, etc.) and the client when
-  provided. Confirmed bookings, reschedules, and cancellations include the client
-  name and appointment time in the Atlanta time zone. Group checkouts send one
-  confirmation for the appointments booked together.
+- The phone identifies the app as **art.pill Bookings**. Alert titles state the
+  event: **New Custom Inquiry**, **Appointment Booked**, **Appointment Rescheduled**,
+  or **Appointment Canceled**, with every word capitalized for other request types too.
+  The client name appears underneath, with the Atlanta appointment date and time
+  for appointment updates. Group checkouts send one **Appointments Booked** alert
+  with the number of appointments and first appointment time.
 - At the owner's request, names and appointment times can appear on the lock
   screen. Email addresses, phone numbers, project notes, and access tokens are
   excluded. Tapping opens the matching private request after unlocking when one

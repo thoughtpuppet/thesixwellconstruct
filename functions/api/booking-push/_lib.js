@@ -5,7 +5,6 @@ export const BOOKING_REQUEST_TYPES = Object.freeze([
   'tattoo_inquiry', 'flash_claim', 'special_project', 'build_brief',
   'maze_design', 'tattoo_special', 'consultation', 'build_session', 'studio_booking',
 ]);
-export const BOOKING_PUSH_TITLE = 'art.pill Tattoo House Bookings';
 const REQUEST_LABELS = Object.freeze({
   tattoo_inquiry: 'custom inquiry', flash_claim: 'flash claim', special_project: 'special project request',
   build_brief: 'Build Your Own request', maze_design: 'Maze design request', tattoo_special: 'Tattoo Special request',
@@ -132,7 +131,7 @@ export async function handleBookingPushApi(request, env) {
       if (!device) return json({ error: 'Enable notifications on this device first.' }, 404);
       const eventKey = `test:${crypto.randomUUID()}`;
       const payload = body.scenario ? samplePayload(body.scenario, sampleName) : {
-        title: BOOKING_PUSH_TITLE, body: 'Test alert: this device is ready for inquiries and appointment updates.', url: '/studio/bookings/',
+        title: 'Test Alert', body: 'This device is ready for inquiries and appointment updates.', url: '/studio/bookings/',
       };
       const result = await enqueuePush(env, eventKey, { ...payload, tag: eventKey }, [device]);
       return json(result.sent ? result : { ...result, error: 'The push service did not accept the test alert. Try reconnecting notifications.' }, result.sent ? 200 : 502);
@@ -154,7 +153,7 @@ function requestPayload(submission) {
   const label = submission.type === 'tattoo_inquiry' && submission.payload?.project_category === 'special_projects_artist_led'
     ? 'artist-led design request' : REQUEST_LABELS[submission.type];
   return {
-    title: BOOKING_PUSH_TITLE, body: `New ${label}${name ? ` from ${name}` : ''}.`,
+    title: `New ${label}`.replace(/\b[a-z]/g, (letter) => letter.toUpperCase()), body: name || 'Open your inbox to review the request.',
     url: `/studio/bookings/?request=${encodeURIComponent(submission.id)}`,
     tag: `booking:${submission.id}`,
   };
@@ -189,14 +188,14 @@ function appointmentPayload(event, appointment) {
   const name = notificationName(appointment.clientName || appointment.client_name) || 'A client';
   const when = appointmentWhen(appointment.startAt || appointment.start_at);
   const count = Number(appointment.checkoutGroupSize || appointment.checkout_group_size || 1);
-  const body = event === 'confirmed'
-    ? count > 1 ? `${name} has booked ${count} appointments.${when ? ` First: ${when}.` : ''}`
-      : `${name} has booked their appointment${when ? ` for ${when}` : ''}.`
-    : event === 'rescheduled' ? `${name}’s appointment has been rescheduled${when ? ` to ${when}` : ''}.`
-    : `${name}’s appointment${when ? ` for ${when}` : ''} has been canceled.`;
+  const grouped = event === 'confirmed' && count > 1;
+  const title = event === 'confirmed' ? grouped ? 'Appointments Booked' : 'Appointment Booked'
+    : event === 'rescheduled' ? 'Appointment Rescheduled' : 'Appointment Canceled';
+  const body = [name, grouped ? `${count} appointments` : '', when ? `${grouped ? 'First: ' : ''}${when}` : '']
+    .filter(Boolean).join(' · ');
   const submissionId = appointment.submissionId || appointment.submission_id;
   return {
-    title: BOOKING_PUSH_TITLE, body,
+    title, body,
     url: submissionId ? `/studio/bookings/?request=${encodeURIComponent(submissionId)}` : '/studio/bookings/',
   };
 }

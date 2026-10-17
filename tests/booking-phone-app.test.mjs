@@ -6,7 +6,7 @@ import { createECDH, createDecipheriv, hkdfSync, randomBytes, createPublicKey, v
 import { runInNewContext } from 'node:vm';
 import worker from '../_worker.js';
 import { handleBookingInbox } from '../functions/api/booking-inbox/_lib.js';
-import { BOOKING_PUSH_TITLE, BOOKING_PUSH_SAMPLES, handleBookingPushApi, notifyBookingRequestPush, notifyBookingAppointmentPush, flushBookingPush, allowedPushEndpoint } from '../functions/api/booking-push/_lib.js';
+import { BOOKING_PUSH_SAMPLES, handleBookingPushApi, notifyBookingRequestPush, notifyBookingAppointmentPush, flushBookingPush, allowedPushEndpoint } from '../functions/api/booking-push/_lib.js';
 import { notifyAdminSubmissionReceived, notifyAdminAppointmentConfirmed, notifyAdminAppointmentRescheduled, notifyAppointmentCancelled } from '../functions/api/notifications/_lib.js';
 
 const root = new URL('../', import.meta.url);
@@ -48,6 +48,13 @@ async function subscribe(env, value) {
   assert.equal(response.status, 200); return response.json();
 }
 const booking = { id: 'request-one', type: 'tattoo_inquiry', contactName: 'Private Name', contactEmail: 'private@example.test', subject: 'Private project notes' };
+const SAMPLE_TITLES = {
+  tattoo_inquiry: 'New Custom Inquiry', flash_claim: 'New Flash Claim', special_project: 'New Special Project Request',
+  build_brief: 'New Build Your Own Request', maze_design: 'New Maze Design Request', tattoo_special: 'New Tattoo Special Request',
+  consultation: 'New Consultation Request', build_session: 'New In-Person Build Session Request', studio_booking: 'New Studio Booking Request',
+  artist_led: 'New Artist-Led Design Request', appointment_confirmed: 'Appointment Booked',
+  appointment_group_confirmed: 'Appointments Booked', appointment_rescheduled: 'Appointment Rescheduled', appointment_cancelled: 'Appointment Canceled',
+};
 
 function decrypt(payload, client) {
   const body = Buffer.from(payload.body), salt = body.subarray(0, 16), keyLength = body[20];
@@ -129,8 +136,8 @@ test('actual Apple-compatible encrypted push is signed and deduplicated across n
     assert.equal(payload.redirect, 'manual'); assert.equal(payload.headers['content-encoding'], 'aes128gcm');
     const message = decrypt(payload, client);
     assert.equal(message.url, '/studio/bookings/?request=request-one');
-    assert.equal(message.title, 'art.pill Tattoo House Bookings');
-    assert.equal(message.body, 'New custom inquiry from Private Name.');
+    assert.equal(message.title, 'New Custom Inquiry');
+    assert.equal(message.body, 'Private Name');
     assert.ok(!JSON.stringify(message).includes('Private project notes')); assert.ok(!JSON.stringify(message).includes('private@example'));
     const token = payload.headers.authorization.match(/t=([^,]+)/)[1];
     const [header, body, signature] = token.split('.');
@@ -149,20 +156,19 @@ test('new request alerts identify each form and safely include only the requeste
   const original = globalThis.fetch, messages = [];
   globalThis.fetch = async (_url, payload) => { messages.push(decrypt(payload, client)); return new Response(null, { status: 201 }); };
   try {
-    const labels = { tattoo_inquiry: 'custom inquiry', flash_claim: 'flash claim', special_project: 'special project request',
-      build_brief: 'Build Your Own request', maze_design: 'Maze design request', tattoo_special: 'Tattoo Special request',
-      consultation: 'consultation request', build_session: 'in-person Build session request', studio_booking: 'studio booking request' };
-    for (const [type, label] of Object.entries(labels)) {
+    for (const type of BOOKING_PUSH_SAMPLES.slice(0, 9).map(sample => sample.id)) {
       await notifyBookingRequestPush(env, { ...booking, id: type, type, contactName: ' Jordan\n Example\u202e ' });
-      assert.equal(messages.at(-1).title, BOOKING_PUSH_TITLE);
-      assert.equal(messages.at(-1).body, `New ${label} from Jordan Example.`);
+      assert.equal(messages.at(-1).title, SAMPLE_TITLES[type]);
+      assert.equal(messages.at(-1).body, 'Jordan Example');
       assert.ok(!JSON.stringify(messages.at(-1)).includes('private@example'));
       assert.ok(!JSON.stringify(messages.at(-1)).includes('Private project notes'));
     }
     await notifyAdminSubmissionReceived(env, { ...booking, id: 'artist-led', payload: { project_category: 'special_projects_artist_led' } });
-    assert.equal(messages.at(-1).body, 'New artist-led design request from Private Name.');
+    assert.equal(messages.at(-1).title, 'New Artist-Led Design Request');
+    assert.equal(messages.at(-1).body, 'Private Name');
     await notifyBookingRequestPush(env, { ...booking, id: 'unnamed', contactName: '' });
-    assert.equal(messages.at(-1).body, 'New custom inquiry.');
+    assert.equal(messages.at(-1).title, 'New Custom Inquiry');
+    assert.equal(messages.at(-1).body, 'Open your inbox to review the request.');
   } finally { globalThis.fetch = original; }
 });
 
@@ -180,13 +186,15 @@ test('appointment notification hooks send named confirmed, rescheduled, and canc
     await notifyAdminAppointmentConfirmed(env, null, appointment);
     await notifyAdminAppointmentConfirmed(env, null, appointment, { idempotencyKey: 'manual-email-resend' });
     assert.equal(messages.length, 1);
-    assert.match(messages[0].body, /^Jordan Example has booked their appointment for .*Oct 20.*2:00.*EDT\.$/);
+    assert.equal(messages[0].title, 'Appointment Booked');
+    assert.match(messages[0].body, /^Jordan Example · .*Oct 20.*2:00.*EDT$/);
     assert.equal(messages[0].url, '/studio/bookings/?request=request-one');
     const moved = { ...appointment, start_at: '2026-10-22T18:00:00.000Z', rescheduled_at: '2026-10-17T18:00:00.000Z', reschedule_count: 1 };
     await notifyAdminAppointmentRescheduled(env, null, moved);
     await notifyAdminAppointmentRescheduled(env, null, moved, { idempotencyKey: 'resend-reschedule-email' });
     assert.equal(messages.length, 2);
-    assert.match(messages[1].body, /^Jordan Example’s appointment has been rescheduled to .*Oct 22/);
+    assert.equal(messages[1].title, 'Appointment Rescheduled');
+    assert.match(messages[1].body, /^Jordan Example · .*Oct 22/);
     // A later move back to a previous time is a different saved event.
     await notifyAdminAppointmentRescheduled(env, null, { ...appointment, rescheduled_at: '2026-10-18T18:00:00.000Z', reschedule_count: 2 });
     assert.equal(messages.length, 3);
@@ -194,9 +202,10 @@ test('appointment notification hooks send named confirmed, rescheduled, and canc
     await notifyAppointmentCancelled(env, null, canceled);
     await notifyAppointmentCancelled(env, null, canceled, { idempotencyKey: 'resend-cancellation-email' });
     assert.equal(messages.length, 4);
-    assert.match(messages[3].body, /^Jordan Example’s appointment for .*Oct 20.* has been canceled\.$/);
+    assert.equal(messages[3].title, 'Appointment Canceled');
+    assert.match(messages[3].body, /^Jordan Example · .*Oct 20/);
     for (const message of messages) {
-      assert.equal(message.title, 'art.pill Tattoo House Bookings');
+      assert.ok(!message.title.includes('art.pill'));
       assert.ok(!JSON.stringify(message).includes('private@example'));
       assert.ok(!JSON.stringify(message).includes('555-private'));
     }
@@ -213,9 +222,11 @@ test('grouped bookings send one confirmation and cancellation alerts do not requ
     await notifyBookingAppointmentPush(env, 'confirmed', appointment);
     await notifyBookingAppointmentPush(env, 'confirmed', { ...appointment, id: 'group-second' });
     assert.equal(messages.length, 1);
-    assert.equal(messages[0].body, 'Jordan has booked 3 appointments.');
+    assert.equal(messages[0].title, 'Appointments Booked');
+    assert.equal(messages[0].body, 'Jordan · 3 appointments');
     await notifyAppointmentCancelled(env, null, { id: 'manual-no-email', status: 'cancelled', clientName: 'Jordan', startAt: 'invalid-date' });
-    assert.equal(messages[1].body, 'Jordan’s appointment has been canceled.');
+    assert.equal(messages[1].title, 'Appointment Canceled');
+    assert.equal(messages[1].body, 'Jordan');
     assert.equal(messages[1].url, '/studio/bookings/');
   } finally { globalThis.fetch = original; }
 });
@@ -250,7 +261,7 @@ test('owner test alert uses Workers-supported manual redirects and reports actua
     // Cloudflare throws before sending when redirect is 'error'.
     assert.equal(payload.redirect, 'manual');
     const message = decrypt(payload, client);
-    assert.equal(message.title, 'art.pill Tattoo House Bookings');
+    assert.equal(message.title, 'Test Alert');
     assert.equal(message.url, '/studio/bookings/');
     return new Response(null, { status: code, headers: code === 302 ? { location: 'https://attacker.test/' } : {} });
   };
@@ -286,16 +297,16 @@ test('every named sample uses the real message builders, stays owner-only, and c
       const response = await worker.fetch(request(path, 'POST', { ...body, scenario: sample.id }), env);
       assert.equal(response.status, 200, sample.id);
       const message = messages.at(-1);
-      assert.equal(message.title, 'art.pill Tattoo House Bookings');
+      assert.equal(message.title, SAMPLE_TITLES[sample.id]);
       assert.match(message.body, /^TEST · .*Sai Solehman/);
       assert.equal(message.url, '/studio/bookings/');
       assert.match(message.tag, /^test:/);
     }
-    assert.equal(messages[0].body, 'TEST · New custom inquiry from Sai Solehman.');
-    assert.match(messages.find(message => message.body.includes('booked their appointment')).body, / for /);
-    assert.ok(messages.some(message => message.body.includes('has booked 3 appointments')));
-    assert.ok(messages.some(message => message.body.includes('has been rescheduled')));
-    assert.ok(messages.some(message => message.body.includes('has been canceled')));
+    assert.equal(messages[0].body, 'TEST · Sai Solehman');
+    assert.match(messages.find(message => message.title === 'Appointment Booked').body, /^TEST · Sai Solehman · /);
+    assert.match(messages.find(message => message.title === 'Appointments Booked').body, /3 appointments · First: /);
+    assert.ok(messages.some(message => message.title === 'Appointment Rescheduled'));
+    assert.ok(messages.some(message => message.title === 'Appointment Canceled'));
     assert.equal(new Set(messages.map(message => message.tag)).size, 14);
     assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM appointments').get().count, before);
     assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM submissions').get().count, 0);
@@ -334,9 +345,9 @@ test('service worker preserves event wording, uses the requested default title, 
   let pending;
   listeners.push({ data: { json: () => ({ url: 'https://attacker.test/' }) }, waitUntil: (value) => { pending = value; } });
   await pending; assert.equal(notices[0].options.data.url, 'https://studio.example.test/studio/bookings/');
-  assert.equal(notices[0].title, 'art.pill Tattoo House Bookings');
-  listeners.push({ data: { json: () => ({ title: BOOKING_PUSH_TITLE, body: 'New custom inquiry from Jordan.' }) }, waitUntil: (value) => { pending = value; } });
-  await pending; assert.equal(notices[1].options.body, 'New custom inquiry from Jordan.');
+  assert.equal(notices[0].title, 'Booking Update');
+  listeners.push({ data: { json: () => ({ title: 'New Custom Inquiry', body: 'Jordan' }) }, waitUntil: (value) => { pending = value; } });
+  await pending; assert.equal(notices[1].title, 'New Custom Inquiry'); assert.equal(notices[1].options.body, 'Jordan');
   listeners.notificationclick({ notification: { close() {}, data: { url: '/studio/submissions/?token=secret' } }, waitUntil: (value) => { pending = value; } });
   await pending; assert.equal(windows[0], 'https://studio.example.test/studio/bookings/');
   assert.equal(listeners.fetch, undefined);
