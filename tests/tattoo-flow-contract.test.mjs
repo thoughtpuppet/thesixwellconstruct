@@ -352,7 +352,7 @@ test("Special Project gallery media is publicly readable after attachment", asyn
 });
 
 const TATTOO_BUDGET_RANGES = [
-  "Up to $300",
+  "$150-$300",
   "$300–$500",
   "$500–$800",
   "$800–$1,200",

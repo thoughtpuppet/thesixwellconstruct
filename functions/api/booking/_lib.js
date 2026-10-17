@@ -124,7 +124,7 @@ const DEFAULT_SUPPORT_EMAIL = "saisolehman@artpilltattoohouse.com";
 const DEFAULT_STUDIO_CONTACT_PHONE = "(770) 820-5800";
 const DEFAULT_CALENDAR_TIME_ZONE = "America/New_York";
 const DEFAULT_TATTOO_INQUIRY_BUDGET_RANGES = Object.freeze([
-  { minimumDollars: null, maximumDollars: 300 },
+  { minimumDollars: 150, maximumDollars: 300 },
   { minimumDollars: 300, maximumDollars: 500 },
   { minimumDollars: 500, maximumDollars: 800 },
   { minimumDollars: 800, maximumDollars: 1200 },

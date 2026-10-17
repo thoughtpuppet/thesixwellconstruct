@@ -5,7 +5,7 @@
   var FLEXIBLE_VALUE = "I’m flexible / I’d like guidance";
   var MINIMUM_SPECIFIC_DOLLARS = 150;
   var DEFAULT_RANGES = [
-    { minimumDollars: null, maximumDollars: 300 },
+    { minimumDollars: 150, maximumDollars: 300 },
     { minimumDollars: 300, maximumDollars: 500 },
     { minimumDollars: 500, maximumDollars: 800 },
     { minimumDollars: 800, maximumDollars: 1200 },

@@ -50,7 +50,7 @@ const SPECIFIC_BUDGET_VALUE = "__specific_amount__";
 const MINIMUM_SPECIFIC_BUDGET_DOLLARS = 150;
 const FLEXIBLE_BUDGET_VALUE = "I’m flexible / I’d like guidance";
 const DEFAULT_TATTOO_BUDGET_RANGES = [
-  "Up to $300",
+  "$150-$300",
   "$300–$500",
   "$500–$800",
   "$800–$1,200",
