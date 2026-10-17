@@ -3,13 +3,13 @@ const $ = (id) => document.getElementById(id);
 const TYPES = {
   tattoo_inquiry: 'Custom tattoo', flash_claim: 'Flash claim', special_project: 'Special project',
   build_brief: 'Build your own', maze_design: 'Maze design', tattoo_special: 'Tattoo Special',
-  consultation: 'Consultation', studio_booking: 'Studio booking',
+  consultation: 'Consultation', build_session: 'In-person Build session', studio_booking: 'Studio booking',
 };
 const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const date = (value) => value ? new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'America/New_York' }).format(new Date(value)) : '';
 const human = (value) => String(value || '').replace(/_/g, ' ');
 let token = localStorage.getItem(TOKEN_KEY) || '';
-let epoch = 0, rows = [], nextCursor = null, currentDetail = null, config = null, registered = null, subscription = null;
+let epoch = 0, rows = [], nextCursor = null, currentDetail = null, config = null, registered = null, subscription = null, pushBusy = false;
 const objectUrls = [];
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const iphone = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -159,15 +159,20 @@ function renderPush() {
   const installNeeded = iphone && !standalone();
   $('install-help').hidden = !installNeeded;
   $('enable-push').hidden = Boolean(subscription);
-  $('enable-push').disabled = (!config?.configured && !config?.canActivate) || !supported || installNeeded || Notification.permission === 'denied';
+  $('enable-push').disabled = pushBusy || (!config?.configured && !config?.canActivate) || !supported || installNeeded || Notification.permission === 'denied';
   $('test-push').hidden = !subscription || !config?.configured;
+  $('test-push').disabled = pushBusy;
   $('disable-push').hidden = !subscription;
+  $('disable-push').disabled = pushBusy;
+  $('sample-push-controls').hidden = !subscription || !config?.configured || !config.sampleTypes?.length;
+  $('sample-push').disabled = pushBusy;
+  $('sample-name').disabled = pushBusy;
   if (installNeeded) { $('alerts-summary').textContent = 'Add to Home Screen'; $('push-status').textContent = 'Install the app before enabling iPhone alerts.'; }
   else if (!config?.configured && !config?.canActivate) { $('alerts-summary').textContent = 'Not activated'; $('push-status').textContent = 'Phone alerts are paused on the website. Your booking inbox still works.'; }
   else if (!supported) { $('alerts-summary').textContent = 'Unavailable here'; $('push-status').textContent = 'This browser does not support phone alerts. Open the app on a supported device.'; }
   else if (Notification.permission === 'denied') { $('alerts-summary').textContent = 'Blocked'; $('push-status').textContent = 'Allow notifications in your device settings, then reopen the app.'; }
-  else if (subscription) { $('alerts-summary').textContent = 'On'; $('push-status').textContent = 'New booking requests will notify this device. Send a test alert to check delivery.'; }
-  else { $('alerts-summary').textContent = 'Off'; $('push-status').textContent = 'Get an alert when a new booking request arrives.'; }
+  else if (subscription) { $('alerts-summary').textContent = 'On'; $('push-status').textContent = 'Get alerts for new inquiries, confirmed bookings, reschedules, and cancellations. Send a test alert to check delivery.'; }
+  else { $('alerts-summary').textContent = 'Off'; $('push-status').textContent = 'Get alerts for new inquiries and appointment updates.'; }
 }
 
 async function configurePush() {
@@ -212,25 +217,57 @@ async function disablePush() {
   subscription = null; renderPush(); pushResult('Phone alerts are off.');
 }
 
-async function testPush() {
-  const button = $('test-push');
-  button.disabled = true;
-  button.textContent = 'Sending…';
-  pushResult('Sending a test alert to this device…');
+async function sendTestAlert(body) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     if (!subscription) throw new Error('Enable notifications on this device first.');
-    await api('/api/admin/booking-push/test', {
-      method: 'POST', body: JSON.stringify({ endpoint: subscription.endpoint }), signal: controller.signal,
+    return await api('/api/admin/booking-push/test', {
+      method: 'POST', body: JSON.stringify({ endpoint: subscription.endpoint, ...body }), signal: controller.signal,
     });
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('The test timed out. Check your connection and try again.');
+    throw error;
+  } finally { clearTimeout(timeout); }
+}
+
+async function testPush() {
+  if (pushBusy) return;
+  const button = $('test-push');
+  pushBusy = true; renderPush();
+  button.textContent = 'Sending…';
+  pushResult('Sending a test alert to this device…');
+  try {
+    await sendTestAlert({});
     pushResult('Test alert sent. Check Notification Center. If no alert appears, check your phone’s notification and Focus settings.');
   } catch (error) {
-    if (token) pushResult(error.name === 'AbortError' ? 'The test timed out. Check your connection and try again.' : error.message || 'Unable to send the test alert. Try again.', true);
+    if (token) pushResult(error.message || 'Unable to send the test alert. Try again.', true);
   } finally {
-    clearTimeout(timeout);
     button.textContent = 'Send test alert';
-    button.disabled = false;
+    pushBusy = false; renderPush();
+  }
+}
+
+async function testPushSamples() {
+  if (pushBusy) return;
+  const name = $('sample-name').value.trim();
+  if (!name) { pushResult('Enter a name for the sample alerts.', true); $('sample-name').focus(); return; }
+  const generation = epoch, samples = config?.sampleTypes || [];
+  if (!samples.length) return;
+  let sent = 0;
+  pushBusy = true; renderPush();
+  try {
+    for (const sample of samples) {
+      if (generation !== epoch) return;
+      pushResult(`Sending sample ${sent + 1} of ${samples.length}: ${sample.label}…`);
+      await sendTestAlert({ scenario: sample.id, clientName: name });
+      sent++;
+    }
+    if (generation === epoch) pushResult(`All ${sent} sample alerts sent for ${name}. Check Notification Center.`);
+  } catch (error) {
+    if (generation === epoch) pushResult(`${sent} of ${samples.length} samples sent. ${error.message || 'Try again.'}`, true);
+  } finally {
+    pushBusy = false; renderPush();
   }
 }
 
@@ -267,6 +304,7 @@ $('request-detail').addEventListener('click', (event) => { const button = event.
 $('enable-push').addEventListener('click', () => { pushResult(''); enablePush().catch((error) => pushResult(error.message, true)); });
 $('disable-push').addEventListener('click', () => run(disablePush, $('disable-push')));
 $('test-push').addEventListener('click', testPush);
+$('sample-push').addEventListener('click', testPushSamples);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && token && !$('inbox-panel').hidden) run(() => loadInbox()); });
 window.addEventListener('online', () => { if (token) run(() => loadInbox()); });
 const workerPromise = registerWorker().catch(() => { registered = null; });

@@ -6,8 +6,8 @@ import { createECDH, createDecipheriv, hkdfSync, randomBytes, createPublicKey, v
 import { runInNewContext } from 'node:vm';
 import worker from '../_worker.js';
 import { handleBookingInbox } from '../functions/api/booking-inbox/_lib.js';
-import { handleBookingPushApi, notifyBookingRequestPush, flushBookingPush, allowedPushEndpoint } from '../functions/api/booking-push/_lib.js';
-import { notifyAdminSubmissionReceived } from '../functions/api/notifications/_lib.js';
+import { BOOKING_PUSH_TITLE, BOOKING_PUSH_SAMPLES, handleBookingPushApi, notifyBookingRequestPush, notifyBookingAppointmentPush, flushBookingPush, allowedPushEndpoint } from '../functions/api/booking-push/_lib.js';
+import { notifyAdminSubmissionReceived, notifyAdminAppointmentConfirmed, notifyAdminAppointmentRescheduled, notifyAppointmentCancelled } from '../functions/api/notifications/_lib.js';
 
 const root = new URL('../', import.meta.url);
 class Statement {
@@ -129,7 +129,9 @@ test('actual Apple-compatible encrypted push is signed and deduplicated across n
     assert.equal(payload.redirect, 'manual'); assert.equal(payload.headers['content-encoding'], 'aes128gcm');
     const message = decrypt(payload, client);
     assert.equal(message.url, '/studio/bookings/?request=request-one');
-    assert.ok(!JSON.stringify(message).includes('Private')); assert.ok(!JSON.stringify(message).includes('private@example'));
+    assert.equal(message.title, 'art.pill Tattoo House Bookings');
+    assert.equal(message.body, 'New custom inquiry from Private Name.');
+    assert.ok(!JSON.stringify(message).includes('Private project notes')); assert.ok(!JSON.stringify(message).includes('private@example'));
     const token = payload.headers.authorization.match(/t=([^,]+)/)[1];
     const [header, body, signature] = token.split('.');
     const claims = JSON.parse(Buffer.from(body, 'base64url'));
@@ -138,6 +140,83 @@ test('actual Apple-compatible encrypted push is signed and deduplicated across n
     const publicKey = createPublicKey({ key: { kty: 'EC', crv: 'P-256', x: raw.subarray(1, 33).toString('base64url'), y: raw.subarray(33).toString('base64url') }, format: 'jwk' });
     assert.ok(verify('sha256', Buffer.from(`${header}.${body}`), { key: publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'base64url')));
     assert.equal(sqlite.prepare('SELECT status FROM booking_push_deliveries').get().status, 'sent');
+  } finally { globalThis.fetch = original; }
+});
+
+test('new request alerts identify each form and safely include only the requested client name', async () => {
+  const { env } = environment(), client = device();
+  await subscribe(env, client.subscription);
+  const original = globalThis.fetch, messages = [];
+  globalThis.fetch = async (_url, payload) => { messages.push(decrypt(payload, client)); return new Response(null, { status: 201 }); };
+  try {
+    const labels = { tattoo_inquiry: 'custom inquiry', flash_claim: 'flash claim', special_project: 'special project request',
+      build_brief: 'Build Your Own request', maze_design: 'Maze design request', tattoo_special: 'Tattoo Special request',
+      consultation: 'consultation request', build_session: 'in-person Build session request', studio_booking: 'studio booking request' };
+    for (const [type, label] of Object.entries(labels)) {
+      await notifyBookingRequestPush(env, { ...booking, id: type, type, contactName: ' Jordan\n Example\u202e ' });
+      assert.equal(messages.at(-1).title, BOOKING_PUSH_TITLE);
+      assert.equal(messages.at(-1).body, `New ${label} from Jordan Example.`);
+      assert.ok(!JSON.stringify(messages.at(-1)).includes('private@example'));
+      assert.ok(!JSON.stringify(messages.at(-1)).includes('Private project notes'));
+    }
+    await notifyAdminSubmissionReceived(env, { ...booking, id: 'artist-led', payload: { project_category: 'special_projects_artist_led' } });
+    assert.equal(messages.at(-1).body, 'New artist-led design request from Private Name.');
+    await notifyBookingRequestPush(env, { ...booking, id: 'unnamed', contactName: '' });
+    assert.equal(messages.at(-1).body, 'New custom inquiry.');
+  } finally { globalThis.fetch = original; }
+});
+
+test('appointment notification hooks send named confirmed, rescheduled, and canceled alerts once per saved event', async () => {
+  const { env } = environment(), client = device();
+  await subscribe(env, client.subscription);
+  const original = globalThis.fetch, messages = [];
+  globalThis.fetch = async (_url, payload) => { messages.push(decrypt(payload, client)); return new Response(null, { status: 201 }); };
+  const appointment = { id: 'appointment-one', submission_id: booking.id, status: 'confirmed', booking_type_id: 'tattoo_quarter',
+    client_name: 'Jordan Example', client_email: 'private@example.test', client_phone: '555-private',
+    start_at: '2026-10-20T18:00:00.000Z', end_at: '2026-10-20T20:00:00.000Z', reschedule_count: 0 };
+  try {
+    await notifyAdminAppointmentConfirmed(env, null, { ...appointment, status: 'pending_deposit' });
+    assert.equal(messages.length, 0);
+    await notifyAdminAppointmentConfirmed(env, null, appointment);
+    await notifyAdminAppointmentConfirmed(env, null, appointment, { idempotencyKey: 'manual-email-resend' });
+    assert.equal(messages.length, 1);
+    assert.match(messages[0].body, /^Jordan Example has booked their appointment for .*Oct 20.*2:00.*EDT\.$/);
+    assert.equal(messages[0].url, '/studio/bookings/?request=request-one');
+    const moved = { ...appointment, start_at: '2026-10-22T18:00:00.000Z', rescheduled_at: '2026-10-17T18:00:00.000Z', reschedule_count: 1 };
+    await notifyAdminAppointmentRescheduled(env, null, moved);
+    await notifyAdminAppointmentRescheduled(env, null, moved, { idempotencyKey: 'resend-reschedule-email' });
+    assert.equal(messages.length, 2);
+    assert.match(messages[1].body, /^Jordan Example’s appointment has been rescheduled to .*Oct 22/);
+    // A later move back to a previous time is a different saved event.
+    await notifyAdminAppointmentRescheduled(env, null, { ...appointment, rescheduled_at: '2026-10-18T18:00:00.000Z', reschedule_count: 2 });
+    assert.equal(messages.length, 3);
+    const canceled = { ...appointment, status: 'cancelled', cancelled_at: '2026-10-19T18:00:00.000Z' };
+    await notifyAppointmentCancelled(env, null, canceled);
+    await notifyAppointmentCancelled(env, null, canceled, { idempotencyKey: 'resend-cancellation-email' });
+    assert.equal(messages.length, 4);
+    assert.match(messages[3].body, /^Jordan Example’s appointment for .*Oct 20.* has been canceled\.$/);
+    for (const message of messages) {
+      assert.equal(message.title, 'art.pill Tattoo House Bookings');
+      assert.ok(!JSON.stringify(message).includes('private@example'));
+      assert.ok(!JSON.stringify(message).includes('555-private'));
+    }
+  } finally { globalThis.fetch = original; }
+});
+
+test('grouped bookings send one confirmation and cancellation alerts do not require a client email', async () => {
+  const { env } = environment(), client = device();
+  await subscribe(env, client.subscription);
+  const original = globalThis.fetch, messages = [];
+  globalThis.fetch = async (_url, payload) => { messages.push(decrypt(payload, client)); return new Response(null, { status: 201 }); };
+  try {
+    const appointment = { id: 'group-anchor', status: 'confirmed', checkoutGroupId: 'group-one', checkoutGroupSize: 3, clientName: 'Jordan' };
+    await notifyBookingAppointmentPush(env, 'confirmed', appointment);
+    await notifyBookingAppointmentPush(env, 'confirmed', { ...appointment, id: 'group-second' });
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].body, 'Jordan has booked 3 appointments.');
+    await notifyAppointmentCancelled(env, null, { id: 'manual-no-email', status: 'cancelled', clientName: 'Jordan', startAt: 'invalid-date' });
+    assert.equal(messages[1].body, 'Jordan’s appointment has been canceled.');
+    assert.equal(messages[1].url, '/studio/bookings/');
   } finally { globalThis.fetch = original; }
 });
 
@@ -171,7 +250,7 @@ test('owner test alert uses Workers-supported manual redirects and reports actua
     // Cloudflare throws before sending when redirect is 'error'.
     assert.equal(payload.redirect, 'manual');
     const message = decrypt(payload, client);
-    assert.equal(message.title, 'art.pill booking alerts');
+    assert.equal(message.title, 'art.pill Tattoo House Bookings');
     assert.equal(message.url, '/studio/bookings/');
     return new Response(null, { status: code, headers: code === 302 ? { location: 'https://attacker.test/' } : {} });
   };
@@ -185,6 +264,41 @@ test('owner test alert uses Workers-supported manual redirects and reports actua
     assert.match((await redirected.json()).error, /did not accept/);
     assert.equal(calls, 2);
     assert.equal(sqlite.prepare("SELECT COUNT(*) count FROM booking_push_deliveries WHERE status='failed' AND last_status=302").get().count, 1);
+  } finally { globalThis.fetch = original; }
+});
+
+test('every named sample uses the real message builders, stays owner-only, and creates no booking records', async () => {
+  const { env, sqlite } = environment(), client = device();
+  await subscribe(env, client.subscription);
+  const original = globalThis.fetch, messages = [];
+  globalThis.fetch = async (_url, payload) => { messages.push(decrypt(payload, client)); return new Response(null, { status: 201 }); };
+  const path = '/api/admin/booking-push/test';
+  const body = { endpoint: client.subscription.endpoint, clientName: 'Sai Solehman' };
+  const before = sqlite.prepare('SELECT COUNT(*) count FROM appointments').get().count;
+  try {
+    assert.equal(BOOKING_PUSH_SAMPLES.length, 14);
+    assert.equal((await worker.fetch(request(path, 'POST', { ...body, scenario: 'tattoo_inquiry' }, false), env)).status, 401);
+    assert.equal((await worker.fetch(request(path, 'POST', { ...body, scenario: 'unknown' }), env)).status, 400);
+    assert.equal((await worker.fetch(request(path, 'POST', { ...body, clientName: '', scenario: 'tattoo_inquiry' }), env)).status, 400);
+    const config = await (await handleBookingPushApi(request('/api/admin/booking-push/config'), env)).json();
+    assert.deepEqual(config.sampleTypes, BOOKING_PUSH_SAMPLES);
+    for (const sample of BOOKING_PUSH_SAMPLES) {
+      const response = await worker.fetch(request(path, 'POST', { ...body, scenario: sample.id }), env);
+      assert.equal(response.status, 200, sample.id);
+      const message = messages.at(-1);
+      assert.equal(message.title, 'art.pill Tattoo House Bookings');
+      assert.match(message.body, /^TEST · .*Sai Solehman/);
+      assert.equal(message.url, '/studio/bookings/');
+      assert.match(message.tag, /^test:/);
+    }
+    assert.equal(messages[0].body, 'TEST · New custom inquiry from Sai Solehman.');
+    assert.match(messages.find(message => message.body.includes('booked their appointment')).body, / for /);
+    assert.ok(messages.some(message => message.body.includes('has booked 3 appointments')));
+    assert.ok(messages.some(message => message.body.includes('has been rescheduled')));
+    assert.ok(messages.some(message => message.body.includes('has been canceled')));
+    assert.equal(new Set(messages.map(message => message.tag)).size, 14);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM appointments').get().count, before);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM submissions').get().count, 0);
   } finally { globalThis.fetch = original; }
 });
 
@@ -210,7 +324,7 @@ test('inbox filters and stable pagination work on real submission rows', async (
   assert.equal((await handleBookingInbox(request('/api/admin/booking-inbox?filter=invalid'), env)).status, 400);
 });
 
-test('service worker displays generic alerts and restricts notification navigation to the inbox', async () => {
+test('service worker preserves event wording, uses the requested default title, and restricts navigation to the inbox', async () => {
   const listeners = {}, notices = [], windows = [];
   runInNewContext(readFileSync(new URL('studio/bookings/sw.js', root), 'utf8'), { URL, self: {
     location: { origin: 'https://studio.example.test' }, addEventListener: (name, callback) => { listeners[name] = callback; },
@@ -220,6 +334,9 @@ test('service worker displays generic alerts and restricts notification navigati
   let pending;
   listeners.push({ data: { json: () => ({ url: 'https://attacker.test/' }) }, waitUntil: (value) => { pending = value; } });
   await pending; assert.equal(notices[0].options.data.url, 'https://studio.example.test/studio/bookings/');
+  assert.equal(notices[0].title, 'art.pill Tattoo House Bookings');
+  listeners.push({ data: { json: () => ({ title: BOOKING_PUSH_TITLE, body: 'New custom inquiry from Jordan.' }) }, waitUntil: (value) => { pending = value; } });
+  await pending; assert.equal(notices[1].options.body, 'New custom inquiry from Jordan.');
   listeners.notificationclick({ notification: { close() {}, data: { url: '/studio/submissions/?token=secret' } }, waitUntil: (value) => { pending = value; } });
   await pending; assert.equal(windows[0], 'https://studio.example.test/studio/bookings/');
   assert.equal(listeners.fetch, undefined);

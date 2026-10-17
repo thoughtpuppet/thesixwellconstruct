@@ -32,7 +32,7 @@ import { defaultEmailDesignProfile, validateEmailDesignProfile } from "./_email-
 import { tattooPricingSummary } from "../booking/_pricing.js";
 import { bookingTokenFromUrl, createBookingRawToken } from "../booking-links.js";
 import { studioAddress } from "../_shared/studio.js";
-import { notifyBookingRequestPush } from "../booking-push/_lib.js";
+import { notifyBookingAppointmentPush, notifyBookingRequestPush } from "../booking-push/_lib.js";
 import {
   emailDesignHistory,
   emailDesignRevision,
@@ -952,6 +952,8 @@ function normalizeAppointment(row) {
     checkoutGroupPosition: Number(row.checkout_group_position ?? row.checkoutGroupPosition ?? 1),
     checkoutGroupSize: Number(row.checkout_group_size ?? row.checkoutGroupSize ?? 1),
     rescheduleCount: Number(row.reschedule_count ?? row.rescheduleCount ?? 0),
+    rescheduledAt: row.rescheduled_at || row.rescheduledAt || "",
+    cancelledAt: row.cancelled_at || row.cancelledAt || "",
     originalStartAt: row.original_start_at || row.originalStartAt || "",
     originalEndAt: row.original_end_at || row.originalEndAt || "",
     meeting: meetingJoinUrl ? { joinUrl: meetingJoinUrl } : null,
@@ -1888,6 +1890,9 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow, o
 
 export async function notifyAdminAppointmentConfirmed(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
+  await notifyBookingAppointmentPush(env, "confirmed", appointment).catch((error) => {
+    console.error("Booking confirmation push could not be queued; email delivery continues.", error);
+  });
   const groupAppointments = await appointmentConfirmationGroup(env, appointment);
   const grouped = groupAppointments.length > 1;
   const groupTipCents = groupAppointments.reduce((total, item) => total + Number(item.tipCents || 0), 0);
@@ -2152,6 +2157,9 @@ export async function notifyAppointmentRescheduled(env, request, appointmentRow,
 
 export async function notifyAdminAppointmentRescheduled(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
+  await notifyBookingAppointmentPush(env, "rescheduled", appointment).catch((error) => {
+    console.error("Booking reschedule push could not be queued; email delivery continues.", error);
+  });
   const profile = rescheduledAppointmentProfile(appointment);
   const bookingTypeLabel = profile.studio ? studioBookingName(appointment) : appointment.bookingTypeLabel || appointment.bookingTypeId;
   const previousStartAt = options.previousStartAt || appointment.originalStartAt || "";
@@ -3021,6 +3029,9 @@ export async function handleAdminResendNotification(request, env) {
 
 export async function notifyAppointmentCancelled(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
+  await notifyBookingAppointmentPush(env, "cancelled", appointment).catch((error) => {
+    console.error("Booking cancellation push could not be queued; email delivery continues.", error);
+  });
   if (!appointment.clientEmail) return { ok: false, skipped: true };
 
   const isStudio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
