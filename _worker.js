@@ -203,6 +203,8 @@ import {
   publicPageVisibilityDecision,
 } from "./functions/api/site-visibility/_lib.js";
 import { isPageVisibilityOperationalExemptPath } from "./shared/page-visibility.js";
+import { handleBookingPushApi, flushBookingPush } from "./functions/api/booking-push/_lib.js";
+import { handleBookingInbox } from "./functions/api/booking-inbox/_lib.js";
 import {
   applySeoDocument,
   applySeoResponse,
@@ -2005,6 +2007,8 @@ async function handleSquareApi(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/api/admin/booking-inbox") return handleBookingInbox(request, env);
+    if (url.pathname.startsWith("/api/admin/booking-push/")) return handleBookingPushApi(request, env);
     if (isLocalOnlyPath(url.pathname) && !isLocalPreview(url)) {
       return notFoundPage(request, env);
     }
@@ -2026,6 +2030,10 @@ export default {
     const visibilityResponse = await pageVisibilityResponse(visibilityRequest, env);
     if (visibilityResponse) return visibilityResponse;
     if (canonicalResponse) return canonicalResponse;
+
+    if (url.pathname.startsWith("/studio/bookings/")) {
+      return privateLinkResponse(await servePublicAsset(request, env, assetPathForRequest(url.pathname)));
+    }
 
     if (url.pathname === "/robots.txt") return handleRobots(request, env);
     if (url.pathname === "/sitemap.xml") return handleSitemap(request, env);
@@ -2489,6 +2497,7 @@ export default {
     return servePublicAsset(request, env, assetPathForRequest(url.pathname));
   },
   async scheduled(controller, env, ctx) {
+    ctx.waitUntil(flushBookingPush(env).catch((error) => console.error("Booking push retry failed.", error)));
     ctx.waitUntil(retryPendingAdjustedOfferNotifications(env));
     ctx.waitUntil(reapExpiredAdjustedOffers(env));
     ctx.waitUntil(retryPendingAdminAppointmentNotifications(env));

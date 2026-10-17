@@ -28,6 +28,13 @@ OUTREACH_PREFERENCES_ENABLED=false
 OUTREACH_INDIVIDUAL_EMAIL_ENABLED=false
 OUTREACH_EMAIL_CAMPAIGNS_ENABLED=false
 SUBMISSIONS_ADMIN_TOKEN=replace-with-a-long-private-token
+# Owner can set up phone alerts inside /studio/bookings/ with the existing Studio token.
+# Explicitly setting BOOKING_PUSH_ENABLED=false pauses alerts and disables in-app activation.
+# These optional legacy environment overrides replace the server-side D1 signing keys.
+BOOKING_PUSH_ENABLED=false
+BOOKING_PUSH_PUBLIC_KEY=replace-with-the-generated-public-key
+BOOKING_PUSH_PRIVATE_KEY=replace-with-the-generated-private-key
+BOOKING_PUSH_SUBJECT=mailto:saisolehman@artpilltattoohouse.com
 # Shared HMAC key for short-lived, snapshot-scoped Archive viewer previews.
 # Store the same secret on the primary Worker and the dedicated viewer Worker.
 ARCHIVE_VIEWER_SIGNING_KEY=replace-with-a-different-long-random-preview-signing-key
