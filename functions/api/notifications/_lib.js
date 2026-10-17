@@ -32,6 +32,7 @@ import { defaultEmailDesignProfile, validateEmailDesignProfile } from "./_email-
 import { tattooPricingSummary } from "../booking/_pricing.js";
 import { bookingTokenFromUrl, createBookingRawToken } from "../booking-links.js";
 import { studioAddress } from "../_shared/studio.js";
+import { notifyBookingRequestPush } from "../booking-push/_lib.js";
 import {
   emailDesignHistory,
   emailDesignRevision,
@@ -1492,6 +1493,9 @@ export async function notifyAdminSubmissionReceived(env, submission, options = {
   if (normalized.type === "tattoo_special" && asString(normalized.payload?.booking_mode) !== "review") {
     return { ok: false, skipped: true, reason: "direct_booking_confirmation_only" };
   }
+  await notifyBookingRequestPush(env, normalized).catch((error) => {
+    console.error("Booking push could not be queued; email delivery continues.", error);
+  });
   const artistLed = normalized.type === "tattoo_inquiry"
     && asString(normalized.payload?.project_category) === "special_projects_artist_led";
   const formName = artistLed ? "Artist-led Design Request" : tattooFormName(normalized.type);

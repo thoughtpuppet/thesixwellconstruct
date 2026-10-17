@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0e0e0e">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="art.pill">
+  <title>Bookings · art.pill</title>
+  <link rel="manifest" href="/studio/bookings/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/studio/bookings/icons/icon-192.png">
+  <link rel="icon" href="/studio/bookings/icons/icon-192.png">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/studio/bookings/bookings.css?v=1">
+  <script type="module" src="/studio/bookings/bookings.js?v=1"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <a href="/studio/bookings/" class="wordmark" aria-label="art.pill bookings">art.pill<span>BOOKINGS</span></a>
+      <button id="lock" class="quiet" type="button" hidden>Lock</button>
+    </header>
+    <main>
+      <section id="unlock-panel" class="unlock-panel" aria-labelledby="unlock-title">
+        <p class="eyebrow">PRIVATE STUDIO</p>
+        <h1 id="unlock-title">Your booking inbox.</h1>
+        <p>Use your Studio access token to open client requests.</p>
+        <form id="unlock-form">
+          <label for="access-token">Studio access token</label>
+          <input id="access-token" type="password" required autocomplete="current-password" spellcheck="false" autocapitalize="none">
+          <button class="primary" type="submit">Unlock inbox</button>
+        </form>
+      </section>
+      <section id="inbox-panel" hidden aria-labelledby="inbox-title">
+        <div class="inbox-heading"><h1 id="inbox-title">Requests</h1><button id="refresh" class="quiet" type="button">Refresh</button></div>
+        <details id="alerts-panel" class="alerts-panel">
+          <summary>Phone alerts <span id="alerts-summary">Set up</span></summary>
+          <div class="alerts-content">
+            <p id="install-help" hidden>On iPhone, open this page in Safari, tap Share, then Add to Home Screen. Open the art.pill icon and enable notifications there.</p>
+            <p id="push-status" role="status">Checking phone alerts…</p>
+            <div class="button-row">
+              <button id="enable-push" class="primary" type="button" disabled>Enable notifications</button>
+              <button id="test-push" type="button" hidden>Send test alert</button>
+              <button id="disable-push" class="quiet" type="button" hidden>Turn off alerts</button>
+            </div>
+          </div>
+        </details>
+        <div class="inbox-tools">
+          <label class="sr-only" for="filter">Filter requests</label>
+          <select id="filter"><option value="active">Active requests</option><option value="unread">Unread</option><option value="all">All requests</option></select>
+          <span id="request-count" class="muted"></span>
+        </div>
+        <div id="request-list" class="request-list" aria-busy="false"></div>
+        <button id="load-more" type="button" hidden>Load older requests</button>
+        <a class="studio-link" href="/studio/submissions/">Open Studio Console</a>
+      </section>
+      <p id="app-status" class="app-status" role="status" aria-live="polite"></p>
+    </main>
+    <dialog id="request-dialog" aria-labelledby="request-title">
+      <div class="detail-header"><span class="eyebrow">BOOKING REQUEST</span><button id="close-detail" type="button" class="quiet">Close</button></div>
+      <div id="request-detail"></div>
+    </dialog>
+  </div>
+</body>
+</html>

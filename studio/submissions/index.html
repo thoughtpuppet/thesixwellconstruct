@@ -733,6 +733,7 @@
     <h1>Studio Console</h1>
     <div class="header-actions">
       <span class="status" id="status" role="status" aria-live="polite">Locked</span>
+      <a class="button" href="/studio/bookings/">Booking App</a>
       <a class="button" href="/studio/previews/">Previews</a>
       <button class="button" id="testEmailBtn" type="button">Send Test Email</button>
       <button class="button" id="refreshBtn" type="button">Refresh</button>
@@ -9006,6 +9007,20 @@ ${meetingLines}
 
   async function loadAndRender() {
     await Promise.all([loadSubmissions(), loadManualTextTemplates()]);
+    const requestedSubmissionId = new URLSearchParams(window.location.search).get("request") || "";
+    if (requestedSubmissionId) {
+      if (!submissions.some((item) => item.id === requestedSubmissionId)) {
+        const payload = await api(`/api/admin/submissions/${encodeURIComponent(requestedSubmissionId)}`);
+        if (payload.submission) submissions.push(payload.submission);
+      }
+      if (submissions.some((item) => item.id === requestedSubmissionId)) {
+        const requestUrl = new URL(window.location.href);
+        requestUrl.searchParams.delete("request");
+        window.history.replaceState(null, "", requestUrl);
+        goToSubmission(requestedSubmissionId);
+        return;
+      }
+    }
     if (/^#writings(?:\/wrkng)?$/.test(window.location.hash)) { activeTab = "writings"; subView = "wrkng"; }
     const archiveEntityId = archiveEntityIdFromLocation();
     if (archiveEntityId) {
