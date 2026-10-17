@@ -6,7 +6,7 @@ import { createECDH, createDecipheriv, hkdfSync, randomBytes, createPublicKey, v
 import { runInNewContext } from 'node:vm';
 import worker from '../_worker.js';
 import { handleBookingInbox } from '../functions/api/booking-inbox/_lib.js';
-import { BOOKING_PUSH_TITLE, handleBookingPushApi, notifyBookingRequestPush, notifyBookingAppointmentPush, flushBookingPush, allowedPushEndpoint } from '../functions/api/booking-push/_lib.js';
+import { BOOKING_PUSH_TITLE, BOOKING_PUSH_SAMPLES, handleBookingPushApi, notifyBookingRequestPush, notifyBookingAppointmentPush, flushBookingPush, allowedPushEndpoint } from '../functions/api/booking-push/_lib.js';
 import { notifyAdminSubmissionReceived, notifyAdminAppointmentConfirmed, notifyAdminAppointmentRescheduled, notifyAppointmentCancelled } from '../functions/api/notifications/_lib.js';
 
 const root = new URL('../', import.meta.url);
@@ -264,6 +264,41 @@ test('owner test alert uses Workers-supported manual redirects and reports actua
     assert.match((await redirected.json()).error, /did not accept/);
     assert.equal(calls, 2);
     assert.equal(sqlite.prepare("SELECT COUNT(*) count FROM booking_push_deliveries WHERE status='failed' AND last_status=302").get().count, 1);
+  } finally { globalThis.fetch = original; }
+});
+
+test('every named sample uses the real message builders, stays owner-only, and creates no booking records', async () => {
+  const { env, sqlite } = environment(), client = device();
+  await subscribe(env, client.subscription);
+  const original = globalThis.fetch, messages = [];
+  globalThis.fetch = async (_url, payload) => { messages.push(decrypt(payload, client)); return new Response(null, { status: 201 }); };
+  const path = '/api/admin/booking-push/test';
+  const body = { endpoint: client.subscription.endpoint, clientName: 'Sai Solehman' };
+  const before = sqlite.prepare('SELECT COUNT(*) count FROM appointments').get().count;
+  try {
+    assert.equal(BOOKING_PUSH_SAMPLES.length, 14);
+    assert.equal((await worker.fetch(request(path, 'POST', { ...body, scenario: 'tattoo_inquiry' }, false), env)).status, 401);
+    assert.equal((await worker.fetch(request(path, 'POST', { ...body, scenario: 'unknown' }), env)).status, 400);
+    assert.equal((await worker.fetch(request(path, 'POST', { ...body, clientName: '', scenario: 'tattoo_inquiry' }), env)).status, 400);
+    const config = await (await handleBookingPushApi(request('/api/admin/booking-push/config'), env)).json();
+    assert.deepEqual(config.sampleTypes, BOOKING_PUSH_SAMPLES);
+    for (const sample of BOOKING_PUSH_SAMPLES) {
+      const response = await worker.fetch(request(path, 'POST', { ...body, scenario: sample.id }), env);
+      assert.equal(response.status, 200, sample.id);
+      const message = messages.at(-1);
+      assert.equal(message.title, 'art.pill Tattoo House Bookings');
+      assert.match(message.body, /^TEST · .*Sai Solehman/);
+      assert.equal(message.url, '/studio/bookings/');
+      assert.match(message.tag, /^test:/);
+    }
+    assert.equal(messages[0].body, 'TEST · New custom inquiry from Sai Solehman.');
+    assert.match(messages.find(message => message.body.includes('booked their appointment')).body, / for /);
+    assert.ok(messages.some(message => message.body.includes('has booked 3 appointments')));
+    assert.ok(messages.some(message => message.body.includes('has been rescheduled')));
+    assert.ok(messages.some(message => message.body.includes('has been canceled')));
+    assert.equal(new Set(messages.map(message => message.tag)).size, 14);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM appointments').get().count, before);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM submissions').get().count, 0);
   } finally { globalThis.fetch = original; }
 });
 

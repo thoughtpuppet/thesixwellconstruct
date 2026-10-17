@@ -11,6 +11,14 @@ const REQUEST_LABELS = Object.freeze({
   build_brief: 'Build Your Own request', maze_design: 'Maze design request', tattoo_special: 'Tattoo Special request',
   consultation: 'consultation request', build_session: 'in-person Build session request', studio_booking: 'studio booking request',
 });
+export const BOOKING_PUSH_SAMPLES = Object.freeze([
+  ...BOOKING_REQUEST_TYPES.map((id) => ({ id, label: REQUEST_LABELS[id] })),
+  { id: 'artist_led', label: 'artist-led design request' },
+  { id: 'appointment_confirmed', label: 'appointment confirmed' },
+  { id: 'appointment_group_confirmed', label: 'multiple appointments confirmed' },
+  { id: 'appointment_rescheduled', label: 'appointment rescheduled' },
+  { id: 'appointment_cancelled', label: 'appointment canceled' },
+]);
 const DEVICE_LIMIT = 10;
 const MAX_ATTEMPTS = 5;
 
@@ -77,12 +85,12 @@ export async function handleBookingPushApi(request, env) {
     if (path === '/api/admin/booking-push/activate' && request.method === 'POST') {
       if (!canActivate) return json({ error: 'Phone alerts have been paused in the website settings.' }, 409);
       env = await activateOwnerPush(env);
-      return json({ configured: pushConfigured(env), publicKey: env.BOOKING_PUSH_PUBLIC_KEY, canActivate: false });
+      return json({ configured: pushConfigured(env), publicKey: env.BOOKING_PUSH_PUBLIC_KEY, canActivate: false, sampleTypes: BOOKING_PUSH_SAMPLES });
     }
     env = await resolvePushEnvironment(env);
     if (path === '/api/admin/booking-push/config' && request.method === 'GET') {
       return json({ configured: pushConfigured(env), publicKey: pushConfigured(env) ? env.BOOKING_PUSH_PUBLIC_KEY : null,
-        canActivate: canActivate && !pushConfigured(env) });
+        canActivate: canActivate && !pushConfigured(env), sampleTypes: BOOKING_PUSH_SAMPLES });
     }
     const db = env.SUBMISSIONS_DB;
     if (path === '/api/admin/booking-push/subscriptions' && request.method === 'POST') {
@@ -115,11 +123,18 @@ export async function handleBookingPushApi(request, env) {
       if (!pushConfigured(env)) return json({ error: 'Phone notifications have not been activated yet.' }, 503);
       let body;
       try { body = await readBody(request); } catch { return json({ error: 'Invalid request.' }, 400); }
+      if (body.scenario !== undefined && !BOOKING_PUSH_SAMPLES.some((sample) => sample.id === body.scenario)) {
+        return json({ error: 'Unknown sample alert type.' }, 400);
+      }
+      const sampleName = notificationName(body.clientName);
+      if (body.scenario && !sampleName) return json({ error: 'Enter a name for the sample alerts.' }, 400);
       const device = await db.prepare('SELECT * FROM booking_push_subscriptions WHERE endpoint = ?').bind(String(body.endpoint || '')).first();
       if (!device) return json({ error: 'Enable notifications on this device first.' }, 404);
-      const result = await enqueuePush(env, `test:${crypto.randomUUID()}`, {
+      const eventKey = `test:${crypto.randomUUID()}`;
+      const payload = body.scenario ? samplePayload(body.scenario, sampleName) : {
         title: BOOKING_PUSH_TITLE, body: 'Test alert: this device is ready for inquiries and appointment updates.', url: '/studio/bookings/',
-      }, [device]);
+      };
+      const result = await enqueuePush(env, eventKey, { ...payload, tag: eventKey }, [device]);
       return json(result.sent ? result : { ...result, error: 'The push service did not accept the test alert. Try reconnecting notifications.' }, result.sent ? 200 : 502);
     }
     return json({ error: 'Unsupported notification request.' }, 405);
@@ -131,14 +146,18 @@ export async function handleBookingPushApi(request, env) {
 
 export async function notifyBookingRequestPush(env, submission) {
   if (!env.SUBMISSIONS_DB || !BOOKING_REQUEST_TYPES.includes(submission.type) || !submission.id) return { skipped: true };
+  return notifyOwnerDevices(env, `request:${submission.id}`, requestPayload(submission));
+}
+
+function requestPayload(submission) {
   const name = notificationName(submission.contactName || submission.contact_name);
   const label = submission.type === 'tattoo_inquiry' && submission.payload?.project_category === 'special_projects_artist_led'
     ? 'artist-led design request' : REQUEST_LABELS[submission.type];
-  return notifyOwnerDevices(env, `request:${submission.id}`, {
+  return {
     title: BOOKING_PUSH_TITLE, body: `New ${label}${name ? ` from ${name}` : ''}.`,
     url: `/studio/bookings/?request=${encodeURIComponent(submission.id)}`,
     tag: `booking:${submission.id}`,
-  });
+  };
 }
 
 function notificationName(value) {
@@ -155,28 +174,42 @@ function appointmentWhen(value) {
 export async function notifyBookingAppointmentPush(env, event, appointment) {
   if (!appointment?.id || !['confirmed', 'rescheduled', 'cancelled'].includes(event)) return { skipped: true };
   if (event === 'cancelled' ? appointment.status !== 'cancelled' : appointment.status !== 'confirmed') return { skipped: true };
-  const name = notificationName(appointment.clientName || appointment.client_name) || 'A client';
   const startAt = appointment.startAt || appointment.start_at || '';
-  const when = appointmentWhen(startAt);
   const groupId = appointment.checkoutGroupId || appointment.checkout_group_id || appointment.id;
-  const count = Number(appointment.checkoutGroupSize || appointment.checkout_group_size || 1);
   const rescheduledAt = appointment.rescheduledAt || appointment.rescheduled_at || '';
   const cancelledAt = appointment.cancelledAt || appointment.cancelled_at || '';
   const rescheduleCount = appointment.rescheduleCount ?? appointment.reschedule_count ?? 0;
   const eventKey = event === 'confirmed' ? `appointment:confirmed:${groupId}`
     : event === 'rescheduled' ? `appointment:rescheduled:${appointment.id}:${rescheduledAt}:${rescheduleCount}:${startAt}`
     : `appointment:cancelled:${appointment.id}:${cancelledAt}`;
+  return notifyOwnerDevices(env, eventKey, { ...appointmentPayload(event, appointment), tag: eventKey });
+}
+
+function appointmentPayload(event, appointment) {
+  const name = notificationName(appointment.clientName || appointment.client_name) || 'A client';
+  const when = appointmentWhen(appointment.startAt || appointment.start_at);
+  const count = Number(appointment.checkoutGroupSize || appointment.checkout_group_size || 1);
   const body = event === 'confirmed'
     ? count > 1 ? `${name} has booked ${count} appointments.${when ? ` First: ${when}.` : ''}`
       : `${name} has booked their appointment${when ? ` for ${when}` : ''}.`
     : event === 'rescheduled' ? `${name}’s appointment has been rescheduled${when ? ` to ${when}` : ''}.`
     : `${name}’s appointment${when ? ` for ${when}` : ''} has been canceled.`;
   const submissionId = appointment.submissionId || appointment.submission_id;
-  return notifyOwnerDevices(env, eventKey, {
+  return {
     title: BOOKING_PUSH_TITLE, body,
     url: submissionId ? `/studio/bookings/?request=${encodeURIComponent(submissionId)}` : '/studio/bookings/',
-    tag: eventKey,
-  });
+  };
+}
+
+function samplePayload(scenario, name) {
+  const appointment = { clientName: name, startAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+    checkoutGroupSize: scenario === 'appointment_group_confirmed' ? 3 : 1 };
+  const event = scenario === 'appointment_group_confirmed' ? 'confirmed' : scenario.replace('appointment_', '');
+  const payload = scenario.startsWith('appointment_') ? appointmentPayload(event, appointment)
+    : requestPayload({ id: 'sample', type: scenario === 'artist_led' ? 'tattoo_inquiry' : scenario, contactName: name,
+      payload: scenario === 'artist_led' ? { project_category: 'special_projects_artist_led' } : {} });
+  // Samples never create or modify a client, inquiry, appointment, or payment.
+  return { ...payload, body: `TEST · ${payload.body}`, url: '/studio/bookings/' };
 }
 
 async function notifyOwnerDevices(env, eventKey, payload) {

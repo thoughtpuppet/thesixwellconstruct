@@ -18,6 +18,13 @@ After this commit is deployed through the website's existing Git-connected Worke
 6. Tap **Send test alert**. Close the app, check the notification, and tap it
    to return to the inbox. A real inquiry should also send the existing email.
 
+To preview every message, use **Send all sample alerts** under Phone alerts. The
+sample name is prefilled as Sai Solehman and can be changed. This sends 14 samples
+to the current device, one at a time, covering every inquiry type and single/group
+confirmations, reschedules, and cancellations. Every sample body begins with
+**TEST** and has its own notification tag so the samples do not replace one another.
+No client, inquiry, appointment, or payment records are created or changed.
+
 First activation creates only this feature's tables and a stable P-256 VAPID
 key pair, using the existing D1 binding and authenticated owner session. No
 Cloudflare login, API token, migration command, or secret entry is needed on

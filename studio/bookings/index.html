@@ -13,8 +13,8 @@
   <link rel="apple-touch-icon" href="/studio/bookings/icons/icon-192.png">
   <link rel="icon" href="/studio/bookings/icons/icon-192.png">
   <link rel="stylesheet" href="/css/tokens.css">
-  <link rel="stylesheet" href="/studio/bookings/bookings.css?v=2">
-  <script type="module" src="/studio/bookings/bookings.js?v=3"></script>
+  <link rel="stylesheet" href="/studio/bookings/bookings.css?v=3">
+  <script type="module" src="/studio/bookings/bookings.js?v=4"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -44,6 +44,12 @@
               <button id="enable-push" class="primary" type="button" disabled>Enable notifications</button>
               <button id="test-push" type="button" hidden>Send test alert</button>
               <button id="disable-push" class="quiet" type="button" hidden>Turn off alerts</button>
+            </div>
+            <div id="sample-push-controls" class="sample-controls" hidden>
+              <label for="sample-name">Name for sample alerts</label>
+              <input id="sample-name" type="text" value="Sai Solehman" maxlength="80" autocomplete="name">
+              <button id="sample-push" type="button">Send all sample alerts</button>
+              <p class="muted">Each sample is marked TEST.</p>
             </div>
             <p id="push-result" class="app-status" role="status" aria-live="polite" hidden></p>
           </div>
