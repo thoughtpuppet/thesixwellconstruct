@@ -161,8 +161,9 @@ async function deliver(env, row) {
     const payload = await buildPushPayload({ data: JSON.parse(row.payload_json), options: { ttl: 86400, urgency: 'high' } }, subscription, {
       subject: env.BOOKING_PUSH_SUBJECT, publicKey: env.BOOKING_PUSH_PUBLIC_KEY, privateKey: env.BOOKING_PUSH_PRIVATE_KEY,
     });
-    // Never follow a push endpoint redirect to a different host.
-    const response = await fetch(subscription.endpoint, { ...payload, redirect: 'error', signal: AbortSignal.timeout(8000) });
+    // Workers supports follow/manual, not redirect: 'error'. Treat redirects as
+    // failed delivery without forwarding the device payload or authorization.
+    const response = await fetch(subscription.endpoint, { ...payload, redirect: 'manual', signal: AbortSignal.timeout(8000) });
     status = response.status;
     await response.body?.cancel();
   } catch { /* Network errors remain retryable; never log device capability URLs or keys. */ }

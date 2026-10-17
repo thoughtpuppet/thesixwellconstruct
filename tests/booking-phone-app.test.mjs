@@ -126,7 +126,7 @@ test('actual Apple-compatible encrypted push is signed and deduplicated across n
     await notifyBookingRequestPush(env, booking); await notifyBookingRequestPush(env, booking);
     assert.equal(sent.length, 1);
     const { payload } = sent[0];
-    assert.equal(payload.redirect, 'error'); assert.equal(payload.headers['content-encoding'], 'aes128gcm');
+    assert.equal(payload.redirect, 'manual'); assert.equal(payload.headers['content-encoding'], 'aes128gcm');
     const message = decrypt(payload, client);
     assert.equal(message.url, '/studio/bookings/?request=request-one');
     assert.ok(!JSON.stringify(message).includes('Private')); assert.ok(!JSON.stringify(message).includes('private@example'));
@@ -155,6 +155,36 @@ test('temporary failures retry; expired devices are removed; disabled alerts sen
     code = 410; await notifyBookingRequestPush(env, { ...booking, id: 'request-two' });
     assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM booking_push_subscriptions').get().count, 0);
     env.BOOKING_PUSH_ENABLED = 'false'; await notifyBookingRequestPush(env, booking); assert.equal(count, 3);
+  } finally { globalThis.fetch = original; }
+});
+
+test('owner test alert uses Workers-supported manual redirects and reports actual acceptance', async () => {
+  const { env, sqlite } = environment(), client = device();
+  await subscribe(env, client.subscription);
+  const path = '/api/admin/booking-push/test';
+  assert.equal((await worker.fetch(request(path, 'POST', { endpoint: client.subscription.endpoint }, false), env)).status, 401);
+  const original = globalThis.fetch;
+  let code = 201, calls = 0;
+  globalThis.fetch = async (url, payload) => {
+    calls++;
+    assert.equal(url, client.subscription.endpoint);
+    // Cloudflare throws before sending when redirect is 'error'.
+    assert.equal(payload.redirect, 'manual');
+    const message = decrypt(payload, client);
+    assert.equal(message.title, 'art.pill booking alerts');
+    assert.equal(message.url, '/studio/bookings/');
+    return new Response(null, { status: code, headers: code === 302 ? { location: 'https://attacker.test/' } : {} });
+  };
+  try {
+    const accepted = await worker.fetch(request(path, 'POST', { endpoint: client.subscription.endpoint }), env);
+    assert.equal(accepted.status, 200);
+    assert.equal((await accepted.json()).sent, 1);
+    code = 302;
+    const redirected = await worker.fetch(request(path, 'POST', { endpoint: client.subscription.endpoint }), env);
+    assert.equal(redirected.status, 502);
+    assert.match((await redirected.json()).error, /did not accept/);
+    assert.equal(calls, 2);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) count FROM booking_push_deliveries WHERE status='failed' AND last_status=302").get().count, 1);
   } finally { globalThis.fetch = original; }
 });
 
