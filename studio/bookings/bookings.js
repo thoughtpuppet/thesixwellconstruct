@@ -19,6 +19,12 @@ function status(message, error = false) {
   $('app-status').classList.toggle('error', error);
 }
 
+function pushResult(message, error = false) {
+  $('push-result').textContent = message;
+  $('push-result').classList.toggle('error', error);
+  $('push-result').hidden = !message;
+}
+
 function clearDetail() {
   objectUrls.splice(0).forEach((url) => URL.revokeObjectURL(url));
   currentDetail = null;
@@ -32,6 +38,7 @@ function lock(message = '') {
   rows = []; nextCursor = null; config = null;
   if ($('request-dialog').open) $('request-dialog').close();
   clearDetail();
+  pushResult('');
   $('request-list').replaceChildren();
   $('access-token').value = '';
   $('inbox-panel').hidden = true;
@@ -202,7 +209,29 @@ async function disablePush() {
   await api('/api/admin/booking-push/subscriptions', { method: 'DELETE', body: JSON.stringify({ endpoint: subscription.endpoint }) });
   const unsubscribed = await subscription.unsubscribe();
   if (!unsubscribed) throw new Error('Unable to remove the device subscription. Try again.');
-  subscription = null; renderPush();
+  subscription = null; renderPush(); pushResult('Phone alerts are off.');
+}
+
+async function testPush() {
+  const button = $('test-push');
+  button.disabled = true;
+  button.textContent = 'Sending…';
+  pushResult('Sending a test alert to this device…');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    if (!subscription) throw new Error('Enable notifications on this device first.');
+    await api('/api/admin/booking-push/test', {
+      method: 'POST', body: JSON.stringify({ endpoint: subscription.endpoint }), signal: controller.signal,
+    });
+    pushResult('Test alert sent. Check Notification Center. If no alert appears, check your phone’s notification and Focus settings.');
+  } catch (error) {
+    if (token) pushResult(error.name === 'AbortError' ? 'The test timed out. Check your connection and try again.' : error.message || 'Unable to send the test alert. Try again.', true);
+  } finally {
+    clearTimeout(timeout);
+    button.textContent = 'Send test alert';
+    button.disabled = false;
+  }
 }
 
 async function unlock() {
@@ -235,12 +264,9 @@ $('request-list').addEventListener('click', (event) => { const button = event.ta
 $('close-detail').addEventListener('click', () => $('request-dialog').close());
 $('request-dialog').addEventListener('close', clearDetail);
 $('request-detail').addEventListener('click', (event) => { const button = event.target.closest('[data-file]'); if (button) run(() => previewFile(button.dataset.file, button), button); });
-$('enable-push').addEventListener('click', () => { enablePush().catch((error) => status(error.message, true)); });
+$('enable-push').addEventListener('click', () => { pushResult(''); enablePush().catch((error) => pushResult(error.message, true)); });
 $('disable-push').addEventListener('click', () => run(disablePush, $('disable-push')));
-$('test-push').addEventListener('click', () => run(async () => {
-  await api('/api/admin/booking-push/test', { method: 'POST', body: JSON.stringify({ endpoint: subscription.endpoint }) });
-  status('Test alert sent. Check your notifications.');
-}, $('test-push')));
+$('test-push').addEventListener('click', testPush);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && token && !$('inbox-panel').hidden) run(() => loadInbox()); });
 window.addEventListener('online', () => { if (token) run(() => loadInbox()); });
 const workerPromise = registerWorker().catch(() => { registered = null; });
