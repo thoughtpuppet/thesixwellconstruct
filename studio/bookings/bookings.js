@@ -3,7 +3,7 @@ const $ = (id) => document.getElementById(id);
 const TYPES = {
   tattoo_inquiry: 'Custom tattoo', flash_claim: 'Flash claim', special_project: 'Special project',
   build_brief: 'Build your own', maze_design: 'Maze design', tattoo_special: 'Tattoo Special',
-  consultation: 'Consultation', studio_booking: 'Studio booking',
+  consultation: 'Consultation', build_session: 'In-person Build session', studio_booking: 'Studio booking',
 };
 const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const date = (value) => value ? new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'America/New_York' }).format(new Date(value)) : '';
@@ -166,8 +166,8 @@ function renderPush() {
   else if (!config?.configured && !config?.canActivate) { $('alerts-summary').textContent = 'Not activated'; $('push-status').textContent = 'Phone alerts are paused on the website. Your booking inbox still works.'; }
   else if (!supported) { $('alerts-summary').textContent = 'Unavailable here'; $('push-status').textContent = 'This browser does not support phone alerts. Open the app on a supported device.'; }
   else if (Notification.permission === 'denied') { $('alerts-summary').textContent = 'Blocked'; $('push-status').textContent = 'Allow notifications in your device settings, then reopen the app.'; }
-  else if (subscription) { $('alerts-summary').textContent = 'On'; $('push-status').textContent = 'New booking requests will notify this device. Send a test alert to check delivery.'; }
-  else { $('alerts-summary').textContent = 'Off'; $('push-status').textContent = 'Get an alert when a new booking request arrives.'; }
+  else if (subscription) { $('alerts-summary').textContent = 'On'; $('push-status').textContent = 'Get alerts for new inquiries, confirmed bookings, reschedules, and cancellations. Send a test alert to check delivery.'; }
+  else { $('alerts-summary').textContent = 'Off'; $('push-status').textContent = 'Get alerts for new inquiries and appointment updates.'; }
 }
 
 async function configurePush() {

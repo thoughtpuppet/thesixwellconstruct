@@ -3,8 +3,14 @@ import { activateOwnerPush, resolvePushEnvironment } from './_setup.js';
 
 export const BOOKING_REQUEST_TYPES = Object.freeze([
   'tattoo_inquiry', 'flash_claim', 'special_project', 'build_brief',
-  'maze_design', 'tattoo_special', 'consultation', 'studio_booking',
+  'maze_design', 'tattoo_special', 'consultation', 'build_session', 'studio_booking',
 ]);
+export const BOOKING_PUSH_TITLE = 'art.pill Tattoo House Bookings';
+const REQUEST_LABELS = Object.freeze({
+  tattoo_inquiry: 'custom inquiry', flash_claim: 'flash claim', special_project: 'special project request',
+  build_brief: 'Build Your Own request', maze_design: 'Maze design request', tattoo_special: 'Tattoo Special request',
+  consultation: 'consultation request', build_session: 'in-person Build session request', studio_booking: 'studio booking request',
+});
 const DEVICE_LIMIT = 10;
 const MAX_ATTEMPTS = 5;
 
@@ -112,7 +118,7 @@ export async function handleBookingPushApi(request, env) {
       const device = await db.prepare('SELECT * FROM booking_push_subscriptions WHERE endpoint = ?').bind(String(body.endpoint || '')).first();
       if (!device) return json({ error: 'Enable notifications on this device first.' }, 404);
       const result = await enqueuePush(env, `test:${crypto.randomUUID()}`, {
-        title: 'art.pill booking alerts', body: 'This device is ready for new booking requests.', url: '/studio/bookings/',
+        title: BOOKING_PUSH_TITLE, body: 'Test alert: this device is ready for inquiries and appointment updates.', url: '/studio/bookings/',
       }, [device]);
       return json(result.sent ? result : { ...result, error: 'The push service did not accept the test alert. Try reconnecting notifications.' }, result.sent ? 200 : 502);
     }
@@ -125,16 +131,59 @@ export async function handleBookingPushApi(request, env) {
 
 export async function notifyBookingRequestPush(env, submission) {
   if (!env.SUBMISSIONS_DB || !BOOKING_REQUEST_TYPES.includes(submission.type) || !submission.id) return { skipped: true };
-  env = await resolvePushEnvironment(env);
-  if (!pushConfigured(env) || !env.SUBMISSIONS_DB || !BOOKING_REQUEST_TYPES.includes(submission.type) || !submission.id) {
-    return { skipped: true };
-  }
-  const devices = (await env.SUBMISSIONS_DB.prepare('SELECT * FROM booking_push_subscriptions ORDER BY created_at LIMIT ?').bind(DEVICE_LIMIT).all()).results || [];
-  return enqueuePush(env, `request:${submission.id}`, {
-    title: 'New art.pill booking request', body: 'Open your inbox to review the details.',
+  const name = notificationName(submission.contactName || submission.contact_name);
+  const label = submission.type === 'tattoo_inquiry' && submission.payload?.project_category === 'special_projects_artist_led'
+    ? 'artist-led design request' : REQUEST_LABELS[submission.type];
+  return notifyOwnerDevices(env, `request:${submission.id}`, {
+    title: BOOKING_PUSH_TITLE, body: `New ${label}${name ? ` from ${name}` : ''}.`,
     url: `/studio/bookings/?request=${encodeURIComponent(submission.id)}`,
     tag: `booking:${submission.id}`,
-  }, devices);
+  });
+}
+
+function notificationName(value) {
+  return typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, ' ')
+    .replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+}
+
+function appointmentWhen(value) {
+  if (!value || !Number.isFinite(new Date(value).getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value));
+}
+
+export async function notifyBookingAppointmentPush(env, event, appointment) {
+  if (!appointment?.id || !['confirmed', 'rescheduled', 'cancelled'].includes(event)) return { skipped: true };
+  if (event === 'cancelled' ? appointment.status !== 'cancelled' : appointment.status !== 'confirmed') return { skipped: true };
+  const name = notificationName(appointment.clientName || appointment.client_name) || 'A client';
+  const startAt = appointment.startAt || appointment.start_at || '';
+  const when = appointmentWhen(startAt);
+  const groupId = appointment.checkoutGroupId || appointment.checkout_group_id || appointment.id;
+  const count = Number(appointment.checkoutGroupSize || appointment.checkout_group_size || 1);
+  const rescheduledAt = appointment.rescheduledAt || appointment.rescheduled_at || '';
+  const cancelledAt = appointment.cancelledAt || appointment.cancelled_at || '';
+  const rescheduleCount = appointment.rescheduleCount ?? appointment.reschedule_count ?? 0;
+  const eventKey = event === 'confirmed' ? `appointment:confirmed:${groupId}`
+    : event === 'rescheduled' ? `appointment:rescheduled:${appointment.id}:${rescheduledAt}:${rescheduleCount}:${startAt}`
+    : `appointment:cancelled:${appointment.id}:${cancelledAt}`;
+  const body = event === 'confirmed'
+    ? count > 1 ? `${name} has booked ${count} appointments.${when ? ` First: ${when}.` : ''}`
+      : `${name} has booked their appointment${when ? ` for ${when}` : ''}.`
+    : event === 'rescheduled' ? `${name}’s appointment has been rescheduled${when ? ` to ${when}` : ''}.`
+    : `${name}’s appointment${when ? ` for ${when}` : ''} has been canceled.`;
+  const submissionId = appointment.submissionId || appointment.submission_id;
+  return notifyOwnerDevices(env, eventKey, {
+    title: BOOKING_PUSH_TITLE, body,
+    url: submissionId ? `/studio/bookings/?request=${encodeURIComponent(submissionId)}` : '/studio/bookings/',
+    tag: eventKey,
+  });
+}
+
+async function notifyOwnerDevices(env, eventKey, payload) {
+  env = await resolvePushEnvironment(env);
+  if (!pushConfigured(env) || !env.SUBMISSIONS_DB) return { skipped: true };
+  const devices = (await env.SUBMISSIONS_DB.prepare('SELECT * FROM booking_push_subscriptions ORDER BY created_at LIMIT ?').bind(DEVICE_LIMIT).all()).results || [];
+  return enqueuePush(env, eventKey, payload, devices);
 }
 
 async function enqueuePush(env, eventKey, payload, devices) {

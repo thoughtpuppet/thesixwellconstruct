@@ -13,8 +13,8 @@ function inboxUrl(value) {
 self.addEventListener('push', (event) => {
   let message = {};
   try { message = event.data?.json() || {}; } catch { /* Always show a visible notification. */ }
-  event.waitUntil(self.registration.showNotification(message.title || 'New art.pill booking request', {
-    body: message.body || 'Open your inbox to review the details.',
+  event.waitUntil(self.registration.showNotification(message.title || 'art.pill Tattoo House Bookings', {
+    body: message.body || 'Open your booking inbox to review the update.',
     icon: '/studio/bookings/icons/icon-192.png',
     tag: message.tag || 'artpill-booking',
     data: { url: inboxUrl(message.url) },

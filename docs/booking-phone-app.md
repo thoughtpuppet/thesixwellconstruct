@@ -51,11 +51,20 @@ Studio token and client details from view while leaving owner-device alerts on.
 - Push HTTPS endpoints are restricted to Apple, Google, Mozilla, and Windows
   services; redirects are rejected. Payloads use RFC 8291 `aes128gcm` encryption
   and RFC 8292 VAPID authentication.
-- The lock-screen message contains no client name, email, phone, or project notes.
-  Tapping it opens the matching private request after unlocking.
+- Every alert uses the title **art.pill Tattoo House Bookings**. New requests name
+  the form (custom inquiry, flash claim, consultation, etc.) and the client when
+  provided. Confirmed bookings, reschedules, and cancellations include the client
+  name and appointment time in the Atlanta time zone. Group checkouts send one
+  confirmation for the appointments booked together.
+- At the owner's request, names and appointment times can appear on the lock
+  screen. Email addresses, phone numbers, project notes, and access tokens are
+  excluded. Tapping opens the matching private request after unlocking when one
+  is linked; manually created appointments without a request open the inbox.
 - The service worker has no fetch handler or CacheStorage. Client requests use
   `cache: no-store`; private app assets carry `no-store` and `noindex` headers.
-- Unique request/device event keys prevent duplicate delivery. The existing
+- Unique request, appointment-event, and device keys prevent duplicate delivery,
+  including repeat payment confirmations and email resends. Each saved reschedule
+  has its own event key. Pending deposits do not send booking confirmations. The existing
   five-minute Worker cron retries network errors, rate limits, and temporary server
   failures up to five times. HTTP 404/410 removes expired devices. Other failures stop.
 - Sent/failed delivery records expire after 30 days. Push errors do not block email.
