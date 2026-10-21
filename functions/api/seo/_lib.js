@@ -5,17 +5,20 @@ import { kinmarkingProjectRedirect } from "../../../shared/kinmarking-routes.js"
 
 export const PUBLIC_SITE_ORIGIN = "https://thesixwellconstruct.com";
 
+export const SAIEL_BIO_OPENING = "Saiel Dauhn Solehman is a Black woman artist and tattoo artist based in Atlanta. Through her work, she explores symbolic correspondence and how meaning is formed, interpreted, lived and preserved, and how it endures.";
+export const KINMARKING_PROJECT_DESCRIPTION = "KINMARKING is a communal series exploring the convergence of the body, rituals of inheritance, the desire for something to persist and the technology of tattooing.";
+
 const STATIC_PAGES = Object.freeze([
   ["/", "The Six.Well Construct · Saiel Dauhn Solehman", "The creative ecosystem of Saiel Dauhn Solehman: art, tattooing, clothing, writing, film, sound, events, and an authored living Archive."],
   ["/home/", "The Six.Well Construct · Creative Ecosystem", "Enter the connected creative ecosystem of Saiel Dauhn Solehman across art, tattooing, clothing, writing, film, sound, events, and Archive."],
   ["/about/", "About the Six.Well Construct · Saiel Dauhn Solehman", "The full operating creative ecosystem of Saiel Dauhn Solehman and the relationships between its mediums, projects, records, and public pathways."],
-  ["/about/saieldauhnsolehman/", "Saiel Dauhn Solehman · Interdisciplinary Artist in Atlanta", "Saiel Dauhn Solehman, also known as Saiel Solehman, is an Atlanta interdisciplinary artist, systems thinker, scholar, and veteran working across art, tattooing, clothing, writing, film, sound, and events."],
+  ["/about/saieldauhnsolehman/", "Saiel Dauhn Solehman · Artist and Tattoo Artist in Atlanta", SAIEL_BIO_OPENING],
   ["/about/collaborators/", "Collaborators · the Six.Well Construct", "People and organizations collaborating within the Six.Well Construct."],
   ["/about/ways-in/", "Ways Into the Six.Well Construct", "Choose a path into Saiel Dauhn Solehman's creative ecosystem through art, tattooing, clothing, writing, film, events, the Legend, or the Archive."],
-  ["/about/exhibitions-appearances/", "Exhibitions and Appearances · Saiel Dauhn Solehman", "A public record of exhibitions, appearances, talks, and programs involving interdisciplinary artist Saiel Dauhn Solehman."],
+  ["/about/exhibitions-appearances/", "Exhibitions and Appearances · Saiel Dauhn Solehman", "A public record of exhibitions, appearances, talks, and programs involving artist Saiel Dauhn Solehman."],
   ["/about/contact-press/", "Contact and Press · Saiel Dauhn Solehman", "Contact and press pathways for Saiel Dauhn Solehman and the Six.Well Construct."],
   ["/currently/", "Current Works and Projects · Saiel Dauhn Solehman", "Current works and active projects across the connected creative practice of Saiel Dauhn Solehman."],
-  ["/art/", "Art by Saiel Dauhn Solehman · Paintings and Works", "Artworks and paintings by Atlanta interdisciplinary artist Saiel Dauhn Solehman, including available works and their connected records."],
+  ["/art/", "Art by Saiel Dauhn Solehman · Paintings and Works", "Artworks and paintings by Atlanta artist Saiel Dauhn Solehman, including available works and their connected records."],
   ["/gallery/", "Gallery · Original Works by Saiel Dauhn Solehman", "A gallery of original works from the creative ecosystem of Saiel Dauhn Solehman."],
   ["/archive/", "The Living Archive · Saiel Dauhn Solehman and Six.Well", "The authored living Archive connecting works, materials, histories, relationships, and projects across the Six.Well Construct."],
   ["/tattoos/", "Atlanta Tattoo Artist · art.pill Tattoo House", "Original, collaborative, and experimental tattoo work by Saiel Dauhn Solehman at art.pill Tattoo House in Atlanta."],
@@ -185,8 +188,10 @@ export function personStructuredData(origin = PUBLIC_SITE_ORIGIN) {
     url: `${origin}/about/saieldauhnsolehman/`,
     image: `${origin}/assets/Sai%20Solehman%20Sunflower%20Scarf.jpg`,
     homeLocation: { "@type": "City", name: "Atlanta" },
-    jobTitle: "Interdisciplinary artist",
-    knowsAbout: ["Art", "Tattooing", "Clothing", "Writing", "Film", "Sound", "Events", "Creative systems"],
+    description: SAIEL_BIO_OPENING,
+    gender: "Woman",
+    jobTitle: ["Artist", "Tattoo artist"],
+    knowsAbout: ["Art", "Tattooing", "Clothing", "Writing", "Film", "Sound", "Events", "Symbolic correspondence", "Meaning", "Preservation", "Endurance"],
   };
 }
 
@@ -476,6 +481,13 @@ export async function handleSitemap(request, env) {
       headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", "x-seo-error": String(error?.message || error).slice(0, 160) },
     });
   }
+}
+
+export function kinmarkingProjectDescription(value = "") {
+  const description = stripMarkup(value);
+  // Keep concise managed copy authoritative; use the approved hero instead of
+  // cutting the older long program description off in the middle of a thought.
+  return description && description.length <= 300 ? description : KINMARKING_PROJECT_DESCRIPTION;
 }
 
 export function dynamicStructuredGraph({ type = "CreativeWork", canonicalUrl, title, description, image = "", extra = {}, origin = PUBLIC_SITE_ORIGIN }) {

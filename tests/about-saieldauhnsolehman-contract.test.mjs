@@ -25,8 +25,9 @@ test("Saiel profile uses the About shell and publishes the supplied inquiry stat
 
   assert.match(html, /class="about-section-page saiel-profile-page entrance-fade"/);
   assert.match(html, /site-hero site-hero--supporting/);
-  assert.match(html, /class="hero-title">Saiel Dauhn Solehman\.<\/h1>/);
-  assert.match(html, /Saiel Dauhn Solehman’s work emerges from the merging of deep philosophical inquiry and systems thinking\./);
+  assert.match(html, /class="hero-title"[^>]*>Saiel Dauhn Solehman\.<\/h1>/);
+  assert.ok(html.includes("Saiel Dauhn Solehman is a Black woman artist and tattoo artist based in Atlanta. Through her work, she explores symbolic correspondence and how meaning is formed, interpreted, lived and preserved, and how it endures."));
+  assert.doesNotMatch(html, /systems thinking|interdisciplinary artist/i);
   assert.match(html, /Her approach is grounded in an effort to understand the world rather than change it\./);
   assert.match(html, /currently studies philosophy, politics, and economics at Georgia State University/);
   assert.doesNotMatch(html, /class="profile-facts"/);

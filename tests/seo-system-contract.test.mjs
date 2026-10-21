@@ -13,6 +13,9 @@ import {
   chillSeriesStructuredData,
   handleRobots,
   isNoindexPath,
+  KINMARKING_PROJECT_DESCRIPTION,
+  kinmarkingProjectDescription,
+  SAIEL_BIO_OPENING,
   personStructuredData,
   sitemapXml,
   staticSeoPage,
@@ -93,6 +96,45 @@ test("Saiel name variants resolve to one Person identity", () => {
   assert.deepEqual(person.alternateName, ["Saiel Solehman"]);
   assert.equal(person["@id"], `${ORIGIN}/about/saieldauhnsolehman/#person`);
   assert.equal(person.url, `${ORIGIN}/about/saieldauhnsolehman/`);
+  assert.equal(person.gender, "Woman");
+  assert.deepEqual(person.jobTitle, ["Artist", "Tattoo artist"]);
+  assert.equal(person.description, SAIEL_BIO_OPENING);
+  assert.doesNotMatch(staticSeoPage("/about/saieldauhnsolehman/").description, /interdisciplinary|systems thinking|scholar|veteran/i);
+});
+
+test("existing navigation controls use semantic links without extra discovery rows", () => {
+  const entrance = readFileSync(join(ROOT, "index.html"), "utf8");
+  assert.doesNotMatch(entrance, /discovery-links/);
+  assert.match(entrance, /<a id="entry-skip" href="\/home\/"/);
+  const home = readFileSync(join(ROOT, "home/index.html"), "utf8");
+  assert.doesNotMatch(home, /discovery-links/);
+  const navigation = home.match(/<nav id="home-utility-links"[^>]*>([\s\S]*?)<\/nav>/)[1];
+  assert.deepEqual([...navigation.matchAll(/href="([^"]+)"/g)].map(match=>match[1]), ["/currently", "/", "/adventure/", "/search/"]);
+});
+
+test("entrance and home serve identical public content to visitors and crawlers", async () => {
+  const database = migratedDatabase();
+  const env = { PUBLIC_SITE_URL: ORIGIN, SUBMISSIONS_DB: new LocalD1(database), ASSETS: {
+    async fetch(request) {
+      const path = new URL(request.url).pathname.startsWith('/home') ? 'home/index.html' : 'index.html';
+      return new Response(readFileSync(join(ROOT,path),'utf8'), { headers: { "content-type": "text/html" } });
+    },
+  } };
+  for(const path of ['/', '/home/']){
+    const visitor = await worker.fetch(new Request(`${ORIGIN}${path}`, { headers: { "user-agent": "Mozilla/5.0" } }), env, {});
+    const crawler = await worker.fetch(new Request(`${ORIGIN}${path}`, { headers: { "user-agent": "Googlebot" } }), env, {});
+    assert.equal(visitor.status, 200);
+    assert.equal(crawler.status, 200);
+    assert.equal(await visitor.text(), await crawler.text());
+  }
+});
+
+test("KINMARKING descriptions retain concise managed copy and fall back to the approved hero", () => {
+  assert.equal(kinmarkingProjectDescription(""), KINMARKING_PROJECT_DESCRIPTION);
+  assert.equal(kinmarkingProjectDescription("Older program description. ".repeat(30)), KINMARKING_PROJECT_DESCRIPTION);
+  assert.equal(kinmarkingProjectDescription("A concise Studio-authored description."), "A concise Studio-authored description.");
+  const source = readFileSync(join(ROOT, "js", "kinmarking-development.js"), "utf8");
+  assert.doesNotMatch(source, /Lorem ipsum|Duis aute irure/);
 });
 
 test("confirmed Chill series credit connects the canonical Person without becoming a sameAs profile", () => {
@@ -301,6 +343,12 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
   const response = await worker.fetch(new Request(`${ORIGIN}${path}`), env, {});
   const html = await response.text();
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-robots-tag"), "noindex,follow");
+  assert.match(html, /<meta name="robots" content="noindex,follow">/);
+  assert.doesNotMatch(html, /Lorem ipsum|Duis aute irure/);
+  const developmentSchema = JSON.parse(html.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/)[1]);
+  assert.equal(developmentSchema["@type"], "WebPage");
+  assert.equal(developmentSchema.startDate, undefined);
   assert.match(html, /<title>KINMARKING 01: Oral Histories &amp; Tattooing/);
   assert.match(html, /id="developmentStatus"[^>]*>In development<\/h2>/);
   assert.doesNotMatch(html, /id="kinmarkingCollaborators"|id="registrationForm"|id="kinmarkingExperience"/);
@@ -310,6 +358,26 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
   assert.equal(payload.occurrence.eventId, "kinmarking-route-test");
   assert.equal(payload.occurrence.id, "kinmarking-route-occurrence");
   assert.equal(payload.event.details, "");
+  database.prepare("UPDATE events SET description=? WHERE id='kinmarking-route-test'").run("Older program description. ".repeat(30));
+  const project = await worker.fetch(new Request(`${ORIGIN}/events/kinmarking/`), env, {});
+  const projectHtml = await project.text();
+  const projectGraph = JSON.parse(projectHtml.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/)[1])["@graph"];
+  const projectEntity = projectGraph.find(node => node["@type"] === "CreativeWork");
+  assert.ok(projectEntity);
+  assert.equal(projectEntity.creator["@id"], `${ORIGIN}/about/saieldauhnsolehman/#person`);
+  assert.equal(projectEntity.description, KINMARKING_PROJECT_DESCRIPTION);
+  assert.equal(projectEntity.startDate, undefined);
+  assert.equal(projectEntity.endDate, undefined);
+  assert.equal(projectEntity.offers, undefined);
+  assert.equal(projectGraph.some(node => node["@type"] === "Event"), false);
+  assert.match(projectHtml, /<meta name="robots" content="index,follow/);
+  database.prepare(`INSERT INTO events(id,slug,title,description,publication_state,status,starts_at,ends_at,created_at,updated_at)
+    VALUES('ordinary-seo-event','ordinary-seo-event','Ordinary event','An announced event.','announced','closed','2026-11-21T19:00:00Z','2026-11-22T00:00:00Z',datetime('now'),datetime('now'))`).run();
+  const ordinary = await worker.fetch(new Request(`${ORIGIN}/events/ordinary-seo-event/`), env, {});
+  const ordinaryHtml = await ordinary.text();
+  const ordinaryGraph = JSON.parse(ordinaryHtml.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/)[1])["@graph"];
+  assert.equal(ordinaryGraph.find(node => node["@type"] === "Event").startDate, '2026-11-21T19:00:00Z');
+  assert.match(ordinary.headers.get("x-robots-tag"), /^index,follow/);
   for (const draftPath of ["/tools/kinmarking-01-draft/", "/.hidden-pages/kinmarking-01/index.html", "/.hidden-pages/kinmarking-01/series.js"]) {
     assert.equal((await worker.fetch(new Request(`${ORIGIN}${draftPath}`),env,{})).status,404,draftPath);
   }
@@ -317,6 +385,7 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
     const editionPath = `/events/kinmarking-${number}/`;
     const later = await worker.fetch(new Request(`${ORIGIN}${editionPath}`),env,{});
     assert.equal(later.status,200,editionPath);
+    assert.equal(later.headers.get("x-robots-tag"), "noindex,follow");
     const laterHtml = await later.text();
     const displayTheme = number === '02' ? 'Color &amp; Tattooing' : number === '04' ? 'Iconography &amp; Tattooing' : theme.replaceAll('&','&amp;');
     assert.ok(laterHtml.includes(`<title>KINMARKING ${number}${displayTheme ? `: ${displayTheme}` : ''}`));
@@ -327,7 +396,8 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
     else {
       assert.equal(laterPayload.occurrence.startsAt,null);
       const schema = JSON.parse(laterHtml.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/)[1]);
-      assert.equal(schema['@graph'].find(node => node['@type'] === 'Event').startDate,undefined);
+      assert.equal(schema['@type'], 'WebPage');
+      assert.equal(schema.startDate,undefined);
     }
     const crossed = await worker.fetch(new Request(`${ORIGIN}${editionPath}?occurrence=kinmarking-route-occurrence`),env,{});
     assert.equal(crossed.status,404);

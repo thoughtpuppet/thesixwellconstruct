@@ -90,12 +90,15 @@
     transition: opacity 0.25s ease;
     transform: translate(-50%, 0);
     pointer-events: none;
+    text-decoration: none;
     white-space: normal;
     max-width: min(72px, 22vw);
     text-align: center;
     line-height: 1.35;
   }
   /* Mobile body class — adjusts wordmark, layout chip visibility, descriptors */
+  .node-label:focus-visible, .sub-node-label:focus-visible { outline: 5px solid currentColor; outline-offset: 5px; }
+  #c:focus-visible { outline: 5px solid var(--color-about); outline-offset: -5px; }
   body.is-mobile #wordmark { top: 14px; font-size: clamp(22px, 6.2vw, 30px); letter-spacing: -0.04em; }
   body.is-mobile #wordmark-desc { top: clamp(46px, 11vw, 56px); font-size: clamp(9px, 2.2vw, 11px); letter-spacing: 0.18em; }
   body.is-mobile #home-utility-links { top: clamp(68px, 17vw, 79px); font-size: 8px; gap: 12px; letter-spacing: 0.13em; }
@@ -207,7 +210,7 @@
   })();
 </script>
 <div id="stage">
-  <canvas id="c"></canvas>
+  <canvas id="c" tabindex="0" role="button" aria-label="Open the Construct" aria-expanded="false"></canvas>
   <div id="wordmark">the six.well construct</div>
   <div id="wordmark-desc" data-copy-id="home-wordmark-desc">the creative ecosystem of Saiel Dauhn Solehman</div>
   <nav id="home-utility-links" aria-label="Immediate construct paths" aria-hidden="true">
@@ -666,7 +669,18 @@ let nodePosInit=false;
 const collapseStartX=new Array(VENTURES.length).fill(0);
 const collapseStartY=new Array(VENTURES.length).fill(0);
 let nodeLabelEls=[];
-VENTURES.forEach(v=>{const el=document.createElement('div');el.className='node-label';el.textContent=v.name+' .';el.style.color=v.color;nodeLabelsDiv.appendChild(el);nodeLabelEls.push(el);});
+VENTURES.forEach((v,index)=>{
+  const el=document.createElement('div');
+  el.className='node-label';el.textContent=v.name+' .';el.style.color=v.color;
+  el.setAttribute('role','button');el.tabIndex=-1;el.setAttribute('aria-hidden','true');
+  el.addEventListener('keydown',event=>{
+    if(event.key!=='Enter'&&event.key!==' ')return;
+    event.preventDefault();event.stopPropagation();
+    const point=nodeScreenPos(index),rect=stage.getBoundingClientRect();
+    stage.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:rect.left+point.x,clientY:rect.top+point.y}));
+  });
+  nodeLabelsDiv.appendChild(el);nodeLabelEls.push(el);
+});
 
 // One-line italic descriptions — Georgia-first serif, fade in on node hover
 const VENTURE_DESCS = {
@@ -862,6 +876,7 @@ stage.addEventListener('mousemove',e=>{
   }
 });
 stage.addEventListener('click',e=>{
+  if(e.target.closest('a'))return;
   const r=stage.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
 
   // ① Main logo expand
@@ -916,6 +931,18 @@ stage.addEventListener('click',e=>{
     hint.style.color=VENTURES[hn].color;hint.style.opacity='0.7';
     return;
   }
+});
+
+// The existing canvas control also opens the same menu from a keyboard.
+canvas.addEventListener('keydown',event=>{
+  if(event.key!=='Enter'&&event.key!==' ')return;
+  event.preventDefault();
+  if(state==='expanded'){triggerCollapse();return;}
+  const point=ringTransform(),camera=camFor(PAR_CENTER),rect=stage.getBoundingClientRect();
+  stage.dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:rect.left+point.x+camera.x,clientY:rect.top+point.y+camera.y}));
+});
+stage.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){event.preventDefault();triggerCollapse();canvas.focus();}
 });
 
 // === Touch / pointer support ===
@@ -1121,6 +1148,7 @@ const SUB_NODE_DATA = {
     return {name:node.name,color:semanticColor,angle:slot.angle,dist:slot.dist,fromDot:slot.fromDot};
   });
   VENTURES.splice(0,VENTURES.length,...managedVentures);
+  rebuildPathwayLinks();
   document.documentElement.dataset.managedNavigation='live';
   document.documentElement.dataset.managedNodeCount=String(managedVentures.length);
 })();
@@ -1172,15 +1200,56 @@ const subNodeCollapseStartX= new Array(MAX_SUBNODES).fill(0);
 const subNodeCollapseStartY= new Array(MAX_SUBNODES).fill(0);
 let outgoingSubNodeSets    = [];
 
-// Build pathway label DOM elements (Georgia-first serif, lowercase)
+// Existing pathway labels are real links, available to people in the same menu.
+// Build all destinations on load; Google need not click the canvas to discover them.
 const subNodeLabelsDiv = document.getElementById('sub-node-labels');
+const pathwayLinkSets = new Map();
 let subNodeLabelEls = [];
-for(let i = 0; i < MAX_SUBNODES; i++){
-  const el = document.createElement('div');
-  el.className = 'sub-node-label';
-  subNodeLabelsDiv.appendChild(el);
-  subNodeLabelEls.push(el);
+function rebuildPathwayLinks(){
+  subNodeLabelsDiv.replaceChildren();pathwayLinkSets.clear();subNodeLabelEls=[];
+  VENTURES.forEach(({name})=>{
+    const paths=SUB_NODE_DATA[name]||[];
+    const links=paths.slice(0,MAX_SUBNODES).map(sub=>{
+      const el=document.createElement('a');
+      el.className='sub-node-label';el.textContent=sub.name;el.href=sub.url;
+      el.hidden=true;el.tabIndex=-1;el.setAttribute('aria-hidden','true');
+      el.addEventListener('click',event=>{
+        event.stopPropagation();
+        if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+        event.preventDefault();
+        window.SixWellAnalytics?.track('pathway_open',{action:'navigate',itemId:sub.name,sectionId:name});
+        if(typeof window._constructFade==='function')window._constructFade(sub.url);
+        else window.location.href=sub.url;
+      });
+      subNodeLabelsDiv.appendChild(el);return el;
+    });
+    pathwayLinkSets.set(name,links);
+  });
 }
+function selectPathwayLinks(name){
+  const links=pathwayLinkSets.get(name)||[];
+  if(subNodeLabelEls===links)return;
+  pathwayLinkSets.forEach(set=>set.forEach(el=>{el.hidden=true;el.tabIndex=-1;el.setAttribute('aria-hidden','true');}));
+  subNodeLabelEls=links;
+}
+function updateNavigationAccessibility(){
+  const open=state==='expanded';
+  canvas.setAttribute('aria-expanded',open?'true':'false');
+  canvas.setAttribute('aria-label',open?'Close the Construct':'Open the Construct');
+  nodeLabelEls.forEach((el,index)=>{
+    const visible=open&&Number(el.style.opacity||0)>.04;
+    el.tabIndex=visible?0:-1;el.setAttribute('aria-hidden',visible?'false':'true');
+    el.setAttribute('aria-expanded',index===activeVentureIdx&&subNodeState!=='idle'?'true':'false');
+  });
+  homeUtilityLinks.querySelectorAll('a').forEach(el=>{el.tabIndex=open?0:-1;});
+  subNodeLabelEls.forEach(el=>{
+    const visible=open&&subNodeState!=='idle'&&Number(el.style.opacity||0)>.01;
+    const enabled=visible&&subNodeState==='expanded';
+    el.hidden=!visible;el.tabIndex=enabled?0:-1;
+    el.setAttribute('aria-hidden',visible?'false':'true');el.style.pointerEvents=enabled?'auto':'none';
+  });
+}
+rebuildPathwayLinks();
 
 // ── Helper: world position of pathway i for the given construct entry ──────
 // Pathways orbit the parent in a full circle, evenly spaced.
@@ -1346,6 +1415,7 @@ function drawSubNodes(){
   if(activeVentureIdx < 0 || subNodeState === 'idle') return;
   const v = VENTURES[activeVentureIdx];
   const subs = SUB_NODE_DATA[v.name];
+  selectPathwayLinks(v.name);
   const shape = SUB_SHAPES[v.name];
   const n = subs.length;
 
@@ -1606,6 +1676,7 @@ function tick(ts){
 
   drawIntroStars();
 
+  updateNavigationAccessibility();
   requestAnimationFrame(tick);
 }
 

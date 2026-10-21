@@ -213,6 +213,7 @@ import {
   dynamicStructuredGraph,
   handleRobots,
   handleSitemap,
+  kinmarkingProjectDescription,
   normalizeSeoPath,
 } from "./functions/api/seo/_lib.js";
 
@@ -1287,13 +1288,16 @@ async function serveEventDetailPage(request, env, pathname) {
     : event.title;
 
   const developmentEdition = Boolean(kinmarkingSessionNumber);
+  const kinmarkingProject = slug === "kinmarking";
   let assetResponse = await servePublicAsset(request, env, developmentEdition ? "/events/detail/development.html" : eventDetailAssetPath(pathname), { seo: false });
   if (assetResponse.status === 404) assetResponse = await servePublicAsset(request, env, "/events/detail/index.html", { seo: false });
   const origin = canonicalOrigin(env, request.url);
   const canonicalPath = `/events/${encodeURIComponent(slug)}/`;
   const canonicalUrl = `${origin}${canonicalPath}`;
-  const title = `${publicTitle} · Six.Well Events · Atlanta`;
-  const description = developmentEdition ? "Program and participation details will follow." : event.description || "A public creative program produced through the Six.Well Construct in Atlanta.";
+  const title = kinmarkingProject ? "KINMARKING · The Six.Well Construct" : `${publicTitle} · Six.Well Events · Atlanta`;
+  const description = developmentEdition ? "Program and participation details will follow."
+    : kinmarkingProject ? kinmarkingProjectDescription(event.description)
+    : event.description || "A public creative program produced through the Six.Well Construct in Atlanta.";
   // Development pages retain their occurrence identity without embedding the program draft.
   if (developmentEdition) payload.event = { ...event, description, details:"", included:"" };
   const image = event.imageUrl || "";
@@ -1316,14 +1320,25 @@ async function serveEventDetailPage(request, env, pathname) {
     canonicalUrl,
     image,
     ogType: "article",
-    structuredData: dynamicStructuredGraph({
-      type: "Event",
+    ...(developmentEdition ? { robots: "noindex,follow" } : {}),
+    structuredData: developmentEdition ? {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "@id": `${canonicalUrl}#webpage`,
+      url: canonicalUrl,
+      name: publicTitle,
+      description,
+      about: { "@id": `${origin}/events/kinmarking/#entity` },
+    } : dynamicStructuredGraph({
+      type: kinmarkingProject ? "CreativeWork" : "Event",
       canonicalUrl,
       title: publicTitle,
       description,
       image,
       origin,
-      extra: {
+      extra: kinmarkingProject ? {
+        creator: { "@id": `${origin}/about/saieldauhnsolehman/#person` },
+      } : {
         ...(startDate ? { startDate } : {}),
         ...(endDate ? { endDate } : {}),
         eventStatus,
