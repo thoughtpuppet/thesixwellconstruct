@@ -5137,6 +5137,7 @@
       return;
     }
     listEl.innerHTML = events.map((ev) => {
+      if (ev.privateRsvpEnabled) return `<button class="submission ${ev.slug === selectedEventSlug ? "active" : ""}" type="button" data-event-slug="${escapeHtml(ev.slug)}"><span class="submission-top"><span class="name">${escapeHtml(ev.title)}</span><span class="pill">${escapeHtml((ev.publicationState || "draft").toUpperCase())}</span></span><span class="meta">${escapeHtml(formatDate(ev.startsAt))}</span><span class="date">${ev.rsvp?.reservedHeadcount || 0} people planned · paper attendance separate</span></button>`;
       const count = rsvpsForEvent(ev).length;
       return `
         <button class="submission ${ev.slug === selectedEventSlug ? "active" : ""}" type="button" data-event-slug="${escapeHtml(ev.slug)}">
@@ -5156,6 +5157,10 @@
   function renderEventDetail(slug) {
     const ev = eventBySlug(slug);
     if (!ev) { detailEl.innerHTML = emptyDetail(); return; }
+    if (ev.privateRsvpEnabled) {
+      detailEl.innerHTML = `<div class="detail-head"><span class="pill">Private RSVP records</span><h2>${escapeHtml(ev.title)}</h2><p class="contact">${escapeHtml(formatDate(ev.startsAt))}<br>${ev.rsvp?.reservedHeadcount || 0} people planned. Reconcile actual attendance from the paper sign-in sheet separately.</p><div class="booking-actions"><a class="button" href="/studio/event-attendance/?event=${encodeURIComponent(ev.slug)}">Private RSVP + paper attendance</a><a class="button" href="${escapeHtml(publicEventPath(ev.slug))}" target="_blank" rel="noopener noreferrer">Open Event Page</a></div></div>`;
+      return;
+    }
     const rsvps = rsvpsForEvent(ev);
     const cards = rsvps.length ? rsvps.map((s) => {
       const seats = s.payload?.seats || "";
@@ -7310,6 +7315,7 @@ ${meetingLines}
   function renderEventCard(ev) {
     const dollars = ((Number(ev.priceCents) || 0) / 100).toFixed(2);
     const isFree = (Number(ev.priceCents) || 0) <= 0;
+    const privateStats = `${ev.rsvp?.reservedHeadcount || 0} people planned. Actual attendance is reconciled from the paper sign-in sheet.`;
     const stats = `${isFree ? "Free · " : ""}${ev.paidSeats || 0} / ${ev.capacity || 0} seats ${isFree ? "registered" : "sold"}` +
       (ev.pendingOrders ? ` · ${ev.pendingOrders} pending` : "") +
       ` · ${ev.paidOrders || 0} ${isFree ? "registration" : "paid order"}${(ev.paidOrders === 1) ? "" : "s"}`;
@@ -7317,7 +7323,7 @@ ${meetingLines}
       <section class="schedule-section is-open" data-collapse-section>
         <button class="section-toggle" type="button">${escapeHtml(ev.title)} — ${escapeHtml((ev.publicationState || "draft").toUpperCase())} / ${escapeHtml((ev.status || "closed").toUpperCase())}</button>
         <div class="section-body">
-          <p class="contact">${escapeHtml(stats)}</p>
+          <p class="contact">${escapeHtml(ev.privateRsvpEnabled ? privateStats : stats)}</p>
           <form data-event-form="${escapeHtml(ev.slug)}">
             <div class="schedule-grid">
               <div class="field">

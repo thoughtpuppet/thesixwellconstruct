@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e0e">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="SNY 00 — a small Signal &amp; Symbol gathering. November 6, 2026, 6:30–9:30 PM Eastern.">
+<title>SNY 00 — the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
+<link rel="stylesheet" href="/css/forms.css">
+<link rel="stylesheet" href="/css/sny00.css">
+</head>
+<body class="venture-page" data-venture="events">
+<header class="top"></header>
+<main class="venture-shell entrance-fade">
+  <nav class="construct-breadcrumb" aria-label="Breadcrumb"><a href="/home/">construct</a><span aria-hidden="true">:</span><a href="/events/">events</a><span aria-hidden="true">:</span><span>SNY 00</span></nav>
+  <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="eventTitle">
+    <div><span class="venture-kicker">Signal &amp; Symbol</span><h1 class="venture-title hero-title" id="eventTitle">SNY 00.</h1></div>
+    <div class="hero-copy">
+      <p class="hero-descriptor" id="eventDescription">A small Signal &amp; Symbol gathering.</p>
+      <p class="hero-note" id="snySchedule"><time datetime="2026-11-06T18:30:00-05:00">November 6, 2026</time><br>6:30–9:30 PM Eastern · America/New_York</p>
+      <div class="hero-actions"><a class="venture-link" href="#gathering">the gathering</a><a class="venture-link" href="#rsvp">RSVP</a></div>
+    </div>
+  </section>
+  <section class="section" id="gathering" aria-labelledby="gatheringTitle">
+    <header class="section-head"><div><span class="section-kicker">in the room</span><h2 class="section-title" id="gatheringTitle">Signal &amp; Symbol.</h2></div><p class="section-copy" id="eventDetails">A green[field] introduction, KINMARKING, and a presentation by Saiel Solehman. A site presentation may be included if ready.</p></header>
+    <div class="sny-grid">
+      <article class="sny-panel"><h3>Across the practice</h3><p>The gathering connects <a href="/events/signal-symbol/">Signal &amp; Symbol</a>, <a href="/events/greenfield/">green[field]</a>, and <a href="/events/kinmarking/">KINMARKING</a>.</p></article>
+      <article class="sny-panel"><h3>Documentation</h3><p>Promo and archive footage capture is planned. Your RSVP is separate from permission to record you or use your likeness, quotes, or work. Recording choices will be shared separately.</p></article>
+    </div>
+  </section>
+  <section class="section" id="rsvp" aria-labelledby="rsvpTitle">
+    <div class="sny-registration">
+      <div class="sny-copy"><span class="section-kicker">a place in the room</span><h2 class="section-title" id="rsvpTitle">RSVP.</h2><p>Your party size helps plan food and headcount. Count yourself in the total.</p><p>Your name and contact details stay in the organizer's private event record. There is no public attendee list.</p><p>Attendance will be recorded on a paper sign-in sheet at the door, then reconciled privately. An RSVP records your plans to come.</p><p>Registration does not subscribe you to marketing or grant permission for recording, public likeness or quotes, or archive publication.</p></div>
+      <div class="sny-panel">
+        <p id="rsvpAvailability" class="sny-availability" role="status">Loading RSVP availability.</p>
+        <form class="public-form" id="rsvpForm">
+          <fieldset id="rsvpFields" disabled>
+            <legend class="sny-legend">Your RSVP</legend>
+            <div class="field"><label for="rsvpName">Name</label><input id="rsvpName" name="name" autocomplete="name" maxlength="120" required></div>
+            <div class="field"><label for="rsvpEmail">Email</label><input id="rsvpEmail" name="email" type="email" autocomplete="email" maxlength="254" required><p class="sny-help">Use the same email if you need to submit again. Repeated submissions keep your original RSVP; contact the organizer for changes.</p></div>
+            <div class="field"><label for="partySize">Party size, including you</label><input id="partySize" name="partySize" type="number" inputmode="numeric" min="1" max="1" step="1" value="1" required aria-describedby="partyHelp"><p class="sny-help" id="partyHelp">Party allowance will appear when RSVP opens.</p></div>
+            <div class="field"><label for="foodRequirements">Practical food requirements (optional)</label><textarea id="foodRequirements" name="foodRequirements" maxlength="500" rows="3" aria-describedby="foodHelp"></textarea><p class="sny-help" id="foodHelp">Share only what helps with food planning, such as foods to avoid. Please leave out diagnoses and medical history. Only the organizer can view this note.</p></div>
+            <div hidden><label>Leave empty<input name="_gotcha" tabindex="-1" autocomplete="off"></label></div>
+            <button class="sny-button" id="rsvpSubmit" type="submit">Confirm RSVP</button>
+          </fieldset>
+        </form>
+        <p id="rsvpResult" class="sny-result" role="status" aria-live="polite" tabindex="-1"></p>
+        <noscript><p>Please enable JavaScript to use the RSVP form.</p></noscript>
+      </div>
+    </div>
+  </section>
+  <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">events</a><a href="/archive/events/">event archive</a><a href="/home/">return to construct</a></div></footer>
+</main>
+<script src="/js/sny00-rsvp.js"></script>
+<script src="/js/transition.js"></script>
+<script src="/js/construct-corner.js"></script>
+<script src="/js/construct-nav.js"></script>
+<script src="/js/construct-wayfinding.js"></script>
+</body>
+</html>

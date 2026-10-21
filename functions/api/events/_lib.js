@@ -24,6 +24,7 @@ import {
 import { ingestCrmSourceRecord } from "../crm/ingest.js";
 import { captureMarketingConsent } from "../outreach/_lib.js";
 import { ensureEditableArchiveDossier } from "../_shared/archive-dossiers.js";
+import { privateRsvpContext, handlePrivateEventRsvp, handlePrivateEventAdmin } from "./_rsvp.js";
 
 const SQUARE_VERSION = "2026-05-20";
 
@@ -572,6 +573,7 @@ function normalizeEvent(row) {
     contactNote: row.contact_note || "",
     waitlistEnabled: row.waitlist_enabled !== 0,
     isRecurring: row.is_recurring === 1,
+    privateRsvpEnabled: row.private_rsvp_enabled === 1,
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
   };
@@ -1335,7 +1337,7 @@ async function eventOccurrencesWithStats(db, event) {
   return views;
 }
 
-function publicEventView(event, stats = {}, occurrences = [], admissionOptions = []) {
+function publicEventView(event, stats = {}, occurrences = [], admissionOptions = [], rsvp = null) {
   const primary = nextEventOccurrence(occurrences) || null;
   const paidSeats = Number(stats.paidSeats) || 0;
   const pendingSeats = Number(stats.pendingSeats) || 0;
@@ -1386,6 +1388,9 @@ function publicEventView(event, stats = {}, occurrences = [], admissionOptions =
     registrationOpen:admissionOptions.some((option) => option.open),
     paidSalesOpen:admissionOptions.some((option) => option.open && !option.free),
     admissionOptions,
+    privateRsvpEnabled:event.privateRsvpEnabled,
+    ...(rsvp ? { rsvp, open:rsvp.open, registrationOpen:rsvp.open, seatsRemaining:rsvp.remaining,
+      soldOut:capacity>0 && rsvp.remaining<=0 } : {}),
   };
 }
 
@@ -1460,7 +1465,7 @@ export async function handleEventsList(request, env) {
       const stats = await ticketStats(db, event.id);
       const occurrences = await eventOccurrencesWithStats(db, event);
       const admissionOptions = await eventAdmissionOptionsWithStats(db, event);
-      events.push(publicEventView(event, stats, occurrences, admissionOptions));
+      events.push(publicEventView(event, stats, occurrences, admissionOptions, await privateRsvpContext(db,event)));
     }
     events.sort((a, b) => {
       const aTime = Date.parse(a.startsAt || "");
@@ -1535,7 +1540,7 @@ export async function handleEventContext(request, env, slug) {
       return errorResponse("Event date not found.", 404);
     }
     return json({
-      event:publicEventView(event, stats, occurrences, admissionOptions),
+      event:publicEventView(event, stats, occurrences, admissionOptions, await privateRsvpContext(db,event)),
       occurrence:selectedOccurrence,
     });
   } catch (error) {
@@ -1584,6 +1589,7 @@ export async function handleEventCheckout(request, env, slug) {
     if (!eventAllowsPublicActions(event)) {
       return errorResponse("Registration has not opened for this announced event.", 409);
     }
+    if (event.privateRsvpEnabled) return errorResponse("Use this event's RSVP form.",409);
     const requestedAdmission = body.admissionOptionId
       || body.admission_option_id
       || body.admissionOption
@@ -1825,7 +1831,7 @@ export async function handleEventWaitlist(request, env, slug) {
     if (!eventAllowsPublicActions(event)) {
       return errorResponse("Updates are not open for this announced event.", 409);
     }
-    if (!event.waitlistEnabled) {
+    if (event.privateRsvpEnabled || !event.waitlistEnabled) {
       return errorResponse("The waitlist is not open for this event.", 409);
     }
     const occurrenceResult = await resolveEventOccurrence(db, event, asString(body.occurrenceId || body.occurrence_id));
@@ -1957,6 +1963,7 @@ export async function handleEventOpenMicSignup(request, env, slug) {
     if (!eventAllowsPublicActions(event)) {
       return errorResponse("Performer requests are not open for this announced event.", 409);
     }
+    if (event.privateRsvpEnabled) return errorResponse("Performer requests are not available for this event.",409);
     const occurrenceResult = await resolveEventOccurrence(db, event, asString(body.occurrenceId || body.occurrence_id));
     if (occurrenceResult.invalid) return errorResponse("Event date not found.", 404);
     if (occurrenceResult.required) {
@@ -2699,6 +2706,7 @@ export async function handleAdminEventsList(request, env) {
         occurrenceCount:occurrences.length,
         admissionOptions,
         admissionOptionCount:admissionOptions.length,
+        rsvp:await privateRsvpContext(db,event),
         startsAt:primary?.startsAt || event.startsAt,
         endsAt:primary?.endsAt || event.endsAt,
         seatsRemaining:primary
@@ -3779,6 +3787,10 @@ export async function handleEventsApi(request, env) {
     if (method !== "POST") return errorResponse("Method not allowed.", 405);
     return handleEventCheckout(request, env, slug);
   }
+  if (action === "rsvp" && parts.length === 4) {
+    if (method !== "POST") return errorResponse("Method not allowed.",405);
+    return handlePrivateEventRsvp(request,env,slug);
+  }
   if (action === "waitlist") {
     if (method !== "POST") return errorResponse("Method not allowed.", 405);
     return handleEventWaitlist(request, env, slug);
@@ -3820,6 +3832,11 @@ export async function handleAdminEventsApi(request, env) {
   }
 
   const slug = parts[3];
+  if ((parts[4] === "rsvps" || parts[4] === "attendance") && parts.length <= 6) {
+    const authError=requireEventsAdmin(request,env);
+    if(authError) return authError;
+    return handlePrivateEventAdmin(request,env,slug,parts[4],parts[5]);
+  }
   if (parts[4] === "waitlist") {
     if (method !== "GET") return errorResponse("Method not allowed.", 405);
     return handleAdminEventWaitlistList(request, env, slug);

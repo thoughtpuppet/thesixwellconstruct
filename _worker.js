@@ -394,7 +394,7 @@ function isEventDetailPagePath(pathname) {
     parts.length === 2 &&
     parts[0] === "events" &&
     parts[1] !== "confirmed" &&
-    !hasFileExtension(pathname)
+    (!hasFileExtension(pathname) || /\/index\.html$/i.test(pathname))
   );
 }
 
