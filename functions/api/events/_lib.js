@@ -25,6 +25,7 @@ import { ingestCrmSourceRecord } from "../crm/ingest.js";
 import { captureMarketingConsent } from "../outreach/_lib.js";
 import { ensureEditableArchiveDossier } from "../_shared/archive-dossiers.js";
 import { privateRsvpContext, handlePrivateEventRsvp, handlePrivateEventAdmin } from "./_rsvp.js";
+import { publicPageVisibilityDecision } from "../site-visibility/_lib.js";
 
 const SQUARE_VERSION = "2026-05-20";
 
@@ -1462,6 +1463,7 @@ export async function handleEventsList(request, env) {
     const events = [];
     for (const row of rows) {
       const event = normalizeEvent(row);
+      if (event.privateRsvpEnabled && (await publicPageVisibilityDecision(`/events/${event.slug}/`,env)).hidden) continue;
       const stats = await ticketStats(db, event.id);
       const occurrences = await eventOccurrencesWithStats(db, event);
       const admissionOptions = await eventAdmissionOptionsWithStats(db, event);
@@ -1529,6 +1531,7 @@ export async function handleEventContext(request, env, slug) {
     if (!event || !eventIsPublic(event)) {
       return errorResponse("Event not found.", 404);
     }
+    if (event.privateRsvpEnabled && (await publicPageVisibilityDecision(`/events/${event.slug}/`,env)).hidden) return errorResponse("Event not found.",404);
     const stats = await ticketStats(db, event.id);
     const occurrences = await eventOccurrencesWithStats(db, event);
     const admissionOptions = await eventAdmissionOptionsWithStats(db, event);

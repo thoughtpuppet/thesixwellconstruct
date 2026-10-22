@@ -1,6 +1,9 @@
 -- Review draft only. Applying this does not open registration or publish a page.
 -- Keep the 2027 annual SNY showcase and the existing Signal & Symbol intact.
 -- A matching name/date requires reconciliation instead of a duplicate record.
+INSERT OR IGNORE INTO site_visibility_rules(path,visibility,scope,updated_by,updated_at)
+VALUES('/events/sny-00','hidden','descendants','migration-0245',datetime('now'));
+
 INSERT INTO events (
   id,slug,title,description,details,starts_at,ends_at,location,price_cents,currency,
   capacity,max_seats_per_order,status,publication_state,waitlist_enabled,

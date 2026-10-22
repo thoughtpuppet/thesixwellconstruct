@@ -18,6 +18,7 @@ export function fixture({open=false,capacity=6,maxParty=4,beforeDraft=false}={})
     db.exec(readFileSync(join(ROOT,'migrations',name),'utf8'));
   }
   if(open) {
+    db.prepare("UPDATE site_visibility_rules SET visibility='public' WHERE path='/events/sny-00'").run();
     db.prepare("UPDATE events SET publication_state='published',status='open' WHERE slug='sny-00'").run();
     db.prepare("UPDATE event_occurrences SET status='open',capacity=?,max_seats_per_order=? WHERE event_id='evt_sny_00'").run(capacity,maxParty);
   }

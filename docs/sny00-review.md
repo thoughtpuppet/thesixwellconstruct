@@ -1,7 +1,10 @@
 # SNY 00 — private implementation review
 
-Status: LOCAL DRAFT. No push, deployment, production migration, registration,
-invitation, email, permission change, or new credential was performed.
+Status: HIDDEN RELEASE PREPARED. The user authorized deploying this draft on
+October 22, 2026 while its public URL returns the existing 404 page. Its Event
+remains a closed draft and registration remains unavailable. No invitation,
+email, calendar event, registration, permission change, or new credential is
+part of this release. See the external release receipt for actual execution.
 
 ## Existing state checked
 
@@ -57,6 +60,17 @@ invitation, email, permission change, or new credential was performed.
 - This initial private RSVP lane deliberately supports a single event date.
   Adding multiple dates closes it pending a date-aware extension.
 
+## Recording notice update — October 22, 2026
+
+The pre-submission notice now uses the user's exact wording:
+
+> Promo and archive footage capture is planned. If you do not wish to be recorded, do not attend. RSVPing is also an acknowledgement and consent to being recorded.
+
+Contradictory recording opt-out and no-recording-permission wording was removed
+from this draft. Marketing and unrelated permissions remain separate. This is
+a local copy edit; RSVP storage and validation are unchanged. The existing RSVP
+record has no dedicated recording acknowledgement or notice-version field.
+
 ## Local review
 
 From this isolated clone, run `node tools/sny00-preview.mjs`, then open
@@ -74,6 +88,9 @@ from published static assets. A `?preview=1` query does not unlock the draft.
 
 ## Decisions before launch
 
+These decisions apply to a future reveal and registration opening. The current
+release is intentionally hidden at `https://thesixwellconstruct.com/events/sny-00/`.
+
 1. Approve purpose/flow copy from the parallel planning work, including whether
    “focus group” is useful. This implementation chooses no descriptor beyond
    the established small Signal & Symbol gathering.
@@ -82,23 +99,63 @@ from published static assets. A `?preview=1` query does not unlock the draft.
 3. Choose venue disclosure, arrival and accessibility details. No studio address
    was copied into this event. Other events' public addresses are not treated
    as approval for SNY 00.
-4. Approve recording consent, likeness/quote use, archive-publication permissions,
-   and an operational opt-out process. No event release is implemented or inferred.
+4. Review whether the recording acknowledgement needs stored evidence or a notice
+   version. Decide any separate likeness/quote use and archive-publication permissions.
 5. Approve the purpose and retention/deletion periods for attendee/contact records,
    paper sheets, and practical food notes. Food notes should be cleared after
    food planning; Studio can clear the field, but automatic expiry is not built.
    No attendee/food export or publication is implemented.
 6. Decide whether confirmation/reminder emails are wanted. Current behavior is
    on-page confirmation only. Review any correspondence before enabling it.
-7. Approve the final public page and an explicit release. Re-read live records
-   immediately before any future migration; reconcile any newly added match.
+7. Approve a future reveal and registration opening. Keep the existing page
+   visibility rule hidden and the Event in draft until that instruction arrives.
+
+## Existing visibility system used for the hidden release
+
+The user's `tools/page-visibility.html` was inspected read-only in the original
+checkout. It is unchanged there. It imports `studio/page-visibility-manager.js`
+and uses the same Studio token and authenticated `GET/PATCH
+/api/admin/site-visibility` as Studio → Site → Public Visibility. It does not
+move files or rewrite Worker source. The original uncommitted registry edit
+only removes two About entries; it is unrelated and is not bundled here.
+
+`shared/page-visibility.js` registers routes and fallback defaults. Migration
+0157 stores live `site_visibility_rules` and `site_visibility_settings` in D1.
+Paths normalize case, query/hash, trailing slashes and `/index.html`; registered
+HTML aliases normalize too. Longest matching path wins. Descendant scope can
+hide a family; a more specific public child overrides it. Home and the error
+page stay public. Home-only hides other page routes. Show All deletes live rules.
+
+The Worker's existing page gate runs before canonical redirects and static or
+dynamic page handlers. It serves the existing `/404.html` body with HTTP 404,
+`Cache-Control: no-store`, and `X-Robots-Tag: noindex, nofollow, noarchive`.
+Visitors and crawlers share this code path. Sitemap generation uses the same
+visibility decisions. Normal local development consults the configured Worker
+origin and falls back to seeded defaults; `--show-hidden` bypasses local hiding.
+
+Limits: this is a registered page control, not universal record publication or
+API authorization. Navigation, search, record publication, Studio, APIs, assets
+and private booking links are separate. Missing D1/settings falls back to code
+defaults for public decisions; authenticated controls require migration 0157.
+
+SNY 00 is now a registered entry with a hidden descendant rule in the existing
+system. The private RSVP list/context/submission lane reads that same decision,
+so hiding the page also disables public RSVP access, even if Event operations
+are later opened by mistake. The closed draft is an additional existing gate.
+No separate hiding mechanism was introduced.
+
+The existing Drive document is **Six.Well Website — Systems Roadmap**, ID
+`1YwdYu6XXesIFl4aLJkn2p-lHqy2UKzJWyhhsssKudYc`. The parent task identified
+that its sections 03, 15 and 25 mention visibility broadly without documenting
+this mechanism. The parent coordinates that document update; this task does
+not write to it. README's inaccurate redirect description is corrected here.
 
 ## Separate event-prep design deliverables
 
 - Flyer, aligned with existing SNY/site visual language.
 - Paper door sign-in sheet with sheet/row references for reconciliation. Keep
-  contact details and food notes off a shared sign-in roster. Recording/publication
-  permission must remain separate from attendance.
+  contact details and food notes off a shared sign-in roster. Separate publication
+  permissions remain a review item.
 - Printed reflective takeaway, content developed with the purpose/flow work.
 - Digital equivalent of that reflective takeaway.
 

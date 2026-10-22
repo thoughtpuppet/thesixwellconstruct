@@ -10,6 +10,7 @@ export const PAGE_VISIBILITY_PAGES = Object.freeze([
   { label: "Archive", path: "/archive/" },
   { label: "Gallery", path: "/gallery/" },
   { label: "Events", path: "/events/" },
+  { label: "SNY 00", path: "/events/sny-00/" },
   { label: "Atlanta Creative Calendar", path: "/calendar/" },
   { label: "Film", path: "/film/" },
   { label: "Music", path: "/music/" },
@@ -43,6 +44,7 @@ export const PAGE_VISIBILITY_PAGES = Object.freeze([
 ]);
 
 export const PAGE_VISIBILITY_DEFAULT_RULES = Object.freeze([
+  { path: "/events/sny-00", visibility: "hidden", scope: "descendants" },
   { path: "/film", visibility: "hidden", scope: "exact" },
   { path: "/music", visibility: "hidden", scope: "exact" },
   { path: "/tattoos/build", visibility: "hidden", scope: "descendants" },

@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {fixture,request,ROOT} from './helpers/sny00-fixture.mjs';
 import {handleEventsApi,handleAdminEventsApi} from '../functions/api/events/_lib.js';
 import worker from '../_worker.js';
+import {handleAdminSiteVisibility} from '../functions/api/site-visibility/_lib.js';
 const signup={name:'Test Guest',email:'guest@example.test',partySize:2,foodRequirements:'No peanuts, please.'};
 before(()=>mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-21T12:00:00Z')}));
 after(()=>mock.timers.reset());
@@ -41,6 +42,7 @@ test('draft/announced/closed/ended/unknown capacity stay nontransactional; priva
   assert.equal((await send(env)).status,404);
   assert.equal((await handleAdminEventsApi(request('/api/admin/events/sny-00/rsvps'),env)).status,401);
   assert.equal((await handleAdminEventsApi(request('/api/admin/events/sny-00/attendance',{method:'POST',body:{}}),env)).status,401);
+  db.prepare("UPDATE site_visibility_rules SET visibility='public' WHERE path='/events/sny-00'").run();
   for(const state of ['announced','published']){
     db.prepare('UPDATE events SET publication_state=? WHERE id=?').run(state,'evt_sny_00');
     assert.equal((await send(env)).status,state==='announced'?404:409);
@@ -124,5 +126,30 @@ test('real Worker keeps draft page and sitemap private, regardless of preview qu
   const sitemap=await worker.fetch(request('/sitemap.xml'),env,{});assert.ok(!(await sitemap.text()).includes('/events/sny-00/'));
   const alias=await worker.fetch(request('/events/sny-00/index.html'),env,{});assert.equal(alias.status,404);assert.ok(!(await alias.text()).includes('id="rsvpForm"'));
   await env.SUBMISSIONS_DB.prepare("UPDATE events SET publication_state='published' WHERE slug='sny-00'").run();
-  const published=await worker.fetch(request('/events/sny-00/'),env,{});assert.equal(published.status,200);assert.match(await published.text(),/6:30–9:30 PM/);
+  await env.SUBMISSIONS_DB.prepare("UPDATE site_visibility_rules SET visibility='public' WHERE path='/events/sny-00'").run();
+  const published=await worker.fetch(request('/events/sny-00/'),env,{});assert.equal(published.status,200);
+  const html=await published.text();assert.match(html,/6:30–9:30 PM/);
+  assert.equal(html.match(/<p id="recordingNotice">([^<]*)<\/p>/)[1],'Promo and archive footage capture is planned. If you do not wish to be recorded, do not attend. RSVPing is also an acknowledgement and consent to being recorded.');
+  assert.ok(html.indexOf('id="recordingNotice"')<html.indexOf('id="rsvpForm"'));
+});
+
+test('existing Studio visibility controls hide SNY 00 and its RSVP lane even if event operations are open',async()=>{
+  const {db,env}=fixture({open:true});
+  env.ASSETS={fetch:async()=>new Response('<html><title>404 test</title><body>Existing 404 page</body></html>',{headers:{'content-type':'text/html'}})};
+  const change=visibility=>handleAdminSiteVisibility(request('/api/admin/site-visibility',{method:'PATCH',admin:true,body:{action:'set',path:'/events/sny-00/',visibility,scope:'descendants'}}),env);
+  assert.equal((await change('hidden')).status,200);
+  for(const path of ['/events/sny-00/','/events/sny-00/index.html','/events/sny-00/?preview=1']){
+    const visitor=await worker.fetch(request(path),env,{});
+    const crawler=await worker.fetch(new Request(request(path),{headers:{'user-agent':'Googlebot'}}),env,{});
+    assert.equal(visitor.status,404);assert.equal(crawler.status,404);
+    assert.equal(visitor.headers.get('x-robots-tag'),'noindex, nofollow, noarchive');
+    assert.equal(await visitor.text(),await crawler.text());
+  }
+  assert.equal((await send(env)).status,404);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM event_rsvps').get().n,0);
+  assert.equal((await handleEventsApi(request('/api/events/sny-00/context'),env)).status,404);
+  assert.ok(!(await (await handleEventsApi(request('/api/events'),env)).text()).includes('sny-00'));
+  assert.equal((await admin(env,'/rsvps')).status,200);
+  assert.equal((await change('public')).status,200);
+  assert.equal((await handleEventsApi(request('/api/events/sny-00/context'),env)).status,200);
 });

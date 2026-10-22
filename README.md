@@ -116,14 +116,29 @@ No bundler, package install, or framework build step is required.
 
 Open Studio, choose `Site`, then `Public Visibility`. Each page can be hidden
 or shown as an exact route or with all descendants. Changes are stored in D1
-and affect the deployed Worker immediately; hidden routes temporarily redirect
-to `/404.html` without moving or replacing their source files.
+and affect the deployed Worker immediately; hidden routes render `/404.html`
+with HTTP 404, `Cache-Control: no-store`, and `X-Robots-Tag: noindex, nofollow,
+noarchive`, without moving or replacing their source files.
 
 The local-only `/tools/page-visibility.html` surface uses the same authenticated
 API and page registry. `.hidden-pages/` is retained only as legacy recovery
 material and is not part of the active visibility workflow. The local preview
 checks the configured Worker origin for effective visibility; `--show-hidden`
 still bypasses that check for development.
+
+The registry and fallback rules live in `shared/page-visibility.js`. Migration
+`0157` stores live rules in `site_visibility_rules` and the home-only setting in
+`site_visibility_settings`. Studio and the local tool use the same authenticated
+`GET/PATCH /api/admin/site-visibility`; longest matching path wins, and a public
+child can override a hidden descendant family. Home and the error page remain
+public. Show All clears every live rule and disables home-only mode.
+
+Route hiding is separate from record publication, navigation, and APIs. The
+Worker excludes Studio, APIs and private booking links from the page gate.
+Sitemap generation reads the same visibility decisions. SNY 00 additionally
+checks that decision in its private RSVP list/context/submission lane, so hiding
+its page also makes that RSVP lane unavailable. Its Event remains a closed draft
+until a separate reveal and registration decision.
 
 ## Legacy Obsidian archive import
 

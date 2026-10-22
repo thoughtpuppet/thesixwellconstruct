@@ -1,5 +1,6 @@
 // Free, private event registration and later paper-sheet reconciliation.
 // No email, CRM, marketing-consent, payment, or public-archive side effects.
+import { publicPageVisibilityDecision } from '../site-visibility/_lib.js';
 const RECEIVED = 'Your RSVP has been received. If you already registered, your original RSVP is kept. Contact the organizer for changes.';
 const json = (data, status=200) => Response.json(data, {status, headers:{'cache-control':'no-store'}});
 const fail = (error, status=400) => json({error}, status);
@@ -50,6 +51,7 @@ export async function privateRsvpContext(db,event) {
 }
 
 export async function handlePrivateEventRsvp(request,env,slug) {
+  if((await publicPageVisibilityDecision(`/events/${slug}/`,env)).hidden) return fail('Event not found.',404);
   const body=await payload(request);
   if(!body) return fail('Expected a small JSON registration.');
   if(text(body._gotcha)) return json({ok:true,message:RECEIVED});
