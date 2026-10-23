@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (file) => readFile(path.join(root, file), "utf8");
 
 const routes = [
+  { route: "/about/kinmarking/", file: "about/kinmarking/index.html", variant: "supporting", descriptor: false },
   { route: "/about/", file: "about/index.html", variant: "landing", descriptor: true },
   { route: "/art/", file: "art/index.html", variant: "landing", descriptor: true },
   { route: "/merch/", file: "merch/index.html", variant: "landing", descriptor: true },
