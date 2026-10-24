@@ -161,7 +161,8 @@ test('new RSVP sends one confirmation with the approved arrival details; duplica
   const {db,env}=fixture();db.exec(readFileSync(join(ROOT,'migrations/0246_sny00_launch.sql'),'utf8'));
   const messages=[];env.EMAIL={send:async message=>{messages.push(message);return {id:'test-delivery'};}};
   const background=[];
-  assert.equal((await handleEventsApi(request('/api/events/sny-00/rsvp',{method:'POST',body:{...signup,partySize:3}}),env,{waitUntil:promise=>background.push(promise)})).status,200);
+  assert.equal((await worker.fetch(request('/api/events/sny-00/context'),env,{})).status,200);
+  assert.equal((await worker.fetch(request('/api/events/sny-00/rsvp',{method:'POST',body:{...signup,partySize:3}}),env,{waitUntil:promise=>background.push(promise)})).status,200);
   assert.equal(background.length,1);await Promise.all(background);
   assert.equal((await send(env,{...signup,email:' GUEST@EXAMPLE.TEST ',partySize:1})).status,200);
   await retryPendingPrivateEventRsvpConfirmations(env);
