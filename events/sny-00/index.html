@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/forms.css">
-<link rel="stylesheet" href="/css/sny00.css">
+<link rel="stylesheet" href="/css/sny00.css?v=20261024-gallery">
 </head>
 <body class="venture-page" data-venture="events">
 <header class="top"></header>
@@ -45,9 +45,10 @@
     </div>
   </section>
   <section class="section" id="flyers" aria-labelledby="flyersTitle">
-    <header class="section-head"><div><span class="section-kicker">Solehman’s New Year · 00</span><h2 class="section-title" id="flyersTitle">The invitation.</h2></div><p class="section-copy">Seven flyers, in sequence. Select an image to view it full size.</p></header>
+    <header class="section-head"><div><span class="section-kicker">Solehman’s New Year · 00</span><h2 class="section-title" id="flyersTitle">The invitation.</h2></div><p class="section-copy">Seven flyers, in sequence. Swipe or use the arrows to browse. Select an image to view it full size.</p></header>
     <p class="section-copy">Updated event time: <strong>6:30–9 PM</strong>. The invitation artwork below shows the earlier 7 PM start.</p>
-    <ol class="sny-flyers" aria-label="SNY00 flyers, in order">
+    <div class="sny-gallery" data-gallery-carousel role="region" aria-roledescription="carousel" aria-label="SNY00 invitation flyers">
+    <ol class="sny-flyers" id="snyFlyers" aria-label="SNY00 flyers, in order">
       <li><figure class="sny-flyer"><a href="/assets/events/sny-00/sny00-flyer-01.png"><img src="/assets/events/sny-00/sny00-flyer-01.png" alt="SNY00 emblem: a gold 00 inside a brown ring, with eight spokes ending in colored circles on black." width="1638" height="2048" loading="lazy" decoding="async"><span class="sny-flyer-caption"><span>01 / 07</span><span>View full size</span></span></a></figure></li>
       <li><figure class="sny-flyer"><a href="/assets/events/sny-00/sny00-flyer-02.png"><img src="/assets/events/sny-00/sny00-flyer-02.png" alt="Solehman’s New Year :00 — soft launch + gathering. Gold and cream lettering on black." width="1638" height="2048" loading="lazy" decoding="async"><span class="sny-flyer-caption"><span>02 / 07</span><span>View full size</span></span></a></figure></li>
       <li><figure class="sny-flyer"><a href="/assets/events/sny-00/sny00-flyer-03.png"><img src="/assets/events/sny-00/sny00-flyer-03.png" alt="The Six.Well Construct presents SNY00. November 6, 2026, 7–9 p.m., at 364 Nelson Street SW. Gold outlines of an abstract gathering with colorful circles." width="1638" height="2048" loading="lazy" decoding="async"><span class="sny-flyer-caption"><span>03 / 07</span><span>View full size</span></span></a></figure></li>
@@ -56,6 +57,12 @@
       <li><figure class="sny-flyer"><a href="/assets/events/sny-00/sny00-flyer-06.png"><img src="/assets/events/sny-00/sny00-flyer-06.png" alt="This gathering will be documented by Tyrone Hawk. A black eye symbol above an abstract gathering on orange." width="1638" height="2048" loading="lazy" decoding="async"><span class="sny-flyer-caption"><span>06 / 07</span><span>View full size</span></span></a></figure></li>
       <li><figure class="sny-flyer"><a href="/assets/events/sny-00/sny00-flyer-07.png"><img src="/assets/events/sny-00/sny00-flyer-07.png" alt="Gold outlines of an abstract gathering beneath a circle containing six dots, on black." width="1638" height="2048" loading="lazy" decoding="async"><span class="sny-flyer-caption"><span>07 / 07</span><span>View full size</span></span></a></figure></li>
     </ol>
+    <div class="sny-gallery-controls" data-gallery-controls hidden>
+      <button class="sny-button" type="button" data-gallery-previous aria-label="Previous flyer" aria-controls="snyFlyers" disabled><span aria-hidden="true">←</span> Previous</button>
+      <p class="sny-gallery-position" data-gallery-position aria-live="polite" aria-atomic="true">1 / 7</p>
+      <button class="sny-button" type="button" data-gallery-next aria-label="Next flyer" aria-controls="snyFlyers">Next <span aria-hidden="true">→</span></button>
+    </div>
+    </div>
     <details class="sny-panel sny-flyer-transcript">
       <summary>Read the flyer text</summary>
       <div class="sny-flyer-text">
@@ -99,6 +106,7 @@
   </section>
   <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/events/">events</a><a href="/archive/events/">event archive</a><a href="/home/">return to construct</a></div></footer>
 </main>
+<script src="/js/sny00-gallery.js?v=20261024"></script>
 <script src="/js/sny00-rsvp.js?v=20261024"></script>
 <script src="/js/transition.js"></script>
 <script src="/js/construct-corner.js"></script>
