@@ -21,5 +21,17 @@ html,body,.venture-page,.venture-shell { background:var(--color-bg); }
 .sny-result[data-error="true"] { color:#ffb09c; }
 .sny-review { border:5px solid var(--ring-faint); padding:24px; margin-bottom:40px; color:var(--text); font-size:15px; line-height:1.7; }
 .sny-review a { text-decoration:underline; }
-@media(max-width:760px) { .sny-grid,.sny-registration { grid-template-columns:minmax(0,1fr); gap:16px; } .sny-panel { padding:18px; } }
+.sny-flyers { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; list-style:none; padding:0; margin:0; }
+.sny-flyers > li { min-width:0; }
+.sny-flyer { margin:0; border:5px solid var(--ring-faint); }
+.sny-flyer a { display:block; color:var(--text); text-decoration:none; }
+.sny-flyer a:focus-visible,.sny-flyer-transcript summary:focus-visible { outline:3px solid var(--text); outline-offset:5px; }
+.sny-flyer img { display:block; width:100%; height:auto; }
+.sny-flyer-caption { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:14px 16px; font:700 11px/1.5 var(--font-display); letter-spacing:.06em; color:var(--text-muted); }
+.sny-flyer a:hover .sny-flyer-caption { color:var(--text); }
+.sny-flyer-transcript { margin-top:16px; }
+.sny-flyer-transcript summary { cursor:pointer; font:800 14px/1.5 var(--font-display); }
+.sny-flyer-text { max-width:70ch; padding-top:24px; }
+.sny-flyer-text h3:not(:first-child) { margin-top:30px; }
+@media(max-width:760px) { .sny-grid,.sny-registration,.sny-flyers { grid-template-columns:minmax(0,1fr); gap:16px; } .sny-panel { padding:18px; } }
 @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
