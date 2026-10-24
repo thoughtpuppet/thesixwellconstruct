@@ -128,7 +128,7 @@ test('real Worker keeps draft page and sitemap private, regardless of preview qu
   await env.SUBMISSIONS_DB.prepare("UPDATE events SET publication_state='published' WHERE slug='sny-00'").run();
   await env.SUBMISSIONS_DB.prepare("UPDATE site_visibility_rules SET visibility='public' WHERE path='/events/sny-00'").run();
   const published=await worker.fetch(request('/events/sny-00/'),env,{});assert.equal(published.status,200);
-  const html=await published.text();assert.match(html,/6:30–9 PM/);
+  const html=await published.text();assert.match(html,/7–9 PM/);
   assert.equal(html.match(/<p id="recordingNotice">([^<]*)<\/p>/)[1],'Promo and archive footage capture is planned. If you do not wish to be recorded, do not attend. RSVPing is also an acknowledgement and consent to being recorded.');
   assert.ok(html.indexOf('id="recordingNotice"')<html.indexOf('id="rsvpForm"'));
 });
@@ -141,24 +141,33 @@ test('unlimited launch keeps the three-person allowance, exact schedule and cano
   const annualBefore=JSON.stringify(db.prepare("SELECT * FROM events WHERE slug='solehmans-new-year'").get());
   const migration=readFileSync(join(ROOT,'migrations/0246_sny00_launch.sql'),'utf8');
   db.exec(migration);db.exec(migration);
+  const timeUpdate=readFileSync(join(ROOT,'migrations/0247_sny00_time.sql'),'utf8');
+  db.exec(timeUpdate);db.exec(timeUpdate);
   assert.equal(JSON.stringify(db.prepare("SELECT * FROM events WHERE slug='solehmans-new-year'").get()),annualBefore);
   assert.equal(db.prepare("SELECT url FROM collaborator_links WHERE entity_id='person-tyrone-hawk'").get().url,'/events/sny-00/');
   assert.equal(db.prepare("SELECT COUNT(*) n FROM entity_revisions WHERE entity_id='person-tyrone-hawk'").get().n,1);
   let context=await (await handleEventsApi(request('/api/events/sny-00/context'),env)).json();
   assert.equal(context.event.registrationOpen,true);assert.equal(context.event.rsvp.unlimited,true);
   assert.equal(context.event.rsvp.remaining,null);assert.equal(context.event.rsvp.maxPartySize,3);
+  assert.equal(new Date(context.event.startsAt).toISOString(),'2026-11-07T00:00:00.000Z');
   assert.equal(new Date(context.event.endsAt).toISOString(),'2026-11-07T02:00:00.000Z');
+  assert.match(context.event.arrivalNotes,/arrive promptly at 7 PM/);
+  assert.ok(!context.event.arrivalNotes.includes('6:30'));
   assert.match(context.event.location,/364 Nelson Street SW, Suite 12/);
   for(let i=0;i<12;i++)assert.equal((await send(env,{name:'Test Guest',email:`unlimited-${i}@example.test`,partySize:3})).status,200);
   assert.equal((await send(env,{...signup,partySize:4})).status,400);
   context=await (await handleEventsApi(request('/api/events/sny-00/context'),env)).json();
   assert.equal(context.event.rsvp.reservedHeadcount,36);assert.equal(context.event.rsvp.open,true);
+  const rsvpsBefore=JSON.stringify(db.prepare('SELECT * FROM event_rsvps ORDER BY id').all());
+  db.exec(timeUpdate);
+  assert.equal(JSON.stringify(db.prepare('SELECT * FROM event_rsvps ORDER BY id').all()),rsvpsBefore);
   const registration=db.prepare('SELECT id FROM event_rsvps LIMIT 1').get();
   assert.equal((await admin(env,'/rsvps/'+registration.id,'PATCH',{partySize:2})).status,200);
 });
 
 test('new RSVP sends one confirmation with the approved arrival details; duplicates and cron do not resend',async()=>{
   const {db,env}=fixture();db.exec(readFileSync(join(ROOT,'migrations/0246_sny00_launch.sql'),'utf8'));
+  db.exec(readFileSync(join(ROOT,'migrations/0247_sny00_time.sql'),'utf8'));
   const messages=[];env.EMAIL={send:async message=>{messages.push(message);return {id:'test-delivery'};}};
   const background=[];
   assert.equal((await worker.fetch(request('/api/events/sny-00/context'),env,{})).status,200);
@@ -168,7 +177,8 @@ test('new RSVP sends one confirmation with the approved arrival details; duplica
   await retryPendingPrivateEventRsvpConfirmations(env);
   assert.equal(messages.length,1);assert.equal(messages[0].to,'guest@example.test');
   assert.match(messages[0].subject,/RSVP confirmed — SNY 00/);
-  for(const expected of ['6:30 PM','9:00 PM','Suite 12','770-820-5800','Mangum Street','arrive promptly','art-making materials','3'])assert.ok(messages[0].text.includes(expected),expected);
+  for(const expected of ['7:00 PM','9:00 PM','Suite 12','770-820-5800','Mangum Street','arrive promptly at 7 PM','art-making materials','3'])assert.ok(messages[0].text.includes(expected),expected);
+  assert.ok(!messages[0].text.includes('6:30'));
   assert.ok(!messages[0].text.includes(signup.foodRequirements));
   assert.ok(!messages[0].text.includes('\n0\n'));
   assert.equal(db.prepare('SELECT status FROM notification_deliveries').get().status,'sent');

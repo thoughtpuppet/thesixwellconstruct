@@ -14,7 +14,7 @@ class Statement {
 export function fixture({open=false,capacity=6,maxParty=4,beforeDraft=false}={}) {
   const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON');
   for(const name of readdirSync(join(ROOT,'migrations')).filter(name=>name.endsWith('.sql')).sort()) {
-    if(name.startsWith('0246_sny00_launch') || (beforeDraft && name.startsWith('0245_'))) continue;
+    if(name.startsWith('0246_sny00_launch') || name.startsWith('0247_sny00_time') || (beforeDraft && name.startsWith('0245_'))) continue;
     db.exec(readFileSync(join(ROOT,'migrations',name),'utf8'));
   }
   if(open) {
