@@ -1,6 +1,6 @@
 {
   "event_slug": "sny-00",
-  "source": "Seven user-supplied SNY SM & FLYERS PNG attachments, supplied for the SNY00 event page on 2026-10-24.",
+  "source": "Seven user-supplied SNY SM & FLYERS PNG attachments, with the user-supplied correction to flyer 04, for the SNY00 event page on 2026-10-24.",
   "supplied_on": "2026-10-24",
   "image_changes": "None; original files copied byte for byte with URL-safe names.",
   "assets": [
@@ -66,15 +66,15 @@
     },
     {
       "sequence": 4,
-      "original_filename": "SNY SM & FLYERS-04.png",
+      "original_filename": "SNY SM & FLYERS-04(1).png",
       "asset_path": "assets/events/sny-00/sny00-flyer-04.png",
-      "asset_role": "Original supplied flyer; unchanged bytes",
+      "asset_role": "Updated original supplied flyer; unchanged bytes",
       "format": "PNG",
       "width": 1638,
       "height": 2048,
       "color_mode": "RGBA",
-      "file_size_bytes": 476020,
-      "sha256": "d7d1afeec50c9bba522e45c0d399589d5a99929816520b5d5f614503a2e4903f",
+      "file_size_bytes": 516630,
+      "sha256": "7a965bfdf68d230bcf95cdfe61fecb77da8cf488557b6c11fe413e7b0311aadf",
       "embedded_capture_datetime": null,
       "embedded_export_datetime": null,
       "camera_make": null,
@@ -82,7 +82,12 @@
       "software": null,
       "orientation": null,
       "embedded_color_profile": null,
-      "metadata_note": "No EXIF, PNG text metadata, or embedded ICC profile present. No capture, export, or artwork date inferred from filesystem timestamps."
+      "metadata_note": "No EXIF, PNG text metadata, or embedded ICC profile present. No capture, export, or artwork date inferred from filesystem timestamps.",
+      "supersedes": {
+        "original_filename": "SNY SM & FLYERS-04.png",
+        "sha256": "d7d1afeec50c9bba522e45c0d399589d5a99929816520b5d5f614503a2e4903f"
+      },
+      "correction_supplied_on": "2026-10-24"
     },
     {
       "sequence": 5,
