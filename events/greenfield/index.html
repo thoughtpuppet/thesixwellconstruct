@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GREEN[FIELD] - the six.well construct</title>
+<meta name="description" content="An intimate showcase for whatever fascinates you. Share your collections, discoveries, interests, experiments, music, poetry, or anything you are geeking out about.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
@@ -50,6 +51,11 @@
     </section>
 
     <section class="section">
+      <div class="stack">
+        <p class="section-copy" data-copy-id="greenfield-invitation">GREEN[FIELD] is an intimate showcase for whatever fascinates you: the things you are geeking out about, collecting, discovering, making, or simply cannot stop thinking about. Share them and talk about them.</p>
+        <p class="section-copy" data-copy-id="greenfield-pretty-rocks">&ldquo;show me your pretty rocks.&rdquo;</p>
+        <p class="section-copy" data-copy-id="greenfield-sharing-scope">A collection, an unusual interest, a demonstration, a personal discovery, a song, a poem, an experiment &mdash; these are just examples. You can share anything you are deeply interested in; it does not have to be art or professional creative work.</p>
+      </div>
       <div class="event-grid">
         <div class="stack">
           <div class="line-panel">
@@ -58,14 +64,14 @@
             <div class="detail-row"><span class="detail-key" data-copy-id="live-events-greenfield-span-4">Where</span><span id="ev-where" data-copy-id="live-events-greenfield-span-5">Loading</span></div>
             <div class="detail-row"><span class="detail-key" data-copy-id="live-events-greenfield-span-6">Ticket</span><span id="ev-price" data-copy-id="live-events-greenfield-span-7">Loading</span></div>
             <div class="detail-row"><span class="detail-key" data-copy-id="live-events-greenfield-span-8">Seats left</span><span id="ev-seats" data-copy-id="live-events-greenfield-span-9">Loading</span></div>
-            <div class="detail-row"><span class="detail-key" data-copy-id="live-events-greenfield-span-10">Night shape</span><span data-copy-id="live-events-greenfield-span-11">Audience entry, open mic sequence, intermission feature, then the closing run.</span></div>
+            <div class="detail-row"><span class="detail-key" data-copy-id="live-events-greenfield-span-10">Night shape</span><span data-copy-id="live-events-greenfield-span-11">Audience entry, a sequence of shared interests and presentations, an intermission feature, then the closing run.</span></div>
           </div>
 
           <article class="form-card" id="open-mic">
-            <span class="form-title" data-copy-id="live-events-greenfield-span-12">Open Mic Request</span>
-            <form class="public-form" id="micForm" novalidate data-live-edit-owner="preview" data-live-edit-label="Operational open-mic request flow">
+            <span class="form-title" data-copy-id="live-events-greenfield-span-12">Share at GREEN[FIELD]</span>
+            <form class="public-form" id="micForm" novalidate data-live-edit-owner="preview" data-live-edit-label="GREEN[FIELD] participation request flow">
               <div class="field">
-                <label for="performerName">Performer name</label>
+                <label for="performerName">Participant name</label>
                 <input id="performerName" name="performerName" autocomplete="name" required>
               </div>
               <div class="field">
@@ -83,25 +89,25 @@
               <div class="field"><label for="micReferralSource">How did you hear about me? (optional)</label><select id="micReferralSource" name="referral_source"><option value="">Choose one</option><option value="friend_family">Friend / family</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="google_search">Google / search</option><option value="event_in_person">Event / in person</option><option value="returning_client">Returning client</option><option value="other">Other</option></select></div>
               <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="newsletter_consent" value="yes"><span class="form-check__label" data-copy-id="live-events-greenfield-span-13">Send me The Six.Well newsletter by email (optional).</span></label>
               <div class="field">
-                <label for="actType">Act type</label>
-                <input id="actType" name="actType" placeholder="poem, song, monologue, movement, reading">
+                <label for="actType">How would you like to share it? (optional)</label>
+                <input id="actType" name="actType" placeholder="Talk, show, demonstrate, play, perform, or describe your own approach">
               </div>
               <div class="field">
-                <label for="pieceTitle">Piece title</label>
-                <input id="pieceTitle" name="pieceTitle">
+                <label for="pieceTitle">What would you like to share? (optional)</label>
+                <input id="pieceTitle" name="pieceTitle" placeholder="A topic, collection, discovery, work, or whatever has your attention">
               </div>
               <div class="field">
                 <label for="requestedSlot">Requested time</label>
                 <input id="requestedSlot" name="requestedSlot" placeholder="early, after intermission, around 8:30, etc.">
               </div>
               <div class="field">
-                <label for="notes">Setup / notes</label>
-                <textarea id="notes" name="notes" placeholder="Tell us anything needed for the piece, timing, intro, or setup."></textarea>
+                <label for="notes">Anything else you would like us to know? (optional)</label>
+                <textarea id="notes" name="notes" placeholder="Tell us about what you want to share, your timing, introduction, or any setup notes."></textarea>
               </div>
               <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
               <button class="submit-btn" type="submit" id="micBtn" data-copy-id="live-events-greenfield-button-1">Request a slot</button>
               <p class="form-message form-status" id="micMessage"></p>
-              <p class="form-note" data-copy-id="live-events-greenfield-p-2">Requests are not final until the host assigns a slot. You will receive an email with your time and performer notes.</p>
+              <p class="form-note" data-copy-id="live-events-greenfield-p-2">Requests are not final until the host assigns a slot. You will receive an email with your time and participation details.</p>
             </form>
           </article>
         </div>
@@ -228,7 +234,7 @@
         ticketOpen = false;
         els.ticketBtn.disabled = true;
         els.ticketBtn.textContent = "Announced";
-        els.ticketNote.textContent = "This event has been announced. Tickets and performer requests are not open yet.";
+        els.ticketNote.textContent = "This event has been announced. Tickets and participation requests are not open yet.";
         els.micBtn.disabled = true;
         els.micBtn.textContent = "Announced";
         Array.from(els.micForm.elements).forEach(function (control) { control.disabled = true; });
@@ -298,10 +304,10 @@
       document.getElementById("performerName").value = "Jordan Rivera";
       document.getElementById("performerEmail").value = "jordan@example.com";
       document.getElementById("performerPhone").value = "404-555-0144";
-      document.getElementById("actType").value = "spoken word";
-      document.getElementById("pieceTitle").value = "Small Weather";
-      document.getElementById("requestedSlot").value = "early in the open mic run";
-      document.getElementById("notes").value = "One mic, no backing track. Five minutes is enough.";
+      document.getElementById("actType").value = "collection and conversation";
+      document.getElementById("pieceTitle").value = "My rock collection";
+      document.getElementById("requestedSlot").value = "early in the showcase";
+      document.getElementById("notes").value = "I would like to show a few rocks and talk about what drew me to them.";
       if (state === "success") {
         message(els.micMessage, "Preview mode - request received. The host will assign the final slot by email.", "ok");
       } else if (state === "error") {
@@ -375,7 +381,7 @@
       var performerName = document.getElementById("performerName").value.trim();
       var performerEmail = document.getElementById("performerEmail").value.trim();
       var performerPhone = document.getElementById("performerPhone").value.trim();
-      if (!performerName) return message(els.micMessage, "Please enter your performer name.", "error");
+      if (!performerName) return message(els.micMessage, "Please enter your name.", "error");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(performerEmail)) return message(els.micMessage, "Please enter a valid email.", "error");
       if (!performerPhone) return message(els.micMessage, "Please enter your phone number.", "error");
       if (previewMode) {
