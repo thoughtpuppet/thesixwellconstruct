@@ -1,5 +1,32 @@
 # SNY 00 — private implementation review
 
+## Launch update — October 24, 2026
+
+The site owner authorized revealing, publishing, and opening SNY00, an edition
+of Solehman's New Year. Migration `0246_sny00_launch.sql` applies that launch
+configuration after deploying the matching RSVP code: unlimited capacity
+(`capacity=0`, matching shared Events), up to three people per RSVP,
+November 6 at 6:30–9 PM Eastern, and 364 Nelson Street SW, Suite 12.
+
+The page and confirmation emails include prompt arrival, optional personal
+drawing/art-making materials, entry help at 770-820-5800, and the tattoo-client
+parking instructions. The original invitation artwork is preserved; a visible
+note identifies its 7 PM start as superseded. Tyrone's link is corrected to
+`/events/sny-00/`, and his supplied documentarian relationship becomes public.
+
+Food requirements are no longer collected or edited. The legacy database
+column remains for schema compatibility and receives an empty value.
+
+Each new RSVP gets a confirmation through the existing event email identity
+and shared email renderer/delivery log. Repeated emails retain the original
+RSVP and do not resend. Failed deliveries retry on the existing scheduled
+Worker, with an atomic lease preventing concurrent retry sends. No marketing,
+payment, ticket, or actual-attendance side effect is added. The local preview
+captures test emails in memory and sends nothing externally.
+
+The earlier sections below document the original hidden draft and its review
+decisions; the launch configuration above supersedes those settings.
+
 Status: HIDDEN RELEASE PREPARED. The user authorized deploying this draft on
 October 22, 2026 while its public URL returns the existing 404 page. Its Event
 remains a closed draft and registration remains unavailable. No invitation,

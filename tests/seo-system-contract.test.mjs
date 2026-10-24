@@ -246,10 +246,16 @@ test("sitemap generation obeys authoritative visibility and excludes query state
     VALUES('/events/','hidden','descendants','test',datetime('now'))
     ON CONFLICT(path) DO UPDATE SET visibility='hidden',scope='descendants'
   `).run();
-  const xml = await sitemapXml({ SUBMISSIONS_DB: new LocalD1(database) }, ORIGIN);
+  let xml = await sitemapXml({ SUBMISSIONS_DB: new LocalD1(database) }, ORIGIN);
   assert.match(xml, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
   assert.match(xml, /<loc>https:\/\/thesixwellconstruct\.com\/about\/saieldauhnsolehman\/<\/loc>/);
   assert.doesNotMatch(xml, /<loc>https:\/\/thesixwellconstruct\.com\/gallery\/<\/loc>/);
+  // The launched SNY00 has an explicit public child rule, which takes priority
+  // over the parent descendants rule. Hiding that child removes it too.
+  assert.match(xml, /<loc>https:\/\/thesixwellconstruct\.com\/events\/sny-00\/<\/loc>/);
+  assert.doesNotMatch(xml, /<loc>https:\/\/thesixwellconstruct\.com\/events\/(?!sny-00\/)/);
+  database.prepare("UPDATE site_visibility_rules SET visibility='hidden' WHERE path='/events/sny-00'").run();
+  xml = await sitemapXml({ SUBMISSIONS_DB: new LocalD1(database) }, ORIGIN);
   assert.doesNotMatch(xml, /<loc>https:\/\/thesixwellconstruct\.com\/events\//);
   const urls = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
   assert.equal(urls.some((url) => /[?#]/.test(url)), false);

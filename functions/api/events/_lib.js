@@ -3755,7 +3755,7 @@ export async function handleAdminEventOpenMicUpdate(request, env, slug, signupId
 /* Router (called from _worker.js)                                     */
 /* ------------------------------------------------------------------ */
 
-export async function handleEventsApi(request, env) {
+export async function handleEventsApi(request, env, ctx) {
   const url = new URL(request.url);
   const { method } = request;
   // /api/events                              -> list bookable events
@@ -3792,7 +3792,7 @@ export async function handleEventsApi(request, env) {
   }
   if (action === "rsvp" && parts.length === 4) {
     if (method !== "POST") return errorResponse("Method not allowed.",405);
-    return handlePrivateEventRsvp(request,env,slug);
+    return handlePrivateEventRsvp(request,env,slug,ctx);
   }
   if (action === "waitlist") {
     if (method !== "POST") return errorResponse("Method not allowed.", 405);

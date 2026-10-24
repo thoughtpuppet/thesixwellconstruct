@@ -1,7 +1,8 @@
 // Free, private event registration and later paper-sheet reconciliation.
-// No email, CRM, marketing-consent, payment, or public-archive side effects.
+// Confirmation email uses the shared delivery log; no CRM, marketing or payment.
 import { publicPageVisibilityDecision } from '../site-visibility/_lib.js';
-const RECEIVED = 'Your RSVP has been received. If you already registered, your original RSVP is kept. Contact the organizer for changes.';
+import { notifyEventRsvpConfirmed } from '../notifications/_lib.js';
+const RECEIVED = 'Your RSVP has been received. A confirmation email will follow. If you already registered, your original RSVP is kept. Contact the organizer for changes.';
 const json = (data, status=200) => Response.json(data, {status, headers:{'cache-control':'no-store'}});
 const fail = (error, status=400) => json({error}, status);
 const text = value => typeof value === 'string' ? value.trim() : '';
@@ -43,53 +44,100 @@ export async function privateRsvpContext(db,event) {
   return {
     occurrenceId:date.occurrence_id,
     reservedHeadcount:total,
-    remaining:Math.max(0,date.capacity-total),
+    remaining:date.capacity>0 ? Math.max(0,date.capacity-total) : null,
+    unlimited:date.capacity===0,
     maxPartySize:date.max_seats_per_order,
     open:date.publication_state==='published' && date.event_status==='open' && date.status==='open'
-      && date.capacity>total && Date.parse(date.ends_at || date.starts_at)>Date.now(),
+      && (date.capacity===0 || date.capacity>total) && Date.parse(date.ends_at || date.starts_at)>Date.now(),
   };
 }
 
-export async function handlePrivateEventRsvp(request,env,slug) {
+export async function handlePrivateEventRsvp(request,env,slug,ctx) {
   if((await publicPageVisibilityDecision(`/events/${slug}/`,env)).hidden) return fail('Event not found.',404);
   const body=await payload(request);
   if(!body) return fail('Expected a small JSON registration.');
   if(text(body._gotcha)) return json({ok:true,message:RECEIVED});
   const name=text(body.name),email=text(body.email).toLowerCase();
-  const seats=integer(body.partySize),food=text(body.foodRequirements);
+  const seats=integer(body.partySize);
   if(!name || name.length>120) return fail('Enter your name (up to 120 characters).');
   if(email.length>254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail('Enter a valid email.');
   if(!Number.isInteger(seats) || seats<1 || seats>99) return fail('Enter a whole party size of at least 1, including you.');
-  if((body.foodRequirements!==undefined && typeof body.foodRequirements!=='string') || food.length>500) return fail('Keep the optional food note under 501 characters.');
   const db=env.SUBMISSIONS_DB;
   if(!db) return fail('Registration is unavailable.',503);
   try {
     const date=await eventDate(db,slug,text(body.occurrenceId));
     if(!date || !date.private_rsvp_enabled || date.publication_state!=='published') return fail('Event not found.',404);
-    if(date.event_status!=='open' || date.status!=='open' || date.capacity<=0
+    if(date.event_status!=='open' || date.status!=='open'
       || Date.parse(date.ends_at || date.starts_at)<=Date.now()) return fail('RSVP is closed.',409);
     if(seats>date.max_seats_per_order) return fail(`Reserve at most ${date.max_seats_per_order} people per RSVP.`);
     const now=new Date().toISOString();
     // One atomic statement checks current capacity and inserts. Unique identity
     // makes retries/racing duplicate requests keep the first private record.
+    const registrationId=crypto.randomUUID();
     const result=await db.prepare(`INSERT INTO event_rsvps
       (id,event_id,occurrence_id,contact_name,contact_email,party_size,food_requirements,status,created_at,updated_at)
       SELECT ?,e.id,o.id,?,?,?,?,'confirmed',?,?
       FROM events e JOIN event_occurrences o ON o.event_id=e.id
       WHERE e.id=? AND o.id=? AND e.private_rsvp_enabled=1 AND e.publication_state='published'
-        AND e.status='open' AND o.status='open' AND o.capacity>0 AND ?<=o.max_seats_per_order
+        AND e.status='open' AND o.status='open' AND ?<=o.max_seats_per_order
         AND julianday(COALESCE(o.ends_at,o.starts_at))>julianday(?)
-        AND ?+COALESCE((SELECT SUM(party_size) FROM event_rsvps WHERE occurrence_id=o.id AND status='confirmed'),0)<=o.capacity
+        AND (o.capacity=0 OR ?+COALESCE((SELECT SUM(party_size) FROM event_rsvps WHERE occurrence_id=o.id AND status='confirmed'),0)<=o.capacity)
       ON CONFLICT(event_id,occurrence_id,contact_email) DO NOTHING`)
-      .bind(crypto.randomUUID(),name,email,seats,food,now,now,date.event_id,date.occurrence_id,seats,now,seats).run();
+      .bind(registrationId,name,email,seats,'',now,now,date.event_id,date.occurrence_id,seats,now,seats).run();
     if(!result.meta?.changes) {
       const existing=await db.prepare('SELECT id FROM event_rsvps WHERE event_id=? AND occurrence_id=? AND contact_email=?').bind(date.event_id,date.occurrence_id,email).first();
       if(!existing) return fail('There is not enough space for that party. Please contact the organizer.',409);
+    } else {
+      const confirmation=deliverPrivateEventRsvpConfirmation(env,registrationId)
+        .catch(()=>console.warn('RSVP confirmation queued for retry.'));
+      if(ctx?.waitUntil) ctx.waitUntil(confirmation);
+      else await confirmation;
     }
     // Identical response for new and repeated submissions: no roster, email,
     // food note, registration ID, or bearer receipt is exposed publicly.
     return json({ok:true,message:RECEIVED});
   } catch {return fail('Unable to save your RSVP. Please try again.',500);}
+}
+
+// The existing delivery table is the durable queue. An atomic two-minute lease
+// prevents concurrent requests/cron runs sending the same confirmation twice.
+async function deliverPrivateEventRsvpConfirmation(env,registrationId) {
+  const db=env.SUBMISSIONS_DB;
+  const registration=await db.prepare(`SELECT r.*,e.title,e.slug,e.description,e.included,e.arrival_notes,e.contact_note,
+      COALESCE(o.starts_at,e.starts_at) AS starts_at,COALESCE(o.ends_at,e.ends_at) AS ends_at,
+      COALESCE(NULLIF(o.location,''),e.location) AS location
+    FROM event_rsvps r JOIN events e ON e.id=r.event_id
+    JOIN event_occurrences o ON o.id=r.occurrence_id WHERE r.id=? AND r.status='confirmed'`)
+    .bind(registrationId).first();
+  if(!registration) return {ok:false,skipped:true};
+  const now=new Date().toISOString(),key=`event_rsvp_confirmed:${registration.id}`;
+  const claim=await db.prepare(`INSERT INTO notification_deliveries
+      (id,channel,template_key,recipient,subject,related_type,related_id,idempotency_key,status,created_at)
+    VALUES (?,'email','event_rsvp_confirmed',?,?,'event_rsvp',?,?,'pending',?)
+    ON CONFLICT(idempotency_key) DO UPDATE SET status='pending',created_at=excluded.created_at
+      WHERE notification_deliveries.status IN ('pending','failed')
+        AND julianday(notification_deliveries.created_at)<=julianday(excluded.created_at)-2.0/1440`)
+    .bind(crypto.randomUUID(),registration.contact_email,`RSVP confirmed — ${registration.title}`,registration.id,key,now).run();
+  if(!claim.meta?.changes) return {ok:true,skipped:true};
+  return notifyEventRsvpConfirmed(env,registration);
+}
+
+export async function retryPendingPrivateEventRsvpConfirmations(env) {
+  const db=env.SUBMISSIONS_DB;
+  if(!db) return {sent:0,failed:0};
+  const retryBefore=new Date(Date.now()-2*60*1000).toISOString();
+  const pending=await db.prepare(`SELECT r.id FROM event_rsvps r
+    JOIN events e ON e.id=r.event_id
+    LEFT JOIN notification_deliveries n ON n.idempotency_key='event_rsvp_confirmed:'||r.id
+    WHERE r.status='confirmed' AND e.private_rsvp_enabled=1
+      AND (n.id IS NULL OR (n.status IN ('pending','failed') AND julianday(n.created_at)<=julianday(?)))
+    ORDER BY r.created_at LIMIT 25`).bind(retryBefore).all();
+  let sent=0,failed=0;
+  for(const row of pending.results || []) {
+    try {const result=await deliverPrivateEventRsvpConfirmation(env,row.id);if(result.ok&&!result.skipped)sent++;else if(!result.ok)failed++;}
+    catch {failed++;}
+  }
+  return {sent,failed};
 }
 
 // Caller enforces the existing Studio admin credential before entering here.
@@ -115,12 +163,10 @@ export async function handlePrivateEventAdmin(request,env,slug,action,recordId) 
       if(!row) return fail('RSVP not found.',404);
       if(!body) return fail('Expected JSON.');
       const status=body.status ?? row.status,seats=body.partySize===undefined ? row.party_size : integer(body.partySize);
-      const food=body.foodRequirements===undefined ? row.food_requirements : text(body.foodRequirements);
-      if(!['confirmed','cancelled'].includes(status) || !Number.isInteger(seats) || seats<1 || seats>date.max_seats_per_order || food.length>500
-        || (body.foodRequirements!==undefined && typeof body.foodRequirements!=='string')) return fail('Check status, party size, and food note.');
+      if(!['confirmed','cancelled'].includes(status) || !Number.isInteger(seats) || seats<1 || seats>date.max_seats_per_order) return fail('Check status and party size.');
       const update=await db.prepare(`UPDATE event_rsvps SET status=?,party_size=?,food_requirements=?,updated_at=? WHERE id=?
-        AND (?='cancelled' OR ?+COALESCE((SELECT SUM(party_size) FROM event_rsvps WHERE occurrence_id=? AND status='confirmed' AND id<>?),0)<=?)`)
-        .bind(status,seats,food,new Date().toISOString(),row.id,status,seats,date.occurrence_id,row.id,date.capacity).run();
+        AND (?='cancelled' OR ?=0 OR ?+COALESCE((SELECT SUM(party_size) FROM event_rsvps WHERE occurrence_id=? AND status='confirmed' AND id<>?),0)<=?)`)
+        .bind(status,seats,'',new Date().toISOString(),row.id,status,date.capacity,seats,date.occurrence_id,row.id,date.capacity).run();
       if(!update.meta?.changes) return fail('That change exceeds capacity.',409);
       return json({ok:true});
     }

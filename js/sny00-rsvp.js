@@ -14,7 +14,7 @@
       var rsvp=data.event && data.event.rsvp;
       if(!rsvp || !rsvp.open) {availability.textContent='RSVP is currently closed.'; return;}
       occurrenceId=rsvp.occurrenceId;
-      party.max=String(Math.min(rsvp.maxPartySize,rsvp.remaining));
+      party.max=String(rsvp.unlimited ? rsvp.maxPartySize : Math.min(rsvp.maxPartySize,rsvp.remaining));
       document.getElementById('partyHelp').textContent='Up to '+rsvp.maxPartySize+' people per RSVP, including you.';
       availability.textContent='RSVP is open.';
       fields.disabled=false;
@@ -29,7 +29,7 @@
       var response=await fetch('/api/events/sny-00/rsvp',{
         method:'POST',headers:{'content-type':'application/json'},credentials:'same-origin',
         body:JSON.stringify({name:values.get('name'),email:values.get('email'),partySize:Number(values.get('partySize')),
-          foodRequirements:values.get('foodRequirements'),_gotcha:values.get('_gotcha'),occurrenceId:occurrenceId})
+          _gotcha:values.get('_gotcha'),occurrenceId:occurrenceId})
       });
       var data=await response.json();
       if(!response.ok) throw new Error(data.error || 'Unable to save your RSVP.');

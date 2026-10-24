@@ -118,6 +118,7 @@ import {
   handleEventsSquareWebhook,
   reapStalePendingTickets,
 } from "./functions/api/events/_lib.js";
+import { retryPendingPrivateEventRsvpConfirmations } from "./functions/api/events/_rsvp.js";
 import {
   handleCalendarAdminApi,
   handleCalendarFeed,
@@ -2199,7 +2200,7 @@ export default {
     }
 
     if (url.pathname === "/api/events" || url.pathname.startsWith("/api/events/")) {
-      return handleEventsApi(request, env);
+      return handleEventsApi(request, env, ctx);
     }
 
     if (
@@ -2519,6 +2520,7 @@ export default {
     ctx.waitUntil(runIcloudCalendarSync(env, "scheduled"));
     ctx.waitUntil(sendDueAppointmentReminders(env));
     ctx.waitUntil(sendDueEventTicketReminders(env));
+    ctx.waitUntil(retryPendingPrivateEventRsvpConfirmations(env));
     ctx.waitUntil(sendDueExperimentalHealedReminders(env));
     ctx.waitUntil(reapStalePendingTickets(env));
     ctx.waitUntil(reapExpiredBookingHolds(env));

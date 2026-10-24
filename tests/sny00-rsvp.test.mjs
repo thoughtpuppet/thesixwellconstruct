@@ -6,6 +6,7 @@ import {fixture,request,ROOT} from './helpers/sny00-fixture.mjs';
 import {handleEventsApi,handleAdminEventsApi} from '../functions/api/events/_lib.js';
 import worker from '../_worker.js';
 import {handleAdminSiteVisibility} from '../functions/api/site-visibility/_lib.js';
+import {retryPendingPrivateEventRsvpConfirmations} from '../functions/api/events/_rsvp.js';
 const signup={name:'Test Guest',email:'guest@example.test',partySize:2,foodRequirements:'No peanuts, please.'};
 before(()=>mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-21T12:00:00Z')}));
 after(()=>mock.timers.reset());
@@ -36,7 +37,7 @@ test('draft seed stops for an existing matching title or instant under another s
   }
 });
 
-test('draft/announced/closed/ended/unknown capacity stay nontransactional; private admin auth is required',async()=>{
+test('draft/announced/closed/ended states stay nontransactional; private admin auth is required',async()=>{
   const {db,env}=fixture();
   assert.equal((await handleEventsApi(request('/api/events/sny-00/context'),env)).status,404);
   assert.equal((await send(env)).status,404);
@@ -47,20 +48,18 @@ test('draft/announced/closed/ended/unknown capacity stay nontransactional; priva
     db.prepare('UPDATE events SET publication_state=? WHERE id=?').run(state,'evt_sny_00');
     assert.equal((await send(env)).status,state==='announced'?404:409);
   }
-  db.exec("UPDATE events SET status='open' WHERE id='evt_sny_00'; UPDATE event_occurrences SET status='open' WHERE event_id='evt_sny_00'");
-  assert.equal((await send(env)).status,409);
-  db.exec("UPDATE event_occurrences SET capacity=6,ends_at='2020-01-01T00:00:00Z' WHERE event_id='evt_sny_00'");
+  db.exec("UPDATE events SET status='open' WHERE id='evt_sny_00'; UPDATE event_occurrences SET status='open',capacity=6,ends_at='2020-01-01T00:00:00Z' WHERE event_id='evt_sny_00'");
   assert.equal((await send(env)).status,409);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM event_rsvps').get().n,0);
 });
 
-test('RSVP uses minimal fields, keeps food private, confirms on page, and retries never change the original',async()=>{
+test('RSVP ignores removed food fields, keeps contacts private, and retries never change the original',async()=>{
   const {db,env}=fixture({open:true});
   const first=await send(env);assert.equal(first.status,200);
   const result=await first.json();assert.deepEqual(Object.keys(result).sort(),['message','ok']);assert.equal(result.ok,true);
   const retry=await send(env,{...signup,email:' GUEST@EXAMPLE.TEST ',name:'Other name',partySize:3,foodRequirements:'changed'});
   assert.deepEqual(await retry.json(),result);
-  const row=db.prepare('SELECT * FROM event_rsvps').get();assert.equal(row.contact_name,'Test Guest');assert.equal(row.party_size,2);assert.equal(row.food_requirements,signup.foodRequirements);
+  const row=db.prepare('SELECT * FROM event_rsvps').get();assert.equal(row.contact_name,'Test Guest');assert.equal(row.party_size,2);assert.equal(row.food_requirements,'');
   const context=await handleEventsApi(request('/api/events/sny-00/context'),env);const publicText=await context.text();
   assert.ok(!publicText.includes(signup.email));assert.ok(!publicText.includes(signup.name));assert.ok(!publicText.includes(signup.foodRequirements));
   assert.equal(JSON.parse(publicText).event.rsvp.reservedHeadcount,2);
@@ -68,13 +67,14 @@ test('RSVP uses minimal fields, keeps food private, confirms on page, and retrie
   assert.equal(db.prepare('SELECT COUNT(*) n FROM event_attendance').get().n,0);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM event_tickets').get().n,0);
   for(const [action,body] of [['checkout',{name:signup.name,email:signup.email,phone:'000-000-0000',seats:1}],['waitlist',{name:signup.name,email:signup.email,phone:'000-000-0000'}],['open-mic',{performerName:signup.name,performerEmail:signup.email,performerPhone:'000-000-0000',actType:'Other',pieceTitle:'Test'}]]) assert.equal((await handleEventsApi(request('/api/events/sny-00/'+action,{method:'POST',body}),env)).status,409);
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM notification_deliveries').get().n,0);
-  const privateData=await (await admin(env,'/rsvps')).json();assert.equal(privateData.registrations[0].food_requirements,signup.foodRequirements);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM notification_deliveries').get().n,1);
+  assert.equal(db.prepare('SELECT status FROM notification_deliveries').get().status,'pending');
+  const privateData=await (await admin(env,'/rsvps')).json();assert.equal(privateData.registrations[0].food_requirements,'');
 });
 
 test('validation rejects malformed, fractional, zero, overlarge and cross-event submissions',async()=>{
   const {env,db}=fixture({open:true});
-  for(const body of [{...signup,name:''},{...signup,email:'invalid'},{...signup,partySize:0},{...signup,partySize:-1},{...signup,partySize:1.2},{...signup,partySize:'2people'},{...signup,partySize:5},{...signup,foodRequirements:'x'.repeat(501)},{...signup,foodRequirements:{}},{...signup,name:'x'.repeat(121)}]) assert.equal((await send(env,body)).status,400,JSON.stringify(body));
+  for(const body of [{...signup,name:''},{...signup,email:'invalid'},{...signup,partySize:0},{...signup,partySize:-1},{...signup,partySize:1.2},{...signup,partySize:'2people'},{...signup,partySize:5},{...signup,name:'x'.repeat(121)}]) assert.equal((await send(env,body)).status,400,JSON.stringify(body));
   assert.equal((await send(env,{...signup,occurrenceId:'occ_evt_signal_symbol'})).status,404);
   assert.equal((await send(env,{...signup,_gotcha:'bot'})).status,200);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM event_rsvps').get().n,0);
@@ -128,9 +128,63 @@ test('real Worker keeps draft page and sitemap private, regardless of preview qu
   await env.SUBMISSIONS_DB.prepare("UPDATE events SET publication_state='published' WHERE slug='sny-00'").run();
   await env.SUBMISSIONS_DB.prepare("UPDATE site_visibility_rules SET visibility='public' WHERE path='/events/sny-00'").run();
   const published=await worker.fetch(request('/events/sny-00/'),env,{});assert.equal(published.status,200);
-  const html=await published.text();assert.match(html,/6:30–9:30 PM/);
+  const html=await published.text();assert.match(html,/6:30–9 PM/);
   assert.equal(html.match(/<p id="recordingNotice">([^<]*)<\/p>/)[1],'Promo and archive footage capture is planned. If you do not wish to be recorded, do not attend. RSVPing is also an acknowledgement and consent to being recorded.');
   assert.ok(html.indexOf('id="recordingNotice"')<html.indexOf('id="rsvpForm"'));
+});
+
+test('unlimited launch keeps the three-person allowance, exact schedule and canonical collaborator link',async()=>{
+  const {db,env}=fixture();
+  db.exec(`INSERT INTO content_entities(id,entity_type,created_at,updated_at) VALUES('person-tyrone-hawk','person',datetime('now'),datetime('now'));
+    INSERT INTO collaborator_profiles(entity_id,slug,created_at,updated_at) VALUES('person-tyrone-hawk','tyrone-hawk',datetime('now'),datetime('now'));
+    INSERT INTO collaborator_links(entity_id,label,url,public_visible) VALUES('person-tyrone-hawk','SNY00','/sny-00',1)`);
+  const annualBefore=JSON.stringify(db.prepare("SELECT * FROM events WHERE slug='solehmans-new-year'").get());
+  const migration=readFileSync(join(ROOT,'migrations/0246_sny00_launch.sql'),'utf8');
+  db.exec(migration);db.exec(migration);
+  assert.equal(JSON.stringify(db.prepare("SELECT * FROM events WHERE slug='solehmans-new-year'").get()),annualBefore);
+  assert.equal(db.prepare("SELECT url FROM collaborator_links WHERE entity_id='person-tyrone-hawk'").get().url,'/events/sny-00/');
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM entity_revisions WHERE entity_id='person-tyrone-hawk'").get().n,1);
+  let context=await (await handleEventsApi(request('/api/events/sny-00/context'),env)).json();
+  assert.equal(context.event.registrationOpen,true);assert.equal(context.event.rsvp.unlimited,true);
+  assert.equal(context.event.rsvp.remaining,null);assert.equal(context.event.rsvp.maxPartySize,3);
+  assert.equal(new Date(context.event.endsAt).toISOString(),'2026-11-07T02:00:00.000Z');
+  assert.match(context.event.location,/364 Nelson Street SW, Suite 12/);
+  for(let i=0;i<12;i++)assert.equal((await send(env,{name:'Test Guest',email:`unlimited-${i}@example.test`,partySize:3})).status,200);
+  assert.equal((await send(env,{...signup,partySize:4})).status,400);
+  context=await (await handleEventsApi(request('/api/events/sny-00/context'),env)).json();
+  assert.equal(context.event.rsvp.reservedHeadcount,36);assert.equal(context.event.rsvp.open,true);
+  const registration=db.prepare('SELECT id FROM event_rsvps LIMIT 1').get();
+  assert.equal((await admin(env,'/rsvps/'+registration.id,'PATCH',{partySize:2})).status,200);
+});
+
+test('new RSVP sends one confirmation with the approved arrival details; duplicates and cron do not resend',async()=>{
+  const {db,env}=fixture();db.exec(readFileSync(join(ROOT,'migrations/0246_sny00_launch.sql'),'utf8'));
+  const messages=[];env.EMAIL={send:async message=>{messages.push(message);return {id:'test-delivery'};}};
+  const background=[];
+  assert.equal((await handleEventsApi(request('/api/events/sny-00/rsvp',{method:'POST',body:{...signup,partySize:3}}),env,{waitUntil:promise=>background.push(promise)})).status,200);
+  assert.equal(background.length,1);await Promise.all(background);
+  assert.equal((await send(env,{...signup,email:' GUEST@EXAMPLE.TEST ',partySize:1})).status,200);
+  await retryPendingPrivateEventRsvpConfirmations(env);
+  assert.equal(messages.length,1);assert.equal(messages[0].to,'guest@example.test');
+  assert.match(messages[0].subject,/RSVP confirmed — SNY 00/);
+  for(const expected of ['6:30 PM','9:00 PM','Suite 12','770-820-5800','Mangum Street','arrive promptly','art-making materials','3'])assert.ok(messages[0].text.includes(expected),expected);
+  assert.ok(!messages[0].text.includes(signup.foodRequirements));
+  assert.ok(!messages[0].text.includes('\n0\n'));
+  assert.equal(db.prepare('SELECT status FROM notification_deliveries').get().status,'sent');
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM event_tickets').get().n,0);
+});
+
+test('failed confirmations retry from the shared delivery log under an atomic lease',async()=>{
+  const {db,env}=fixture({open:true});
+  let calls=0;env.EMAIL={send:async()=>{calls++;throw new Error('Test mail outage');}};
+  assert.equal((await send(env)).status,200);assert.equal(calls,1);
+  assert.equal(db.prepare('SELECT status FROM notification_deliveries').get().status,'failed');
+  env.EMAIL.send=async()=>{calls++;return {id:'recovered'};};
+  await retryPendingPrivateEventRsvpConfirmations(env);assert.equal(calls,1);
+  db.exec("UPDATE notification_deliveries SET created_at='2020-01-01T00:00:00Z'");
+  await Promise.all([retryPendingPrivateEventRsvpConfirmations(env),retryPendingPrivateEventRsvpConfirmations(env)]);
+  assert.equal(calls,2);assert.equal(db.prepare('SELECT status FROM notification_deliveries').get().status,'sent');
+  await retryPendingPrivateEventRsvpConfirmations(env);assert.equal(calls,2);
 });
 
 test('existing Studio visibility controls hide SNY 00 and its RSVP lane even if event operations are open',async()=>{

@@ -3084,6 +3084,42 @@ export async function notifyAppointmentCancelled(env, request, appointmentRow, o
   });
 }
 
+export async function notifyEventRsvpConfirmed(env, registration) {
+  const eventUrl = publicUrl(env, null, `/events/${encodeURIComponent(registration.slug)}/`);
+  const message = renderClientEmail({
+    templateKey: "event_rsvp_confirmed",
+    theme: "construct_event",
+    subject: `RSVP confirmed — ${registration.title}`,
+    preheader: `Your arrival details for ${registration.title}.`,
+    classification: "EVENT RSVP",
+    headline: `Your RSVP is confirmed for ${registration.title}.`,
+    greeting: `Hi ${registration.contact_name || "there"},`,
+    intro: registration.description ? [registration.description] : [],
+    details: [
+      { label: "People attending, including you", value: String(registration.party_size) },
+      { label: "When", value: [formatDate(registration.starts_at), registration.ends_at ? formatDate(registration.ends_at) : ""].filter(Boolean).join(" – ") },
+      { label: "Where", value: registration.location },
+    ],
+    sections: [
+      registration.arrival_notes ? { title: "Arrival and parking", paragraphs: [registration.arrival_notes] } : null,
+      registration.included ? { title: "What to bring", paragraphs: [registration.included] } : null,
+    ].filter(Boolean),
+    primaryAction: { label: "Event details", href: eventUrl },
+    outro: [registration.contact_note, "This RSVP does not subscribe you to marketing."].filter(Boolean),
+    signature: { closing: "See you there,", name: "Saiel Solehman", mark: "the six.well construct" },
+  });
+  return sendTransactionalEmail(env, {
+    to: registration.contact_email,
+    ...eventsEmailIdentity(env),
+    ...message,
+    durable: true,
+    templateKey: "event_rsvp_confirmed",
+    relatedType: "event_rsvp",
+    relatedId: registration.id,
+    idempotencyKey: `event_rsvp_confirmed:${registration.id}`,
+  });
+}
+
 export async function notifyEventTicketPaid(env, request, ticketRow, options = {}) {
   const email = ticketRow.contact_email || ticketRow.contactEmail || "";
   if (!email) return { ok: false, skipped: true };

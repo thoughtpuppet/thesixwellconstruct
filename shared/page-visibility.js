@@ -44,7 +44,6 @@ export const PAGE_VISIBILITY_PAGES = Object.freeze([
 ]);
 
 export const PAGE_VISIBILITY_DEFAULT_RULES = Object.freeze([
-  { path: "/events/sny-00", visibility: "hidden", scope: "descendants" },
   { path: "/film", visibility: "hidden", scope: "exact" },
   { path: "/music", visibility: "hidden", scope: "exact" },
   { path: "/tattoos/build", visibility: "hidden", scope: "descendants" },
