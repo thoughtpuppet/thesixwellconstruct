@@ -18,6 +18,7 @@ export const BOOKING_PUSH_SAMPLES = Object.freeze([
   { id: 'appointment_group_confirmed', label: 'multiple appointments confirmed' },
   { id: 'appointment_rescheduled', label: 'appointment rescheduled' },
   { id: 'appointment_cancelled', label: 'appointment canceled' },
+  { id: 'event_rsvp', label: 'SNY00 RSVP' },
 ]);
 const DEVICE_LIMIT = 10;
 const MAX_ATTEMPTS = 5;
@@ -127,12 +128,12 @@ export async function handleBookingPushApi(request, env) {
         return json({ error: 'Unknown sample alert type.' }, 400);
       }
       const sampleName = notificationName(body.clientName);
-      if (body.scenario && !sampleName) return json({ error: 'Enter a name for the sample alerts.' }, 400);
+      if (body.scenario && body.scenario !== 'event_rsvp' && !sampleName) return json({ error: 'Enter a name for the sample alerts.' }, 400);
       const device = await db.prepare('SELECT * FROM booking_push_subscriptions WHERE endpoint = ?').bind(String(body.endpoint || '')).first();
       if (!device) return json({ error: 'Enable notifications on this device first.' }, 404);
       const eventKey = `test:${crypto.randomUUID()}`;
       const payload = body.scenario ? samplePayload(body.scenario, sampleName) : {
-        title: 'Test Alert', body: 'This device is ready for inquiries and appointment updates.', url: '/studio/bookings/',
+        title: 'Test Alert', body: 'This device is ready for inquiries, appointment updates, and SNY00 RSVPs.', url: '/studio/bookings/',
       };
       const result = await enqueuePush(env, eventKey, { ...payload, tag: eventKey }, [device]);
       return json(result.sent ? result : { ...result, error: 'The push service did not accept the test alert. Try reconnecting notifications.' }, result.sent ? 200 : 502);
@@ -147,6 +148,21 @@ export async function handleBookingPushApi(request, env) {
 export async function notifyBookingRequestPush(env, submission) {
   if (!env.SUBMISSIONS_DB || !BOOKING_REQUEST_TYPES.includes(submission.type) || !submission.id) return { skipped: true };
   return notifyOwnerDevices(env, `request:${submission.id}`, requestPayload(submission));
+}
+
+export async function notifyEventRsvpPush(env, registration) {
+  if (!registration?.id || registration.slug !== 'sny-00' || registration.status !== 'confirmed') return { skipped: true };
+  const eventKey = `event_rsvp:${registration.id}`;
+  return notifyOwnerDevices(env, eventKey, { ...eventRsvpPayload(registration), tag: eventKey });
+}
+
+function eventRsvpPayload(registration) {
+  const count = Number(registration.party_size);
+  return {
+    title: 'New RSVP · SNY00',
+    body: `${count} ${count === 1 ? 'person' : 'people'} · Open the private guest list.`,
+    url: '/studio/bookings/?event=sny-00',
+  };
 }
 
 function requestPayload(submission) {
@@ -202,6 +218,10 @@ function appointmentPayload(event, appointment) {
 }
 
 function samplePayload(scenario, name) {
+  if (scenario === 'event_rsvp') {
+    const payload = eventRsvpPayload({ party_size: 2 });
+    return { ...payload, body: `TEST · ${payload.body}` };
+  }
   const appointment = { clientName: name, startAt: new Date(Date.now() + 7 * 86400000).toISOString(),
     checkoutGroupSize: scenario === 'appointment_group_confirmed' ? 3 : 1 };
   const event = scenario === 'appointment_group_confirmed' ? 'confirmed' : scenario.replace('appointment_', '');

@@ -11,6 +11,7 @@ const date = (value) => value ? new Intl.DateTimeFormat('en-US', { dateStyle: 'm
 const human = (value) => String(value || '').replace(/_/g, ' ');
 let token = localStorage.getItem(TOKEN_KEY) || '';
 let epoch = 0, rows = [], nextCursor = null, currentDetail = null, config = null, registered = null, subscription = null, pushBusy = false;
+let guestGeneration = 0;
 const objectUrls = [];
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const iphone = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -38,6 +39,8 @@ function lock(message = '') {
   localStorage.removeItem(TOKEN_KEY);
   rows = []; nextCursor = null; config = null;
   if ($('request-dialog').open) $('request-dialog').close();
+  if ($('guest-dialog').open) $('guest-dialog').close();
+  clearGuests();
   clearDetail();
   pushResult('');
   $('request-list').replaceChildren();
@@ -84,6 +87,39 @@ async function loadInbox(append = false) {
   renderRows();
   status('');
   $('request-list').setAttribute('aria-busy', 'false');
+}
+
+function clearGuests() {
+  guestGeneration++;
+  $('guest-list').replaceChildren();
+  $('guest-summary').textContent = '';
+  $('guest-list').setAttribute('aria-busy', 'false');
+}
+
+async function openGuests() {
+  const generation = ++guestGeneration;
+  $('guest-list').setAttribute('aria-busy', 'true');
+  status('Loading SNY00 guest list…');
+  try {
+    const data = await api('/api/admin/events/sny-00/rsvps');
+    if (generation !== guestGeneration) return;
+    const registrations = data.registrations || [];
+    const confirmed = registrations.filter((row) => row.status === 'confirmed');
+    const people = data.summary.rsvpHeadcount;
+    $('guest-summary').textContent = `${confirmed.length} confirmed ${confirmed.length === 1 ? 'RSVP' : 'RSVPs'} · ${people} ${people === 1 ? 'person' : 'people'} planned`;
+    $('guest-list').innerHTML = registrations.length ? [...registrations].reverse().map((row) => `
+      <details class="guest-card">
+        <summary><span class="card-name">${escape(row.contact_name)}</span><span class="card-type">${escape(row.party_size)} ${row.party_size === 1 ? 'person' : 'people'} · ${escape(human(row.status))}</span></summary>
+        <dl class="detail-fields"><div><dt>Email</dt><dd>${escape(row.contact_email)}</dd></div><div><dt>RSVP received</dt><dd>${escape(date(row.created_at))}</dd></div></dl>
+      </details>`).join('') : '<div class="empty-state"><h2>No RSVPs yet.</h2><p>New SNY00 RSVPs will appear here.</p></div>';
+    if (!$('guest-dialog').open) $('guest-dialog').showModal();
+    const url = new URL(location.href);
+    url.searchParams.delete('request'); url.searchParams.set('event', 'sny-00');
+    history.replaceState(null, '', url);
+    status('');
+  } finally {
+    if (generation === guestGeneration) $('guest-list').setAttribute('aria-busy', 'false');
+  }
 }
 
 function fields(submission) {
@@ -172,6 +208,8 @@ function renderPush() {
   $('enable-push').disabled = pushBusy || (!config?.configured && !config?.canActivate) || !supported || installNeeded || Notification.permission === 'denied';
   $('test-push').hidden = !subscription || !config?.configured;
   $('test-push').disabled = pushBusy;
+  $('test-rsvp-push').hidden = !subscription || !config?.configured;
+  $('test-rsvp-push').disabled = pushBusy;
   $('disable-push').hidden = !subscription;
   $('disable-push').disabled = pushBusy;
   $('sample-push-controls').hidden = !subscription || !config?.configured || !config.sampleTypes?.length;
@@ -181,8 +219,8 @@ function renderPush() {
   else if (!config?.configured && !config?.canActivate) { $('alerts-summary').textContent = 'Not activated'; $('push-status').textContent = 'Phone alerts are paused on the website. Your booking inbox still works.'; }
   else if (!supported) { $('alerts-summary').textContent = 'Unavailable here'; $('push-status').textContent = 'This browser does not support phone alerts. Open the app on a supported device.'; }
   else if (Notification.permission === 'denied') { $('alerts-summary').textContent = 'Blocked'; $('push-status').textContent = 'Allow notifications in your device settings, then reopen the app.'; }
-  else if (subscription) { $('alerts-summary').textContent = 'On'; $('push-status').textContent = 'Get alerts for new inquiries, confirmed bookings, reschedules, and cancellations. Send a test alert to check delivery.'; }
-  else { $('alerts-summary').textContent = 'Off'; $('push-status').textContent = 'Get alerts for new inquiries and appointment updates.'; }
+  else if (subscription) { $('alerts-summary').textContent = 'On'; $('push-status').textContent = 'Get alerts for new inquiries, confirmed bookings, reschedules, cancellations, and SNY00 RSVPs. Send a test alert to check delivery.'; }
+  else { $('alerts-summary').textContent = 'Off'; $('push-status').textContent = 'Get alerts for new inquiries, appointment updates, and SNY00 RSVPs.'; }
 }
 
 async function configurePush() {
@@ -241,19 +279,22 @@ async function sendTestAlert(body) {
   } finally { clearTimeout(timeout); }
 }
 
-async function testPush() {
+async function testPush(scenario = '') {
   if (pushBusy) return;
-  const button = $('test-push');
+  const button = $(scenario === 'event_rsvp' ? 'test-rsvp-push' : 'test-push');
+  const label = button.textContent, generation = epoch;
   pushBusy = true; renderPush();
   button.textContent = 'Sending…';
   pushResult('Sending a test alert to this device…');
   try {
-    await sendTestAlert({});
-    pushResult('Test alert sent. Check Notification Center. If no alert appears, check your phone’s notification and Focus settings.');
+    await sendTestAlert(scenario ? { scenario } : {});
+    if (generation === epoch) pushResult(scenario === 'event_rsvp'
+      ? 'RSVP test alert sent. Tap it to open the private SNY00 guest list.'
+      : 'Test alert sent. Check Notification Center. If no alert appears, check your phone’s notification and Focus settings.');
   } catch (error) {
-    if (token) pushResult(error.message || 'Unable to send the test alert. Try again.', true);
+    if (generation === epoch && token) pushResult(error.message || 'Unable to send the test alert. Try again.', true);
   } finally {
-    button.textContent = 'Send test alert';
+    button.textContent = label;
     pushBusy = false; renderPush();
   }
 }
@@ -289,8 +330,9 @@ async function unlock() {
   $('unlock-panel').hidden = true; $('inbox-panel').hidden = false; $('lock').hidden = false;
   $('access-token').value = '';
   configurePush().catch((error) => { $('push-status').textContent = error.message; $('alerts-summary').textContent = 'Unavailable'; });
-  const id = new URLSearchParams(location.search).get('request');
-  if (id) await openRequest(id);
+  const params = new URLSearchParams(location.search);
+  if (params.get('event') === 'sny-00') await openGuests();
+  else if (params.get('request')) await openRequest(params.get('request'));
 }
 
 function run(action, button) {
@@ -313,9 +355,21 @@ $('request-dialog').addEventListener('close', clearDetail);
 $('request-detail').addEventListener('click', (event) => { const button = event.target.closest('[data-file]'); if (button) run(() => previewFile(button.dataset.file, button), button); });
 $('enable-push').addEventListener('click', () => { pushResult(''); enablePush().catch((error) => pushResult(error.message, true)); });
 $('disable-push').addEventListener('click', () => run(disablePush, $('disable-push')));
-$('test-push').addEventListener('click', testPush);
+$('test-push').addEventListener('click', () => testPush());
+$('test-rsvp-push').addEventListener('click', () => testPush('event_rsvp'));
 $('sample-push').addEventListener('click', testPushSamples);
-document.addEventListener('visibilitychange', () => { if (!document.hidden && token && !$('inbox-panel').hidden) run(() => loadInbox()); });
-window.addEventListener('online', () => { if (token) run(() => loadInbox()); });
+$('open-guests').addEventListener('click', () => run(openGuests, $('open-guests')));
+$('refresh-guests').addEventListener('click', () => run(openGuests, $('refresh-guests')));
+$('close-guests').addEventListener('click', () => $('guest-dialog').close());
+$('guest-dialog').addEventListener('close', () => {
+  clearGuests();
+  // Keep a locked notification destination so unlocking can reopen the list.
+  if (!token) return;
+  const url = new URL(location.href); url.searchParams.delete('event');
+  history.replaceState(null, '', url);
+});
+const refreshActiveView = () => $('guest-dialog').open ? openGuests() : loadInbox();
+document.addEventListener('visibilitychange', () => { if (!document.hidden && token && !$('inbox-panel').hidden) run(refreshActiveView); });
+window.addEventListener('online', () => { if (token) run(refreshActiveView); });
 const workerPromise = registerWorker().catch(() => { registered = null; });
 if (token) run(unlock);

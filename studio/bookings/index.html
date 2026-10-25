@@ -13,8 +13,8 @@
   <link rel="apple-touch-icon" href="/studio/bookings/icons/icon-192.png">
   <link rel="icon" href="/studio/bookings/icons/icon-192.png">
   <link rel="stylesheet" href="/css/tokens.css">
-  <link rel="stylesheet" href="/studio/bookings/bookings.css?v=3">
-  <script type="module" src="/studio/bookings/bookings.js?v=4"></script>
+  <link rel="stylesheet" href="/studio/bookings/bookings.css?v=4">
+  <script type="module" src="/studio/bookings/bookings.js?v=5"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -43,6 +43,7 @@
             <div class="button-row">
               <button id="enable-push" class="primary" type="button" disabled>Enable notifications</button>
               <button id="test-push" type="button" hidden>Send test alert</button>
+              <button id="test-rsvp-push" type="button" hidden>Send RSVP test alert</button>
               <button id="disable-push" class="quiet" type="button" hidden>Turn off alerts</button>
             </div>
             <div id="sample-push-controls" class="sample-controls" hidden>
@@ -54,6 +55,7 @@
             <p id="push-result" class="app-status" role="status" aria-live="polite" hidden></p>
           </div>
         </details>
+        <div class="event-shortcut"><button id="open-guests" type="button">SNY00 guest list</button><p class="muted">Private RSVPs and planned headcount.</p></div>
         <div class="inbox-tools">
           <label class="sr-only" for="filter">Filter requests</label>
           <select id="filter"><option value="active">Active requests</option><option value="unread">Unread</option><option value="all">All requests</option></select>
@@ -68,6 +70,15 @@
     <dialog id="request-dialog" aria-labelledby="request-title">
       <div class="detail-header"><span class="eyebrow">BOOKING REQUEST</span><button id="close-detail" type="button" class="quiet">Close</button></div>
       <div id="request-detail"></div>
+    </dialog>
+    <dialog id="guest-dialog" aria-labelledby="guest-title">
+      <div class="detail-header"><span class="eyebrow">CONSTRUCT EVENTS</span><button id="close-guests" type="button" class="quiet" aria-label="Close guest list">Close</button></div>
+      <h2 id="guest-title">SNY00 guest list</h2>
+      <p id="guest-summary" class="detail-meta"></p>
+      <p class="muted">RSVPs show planned attendance. Actual attendance is recorded separately from the paper sign-in sheet.</p>
+      <button id="refresh-guests" type="button">Refresh guest list</button>
+      <div id="guest-list" class="guest-list" aria-busy="false"></div>
+      <a class="studio-link" href="/studio/event-attendance/?event=sny-00">Manage RSVPs and paper attendance in Studio</a>
     </dialog>
   </div>
 </body>

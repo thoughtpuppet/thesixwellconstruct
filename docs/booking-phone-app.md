@@ -4,6 +4,8 @@ The owner app at `/studio/bookings/` uses the existing Studio token. It shows
 active, unread, and historical requests, previews private reference files,
 and links directly to the matching request in Studio for approval, decline,
 and booking-link preparation. Existing email notifications remain enabled.
+It also receives owner alerts for new SNY00 RSVPs and opens a private guest list
+inside the same installed app.
 
 ## iPhone setup
 
@@ -19,9 +21,10 @@ After this commit is deployed through the website's existing Git-connected Worke
    to return to the inbox. A real inquiry should also send the existing email.
 
 To preview every message, use **Send all sample alerts** under Phone alerts. The
-sample name is prefilled as Sai Solehman and can be changed. This sends 14 samples
+sample name is prefilled as Sai Solehman and can be changed. This sends 16 samples
 to the current device, one at a time, covering every inquiry type and single/group
-confirmations, reschedules, and cancellations. Every sample body begins with
+confirmations, reschedules, cancellations, and an SNY00 RSVP. The RSVP sample shows
+an illustrative party size and opens the actual private guest list. Every sample body begins with
 **TEST** and has its own notification tag so the samples do not replace one another.
 No client, inquiry, appointment, or payment records are created or changed.
 
@@ -76,6 +79,28 @@ Studio token and client details from view while leaving owner-device alerts on.
   five-minute Worker cron retries network errors, rate limits, and temporary server
   failures up to five times. HTTP 404/410 removes expired devices. Other failures stop.
 - Sent/failed delivery records expire after 30 days. Push errors do not block email.
+
+## SNY00 RSVP alerts
+
+- A newly saved SNY00 RSVP sends **New RSVP · SNY00** to the existing registered
+  owner devices, with the party size. Guest names, emails, and other private
+  details are excluded from the alert. Existing keys and subscriptions are reused;
+  no reinstall or additional notification permission is needed for a device already enabled.
+- Tapping opens `/studio/bookings/?event=sny-00`. If locked, unlock with the
+  existing Studio token and the guest list opens automatically. **SNY00 guest list**
+  in the inbox also opens it. The list shows confirmed planned headcount and marks
+  canceled RSVPs separately; it does not treat an RSVP as actual attendance.
+- **Phone alerts → Send RSVP test alert** sends just this sample to the current
+  device. It is marked **TEST**, uses an illustrative party size, and creates no RSVP.
+- Duplicate form submissions do not trigger another alert. Temporary push-service
+  failures use the existing delivery queue and five-minute retry job. Guest
+  confirmation email runs independently, so a failure in either channel does not
+  prevent the other. Existing RSVPs are not replayed as new alerts.
+- Guest-list requests use the existing owner-authenticated event endpoint with
+  `no-store`. Locking clears the list from view, including expanded guest contacts.
+- This is limited to the SNY00 edition. It does not add alerts to the parent
+  Solehman's New Year series or other events, change booking alerts, or add guests
+  to the booking inbox or marketing lists.
 
 ## Verification
 

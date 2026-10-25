@@ -38,6 +38,12 @@ h2 { font-size:1.45rem; line-height:1.3; }
 .sample-controls input { width:100%; }
 .inbox-tools { display:flex; gap:16px; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .inbox-tools select { max-width:75%; }
+.event-shortcut { margin-bottom:24px; }
+.event-shortcut p { margin:8px 0 0; }
+.guest-list { display:grid; gap:14px; margin-top:20px; }
+.guest-card { border:5px solid var(--color-accent-dim); padding:16px; }
+.guest-card summary { min-height:48px; overflow-wrap:anywhere; }
+.guest-card .detail-fields { margin-bottom:0; }
 .muted { color:var(--color-text-muted); font-size:.875rem; }
 .request-list { display:grid; gap:14px; }
 .request-card { display:block; text-align:left; width:100%; padding:18px 16px; }

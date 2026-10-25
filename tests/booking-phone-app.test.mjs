@@ -6,7 +6,7 @@ import { createECDH, createDecipheriv, hkdfSync, randomBytes, createPublicKey, v
 import { runInNewContext } from 'node:vm';
 import worker from '../_worker.js';
 import { handleBookingInbox } from '../functions/api/booking-inbox/_lib.js';
-import { BOOKING_PUSH_SAMPLES, handleBookingPushApi, notifyBookingRequestPush, notifyBookingAppointmentPush, flushBookingPush, allowedPushEndpoint } from '../functions/api/booking-push/_lib.js';
+import { BOOKING_PUSH_SAMPLES, handleBookingPushApi, notifyBookingRequestPush, notifyBookingAppointmentPush, notifyEventRsvpPush, flushBookingPush, allowedPushEndpoint } from '../functions/api/booking-push/_lib.js';
 import { notifyAdminSubmissionReceived, notifyAdminAppointmentConfirmed, notifyAdminAppointmentRescheduled, notifyAppointmentCancelled } from '../functions/api/notifications/_lib.js';
 
 const root = new URL('../', import.meta.url);
@@ -55,6 +55,7 @@ const SAMPLE_TITLES = {
   consultation: 'New Consultation Request', build_session: 'New In-Person Build Session Request', studio_booking: 'New Studio Booking Request',
   artist_led: 'New Artist-Led Design Request', appointment_confirmed: 'Appointment Booked',
   appointment_group_confirmed: 'Appointments Booked', appointment_rescheduled: 'Appointment Rescheduled', appointment_cancelled: 'Appointment Canceled',
+  event_rsvp: 'New RSVP · SNY00',
 };
 
 function decrypt(payload, client) {
@@ -288,7 +289,7 @@ test('every named sample uses the real message builders, stays owner-only, and c
   const body = { endpoint: client.subscription.endpoint, clientName: 'Sai Solehman' };
   const before = sqlite.prepare('SELECT COUNT(*) count FROM appointments').get().count;
   try {
-    assert.equal(BOOKING_PUSH_SAMPLES.length, 15);
+    assert.equal(BOOKING_PUSH_SAMPLES.length, 16);
     assert.equal((await worker.fetch(request(path, 'POST', { ...body, scenario: 'tattoo_inquiry' }, false), env)).status, 401);
     assert.equal((await worker.fetch(request(path, 'POST', { ...body, scenario: 'unknown' }), env)).status, 400);
     assert.equal((await worker.fetch(request(path, 'POST', { ...body, clientName: '', scenario: 'tattoo_inquiry' }), env)).status, 400);
@@ -299,8 +300,13 @@ test('every named sample uses the real message builders, stays owner-only, and c
       assert.equal(response.status, 200, sample.id);
       const message = messages.at(-1);
       assert.equal(message.title, SAMPLE_TITLES[sample.id]);
-      assert.match(message.body, /^TEST · .*Sai Solehman/);
-      assert.equal(message.url, '/studio/bookings/');
+      if (sample.id === 'event_rsvp') {
+        assert.equal(message.body, 'TEST · 2 people · Open the private guest list.');
+        assert.equal(message.url, '/studio/bookings/?event=sny-00');
+      } else {
+        assert.match(message.body, /^TEST · .*Sai Solehman/);
+        assert.equal(message.url, '/studio/bookings/');
+      }
       assert.match(message.tag, /^test:/);
     }
     assert.equal(messages[0].body, 'TEST · Sai Solehman');
@@ -308,9 +314,16 @@ test('every named sample uses the real message builders, stays owner-only, and c
     assert.match(messages.find(message => message.title === 'Appointments Booked').body, /3 appointments · First: /);
     assert.ok(messages.some(message => message.title === 'Appointment Rescheduled'));
     assert.ok(messages.some(message => message.title === 'Appointment Canceled'));
-    assert.equal(new Set(messages.map(message => message.tag)).size, 15);
+    assert.equal(new Set(messages.map(message => message.tag)).size, 16);
     assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM appointments').get().count, before);
     assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM submissions').get().count, 0);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM event_rsvps').get().count, 0);
+    // The focused RSVP sample needs no guest name and creates no registration.
+    const focused = await worker.fetch(request(path, 'POST', { endpoint: client.subscription.endpoint, scenario: 'event_rsvp' }), env);
+    assert.equal(focused.status, 200);
+    assert.equal(messages.at(-1).url, '/studio/bookings/?event=sny-00');
+    assert.equal(messages.at(-1).body, 'TEST · 2 people · Open the private guest list.');
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM event_rsvps').get().count, 0);
   } finally { globalThis.fetch = original; }
 });
 
@@ -319,6 +332,113 @@ test('admin email flow still returns normally when push schema is unavailable', 
   const original = console.error; console.error = () => {};
   try { const result = await notifyAdminSubmissionReceived(env, booking); assert.equal(result.skipped, true); }
   finally { console.error = original; }
+});
+
+function openRsvpEvent(sqlite) {
+  const end = new Date(Date.now() + 86400000).toISOString();
+  sqlite.exec("UPDATE site_visibility_rules SET visibility='public' WHERE path='/events/sny-00'; UPDATE events SET publication_state='published',status='open' WHERE slug='sny-00';");
+  sqlite.prepare("UPDATE event_occurrences SET status='open',capacity=0,max_seats_per_order=3,ends_at=? WHERE event_id='evt_sny_00'").run(end);
+}
+const rsvpGuest = { name: 'Private Guest', email: 'guest@example.test', partySize: 2 };
+const rsvpRequest = (body = rsvpGuest) => request('/api/events/sny-00/rsvp', 'POST', body, false);
+
+test('new SNY00 RSVP alerts the existing owner device once, separately from guest confirmation email', async () => {
+  const { env, sqlite } = environment(), client = device();
+  openRsvpEvent(sqlite); await subscribe(env, client.subscription);
+  const original = globalThis.fetch, messages = [], emails = [], background = [];
+  env.EMAIL = { send: async (message) => { emails.push(message); return { id: 'test-rsvp-email' }; } };
+  globalThis.fetch = async (_url, payload) => { messages.push(decrypt(payload, client)); return new Response(null, { status: 201 }); };
+  try {
+    const response = await worker.fetch(rsvpRequest(), env, { waitUntil: (promise) => background.push(promise) });
+    assert.equal(response.status, 200); assert.equal(background.length, 1);
+    await Promise.all(background);
+    assert.deepEqual(messages, [{ title: 'New RSVP · SNY00', body: '2 people · Open the private guest list.',
+      url: '/studio/bookings/?event=sny-00', tag: `event_rsvp:${sqlite.prepare('SELECT id FROM event_rsvps').get().id}` }]);
+    assert.equal(emails.length, 1); assert.equal(emails[0].to, rsvpGuest.email);
+    const publicResult = await response.text();
+    for (const value of [rsvpGuest.name, rsvpGuest.email, env.SUBMISSIONS_ADMIN_TOKEN]) {
+      assert.ok(!JSON.stringify(messages).includes(value)); assert.ok(!publicResult.includes(value));
+    }
+    assert.equal((await worker.fetch(rsvpRequest({ ...rsvpGuest, email: ' GUEST@EXAMPLE.TEST ', partySize: 1 }), env)).status, 200);
+    await flushBookingPush(env);
+    assert.equal(messages.length, 1); assert.equal(emails.length, 1);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM booking_push_deliveries').get().count, 1);
+    assert.equal(sqlite.prepare('SELECT party_size FROM event_rsvps').get().party_size, 2);
+    const privateResponse = await worker.fetch(request('/api/admin/events/sny-00/rsvps'), env);
+    assert.equal(privateResponse.headers.get('cache-control'), 'no-store');
+    assert.equal((await privateResponse.json()).summary.rsvpHeadcount, 2);
+    assert.equal((await worker.fetch(request('/api/admin/events/sny-00/rsvps', 'GET', null, false), env)).status, 401);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM event_attendance').get().count, 0);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM submissions').get().count, 0);
+  } finally { globalThis.fetch = original; }
+});
+
+test('RSVP validation, bots, closed events and full capacity never create owner alerts', async () => {
+  const { env, sqlite } = environment(); openRsvpEvent(sqlite); await subscribe(env, device().subscription);
+  const original = globalThis.fetch; let calls = 0;
+  globalThis.fetch = async () => { calls++; return new Response(null, { status: 201 }); };
+  try {
+    assert.equal((await worker.fetch(rsvpRequest({ ...rsvpGuest, partySize: 4 }), env)).status, 400);
+    assert.equal((await worker.fetch(rsvpRequest({ ...rsvpGuest, _gotcha: 'bot' }), env)).status, 200);
+    sqlite.exec("UPDATE events SET status='closed' WHERE slug='sny-00'");
+    assert.equal((await worker.fetch(rsvpRequest(), env)).status, 409);
+    sqlite.exec("UPDATE events SET status='open' WHERE slug='sny-00'; UPDATE event_occurrences SET capacity=1 WHERE event_id='evt_sny_00'");
+    assert.equal((await worker.fetch(rsvpRequest(), env)).status, 409);
+    assert.equal(calls, 0);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM event_rsvps').get().count, 0);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM booking_push_deliveries').get().count, 0);
+  } finally { globalThis.fetch = original; }
+});
+
+test('RSVP push retries temporary delivery failures without delaying or duplicating guest email', async () => {
+  const { env, sqlite } = environment(); openRsvpEvent(sqlite); await subscribe(env, device().subscription);
+  const original = globalThis.fetch; let pushCalls = 0, emailCalls = 0, code = 503;
+  env.EMAIL = { send: async () => { emailCalls++; return { id: 'test' }; } };
+  globalThis.fetch = async () => { pushCalls++; return new Response(null, { status: code }); };
+  try {
+    assert.equal((await worker.fetch(rsvpRequest(), env)).status, 200);
+    assert.equal(emailCalls, 1); assert.equal(pushCalls, 1);
+    assert.equal(sqlite.prepare('SELECT status FROM booking_push_deliveries').get().status, 'pending');
+    assert.equal(sqlite.prepare('SELECT status FROM notification_deliveries').get().status, 'sent');
+    code = 201; sqlite.exec("UPDATE booking_push_deliveries SET next_attempt_at='2000-01-01T00:00:00Z'");
+    await flushBookingPush(env); await flushBookingPush(env);
+    assert.equal(pushCalls, 2); assert.equal(emailCalls, 1);
+    assert.equal(sqlite.prepare('SELECT status FROM booking_push_deliveries').get().status, 'sent');
+  } finally { globalThis.fetch = original; }
+});
+
+test('guest email failure cannot block an RSVP owner alert; missing push tables cannot block guest email', async () => {
+  const { env, sqlite } = environment(); openRsvpEvent(sqlite); await subscribe(env, device().subscription);
+  const original = globalThis.fetch, originalWarn = console.warn; let pushCalls = 0, emailCalls = 0;
+  console.warn = () => {};
+  globalThis.fetch = async () => { pushCalls++; return new Response(null, { status: 201 }); };
+  env.EMAIL = { send: async () => { throw new Error('Test email outage'); } };
+  try {
+    assert.equal((await worker.fetch(rsvpRequest(), env)).status, 200);
+    assert.equal(pushCalls, 1);
+    assert.equal(sqlite.prepare('SELECT status FROM booking_push_deliveries').get().status, 'sent');
+    assert.equal(sqlite.prepare('SELECT status FROM notification_deliveries').get().status, 'failed');
+    sqlite.exec('DROP TABLE booking_push_deliveries; DROP TABLE booking_push_subscriptions');
+    env.EMAIL.send = async () => { emailCalls++; return { id: 'test' }; };
+    assert.equal((await worker.fetch(rsvpRequest({ ...rsvpGuest, email: 'second@example.test' }), env)).status, 200);
+    assert.equal(emailCalls, 1); assert.equal(pushCalls, 1);
+    assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM event_rsvps').get().count, 2);
+  } finally { globalThis.fetch = original; console.warn = originalWarn; }
+});
+
+test('owner RSVP push is limited to confirmed SNY00 registrations and honors paused alerts', async () => {
+  const { env } = environment(), client = device(); await subscribe(env, client.subscription);
+  const original = globalThis.fetch, messages = [];
+  globalThis.fetch = async (_url, payload) => { messages.push(decrypt(payload, client)); return new Response(null, { status: 201 }); };
+  const registration = { id: 'single-rsvp', slug: 'sny-00', status: 'confirmed', party_size: 1 };
+  try {
+    await notifyEventRsvpPush(env, { ...registration, slug: 'other-event' });
+    await notifyEventRsvpPush(env, { ...registration, status: 'cancelled' });
+    env.BOOKING_PUSH_ENABLED = 'false'; await notifyEventRsvpPush(env, registration);
+    assert.equal(messages.length, 0);
+    env.BOOKING_PUSH_ENABLED = 'true'; await notifyEventRsvpPush(env, registration);
+    assert.equal(messages[0].body, '1 person · Open the private guest list.');
+  } finally { globalThis.fetch = original; }
 });
 
 test('inbox filters and stable pagination work on real submission rows', async () => {
@@ -352,4 +472,22 @@ test('service worker preserves event wording, uses the requested default title, 
   listeners.notificationclick({ notification: { close() {}, data: { url: '/studio/submissions/?token=secret' } }, waitUntil: (value) => { pending = value; } });
   await pending; assert.equal(windows[0], 'https://studio.example.test/studio/bookings/');
   assert.equal(listeners.fetch, undefined);
+});
+
+test('RSVP notification clicks preserve the in-app guest-list destination and focus the installed app', async () => {
+  const listeners = {}, notices = [], navigations = [];
+  let focused = false, pending;
+  runInNewContext(readFileSync(new URL('studio/bookings/sw.js', root), 'utf8'), { URL, self: {
+    location: { origin: 'https://studio.example.test' }, addEventListener: (name, callback) => { listeners[name] = callback; },
+    registration: { showNotification: async (title, options) => notices.push({ title, options }) },
+    clients: { matchAll: async () => [{ url: 'https://studio.example.test/studio/bookings/', navigate: async (url) => {
+      navigations.push(url); return { focus: () => { focused = true; } };
+    } }], openWindow: async () => assert.fail('Existing installed app should be focused.') },
+  } });
+  listeners.push({ data: { json: () => ({ title: 'New RSVP · SNY00', body: '2 people', url: '/studio/bookings/?event=sny-00' }) }, waitUntil: (promise) => { pending = promise; } });
+  await pending;
+  assert.equal(notices[0].options.data.url, 'https://studio.example.test/studio/bookings/?event=sny-00');
+  listeners.notificationclick({ notification: { close() {}, data: notices[0].options.data }, waitUntil: (promise) => { pending = promise; } });
+  await pending;
+  assert.deepEqual(navigations, ['https://studio.example.test/studio/bookings/?event=sny-00']); assert.equal(focused, true);
 });

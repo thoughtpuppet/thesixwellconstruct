@@ -2,6 +2,7 @@
 // Confirmation email uses the shared delivery log; no CRM, marketing or payment.
 import { publicPageVisibilityDecision } from '../site-visibility/_lib.js';
 import { notifyEventRsvpConfirmed } from '../notifications/_lib.js';
+import { notifyEventRsvpPush } from '../booking-push/_lib.js';
 const RECEIVED = 'Your RSVP has been received. A confirmation email will follow. If you already registered, your original RSVP is kept. Contact the organizer for changes.';
 const json = (data, status=200) => Response.json(data, {status, headers:{'cache-control':'no-store'}});
 const fail = (error, status=400) => json({error}, status);
@@ -88,10 +89,16 @@ export async function handlePrivateEventRsvp(request,env,slug,ctx) {
       const existing=await db.prepare('SELECT id FROM event_rsvps WHERE event_id=? AND occurrence_id=? AND contact_email=?').bind(date.event_id,date.occurrence_id,email).first();
       if(!existing) return fail('There is not enough space for that party. Please contact the organizer.',409);
     } else {
-      const confirmation=deliverPrivateEventRsvpConfirmation(env,registrationId)
-        .catch(()=>console.warn('RSVP confirmation queued for retry.'));
-      if(ctx?.waitUntil) ctx.waitUntil(confirmation);
-      else await confirmation;
+      // Guest email and owner push are independent. Only a newly saved RSVP
+      // sends an owner alert; the existing push queue owns delivery retries.
+      const notifications=Promise.all([
+        deliverPrivateEventRsvpConfirmation(env,registrationId)
+          .catch(()=>console.warn('RSVP confirmation queued for retry.')),
+        notifyEventRsvpPush(env,{id:registrationId,slug,status:'confirmed',party_size:seats})
+          .catch(()=>console.warn('Owner RSVP alert could not be queued.')),
+      ]);
+      if(ctx?.waitUntil) ctx.waitUntil(notifications);
+      else await notifications;
     }
     // Identical response for new and repeated submissions: no roster, email,
     // food note, registration ID, or bearer receipt is exposed publicly.
