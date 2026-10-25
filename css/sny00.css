@@ -7,7 +7,10 @@ html,body,.venture-page,.venture-shell { background:var(--color-bg); }
 .sny-panel p,.sny-copy p { color:var(--text-muted); font-size:15px; line-height:1.75; overflow-wrap:anywhere; }
 .sny-copy p { margin-top:18px; }
 .sny-panel a { text-decoration:underline; text-underline-offset:4px; }
-.sny-registration { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1fr); gap:clamp(28px,5vw,72px); align-items:start; }
+.sny-invitation-rsvp { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(28px,4vw,56px); align-items:start; }
+.sny-invitation,.sny-rsvp { min-width:0; scroll-margin-top:100px; }
+.sny-invitation .section-head { grid-template-columns:minmax(0,1fr); gap:20px; align-items:start; }
+.sny-registration { display:grid; grid-template-columns:minmax(0,1fr); gap:28px; align-items:start; }
 .sny-availability { margin:0 0 20px; }
 #rsvpFields { display:grid; gap:20px; border:0; padding:0; margin:0; min-width:0; }
 .sny-legend { font:800 12px/1.4 var(--font-display); letter-spacing:.1em; padding:0 0 20px; }
@@ -40,5 +43,6 @@ html,body,.venture-page,.venture-shell { background:var(--color-bg); }
 .sny-flyer-transcript summary { cursor:pointer; font:800 14px/1.5 var(--font-display); }
 .sny-flyer-text { max-width:70ch; padding-top:24px; }
 .sny-flyer-text h3:not(:first-child) { margin-top:30px; }
-@media(max-width:760px) { .sny-grid,.sny-registration { grid-template-columns:minmax(0,1fr); gap:16px; } .sny-panel { padding:18px; } .sny-gallery-controls .sny-button { padding:10px; } }
+@media(max-width:960px) { .sny-invitation-rsvp { grid-template-columns:minmax(0,1fr); gap:48px; } }
+@media(max-width:760px) { .sny-grid { grid-template-columns:minmax(0,1fr); gap:16px; } .sny-panel { padding:18px; } .sny-gallery-controls .sny-button { padding:10px; } }
 @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
