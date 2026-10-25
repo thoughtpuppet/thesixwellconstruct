@@ -293,7 +293,7 @@ function parseCalendarData(calendarData, source) {
   return intervals;
 }
 
-async function calendarQuery(env, calendar, startAt, endAt) {
+async function calendarQuery(env, calendar, startAt, endAt, { requireComplete = false } = {}) {
   const body = `<?xml version="1.0" encoding="utf-8"?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/><c:calendar-data><c:expand start="${utcIcs(startAt)}" end="${utcIcs(endAt)}"/></c:calendar-data></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:time-range start="${utcIcs(startAt)}" end="${utcIcs(endAt)}"/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>`;
   const response = await caldavFetch(env, calendar.href, {
@@ -303,12 +303,62 @@ async function calendarQuery(env, calendar, startAt, endAt) {
   });
   const text = await boundedText(response);
   if (!response.ok && response.status !== 207) throw new Error(`iCloud calendar query failed (${response.status}).`);
-  return xmlResponses(text).flatMap((row) => {
+  if (requireComplete && (!/<(?:[\w-]+:)?multistatus\b/i.test(text)
+      || !/<\/(?:[\w-]+:)?multistatus\s*>/i.test(text))) {
+    throw new Error("iCloud returned an incomplete calendar response.");
+  }
+  const rows = xmlResponses(text);
+  if (requireComplete && (text.match(/<(?:[\w-]+:)?response(?:\s|>)/gi) || []).length !== rows.length) {
+    throw new Error("iCloud returned a partial calendar resource.");
+  }
+  return rows.flatMap((row) => {
     const href = xmlTag(row, "href");
     const etag = xmlTag(row, "getetag");
     const data = xmlTag(row, "calendar-data");
+    if (requireComplete) {
+      const statuses = [...row.matchAll(/<(?:[\w-]+:)?status[^>]*>([^<]*)<\//gi)].map((match) => match[1]);
+      if (!statuses.length || statuses.some((status) => !/HTTP\/\S+\s+2\d\d\b/.test(status))
+          || !/BEGIN:VCALENDAR/.test(data) || !/BEGIN:VEVENT/.test(data)
+          || (data.match(/BEGIN:VEVENT/g) || []).length !== (data.match(/END:VEVENT/g) || []).length
+          || /^(?:RRULE|RDATE|EXDATE)[;:]/m.test(data)) {
+        throw new Error("iCloud did not return complete expanded calendar data.");
+      }
+      const events = [...data.matchAll(/BEGIN:VEVENT\r?\n([\s\S]*?)END:VEVENT/g)];
+      if (events.length !== (data.match(/BEGIN:VEVENT/g) || []).length) throw new Error("Unresolved calendar event data.");
+      for (const event of events) {
+        const properties = icsProperties(event[1]);
+        if (asString(properties.get("STATUS")?.[0]?.value).toUpperCase() === "CANCELLED") continue;
+        const start = parseIcsDate(properties.get("DTSTART")?.[0]);
+        const end = parseIcsDate(properties.get("DTEND")?.[0]);
+        if (!start || (!end && !start.allDay) || (end && new Date(end.iso) <= new Date(start.iso))) {
+          throw new Error("iCloud returned an event with unresolved timing.");
+        }
+      }
+    }
     return parseCalendarData(data, { href, etag });
   });
+}
+
+// Room booking requires a complete live read of the already-selected calendars.
+// Tattoo-only cache freshness cannot establish studio availability.
+export async function loadRequiredStudioCalendarAvailability(env, db, startAt, endAt) {
+  const unknown = () => ({ checked:false, unknown:true, intervals:[] });
+  if (!credentialsReady(env || {}) || !startAt || !endAt) return unknown();
+  try {
+    const row = await settingsRow(db);
+    if (!row?.inbound_enabled) return unknown();
+    const selected = JSON.parse(row.blocking_calendars_json || "[]");
+    const calendars = parseBlockingCalendars(row);
+    if (!Array.isArray(selected) || !calendars.length || calendars.length !== selected.length) return unknown();
+    const groups = await Promise.all(calendars.map((calendar) => calendarQuery(env, calendar, startAt, endAt, { requireComplete:true })));
+    const intervals = groups.flat();
+    if (intervals.length > MAX_BUSY_INTERVALS) return unknown();
+    return { checked:true, unknown:false, intervals };
+  } catch {
+    // Credentials, permission, transport, timeout, schema and parse failures are
+    // unknown availability. Never turn a failed required read into free time.
+    return unknown();
+  }
 }
 
 async function sha256Hex(value) {
@@ -585,7 +635,13 @@ export async function runIcloudCalendarSync(env, triggerKind = "scheduled") {
   }
 }
 
-export async function checkIcloudCalendarConflict(env, db, windowRow) {
+export async function checkIcloudCalendarConflict(env, db, windowRow, { required = false } = {}) {
+  if (required) {
+    const startAt = new Date(new Date(windowRow.start_at).getTime() - Number(windowRow.buffer_before_minutes || 0) * 60000).toISOString();
+    const endAt = new Date(new Date(windowRow.end_at).getTime() + Number(windowRow.buffer_after_minutes || 0) * 60000).toISOString();
+    const availability = await loadRequiredStudioCalendarAvailability(env, db, startAt, endAt);
+    return { conflict:availability.intervals.some((item) => new Date(item.startAt) < new Date(endAt) && new Date(item.endAt) > new Date(startAt)), checked:availability.checked, unknown:availability.unknown };
+  }
   if (!env || !credentialsReady(env) || !windowRow?.start_at || !windowRow?.end_at) return { conflict: false, checked: false };
   if (windowRow.availability_scope && windowRow.availability_scope !== "tattoo") return { conflict: false, checked: false };
   let row;

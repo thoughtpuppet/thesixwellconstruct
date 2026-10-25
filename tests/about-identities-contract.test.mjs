@@ -21,7 +21,7 @@ test("public Creative Identities shells load safely and expose gated ThoughtPupp
     devServer,
     worker,
   ] = await Promise.all([
-    read("about/identities/index.html"),
+    read("about/index.html"),
     read("about/identities/detail/index.html"),
     read("css/about-identities.css"),
     read("js/about-identities.js"),
@@ -34,7 +34,7 @@ test("public Creative Identities shells load safely and expose gated ThoughtPupp
     read("_worker.js"),
   ]);
 
-  for (const html of [indexHtml, detailHtml]) {
+  for (const html of [detailHtml]) {
     assert.match(html, /<main class="about-section-page identity-page [^"]*entrance-fade">/);
     assert.match(html, /<nav class="construct-breadcrumb" aria-label="Breadcrumb">/);
     assert.match(html, /href="\/about\/section-page\.css"/);
@@ -42,15 +42,15 @@ test("public Creative Identities shells load safely and expose gated ThoughtPupp
     assert.match(html, /href="\/css\/hero\.css"/);
     assert.match(html, /<script src="\/js\/about-identities\.js"><\/script>/);
   }
-  assert.match(indexHtml, /<header class="section-head site-hero site-hero--supporting"[^>]*>/);
-  assert.match(indexHtml, /<p class="section-intro hero-descriptor">[^<]+<\/p>/);
-  assert.match(indexHtml, /data-identity-index aria-live="polite" aria-busy="true"/);
+  assert.match(indexHtml, /id="creative-identities"/);
+  assert.match(indexHtml, /data-identity-history="ThoughtPuppet"/);
+  assert.match(indexHtml, /<script src="\/js\/about-history-links\.js"><\/script>/);
   assert.match(detailHtml, /data-identity-detail aria-live="polite" aria-busy="true"/);
   assert.match(detailHtml, /<dialog class="identity-media-dialog" data-identity-media-dialog aria-labelledby="identity-media-dialog-title">/);
-  assert.match(detailHtml, /<button type="button" data-identity-media-close>Close<\/button>/);
+  assert.match(detailHtml, /<button type="button" data-identity-media-close[^>]*>Close<\/button>/);
   assert.match(detailHtml, /<img data-identity-media-image src="" alt="">/);
 
-  assert.match(devServer, /\["\/about\/identities\/",\s*200\]/);
+  assert.match(devServer, /\["\/about\/identities\/",\s*308\]/);
   assert.match(devServer, /\["\/about\/identities\/thoughtpuppet\/",\s*200\]/);
   assert.match(devServer, /function identityProfileRouteFile\(urlPath\)[\s\S]*?parts\[0\]\s*!==\s*"about"[\s\S]*?parts\[1\]\s*!==\s*"identities"[\s\S]*?"about",\s*"identities",\s*"detail",\s*"index\.html"/);
   assert.match(worker, /function identityProfileSlug\(pathname\)[\s\S]*?parts\[0\]\s*!==\s*"about"[\s\S]*?parts\[1\]\s*!==\s*"identities"/);

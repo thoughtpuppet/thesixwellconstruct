@@ -34,7 +34,10 @@ const VALID_STATUSES = new Set([
   "archived",
 ]);
 
+import { normalizeEngagementRequest } from "../../../shared/engagement-requests.js";
+
 const PUBLIC_TYPES = new Set([
+  "engagement_request",
   "tattoo_inquiry",
   "flash_claim",
   "special_project",
@@ -108,6 +111,7 @@ const ALLOWED_UPLOAD_TYPES = new Set([
   "application/json",
 ]);
 const FILE_LIMITS_BY_TYPE = {
+  engagement_request: 0,
   tattoo_inquiry: 12,
   flash_claim: 6,
   special_project: 6,
@@ -1250,6 +1254,7 @@ function crmNodeForSubmission(type, payload = {}) {
   if (["tattoo_inquiry", "flash_claim", "special_project", "tattoo_special", "build_brief", "maze_design", "consultation", "build_session"].includes(type)) {
     return "node-tattoos";
   }
+  if (type === "engagement_request") return "node-about";
   if (type === "art_acquisition") return "node-art";
   if (type === "studio_booking") {
     return payload.booking_type_id === "studio_visit" ? "node-art" : "node-events";
@@ -1686,6 +1691,12 @@ export async function handleCreateSubmission(request, env) {
   const body = await readSubmissionBody(request);
   if (!body) return errorResponse("Expected JSON or form data.", 400);
   if (body.error) return errorResponse(body.error, body.status || 400);
+  if (asString(body.payload.type || body.payload.form_type).replace(/^standard_/, "").replace(/^new_/, "") === "engagement_request") {
+    if (asString(body.payload._gotcha)) return json({ ok:true, submissionId:null, spam:true });
+    const engagement = normalizeEngagementRequest(body.payload);
+    if (engagement.error) return errorResponse(engagement.error, 400);
+    body.payload = engagement.payload;
+  }
   const tattooBudgetValidation = normalizeTattooBudgetPayload(body.payload);
   if (tattooBudgetValidation?.error) {
     return errorResponse(tattooBudgetValidation.error, 400, { code: "INVALID_SPECIFIC_BUDGET" });
@@ -1726,6 +1737,9 @@ export async function handleCreateSubmission(request, env) {
 
   const idempotency = normalizeIdempotencyKey(request, body.payload);
   if (idempotency.error) return errorResponse(idempotency.error, 400);
+  if (submission.type === "engagement_request" && !idempotency.value) {
+    return errorResponse("An idempotency key is required for engagement inquiries.", 400);
+  }
   const idempotencyFingerprint = idempotency.value
     ? await submissionIdempotencyFingerprint(submission, body.payload, body.files)
     : "";

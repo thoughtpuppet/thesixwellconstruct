@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="description" content="Private local preview of the thirteen-bottle ink archive.">
+  <title>Ink Materials - Local Preview - the six.well construct</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <style>
+    html,body { margin:0; width:100%; height:100%; background:var(--color-bg,#0e0e0e); }
+    iframe { display:block; width:100%; height:100dvh; border:0; }
+    .fallback { position:fixed; inset:0; padding:32px; color:var(--color-archive-bright,#b87a32); font:16px/1.6 Georgia,serif; background:var(--color-bg,#0e0e0e); }
+    .fallback a { color:inherit; }
+  </style>
+</head>
+<body>
+  <!-- Served by the existing 4173 server. Embedded application and all edits
+       remain on the isolated 4186 loopback server and its existing SQLite file.
+       The repository excludes *preview*.html from deployment assets. -->
+  <iframe id="materials-review" title="Thirteen-bottle ink materials archive review" src="http://127.0.0.1:4186/archive/materials-review/"></iframe>
+  <noscript><p class="fallback">The archive needs JavaScript. <a href="http://127.0.0.1:4186/archive/materials-review/">Open the isolated review directly</a>.</p></noscript>
+  <script>
+    const bottle = new URL(location.href).searchParams.get('bottle');
+    if (bottle && /^(?:SI-001-(?:0[1-9]|1[01])|SI-002-01|IZB-001-01)$/.test(bottle)) {
+      const target = new URL('http://127.0.0.1:4186/archive/materials-review/');
+      target.searchParams.set('bottle', bottle);
+      document.querySelector('#materials-review').src = target.href;
+    }
+  </script>
+</body>
+</html>

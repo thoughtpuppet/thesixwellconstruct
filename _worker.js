@@ -12,6 +12,7 @@ import {
 } from "./functions/api/shop/_lib.js";
 import { KINMARKING_FIRST_EDITION_SLUG, kinmarkingFirstEditionRedirect, kinmarkingSessionNumber as editionNumberForSlug } from "./shared/kinmarking-routes.js";
 import { renderCollaboratorsDocument } from "./functions/api/construct/_collaborators.js";
+import { aboutRedirectUrl } from "./shared/about-routes.js";
 import {
   handleAdminMerchApi,
   handleLaunchAlertSignup,
@@ -811,7 +812,7 @@ async function serveArtRecordPage(request, env, slug) {
         ],
         links: [
           { href: "/art/", label: "Explore more artwork" },
-          { href: "/about/contact-press/", label: "Ask about collecting or exhibitions" },
+          { href: "/about/#contact", label: "Ask about collecting or exhibitions" },
         ],
       })}</main>`,
     )
@@ -983,7 +984,7 @@ async function serveIdentityProfilePage(request, env, slug) {
           { label: "Origin", value: profile.originTitle },
         ],
         links: [
-          { href: "/about/identities/", label: "Explore creative identities" },
+          { href: "/about/#creative-identities", label: "Explore creative identities" },
           { href: "/archive/", label: "Search the living Archive" },
         ],
       })}</article>`,
@@ -1278,7 +1279,7 @@ async function serveEventDetailPage(request, env, pathname) {
   if (kinmarkingSessionNumber && (!selected || (requestedOccurrence && requestedOccurrence !== selected.id))) return notFoundPage(request, env);
   if (kinmarkingSessionNumber) payload.occurrence = selected;
   let editionTheme = firstKinmarkingEdition
-    ? selected.title && selected.title !== "Skin As Archive" ? selected.title : "Oral Histories & Tattooing"
+    ? selected.title && !["Skin As Archive", "Oral Histories & Tattooing", "Memory Work & Tattooing"].includes(selected.title) ? selected.title : "Memory Work, Oral Histories and Tattooing"
     : selected?.title || "";
   if (kinmarkingSessionNumber === "02" && ["Color as Inheritance", "Color"].includes(editionTheme)) editionTheme = "Color & Tattooing";
   if (["Symbols as Language", "Symbols", "Iconography"].includes(editionTheme)) editionTheme = "Iconography & Tattooing";
@@ -2040,12 +2041,16 @@ export default {
     }
 
     const canonicalResponse = canonicalRedirect(request, env);
-    const visibilityRequest = canonicalResponse?.headers.get("location")
-      ? new Request(canonicalResponse.headers.get("location"), request)
+    const aboutSource = new URL(canonicalResponse?.headers.get("location") || request.url);
+    aboutSource.search = url.search;
+    const aboutDestination = aboutRedirectUrl(aboutSource);
+    const routeResponse = aboutDestination ? Response.redirect(aboutDestination, 308) : canonicalResponse;
+    const visibilityRequest = routeResponse?.headers.get("location")
+      ? new Request(routeResponse.headers.get("location"), request)
       : request;
     const visibilityResponse = await pageVisibilityResponse(visibilityRequest, env);
     if (visibilityResponse) return visibilityResponse;
-    if (canonicalResponse) return canonicalResponse;
+    if (routeResponse) return routeResponse;
 
     if (url.pathname.startsWith("/studio/bookings/")) {
       return privateLinkResponse(await servePublicAsset(request, env, assetPathForRequest(url.pathname)));

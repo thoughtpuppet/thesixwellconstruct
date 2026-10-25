@@ -746,6 +746,7 @@
     <button class="tab" type="button" data-tab="people">People</button>
     <button class="tab" type="button" data-tab="tattoo">Tattoos</button>
     <button class="tab" type="button" data-tab="studio">Studio Booking</button>
+        <button class="tab" type="button" data-tab="engagements">Engagements</button>
     <button class="tab" type="button" data-tab="art">Art</button>
     <button class="tab" type="button" data-tab="merch">Merch</button>
     <button class="tab" type="button" data-tab="legend">Legend</button>
@@ -839,6 +840,7 @@
   const bookingPreviewKey = "swc_booking_admin_preview";
   const sidebarPreferenceKey = "swc_studio_sidebar_collapsed";
   const TAB_TYPES = {
+    engagements: ["engagement_request"],
     tattoo: ["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "tattoo_special", "consultation", "in_person_consultation", "build_session"],
     studio: ["studio_booking"],
     art: ["art_acquisition", "art_inquiry"],
@@ -2408,6 +2410,8 @@
         <button class="subnav-btn ${subView === "special-projects" ? "is-active" : ""}" type="button" data-subview="special-projects">Special Projects</button>
         <button class="subnav-btn ${subView === "specials" ? "is-active" : ""}" type="button" data-subview="specials">Specials</button>
         <button class="subnav-btn ${subView === "tattoo-settings" ? "is-active" : ""}" type="button" data-subview="tattoo-settings">Tattoo Settings</button>`;
+    } else if (activeTab === "engagements") {
+      html = '<button class="subnav-btn is-active" type="button" data-subview="requests">Inquiries</button>';
     } else if (activeTab === "studio") {
       html = `
         <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
@@ -2445,6 +2449,7 @@
   }
 
   function tabForSubmission(submission) {
+    if (submission?.type === "engagement_request") return "engagements";
     if (submissionBelongsToTab(submission, "art")) return "art";
     if (submissionBelongsToTab(submission, "studio")) return "studio";
     if (submissionBelongsToTab(submission, "events")) return "events";
@@ -7001,7 +7006,30 @@ ${meetingLines}
     </section>`;
   }
 
+  function renderEngagementDetail(submission) {
+    const payload = submission.payload || {};
+    detailEl.innerHTML = `
+      <div class="detail-head">
+        <span class="detail-context" data-submission-status-pill>Construct engagement inquiry · ${escapeHtml(titleize(submission.status))}</span>
+        <span data-request-badge="${escapeHtml(submission.id)}">${requestBadgeMarkup(submission)}</span>
+        <h2>${escapeHtml(submission.contactName || "Unnamed")}</h2>
+        <p class="contact">${escapeHtml(submission.contactEmail)}<br>${escapeHtml(submission.contactPhone)}<br>${escapeHtml(formatDate(submission.createdAt))}</p>
+      </div>
+      <p class="contact">Private inquiry only. No appointment or studio time is reserved. Timing and terms are arranged separately.</p>
+      ${["category","organization","project_title","message","preferred_dates","location","website","budget"].map((key) => detailField(titleize(key), payload[key] || "—")).join("")}
+      <div class="field"><label>Status</label><div id="detailStatus" class="value" data-status="${escapeHtml(submission.status)}">${escapeHtml(titleize(submission.status))}</div></div>
+      <div class="field"><label for="internalNotes">Internal Notes</label><textarea id="internalNotes">${escapeHtml(submission.internalNotes || "")}</textarea>
+        <div class="booking-actions"><button class="button" id="saveReviewNotesBtn" type="button">Save Internal Notes</button><button class="button" id="archiveSubmissionBtn" type="button">Archive Entry</button></div>
+        <p id="reviewNotesSaveState" class="save-feedback" role="status" aria-live="polite"></p>
+      </div>
+      <div class="detail-section"><button class="detail-section-toggle" type="button" data-section-toggle>Event History</button><div class="detail-section-body" id="eventHistoryBody"></div></div>
+      <div class="detail-section"><button class="detail-section-toggle" type="button" data-section-toggle>Notifications</button><div class="detail-section-body" id="notificationsBody"></div></div>`;
+    enhanceControls(detailEl);
+    renderEventHistory(submission.id);
+  }
+
   function renderDetail(submission) {
+    if (submission.type === "engagement_request") return renderEngagementDetail(submission);
     const preserveTextAssist = textAssistDirty && textAssistSubmissionId === submission.id;
     const initialTextAssist = preserveTextAssist ? textAssistDraft : textReminderCopy(submission);
     const hasAppointment = !!latestAppointmentFor(submission.id);

@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
 <style>
   :root {
-    --bg: #0e0e0e;
+    --bg: var(--color-bg);
     --body: var(--color-body, #FBD19D);
     --body-muted: var(--color-text-muted, rgba(251, 209, 157, 0.66));
     --base-text: rgba(252, 184, 103, 0.72);
@@ -50,6 +50,21 @@
     width: min(100%, 1240px);
     margin: 0 auto;
     padding: clamp(16px, 2.5vw, 28px) clamp(16px, 4vw, 42px) 72px;
+  }
+
+  /* Reading copy keeps authored casing, including editor and keyword spans.
+     Short standalone lines retain the shared display treatment. */
+  .about-next :is(
+    .band-lede,
+    .copy-block p,
+    .selected-body:not(.is-brief),
+    #selectedContext,
+    .manifest-brand-copy,
+    .connection-desc
+  ) {
+    --type-body-transform: none;
+    --type-body-tracking: normal;
+    --type-body-tracking-active: normal;
   }
 
   .stage {
@@ -105,10 +120,6 @@
     letter-spacing: 0.28em;
     line-height: 1.4;
     text-transform: uppercase;
-  }
-
-  .hero-copy {
-    margin: 10px auto 0;
   }
 
   .hero-jump {
@@ -223,15 +234,15 @@
     transition: opacity 360ms var(--ease), transform 360ms var(--ease);
   }
 
+  .stage-selected-panel[hidden],
+  .details[hidden] {
+    display: none;
+  }
+
   .diagram-stage.has-selection .stage-selected-panel {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(-50%);
-  }
-
-  .diagram-stage.has-selection .stage-selected-panel.is-fading {
-    opacity: 0;
-    transform: translateY(calc(-50% + 8px));
   }
 
   .stage-selected-role {
@@ -403,12 +414,19 @@
 
   .node-hit {
     outline: none;
+    cursor: pointer;
     transform-box: fill-box;
     transform-origin: center;
   }
 
+  .node-target {
+    fill: transparent;
+    pointer-events: all;
+  }
+
   .node-core {
     fill: var(--node-color);
+    r: var(--node-radius, 32px);
     opacity: 0.98;
     transform-box: fill-box;
     transform-origin: center;
@@ -435,17 +453,6 @@
     user-select: none;
   }
 
-  .node-count {
-    fill: rgba(252, 184, 103, 0.6);
-    font-family: var(--serif);
-    font-size: 12px;
-    letter-spacing: 0;
-    text-anchor: middle;
-    opacity: 0;
-    transition: opacity 300ms var(--ease);
-    user-select: none;
-  }
-
   .node-hit:focus-visible .node-core {
     stroke: var(--body);
     stroke-width: 5;
@@ -463,7 +470,7 @@
   }
 
   .node-hit.is-active .node-core {
-    r: 43;
+    r: var(--node-active-radius, 43px);
     fill: url(var(--sphere-gradient));
   }
 
@@ -471,12 +478,8 @@
     opacity: 0;
   }
 
-  .node-hit.is-active .node-count {
-    opacity: 1;
-  }
-
   .node-hit.is-connected .node-core {
-    r: 35;
+    r: var(--node-connected-radius, 35px);
     fill: url(var(--sphere-gradient));
   }
 
@@ -501,20 +504,6 @@
     min-height: 118px;
     border-top: 5px solid rgba(252, 184, 103, 0.14);
     padding-top: 18px;
-  }
-
-  /* Soft content swap: details fade out, repopulate, fade back in. */
-  .selected-copy,
-  .connection-list,
-  .state-label {
-    transition: opacity 360ms var(--ease), transform 360ms var(--ease);
-  }
-
-  .selected-copy.is-fading,
-  .connection-list.is-fading,
-  .state-label.is-fading {
-    opacity: 0;
-    transform: translateY(7px);
   }
 
   .selected-kicker,
@@ -551,6 +540,17 @@
     color: var(--base-text);
     font-size: 13px;
     line-height: 1.65;
+  }
+
+  .practice-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+  }
+
+  .practice-details .selected-kicker {
+    font-size: 12px;
   }
 
   .material-strip {
@@ -635,6 +635,16 @@
     text-wrap: balance;
   }
 
+  .illustrative-example {
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 5px solid rgba(109, 61, 21, 0.34);
+  }
+
+  .illustrative-example .selected-title {
+    font-size: 24px;
+  }
+
   .connection-list {
     min-height: 118px;
     border-top: 5px solid rgba(252, 184, 103, 0.14);
@@ -644,7 +654,7 @@
   .connection-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 14px;
   }
 
   .connection-card {
@@ -668,10 +678,24 @@
     }
   }
 
-  .connection-card:hover,
-  .connection-card:focus-visible {
+  a.connection-card:hover {
     transform: translateY(-2px);
-    outline: none;
+  }
+
+  a.connection-card:focus-visible,
+  .stage-selected-more:focus-visible {
+    outline: 5px solid var(--color-body);
+    outline-offset: 3px;
+  }
+
+  .connection-destination {
+    display: block;
+    margin-top: 12px;
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.4;
+    text-transform: uppercase;
   }
 
   .connection-name {
@@ -800,6 +824,46 @@
     color: var(--base-text);
     font-size: 13px;
     line-height: 1.62;
+  }
+
+  .identity-summary-grid .copy-block {
+    min-width: 0;
+    min-height: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .section-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    margin-top: 24px;
+  }
+
+  .section-actions a,
+  .identity-history a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.5;
+  }
+
+  .section-actions a:hover,
+  .identity-history a:hover {
+    color: var(--body);
+  }
+
+  .section-actions a:focus-visible,
+  .identity-history a:focus-visible {
+    outline: 5px solid var(--accent);
+    outline-offset: 4px;
+  }
+
+  .identity-history:empty {
+    display: none;
   }
 
   .breakdown-shell {
@@ -969,6 +1033,12 @@
     transition: color 360ms var(--ease);
   }
 
+  .band-lede .orientation-statement,
+  .band-lede .orientation-statement * {
+    font-size: inherit;
+    font-weight: 400;
+  }
+
   /* Amber mode: every highlighted term collapses to the light amber accent. */
   body.terms-amber .node-term {
     color: var(--accent);
@@ -1067,9 +1137,9 @@
     }
 
     .diagram {
-      width: 120%;
+      width: 100%;
       height: clamp(440px, 75vw, 660px);
-      margin-left: -10%;
+      margin-left: 0;
       min-width: 0;
       min-height: 0;
       overflow: visible;
@@ -1092,22 +1162,13 @@
       transform: translateY(0);
     }
 
-    .diagram-stage.has-selection .stage-selected-panel.is-fading {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-
     .node-label {
       font-size: 16px;
     }
 
-    .node-count {
-      font-size: 11px;
-    }
-
     .spoke,
     .connection-line {
-      stroke-width: 4;
+      stroke-width: 5;
     }
 
     .center-ring {
@@ -1166,7 +1227,7 @@
     .diagram-wrap {
       width: 100%;
       max-width: none;
-      min-height: clamp(420px, 118vw, 540px);
+      min-height: 0;
       margin-left: 0;
       left: auto;
       transform: none;
@@ -1174,26 +1235,40 @@
     }
 
     .diagram {
-      width: 138%;
-      height: clamp(420px, 118vw, 540px);
-      margin-left: -19%;
+      width: 100%;
+      margin-left: 0;
     }
 
     .node-label {
-      font-size: 14px;
-    }
-
-    .node-count {
-      font-size: 10px;
+      font-size: 16px;
     }
 
     .spoke,
     .connection-line {
-      stroke-width: 3.5;
+      stroke-width: 5;
     }
 
     .center-ring {
       stroke-width: 16;
+    }
+  }
+
+  @media (max-width: 700px) {
+    .diagram-wrap {
+      min-height: 0;
+    }
+
+    .diagram {
+      height: auto;
+      aspect-ratio: var(--diagram-aspect, 390 / 510);
+    }
+
+    .node-label {
+      font-size: 16px;
+    }
+
+    .details {
+      padding-top: 8px;
     }
   }
 
@@ -1209,6 +1284,10 @@
     html {
       --about-anchor-offset: 126px;
     }
+
+    .practice-details {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
@@ -1221,22 +1300,17 @@
     <canvas class="stage-bg" id="particleBg" aria-hidden="true"></canvas>
     <header class="stage-head site-hero site-hero--supporting">
       <h1 class="wordmark hero-title" id="page-title" data-copy-id="live-about-h1-1">THE six.well CONSTRUCT.</h1>
-      <p class="hero-copy hero-descriptor" data-copy-id="live-about-p-1">
-        The construct is the system. Nodes are the rooms inside it. Mediums are the
-        forms the work moves through. The archive keeps the proof, residue, and
-        evolution.
-      </p>
-      <span class="state-label" id="stateLabel" data-copy-id="live-about-span-1">click a construct entry - its connections illuminate</span>
+      <span class="state-label" id="stateLabel" role="status" aria-live="polite" data-copy-id="live-about-span-1">choose a circle to explore its connections</span>
     </header>
 
     <div class="diagram-stage" id="constructMapStage">
       <div class="diagram-wrap" aria-label="interactive construct connection diagram">
-        <svg class="diagram" id="diagram" viewBox="0 0 1000 640" role="img" aria-labelledby="diagramTitle diagramDesc">
+        <svg class="diagram" id="diagram" viewBox="0 0 1000 640" role="group" aria-labelledby="diagramTitle" aria-describedby="diagramDesc">
           <title id="diagramTitle">The six.well construct connections</title>
-          <desc id="diagramDesc">Nine clickable construct entries orbit the center. About begins selected to reveal the complete ecosystem; choosing another entry illuminates its relationships.</desc>
+          <desc id="diagramDesc">Ten circles represent creative practices, commerce, and shared systems within the construct. Each can involve several modes and mediums. Choose a circle to illuminate its connections and read its function, relationships, and an illustrative example. Choose it again or press Escape to clear the selection. Nothing begins selected.</desc>
           <defs id="gradientDefs"></defs>
-          <g id="spokesLayer"></g>
-          <g id="connectionLayer"></g>
+          <g id="spokesLayer" aria-hidden="true"></g>
+          <g id="connectionLayer" aria-hidden="true"></g>
           <g id="centerLayer" aria-hidden="true">
             <circle class="center-ring" cx="500" cy="322" r="65"></circle>
             <circle class="center-dot" cx="483" cy="299" r="9.5"></circle>
@@ -1250,8 +1324,8 @@
         </svg>
       </div>
 
-      <aside class="stage-selected-panel" id="stageSelectedPanel" aria-live="polite" aria-labelledby="selectedTitle">
-        <span class="selected-kicker" data-copy-id="live-about-span-2">selected construct entry</span>
+      <aside class="stage-selected-panel" id="stageSelectedPanel" aria-labelledby="selectedTitle" hidden>
+        <span class="selected-kicker" data-copy-id="live-about-span-2">what this part does</span>
         <h2 class="selected-title" id="selectedTitle"></h2>
         <p class="stage-selected-role" id="selectedRole"></p>
         <p class="selected-body" id="selectedBody"></p>
@@ -1262,34 +1336,35 @@
       </aside>
     </div>
 
-    <nav class="hero-jump hero-jump--rail" aria-label="about sections">
-      <a href="#orientation" data-copy-id="live-about-a-2">ABOUT</a>
-      <a href="/currently" data-copy-id="live-about-a-3">Current Works + Projects</a>
-      <a href="/about/identities/" data-copy-id="live-about-a-4">Creative identities</a>
-      <a href="/about/visual-language/" data-copy-id="live-about-a-5">Visual language</a>
-      <a href="/about/breakdown/" data-copy-id="live-about-a-6">Breakdown</a>
-      <a href="/about/saieldauhnsolehman/" data-copy-id="live-about-a-7">Saiel Dauhn Solehman</a>
-      <a href="/about/mediums/" data-copy-id="live-about-a-8">Mediums</a>
-      <a href="/about/legend/" data-copy-id="live-about-a-9">Legend</a>
-      <a href="/about/ways-in/" data-copy-id="live-about-a-10">Ways in</a>
-      <a href="/about/collaborators/" data-copy-id="about-collaborators-link">Collaborators</a>
-      <a href="/about/contact-press/" data-copy-id="live-about-a-11">Contact / press</a>
-    </nav>
-
-    <div class="details" id="constructMapDetails" aria-live="polite">
+    <div class="details" id="constructMapDetails" hidden>
       <section class="selected-copy">
-        <span class="selected-kicker" data-copy-id="live-about-span-3">deeper context</span>
+        <span class="selected-kicker" data-copy-id="live-about-span-3">how it connects</span>
         <p class="selected-context" id="selectedContext"></p>
-        <div class="material-strip" id="selectedMaterials" aria-label="selected construct entry materials"></div>
+        <div class="material-strip" id="selectedMaterials" aria-label="selected part topics"></div>
+        <div class="practice-details">
+          <section aria-labelledby="selectedModesHeading">
+            <h3 class="selected-kicker" id="selectedModesHeading" data-copy-id="about-map-modes-heading">modes can include</h3>
+            <p class="selected-context" id="selectedModes" data-live-edit-owner="managed" data-live-edit-label="About map example modes"></p>
+          </section>
+          <section aria-labelledby="selectedMediumsHeading">
+            <h3 class="selected-kicker" id="selectedMediumsHeading" data-copy-id="about-map-mediums-heading">mediums can include</h3>
+            <p class="selected-context" id="selectedMediums" data-live-edit-owner="managed" data-live-edit-label="About map example mediums"></p>
+          </section>
+        </div>
         <section class="manifest-brand" id="manifestBrand" aria-labelledby="manifestBrandTitle">
           <div class="manifest-brand-head">
             <img class="manifest-brand-logo" id="manifestBrandLogo" alt="" hidden>
             <div>
-              <p class="manifest-brand-kicker" id="manifestBrandKicker" data-copy-id="live-about-p-5">construct system / orientation</p>
-              <h3 class="manifest-brand-title" id="manifestBrandTitle" data-copy-id="live-about-h3-1">The Six.Well Construct</h3>
+              <p class="manifest-brand-kicker" id="manifestBrandKicker" data-copy-id="live-about-p-5">creative identity</p>
+              <h3 class="manifest-brand-title" id="manifestBrandTitle" data-live-edit-owner="managed" data-live-edit-label="About map identity"></h3>
             </div>
           </div>
-          <p class="manifest-brand-copy" id="manifestBrandCopy" data-copy-id="live-about-p-6">The operating architecture that holds the nodes, mediums, archive, and method in relation.</p>
+          <p class="manifest-brand-copy" id="manifestBrandCopy" data-live-edit-owner="managed" data-live-edit-label="About map identity explanation"></p>
+        </section>
+        <section class="illustrative-example" aria-labelledby="selectedExampleTitle">
+          <span class="selected-kicker" data-copy-id="about-map-example-kicker">illustrative example</span>
+          <h3 class="selected-title" id="selectedExampleTitle" data-live-edit-owner="managed" data-live-edit-label="About map example"></h3>
+          <p class="selected-body" id="selectedExampleBody" data-live-edit-owner="managed" data-live-edit-label="About map example explanation"></p>
         </section>
       </section>
 
@@ -1299,6 +1374,19 @@
         </div>
       </section>
     </div>
+
+    <nav class="hero-jump hero-jump--rail" aria-label="about sections">
+      <a href="#orientation" data-copy-id="live-about-a-2">ABOUT</a>
+      <a href="#connections" data-copy-id="live-about-a-6">How it connects</a>
+      <a href="#modes-mediums" data-copy-id="live-about-a-8">Modes + mediums</a>
+      <a href="#creative-identities" data-copy-id="live-about-a-4">Creative identities</a>
+      <a href="#creator" data-copy-id="live-about-a-7">Saiel Dauhn Solehman</a>
+      <a href="/currently" data-copy-id="live-about-a-3">Current Works + Projects</a>
+      <a href="/about/legend/" data-copy-id="live-about-a-9">Legend</a>
+      <a href="/about/collaborators/" data-copy-id="about-collaborators-link">Collaborators</a>
+      <a href="/about/exhibitions-appearances/" data-copy-id="about-exhibitions-link">Exhibitions / appearances</a>
+      <a href="#contact" data-copy-id="live-about-a-11">Contact / press</a>
+    </nav>
 
     <a class="map-transition" href="#orientation" aria-label="Continue from the construct map to What this is" data-copy-id="live-about-a-12">
       <span>
@@ -1316,28 +1404,120 @@
         <h2 class="band-title" data-copy-id="live-about-h2-2">What this is.</h2>
       </header>
       <div>
-        <p class="band-lede" data-copy-id="live-about-p-7">
-          The <span><span>Six.Well Construct</span></span> is the full operating solo creative ecosystem of saiel dauhn solehman. Its purpose is to create an environment where ideas and projects exist as interconnected parts of a larger world.&nbsp;Each node supports each other. It holds named
-          nodes, creative mediums, public-facing entry points, world-building logic, and the <span><span>archive</span></span>
-          <span><span>record</span></span> that helps place it.
-        </p>
+        <p class="band-lede" id="connections" data-copy-id="live-about-p-7">The <strong><span><span>Six.Well Construct</span></span></strong> is the creative ecosystem of Saiel Dauhn Solehman, where <span>inquiry, work,&nbsp; resources, and <span><span>history</span></span> support one another.</span> The <span><span>map</span></span> connects creative practices, <span><span>commerce</span></span>, and shared systems, each of which can be a starting point for ideation. Ideas can diverge to expand their possibilities, associations, and contexts, and converge to become more clearly defined through those contexts and connections. Ideation, thought, and execution develop ideas across these parts through different mediums and modes; making and encountering the work can open further possibilities and deepen understanding. A <strong><span><span>painting</span></span></strong>, for example, can lead to <strong><span><span>clothing</span></span></strong>, a <strong><span><span>tattoo</span></span></strong>, or an exhibition. Following its <strong><span><span>symbols</span></span></strong> across those contexts helps trace how their meanings develop. The <strong><span><span>Archive</span></span></strong> keeps the material and <strong><span><span>history</span></span></strong> of this development connected.</p>
         <div class="copy-grid">
           <div class="copy-block">
             <h3 data-copy-id="live-about-h3-2">The construct</h3>
-            <p data-copy-id="live-about-p-8">The&nbsp;<span>system</span> that lets the work stay operational, and an anchor of the philosophy that informs all brands, nodes and mediums.</p>
+            <p data-copy-id="live-about-p-8">The system that keeps the work operational and the structure that anchors the philosophy informing its brands, modes, and mediums. An idea can move between projects and forms while keeping its connections to the work, people, and material that shaped it.</p>
           </div>
-          <div class="copy-block">
-            <h3 data-copy-id="live-about-h3-3">Nodes</h3>
-            <p data-copy-id="live-about-p-9">Named houses, domains and project containers: <span><span>art.pill</span></span> <span><span>Tattoo House</span></span>, ThoughtPuppet, Sloth99, <span><span>Six.Well</span></span> <span><span>Clothing</span></span>, GREEN[FIELD], MILOWALKSONWATER, <span>Mindful Darkness</span>, The Seventh <span><span>Room and THE SOLEHMAN LETTERS.</span></span></p>
+          <div class="copy-block" id="modes-mediums">
+            <h3 data-copy-id="live-about-h3-3">Modes</h3>
+            <p data-copy-id="live-about-p-9">The methods, styles, and sensory channels through which work is developed, experienced, or communicated: visual, auditory, tactile, narrative, or participatory. Modes can shape ideation, thought, and execution. One work can involve several modes, and the same mode can operate across different parts of the construct.</p>
           </div>
           <div class="copy-block">
             <h3 data-copy-id="live-about-h3-4">Mediums</h3>
-            <p data-copy-id="live-about-p-10">The forms the work MANIFESTS as: <span>tattooing</span>, <span>paintings</span>, woodworks,&nbsp;<span>film</span>, animation,&nbsp;<span>writing</span>, <span>clothing and other objects</span>, music and space or interior.</p>
+            <p data-copy-id="live-about-p-10">The physical materials and tools used to create work: paint, canvas, wood, fabric, thread, tattoo ink, needles, cameras, or instruments. Their properties, possibilities, and constraints can generate ideas and shape making. One practice can use several mediums, and a medium can be used across different parts of the construct.</p>
+          </div>
+          <div class="copy-block">
+            <h3 data-copy-id="about-index-identities-heading">Creative identities</h3>
+            <p data-copy-id="about-index-identities-copy">The names under which creative practices develop and share their work. These include <span>art.pill</span> <span>Tattoo House</span>, ThoughtPuppet, Sloth99, <span>Six.Well</span> <span>Clothing</span>, MILOWALKSONWATER, <span>Mindful Darkness</span>, The Seventh <span>Room</span>, and <span>THE SOLEHMAN LETTERS</span>. Their practices can work through several modes and mediums while retaining their own purpose and relationships within <span>the construct</span>.</p>
           </div>
           <div class="copy-block">
             <h3 data-copy-id="live-about-h3-5">Archive</h3>
-            <p data-copy-id="live-about-p-11">The record layer: works, process, releases, events, documents, and experiments that still speak after the active room changes.</p>
+            <p data-copy-id="live-about-p-11">The connected record of inception, creation, presentation, and maintenance. Sources, studies, process material, objects, releases, events, and later changes can stay linked to the work they belong to. Collecting and connecting that material can reveal relationships, deepen understanding, and inform future work.</p>
           </div>
+          <div class="copy-block">
+            <h3 data-copy-id="about-index-legend-heading">Legend</h3>
+            <p data-copy-id="about-index-legend-copy">The shared visual vocabulary of the construct. A symbol record holds its documented meanings, variations, and appearances, giving someone a way to follow the same symbol through paintings, tattoos, clothing, and other works. Exploring those contexts can deepen understanding of the symbol and the works containing it.</p>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="info-band" id="creative-identities">
+      <header>
+        <span class="band-kicker" data-copy-id="about-identities-kicker">practices / histories</span>
+        <h2 class="band-title" data-copy-id="about-identities-section-title">Creative identities.</h2>
+      </header>
+      <div>
+        <p class="band-lede" data-copy-id="about-identities-section-copy">The names under which creative practices develop and share their work. Their practices can work through several modes and mediums while retaining their own purpose and relationships within the construct. Published Archive timelines offer a deeper look at their development.</p>
+        <div class="copy-grid identity-summary-grid">
+          <div class="copy-block" data-identity-history="art.pill Tattoo House">
+            <h3 data-copy-id="about-identity-artpill-title">art.pill Tattoo House</h3>
+            <p data-copy-id="about-identity-artpill-copy">Tattooing as listening, interpretation, and collaborative mark-making. Images and symbols meet a person's intentions and the body that will carry them.</p>
+            <div class="identity-history" data-live-edit-owner="managed" data-live-edit-label="Published art.pill Archive timeline"></div>
+          </div>
+          <div class="copy-block" data-identity-history="ThoughtPuppet">
+            <h3 data-copy-id="about-identity-thoughtpuppet-title">ThoughtPuppet</h3>
+            <p data-copy-id="about-identity-thoughtpuppet-copy">Painting, images, objects, and studies through which visual inquiry develops. The work can retain its own significance while contributing imagery and ideas to other practices.</p>
+            <div class="identity-history" data-live-edit-owner="managed" data-live-edit-label="Published ThoughtPuppet Archive timeline"></div>
+          </div>
+          <div class="copy-block" data-identity-history="Six.Well Clothing">
+            <h3 data-copy-id="about-identity-sixwell-title">Six.Well Clothing</h3>
+            <p data-copy-id="about-identity-sixwell-copy">Garments and objects as an ongoing artistic practice and collective culture. Wearing and using the work creates further encounters with its imagery and ideas.</p>
+            <div class="identity-history" data-live-edit-owner="managed" data-live-edit-label="Published Six.Well Clothing Archive timeline"></div>
+          </div>
+          <div class="copy-block" data-identity-history="Sloth99">
+            <h3 data-copy-id="about-identity-sloth99-title">Sloth99</h3>
+            <p data-copy-id="about-identity-sloth99-copy">Moving images, narrative, and documentation. Film offers ways to develop ideas through sequences, duration, and the relationships between image and sound.</p>
+            <div class="identity-history" data-live-edit-owner="managed" data-live-edit-label="Published Sloth99 Archive timeline"></div>
+          </div>
+          <div class="copy-block" data-identity-history="MILOWALKSONWATER">
+            <h3 data-copy-id="about-identity-milo-title">MILOWALKSONWATER</h3>
+            <p data-copy-id="about-identity-milo-copy">The music and sound identity within the construct. Its place in the wider practice continues to develop through making and listening.</p>
+            <div class="identity-history" data-live-edit-owner="managed" data-live-edit-label="Published MILOWALKSONWATER Archive timeline"></div>
+          </div>
+          <div class="copy-block" data-identity-history="Mindful Darkness">
+            <h3 data-copy-id="about-identity-mindful-title">Mindful Darkness</h3>
+            <p data-copy-id="about-identity-mindful-copy">Sustained reflection and written inquiry. WRKNG makes room for unfinished thinking, allowing questions to remain open as they develop.</p>
+            <div class="identity-history" data-live-edit-owner="managed" data-live-edit-label="Published Mindful Darkness Archive timeline"></div>
+          </div>
+          <div class="copy-block" data-identity-history="THE SOLEHMAN LETTERS">
+            <h3 data-copy-id="about-identity-letters-title">THE SOLEHMAN LETTERS</h3>
+            <p data-copy-id="about-identity-letters-copy">Direct correspondence that brings writing into an ongoing relationship with its readers.</p>
+            <div class="identity-history" data-live-edit-owner="managed" data-live-edit-label="Published Solehman Letters Archive timeline"></div>
+          </div>
+          <div class="copy-block" data-identity-history="The Seventh Room">
+            <h3 data-copy-id="about-identity-seventh-title">The Seventh Room</h3>
+            <p data-copy-id="about-identity-seventh-copy">An evolving practice of space, interiors, hosting, and atmosphere. The room itself can shape how work is encountered and how people gather.</p>
+            <div class="identity-history" data-live-edit-owner="managed" data-live-edit-label="Published Seventh Room Archive timeline"></div>
+          </div>
+          <div class="copy-block" data-identity-history="GREEN[FIELD]">
+            <h3 data-copy-id="about-identity-greenfield-title">GREEN[FIELD]</h3>
+            <p data-copy-id="about-identity-greenfield-copy">A recurring gathering that brings performers, participants, and audiences into a shared creative space. It develops within the wider Events practice.</p>
+            <div class="identity-history" data-live-edit-owner="managed" data-live-edit-label="Published GREEN FIELD Archive timeline"></div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="info-band" id="creator">
+      <header>
+        <span class="band-kicker" data-copy-id="about-creator-kicker">artist / founder</span>
+        <h2 class="band-title" data-copy-id="about-creator-title">Saiel Dauhn Solehman.</h2>
+      </header>
+      <div>
+        <p class="band-lede" data-copy-id="about-creator-copy">Saiel Dauhn Solehman is an Atlanta native and interdisciplinary artist whose practice brings philosophical inquiry and systems thinking into making. The construct holds her creative practices together while preserving their identities, relationships, and histories.</p>
+        <div class="section-actions">
+          <a href="/about/saieldauhnsolehman/" data-copy-id="about-creator-profile-link">Read the full artist profile</a>
+          <a href="/about/collaborators/" data-copy-id="about-creator-collaborators-link">Collaborators</a>
+          <a href="/about/exhibitions-appearances/" data-copy-id="about-creator-appearances-link">Exhibitions / appearances</a>
+        </div>
+      </div>
+    </article>
+
+    <article class="info-band" id="contact">
+      <header>
+        <span class="band-kicker" data-copy-id="about-contact-kicker">inquiries / press</span>
+        <h2 class="band-title" data-copy-id="about-contact-title">Begin a conversation.</h2>
+      </header>
+      <div>
+        <p class="band-lede" data-copy-id="about-contact-copy">Use the relevant inquiry form to discuss a tattoo or collecting artwork. For a biography, practice context, and documented exhibition credits, start with the artist profile and Exhibitions / Appearances.</p>
+        <div class="section-actions">
+          <a href="/tattoos/inquire/" data-copy-id="about-contact-tattoo-link">Tattoo inquiry</a>
+          <a href="/art/acquisitioninquiry.html" data-copy-id="about-contact-art-link">Art acquisition inquiry</a>
+          <a href="/about/saieldauhnsolehman/" data-copy-id="about-contact-bio-link">Biography</a>
+          <a href="/about/exhibitions-appearances/" data-copy-id="about-contact-press-link">Exhibitions / appearances</a>
         </div>
       </div>
     </article>
@@ -1363,6 +1543,7 @@
 <script src="/js/transition.js"></script>
 <script src="/js/construct-corner.js"></script>
 <script src="/js/construct-nav.js"></script>
+<script src="/js/about-history-links.js"></script>
 <script src="/js/construct-ambient-field.js"></script>
 <script>
   /* Term-color toggle: start highlighted keywords in the flat amber
@@ -1392,21 +1573,21 @@
     const groups = {
       about: {
         title: 'About',
-        copy: 'The orientation layer: it names the system, the founder, the architecture, the nodes, and the method so the rest of the site can stay strange without becoming illegible.',
-        children: ['The Construct', 'Saiel / Founder', 'Architecture', 'Nodes', 'Method'],
+        copy: 'The orientation layer explains the system, its founder, creative identities, modes, mediums, and relationships.',
+        children: ['The Construct', 'Saiel / Founder', 'Architecture', 'Creative identities', 'Modes', 'Mediums'],
         meta: ['orientation', 'public language', 'map']
       },
       nodes: {
-        title: 'Nodes',
-        copy: 'The named houses and project rooms. A node can use many mediums, hold its own tone, and still remain accountable to the whole construct.',
+        title: 'Creative identities',
+        copy: 'The names under which creative practices develop and share their work. Each practice can involve several modes and mediums while retaining its own purpose and relationships.',
         children: ['art.pill Tattoo House', 'ThoughtPuppet', 'Sloth99', 'Six.Well Clothing', 'GREEN[FIELD]', 'MILOWALKSONWATER', 'Mindful Darkness', 'The Seventh Room'],
         meta: ['houses', 'projects', 'rooms']
       },
       mediums: {
         title: 'Mediums',
-        copy: 'The forms the work moves through. Mediums are not brands by themselves; they are ways the charge becomes visible, wearable, readable, spatial, or embodied.',
-        children: ['Tattoo', 'Painting', 'Film', 'Writing', 'Clothing', 'Space / Interior'],
-        meta: ['forms', 'materials', 'movement']
+        copy: 'The physical materials and tools through which work is created. Their possibilities and constraints can shape ideation, thought, and execution.',
+        children: ['Paint / Canvas', 'Ink / Needles', 'Fabric / Thread', 'Cameras', 'Paper / Pens', 'Instruments'],
+        meta: ['materials', 'tools', 'making']
       },
       archive: {
         title: 'Archive',
@@ -1472,91 +1653,197 @@
 
   (function() {
     const center = { x: 500, y: 322 };
-    const centerRingOuterRadius = 76;
+    let centerRingOuterRadius = 76;
+    let compactDiagram = false;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const lineDuration = 780;
     const connectionStagger = 155;
     const lineLead = 180;      // beat between the click and the first line drawing
-    const detailFade = 320;    // details fade-out time before content swaps
 
+    const legendColor = getComputedStyle(document.documentElement).getPropertyValue('--color-archive-bright').trim();
     const nodes = [
-      { key: 'tattooing', label: 'Tattooing', color: '#6E0404', activeColor: '#6E0404', url: '/tattoos/', angle: -90, status: 'live public door', role: 'Art.Pill / mark and body-ritual layer', note: 'What it is: the appointment, the symbolic mark, the client threshold, and the most intimate service surface. Why it matters: it proves the construct can touch real bodies with care, boundaries, and trust.', materials: ['consultations', 'custom inquiry', 'flash', 'healed work', 'aftercare'], brand: { kicker: 'node manifestation / tattoo', title: 'art.pill Tattoo House', copy: 'The tattoo medium manifests through art.pill Tattoo House: an artist-led mark and body-ritual room for flash, custom review, special projects, and private booking.', logo: '/assets/brand/art-pill-tattoo-house.svg.svg', logoAlt: 'art.pill Tattoo House logo' } },
-      { key: 'art', label: 'Art', color: '#0071EB', url: '/art/', angle: -50, status: 'live public door', role: 'visual root system', note: 'What it is: paintings, studies, objects, symbols, and the visual grammar beneath the wider system. Why it matters: it gives tattoos, garments, film, and archive records a shared image vocabulary.', materials: ['paintings', 'studies', 'symbols', 'objects', 'statements'], brand: { kicker: 'node manifestation / image', title: 'ThoughtPuppet', copy: 'The painting and visual-language medium manifests through ThoughtPuppet: the blue-origin image room where symbols, studies, objects, and source material begin talking to the rest of the construct.' } },
-      { key: 'merch', label: 'Merch', color: '#F08F15', url: '/merch/', angle: -10, status: 'live commerce door', role: 'six.well artifact economy', note: 'What it is: garments, prints, editions, and physical proof of participation. Why it matters: it lets commerce fund the system without reducing the work to generic product.', materials: ['garments', 'prints', 'editions', 'drops', 'release records'], brand: { kicker: 'node manifestation / clothing', title: 'Six.Well Clothing', copy: 'The clothing and object medium manifests through Six.Well Clothing: garments, prints, editions, and artifact commerce that lets source imagery move into the world.', logo: '/assets/brand/six-well-clothing.svg.svg', logoAlt: 'Six.Well Clothing logo' } },
-      { key: 'about', label: 'About', color: '#FCB867', url: '/about/', angle: 30, status: 'orientation layer', role: 'map / founder / access point', note: 'What it is: the public explanation of the construct. Why it matters: it names what is live, what is incubating, who built it, and which door someone should use first.', materials: ['system map', 'founder page', 'ways in', 'status', 'press language'], brand: { kicker: 'construct system / orientation', title: 'The Six.Well Construct', copy: 'The orientation layer manifests the construct itself: the public language that explains the founder, architecture, nodes, mediums, archive, and ways in.' } },
-      { key: 'events', label: 'Events', color: '#005D25', url: '/events/', angle: 70, status: 'incubating public room', role: 'gathering and ritual layer', note: 'What it is: performance rooms, hosted gatherings, annual rituals, and event relics. Why it matters: it makes the construct social, time-based, and physically witnessed.', materials: ['GREEN[FIELD]', 'gatherings', 'recaps', 'tickets', 'ritual calendar'], brand: { kicker: 'node manifestation / events', title: 'GREEN[FIELD]', copy: 'The events medium manifests through GREEN[FIELD]: gatherings, hosted rooms, annual rituals, performance traces, and live containers that make the construct social and physically witnessed.' } },
-      { key: 'music', label: 'Music', color: '#A22F8D', url: '/music/', angle: 110, status: 'incubating atmosphere', role: 'sound and conversation layer', note: 'What it is: performance audio, interviews, scores, loops, and voice fragments. Why it matters: it gives the system atmosphere, cadence, and repeatable social texture.', materials: ['audio', 'scores', 'talks', 'clips', 'transcripts'], brand: { kicker: 'node manifestation / music', title: 'MILOWALKSONWATER', copy: 'The music medium manifests through MILOWALKSONWATER: performance audio, scores, loops, voice fragments, and sound work that gives the construct cadence and atmosphere.' } },
-      { key: 'writings', label: 'Writings', color: '#FFE7CA', url: '/writings/', angle: 150, status: 'thread to launch', role: 'language and letter layer', note: 'What it is: letters, statements, essays, release notes, newsletter dispatches, and field fragments. Why it matters: it keeps the public language alive without forcing every explanation into the first doorway.', materials: ['Mindful Darkness', 'THE SOLEHMAN LETTERS', 'essays', 'notes', 'field fragments'], brand: { kicker: 'node manifestation / writing', title: 'Mindful Darkness', copy: 'The writing medium manifests through Mindful Darkness, with THE SOLEHMAN LETTERS as its newsletter surface for letters, statements, field notes, theory, and the language that lets the deeper rooms keep their charge.' } },
-      { key: 'archive', label: 'Archive', color: '#6D3D15', url: '/archive/', angle: 190, status: 'live memory system', role: 'record and proof layer', note: 'What it is: process, residue, records, abandoned paths, and older rooms that still speak. Why it matters: it lets the system remember itself instead of disappearing into feeds.', materials: ['records', 'photos', 'process scans', 'timelines', 'source material'], brand: { kicker: 'construct system / record', title: 'The Archive', copy: 'The archive manifests as the construct memory: works, process, releases, events, documents, experiments, and older rooms that still feed the active system.' } },
-      { key: 'film', label: 'Film', color: '#328C84', url: '/film/', angle: 230, status: 'incubating narrative engine', role: 'moving-image and documentation layer', note: 'What it is: campaign footage, studio life, interviews, recaps, and mythic documentation. Why it matters: it makes the world visible as it is being built.', materials: ['short films', 'BTS', 'campaigns', 'recaps', 'lore videos'], brand: { kicker: 'node manifestation / film', title: 'Sloth99', copy: 'The film medium manifests through Sloth99: moving image, character, slow attention, documentation, campaign footage, and the narrative engine of the construct.' } }
+      {
+        key: 'tattooing', label: 'Tattooing', color: '#6E0404', url: '/tattoos/', identity: 'Tattooing / art.pill Tattoo House',
+        summary: 'Tattooing develops ideas through drawing and conversation, considers their meaning and placement with a particular person, and carries them into tattoos and the care around them.',
+        context: 'Paintings and shared symbols can inform a tattoo design. Drawing and conversation develop it for a particular person, while design notes, process photographs, and later documentation can retain its connection to the source.',
+        materials: ['drawings', 'consultation', 'tattoos', 'healed work'],
+        modes: ['visual', 'tactile', 'collaborative'],
+        mediums: ['ink', 'needles', 'skin', 'drawing tools'],
+        example: { title: 'From painting to tattoo', copy: 'A shape in a painting could become the starting point for a tattoo design. Its symbol record can connect both works, while the Archive can hold the drawing, process, and healed documentation.' },
+        brand: { title: 'art.pill Tattoo House', copy: 'art.pill Tattoo House is the named tattoo practice within the construct, holding flash, custom design, special projects, and booking.', logo: '/assets/brand/art-pill-tattoo-house.svg.svg', logoAlt: 'art.pill Tattoo House logo' }
+      },
+      {
+        key: 'art', label: 'Art', color: '#0071EB', url: '/art/', identity: 'Art / ThoughtPuppet',
+        summary: 'ThoughtPuppet uses images and materials to develop ideas, explore questions, and make paintings, studies, and objects.',
+        context: 'A painting can provide imagery for clothing and objects, ideas for tattoos, and work for an exhibition. Symbols link it to other works through Legend; sources, studies, and its continuing history can remain connected through the Archive. Encounters with those works can prompt further thought and making.',
+        materials: ['paintings', 'studies', 'objects', 'symbols'],
+        modes: ['visual', 'symbolic', 'material exploration'],
+        mediums: ['paint', 'canvas', 'wood', 'drawing tools'],
+        example: { title: 'One painting, several forms', copy: 'A painting could lead to a garment made through Six.Well, a tattoo design developed through art.pill Tattoo House, and an exhibition. A symbol appearing in it can connect those works through Legend, with their source and process material retained in the Archive.' },
+        brand: { title: 'ThoughtPuppet', copy: 'ThoughtPuppet is the painting and visual-language identity within the construct. Its studies and finished works can retain their own purpose while contributing imagery and ideas to other practices.' }
+      },
+      {
+        key: 'merch', label: 'Merch', color: '#F08F15', url: '/merch/', identity: 'Merch / Six.Well Clothing / commerce',
+        summary: 'Six.Well develops clothing and objects and handles commerce for the whole construct. Everything is sold through Six.Well, including work originating elsewhere.',
+        context: 'Imagery from art and tattooing can be explored through new materials and uses. Objects carry symbols into everyday life, where their use and circulation can develop meaning further. Work retains its originating identity while Six.Well handles its sale; sources, production, and later changes can remain connected through the Archive.',
+        materials: ['clothing', 'prints', 'objects', 'editions', 'commerce'],
+        modes: ['visual', 'tactile', 'wearing and use'],
+        mediums: ['fabric', 'thread', 'printing tools'],
+        example: { title: 'Making and selling connected work', copy: 'A painting made through ThoughtPuppet could inform a garment developed through Six.Well Clothing. Both can be sold through Six.Well while retaining their distinct identities and links to their shared imagery, symbols, studies, and production material.' },
+        brand: { title: 'Six.Well Clothing', copy: 'Six.Well Clothing develops ideas through garments, prints, editions, and objects, considering how they are made, used, and circulated. Its commerce function serves the whole construct and supports continued work across its practices and shared systems.', logo: '/assets/brand/six-well-clothing.svg.svg', logoAlt: 'Six.Well Clothing logo' }
+      },
+      {
+        key: 'about', label: 'About', color: '#FCB867', url: '/about/', identity: 'Shared system / orientation',
+        summary: 'About develops the language through which the construct explains itself, considers how its parts relate, and provides public explanations and routes into the work.',
+        context: 'An idea can begin anywhere in the construct. Exploring work through different mediums and modes can expand possibilities and help define an idea through its contexts. Following a symbol from one work to another, for example, reveals how its meaning develops through its uses and relationships.',
+        materials: ['creative identities', 'relationships', 'ways in'],
+        modes: ['written', 'visual', 'explanatory'],
+        mediums: ['paper', 'screens', 'computers'],
+        example: { title: 'Finding a path through the work', copy: 'Someone encountering a symbol in a painting could follow it through Legend to a garment, a tattoo, or an exhibition context. Those appearances can reveal further associations and help define the symbol more clearly, deepening their understanding of it and each work containing it.' },
+        brand: { title: 'The Six.Well Construct', copy: 'The construct holds its practices, creative identities, modes, mediums, symbols, and histories in relation through a shared structure and philosophy. Their connections support continued practice and help people understand its individual parts.', shared: true }
+      },
+      {
+        key: 'events', label: 'Events', color: '#005D25', url: '/events/', identity: 'Gatherings / exhibitions / GREEN[FIELD]',
+        summary: 'Events develop ideas for shared experiences, consider how work and people meet, and carry those ideas into exhibitions, gatherings, and performances.',
+        context: 'An exhibition idea can prompt new paintings, objects, sound, or writing. Bringing work into a shared setting creates contexts through which its ideas can be explored and more clearly defined. Encounters and interpretations can inform later work, while the Archive can link planning material and documentation to the works and people involved.',
+        materials: ['exhibitions', 'gatherings', 'performances', 'documentation'],
+        modes: ['visual', 'auditory', 'participatory'],
+        mediums: ['physical spaces', 'lighting', 'sound equipment'],
+        example: { title: 'Work brought into a shared room', copy: 'An exhibition could contain a painting alongside objects derived from it. Visitors could follow a shared symbol to other works, and the event record could connect the installation, planning material, photographs, and later reflections.' },
+        brand: { title: 'GREEN[FIELD]', copy: 'GREEN[FIELD] is a named identity for gatherings and shared experiences. Events also develops and presents exhibitions and other projects across the construct.' }
+      },
+      {
+        key: 'music', label: 'Music', color: '#A22F8D', url: '/music/', identity: 'Music / MILOWALKSONWATER',
+        summary: 'Music explores ideas through listening, sound, and voice, developing them through composition, recording, and performance.',
+        context: 'Sound can contribute to a gathering or a film, while conversations and lyrics can connect to writing. Recordings, drafts, and performance documentation can retain those relationships in the Archive.',
+        materials: ['sound', 'compositions', 'voice', 'recordings'],
+        modes: ['auditory', 'performative'],
+        mediums: ['instruments', 'microphones', 'recording tools'],
+        example: { title: 'Sound joins an exhibition', copy: 'A sound piece could accompany an exhibition containing a painting. Its recordings and development notes could remain linked to the event and become source material for later work.' },
+        brand: { title: 'MILOWALKSONWATER', copy: 'MILOWALKSONWATER is the music identity within the construct, giving sound, composition, voice, and performance a named place to develop.' }
+      },
+      {
+        key: 'writings', label: 'Writings', color: '#FFE7CA', url: '/writings/', identity: 'Writings / Mindful Darkness / THE SOLEHMAN LETTERS',
+        summary: 'Writing develops and examines ideas through language, giving them form in essays, letters, notes, and published reflections.',
+        context: 'Writing can explain a work, accompany an object or event, and develop the philosophy behind the construct. Drafts and later reflections can stay linked to what prompted them through the Archive.',
+        materials: ['essays', 'letters', 'notes', 'drafts'],
+        modes: ['written', 'narrative', 'reflective'],
+        mediums: ['paper', 'pens', 'computers'],
+        example: { title: 'Language alongside a painting', copy: 'A reflection on a painting could become a letter, an exhibition text, or the description of a related object. Its drafts and publication can stay connected to the work and its history.' },
+        brand: { title: 'Mindful Darkness', copy: 'Mindful Darkness is the writing identity within the construct. THE SOLEHMAN LETTERS is a named publication through which letters, reflections, and ideas can reach readers.' }
+      },
+      {
+        key: 'archive', label: 'Archive', color: '#6D3D15', url: '/archive/', identity: 'Shared system / history and material',
+        summary: 'The Archive gathers material, develops connections and interpretations, and maintains records of the inception, creation, presentation, and maintenance of the work.',
+        context: 'Sources, studies, works, production material, releases, exhibitions, and later changes can be linked to one another. Earlier material can be a starting point for an idea. Exploring connected records can reveal further possibilities and help define an idea through its history and contexts, providing material for continued thought and making.',
+        materials: ['sources', 'process', 'records', 'timelines', 'maintenance'],
+        modes: ['documentary', 'narrative', 'visual'],
+        mediums: ['paper', 'cameras', 'scanners', 'computers'],
+        example: { title: 'Following a work over time', copy: 'A painting could have connected records for its source material, studies, creation, derived objects, exhibition, and later conservation or maintenance. Those records can preserve each relationship and provide material for future work.' },
+        brand: { title: 'The Archive', copy: 'The Archive is a shared system across the construct, connecting particular works, material, and records over time. It supports continuity by keeping earlier work available to revisit, interpret, and develop from.', shared: true }
+      },
+      {
+        key: 'legend', label: 'Legend', color: legendColor, url: '/about/legend/', identity: 'Shared system / visual vocabulary',
+        summary: 'Legend is the shared visual vocabulary of the construct.',
+        briefSummary: true,
+        context: 'A symbol can be a starting point for an idea as well as emerge through making. Exploring its meanings, variations, and appearances across paintings, tattoos, clothing, and other works can open associations and help define it through those contexts. Archive records retain the history of the particular works containing it.',
+        materials: ['symbols', 'meanings', 'variations', 'appearances'],
+        modes: ['visual', 'symbolic', 'interpretive'],
+        mediums: ['drawing tools', 'paper', 'screens'],
+        example: { title: 'Following the same symbol', copy: 'A symbol in a painting could also appear on a garment and in a tattoo. Its Legend record can lead someone to each appearance, where surrounding imagery, use, and associations help define its meaning and deepen understanding of the works containing it. Source studies and their histories can remain linked through the Archive.' },
+        brand: { title: 'The Legend', copy: 'Legend is a shared system across the construct. It makes recurring visual forms recognizable and their documented meanings and appearances explorable, allowing understanding to develop as their use continues.', shared: true }
+      },
+      {
+        key: 'film', label: 'Film', color: '#328C84', url: '/film/', identity: 'Film / Sloth99',
+        summary: 'Film develops ideas through moving images, explores them through movement and narrative, and carries them into films, edits, and documentation of how work is made and experienced.',
+        context: 'Moving images can explore a painting, document tattooing, accompany an object, or form part of an exhibition. Footage, edits, and presentation records can remain linked to their subjects through the Archive.',
+        materials: ['moving images', 'footage', 'edits', 'documentation'],
+        modes: ['visual', 'auditory', 'narrative'],
+        mediums: ['cameras', 'microphones', 'editing tools'],
+        example: { title: 'A painting seen through film', copy: 'A film could follow the making of a painting and its later exhibition. The film and its source footage could connect to the painting, the event, and related Archive records.' },
+        brand: { title: 'Sloth99', copy: 'Sloth99 is the moving-image identity within the construct, giving film, documentation, and visual storytelling a named place to develop.' }
+      }
     ];
 
-    /*
-      Connection map informed by the current public construct-entry structure. It
-      keeps the existing route doors while translating the node/medium/archive
-      hierarchy into visible movement between doors, artifacts, memory, and community.
-    */
+    // These are explanatory possibilities, not claims about particular published works.
+    const relationship = (target, description, materials) => ({ target, description, materials });
     const connections = {
       tattooing: [
-        { target: 'art', title: 'Tattooing -> Art', description: 'Flash, tattoo legend symbols, and client-ready drawings can grow out of the same visual vocabulary as paintings and studies.', materials: ['flash', 'symbol sets', 'visual systems'] },
-        { target: 'merch', title: 'Tattooing -> Merch', description: 'Aftercare, studio objects, printed studies, and mythic flash collections become artifacts that fund the next layer.', materials: ['aftercare', 'prints', 'studio goods'] },
-        { target: 'archive', title: 'Tattooing -> Archive', description: 'Healed work, design notes, appointment traces, deposits, and process images become proof that the world touches bodies.', materials: ['healed photos', 'booking traces', 'design notes'] },
-        { target: 'film', title: 'Tattooing -> Film', description: 'Sloth99 can document tattoo sessions, studio life, client education, and the making of symbolic body work.', materials: ['BTS footage', 'education clips', 'session records'] }
+        relationship('art', 'Drawing and tattoo studies can share imagery with paintings and other visual work.', ['drawings', 'studies']),
+        relationship('merch', 'Tattoo drawings can provide imagery for prints, clothing, or studio objects.', ['prints', 'objects']),
+        relationship('archive', 'Design notes, process photographs, and healed documentation can remain linked to the tattoo and its sources.', ['design notes', 'healed work']),
+        relationship('film', 'Film can document tattooing, its development, and the care around the work.', ['process footage', 'documentation']),
+        relationship('legend', 'A symbol used in a tattoo can connect that design to its shared meaning and other documented appearances.', ['symbols', 'appearances'])
       ],
       art: [
-        { target: 'tattooing', title: 'Art -> Tattooing', description: 'Paintings and symbol maps become source material for original flash, premium concepts, and tattoo legend systems.', materials: ['studies', 'flash seeds', 'symbol maps'] },
-        { target: 'merch', title: 'Art -> Merch', description: 'Finished images, studies, and visual systems become prints, garments, editions, and collector objects.', materials: ['prints', 'editions', 'object graphics'] },
-        { target: 'film', title: 'Art -> Film', description: 'The visual root system gives Sloth99 imagery, atmosphere, campaign language, and documentary subject matter.', materials: ['painting footage', 'campaign images', 'visual essays'] },
-        { target: 'archive', title: 'Art -> Archive', description: 'Progress trackers, reference links, tags, and documentation preserve the emergence of the visual mythology.', materials: ['tracker records', 'references', 'process scans'] }
+        relationship('tattooing', 'An image or symbol in a painting can provide source material for a tattoo design.', ['paintings', 'tattoo designs']),
+        relationship('merch', 'Imagery or ideas from a painting can become clothing, prints, editions, and other objects. Six.Well handles the sale of the painting and related objects while each retains its originating identity.', ['clothing', 'objects', 'commerce']),
+        relationship('film', 'A painting can inform moving-image work or become the subject of a film.', ['moving images', 'footage']),
+        relationship('archive', 'Sources, studies, creation, presentation, and maintenance material can remain connected to the artwork.', ['sources', 'process', 'maintenance']),
+        relationship('events', 'A painting or other artwork can be included in an exhibition or gathering.', ['exhibitions', 'installation']),
+        relationship('legend', 'Symbols appearing in a painting can link it to their shared records and to other works containing those symbols.', ['symbols', 'connected works'])
       ],
       merch: [
-        { target: 'archive', title: 'Merch -> Archive', description: 'Every release needs records: edition numbers, object descriptions, photos, release notes, and why the object exists.', materials: ['edition records', 'object photos', 'release notes'] },
-        { target: 'film', title: 'Merch -> Film', description: 'Drops need product video, premium renders, launch films, and process clips so the object feels like it came from the world.', materials: ['hero film', '3D assets', 'product reels'] },
-        { target: 'events', title: 'Merch -> Events', description: 'Garments can become event relics, uniforms, capsules, and physical proof that someone was inside a room.', materials: ['event capsules', 'relics', 'uniforms'] },
-        { target: 'writings', title: 'Merch -> Writings', description: 'Artifact pages and letters explain the story, edition logic, and cross-node meaning behind each object.', materials: ['object copy', 'drop letters', 'certificates'] }
+        relationship('archive', 'Production studies, edition information, release documentation, and later changes can stay linked to an object.', ['production', 'releases']),
+        relationship('film', 'Film can explore an object, document its production, or accompany its release.', ['process footage', 'release films']),
+        relationship('events', 'Objects and clothing can be presented in an exhibition or developed alongside a gathering.', ['exhibitions', 'objects']),
+        relationship('writings', 'Writing can explain an object, its source imagery, and how it relates to other work.', ['object text', 'letters']),
+        relationship('legend', 'A symbol carried by a garment or object can connect it to the same symbol in other works.', ['symbols', 'appearances'])
       ],
       about: [
-        { target: 'tattooing', title: 'About -> Tattooing', description: 'The public map must make the tattoo door obvious before asking visitors to understand the whole mythology.', materials: ['book door', 'boundaries', 'pricing context'] },
-        { target: 'art', title: 'About -> Art', description: 'About names the visual root system and shows how paintings, studies, and symbols feed the wider construct.', materials: ['artist context', 'visual root', 'symbol map'] },
-        { target: 'merch', title: 'About -> Merch', description: 'The map clarifies why a garment is an artifact, not just a product, and points visitors toward what is available now.', materials: ['shop door', 'artifact language', 'availability'] },
-        { target: 'events', title: 'About -> Events', description: 'About can hold the public explanation for gatherings, annual rituals, and future live rooms before each event surface opens.', materials: ['public context', 'ritual calendar', 'gathering frame'] },
-        { target: 'music', title: 'About -> Music', description: 'About gives the sound layer enough context to feel like atmosphere and conversation inside the construct rather than a separate channel.', materials: ['sound context', 'performance audio', 'conversation layer'] },
-        { target: 'writings', title: 'About -> Writings', description: 'Layered public language routes curious visitors toward Mindful Darkness and THE SOLEHMAN LETTERS instead of overloading the first doorway.', materials: ['positioning', 'newsletter', 'founder voice'] },
-        { target: 'archive', title: 'About -> Archive', description: 'About translates the system; Archive proves it by keeping records, traces, and source material findable.', materials: ['node atlas', 'proof', 'records'] },
-        { target: 'film', title: 'About -> Film', description: 'About frames the moving-image branch as the narrative arm that documents, explains, and mythologizes the world being built.', materials: ['narrative frame', 'documentation', 'Sloth99'] }
+        relationship('tattooing', 'About explains tattooing within the wider ecosystem and provides a route to its work and services.', ['orientation', 'tattooing']),
+        relationship('art', 'About explains how paintings, studies, and objects can connect to other forms of work.', ['visual work', 'relationships']),
+        relationship('merch', 'About explains how Six.Well develops clothing and objects and handles commerce for work across the construct.', ['objects', 'commerce']),
+        relationship('events', 'About explains how exhibitions and gatherings can bring connected work and people together.', ['exhibitions', 'gatherings']),
+        relationship('music', 'About places sound and performance in relation to events, film, writing, and archival material.', ['sound', 'relationships']),
+        relationship('writings', 'About provides context for the writing and philosophy developed through essays, letters, and notes.', ['philosophy', 'letters']),
+        relationship('archive', 'About introduces the Archive as the connected history and material of the work.', ['history', 'material']),
+        relationship('film', 'About places moving-image work and documentation within the wider ecosystem.', ['moving images', 'documentation']),
+        relationship('legend', 'About introduces the shared visual vocabulary of the construct and the routes it opens between works.', ['symbols', 'appearances'])
       ],
       events: [
-        { target: 'music', title: 'Events -> Music', description: 'GREEN[FIELD] and performance nights create live sound, conversation, clips, and social proof for the community layer.', materials: ['performances', 'guest audio', 'clips'] },
-        { target: 'merch', title: 'Events -> Merch', description: 'Solehman New Year and smaller rooms can produce one capsule, one artifact drop, or one relic tied to attendance.', materials: ['capsules', 'tickets', 'relics'] },
-        { target: 'film', title: 'Events -> Film', description: 'Every gathering should be documented through recaps, projection material, BTS footage, and visual evidence.', materials: ['recaps', 'projections', 'BTS'] },
-        { target: 'archive', title: 'Events -> Archive', description: 'Flyers, photos, set lists, talks, release objects, and recaps keep the ritual from vanishing after it ends.', materials: ['flyers', 'photos', 'recaps'] }
+        relationship('music', 'Sound and performance can form part of a gathering or exhibition.', ['sound', 'performances']),
+        relationship('merch', 'An event can present related objects or become a context for developing new clothing and editions.', ['objects', 'editions']),
+        relationship('film', 'Moving images can be presented during an event or document the experience.', ['screenings', 'documentation']),
+        relationship('archive', 'Planning material, installation records, photographs, and later reflections can remain linked to the event and its works.', ['planning', 'installation', 'records']),
+        relationship('art', 'An exhibition can bring paintings and other artworks into a shared setting.', ['paintings', 'exhibitions']),
+        relationship('legend', 'Symbols appearing in exhibited works can provide a route between those works and other documented appearances.', ['symbols', 'exhibited works'])
       ],
       music: [
-        { target: 'events', title: 'Music -> Events', description: 'Sound, conversation, and performance become the atmosphere of rooms where the construct gathers people.', materials: ['sets', 'talks', 'live audio'] },
-        { target: 'film', title: 'Music -> Film', description: 'Scores, loops, interviews, and voice fragments give moving-image work a sonic identity.', materials: ['scores', 'voice', 'field audio'] },
-        { target: 'writings', title: 'Music -> Writings', description: 'Conversations can become transcripts, notes, letters, and public context without overbuilding a media company too soon.', materials: ['transcripts', 'show notes', 'letters'] },
-        { target: 'archive', title: 'Music -> Archive', description: 'Raw audio, guest records, performance traces, and clips should be stored as evidence and future source material.', materials: ['raw audio', 'clips', 'guest records'] }
+        relationship('events', 'A composition, performance, or sound piece can contribute to a gathering or exhibition.', ['compositions', 'performances']),
+        relationship('film', 'Sound, music, and voice can become part of moving-image work.', ['soundtracks', 'voice']),
+        relationship('writings', 'Lyrics, conversation, and listening notes can connect sound work to writing.', ['lyrics', 'notes']),
+        relationship('archive', 'Recordings, drafts, and performance material can preserve the development and presentation of sound work.', ['recordings', 'drafts'])
       ],
       writings: [
-        { target: 'about', title: 'Writings -> About', description: 'The letters refine the public language: surface, middle, and deep explanations that let strangers enter at the right depth.', materials: ['positioning', 'founder notes', 'public language'] },
-        { target: 'merch', title: 'Writings -> Merch', description: 'Release notes and object descriptions turn products into artifacts with memory, story, and collector logic.', materials: ['drop notes', 'object text', 'certificates'] },
-        { target: 'events', title: 'Writings -> Events', description: 'Letters can announce gatherings, recap rituals, and give the audience a thread to follow before and after the room.', materials: ['announcements', 'recaps', 'quiet closings'] },
-        { target: 'archive', title: 'Writings -> Archive', description: 'Letters, essays, drafts, and fragments become a readable record of the founder and system evolving over time.', materials: ['letters', 'drafts', 'essays'] }
+        relationship('about', 'Writing can develop the ideas and language through which the construct explains itself.', ['philosophy', 'public language']),
+        relationship('merch', 'Letters and object descriptions can explain the sources and relationships behind clothing or an edition.', ['object text', 'letters']),
+        relationship('events', 'Writing can introduce an exhibition, accompany a gathering, or reflect on the experience.', ['exhibition text', 'reflections']),
+        relationship('archive', 'Notes, drafts, letters, and published writing can remain linked to their sources and subjects.', ['drafts', 'published writing'])
       ],
       archive: [
-        { target: 'about', title: 'Archive -> About', description: 'The archive gives the map proof, history, and a way to show what is active, incubating, dormant, or mythic.', materials: ['timelines', 'node status', 'evidence'] },
-        { target: 'tattooing', title: 'Archive -> Tattooing', description: 'Healed work, flash records, appointment traces, and process images return to tattooing as trust, proof, and future source material.', materials: ['healed work', 'flash records', 'appointment traces'] },
-        { target: 'art', title: 'Archive -> Art', description: 'Old studies, abandoned concepts, references, and symbol tags can return as future paintings or visual systems.', materials: ['references', 'abandoned studies', 'tags'] },
-        { target: 'merch', title: 'Archive -> Merch', description: 'Ephemera, past marks, studies, and release records can become future editions or wearable archive objects.', materials: ['ephemera', 'edition history', 'source scans'] },
-        { target: 'events', title: 'Archive -> Events', description: 'Flyers, recaps, photos, set lists, and audience traces turn past gatherings into source material for future rooms.', materials: ['flyers', 'recaps', 'event traces'] },
-        { target: 'music', title: 'Archive -> Music', description: 'Stored audio, transcripts, performance notes, and guest records keep the sound layer usable instead of disappearing after release.', materials: ['raw audio', 'transcripts', 'guest records'] },
-        { target: 'writings', title: 'Archive -> Writings', description: 'Drafts, fragments, notes, and timelines become readable public context when the writing layer needs proof and lineage.', materials: ['drafts', 'fragments', 'timelines'] },
-        { target: 'film', title: 'Archive -> Film', description: 'Stored evidence gives Sloth99 source material for documentaries, campaign films, and lore videos.', materials: ['footage logs', 'stills', 'lore'] }
+        relationship('about', 'Connected records give the public explanation examples and history to follow.', ['history', 'context']),
+        relationship('tattooing', 'Earlier drawings, tattoo documentation, and healed work can inform later tattoo designs.', ['drawings', 'healed work']),
+        relationship('art', 'Sources, studies, and earlier works can become material for new paintings and objects.', ['sources', 'studies']),
+        relationship('merch', 'Earlier images, objects, and production records can inform new clothing and editions.', ['source images', 'production records']),
+        relationship('events', 'Documentation of earlier exhibitions and gatherings can inform future events.', ['installation records', 'reflections']),
+        relationship('music', 'Recordings and performance documentation can become material for later sound work.', ['recordings', 'performance records']),
+        relationship('writings', 'Notes, documents, and timelines can inform essays, letters, and accounts of the work.', ['notes', 'timelines']),
+        relationship('film', 'Footage, photographs, and historical records can become source material for moving-image work.', ['footage', 'photographs']),
+        relationship('legend', 'Source studies and particular works can document the history of a symbol while remaining distinct from its shared Legend identity.', ['source studies', 'symbol history'])
+      ],
+      legend: [
+        relationship('art', 'A symbol record can lead to paintings and other visual works containing that symbol.', ['paintings', 'appearances']),
+        relationship('tattooing', 'A symbol record can lead to documented tattoos and designs containing that symbol.', ['tattoos', 'designs']),
+        relationship('merch', 'A symbol record can lead to garments and other objects carrying that symbol.', ['clothing', 'objects']),
+        relationship('events', 'A symbol can connect exhibited works and their event context through documented appearances.', ['exhibited works', 'event context']),
+        relationship('archive', 'A symbol record can connect to source studies, versions, and the histories of particular works.', ['source studies', 'versions'])
       ],
       film: [
-        { target: 'tattooing', title: 'Film -> Tattooing', description: 'Documentation makes premium tattoo work legible through process, education, studio atmosphere, and trust.', materials: ['session clips', 'education', 'studio life'] },
-        { target: 'merch', title: 'Film -> Merch', description: 'Campaign films, product viewers, and process footage help artifact garments feel authored instead of generic.', materials: ['campaigns', 'renders', 'launch film'] },
-        { target: 'events', title: 'Film -> Events', description: 'Screenings, projections, recaps, and captured performance can become live containers for the world.', materials: ['screenings', 'projections', 'recaps'] },
-        { target: 'archive', title: 'Film -> Archive', description: 'Cuts, stills, interviews, and making-of footage become the memory trail for future viewers and collectors.', materials: ['stills', 'interviews', 'footage'] }
+        relationship('tattooing', 'Moving images can document tattoo design, sessions, and the experience around the work.', ['process footage', 'documentation']),
+        relationship('merch', 'Moving images can explore an object or document how clothing and editions are made.', ['objects', 'production footage']),
+        relationship('events', 'A film can be screened in an exhibition or document a gathering.', ['screenings', 'event footage']),
+        relationship('archive', 'Source footage, edits, stills, and presentation records can remain connected to the film and its subjects.', ['footage', 'edits', 'stills'])
       ]
     };
 
@@ -1572,18 +1859,22 @@
     const selectedBody = document.getElementById('selectedBody');
     const selectedContext = document.getElementById('selectedContext');
     const selectedMaterials = document.getElementById('selectedMaterials');
+    const selectedModes = document.getElementById('selectedModes');
+    const selectedMediums = document.getElementById('selectedMediums');
     const manifestBrand = document.getElementById('manifestBrand');
     const manifestBrandLogo = document.getElementById('manifestBrandLogo');
     const manifestBrandKicker = document.getElementById('manifestBrandKicker');
     const manifestBrandTitle = document.getElementById('manifestBrandTitle');
     const manifestBrandCopy = document.getElementById('manifestBrandCopy');
+    const selectedExampleTitle = document.getElementById('selectedExampleTitle');
+    const selectedExampleBody = document.getElementById('selectedExampleBody');
     const stateLabel = document.getElementById('stateLabel');
     const connectionGrid = document.getElementById('connectionGrid');
     const details = document.querySelector('.details');
     const selectedCopy = document.querySelector('.selected-copy');
-    const connectionList = document.querySelector('.connection-list');
-    const fadeGroup = [stageSelectedPanel, selectedCopy, connectionList, stateLabel];
+    const routeVisibility = new Map();
     const highlightRules = [
+      { color: legendColor, terms: ['legend', 'appearances', 'variations'] },
       { color: '#6E0404', terms: ['Art.Pill', 'tattoo house', 'tattooing', 'tattoo', 'tattoos', 'mark', 'marks', 'body', 'bodies', 'flash', 'aftercare', 'consultation', 'consultations', 'appointment', 'appointments', 'client', 'clients', 'healed work', 'symbolic mark'] },
       { color: '#0071EB', terms: ['art index', 'acquisition inquiry', 'symbol maps', 'source material', 'visual vocabulary', 'art', 'artist', 'paintings', 'painting', 'studies', 'study', 'symbols', 'symbol', 'visual', 'image', 'images', 'objects', 'object', 'drawings'] },
       { color: '#F08F15', terms: ['merch', 'garments', 'garment', 'prints', 'print', 'editions', 'edition', 'drops', 'drop', 'commerce', 'product', 'products', 'clothing', 'capsules'] },
@@ -1691,19 +1982,11 @@
       timers = [];
     }
 
-    /* fade the details out, swap their content, then fade back in */
-    function softSwap(apply) {
-      fadeGroup.forEach(el => el.classList.add('is-fading'));
-      const timer = setTimeout(() => {
-        apply();
-        requestAnimationFrame(() => {
-          fadeGroup.forEach(el => el.classList.remove('is-fading'));
-        });
-      }, detailFade);
-      timers.push(timer);
-    }
-
     function clearSelection() {
+      const previous = nodeByKey(activeKey);
+      if (stageSelectedPanel.contains(document.activeElement) || details.contains(document.activeElement)) {
+        previous?.group.focus({ preventScroll: true });
+      }
       activeKey = null;
       clearTimers();
       activeConnections = [];
@@ -1711,24 +1994,28 @@
       diagram.classList.remove('has-active');
       diagramStage.classList.remove('has-selection');
       details.classList.remove('has-selection');
+      stageSelectedPanel.hidden = true;
+      details.hidden = true;
       connectionLayer.replaceChildren();
       nodeLayer.querySelectorAll('.node-hit').forEach(group => {
         group.classList.remove('is-active', 'is-connected', 'is-connected-pending');
+        group.setAttribute('aria-pressed', 'false');
       });
-      softSwap(() => {
-        selectedTitle.textContent = '';
-        selectedTitle.style.color = 'var(--accent)';
-        selectedRole.textContent = '';
-        selectedBody.textContent = '';
-        selectedContext.textContent = '';
-        selectedMaterials.replaceChildren();
-        selectedMaterials.style.removeProperty('--chip-color');
-        renderManifestBrand(null);
-        stateLabel.textContent = 'click a construct entry - its connections illuminate';
-        connectionGrid.replaceChildren();
-        highlightNodeTerms(selectedCopy);
-        highlightNodeTerms(connectionGrid);
-      });
+      selectedTitle.textContent = '';
+      selectedRole.textContent = '';
+      selectedBody.textContent = '';
+      selectedBody.classList.remove('is-brief');
+      selectedContext.textContent = '';
+      selectedModes.textContent = '';
+      selectedMediums.textContent = '';
+      selectedMaterials.replaceChildren();
+      selectedMaterials.style.removeProperty('--chip-color');
+      renderManifestBrand(null);
+      selectedExampleTitle.textContent = '';
+      selectedExampleBody.textContent = '';
+      stateLabel.textContent = 'choose a circle to explore its connections';
+      connectionGrid.replaceChildren();
+      refreshGeometry();
     }
 
     function renderMaterialChips(container, items, color) {
@@ -1744,24 +2031,20 @@
     }
 
     function renderManifestBrand(node) {
-      const brand = node && node.brand ? node.brand : {
-        kicker: 'construct system / orientation',
-        title: 'The Six.Well Construct',
-        copy: 'The operating architecture that holds the nodes, mediums, archive, and method in relation.'
-      };
-      manifestBrand.style.setProperty('--brand-color', node ? (node.activeColor || node.color) : 'var(--accent)');
+      const brand = node?.brand || {};
+      manifestBrand.style.setProperty('--brand-color', node ? node.color : 'var(--accent)');
       if (brand.logo) {
         manifestBrandLogo.src = brand.logo;
-        manifestBrandLogo.alt = brand.logoAlt || '';
+        manifestBrandLogo.alt = brand.logoAlt;
         manifestBrandLogo.hidden = false;
       } else {
         manifestBrandLogo.removeAttribute('src');
         manifestBrandLogo.alt = '';
         manifestBrandLogo.hidden = true;
       }
-      manifestBrandKicker.textContent = brand.kicker;
-      manifestBrandTitle.textContent = brand.title;
-      manifestBrandCopy.textContent = brand.copy;
+      manifestBrandKicker.textContent = brand.shared ? 'shared system' : 'creative identity';
+      manifestBrandTitle.textContent = brand.title || '';
+      manifestBrandCopy.textContent = brand.copy || '';
     }
 
     function connectionEndpoints(source, target) {
@@ -1828,6 +2111,11 @@
       line.setAttribute('stroke', `url(#${gradientId})`);
       line.style.setProperty('--line-length', length);
       line.style.animationDelay = `${lineLead + delay}ms`;
+      if (reduceMotion.matches) {
+        line.style.animation = 'none';
+        line.style.strokeDasharray = 'none';
+        line.style.strokeDashoffset = '0';
+      }
       line.addEventListener('animationend', () => {
         line.style.animation = 'none';
         line.style.strokeDasharray = 'none';
@@ -1836,6 +2124,7 @@
       connectionLayer.appendChild(line);
       activeConnections.push({ line, gradient, source, target });
 
+      if (reduceMotion.matches) return;
       const timer = setTimeout(() => {
         const targetGroup = nodeLayer.querySelector(`[data-node="${target.key}"]`);
         if (targetGroup && activeKey === source.key) {
@@ -1846,53 +2135,72 @@
       timers.push(timer);
     }
 
-    function renderDetails(source, entries) {
-      softSwap(() => {
-      selectedTitle.textContent = source.label;
-      selectedTitle.style.color = source.activeColor || source.color;
-      stageSelectedPanel.style.setProperty('--selected-color', source.activeColor || source.color);
-      selectedRole.textContent = `${source.role} - ${source.status}`;
-      selectedBody.textContent = source.note
-        .replace(/^What it is:\s*/i, '')
-        .split(/\s+Why it matters:/i)[0];
-      selectedContext.textContent = source.note;
-      renderMaterialChips(selectedMaterials, source.materials || [], source.activeColor || source.color);
-      renderManifestBrand(source);
-      stateLabel.textContent = `${source.label.toLowerCase()} - ${entries.length} connections`;
+    function renderConnections(source, entries) {
       connectionGrid.replaceChildren();
-
       entries.forEach((entry, index) => {
         const target = nodeByKey(entry.target);
-        const card = document.createElement('a');
+        const available = routeVisibility.get(target.url) === true;
+        const card = document.createElement(available ? 'a' : 'article');
         card.className = 'connection-card';
-        card.href = target.url;
+        card.dataset.target = target.key;
+        if (available) card.href = target.url;
         card.style.setProperty('--link-color', target.color);
-        card.style.setProperty('--card-delay', `${120 + index * 110}ms`);
+        card.style.setProperty('--card-delay', (reduceMotion.matches ? 0 : 120 + index * 110) + 'ms');
 
         const name = document.createElement('span');
         name.className = 'connection-name';
-        name.textContent = entry.title;
-
+        name.textContent = source.label + ' → ' + target.label;
         const desc = document.createElement('span');
         desc.className = 'connection-desc';
         desc.textContent = entry.description;
-
         const materials = document.createElement('span');
         materials.className = 'connection-materials';
-        (entry.materials || []).forEach(item => {
-          const chip = document.createElement('span');
-          chip.className = 'material-chip';
-          chip.textContent = item;
-          materials.appendChild(chip);
-        });
-
-        card.append(name, desc, materials);
+        renderMaterialChips(materials, entry.materials || [], target.color);
+        const destination = document.createElement('span');
+        destination.className = 'connection-destination';
+        destination.textContent = available ? 'Explore ' + target.label + ' ↗' : 'Relationship explained here';
+        card.append(name, desc, materials, destination);
         connectionGrid.appendChild(card);
       });
+      highlightNodeTerms(connectionGrid);
+    }
+
+    async function loadRouteVisibility() {
+      await Promise.all(nodes.map(async node => {
+        try {
+          const response = await fetch('/api/site/visibility?path=' + encodeURIComponent(node.url), {
+            cache: 'no-store', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000)
+          });
+          if (!response.ok) throw new Error('Visibility unavailable');
+          const decision = await response.json();
+          routeVisibility.set(node.url, decision.visibility === 'public' && decision.hidden === false);
+        } catch (_) {
+          // Keep explanations readable when a destination cannot be confirmed.
+          routeVisibility.set(node.url, false);
+        }
+      }));
+      if (activeKey) renderConnections(nodeByKey(activeKey), connections[activeKey]);
+    }
+
+    function renderDetails(source, entries) {
+      selectedTitle.textContent = source.label;
+      selectedTitle.style.color = source.color;
+      stageSelectedPanel.style.setProperty('--selected-color', source.color);
+      selectedRole.textContent = source.identity;
+      selectedBody.textContent = source.summary;
+      selectedBody.classList.toggle('is-brief', source.briefSummary === true);
+      selectedContext.textContent = source.context;
+      selectedModes.textContent = source.modes.join(', ');
+      selectedMediums.textContent = source.mediums.join(', ');
+      renderMaterialChips(selectedMaterials, source.materials, source.color);
+      renderManifestBrand(source);
+      selectedExampleTitle.textContent = source.example.title;
+      selectedExampleTitle.style.color = source.color;
+      selectedExampleBody.textContent = source.example.copy;
+      stateLabel.textContent = source.label.toLowerCase() + ' — ' + entries.length + ' connections';
+      renderConnections(source, entries);
       highlightNodeTerms(selectedCopy);
       highlightNodeTerms(stageSelectedPanel);
-      highlightNodeTerms(connectionGrid);
-      });
     }
 
     function activateNode(key) {
@@ -1900,7 +2208,6 @@
         clearSelection();
         return;
       }
-
       activeKey = key;
       clearTimers();
       activeConnections = [];
@@ -1909,19 +2216,23 @@
       diagram.classList.add('has-active');
       diagramStage.classList.add('has-selection');
       details.classList.add('has-selection');
+      stageSelectedPanel.hidden = false;
+      details.hidden = false;
       nodeLayer.querySelectorAll('.node-hit').forEach(group => {
-        group.classList.toggle('is-active', group.dataset.node === key);
+        const selected = group.dataset.node === key;
+        group.classList.toggle('is-active', selected);
+        group.setAttribute('aria-pressed', String(selected));
         group.classList.remove('is-connected', 'is-connected-pending');
       });
-
       const source = nodeByKey(key);
-      const entries = connections[key] || [];
+      const entries = connections[key];
       entries.forEach(entry => {
-        const targetGroup = nodeLayer.querySelector(`[data-node="${entry.target}"]`);
-        if (targetGroup) targetGroup.classList.add('is-connected-pending');
+        const targetGroup = nodeByKey(entry.target).group;
+        targetGroup.classList.add(reduceMotion.matches ? 'is-connected' : 'is-connected-pending');
       });
       renderDetails(source, entries);
-      entries.forEach((entry, index) => drawConnection(source, nodeByKey(entry.target), source.activeColor || source.color, index));
+      entries.forEach((entry, index) => drawConnection(source, nodeByKey(entry.target), source.color, index));
+      refreshGeometry();
     }
 
     function buildGradients() {
@@ -1951,65 +2262,88 @@
 
     function buildDiagram() {
       buildGradients();
-
       nodes.forEach((node, index) => {
-        node.point = polarPoint(node.angle, 258, 258);
-
-        const spoke = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        spoke.setAttribute('class', 'spoke');
-        spokesLayer.appendChild(spoke);
-
-        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        group.setAttribute('class', 'node-hit');
-        group.setAttribute('data-node', node.key);
-        group.setAttribute('tabindex', '0');
-        group.setAttribute('role', 'button');
-        group.setAttribute('aria-label', `Show ${node.label} connections`);
-        group.style.setProperty('--node-color', node.color);
-        group.style.setProperty('--sphere-gradient', `#sphere-${node.key}`);
         node.index = index;
         node.offset = { x: 0, y: 0 };
         node.phase = index * 0.2;
-        node.spoke = spoke;
-        node.group = group;
-        updateSpoke(node);
-
-        const halo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        halo.setAttribute('class', 'node-halo');
-        halo.setAttribute('cx', node.point.x);
-        halo.setAttribute('cy', node.point.y);
-        halo.setAttribute('r', 46);
-
-        const core = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        core.setAttribute('class', 'node-core');
-        core.setAttribute('cx', node.point.x);
-        core.setAttribute('cy', node.point.y);
-        core.setAttribute('r', 32);
-
-        const labelOffset = node.point.y < center.y ? -52 : 60;
-        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        label.setAttribute('class', 'node-label');
-        label.setAttribute('x', node.point.x);
-        label.setAttribute('y', node.point.y + labelOffset);
-        label.textContent = node.label;
-
-        const count = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        count.setAttribute('class', 'node-count');
-        count.setAttribute('x', node.point.x);
-        count.setAttribute('y', node.point.y + (node.point.y < center.y ? 78 : -70));
-        count.textContent = `${(connections[node.key] || []).length} connections`;
-
-        group.append(halo, core, label, count);
-        group.addEventListener('click', () => activateNode(node.key));
-        group.addEventListener('keydown', event => {
+        node.point = { ...center };
+        const svgElement = (tag, className) => {
+          const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
+          element.setAttribute('class', className);
+          return element;
+        };
+        node.spoke = svgElement('line', 'spoke');
+        spokesLayer.appendChild(node.spoke);
+        node.group = svgElement('g', 'node-hit');
+        node.group.dataset.node = node.key;
+        node.group.setAttribute('tabindex', '0');
+        node.group.setAttribute('role', 'button');
+        node.group.setAttribute('aria-label', 'Show ' + node.label + ' connections');
+        node.group.setAttribute('aria-pressed', 'false');
+        node.group.setAttribute('aria-controls', 'stageSelectedPanel constructMapDetails');
+        node.group.style.setProperty('--node-color', node.color);
+        node.group.style.setProperty('--sphere-gradient', '#sphere-' + node.key);
+        node.hitTarget = svgElement('circle', 'node-target');
+        node.halo = svgElement('circle', 'node-halo');
+        node.core = svgElement('circle', 'node-core');
+        node.labelElement = svgElement('text', 'node-label');
+        node.labelElement.textContent = node.label;
+        node.group.append(node.hitTarget, node.halo, node.core, node.labelElement);
+        node.group.addEventListener('click', () => activateNode(node.key));
+        node.group.addEventListener('keydown', event => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             activateNode(node.key);
           }
         });
-
-        nodeLayer.appendChild(group);
+        nodeLayer.appendChild(node.group);
       });
+    }
+
+    function layoutDiagram() {
+      const width = diagram.getBoundingClientRect().width;
+      compactDiagram = window.matchMedia('(max-width: 700px)').matches;
+      const viewWidth = compactDiagram ? width : 1000;
+      const viewHeight = compactDiagram ? Math.max(460, Math.min(620, width + 120)) : 640;
+      center.x = viewWidth / 2;
+      center.y = compactDiagram ? viewHeight / 2 : 322;
+      diagram.setAttribute('viewBox', '0 0 ' + viewWidth + ' ' + viewHeight);
+      diagram.style.setProperty('--diagram-aspect', viewWidth + ' / ' + viewHeight);
+      diagram.style.setProperty('--node-radius', compactDiagram ? '22px' : '32px');
+      diagram.style.setProperty('--node-active-radius', compactDiagram ? '28px' : '43px');
+      diagram.style.setProperty('--node-connected-radius', compactDiagram ? '24px' : '35px');
+      const ringRadius = compactDiagram ? 42 : 65;
+      const ring = document.querySelector('.center-ring');
+      ring.setAttribute('cx', center.x);
+      ring.setAttribute('cy', center.y);
+      ring.setAttribute('r', ringRadius);
+      centerRingOuterRadius = ringRadius + (compactDiagram ? 8 : window.innerWidth <= 1024 ? 9 : 12);
+      document.querySelectorAll('.center-dot').forEach((dot, index) => {
+        dot.setAttribute('cx', center.x + (index % 2 ? 1 : -1) * (compactDiagram ? 11 : 17));
+        dot.setAttribute('cy', center.y + (Math.floor(index / 2) - 1) * (compactDiagram ? 15 : 23));
+        dot.setAttribute('r', compactDiagram ? 6 : 9.5);
+      });
+      const radiusX = compactDiagram ? viewWidth / 2 - 60 : 258;
+      const radiusY = compactDiagram ? viewHeight / 2 - 65 : 258;
+      const scale = compactDiagram ? 1 : Math.min(width / viewWidth, diagram.getBoundingClientRect().height / viewHeight);
+      nodes.forEach(node => {
+        node.point = polarPoint(-90 + node.index * 360 / nodes.length, radiusX, radiusY);
+        node.offset = { x: 0, y: 0 };
+        node.group.setAttribute('transform', 'translate(0 0)');
+        [node.hitTarget, node.halo, node.core].forEach(circle => {
+          circle.setAttribute('cx', node.point.x);
+          circle.setAttribute('cy', node.point.y);
+        });
+        node.hitTarget.setAttribute('r', compactDiagram ? 28 : Math.max(46, 22 / scale));
+        node.halo.setAttribute('r', compactDiagram ? 28 : 46);
+        node.core.setAttribute('r', compactDiagram ? 22 : 32);
+        const above = node.point.y < center.y;
+        node.labelElement.setAttribute('x', node.point.x);
+        node.labelElement.setAttribute('y', node.point.y + (above ? -1 : 1) * (compactDiagram ? 39 : above ? 52 : 60));
+        node.labelElement.style.fontSize = (compactDiagram ? 16 : Math.max(18, 14 / scale)) + 'px';
+      });
+      pointer.active = false;
+      refreshGeometry();
     }
 
     function livePoint(node) {
@@ -2020,10 +2354,9 @@
     }
 
     function nodeCoreRadius(node) {
-      if (!node.group) return 32;
-      if (node.group.classList.contains('is-active')) return 43;
-      if (node.group.classList.contains('is-connected')) return 35;
-      return 32;
+      if (node.group.classList.contains('is-active')) return compactDiagram ? 28 : 43;
+      if (node.group.classList.contains('is-connected')) return compactDiagram ? 24 : 35;
+      return compactDiagram ? 22 : 32;
     }
 
     function spokeEndPoint(node) {
@@ -2082,35 +2415,61 @@
       return { x, y };
     }
 
-    function updateMotion(timestamp) {
-      const seconds = timestamp / 1000;
-      nodes.forEach(node => {
-        const target = motionTarget(node, seconds);
-        node.offset.x += (target.x - node.offset.x) * 0.055;
-        node.offset.y += (target.y - node.offset.y) * 0.055;
-        node.group.setAttribute('transform', `translate(${node.offset.x.toFixed(2)} ${node.offset.y.toFixed(2)})`);
-        updateSpoke(node);
-      });
-
+    function refreshGeometry() {
+      nodes.forEach(updateSpoke);
       activeConnections.forEach(connection => {
         const { sourcePoint, targetPoint } = connectionEndpoints(connection.source, connection.target);
-        connection.line.setAttribute('d', `M ${sourcePoint.x.toFixed(2)} ${sourcePoint.y.toFixed(2)} L ${targetPoint.x.toFixed(2)} ${targetPoint.y.toFixed(2)}`);
-        connection.gradient.setAttribute('x1', sourcePoint.x.toFixed(2));
-        connection.gradient.setAttribute('y1', sourcePoint.y.toFixed(2));
-        connection.gradient.setAttribute('x2', targetPoint.x.toFixed(2));
-        connection.gradient.setAttribute('y2', targetPoint.y.toFixed(2));
+        connection.line.setAttribute('d', 'M ' + sourcePoint.x + ' ' + sourcePoint.y + ' L ' + targetPoint.x + ' ' + targetPoint.y);
+        connection.gradient.setAttribute('x1', sourcePoint.x);
+        connection.gradient.setAttribute('y1', sourcePoint.y);
+        connection.gradient.setAttribute('x2', targetPoint.x);
+        connection.gradient.setAttribute('y2', targetPoint.y);
       });
+    }
 
+    function updateMotion(timestamp) {
+      if (reduceMotion.matches || document.hidden) { rafId = null; return; }
+      nodes.forEach(node => {
+        const target = motionTarget(node, timestamp / 1000);
+        node.offset.x += (target.x - node.offset.x) * 0.055;
+        node.offset.y += (target.y - node.offset.y) * 0.055;
+        node.group.setAttribute('transform', 'translate(' + node.offset.x.toFixed(2) + ' ' + node.offset.y.toFixed(2) + ')');
+      });
+      refreshGeometry();
       rafId = requestAnimationFrame(updateMotion);
     }
 
+    function syncMotion() {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = null;
+      if (reduceMotion.matches) {
+        clearTimers();
+        nodes.forEach(node => {
+          node.offset = { x: 0, y: 0 };
+          node.group.setAttribute('transform', 'translate(0 0)');
+          if (node.group.classList.contains('is-connected-pending')) {
+            node.group.classList.replace('is-connected-pending', 'is-connected');
+          }
+        });
+        connectionLayer.querySelectorAll('.connection-line').forEach(line => {
+          line.style.animation = 'none';
+          line.style.strokeDasharray = 'none';
+          line.style.strokeDashoffset = '0';
+        });
+        refreshGeometry();
+      } else if (!document.hidden) {
+        rafId = requestAnimationFrame(updateMotion);
+      }
+    }
+
     function updatePointer(event) {
-      const rect = diagram.getBoundingClientRect();
-      const scaleX = 1000 / rect.width;
-      const scaleY = 640 / rect.height;
+      if (reduceMotion.matches || event.pointerType === 'touch') return;
+      const matrix = diagram.getScreenCTM();
+      if (!matrix) return;
+      const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
       pointer.active = true;
-      pointer.x = (event.clientX - rect.left) * scaleX;
-      pointer.y = (event.clientY - rect.top) * scaleY;
+      pointer.x = point.x;
+      pointer.y = point.y;
     }
 
     diagram.addEventListener('pointermove', updatePointer);
@@ -2122,12 +2481,21 @@
     });
 
     buildDiagram();
-    highlightNodeTerms(document.querySelector('.hero-copy'));
+    layoutDiagram();
+    window.addEventListener('resize', layoutDiagram);
+    reduceMotion.addEventListener('change', syncMotion);
+    document.addEventListener('visibilitychange', syncMotion);
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && activeKey && (diagram.contains(document.activeElement) || stageSelectedPanel.contains(document.activeElement) || details.contains(document.activeElement))) {
+        event.preventDefault();
+        clearSelection();
+      }
+    });
+    loadRouteVisibility();
     highlightNodeTerms(document.querySelector('.selected-copy'));
     highlightNodeTerms(document.querySelector('.connection-list'));
     highlightNodeTerms(document.querySelector('.content-bands'));
-    activateNode('about');
-    rafId = requestAnimationFrame(updateMotion);
+    syncMotion();
   })();
 </script>
 </body>

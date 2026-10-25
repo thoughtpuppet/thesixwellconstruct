@@ -258,6 +258,10 @@ test("sitemap generation obeys authoritative visibility and excludes query state
   xml = await sitemapXml({ SUBMISSIONS_DB: new LocalD1(database) }, ORIGIN);
   assert.doesNotMatch(xml, /<loc>https:\/\/thesixwellconstruct\.com\/events\//);
   const urls = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+  assert.ok(urls.includes(`${ORIGIN}/about/legend/`));
+  for (const slug of ["breakdown", "mediums", "identities", "founder", "contact-press", "visual-language", "ways-in"]) {
+    assert.equal(urls.includes(`${ORIGIN}/about/${slug}/`), false, slug);
+  }
   assert.equal(urls.some((url) => /[?#]/.test(url)), false);
   assert.equal(new Set(urls).size, occurrences(xml, /<loc>/g));
 });
@@ -342,10 +346,14 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
       return new Response(source, { headers:{ "content-type":"text/html" } });
     } },
   };
-  const path = "/events/kinmarking-01-oral-histories-and-tattooing/";
-  const old = await worker.fetch(new Request(`${ORIGIN}/events/kinmarking-01-skin-as-archive/?edit=1&occurrence=kinmarking-route-occurrence`), env, {});
-  assert.equal(old.status, 308);
-  assert.equal(old.headers.get("location"), `${ORIGIN}${path}?edit=1&occurrence=kinmarking-route-occurrence`);
+  const path = "/events/kinmarking-01-memory-work-and-tattooing/";
+  for (const legacySlug of ["kinmarking-01-skin-as-archive", "kinmarking-01-oral-histories-and-tattooing"]) {
+    for (const suffix of ["", "/", "/index.html"]) {
+      const old = await worker.fetch(new Request(`${ORIGIN}/events/${legacySlug}${suffix}?edit=1&occurrence=kinmarking-route-occurrence`), env, {});
+      assert.equal(old.status, 308);
+      assert.equal(old.headers.get("location"), `${ORIGIN}${path}?edit=1&occurrence=kinmarking-route-occurrence`);
+    }
+  }
   const response = await worker.fetch(new Request(`${ORIGIN}${path}`), env, {});
   const html = await response.text();
   assert.equal(response.status, 200);
@@ -355,7 +363,7 @@ test("renamed KINMARKING edition redirects legacy links and renders the same pub
   const developmentSchema = JSON.parse(html.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/)[1]);
   assert.equal(developmentSchema["@type"], "WebPage");
   assert.equal(developmentSchema.startDate, undefined);
-  assert.match(html, /<title>KINMARKING 01: Oral Histories &amp; Tattooing/);
+  assert.match(html, /<title>KINMARKING 01: Memory Work, Oral Histories and Tattooing/);
   assert.match(html, /id="developmentStatus"[^>]*>In development<\/h2>/);
   assert.doesNotMatch(html, /id="kinmarkingCollaborators"|id="registrationForm"|id="kinmarkingExperience"/);
   assert.ok(html.includes(`<link rel="canonical" href="${ORIGIN}${path}">`));

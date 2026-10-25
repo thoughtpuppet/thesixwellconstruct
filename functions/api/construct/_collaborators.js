@@ -23,10 +23,11 @@ export async function publicCollaborators(request, env, slug = "") {
   const ids = records.map(record => record.id);
   const placeholders = ids.map(() => "?").join(",");
   const [mediaResult, relationResult, creditResult, linkResult] = await Promise.all([
-    database.prepare(`SELECT em.entity_id,em.alt_text_override,m.alt_text,m.width,m.height,
-      COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id) url
+    database.prepare(`SELECT em.entity_id,em.role,em.alt_text_override,m.alt_text,m.width,m.height,
+      COALESCE(NULLIF(em.caption_override,''),m.caption,'') caption,
+      COALESCE(NULLIF(m.source_url,''),'/api/construct/entity-media/'||m.id) url
       FROM entity_media em JOIN media_assets m ON m.id=em.media_id
-      WHERE em.entity_id IN (${placeholders}) AND em.role='primary' AND em.public_visible=1
+      WHERE em.entity_id IN (${placeholders}) AND em.role IN ('primary','gallery') AND em.public_visible=1
         AND m.privacy='public' AND m.state='active' AND m.public_presentation='inline'
         AND m.mime_type LIKE 'image/%'
       ORDER BY em.sort_order,em.media_id`).bind(...ids).all(),
@@ -47,7 +48,8 @@ export async function publicCollaborators(request, env, slug = "") {
   ]);
   const byId = new Map(records.map(record => [record.id, record]));
   const publicRecords = records.map(record => {
-    const media = (mediaResult.results || []).find(item => item.entity_id === record.id);
+    const recordMedia = (mediaResult.results || []).filter(item => item.entity_id === record.id);
+    const media = recordMedia.find(item => item.role === 'primary');
     const affiliations = (relationResult.results || []).flatMap(relation => {
       const outgoing = relation.source_entity_id === record.id;
       if (!outgoing && relation.target_entity_id !== record.id) return [];
@@ -59,6 +61,7 @@ export async function publicCollaborators(request, env, slug = "") {
       kindLabel: record.kind_label || (record.entity_type === "person" ? "Individual" : "Organization"), descriptionLabel: record.description_label, pronouns: record.pronouns, bio: record.bio,
       websiteUrl: record.website_url, route: `/about/collaborators/${encodeURIComponent(record.slug)}/`,
       image: media ? { url: media.url, width: media.width, height: media.height, alt: media.alt_text_override || media.alt_text || `Portrait of ${record.name}` } : null,
+      gallery: recordMedia.filter(item => item.role === 'gallery' && item.url !== media?.url).map(item => ({ url: item.url, width: item.width, height: item.height, alt: item.alt_text_override || item.alt_text || `Photograph of ${record.name}`, caption: item.caption })),
       affiliations,
       links: (linkResult.results || []).filter(link => link.entity_id === record.id).map(link => ({ label: link.label, url: link.url })),
       credits: (creditResult.results || []).filter(credit => credit.entity_id === record.id).map(credit => ({ title: credit.title, editionNumber: credit.edition_number, role: credit.role, route: credit.route })),
@@ -76,9 +79,17 @@ function portrait(record, eager = false) {
 function creditLinks(record) {
   return record.credits.map(credit => `<a class="text-link" href="${safeUrl(credit.route)}">${escapeHtml(credit.title)} ${escapeHtml(credit.editionNumber)} · ${escapeHtml(credit.role)}</a>`).join("");
 }
+function gallery(record) {
+  const images = (record.gallery || []).filter(item => safeUrl(item.url));
+  if (!images.length) return '';
+  return `<div class="collaborator-gallery" aria-label="Photographs of ${escapeHtml(record.name)}">${images.map(item => `<figure><img src="${safeUrl(item.url)}" alt="${escapeHtml(item.alt)}"${item.width ? ` width="${Number(item.width)}"` : ''}${item.height ? ` height="${Number(item.height)}"` : ''} loading="lazy">${item.caption ? `<figcaption>${escapeHtml(item.caption)}</figcaption>` : ''}</figure>`).join('')}</div>`;
+}
 export function renderCollaborators(payload) {
   if (payload.record) {
     const record = payload.record;
+    const projectLinks = (record.links || []).filter(link => /^\/(?!\/)/.test(link.url) && safeUrl(link.url));
+    const workLinks = (record.links || []).filter(link => /^https:\/\//i.test(link.url) && safeUrl(link.url));
+    const firstKinmarkingEdition = record.credits.some(credit => credit.title === 'KINMARKING' && credit.editionNumber === '01');
     return `<article class="collaborator-profile" aria-labelledby="collaborator-profile-name">
       ${portrait(record, true)}<div class="collaborator-profile-copy">
       <span class="band-kicker collaborator-kind">${escapeHtml(record.kindLabel)}</span>
@@ -86,9 +97,10 @@ export function renderCollaborators(payload) {
       ${record.descriptionLabel ? `<p class="collaborator-description meta-copy">${escapeHtml(record.descriptionLabel)}</p>` : ""}
     ${record.pronouns ? `<p class="collaborator-pronouns">${escapeHtml(record.pronouns)}</p>` : ""}
       <p class="collaborator-bio" data-live-edit-owner="managed" data-live-edit-label="Collaborator biography" data-live-edit-owner-href="/studio/submissions/#archive/${record.entityType === "person" ? "people" : "organizations"}">${escapeHtml(record.bio)}</p>
+      ${gallery(record)}
       ${record.affiliations.length ? `<div class="collaborator-affiliations"><h3>Relationships</h3><ul>${record.affiliations.map(related => `<li>${escapeHtml(related.label)} <a href="${safeUrl(related.route)}">${escapeHtml(related.name)}</a></li>`).join("")}</ul></div>` : ""}
-      ${record.credits.length ? `<div class="collaborator-projects"><h3>Collaboration within the Construct</h3><div class="link-row">${creditLinks(record)}</div><p>The first KINMARKING edition is being developed through conversation between oral history and tattooing.</p></div>` : ""}
-      ${(record.links || []).some(link => safeUrl(link.url)) ? `<div class="collaborator-work"><h3>Explore their work</h3><ul>${record.links.filter(link => safeUrl(link.url)).map(link => `<li><a href="${safeUrl(link.url)}">${escapeHtml(link.label)}</a></li>`).join("")}</ul></div>` : ""}
+      ${record.credits.length || projectLinks.length ? `<div class="collaborator-projects"><h3>Collaboration within the Construct</h3><div class="link-row">${creditLinks(record)}${projectLinks.map(link => `<a class="text-link" href="${safeUrl(link.url)}">${escapeHtml(link.label)}</a>`).join('')}</div>${firstKinmarkingEdition ? '<p>The first KINMARKING edition is being developed through conversation between oral history and tattooing.</p>' : ''}</div>` : ""}
+      ${workLinks.length ? `<div class="collaborator-work"><h3>Explore their work</h3><ul>${workLinks.map(link => `<li><a href="${safeUrl(link.url)}">${escapeHtml(link.label)}</a></li>`).join("")}</ul></div>` : ""}
       ${safeUrl(record.websiteUrl) ? `<div class="link-row"><a class="text-link" href="${safeUrl(record.websiteUrl)}">Visit ${escapeHtml(record.name)}</a></div>` : ""}
       </div></article>`;
   }

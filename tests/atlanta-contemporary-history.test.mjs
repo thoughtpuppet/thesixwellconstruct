@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import {readdirSync,readFileSync} from 'node:fs';
+import {DatabaseSync} from 'node:sqlite';
+import test from 'node:test';
+import {handleConstructApi} from '../functions/api/construct/_lib.js';
+const migration='0244_atlanta_contemporary_historical_appearance.sql';
+test('historical Atlanta Contemporary credits reuse the current person and preserve source relationships',async()=>{
+ const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON');
+ for(const name of readdirSync(new URL('../migrations/',import.meta.url)).filter(n=>n.endsWith('.sql')).sort()) db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
+ const person=db.prepare("SELECT * FROM people WHERE id='person-saiel-dauhn-solehman'").get();
+ assert.ok(person);assert.notEqual(person.name,'Saiel Solomon');
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM people WHERE name='Saiel Solomon'").get().n,0);
+ const entry=db.prepare("SELECT * FROM artist_appearances WHERE id='appearance-sfqp-artist-talk-2019'").get();
+ assert.equal(entry.starts_at,'2019-07-11T22:00:00Z');assert.equal(entry.ends_at,'2019-07-12T00:00:00Z');
+ assert.equal(entry.state,'published');assert.match(entry.description,/Saiel Solomon/);assert.doesNotMatch(entry.summary,/Saiel Solomon/);
+ const story=db.prepare('SELECT story_html FROM archive_dossiers WHERE entity_id=?').get(entry.id).story_html;
+ assert.match(story,/Partner Artist/);assert.match(story,/\/about\/saieldauhnsolehman\//);assert.match(story,/category=partner-artist/);
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM archive_dossier_subjects WHERE dossier_entity_id=? AND subject_entity_id=?').get(entry.id,person.id).n,1);
+ const profile=readFileSync(new URL('../about/saieldauhnsolehman/index.html',import.meta.url),'utf8');
+ assert.doesNotMatch(profile,/Saiel Solomon/);assert.match(profile,/sfqp-artist-talk-2019/);
+ db.exec(readFileSync(new URL('../migrations/'+migration,import.meta.url),'utf8'));
+ assert.equal(db.prepare('SELECT COUNT(*) n FROM archive_event_identifiers WHERE entity_id=?').get(entry.id).n,1);
+ class Statement{constructor(sql,values=[]){this.sql=sql;this.values=values}bind(...values){return new Statement(this.sql,values)}async all(){return {results:db.prepare(this.sql).all(...this.values)}}async first(){return db.prepare(this.sql).get(...this.values)||null}async run(){return db.prepare(this.sql).run(...this.values)}}
+ const env={SUBMISSIONS_DB:{prepare:sql=>new Statement(sql),batch:statements=>Promise.all(statements.map(s=>s.run()))}};
+ const response=await handleConstructApi(new Request('https://example.test/api/appearances/sfqp-artist-talk-2019'),env);
+ assert.equal(response.status,200);const data=await response.json();
+ assert.equal(data.record.subjects.find(p=>p.subject_entity_id===person.id).name,person.name);
+ const archive=await handleConstructApi(new Request('https://example.test/api/archive/items/sfqp-artist-talk-2019'),env);
+ assert.equal(archive.status,200);
+ const archiveData=await archive.json();assert.match(JSON.stringify(archiveData),/Partner Artist/);
+ assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[]);
+});

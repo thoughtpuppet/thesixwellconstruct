@@ -23,7 +23,7 @@ const server=createServer(async(req,res)=>{
     if(url.pathname.startsWith('/api/admin/events')) response=await handleAdminEventsApi(request,env);
     else if(url.pathname.startsWith('/api/events')) response=await handleEventsApi(request,env);
     else if(url.pathname.startsWith('/api/')) response=Response.json({submissions:[],appointments:[],records:[],items:[],symbols:[]});
-    else if(/^\/events\/kinmarking-(?:\d{2,}|01-oral-histories-and-tattooing)\/$/.test(url.pathname)) response=await worker.fetch(request,env,{});
+    else if(/^\/events\/kinmarking-(?:\d{2,}|01-(?:oral-histories|memory-work)-and-tattooing|01-skin-as-archive)(?:\/|\/index\.html)?$/.test(url.pathname)) response=await worker.fetch(request,env,{});
     else response=await asset(url);
     res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));
   }catch(error){res.writeHead(500,{'content-type':'text/plain'});res.end(error.stack);}

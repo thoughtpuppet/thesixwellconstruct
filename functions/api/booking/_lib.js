@@ -20,7 +20,7 @@ import {
 import { bookingTokenFromUrl, bookingUrlForToken, createBookingRawToken } from "../booking-links.js";
 import { studioAddress } from "../_shared/studio.js";
 import { effectiveTattooSpecialSalesClose } from "../tattoo-specials/_sales-window.js";
-import { checkIcloudCalendarConflict } from "./_calendar-sync.js";
+import { checkIcloudCalendarConflict, loadRequiredStudioCalendarAvailability } from "./_calendar-sync.js";
 
 const BOOKING_STATUSES = new Set([
   "pending_deposit",
@@ -676,9 +676,12 @@ function isExclusiveTattooBookingType(bookingTypeId) {
 }
 
 function hasSlotCapacity(windowRow, appointmentRows, candidateBookingTypeId = "") {
+  // A room event occupies the shared space in both booking directions.
+  if (appointmentRows.some((appointment) => STUDIO_SPACE_BOOKING_TYPE_IDS.includes(appointment.booking_type_id)
+      && intervalsOverlap(intervalWithBuffer(windowRow), intervalWithBuffer(appointment)))) return false;
   const overlapCount = overlappingAppointmentCount(windowRow, appointmentRows);
   const bookingTypeId = candidateBookingTypeId || windowRow.booking_type_id || windowRow.bookingTypeId || "";
-  return isExclusiveTattooBookingType(bookingTypeId)
+  return (isExclusiveTattooBookingType(bookingTypeId) || STUDIO_SPACE_BOOKING_TYPE_IDS.includes(bookingTypeId))
     ? overlapCount === 0
     : overlapCount < Number(windowRow.capacity || 1);
 }
@@ -1706,7 +1709,7 @@ async function listPublicWindows(db, bookingTypes) {
     .all();
   const blackouts = blackoutResult.results || [];
   const activeAppointments = await loadActiveAppointments(db, new Date().toISOString());
-  const soleBookingTypeId = ids.length === 1 ? ids[0] : "";
+  const soleBookingTypeId = ids.length === 1 || ids.every((id) => STUDIO_SPACE_BOOKING_TYPE_IDS.includes(id)) ? ids[0] : "";
 
   const manualWindows = (manualResult.results || [])
     .filter((row) => Number(row.appointment_count || 0) < Number(row.capacity || 1))
@@ -2192,15 +2195,6 @@ async function ensureAvailable(
   if (isBlockedByBlackout(effectiveWindow, blackoutResult.results || [], bookingTypeId)) {
     return { error: "That appointment time is blocked out." };
   }
-  const externalCalendar = overrideExternalConflict
-    ? { conflict: false, checked: false, overridden: true }
-    : await checkIcloudCalendarConflict(env, db, effectiveWindow);
-  if (externalCalendar.conflict) {
-    return {
-      error: "That appointment time conflicts with existing calendar availability.",
-      code: "EXTERNAL_CALENDAR_CONFLICT",
-    };
-  }
   const activeAppointments = (await loadActiveAppointments(
     db,
     new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
@@ -2208,6 +2202,16 @@ async function ensureAvailable(
   if (!hasSlotCapacity(effectiveWindow, activeAppointments, bookingTypeId)) {
     return { error: "That appointment time overlaps another booking." };
   }
+  const externalCalendar = overrideExternalConflict
+    ? { conflict: false, checked: false, overridden: true }
+    : await checkIcloudCalendarConflict(env, db, effectiveWindow, { required:STUDIO_SPACE_BOOKING_TYPE_IDS.includes(bookingTypeId) });
+  if (externalCalendar.unknown) return {
+    error:"Studio availability cannot be verified right now. No time has been reserved. Please try again later.",
+    code:"EXTERNAL_CALENDAR_UNAVAILABLE", status:503,
+  };
+  if (externalCalendar.conflict) return {
+    error:"That appointment time conflicts with existing calendar availability.", code:"EXTERNAL_CALENDAR_CONFLICT",
+  };
   return { window, appointmentEndAt };
 }
 
@@ -2676,7 +2680,9 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
             )
         )
         AND (
-          SELECT COUNT(*) FROM appointments overlap_appointment
+          SELECT COALESCE(SUM(CASE
+            WHEN overlap_appointment.booking_type_id IN ('studio_gathering','studio_rental')
+            THEN aw.capacity ELSE 1 END), 0) FROM appointments overlap_appointment
           LEFT JOIN availability_windows overlap_window
             ON overlap_window.id = overlap_appointment.availability_window_id
           WHERE overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
@@ -2687,7 +2693,7 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
                 > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
             )
         ) < CASE
-          WHEN ? IN ('tattoo_quarter','tattoo_half','tattoo_three_quarter','tattoo_full','tattoo_extended')
+          WHEN ? IN ('tattoo_quarter','tattoo_half','tattoo_three_quarter','tattoo_full','tattoo_extended','studio_gathering','studio_rental')
             OR ? LIKE 'tattoo_special_%'
           THEN 1 ELSE aw.capacity
         END
@@ -2883,7 +2889,9 @@ async function promoteApprovedTattooSpecialRequest(db, values) {
                  )
              )
              AND (
-               SELECT COUNT(*) FROM appointments overlap_appointment
+               SELECT COALESCE(SUM(CASE
+            WHEN overlap_appointment.booking_type_id IN ('studio_gathering','studio_rental')
+            THEN aw.capacity ELSE 1 END), 0) FROM appointments overlap_appointment
                LEFT JOIN availability_windows overlap_window
                  ON overlap_window.id = overlap_appointment.availability_window_id
                WHERE overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
@@ -3930,7 +3938,19 @@ export async function handlePublicStudioContext(request, env) {
     if (!bookingTypes.length) {
       return errorResponse("Studio booking is not configured.", 503);
     }
-    const windows = await listPublicWindows(db, bookingTypes);
+    let windows = await listPublicWindows(db, bookingTypes);
+    const roomWindows = windows.filter((window) => STUDIO_SPACE_BOOKING_TYPE_IDS.includes(window.bookingTypeId)
+      || (!window.bookingTypeId && bookingTypes.some((type) => STUDIO_SPACE_BOOKING_TYPE_IDS.includes(type.id))));
+    if (roomWindows.length) {
+      const starts = roomWindows.map((window) => new Date(window.startAt).getTime() - Number(window.bufferBeforeMinutes || 0) * 60000);
+      const ends = roomWindows.map((window) => new Date(window.endAt).getTime() + Number(window.bufferAfterMinutes || 0) * 60000);
+      const external = await loadRequiredStudioCalendarAvailability(env, db, new Date(Math.min(...starts)).toISOString(), new Date(Math.max(...ends)).toISOString());
+      if (external.unknown) return errorResponse("Studio availability cannot be verified right now. Please try again later.", 503, { code:"EXTERNAL_CALENDAR_UNAVAILABLE" });
+      const roomIds = new Set(roomWindows.map((window) => window.id));
+      windows = windows.filter((window) => !roomIds.has(window.id) || !external.intervals.some((busy) =>
+        new Date(busy.startAt).getTime() < new Date(window.endAt).getTime() + Number(window.bufferAfterMinutes || 0) * 60000
+        && new Date(busy.endAt).getTime() > new Date(window.startAt).getTime() - Number(window.bufferBeforeMinutes || 0) * 60000));
+    }
     return json({
       ok: true,
       bookingType: bookingTypes[0],
@@ -4181,7 +4201,7 @@ export async function handlePublicStudioCheckout(request, env) {
     const db = requireBookingDb(env);
     const result = await createPublicStudioAppointment(db, env, body);
     if (result.spam) return json({ ok: true, spam: true });
-    if (result.error) return errorResponse(result.error, result.code ? 409 : 400, {
+    if (result.error) return errorResponse(result.error, result.status || (result.code ? 409 : 400), {
       ...(result.code ? { code: result.code } : {}),
       ...(result.appointment ? { appointment: result.appointment } : {}),
     });
@@ -5305,7 +5325,9 @@ async function insertDirectPublicSession(db, submission, appointment, submission
           > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
     )
     AND (
-      SELECT COUNT(*) FROM appointments overlap_appointment
+      SELECT COALESCE(SUM(CASE
+            WHEN overlap_appointment.booking_type_id IN ('studio_gathering','studio_rental')
+            THEN aw.capacity ELSE 1 END), 0) FROM appointments overlap_appointment
       LEFT JOIN availability_windows overlap_window
         ON overlap_window.id = overlap_appointment.availability_window_id
       WHERE overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
@@ -5313,7 +5335,7 @@ async function insertDirectPublicSession(db, submission, appointment, submission
           < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
         AND unixepoch(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) * 60
           > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
-    ) < ${isExclusiveTattooBookingType(appointment.bookingTypeId) ? "1" : "aw.capacity"}
+    ) < ${(isExclusiveTattooBookingType(appointment.bookingTypeId) || STUDIO_SPACE_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId)) ? "1" : "aw.capacity"}
     AND (
       SELECT COUNT(*) FROM appointments exact_appointment
       WHERE exact_appointment.availability_window_id = aw.id
@@ -6755,7 +6777,9 @@ async function moveConfirmedAppointment(
                    > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
              )
              AND (
-               SELECT COUNT(*) FROM appointments overlap_appointment
+               SELECT COALESCE(SUM(CASE
+            WHEN overlap_appointment.booking_type_id IN ('studio_gathering','studio_rental')
+            THEN aw.capacity ELSE 1 END), 0) FROM appointments overlap_appointment
                LEFT JOIN availability_windows overlap_window
                  ON overlap_window.id = overlap_appointment.availability_window_id
                WHERE overlap_appointment.id <> appointments.id
@@ -6765,7 +6789,7 @@ async function moveConfirmedAppointment(
                  AND unixepoch(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) * 60
                    > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
              ) < CASE
-               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_three_quarter','tattoo_full','tattoo_extended')
+               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_three_quarter','tattoo_full','tattoo_extended','studio_gathering','studio_rental')
                  OR appointments.booking_type_id LIKE 'tattoo_special_%'
                THEN 1 ELSE aw.capacity
              END
@@ -6775,7 +6799,7 @@ async function moveConfirmedAppointment(
                  AND exact_appointment.availability_window_id = aw.id
                  AND exact_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
              ) < CASE
-               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_three_quarter','tattoo_full','tattoo_extended')
+               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_three_quarter','tattoo_full','tattoo_extended','studio_gathering','studio_rental')
                  OR appointments.booking_type_id LIKE 'tattoo_special_%'
                THEN 1 ELSE aw.capacity
              END
@@ -11256,7 +11280,10 @@ async function createPrivateManualWindow(
     if (isBlockedByBlackout(candidate, blackouts.results || [], bookingType.id)) {
       return { error: "That time conflicts with existing calendar availability.", code: "EXTERNAL_CALENDAR_CONFLICT", conflicts: [] };
     }
-    const externalCalendar = await checkIcloudCalendarConflict(env, db, candidate);
+    const externalCalendar = await checkIcloudCalendarConflict(env, db, candidate, { required:STUDIO_SPACE_BOOKING_TYPE_IDS.includes(bookingType.id) });
+    if (externalCalendar.unknown) {
+      return { error:"Studio calendar availability cannot be verified right now.", code:"EXTERNAL_CALENDAR_UNAVAILABLE", conflicts:[] };
+    }
     if (externalCalendar.conflict) {
       return { error: "That time conflicts with existing calendar availability.", code: "EXTERNAL_CALENDAR_CONFLICT", conflicts: [] };
     }

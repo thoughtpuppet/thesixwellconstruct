@@ -6,6 +6,55 @@ import vm from 'node:vm';
 import {fixture,ROOT} from './helpers/kinmarking-editions-fixture.mjs';
 import {handleAdminEventUpdate,handleAdminEventsList,handleEventContext} from '../functions/api/events/_lib.js';
 const request=(body)=>new Request('https://example.test/api/admin/events/kinmarking',{method:body?'PATCH':'GET',headers:{authorization:'Bearer kinmarking-isolated-qa','content-type':'application/json'},body:body?JSON.stringify(body):undefined});
+
+test('Memory Work rename changes only the first edition title and preserves later Studio edits',()=>{
+  const f=fixture();
+  const before=f.db.prepare('SELECT * FROM event_occurrences ORDER BY id').all();
+  const admission=f.db.prepare('SELECT * FROM event_admission_options').all();
+  const migration=readFileSync(join(ROOT,'migrations/0240_kinmarking_memory_work_title.sql'),'utf8');
+  f.db.exec(migration);
+  for(const old of before){
+    const row=f.db.prepare('SELECT * FROM event_occurrences WHERE id=?').get(old.id);
+    for(const key of Object.keys(old).filter(key=>key!=='updated_at')) assert.equal(row[key],key==='title'&&old.session_number==='01'?'Memory Work & Tattooing':old[key],key);
+  }
+  assert.deepEqual(f.db.prepare('SELECT * FROM event_admission_options').all(),admission);
+  f.db.exec("UPDATE event_occurrences SET title='Later authored title' WHERE session_number='01'");
+  f.db.exec(migration);
+  assert.equal(f.db.prepare("SELECT title FROM event_occurrences WHERE session_number='01'").get().title,'Later authored title');
+  assert.deepEqual(f.db.prepare('PRAGMA foreign_key_check').all(),[]);
+  f.db.close();
+});
+test('first-edition title rename preserves occurrence data, later edits, and the current URL',()=>{
+  const f=fixture();
+  f.db.exec(readFileSync(join(ROOT,'migrations/0240_kinmarking_memory_work_title.sql'),'utf8'));
+  const before=f.db.prepare('SELECT * FROM event_occurrences ORDER BY id').all();
+  const admission=f.db.prepare('SELECT * FROM event_admission_options').all();
+  const migration=readFileSync(join(ROOT,'migrations/0241_kinmarking_memory_work_oral_histories_title.sql'),'utf8');
+  f.db.exec(migration);
+  for(const old of before){
+    const row=f.db.prepare('SELECT * FROM event_occurrences WHERE id=?').get(old.id);
+    for(const key of Object.keys(old).filter(key=>key!=='updated_at')) assert.equal(row[key],key==='title'&&old.session_number==='01'?'Memory Work, Oral Histories and Tattooing':old[key],key);
+  }
+  assert.deepEqual(f.db.prepare('SELECT * FROM event_admission_options').all(),admission);
+  const renamed=f.db.prepare('SELECT * FROM event_occurrences ORDER BY id').all();
+  f.db.exec(migration);
+  assert.deepEqual(f.db.prepare('SELECT * FROM event_occurrences ORDER BY id').all(),renamed);
+  f.db.exec("UPDATE event_occurrences SET title='Later authored title' WHERE session_number='01'");
+  f.db.exec(migration);
+  assert.equal(f.db.prepare("SELECT title FROM event_occurrences WHERE session_number='01'").get().title,'Later authored title');
+  assert.deepEqual(f.db.prepare('PRAGMA foreign_key_check').all(),[]);
+  f.db.close();
+  for(const source of ['js/kinmarking-series.js','.hidden-pages/kinmarking-01/series.js']){
+    const context={window:{}};
+    vm.runInNewContext(readFileSync(join(ROOT,source),'utf8'),context);
+    const series=context.window.KinmarkingSeries;
+    for(const title of ['Skin As Archive','Oral Histories & Tattooing','Memory Work & Tattooing','Memory Work, Oral Histories and Tattooing']) assert.equal(series.editionTitle(null,{sessionNumber:'01',title},0),'KINMARKING 01: Memory Work, Oral Histories and Tattooing');
+    assert.equal(series.editionTitle(null,{sessionNumber:'01',title:'Later authored title'},0),'KINMARKING 01: Later authored title');
+    assert.equal(series.editionHref({number:'01'}),'/events/kinmarking-01-memory-work-and-tattooing/');
+    assert.ok(series.editions[0].previousTitles.includes('Memory Work & Tattooing'));
+  }
+});
+
 test('edition migration preserves occurrence data and admission references while inserting undated Grief at 03',()=>{
   const f=fixture({migrate:false});
   const before=f.db.prepare('SELECT * FROM event_occurrences ORDER BY id').all();
@@ -52,5 +101,5 @@ test('public edition renderer follows Studio titles and descriptions beyond the 
   const rows=s.orderedEvents([{slug:'kinmarking',occurrences}]);
   assert.equal(rows[0].description,'Studio description');assert.equal(s.editionHref(rows[0]),'/events/kinmarking-06/');
   assert.equal(s.sessionNumberForSlug('kinmarking-12'),'12');
-  assert.match(rows[1].description,/meanings we inherit through color/);
+  assert.match(rows[1].description,/How does a color come to mean something/);
 });

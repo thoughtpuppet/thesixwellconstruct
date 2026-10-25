@@ -27,6 +27,7 @@ import {
 import { contentHash, readHtmlCopy, readSourceMarker, replaceHtmlCopy, replaceSourceMarker } from "./live-editor-source.mjs";
 import { auditLiveEditorCoverage } from "./live-editor-coverage.mjs";
 import { kinmarkingFirstEditionRedirect, kinmarkingProjectRedirect } from "../shared/kinmarking-routes.js";
+import { aboutRedirectUrl } from "../shared/about-routes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -170,22 +171,25 @@ const checkRoutes = [
   ["/edit-links-mac", 200],
   ["/page-visibility", 200],
   ["/about/", 200],
-  ["/about/identities/", 200],
+  ["/about/identities/", 308],
   ["/about/identities/thoughtpuppet/", 200],
-  ["/about/visual-language/", 200],
+  ["/about/visual-language/", 308],
   ["/about/legend/open-eye/", 200],
-  ["/about/breakdown/", 200],
-  ["/about/founder/", 200],
+  ["/about/breakdown/", 308],
+  ["/about/founder/", 308],
   ["/about/saieldauhnsolehman/", 200],
-  ["/about/mediums/", 200],
+  ["/about/mediums/", 308],
   ["/about/six-well/", 200],
-  ["/about/ways-in/", 200],
+  ["/about/ways-in/", 308],
   ["/currently", 200],
   ["/currently/", 200],
-  ["/about/contact-press/", 200],
+  ["/about/contact-press/", 308],
   ["/about/exhibitions-appearances/", 200],
   ["/about/exhibitions-appearances/made-in-public/", 200],
-  ["/construct-map/", 200],
+  ["/construct-map/", 308],
+  ["/about/construct-connections-organic.html", 308],
+  ["/sixwellconstruct/bible/", 308],
+  ["/sixwellconstruct/bible/v1-tabbed.html", 308],
   ["/adventure/", 200],
   ["/adventure", 308],
   ["/explore/", 308],
@@ -253,7 +257,8 @@ const checkRoutes = [
   ["/js/live-text-editor.js", 200],
   ["/events/kinmarking/", 200],
   ["/events/kinmarking-01-skin-as-archive/", 308],
-  ["/events/kinmarking-01-oral-histories-and-tattooing/", 200],
+  ["/events/kinmarking-01-oral-histories-and-tattooing/", 308],
+  ["/events/kinmarking-01-memory-work-and-tattooing/", 200],
   ["/events/kinmarking-02/", 200],
   ["/events/kinmarking-03/", 200],
   ["/events/kinmarking-04/", 200],
@@ -1227,7 +1232,7 @@ function cloneStructured(value) { return JSON.parse(JSON.stringify(value)); }
 async function resolveFile(urlPath) {
   const decodedPath = requestPathname(urlPath);
   const normalizedPath = normalizeRoute(decodedPath);
-  if (/^\/events\/kinmarking-(?:01-oral-histories-and-tattooing|\d{2,})$/.test(normalizedPath)) {
+  if (/^\/events\/kinmarking-(?:01-memory-work-and-tattooing|\d{2,})$/.test(normalizedPath)) {
     return path.join(root, "events", "detail", "development.html");
   }
   const artParts = normalizedPath.split("/").filter(Boolean);
@@ -1284,6 +1289,12 @@ const showHidden = process.argv.includes("--show-hidden");
 
 const server = createServer(async (req, res) => {
   const requestUrl = new URL(req.url || "/", `http://${host}`);
+  const aboutDestination = aboutRedirectUrl(requestUrl);
+  if (aboutDestination) {
+    res.writeHead(308, { "Location": `${aboutDestination.pathname}${aboutDestination.search}${aboutDestination.hash}` });
+    res.end();
+    return;
+  }
   const kinmarkingRedirect = kinmarkingProjectRedirect(requestUrl.pathname) || kinmarkingFirstEditionRedirect(requestUrl.pathname);
   if (kinmarkingRedirect) {
     res.writeHead(308, { "Location": `${kinmarkingRedirect}${requestUrl.search}` });

@@ -250,14 +250,13 @@
         </div>
         <nav class="section-nav" aria-label="about sections">
           <a href="/about/#orientation">ABOUT</a>
-          <a href="/about/identities/">Creative identities</a>
-          <a href="/about/visual-language/">Visual language</a>
-          <a href="/about/breakdown/">Breakdown</a>
+          <a href="/about/#creative-identities">Creative identities</a>
+          <a href="/about/legend/#sources-of-visual-language">Sources of visual language</a>
+          <a href="/about/#connections">How it connects</a>
           <a href="/about/saieldauhnsolehman/">Founder</a>
-          <a href="/about/mediums/">Mediums</a>
-          <a href="/about/ways-in/">Ways in</a>
+          <a href="/about/#modes-mediums">Modes + mediums</a>
           <a href="/currently">Current state</a>
-          <a href="/about/contact-press/">Contact / press</a>
+          <a href="/about/#contact">Contact / press</a>
         </nav>
       </header>
       <div class="legend-record-layers">

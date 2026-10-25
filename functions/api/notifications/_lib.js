@@ -1135,6 +1135,12 @@ const SUBMISSION_RECEIPTS = {
     expectation: "The Art studio will review the work, availability, budget, and questions you shared.",
     next: "The studio will reply with availability, acquisition details, or the next step.",
   },
+  engagement_request: {
+    label: "engagement inquiry",
+    subject: "Engagement inquiry received",
+    expectation: "Your inquiry has been received by the Construct. No appointment, studio time, rate, or scope of work is confirmed.",
+    next: "Any timing and terms will be arranged separately.",
+  },
   studio_booking: {
     label: "studio booking request",
     subject: "Studio booking request received",
@@ -1343,6 +1349,7 @@ function submissionDetailLines(submission) {
     ],
     art_acquisition: ["artwork", "artwork_title", "budget_range", "message", "instagram"],
     consultation: ["consultation_type", "preferred_dates", "message", "instagram"],
+    engagement_request: ["category", "organization", "project_title", "message", "preferred_dates", "location", "website", "budget"],
     studio_booking: ["booking_type", "preferred_dates", "party_size", "message"],
   };
   const preferredFields = fieldsByType[submission.type] || Object.keys(payload);
@@ -1422,7 +1429,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
   }
   const studioVisit = type === "studio_booking"
     && (normalized.payload?.booking_type_id || normalized.payload?.bookingTypeId) === "studio_visit";
-  const constructTheme = type === "art_acquisition" || studioVisit
+  const constructTheme = type === "engagement_request" ? "construct_studio" : type === "art_acquisition" || studioVisit
     ? "construct_art"
     : type === "studio_booking"
       ? "construct_event"
@@ -1456,7 +1463,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     ? flashSheetDesignLines(normalized.payload, "sheet_design_selections", "Requested sheet designs:")
     : [];
   const message = buildSubmissionReceivedEmail({
-    variant: studioVisit
+    variant: type === "engagement_request" ? "engagement_request" : studioVisit
       ? "studio_visit"
       : artistLed ? "special" : ({ tattoo_inquiry: "custom", flash_claim: "flash", build_brief: "build", maze_design: "maze", special_project: "special", tattoo_special: "tattoo_special", consultation: "consultation", build_session: "build_session", art_acquisition: "art_acquisition", studio_booking: "studio_space" })[type] || "custom",
     theme: constructTheme,
@@ -1504,7 +1511,7 @@ export async function notifyAdminSubmissionReceived(env, submission, options = {
   const studioVisit = normalized.type === "studio_booking"
     && (normalized.payload?.booking_type_id || normalized.payload?.bookingTypeId) === "studio_visit";
   const submissionTypeLabel = studioVisit ? "Open Studio Visit" : artistLed ? "Artist-led Design Request" : labelFromKey(normalized.type);
-  const theme = normalized.type === "art_acquisition" || studioVisit
+  const theme = normalized.type === "engagement_request" ? "construct_studio" : normalized.type === "art_acquisition" || studioVisit
     ? "construct_art"
     : normalized.type === "studio_booking"
       ? "construct_event"

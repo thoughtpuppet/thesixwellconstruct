@@ -17,21 +17,18 @@ class LocalD1{constructor(database){this.database=database}prepare(sql){return n
 function migratedDatabase(){const database=new DatabaseSync(":memory:");database.exec("PRAGMA foreign_keys=ON");for(const name of readdirSync(path.join(ROOT,"migrations")).filter(name=>name.endsWith(".sql")).sort())database.exec(readFileSync(path.join(ROOT,"migrations",name),"utf8"));return database}
 
 test("About and Archive routes follow the page-visibility authority instead of legacy closure exceptions",async()=>{
-  const database={
-    prepare(){
-      return {bind(slug){
-        return {async first(){return slug==="made-in-public"?{entity_id:"appearance-made-in-public"}:null}};
-      }};
-    },
-  };
+  const database=new LocalD1(migratedDatabase());
   for(const route of ["/about/exhibitions-appearances/","/about/exhibitions-appearances/made-in-public/","/archive/records/made-in-public/"]){
     const response=await worker.fetch(new Request(`https://example.test${route}`),{ASSETS:assets,SUBMISSIONS_DB:database},{});
     assert.equal(response.status,200,route);
   }
-  for(const route of ["/about/founder/","/archive/records/lostmarbles/"]){
+  for(const route of ["/archive/records/lostmarbles/"]){
     const response=await worker.fetch(new Request(`https://example.test${route}`),{ASSETS:assets,SUBMISSIONS_DB:database},{});
     assert.equal(response.status,200,route);
   }
+  const founder=await worker.fetch(new Request("https://example.test/about/founder/"),{ASSETS:assets,SUBMISSIONS_DB:database},{});
+  assert.equal(founder.status,308);
+  assert.equal(new URL(founder.headers.get("location")).pathname,"/about/saieldauhnsolehman/");
 });
 
 test("Made in Public seeds participation, venue, flyer, archive, and merch without falsely exhibiting the source painting",async()=>{

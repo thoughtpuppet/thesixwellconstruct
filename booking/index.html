@@ -6,6 +6,18 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <title>Private Booking - the six.well construct</title>
+<script>
+// Token presence (including an empty/invalid token) always retains private errors.
+(function () {
+  const query = new URLSearchParams(location.search);
+  const privateEntry = query.has("token") || /^\/b\//.test(location.pathname)
+    || (query.get("preview") === "1" && query.get("hub") !== "1")
+    || query.get("entry") === "tattoo-special-request" || query.has("checkout");
+  document.documentElement.dataset.bookingView = privateEntry ? "private" : "public";
+  if (!privateEntry) document.title = "Booking - the six.well construct";
+})();
+</script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
@@ -128,6 +140,7 @@
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 <link rel="stylesheet" href="/css/booking-client-copy.css">
+<link rel="stylesheet" href="/css/booking-hub.css">
 </head>
 <body class="tattoo-flow booking-client-flow" data-venture="tattooing" data-construct-breadcrumb-current="Private Booking">
 <script>
@@ -140,9 +153,120 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fadeOut); else fadeOut();
 })();
 </script>
+<script>if(document.documentElement.dataset.bookingView === "public"){document.body.className="booking-hub-flow";document.body.dataset.venture="about";document.body.dataset.constructBreadcrumbCurrent="Booking";}</script>
 <div class="grain"></div>
 <header></header>
-<main class="site-hero site-hero--supporting">
+<main id="bookingHub" class="booking-hub entrance-fade">
+  <section class="hub-hero site-hero site-hero--supporting" aria-labelledby="hubTitle">
+    <span class="hub-kicker">the six.well construct / ways in</span>
+    <h1 class="hero-title" id="hubTitle" data-copy-id="booking-hub-title">BOOKING.</h1>
+    <p class="hero-descriptor" data-copy-id="booking-hub-descriptor">A place to visit, make, gather, and exchange ideas. Find your way into the practice.</p>
+    <p class="hub-intro" data-copy-id="booking-hub-intro">Book a studio visit, reserve the space, begin a tattoo project, or propose time together.</p>
+  </section>
+  <section class="hub-section" aria-labelledby="hubWaysTitle">
+    <span class="hub-kicker">Ways in</span>
+    <h2 id="hubWaysTitle" data-copy-id="booking-hub-ways-title">Choose the door.</h2>
+    <p>Visits and studio events use the available booking calendars. For other engagements, send an inquiry to begin the conversation.</p>
+    <div class="path-grid">
+      <article class="path-card hub-art">
+        <span class="hub-mode">Schedule a visit</span>
+        <h3>Studio visit</h3>
+        <p>See the space, works in progress, finished paintings, and the practice behind the Construct.</p>
+        <div class="link-row"><a class="text-link" href="/booking/studio-visit/">Find a visit time</a></div>
+      </article>
+      <article class="path-card hub-event">
+        <span class="hub-mode">Reserve the space</span>
+        <h3>Studio events</h3>
+        <p>Private gatherings and external event rentals. Choose an available time and continue to deposit checkout.</p>
+        <div class="link-row"><a class="text-link" href="/booking/studio/">Find studio time</a></div>
+      </article>
+      <article class="path-card hub-tattoo">
+        <span class="hub-mode">Tattoo inquiry / consultation</span>
+        <h3>Tattoos</h3>
+        <p>Start a tattoo project or choose a tattoo-specific consultation through art.pill Tattoo House.</p>
+        <div class="link-row"><a class="text-link" href="/tattoos/inquire/">Explore tattoo booking</a><a class="text-link hub-secondary" href="/tattoos/inquire/consultation/">Tattoo consultation</a></div>
+      </article>
+      <article class="path-card ">
+        <span class="hub-mode">Inquiry</span>
+        <h3>General consultation</h3>
+        <p>A conversation about artistic practice, research, ideas, or a project beyond tattooing.</p>
+        <div class="link-row"><a class="text-link" href="#request" data-engagement-category="general_consultation">Inquire about a consultation</a></div>
+      </article>
+      <article class="path-card ">
+        <span class="hub-mode">Inquiry</span>
+        <h3>Appearances &amp; speaking</h3>
+        <p>Artist talks, lectures, panels, workshops, and other invitations to participate.</p>
+        <div class="link-row"><a class="text-link" href="#request" data-engagement-category="appearance">Send an invitation</a></div>
+      </article>
+      <article class="path-card ">
+        <span class="hub-mode">Inquiry</span>
+        <h3>Interviews</h3>
+        <p>Conversations for publications, podcasts, film, research, or press.</p>
+        <div class="link-row"><a class="text-link" href="#request" data-engagement-category="interview">Propose an interview</a></div>
+      </article>
+      <article class="path-card ">
+        <span class="hub-mode">Inquiry</span>
+        <h3>Collaborations</h3>
+        <p>Shared research, creative work, commissions, and projects across disciplines.</p>
+        <div class="link-row"><a class="text-link" href="#request" data-engagement-category="collaboration">Propose a collaboration</a></div>
+      </article>
+      <article class="path-card ">
+        <span class="hub-mode">Inquiry</span>
+        <h3>Something else</h3>
+        <p>Have another way to work together in mind? Describe what you are thinking.</p>
+        <div class="link-row"><a class="text-link" href="#request" data-engagement-category="other">Start an inquiry</a></div>
+      </article>
+    </div>
+  </section>
+  <section class="hub-section hub-request-grid" id="request" aria-labelledby="engagementTitle">
+    <div>
+      <span class="hub-kicker">Start a conversation</span>
+      <h2 id="engagementTitle" data-copy-id="booking-hub-request-title">An idea for<br>time together.</h2>
+      <p>Share the purpose, context, and any proposed timing. This sends a private inquiry to the Construct. It does not reserve a time or confirm an appointment.</p>
+      <p>For tattoo projects and tattoo consultations, use the <a href="/tattoos/inquire/">tattoo inquiry page</a>.</p>
+    </div>
+    <form id="engagementForm" class="public-form" data-live-edit-owner="preview" data-live-edit-label="Construct engagement inquiry">
+      <div class="hub-form-fields">
+        <div class="hub-honeypot" aria-hidden="true"><label>Leave empty<input name="_gotcha" tabindex="-1" autocomplete="off"></label></div>
+        <div class="form-grid">
+          <label class="form-field form-field--full">Inquiry category
+            <select name="category" required>
+              <option value="">Choose a category</option>
+              <option value="appearance">Appearance</option>
+              <option value="speaking">Speaking / artist talk</option>
+              <option value="general_consultation">General consultation</option>
+              <option value="interview">Interview / press</option>
+              <option value="collaboration">Collaboration</option>
+              <option value="other">Other inquiry</option>
+            </select>
+          </label>
+          <label class="form-field form-field--full">Your name<input name="name" autocomplete="name" maxlength="160" required></label>
+          <label class="form-field">Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
+          <label class="form-field">Phone<input name="phone" type="tel" autocomplete="tel" maxlength="80" required></label>
+          <label class="form-field form-field--full">Organization / publication (optional)<input name="organization" autocomplete="organization" maxlength="200"></label>
+          <label class="form-field form-field--full">Project / topic<input name="project_title" maxlength="200" required></label>
+          <label class="form-field form-field--full">What do you have in mind?<textarea name="message" rows="5" maxlength="5000" required></textarea></label>
+          <label class="form-field form-field--full">Preferred timing and time zone (optional)<input name="preferred_dates" maxlength="500" placeholder="Proposed dates, flexibility, and time zone"></label>
+          <label class="form-field form-field--full">Location / virtual format (optional)<input name="location" maxlength="300"></label>
+          <label class="form-field">Budget / honorarium (optional)<input name="budget" maxlength="300"></label>
+          <label class="form-field">Relevant website (optional)<input name="website" type="url" maxlength="2000" placeholder="https://"></label>
+        </div>
+        <label class="form-check" style="margin-top:24px;">
+          <input class="form-check__input" name="request_consent" type="checkbox" value="yes" required>
+          <span class="form-check__label">I understand this is an inquiry. No appointment or studio time is reserved by submitting it.</span>
+        </label>
+      </div>
+      <div class="hub-form-actions"><button class="hub-submit" type="submit">Send inquiry</button></div>
+      <p id="engagementFeedback" class="hub-feedback" role="status" aria-live="polite" hidden></p>
+      <noscript><p>JavaScript is required to send this inquiry. You can also use the contact details on the <a href="/about/#contact">About page</a>.</p></noscript>
+    </form>
+  </section>
+  <footer class="hub-footer footer-links">
+    <a href="/home/">Return to the Construct</a><a href="/about/">About the practice</a><a href="/art/">Art making</a><a href="/events/">Public events</a>
+  </footer>
+</main>
+<script>if(document.documentElement.dataset.bookingView === "private") document.getElementById("bookingHub").remove();</script>
+<main id="privateBooking" class="site-hero site-hero--supporting">
   <h1 class="hero-title" id="bookingTitle" data-copy-id="booking-title" data-live-edit-owner="managed" data-live-edit-label="Client-specific booking title" data-live-edit-owner-href="/studio/submissions/#tattoo/appointments" data-live-edit-owner-label="Open Tattoo Appointments in Studio">BOOKING.</h1>
   <p class="booking-context-copy" id="bookingLead" data-copy-id="booking-lead" data-live-edit-owner="managed" data-live-edit-label="Client-specific booking instructions" data-live-edit-owner-href="/studio/submissions/#tattoo/appointments" data-live-edit-owner-label="Open Tattoo Appointments in Studio">Your project and final session plan are ready for scheduling. Add up to 3 appointments across the available session lengths, if applicable.</p>
   <div class="badge"><span class="badge-dot"></span><span data-copy-id="booking-private-badge">Private Booking</span></div>
@@ -239,6 +363,7 @@
 </main>
 <script>
 (function(){
+  if (document.documentElement.dataset.bookingView === "public") return;
   const params = new URLSearchParams(window.location.search);
   const shortTokenMatch = window.location.pathname.match(/^\/b\/([A-Za-z0-9_-]{12})\/?$/);
   const token = params.get("token") || shortTokenMatch?.[1] || "";
@@ -1684,6 +1809,7 @@
   });
 })();
 </script>
+<script type="module" src="/js/booking-hub.js"></script>
 <script src="/js/transition.js"></script>
 <script src="/js/construct-corner.js"></script>
 <script src="/js/construct-nav.js"></script>

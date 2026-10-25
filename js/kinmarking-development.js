@@ -27,7 +27,8 @@
     if (footer) shell.append(footer);
     function setTitle(session) {
       var theme = session && session.title || edition && edition.title || 'Theme to be announced';
-      var publicTitle = 'KINMARKING ' + number + ': ' + theme;
+      var publicTitle = series.editionTitle(null, {sessionNumber:number, title:theme}, 0);
+      theme = publicTitle.replace('KINMARKING ' + number + ': ', '');
       root.querySelector('#eventTitle').textContent = theme;
       document.title = publicTitle + ' — the six.well construct';
       document.body.setAttribute('data-construct-breadcrumb-current', publicTitle);

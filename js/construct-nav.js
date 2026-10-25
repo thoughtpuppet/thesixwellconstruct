@@ -63,10 +63,12 @@
       ['all merch', '/merch/'],
     ],
     about: [
-      ['Current Works + Projects', '/currently'], ['the construct', '/about/#construct'],
+      ['the construct', '/about/#orientation'], ['how it connects', '/about/#connections'],
+      ['creative identities', '/about/#creative-identities'],
       ['Saiel Dauhn Solehman', '/about/saieldauhnsolehman/'],
-      ['architecture', '/about/#construct-architecture'], ['nodes', '/about/#access'],
-      ['method', '/about/#library'], ['collaborators', '/about/collaborators/'], ['faq', '/about/#faq'], ['Legend', '/about/legend/'],
+      ['Current Works + Projects', '/currently'], ['Legend', '/about/legend/'],
+      ['collaborators', '/about/collaborators/'], ['exhibitions / appearances', '/about/exhibitions-appearances/'],
+      ['contact / press', '/about/#contact'],
     ],
     events: [
       ['GREEN[FIELD]', '/events/greenfield/'], ['Signal & Symbol', '/events/signal-symbol/'],
@@ -94,6 +96,26 @@
     ],
   };
   function normalizedPathway(ventureKey, label, url, color) {
+    if (ventureKey === 'about') {
+      var destinations = {
+        '/about/#construct': ['the construct', '/about/#orientation'],
+        '/about/#construct-architecture': ['how it connects', '/about/#connections'],
+        '/about/#access': ['creative identities', '/about/#creative-identities'],
+        '/about/#library': ['modes + mediums', '/about/#modes-mediums'],
+        '/about/#faq': ['contact / press', '/about/#contact'],
+        '/about/breakdown/': ['how it connects', '/about/#connections'],
+        '/about/mediums/': ['modes + mediums', '/about/#modes-mediums'],
+        '/about/identities/': ['creative identities', '/about/#creative-identities'],
+        '/about/visual-language/': ['sources of visual language', '/about/legend/#sources-of-visual-language'],
+        '/about/ways-in/': ['the construct', '/about/#orientation'],
+        '/about/founder/': ['Saiel Dauhn Solehman', '/about/saieldauhnsolehman/'],
+        '/about/contact-press/': ['contact / press', '/about/#contact'],
+      };
+      if (destinations[url]) {
+        label = destinations[url][0];
+        url = destinations[url][1];
+      }
+    }
     if (ventureKey === 'about' && (url === '/currently' || url === '/about/current-state/')) {
       return { label: 'Current Works + Projects', url: '/currently', color: color };
     }
@@ -1878,7 +1900,12 @@
       if (!venture) return null;
       venture.label = node.name || venture.label;
       venture.url = node.route || venture.url;
-      venture.pathways = (node.pathways || []).slice(0, 9).map(function(pathway) {
+      // About's section layout owns these destinations while managed data
+      // continues to supply the entry's identity and color.
+      var managedPathways = venture.key === 'about'
+        ? PATHWAYS_BY_KEY.about.map(function(pathway) { return { name: pathway[0], route: pathway[1] }; })
+        : (node.pathways || []).slice(0, 9);
+      venture.pathways = managedPathways.map(function(pathway) {
         var normalized = normalizedPathway(
           venture.key,
           pathway.name,

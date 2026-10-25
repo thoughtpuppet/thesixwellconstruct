@@ -120,7 +120,7 @@
   function editorPagePathname() {
     // Keep existing first-edition drafts, history, and undo available after the URL rename.
     return window.location.pathname.replace(
-      /^\/events\/kinmarking-01-oral-histories-and-tattooing\/$/,
+      /^\/events\/kinmarking-01-(?:oral-histories|memory-work)-and-tattooing\/$/,
       '/events/kinmarking-01-skin-as-archive/'
     );
   }

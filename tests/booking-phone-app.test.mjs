@@ -49,6 +49,7 @@ async function subscribe(env, value) {
 }
 const booking = { id: 'request-one', type: 'tattoo_inquiry', contactName: 'Private Name', contactEmail: 'private@example.test', subject: 'Private project notes' };
 const SAMPLE_TITLES = {
+  engagement_request: 'New Construct Engagement Inquiry',
   tattoo_inquiry: 'New Custom Inquiry', flash_claim: 'New Flash Claim', special_project: 'New Special Project Request',
   build_brief: 'New Build Your Own Request', maze_design: 'New Maze Design Request', tattoo_special: 'New Tattoo Special Request',
   consultation: 'New Consultation Request', build_session: 'New In-Person Build Session Request', studio_booking: 'New Studio Booking Request',
@@ -287,7 +288,7 @@ test('every named sample uses the real message builders, stays owner-only, and c
   const body = { endpoint: client.subscription.endpoint, clientName: 'Sai Solehman' };
   const before = sqlite.prepare('SELECT COUNT(*) count FROM appointments').get().count;
   try {
-    assert.equal(BOOKING_PUSH_SAMPLES.length, 14);
+    assert.equal(BOOKING_PUSH_SAMPLES.length, 15);
     assert.equal((await worker.fetch(request(path, 'POST', { ...body, scenario: 'tattoo_inquiry' }, false), env)).status, 401);
     assert.equal((await worker.fetch(request(path, 'POST', { ...body, scenario: 'unknown' }), env)).status, 400);
     assert.equal((await worker.fetch(request(path, 'POST', { ...body, clientName: '', scenario: 'tattoo_inquiry' }), env)).status, 400);
@@ -307,7 +308,7 @@ test('every named sample uses the real message builders, stays owner-only, and c
     assert.match(messages.find(message => message.title === 'Appointments Booked').body, /3 appointments · First: /);
     assert.ok(messages.some(message => message.title === 'Appointment Rescheduled'));
     assert.ok(messages.some(message => message.title === 'Appointment Canceled'));
-    assert.equal(new Set(messages.map(message => message.tag)).size, 14);
+    assert.equal(new Set(messages.map(message => message.tag)).size, 15);
     assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM appointments').get().count, before);
     assert.equal(sqlite.prepare('SELECT COUNT(*) count FROM submissions').get().count, 0);
   } finally { globalThis.fetch = original; }

@@ -426,7 +426,7 @@
         <h1 class="hero-title" id="identity-profile-title">${escapeHtml(name)}</h1>
         ${descriptor ? `<p class="section-intro hero-descriptor">${escapeHtml(descriptor)}</p>` : ""}
         <nav class="section-nav" aria-label="identity navigation">
-          <a href="/about/identities/">All identities</a>
+          <a href="/about/#creative-identities">All identities</a>
           <a href="/currently">Current Works</a>
           <a href="/about/legend/">Legend</a>
           ${timelineRoute(data) ? `<a href="${escapeHtml(timelineRoute(data))}">Full history</a>` : ""}
@@ -498,7 +498,7 @@
     detailHost.innerHTML = `<div class="identity-state" role="alert">
       <h1 class="band-title">This creative identity is unavailable.</h1>
       <p>It may be unpublished, archived, renamed, or temporarily unavailable.</p>
-      <a class="identity-inline-link" href="/about/identities/">Return to Creative Identities</a>
+      <a class="identity-inline-link" href="/about/#creative-identities">Return to Creative Identities</a>
     </div>`;
     detailHost.setAttribute("aria-busy", "false");
   }

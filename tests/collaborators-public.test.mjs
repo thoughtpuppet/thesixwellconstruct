@@ -46,7 +46,7 @@ test("migration registers separate collaborators, supplied portraits, co-founder
   for (const record of records) {
     assert.equal(record.credits.length,1);
     assert.equal(record.credits[0].editionNumber,"01");
-    assert.match(record.credits[0].route,/kinmarking-01-oral-histories-and-tattooing/);
+    assert.match(record.credits[0].route,/kinmarking-01-memory-work-and-tattooing/);
     assert.ok(!("internal_notes" in record));
   }
   assert.equal(records[2].affiliations.filter(link=>link.label==="Co-founder").length,2);

@@ -5,10 +5,12 @@
   var FALLBACKS = Object.freeze([
     {
       number:"01",
-      slug:"kinmarking-01-oral-histories-and-tattooing",
+      slug:"kinmarking-01-memory-work-and-tattooing",
       legacySlug:"kinmarking-01-skin-as-archive",
-      title:"Oral Histories & Tattooing",
+      legacySlugs:["kinmarking-01-oral-histories-and-tattooing"],
+      title:"Memory Work, Oral Histories and Tattooing",
       previousTitle:"Skin As Archive",
+      previousTitles:["Oral Histories & Tattooing","Memory Work & Tattooing"],
       description: /* live-copy:kinmarking.01.description */ "Drawing on oral history, the first edition uses telling and listening to bring stories and associations into view, giving interpretation and visual development a place to begin.",
       details: /* live-copy:kinmarking.01.details */ "The first edition begins with drawing out material. Before developing an image, the series makes room to notice the stories, associations, and patterns of relationship from which meaning can emerge. Oral history and archival practices offer approaches to asking, listening, contextualizing, and collecting.\n\nThis is an intentional starting point for the wider inquiry. KINMARKING approaches the process through which knowledge becomes embodied as ritual, whether or not we consciously recognize it happening. The word ritual is also a way to direct attention toward the significance of processes that may otherwise feel ordinary or automatic.\n\nThrough telling and listening, participants can explore experiences they remember, stories received from others, and associations shaped by shared culture. A phrase, gesture, image, or object may offer a starting point without needing to stand for a single personal memory. Photographs and objects are optional support for the conversation.\n\nTogether, we consider what becomes significant within this material, how its relationships change with context, and what someone might wish to preserve or express. These encounters give later explorations of color, symbolism, and composition a foundation. Tattooing is one possible way to give what emerges a visual form.\n\nCome with a story, an association, or a question you want to follow. Sharing is voluntary, listening is participation, and no finished design or tattoo commitment is required. The final format is developing through collaboration.",
       guideTitle: /* live-copy:kinmarking.01.guide-title */ "Begin with a story.",
@@ -72,7 +74,7 @@
   }
 
   function sessionNumberForSlug(slug) {
-    var fallback = FALLBACKS.find(function (item) { return item.slug === String(slug || "") || item.legacySlug === String(slug || ""); });
+    var fallback = FALLBACKS.find(function (item) { return item.slug === String(slug || "") || item.legacySlug === String(slug || "") || (item.legacySlugs || []).includes(String(slug || "")); });
     return fallback ? fallback.number : "";
   }
 
@@ -86,7 +88,7 @@
     var sessionTitle = String((occurrence && occurrence.title) || (fallback && fallback.title) || "").trim();
     // Use the renamed edition while an existing Event record still has its old title.
     // Other Studio titles remain authoritative, including future editorial changes.
-    if (fallback && sessionTitle === fallback.previousTitle) sessionTitle = fallback.title;
+    if (fallback && (sessionTitle === fallback.previousTitle || (fallback.previousTitles || []).includes(sessionTitle))) sessionTitle = fallback.title;
     if (number === "02" && sessionTitle === "Color") sessionTitle = fallback.title;
     if (number === "03" && ["Symbols", "Iconography"].includes(sessionTitle)) sessionTitle = fallback.title;
     if (number === "04" && ["Symbolism and Composition", "Symbolism and Composition & Tattooing"].includes(sessionTitle)) sessionTitle = fallback.title;

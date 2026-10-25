@@ -8,15 +8,9 @@ const constructNavPath = new URL("../js/construct-nav.js", import.meta.url);
 const tattooIndexPath = new URL("../tattoos/index.html", import.meta.url);
 
 const aboutNavigationPaths = [
-  "../about/breakdown/index.html",
-  "../about/contact-press/index.html",
   "../about/exhibitions-appearances/index.html",
-  "../about/founder/index.html",
   "../about/legend/index.html",
-  "../about/mediums/index.html",
   "../about/six-well/index.html",
-  "../about/visual-language/index.html",
-  "../about/ways-in/index.html",
   "../js/legend-record-view.js",
 ];
 

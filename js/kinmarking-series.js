@@ -5,11 +5,13 @@
   var FALLBACKS = Object.freeze([
     {
       number:"01",
-      slug:"kinmarking-01-oral-histories-and-tattooing",
+      slug:"kinmarking-01-memory-work-and-tattooing",
       legacySlug:"kinmarking-01-skin-as-archive",
-      title:"Oral Histories & Tattooing",
+      legacySlugs:["kinmarking-01-oral-histories-and-tattooing"],
+      title:"Memory Work, Oral Histories and Tattooing",
       previousTitle:"Skin As Archive",
-      description: /* live-copy:kinmarking.01.description */ "Drawing on oral history, the first edition uses telling and listening to bring stories and associations into view, giving interpretation and visual development a place to begin.",
+      previousTitles:["Oral Histories & Tattooing","Memory Work & Tattooing"],
+      description: /* live-copy:kinmarking.01.description */ "This first edition centers the practice of working with memory: drawing it out, gathering its traces, placing it in context, and revisiting what it means. Through telling, listening, and engaging with stories, images, objects, and inherited accounts, we extract and collect embodied knowledge shaped by personal experience and cultural inheritance, exploring how it is interpreted and carried forward. The material collected sets the groundwork for the editions that follow. Tattooing enters as one possible way to embody what emerges from that work.",
       details: /* live-copy:kinmarking.01.details */ "The first edition begins with drawing out material. Before developing an image, the series makes room to notice the stories, associations, and patterns of relationship from which meaning can emerge. Oral history and archival practices offer approaches to asking, listening, contextualizing, and collecting.\n\nThis is an intentional starting point for the wider inquiry. KINMARKING approaches the process through which knowledge becomes embodied as ritual, whether or not we consciously recognize it happening. The word ritual is also a way to direct attention toward the significance of processes that may otherwise feel ordinary or automatic.\n\nThrough telling and listening, participants can explore experiences they remember, stories received from others, and associations shaped by shared culture. A phrase, gesture, image, or object may offer a starting point without needing to stand for a single personal memory. Photographs and objects are optional support for the conversation.\n\nTogether, we consider what becomes significant within this material, how its relationships change with context, and what someone might wish to preserve or express. These encounters give later explorations of color, symbolism, and composition a foundation. Tattooing is one possible way to give what emerges a visual form.\n\nCome with a story, an association, or a question you want to follow. Sharing is voluntary, listening is participation, and no finished design or tattoo commitment is required. The final format is developing through collaboration.",
       guideTitle: /* live-copy:kinmarking.01.guide-title */ "Begin with a story.",
       guideIntro: /* live-copy:kinmarking.01.guide-intro */ "A story, an association, or a question is enough to begin. Your starting point might come from personal experience, something passed down, or shared culture. The gathering centers telling and listening; photographs and objects can support that exploration.",
@@ -36,7 +38,7 @@
     },
     {
       number:"02", slug:"kinmarking-02", title:"Color & Tattooing", previousTitle:"Color as Inheritance", theme:"Color",
-      description: /* live-copy:kinmarking.02.description */ "Explore the meanings we inherit through color, from family and cultural traditions to personal associations. Through conversation and visual experimentation, develop palettes, shapes, and symbols into possibilities for tattooing.",
+      description: /* live-copy:kinmarking.02.description */ "How does a color come to mean something? Explore the meanings we inherit through family histories and cultural practices, alongside associations formed through personal experience and everyday encounters. Through conversation and visual experimentation, consider how color relationships can express these attachments, shift their meaning, and become part of a tattoo’s visual language.",
       details: /* live-copy:kinmarking.02.details */ "How did a color come to mean something to you? This edition follows color through textiles, objects, images, ceremonies, and everyday life. Consider the meanings you have received, the associations you have made yourself, and what you want to preserve or reinterpret in a tattoo.",
       guideTitle: /* live-copy:kinmarking.02.guide-title */ "Begin with a color.",
       guideIntro: /* live-copy:kinmarking.02.guide-intro */ "Arrive with a color, palette, reference, or curiosity. A personal association can be your starting point, and new connections can develop through the session.",
@@ -45,18 +47,18 @@
     },
     {
       number:"03", slug:"kinmarking-03", title:"Grief & Tattooing",
-      description:"An inquiry into how clients use tattooing to face and process grief, alchemizing it into art that lives in the skin.",
+      description:"This edition explores how people use tattooing to face and process grief, alchemizing it into art that lives in the skin. Consider what we wish to remember, what changes as we grieve, and how a tattoo might express an ongoing relationship with someone or something we have lost.",
     },
     {
       number:"04", slug:"kinmarking-04", title:"Iconography & Tattooing", previousTitle:"Symbols as Language", theme:"Iconography",
-      description: /* live-copy:kinmarking.04.description */ "Explore how symbols, badges, and visual signs communicate identity, belief, belonging, and personal history. Interpret inherited meanings and develop a visual language of your own through drawing and tattoo design.",
+      description: /* live-copy:kinmarking.04.description */ "Explore the images, emblems, and visual signs through which people communicate identity, belief, belonging, and history. Through recognizing and interpreting inherited imagery, we draw out embodied knowledge and the attachments it carries. Consider how these images acquire meaning within particular cultural and personal contexts, and how we might reinterpret or translate them into tattoos.",
       details: /* live-copy:kinmarking.04.details */ "What does a symbol say, and who knows how to read it? This edition considers the signs we encounter, inherit, wear, and create. Explore how context changes their interpretation, what you want a mark to communicate, and how to preserve, combine, or transform those meanings in a tattoo.",
       guideTitle: /* live-copy:kinmarking.04.guide-title */ "Begin with a sign.",
       guideIntro: /* live-copy:kinmarking.04.guide-intro */ "Bring a symbol you recognize, wear, question, or want to understand. You can also begin with an idea or affiliation and discover its visual form through the session.",
       bring: /* live-copy:kinmarking.04.bring */ "Bring one to three references if you have them: a symbol, badge, pattern, piece of lettering, photograph, or object bearing a sign.",
       how: /* live-copy:kinmarking.04.how */ "Discuss symbols in their specific contexts, explore how you and others read them, and experiment with drawing, abstraction, and composition. Work with the tattoo artist to develop a mark that expresses what you want to communicate.",
     },
-    { number:"05", slug:"kinmarking-05", title:"Symbolism, Composition & Tattooing", description:"Program and participation details will follow." },
+    { number:"05", slug:"kinmarking-05", title:"Symbolism, Composition & Tattooing", description:"How can an image become a way to engage with a memory, relationship, or idea? Drawing on inherited symbolism and personal associations, we extract embodied knowledge as material for visual development. Explore the arrangement of forms through scale, spacing, orientation, and placement on the body, considering how these choices shape a tattoo’s meaning, including what remains private, uncertain, or open to interpretation." },
   ]);
   var TIME_ZONE = "America/New_York";
 
@@ -76,7 +78,7 @@
   }
 
   function sessionNumberForSlug(slug) {
-    var fallback = FALLBACKS.find(function (item) { return item.slug === String(slug || "") || item.legacySlug === String(slug || ""); });
+    var fallback = FALLBACKS.find(function (item) { return item.slug === String(slug || "") || item.legacySlug === String(slug || "") || (item.legacySlugs || []).includes(String(slug || "")); });
     return fallback ? fallback.number : (String(slug || "").match(/^kinmarking-(\d{2,})$/) || [])[1] || "";
   }
 
@@ -90,7 +92,7 @@
     var sessionTitle = String((occurrence && occurrence.title) || (fallback && fallback.title) || "").trim();
     // Use the renamed edition while an existing Event record still has its old title.
     // Other Studio titles remain authoritative, including future editorial changes.
-    if (fallback && sessionTitle === fallback.previousTitle) sessionTitle = fallback.title;
+    if (fallback && (sessionTitle === fallback.previousTitle || (fallback.previousTitles || []).includes(sessionTitle))) sessionTitle = fallback.title;
     if (number === "02" && sessionTitle === "Color") sessionTitle = fallback.title;
     if (["Symbols as Language", "Symbols", "Iconography"].includes(sessionTitle)) sessionTitle = "Iconography & Tattooing";
     if (["Symbolism and Composition", "Symbolism and Composition & Tattooing"].includes(sessionTitle)) sessionTitle = "Symbolism, Composition & Tattooing";
@@ -101,7 +103,7 @@
     if (occurrence && Object.prototype.hasOwnProperty.call(occurrence, 'description')) return occurrence.description || "Program and participation details will follow.";
     var number = normalizedNumber(occurrence && occurrence.sessionNumber, Number(index) || 0);
     var fallback = occurrence && occurrence.title
-      ? FALLBACKS.find(function (item) { return item.title === occurrence.title || item.previousTitle === occurrence.title; })
+      ? FALLBACKS.find(function (item) { return item.title === occurrence.title || item.previousTitle === occurrence.title || (item.previousTitles || []).includes(occurrence.title); })
       : fallbackForNumber(number);
     if (fallback && fallback.description) {
       return fallback.description;

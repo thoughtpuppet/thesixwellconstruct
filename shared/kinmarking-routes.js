@@ -1,5 +1,6 @@
-export const KINMARKING_FIRST_EDITION_SLUG = "kinmarking-01-oral-histories-and-tattooing";
+export const KINMARKING_FIRST_EDITION_SLUG = "kinmarking-01-memory-work-and-tattooing";
 export const KINMARKING_FIRST_EDITION_LEGACY_SLUG = "kinmarking-01-skin-as-archive";
+export const KINMARKING_FIRST_EDITION_PREVIOUS_SLUG = "kinmarking-01-oral-histories-and-tattooing";
 
 export function kinmarkingSessionNumber(slug) {
   if (slug === KINMARKING_FIRST_EDITION_SLUG) return "01";
@@ -15,6 +16,9 @@ export function kinmarkingFirstEditionRedirect(pathname) {
     `/events/${KINMARKING_FIRST_EDITION_LEGACY_SLUG}`,
     `/events/${KINMARKING_FIRST_EDITION_LEGACY_SLUG}/`,
     `/events/${KINMARKING_FIRST_EDITION_LEGACY_SLUG}/index.html`,
+    `/events/${KINMARKING_FIRST_EDITION_PREVIOUS_SLUG}`,
+    `/events/${KINMARKING_FIRST_EDITION_PREVIOUS_SLUG}/`,
+    `/events/${KINMARKING_FIRST_EDITION_PREVIOUS_SLUG}/index.html`,
     `/events/${KINMARKING_FIRST_EDITION_SLUG}`,
     `/events/${KINMARKING_FIRST_EDITION_SLUG}/index.html`,
   ]).has(pathname)) return "";

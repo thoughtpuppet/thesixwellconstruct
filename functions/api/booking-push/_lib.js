@@ -3,9 +3,10 @@ import { activateOwnerPush, resolvePushEnvironment } from './_setup.js';
 
 export const BOOKING_REQUEST_TYPES = Object.freeze([
   'tattoo_inquiry', 'flash_claim', 'special_project', 'build_brief',
-  'maze_design', 'tattoo_special', 'consultation', 'build_session', 'studio_booking',
+  'maze_design', 'tattoo_special', 'consultation', 'build_session', 'studio_booking', 'engagement_request',
 ]);
 const REQUEST_LABELS = Object.freeze({
+  engagement_request: 'Construct engagement inquiry',
   tattoo_inquiry: 'custom inquiry', flash_claim: 'flash claim', special_project: 'special project request',
   build_brief: 'Build Your Own request', maze_design: 'Maze design request', tattoo_special: 'Tattoo Special request',
   consultation: 'consultation request', build_session: 'in-person Build session request', studio_booking: 'studio booking request',

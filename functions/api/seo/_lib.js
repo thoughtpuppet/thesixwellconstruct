@@ -1,7 +1,7 @@
 import { COLLABORATOR_PUBLIC_SQL } from "../construct/_collaborators.js";
 import { loadPublicCalendarSearchEvents } from "../calendar/_lib.js";
 import { publicPageVisibilityDecisions } from "../site-visibility/_lib.js";
-import { kinmarkingProjectRedirect } from "../../../shared/kinmarking-routes.js";
+import { kinmarkingFirstEditionRedirect, kinmarkingProjectRedirect } from "../../../shared/kinmarking-routes.js";
 
 export const PUBLIC_SITE_ORIGIN = "https://thesixwellconstruct.com";
 
@@ -11,12 +11,11 @@ export const KINMARKING_PROJECT_DESCRIPTION = "KINMARKING is a communal series e
 const STATIC_PAGES = Object.freeze([
   ["/", "The Six.Well Construct · Saiel Dauhn Solehman", "The creative ecosystem of Saiel Dauhn Solehman: art, tattooing, clothing, writing, film, sound, events, and an authored living Archive."],
   ["/home/", "The Six.Well Construct · Creative Ecosystem", "Enter the connected creative ecosystem of Saiel Dauhn Solehman across art, tattooing, clothing, writing, film, sound, events, and Archive."],
-  ["/about/", "About the Six.Well Construct · Saiel Dauhn Solehman", "The full operating creative ecosystem of Saiel Dauhn Solehman and the relationships between its mediums, projects, records, and public pathways."],
+  ["/about/", "About the Six.Well Construct · Saiel Dauhn Solehman", "How inquiry, creative practices, commerce, people, symbols, and Archive histories connect within the creative ecosystem of Saiel Dauhn Solehman."],
   ["/about/saieldauhnsolehman/", "Saiel Dauhn Solehman · Artist and Tattoo Artist in Atlanta", SAIEL_BIO_OPENING],
   ["/about/collaborators/", "Collaborators · the Six.Well Construct", "People and organizations collaborating within the Six.Well Construct."],
-  ["/about/ways-in/", "Ways Into the Six.Well Construct", "Choose a path into Saiel Dauhn Solehman's creative ecosystem through art, tattooing, clothing, writing, film, events, the Legend, or the Archive."],
+  ["/about/legend/", "The Legend · the Six.Well Construct", "The shared visual vocabulary of the Six.Well Construct: symbols, their sources, meanings, variations, and appearances across the work."],
   ["/about/exhibitions-appearances/", "Exhibitions and Appearances · Saiel Dauhn Solehman", "A public record of exhibitions, appearances, talks, and programs involving artist Saiel Dauhn Solehman."],
-  ["/about/contact-press/", "Contact and Press · Saiel Dauhn Solehman", "Contact and press pathways for Saiel Dauhn Solehman and the Six.Well Construct."],
   ["/currently/", "Current Works and Projects · Saiel Dauhn Solehman", "Current works and active projects across the connected creative practice of Saiel Dauhn Solehman."],
   ["/art/", "Art by Saiel Dauhn Solehman · Paintings and Works", "Artworks and paintings by Atlanta artist Saiel Dauhn Solehman, including available works and their connected records."],
   ["/gallery/", "Gallery · Original Works by Saiel Dauhn Solehman", "A gallery of original works from the creative ecosystem of Saiel Dauhn Solehman."],
@@ -124,7 +123,7 @@ export function canonicalRedirect(request, env = {}) {
   const requestHost = url.hostname.toLowerCase();
   const isKnownHost = requestHost === productionHost || requestHost === `www.${productionHost}`;
   const requestedPath = url.pathname;
-  const kinmarkingRedirect = kinmarkingProjectRedirect(requestedPath);
+  const kinmarkingRedirect = kinmarkingProjectRedirect(requestedPath) || kinmarkingFirstEditionRedirect(requestedPath);
   let normalizedPath = normalizeSeoPath(requestedPath);
   if (kinmarkingRedirect) normalizedPath = kinmarkingRedirect;
   if (/^\/explore(?:\/|\/index\.html)?$/i.test(requestedPath)) normalizedPath = "/adventure/";

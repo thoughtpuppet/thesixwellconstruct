@@ -1,6 +1,7 @@
 const TOKEN_KEY = 'swc_submissions_admin_token';
 const $ = (id) => document.getElementById(id);
 const TYPES = {
+  engagement_request: 'Construct engagement inquiry',
   tattoo_inquiry: 'Custom tattoo', flash_claim: 'Flash claim', special_project: 'Special project',
   build_brief: 'Build your own', maze_design: 'Maze design', tattoo_special: 'Tattoo Special',
   consultation: 'Consultation', build_session: 'In-person Build session', studio_booking: 'Studio booking',
@@ -87,6 +88,15 @@ async function loadInbox(append = false) {
 
 function fields(submission) {
   const p = submission.payload || {};
+  if (submission.type === 'engagement_request') {
+    return [
+      ['Category', human(p.category)], ['Email', submission.contactEmail], ['Phone', submission.contactPhone],
+      ['Organization', p.organization], ['Project / topic', p.project_title], ['Details', p.message],
+      ['Proposed timing', p.preferred_dates], ['Location / format', p.location], ['Website', p.website],
+      ['Budget / honorarium', p.budget], ['Status', human(submission.status)],
+    ].filter(([, value]) => typeof value === 'string' && value.trim())
+      .map(([label, value]) => `<div><dt>${label}</dt><dd>${escape(value)}</dd></div>`).join('');
+  }
   const values = [
     ['Email', submission.contactEmail], ['Phone', submission.contactPhone],
     ['Project', submission.subject || p.project_description || p.design_description],
@@ -110,7 +120,7 @@ async function openRequest(id) {
     <p class="detail-meta">${escape(TYPES[submission.type] || human(submission.type))} · ${escape(date(submission.createdAt))}</p>
     <dl class="detail-fields">${fields(submission)}</dl>
     <div class="detail-actions"><a href="/studio/submissions/?request=${encodeURIComponent(id)}">Full review in Studio</a>${mail ? `<a href="mailto:${escape(encodeURIComponent(mail).replace(/%40/g, '@'))}">Email client</a>` : ''}</div>
-    <p class="muted">Approve, decline, or prepare a booking link in Studio.</p>
+    <p class="muted">${submission.type === 'engagement_request' ? 'Inquiry only. No time is reserved. Keep working notes or archive the inquiry in Studio.' : 'Approve, decline, or prepare a booking link in Studio.'}</p>
     ${(submission.files || []).length ? `<h2>References</h2><div class="file-list">${submission.files.map((file) => `<button type="button" data-file="${escape(file.id)}" ${file.stored ? '' : 'disabled'}>${escape(file.fileName || 'Reference')}${file.stored ? '' : ' · unavailable'}</button>`).join('')}</div><div id="file-preview"></div>` : ''}`;
   if (!$('request-dialog').open) $('request-dialog').showModal();
   status('');

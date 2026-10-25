@@ -9,7 +9,23 @@ const read = (file) => readFile(path.join(root, file), "utf8");
 
 const routes = [
   { route: "/about/kinmarking/", file: "about/kinmarking/index.html", variant: "supporting", descriptor: false },
-  { route: "/about/", file: "about/index.html", variant: "landing", descriptor: true },
+  { route: "/about/collaborators/", file: "about/collaborators/index.html", variant: "supporting", descriptor: true },
+  { route: "/about/exhibitions-appearances/", file: "about/exhibitions-appearances/index.html", variant: "supporting", descriptor: true },
+  { route: "/about/saieldauhnsolehman/", file: "about/saieldauhnsolehman/index.html", variant: "supporting", descriptor: true },
+  { route: "/archive/art/making-the-canvas/", file: "archive/art/making-the-canvas/index.html", variant: "supporting", descriptor: true },
+  { route: "/archive/blackboards/redesign-concept.html", file: "archive/blackboards/redesign-concept.html", variant: "supporting", descriptor: true },
+  { route: "/archive/collections/six-well-permanent-garments/", file: "archive/collections/six-well-permanent-garments/index.html", variant: "supporting", descriptor: true },
+  { route: "/archive/maze/", file: "archive/maze/index.html", variant: "supporting", descriptor: true },
+  { route: "/archive/places/goat-farm-arts-center/", file: "archive/places/goat-farm-arts-center/index.html", variant: "supporting", descriptor: true },
+  { route: "/archive/places/guardian-studios/", file: "archive/places/guardian-studios/index.html", variant: "supporting", descriptor: true },
+  { route: "/calendar/submit/", file: "calendar/submit/index.html", variant: "supporting", descriptor: true },
+  { route: "/calendar/submit/manage/", file: "calendar/submit/manage/index.html", variant: "supporting", descriptor: true },
+  { route: "/events/detail/development.html", file: "events/detail/development.html", variant: "supporting", descriptor: false },
+  { route: "/events/kinmarking/", file: "events/kinmarking/index.html", variant: "landing", descriptor: true },
+  { route: "/tattoos/special-projects/healed/", file: "tattoos/special-projects/healed/index.html", variant: "supporting", descriptor: true },
+  { route: "/tattoos/specials/adjusted-offer/", file: "tattoos/specials/adjusted-offer/index.html", variant: "landing", descriptor: true },
+  { route: "/tattoos/specials/", file: "tattoos/specials/index.html", variant: "landing", descriptor: true },
+  { route: "/about/", file: "about/index.html", variant: "supporting", descriptor: false },
   { route: "/art/", file: "art/index.html", variant: "landing", descriptor: true },
   { route: "/merch/", file: "merch/index.html", variant: "landing", descriptor: true },
   { route: "/tattoos/", file: "tattoos/index.html", variant: "landing", descriptor: true },
@@ -18,17 +34,10 @@ const routes = [
 
   { route: "/404", file: "404.html", variant: "supporting", descriptor: true },
   { route: "/about/artpilltattoohouse/", file: "about/artpilltattoohouse/index.html", variant: "supporting", descriptor: true },
-  { route: "/about/breakdown/", file: "about/breakdown/index.html", variant: "supporting", descriptor: true },
-  { route: "/about/contact-press/", file: "about/contact-press/index.html", variant: "supporting", descriptor: true },
-  { route: "/about/identities/", file: "about/identities/index.html", variant: "supporting", descriptor: true },
   { route: "/about/identities/:slug/", file: "about/identities/detail/index.html", heroSource: "js/about-identities.js", variant: "supporting", descriptor: true, dynamic: true },
   { route: "/currently", file: "currently/index.html", variant: "supporting", descriptor: true },
-  { route: "/about/founder/", file: "about/founder/index.html", variant: "supporting", descriptor: true },
   { route: "/about/legend/", file: "about/legend/index.html", variant: "supporting", descriptor: true },
-  { route: "/about/mediums/", file: "about/mediums/index.html", variant: "supporting", descriptor: true },
   { route: "/about/six-well/", file: "about/six-well/index.html", variant: "supporting", descriptor: true },
-  { route: "/about/visual-language/", file: "about/visual-language/index.html", variant: "supporting", descriptor: true },
-  { route: "/about/ways-in/", file: "about/ways-in/index.html", variant: "supporting", descriptor: true },
 
   { route: "/tattoos/client-resources/", file: "tattoos/client-resources/index.html", variant: "supporting", descriptor: true },
 
@@ -67,7 +76,6 @@ const routes = [
   { route: "/booking/confirmed/consultation/", file: "booking/confirmed/consultation/index.html", variant: "supporting", descriptor: false },
   { route: "/booking/confirmed/studio/", file: "booking/confirmed/studio/index.html", variant: "supporting", descriptor: false },
   { route: "/booking/confirmed/virtual-consultation/", file: "booking/confirmed/virtual-consultation/index.html", variant: "supporting", descriptor: false },
-  { route: "/construct-map/", file: "construct-map/index.html", variant: "supporting", descriptor: true },
   { route: "/calendar/", file: "calendar/index.html", variant: "supporting", descriptor: true },
 
   { route: "/events/calendar/", file: "events/calendar/index.html", variant: "supporting", descriptor: true },
@@ -77,6 +85,7 @@ const routes = [
   { route: "/events/open-studios/", file: "events/open-studios/index.html", variant: "supporting", descriptor: true },
   { route: "/events/signal-symbol/", file: "events/signal-symbol/index.html", variant: "supporting", descriptor: true },
   { route: "/events/solehmans-new-year/", file: "events/solehmans-new-year/index.html", variant: "supporting", descriptor: true },
+  { route: "/events/sny-00/", file: "events/sny-00/index.html", variant: "landing", descriptor: true },
   { route: "/events/ss-and-f-live-audience/", file: "events/ss-and-f-live-audience/index.html", variant: "supporting", descriptor: true },
 
   { route: "/merch/:slug/", file: "merch/detail/index.html", variant: "supporting", descriptor: true, dynamic: true },
@@ -123,11 +132,11 @@ test("active public hero inventory is complete and assigns one valid variant", a
   assert.equal(new Set(routes.map(({ route }) => route)).size, routes.length, "hero routes must be unique");
 
   const landing = routes.filter(({ variant }) => variant === "landing").map(({ route }) => route).sort();
-  assert.deepEqual(landing, ["/about/", "/archive/", "/art/", "/events/", "/merch/", "/tattoos/"]);
+  assert.deepEqual(landing, ["/archive/", "/art/", "/events/", "/events/kinmarking/", "/events/sny-00/", "/merch/", "/tattoos/", "/tattoos/specials/", "/tattoos/specials/adjusted-offer/"]);
 
   const discovered = (
     await Promise.all(
-      ["about", "adventure", "archive", "art", "booking", "calendar", "construct-map", "events", "merch", "preferences", "search", "tattoos"].map(walkHtml),
+      ["about", "adventure", "archive", "art", "booking", "calendar", "events", "merch", "preferences", "search", "tattoos"].map(walkHtml),
     )
   )
     .flat()
@@ -168,6 +177,7 @@ test("every inventoried public hero loads and follows the shared component contr
     assert.match(source, new RegExp(`\\bsite-hero--${record.variant}\\b`), `${label} needs the ${record.variant} variant`);
     assert.match(source, /\bhero-title\b/, `${label} needs .hero-title`);
     if (record.descriptor) assert.match(source, /\bhero-descriptor\b/, `${label} needs .hero-descriptor`);
+    if (record.route === "/about/") assert.doesNotMatch(source, /\bhero-descriptor\b/, "About intentionally opens with its connection map and no hero description");
 
     if (!record.dynamic) {
       const heroClasses = [...source.matchAll(/class=["']([^"']*\bsite-hero\b[^"']*)["']/g)];

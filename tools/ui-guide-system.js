@@ -94,9 +94,7 @@
     { id: "special-home", label: "Homepage construct", route: "/home/", source: "home/index.html", description: "Canvas/node navigation with its own spatial and motion contract." },
     { id: "special-entry", label: "Entry threshold / room", route: "/", source: "index.html + entry-room/3d", description: "Immersive threshold and 3D entry logic; not a standard page shell." },
     { id: "special-maze", label: "Maze application", route: "/tattoos/build/maze/", source: "apps/maze + compiled bundle", description: "Application workspace owned by its React/Konva composition system." },
-    { id: "special-map", label: "Construct Map", route: "/construct-map/", source: "construct-map/index.html", description: "Relationship diagram and structural key rather than a content page." },
     { id: "special-build", label: "Tattoo Build workspace", route: "/tattoos/build/", source: "tattoos/build/index.html", description: "Composition builder plus application flow with specialized responsive states." },
-    { id: "special-bible", label: "Construct Bible", route: "/sixwellconstruct/bible/", source: "sixwellconstruct/bible/index.html", description: "Internal reference surface, not a public production template." }
   ];
 
   var SOURCE_CANDIDATE_ROUTES = {

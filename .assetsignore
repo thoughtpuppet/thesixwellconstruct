@@ -45,6 +45,10 @@ prototypes/**
 **/*preview*.html
 **/*preview*/**
 about/about-next.html
+# Superseded orientation pages redirect to About in the Worker.
+about/construct-connections-organic.html
+construct-map/**
+sixwellconstruct/bible/**
 tools/writing-preview-server.mjs
 tools/writing-local-runtime.mjs
 functions

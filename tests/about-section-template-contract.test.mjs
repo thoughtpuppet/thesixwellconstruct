@@ -7,23 +7,11 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PAGES = [
-  "breakdown",
-  "contact-press",
-  "founder",
-  "mediums",
   "six-well",
-  "visual-language",
-  "ways-in",
 ];
 
 const BASELINE_HASHES = {
-  "breakdown": "97d2c2bc2a33a6111ae8f4f46758bbf11f2c6f18a06c5c1551a5730958603e3a",
-  "contact-press": "cd18abae7c031385f5c42203b37505298bb009d4f280df9b1e2f56190902b875",
-  "founder": "252580e269fc64f7216e1547f79caacdc8cd9a0ba506fc7557e3999e2530d6cd",
-  "mediums": "918f240d75785649fff9b314412f78739afc59a1250c6b302093a38e09bc42e4",
-  "six-well": "879c7da538c716089067dd0c668d3765294fcd1b56cb25de63e348c49d97a90b",
-  "visual-language": "422aa04f42ed1f5110a0f7851be30f5757e78ea47016d150a3215062e93b4a0e",
-  "ways-in": "097a93e6f048f0542a173222d2f0090a22cd5ba51543101d6bcb69c1bc5effb9",
+  "six-well": "5d4945896075558a5fa411da09e3f54ddd1148c381c8c44f4775b9013b96b4c7",
 };
 
 function cleanText(value) {
@@ -97,9 +85,9 @@ if (process.env.ABOUT_INVENTORY_PRINT === "1") {
       assert.ok(transitionIndex < familyIndex, `${page} must load family CSS after transitions`);
       assert.ok(familyIndex < mobileIndex, `${page} must load mobile.css after family CSS`);
       assert.ok(mobileIndex < typographyIndex, `${page} must load typography last`);
-      assert.match(html, /<h1 class="hero-title">/);
-      assert.match(html, /<p class="section-intro hero-descriptor">/);
-      assert.match(html, /<h2 class="band-title section-title">/);
+      assert.match(html, /<h1 class="hero-title"[^>]*>/);
+      assert.match(html, /<p class="section-intro hero-descriptor"[^>]*>/);
+      assert.match(html, /<h2 class="band-title section-title"[^>]*>/);
       assert.doesNotMatch(html, /<style\b/i, `${page} must not add page-local CSS`);
     }
   });

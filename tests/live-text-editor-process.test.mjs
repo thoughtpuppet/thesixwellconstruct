@@ -114,7 +114,7 @@ test("KINMARKING 01 draft edits stay in private sources while its regular route 
   let preview;
   try {
     preview = await startPreview(Number(new URL(origin).port));
-    const publicResponse = await fetch(`${origin}/events/kinmarking-01-oral-histories-and-tattooing/?draft=1`);
+    const publicResponse = await fetch(`${origin}/events/kinmarking-01-memory-work-and-tattooing/?draft=1`);
     assert.equal(publicResponse.status,200);
     const publicHtml = await publicResponse.text();
     assert.match(publicHtml,/id="developmentStatus"[^>]*>In development/);

@@ -227,11 +227,32 @@
     );
   }
 
+  function storyHtmlMarkup(value) {
+    if (!value) return "";
+    const parsed = new DOMParser().parseFromString(String(value), "text/html");
+    const allowed = new Set(["P", "H2", "H3", "H4", "STRONG", "EM", "BR", "UL", "OL", "LI", "BLOCKQUOTE", "A"]);
+    function render(node) {
+      if (node.nodeType === 3) return escapeHtml(node.textContent);
+      if (node.nodeType !== 1 || ["SCRIPT", "STYLE", "IFRAME", "OBJECT", "TEMPLATE", "SVG", "MATH"].includes(node.tagName)) return "";
+      const children = Array.from(node.childNodes).map(render).join("");
+      if (!allowed.has(node.tagName)) return children;
+      if (node.tagName === "BR") return "<br>";
+      if (node.tagName === "A") {
+        const href = safeUrl(node.getAttribute("href"));
+        return href ? '<a href="' + escapeHtml(href) + '">' + children + "</a>" : children;
+      }
+      const tag = node.tagName.toLowerCase();
+      return "<" + tag + ">" + children + "</" + tag + ">";
+    }
+    return Array.from(parsed.body.childNodes).map(render).join("");
+  }
+
   function subjectExplorerUrl(subject) {
     const role = text(subject && subject.role).toLowerCase();
     const entityType = text(subject && (subject.entity_type || subject.entityType)).toLowerCase();
     const id = text(subject && (subject.entity_id || subject.id));
     const name = text(subject && (subject.name || subject.title || subject.slug || id));
+    if (id === "person-saiel-dauhn-solehman") return "/about/saieldauhnsolehman/";
     let key = "q";
     let value = text(subject && subject.slug, id, name);
     if (entityType === "person" || role.includes("founder") || role.includes("artist")) key = "person";
@@ -1278,6 +1299,7 @@
       const title = text(item.title, item.name, slug);
       const summary = text(data.dossier.orientation, item.orientation, item.summary, item.description);
       const story = text(data.dossier.story, data.dossier.body, item.story, item.body, item.statement, summary);
+      const storyMarkup = storyHtmlMarkup(text(data.dossier.story_html, item.story_html));
       const activeUrl = safeUrl(first(item.active_url, item.canonical_url, item.entity_url, item.source_route, item.legacy_path, item.route, data.dossier.active_url));
       const versionsById = new Map(data.versions.map((version) => [text(version.id), version]));
       const statesById = new Map(data.states.map((state) => [text(state.id), state]));
@@ -1318,7 +1340,7 @@
         <article${mediumKey ? ` data-archive-medium="${escapeHtml(mediumKey)}"` : ""}>
           <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(archiveObjectTypeLabel(item), item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p data-retro-kind="dossier" data-retro-id="${escapeHtml(item.entity_id||item.id)}" data-retro-field="orientation" class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadataHtml}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${relatedActionMarkup}</div></div></div>${imageUrl || imageMarkup ? `<figure data-retro-media="${escapeHtml(primaryMaterial?.media_id||image.id||'')}" class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${inlineEmphasis(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
           <nav class="archive-jump-nav" aria-label="On this record"><a href="#overview">Overview</a><a href="#story">Story</a>${data.documentation.length ? `<a href="#documentation">Documentation</a>` : ""}${data.versions.length ? `<a href="#evolution">Evolution</a>` : ""}${webSnapshotMarkup ? `<a href="#website-snapshots">Website snapshots</a>` : ""}${data.colorUsages.length||data.materialUsages.length||data.paletteMaps.length?`<a href="#palette-materials">Palette &amp; Materials</a>`:""}<a href="#notebook">Notebook</a><a href="#history">History</a><a href="#connections">Connections</a></nav>
-          <section class="archive-document-section" id="story"><header class="archive-section-heading"><span class="archive-section-index">01 / Context</span><h2 class="archive-section-title">The story</h2></header><div><div class="archive-prose"><div data-retro-kind="dossier" data-retro-id="${escapeHtml(item.entity_id||item.id)}" data-retro-field="story">${story ? paragraphMarkup(story) : "<p>This dossier currently holds the public facts of the work. Its fuller story has not been published yet.</p>"}</div>${data.collections.length ? `<div class="archive-link-chips">${data.collections.map((collection) => `<a class="archive-chip" href="/archive/?collection=${encodeURIComponent(text(collection.slug, collection.id, collection.name))}">${escapeHtml(text(collection.name, collection.title, collection.slug))}</a>`).join("")}</div>` : ""}</div>${contextMarkup(data.subjects, data.terms)}</div></section>
+          <section class="archive-document-section" id="story"><header class="archive-section-heading"><span class="archive-section-index">01 / Context</span><h2 class="archive-section-title">The story</h2></header><div><div class="archive-prose"><div data-retro-kind="dossier" data-retro-id="${escapeHtml(item.entity_id||item.id)}" data-retro-field="story">${storyMarkup || (story ? paragraphMarkup(story) : "<p>This dossier currently holds the public facts of the work. Its fuller story has not been published yet.</p>")}</div>${data.collections.length ? `<div class="archive-link-chips">${data.collections.map((collection) => `<a class="archive-chip" href="/archive/?collection=${encodeURIComponent(text(collection.slug, collection.id, collection.name))}">${escapeHtml(text(collection.name, collection.title, collection.slug))}</a>`).join("")}</div>` : ""}</div>${contextMarkup(data.subjects, data.terms)}</div></section>
           ${data.documentation.length ? `<section class="archive-document-section" id="documentation"><header class="archive-section-heading"><span class="archive-section-index">02 / Catalogue</span><h2 class="archive-section-title">Documentation</h2></header><div>${documentationMarkup(data.documentation)}</div></section>` : ""}
           ${data.versions.length ? `<section class="archive-document-section" id="evolution"><header class="archive-section-heading"><span class="archive-section-index">03 / Evolution</span><h2 class="archive-section-title">Versions and states</h2></header><div>${evolutionMarkup(data, materials, item)}</div></section>` : ""}
           ${webSnapshotMarkup ? `<section class="archive-document-section" id="website-snapshots"><header class="archive-section-heading"><span class="archive-section-index">04 / Living source</span><h2 class="archive-section-title">Website snapshots</h2></header><div>${webSnapshotMarkup}</div></section>` : ""}

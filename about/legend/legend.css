@@ -13,6 +13,28 @@ body,
   --legend-rule: var(--color-archive-dim);
   --legend-symbol: var(--color-archive);
   --legend-signal: var(--color-archive-bright);
+  --type-body-transform: none;
+  --type-body-tracking: normal;
+  --type-body-tracking-active: normal;
+}
+
+html:has(.legend-page) {
+  scroll-padding-top: 104px;
+}
+
+.legend-page .legend-sources {
+  margin-top: var(--section-gap);
+}
+
+.legend-page .sources-context {
+  margin-top: var(--space-md);
+  max-width: 49rem;
+}
+
+@media (max-width: 640px) {
+  html:has(.legend-page) {
+    scroll-padding-top: 126px;
+  }
 }
 
 .legend-page :where(button, a, input):focus-visible {
