@@ -4520,14 +4520,14 @@ test("Tattoo aftercare is part of the client resource packet and keeps medical e
   const policies = readFileSync(join(ROOT, "tattoos", "policies", "index.html"), "utf8");
   const dayOf = readFileSync(join(ROOT, "tattoos", "day-of", "index.html"), "utf8");
   const location = readFileSync(join(ROOT, "tattoos", "location-parking", "index.html"), "utf8");
-  assert.match(aftercare, /<h1 class="hero-title">Aftercare Instructions<\/h1>/);
+  assert.match(aftercare, /<h1 class="hero-title"[^>]*>Aftercare Instructions<\/h1>/);
   assert.match(aftercare, /Follow the covering and product instructions given at your appointment first/);
   assert.match(aftercare, /Contact a doctor or board-certified dermatologist promptly/);
   assert.match(aftercare, /Seek emergency care for trouble breathing/);
   assert.match(aftercare, /health\.clevelandclinic\.org\/tattoo-aftercare/);
   assert.match(aftercare, /aad\.org\/public\/everyday-care\/skin-care-basics\/tattoos\/tattoo-skin-reactions/);
   for (const source of [policies, dayOf, location]) assert.match(source, /href="\/tattoos\/aftercare\/"/);
-  assert.match(location, /You may park on the street alongside the building\. A free gravel parking lot is also available at the very end of Mangum Street, the street adjacent to the building\. Continue to the end of Mangum Street; the lot will be on your left\./);
+  assert.match(location, /Street parking is available in front of the building, all along Nelson Street, and on Centennial\. A free gravel parking lot is also available at the very end of Mangum Street, the street adjacent to the building\. Continue to the end of Mangum Street; the lot will be on your left\./);
   assert.match(location, /<figure class="parking-guide">[\s\S]*?src="\/assets\/images\/artpill-location-parking-guide\.jpg"[\s\S]*?width="1672" height="941"[\s\S]*?loading="lazy"[\s\S]*?alt="The brick studio building beside Mangum Street, with an arrow pointing down Mangum Street toward the free gravel parking lot\."/);
   assert.match(location, /\.parking-guide \{[\s\S]*?border: 5px solid/);
 });

@@ -168,6 +168,7 @@ test('unlimited launch keeps the three-person allowance, exact schedule and cano
 test('new RSVP sends one confirmation with the approved arrival details; duplicates and cron do not resend',async()=>{
   const {db,env}=fixture();db.exec(readFileSync(join(ROOT,'migrations/0246_sny00_launch.sql'),'utf8'));
   db.exec(readFileSync(join(ROOT,'migrations/0247_sny00_time.sql'),'utf8'));
+  db.exec(readFileSync(join(ROOT,'migrations/0249_sny00_parking.sql'),'utf8'));
   const messages=[];env.EMAIL={send:async message=>{messages.push(message);return {id:'test-delivery'};}};
   const background=[];
   assert.equal((await worker.fetch(request('/api/events/sny-00/context'),env,{})).status,200);
@@ -177,8 +178,9 @@ test('new RSVP sends one confirmation with the approved arrival details; duplica
   await retryPendingPrivateEventRsvpConfirmations(env);
   assert.equal(messages.length,1);assert.equal(messages[0].to,'guest@example.test');
   assert.match(messages[0].subject,/RSVP confirmed — SNY 00/);
-  for(const expected of ['7:00 PM','9:00 PM','Suite 12','770-820-5800','Mangum Street','arrive promptly at 7 PM','art-making materials','3'])assert.ok(messages[0].text.includes(expected),expected);
+  for(const expected of ['7:00 PM','9:00 PM','Suite 12','770-820-5800','Mangum Street','in front of the building','Nelson Street','Centennial','arrive promptly at 7 PM','art-making materials','3'])assert.ok(messages[0].text.includes(expected),expected);
   assert.ok(!messages[0].text.includes('6:30'));
+  assert.ok(!messages[0].text.includes('alongside the building'));
   assert.ok(!messages[0].text.includes(signup.foodRequirements));
   assert.ok(!messages[0].text.includes('\n0\n'));
   assert.equal(db.prepare('SELECT status FROM notification_deliveries').get().status,'sent');
