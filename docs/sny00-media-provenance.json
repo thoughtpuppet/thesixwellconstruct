@@ -1,8 +1,8 @@
 {
   "event_slug": "sny-00",
-  "source": "Seven user-supplied SNY SM & FLYERS PNG attachments, with the user-supplied correction to flyer 04, for the SNY00 event page on 2026-10-24.",
+  "source": "Seven user-supplied SNY SM & FLYERS PNG attachments, the user-supplied correction to flyer 04, and the separately supplied high-resolution hero artwork for the SNY00 event page on 2026-10-24.",
   "supplied_on": "2026-10-24",
-  "image_changes": "None; original files copied byte for byte with URL-safe names.",
+  "image_changes": "Original files copied byte for byte with URL-safe names. Hero artwork is displayed through a centered square CSS crop; source pixels remain unchanged.",
   "assets": [
     {
       "sequence": 1,
@@ -149,5 +149,42 @@
       "embedded_color_profile": null,
       "metadata_note": "No EXIF, PNG text metadata, or embedded ICC profile present. No capture, export, or artwork date inferred from filesystem timestamps."
     }
-  ]
+  ],
+  "hero_artwork": {
+    "original_filename": "SNY SM & FLYERS-01.png",
+    "asset_path": "assets/events/sny-00/sny00-hero-emblem.png",
+    "asset_role": "User-supplied high-resolution hero artwork; unchanged source bytes, separate from flyer 01",
+    "supplied_on": "2026-10-24",
+    "format": "PNG",
+    "width": 4500,
+    "height": 5625,
+    "bit_depth": 8,
+    "color_mode": "RGBA",
+    "file_size_bytes": 244636,
+    "sha256": "eaf281a8d6602e915b4814e835cd95b70b940b11fffcd7a26bd288c3d2298086",
+    "embedded_capture_datetime": null,
+    "embedded_export_datetime": null,
+    "camera_make": null,
+    "camera_model": null,
+    "software": null,
+    "orientation": null,
+    "embedded_color_profile": null,
+    "pixel_density": {
+      "x_pixels_per_unit": 11811,
+      "y_pixels_per_unit": 11811,
+      "unit": "meter"
+    },
+    "presentation": {
+      "crop": "Centered square viewport using object-fit: cover; no raster derivative",
+      "source_crop_bounds_px": [
+        0,
+        562.5,
+        4500,
+        5062.5
+      ],
+      "desktop_position": "Beside the hero title and details",
+      "mobile_position": "Below the hero buttons"
+    },
+    "metadata_note": "PNG contains IHDR, pHYs, IDAT and IEND chunks only. No EXIF, PNG text metadata, embedded ICC profile, capture date or export date present. No artwork date inferred from filesystem timestamps."
+  }
 }
