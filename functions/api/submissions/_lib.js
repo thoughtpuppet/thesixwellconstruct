@@ -3310,7 +3310,7 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
       }
       if (action === "approve") {
         const effectiveSalesClosesAt = effectiveTattooSpecialSalesClose(terms);
-        if (new Date(effectiveSalesClosesAt).getTime() <= Date.now()) {
+        if (effectiveSalesClosesAt && new Date(effectiveSalesClosesAt).getTime() <= Date.now()) {
           return errorResponse("The Tattoo Specials sales window has closed.", 409);
         }
         const requestedAppointment = await db.prepare(

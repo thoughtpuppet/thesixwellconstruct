@@ -6,6 +6,7 @@ import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
+import { effectiveTattooSpecialSalesClose } from "../functions/api/tattoo-specials/_sales-window.js";
 
 import {
   handleCreateSubmission,
@@ -12613,4 +12614,91 @@ test("Adjusted Offer client and Studio surfaces preserve the private response co
   assert.match(worker, /headers\.set\("referrer-policy", "no-referrer"\)/);
   assert.match(worker, /privateLinkResponse\([\s\S]*servePublicAsset\(request, env, "\/tattoos\/specials\/adjusted-offer\/index\.html"\)/);
   assert.match(worker, /retryPendingAdjustedOfferNotifications/);
+});
+
+
+test("permanent Tattoo Specials preserve requests, approval access, and deposits without a sales cutoff", async () => {
+  const database = migratedDatabase();
+  const token = "permanent-special-admin";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database), SUBMISSIONS_ADMIN_TOKEN: token,
+    PUBLIC_SITE_URL: "https://example.test", SQUARE_ACCESS_TOKEN: "square-test", SQUARE_LOCATION_ID: "test-location",
+  };
+  database.prepare("UPDATE tattoo_special_campaigns SET sales_opens_at=?,sales_closes_at=? WHERE id='campaign-fka-2026'")
+    .run(new Date(Date.now() - 3600000).toISOString(), new Date(Date.now() + 3600000).toISOString());
+  const before = await (await handlePublicTattooSpecials(new Request("https://example.test/api/tattoo/specials"), env)).json();
+  const offer = before.offers.find((item) => item.id === "special-two-small");
+  const response = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
+    offerId: offer.id, variantId: offer.variants[0].id, idempotencyKey: "permanent-special-request",
+    name: "Permanent Client", email: "permanent@example.test", phone: "4045550123", dob: "1990-01-01",
+    ageConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
+    placement: "Forearm", projectDetails: "Two small tattoos.",
+  }), env);
+  assert.equal(response.status, 201, await response.clone().text());
+  const submission = await response.json();
+  const updated = await handleAdminTattooSpecialCampaign(adminJsonRequest(
+    "/api/admin/tattoo/specials/campaigns/campaign-fka-2026", { salesClosesAt: "" }, token, "PATCH",
+  ), env, "campaign-fka-2026");
+  assert.equal(updated.status, 200, await updated.clone().text());
+  assert.equal((await updated.json()).readiness.salesWindowValid, true);
+  const publicOffer = await (await handlePublicTattooSpecials(new Request("https://example.test/api/tattoo/specials"), env)).json();
+  assert.equal(publicOffer.isPermanent, true);
+  assert.equal(publicOffer.salesClosesAt, "");
+  assert.equal(publicOffer.state, "open");
+  assert.equal(database.prepare("SELECT sales_closes_at FROM tattoo_special_submission_terms WHERE submission_id=?").get(submission.submissionId).sales_closes_at, "");
+  assert.equal(JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(submission.submissionId).payload_json).sales_closes_at, "");
+  const decision = await decideSubmission(env, submission.submissionId, token, "approve", {});
+  assert.equal(decision.status, 200, await decision.clone().text());
+  const prepared = await handleAdminTattooSpecialDeposit(adminJsonRequest(
+    "/api/admin/tattoo/specials/submissions/" + submission.submissionId + "/deposit", {}, token,
+  ), env, submission.submissionId);
+  assert.equal(prepared.status, 200, await prepared.clone().text());
+  const access = await prepared.json();
+  const bookingToken = bookingTokenFromUrl(access.clientUrl);
+  const tokenRow = database.prepare("SELECT expires_at FROM booking_tokens WHERE submission_id=? AND revoked_at IS NULL").get(submission.submissionId);
+  assert.ok(new Date(tokenRow.expires_at).getTime() > Date.now());
+  assert.ok(new Date(tokenRow.expires_at).getTime() <= Date.now() + 24 * 3600000);
+  const start = new Date(Date.now() + 3 * 3600000);
+  insertAvailabilityWindow(database, {
+    id: "permanent-special-slot", bookingTypeId: offer.bookingTypeId,
+    startAt: start.toISOString(), endAt: new Date(start.getTime() + offer.durationMinutes * 60000).toISOString(),
+  });
+  const context = await handleBookingContext(new Request("https://example.test/api/booking/context?token=" + bookingToken), env);
+  assert.equal(context.status, 200, await context.clone().text());
+  assert.ok((await context.json()).availabilityWindows.some((item) => item.id === "permanent-special-slot"));
+  const checkout = await withMockFetch(async (url) => {
+    if (String(url).endsWith("/v2/online-checkout/payment-links")) return jsonFetchResponse({
+      payment_link: { id: "permanent-test-link", order_id: "permanent-test-order", url: "https://square.test/permanent" },
+    });
+    throw new Error("Unexpected request: " + url);
+  }, () => handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
+    token: bookingToken, bookingTypeId: offer.bookingTypeId, availabilityWindowId: "permanent-special-slot", tipCents: 0,
+  }), env));
+  assert.equal(checkout.status, 200, await checkout.clone().text());
+  const checkoutPayload = await checkout.json();
+  assert.equal(checkoutPayload.checkoutReady, true);
+  const webhookUrl = "https://example.test/api/square/webhook";
+  const signatureKey = "permanent-special-webhook";
+  const webhookBody = JSON.stringify({
+    type: "payment.updated",
+    data: { object: { payment: { id: "permanent-test-payment", order_id: "permanent-test-order", status: "COMPLETED" } } },
+  });
+  const signature = await squareWebhookSignatureForTest(webhookBody, signatureKey, webhookUrl);
+  const webhook = await withMockFetch(async (url) => {
+    assert.match(String(url), /\/v2\/orders\/permanent-test-order$/);
+    return jsonFetchResponse({ order: { id: "permanent-test-order", state: "COMPLETED" } });
+  }, () => handleSquareWebhook(new Request(webhookUrl, {
+    method: "POST", body: webhookBody,
+    headers: { "content-type": "application/json", "x-square-hmacsha256-signature": signature },
+  }), { ...env, SQUARE_WEBHOOK_SIGNATURE_KEY: signatureKey, SQUARE_WEBHOOK_NOTIFICATION_URL: webhookUrl }));
+  assert.equal(webhook.status, 200, await webhook.clone().text());
+  assert.notEqual((await webhook.json()).attention, true);
+  assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE appointment_id=?").get(checkoutPayload.appointmentId).status, "paid");
+});
+
+test("permanent sales windows distinguish no deadline from an unavailable campaign", () => {
+  const expired = "2000-01-01T00:00:00.000Z";
+  assert.equal(effectiveTattooSpecialSalesClose({ sales_closes_at: expired, campaign_sales_closes_at: "" }), "");
+  assert.equal(effectiveTattooSpecialSalesClose({ sales_closes_at: "", campaign_sales_closes_at: expired }), "");
+  assert.equal(effectiveTattooSpecialSalesClose({ sales_closes_at: expired, campaign_sales_closes_at: null }), expired);
 });

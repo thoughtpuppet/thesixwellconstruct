@@ -5205,7 +5205,7 @@ export async function prepareApprovedTattooSpecialRequest(request, env, submissi
   }
 
   const effectiveSalesClosesAt = effectiveTattooSpecialSalesClose(terms);
-  const salesCloseMs = new Date(effectiveSalesClosesAt).getTime();
+  const salesCloseMs = effectiveSalesClosesAt ? new Date(effectiveSalesClosesAt).getTime() : Infinity;
   const paymentDueMs = Math.min(Date.now() + 24 * 60 * 60 * 1000, salesCloseMs);
   if (!Number.isFinite(paymentDueMs) || paymentDueMs <= Date.now()) {
     throw new Error("The Tattoo Specials payment window has closed.");
@@ -7599,7 +7599,7 @@ async function processSquareWebhookPayload(request, env, rawBody) {
        FROM tattoo_special_submission_terms WHERE submission_id = ?`
     ).bind(appointmentRow.submission_id).first()
     : null;
-  if (specialTerms && specialTerms.sales_closes_at <= now) {
+  if (specialTerms?.sales_closes_at && specialTerms.sales_closes_at <= now) {
     await db.batch([
       db.prepare(
         `UPDATE appointments SET hold_state = 'expiry_attention', updated_at = ?
@@ -8618,7 +8618,7 @@ export async function handleAdminCreateBookingToken(request, env) {
            FROM tattoo_special_submission_terms WHERE submission_id = ?`
         ).bind(submissionId).first();
         if (!specialTerms) return errorResponse("Tattoo Special terms are missing.", 409);
-        if (new Date(specialTerms.sales_closes_at).getTime() <= Date.now()) {
+        if (specialTerms.sales_closes_at && new Date(specialTerms.sales_closes_at).getTime() <= Date.now()) {
           return errorResponse("The Tattoo Special sales window has closed.", 409, { code: "SPECIALS_WINDOW_CLOSED" });
         }
       }
@@ -8660,7 +8660,7 @@ export async function handleAdminCreateBookingToken(request, env) {
     let expiresAtMs = requestedExpiry
       ? new Date(requestedExpiry).getTime()
       : Date.now() + 1000 * 60 * 60 * 24 * 30;
-    if (specialTerms) expiresAtMs = Math.min(expiresAtMs, new Date(specialTerms.sales_closes_at).getTime());
+    if (specialTerms?.sales_closes_at) expiresAtMs = Math.min(expiresAtMs, new Date(specialTerms.sales_closes_at).getTime());
     if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
       return errorResponse("Booking link expiration must be a valid future timestamp.", 400);
     }

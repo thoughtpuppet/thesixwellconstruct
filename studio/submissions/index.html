@@ -4383,7 +4383,7 @@
         <label>Campaign title<input name="title" required maxlength="200" value="${escapeHtml(campaign.title || "")}"></label>
         <label>Slug<input name="slug" required maxlength="160" value="${escapeHtml(campaign.slug || "")}"></label>
         <label>Sales opens (Eastern)<input name="salesOpensAt" type="datetime-local" required value="${escapeHtml(formatDateTimeInput(campaign.salesOpensAt || fallback.salesOpensAt))}"></label>
-        <label>Sales closes (Eastern)<input name="salesClosesAt" type="datetime-local" required value="${escapeHtml(formatDateTimeInput(campaign.salesClosesAt || fallback.salesClosesAt))}"></label>
+        <label>Sales closes (Eastern; leave blank for permanent)<input name="salesClosesAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(campaign.salesClosesAt ?? fallback.salesClosesAt))}"></label>
         <label>Default deposit (dollars)<input name="defaultDepositDollars" type="number" min="0" step="1" required value="${escapeHtml(Number(campaign.defaultDepositCents ?? fallback.defaultDepositCents ?? 5000) / 100)}"></label>
         <label>Shared Media artwork<select name="artworkMediaId"><option value="">No artwork</option>${(tattooSpecials.media || []).map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === campaign.artwork?.mediaId ? "selected" : ""}>${escapeHtml(item.title || item.filename || item.id)}</option>`).join("")}</select></label>
         <label>Display order<input name="sortOrder" type="number" value="${escapeHtml(campaign.sortOrder ?? 0)}"></label>

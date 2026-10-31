@@ -129,8 +129,12 @@
   function renderOpen() {
     stateEl.hidden = true;
     offersSection.hidden = false;
-    document.getElementById("specialsDates").textContent = `from ${date(payload.salesOpensAt)} through ${date(payload.salesClosesAt)}`;
-    document.getElementById("specialsDeposit").textContent = payload.defaultDeposit;
+    if (payload.isPermanent) {
+      document.getElementById("specialsWindowCopy").textContent = `Available year-round. The ${payload.defaultDeposit} deposit goes toward your tattoo.`;
+    } else {
+      document.getElementById("specialsDates").textContent = `from ${date(payload.salesOpensAt)} through ${date(payload.salesClosesAt)}`;
+      document.getElementById("specialsDeposit").textContent = payload.defaultDeposit;
+    }
     offersEl.innerHTML = payload.offers.map((offer) => `<article class="special-card" data-mode="${escape(offer.mode)}" data-offer-card="${escape(offer.id)}"><h3>${escape(offer.title)}</h3><p>${escape(offer.description)}</p><p class="special-card__prices">${offer.variants.map((variant) => `${escape(variant.label)} ${escape(variant.price)}`).join(" \u00b7 ")}</p><button type="button" data-offer="${escape(offer.id)}">Choose this special \u2192</button></article>`).join("");
     trackStageOnce("campaign_opened", "interactive_start", "");
     observeOffers();

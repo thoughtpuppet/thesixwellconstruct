@@ -2923,7 +2923,7 @@ export async function handleAdminResendNotification(request, env) {
       if (
         !specialAppointment.payment_due_at
         || specialAppointment.payment_due_at <= now
-        || specialAppointment.sales_closes_at <= now
+        || (specialAppointment.sales_closes_at && specialAppointment.sales_closes_at <= now)
       ) {
         return errorResponse("This Tattoo Special deposit link is no longer active. Prepare new client access before resending it.", 409);
       }

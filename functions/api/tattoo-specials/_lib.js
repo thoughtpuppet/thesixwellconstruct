@@ -37,27 +37,38 @@ function integer(value, fallback = 0) {
 function extendedCampaignRequestStatements(db, campaignId, previousClose, nextClose, now) {
   const previousMs = new Date(previousClose).getTime();
   const nextMs = new Date(nextClose).getTime();
-  if (!Number.isFinite(previousMs) || !Number.isFinite(nextMs) || nextMs <= previousMs) return [];
+  const permanent = nextClose === "";
+  if (previousClose === "" || (!permanent && (!Number.isFinite(previousMs) || !Number.isFinite(nextMs) || nextMs <= previousMs))) return [];
   return [
+    ...(permanent ? [db.prepare(
+      `UPDATE booking_tokens SET expires_at = NULL, updated_at = ?
+       WHERE used_at IS NULL AND revoked_at IS NULL AND submission_id IN (
+         SELECT t.submission_id FROM tattoo_special_submission_terms t
+         JOIN submissions s ON s.id = t.submission_id
+         WHERE t.campaign_id = ? AND t.sales_closes_at <> ''
+           AND booking_tokens.expires_at = t.sales_closes_at
+           AND s.status IN ('new','reviewing','approved')
+       )`
+    ).bind(now, campaignId)] : []),
     db.prepare(
       `UPDATE submissions
        SET payload_json = json_set(payload_json, '$.sales_closes_at', ?), updated_at = ?
        WHERE type = 'tattoo_special' AND status IN ('new','reviewing','approved')
          AND id IN (
            SELECT submission_id FROM tattoo_special_submission_terms
-           WHERE campaign_id = ? AND sales_closes_at < ?
+           WHERE campaign_id = ? AND sales_closes_at <> '' AND (? = '' OR sales_closes_at < ?)
          )`
-    ).bind(nextClose, now, campaignId, nextClose),
+    ).bind(nextClose, now, campaignId, nextClose, nextClose),
     db.prepare(
       `UPDATE tattoo_special_submission_terms
        SET sales_closes_at = ?, updated_at = ?
-       WHERE campaign_id = ? AND sales_closes_at < ?
+       WHERE campaign_id = ? AND sales_closes_at <> '' AND (? = '' OR sales_closes_at < ?)
          AND EXISTS (
            SELECT 1 FROM submissions s
            WHERE s.id = tattoo_special_submission_terms.submission_id
              AND s.type = 'tattoo_special' AND s.status IN ('new','reviewing','approved')
          )`
-    ).bind(nextClose, now, campaignId, nextClose),
+    ).bind(nextClose, now, campaignId, nextClose, nextClose),
   ];
 }
 
@@ -129,7 +140,7 @@ function windowState(settings, nowMs = Date.now()) {
   const opens = new Date(settings.sales_opens_at).getTime();
   const closes = new Date(settings.sales_closes_at).getTime();
   if (nowMs < opens) return "scheduled";
-  if (nowMs >= closes) return "closed";
+  if (settings.sales_closes_at && nowMs >= closes) return "closed";
   return "open";
 }
 
@@ -211,6 +222,7 @@ async function loadCampaigns(db, includeArchived = true) {
     timezone: row.timezone || "America/New_York",
     salesOpensAt: row.sales_opens_at || "",
     salesClosesAt: row.sales_closes_at || "",
+    isPermanent: row.sales_closes_at === "",
     defaultDepositCents: Number(row.default_deposit_cents || 0),
     defaultDeposit: money(Number(row.default_deposit_cents || 0)),
     sortOrder: Number(row.sort_order || 0),
@@ -357,6 +369,7 @@ function publicSettings(settings, state) {
     timezone: settings?.timezone || "America/New_York",
     salesOpensAt: settings?.sales_opens_at || "",
     salesClosesAt: settings?.sales_closes_at || "",
+    isPermanent: settings?.sales_closes_at === "",
     defaultDepositCents: Number(settings?.default_deposit_cents || 0),
     defaultDeposit: money(Number(settings?.default_deposit_cents || 0)),
     artwork: settings?.artwork_media_id ? {
@@ -451,13 +464,13 @@ async function createBookingAccess(db, request, submissionId, terms, closesAt) {
       `INSERT INTO booking_tokens
        (id, token_hash, submission_id, allowed_booking_types_json, purpose, expires_at, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'tattoo', ?, ?, ?)`
-    ).bind(tokenId, await sha256(token), submissionId, JSON.stringify([terms.booking_type_id]), closesAt, now, now),
+    ).bind(tokenId, await sha256(token), submissionId, JSON.stringify([terms.booking_type_id]), closesAt || null, now, now),
     db.prepare("UPDATE submissions SET booking_url = ?, updated_at = ? WHERE id = ?")
       .bind(bookingUrl.pathname + bookingUrl.search, now, submissionId),
     db.prepare(
       `INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at)
        VALUES (?, ?, 'special_request_link_created', 'system', ?, ?)`
-    ).bind(crypto.randomUUID(), submissionId, `Tattoo Special request-time selection · ${terms.offer_title} · expires at sales close`, now),
+    ).bind(crypto.randomUUID(), submissionId, `Tattoo Special request-time selection · ${terms.offer_title}${closesAt ? " · expires at sales close" : ""}`, now),
   ]);
   return { id: tokenId, rawToken: token, bookingUrl: bookingUrl.pathname + bookingUrl.search, purpose: "tattoo", expiresAt: closesAt, allowedBookingTypes: [terms.booking_type_id] };
 }
@@ -505,7 +518,7 @@ async function prepareTattooSpecialClientAccess(db, request, env, submission, pr
   const now = new Date().toISOString();
   const expiryMs = Math.min(
     new Date(preparedRequest.paymentDueAt).getTime(),
-    new Date(terms.sales_closes_at).getTime(),
+    terms.sales_closes_at ? new Date(terms.sales_closes_at).getTime() : Infinity,
   );
   if (!Number.isFinite(expiryMs) || expiryMs <= Date.now()) {
     throw new Error("The Tattoo Special booking access window has closed.");
@@ -810,7 +823,7 @@ async function adminPayload(db) {
       database: true,
       artwork: Boolean(publishedRow?.artwork_media_id && mediaUrl(publishedRow)),
       activeOffers: publishedRow ? (await loadOffers(db, false, publishedRow.id)).length : 0,
-      salesWindowValid: Boolean(publishedRow && new Date(publishedRow.sales_opens_at).getTime() < new Date(publishedRow.sales_closes_at).getTime()),
+      salesWindowValid: Boolean(publishedRow && Number.isFinite(new Date(publishedRow.sales_opens_at).getTime()) && (!publishedRow.sales_closes_at || new Date(publishedRow.sales_opens_at).getTime() < new Date(publishedRow.sales_closes_at).getTime())),
     },
   };
 }
@@ -827,8 +840,8 @@ export async function handleAdminTattooSpecials(request, env) {
     const current = await loadPublishedCampaign(db);
     if (!current) return failure("Publish a Tattoo Specials campaign before editing public settings.", 409);
     const opensAt = text(body.salesOpensAt || current.sales_opens_at, 80);
-    const closesAt = text(body.salesClosesAt || current.sales_closes_at, 80);
-    if (!Number.isFinite(new Date(opensAt).getTime()) || !Number.isFinite(new Date(closesAt).getTime()) || new Date(opensAt) >= new Date(closesAt)) {
+    const closesAt = text(body.salesClosesAt === undefined ? current.sales_closes_at : body.salesClosesAt, 80);
+    if (!Number.isFinite(new Date(opensAt).getTime()) || (closesAt && (!Number.isFinite(new Date(closesAt).getTime()) || new Date(opensAt) >= new Date(closesAt)))) {
       return failure("Enter a valid sales opening and closing time.", 400);
     }
     const deposit = body.defaultDepositCents === undefined ? Number(current.default_deposit_cents) : integer(body.defaultDepositCents, -1);
@@ -868,7 +881,7 @@ function normalizeCampaignInput(body, current = {}) {
     ? Number(current.default_deposit_cents ?? 5000)
     : integer(body.defaultDepositCents, -1);
   if (!title || !slug) return { error: "Campaign title and slug are required." };
-  if (!Number.isFinite(new Date(opensAt).getTime()) || !Number.isFinite(new Date(closesAt).getTime()) || new Date(opensAt) >= new Date(closesAt)) {
+  if (!Number.isFinite(new Date(opensAt).getTime()) || (closesAt && (!Number.isFinite(new Date(closesAt).getTime()) || new Date(opensAt) >= new Date(closesAt)))) {
     return { error: "Enter a valid campaign sales opening and closing time." };
   }
   if (deposit < 0) return { error: "Default deposit must be zero or greater." };

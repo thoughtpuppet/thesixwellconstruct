@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   handleAdminGetAvailabilityPreview,
   handleAdminUpdateSchedule,
+  materializeGeneratedWindow,
 } from "../functions/api/booking/_lib.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -241,4 +242,29 @@ test("Studio weekly schedule exposes add/remove controls and submits category-ow
   assert.match(source, /ruleCategories: availabilityConfig\(\)\.groups\.map/);
   assert.match(source, /category: row\.dataset\.ruleCategory/);
   assert.match(source, /dayOfWeek: Number\(row\.dataset\.ruleDay\)/);
+});
+
+
+test("two-hour booking notice includes the boundary and rejects it once too close", async (t) => {
+  const now = Date.parse("2035-03-05T09:00:00.000Z");
+  t.mock.timers.enable({ apis: ["Date"], now });
+  const database = migratedDatabase();
+  assert.equal(database.prepare("SELECT minimum_notice_hours FROM booking_settings WHERE venture='tattooing'").get().minimum_notice_hours, 2);
+  database.exec("UPDATE availability_rules SET active=0; UPDATE booking_settings SET timezone='UTC',booking_horizon_days=1,max_bookings_per_day=40,default_buffer_before_minutes=0,default_buffer_after_minutes=0 WHERE venture='tattooing'");
+  database.prepare(`INSERT INTO availability_rules
+    (id,venture,category,day_of_week,start_time,end_time,active,capacity,buffer_before_minutes,buffer_after_minutes,note,created_at,updated_at)
+    VALUES ('two-hour-boundary','tattooing','tattooing',?,'09:00','18:00',1,1,0,0,'',datetime('now'),datetime('now'))`).run(new Date(now).getUTCDay());
+  const db = new LocalD1(database);
+  const response = await handleAdminGetAvailabilityPreview(adminRequest("/api/admin/booking/availability-preview?scope=tattoo", "two-hour-admin"), {
+    SUBMISSIONS_DB: db, SUBMISSIONS_ADMIN_TOKEN: "two-hour-admin",
+  });
+  assert.equal(response.status, 200, await response.clone().text());
+  const windows = (await response.json()).availabilityWindows.filter((item) => item.bookingTypeId === "tattoo_quarter");
+  assert.ok(windows.length > 0);
+  assert.ok(windows.every((item) => Date.parse(item.startAt) >= now + 2 * 3600000));
+  const boundary = windows.find((item) => Date.parse(item.startAt) === now + 2 * 3600000);
+  assert.ok(boundary);
+  assert.equal((await materializeGeneratedWindow(db, boundary.id, "tattoo_quarter")).window.start_at, boundary.startAt);
+  t.mock.timers.tick(1);
+  assert.match((await materializeGeneratedWindow(db, boundary.id, "tattoo_quarter")).error, /no longer available/);
 });
