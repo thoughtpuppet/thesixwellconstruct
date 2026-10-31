@@ -348,3 +348,15 @@ main {
     align-items: flex-start;
   }
 }
+
+@media (max-width: 380px) {
+  .specials-header a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    line-height: 1.4;
+  }
+}
